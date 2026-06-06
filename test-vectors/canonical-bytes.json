@@ -179,45 +179,6 @@
         "issuedAt": 1735689601000
       },
       "signatureHex": "7e380cc3c8364808b1c00f2d213e9dfdf7dec496fe9cd97ea0e18f592b6083e7c6967293e2dc2977d822bedfef6c45ba8905ede2362ddb64fd98c2cc6b552308"
-    },
-    {
-      "name": "pair",
-      "signedBy": "stk",
-      "input": {
-        "v": 1,
-        "stkPub": "b927c2d0bf0e6d27010d32bba280743e8fc4c6dec0b1702ddc7cd6be27cd078d",
-        "eBoxPub": "03080d12171c21262b30353a3f44494e53585d62676c71767b80858a8f94999e",
-        "nonce": "1112131415161718191a1b1c1d1e1f20",
-        "sessionId": "05101b26313c47525d68737e89949faa",
-        "hint": {
-          "mdnsName": "flagship-cd078d.local",
-          "cloudRendezvousId": "rndz-cd078d",
-          "suffix6": "cd078d"
-        }
-      },
-      "signatureHex": "9087cfbdb4a95b9d9edd1d5e2c4fd3e2fae6d557fc264257fe2a016bf3c96cb21c000c8a0876e707b954057e8101c39e2e10f5e20d613f23061d0816845df60e"
-    },
-    {
-      "name": "box-unpair",
-      "signedBy": "irk",
-      "input": {
-        "userId": "harry",
-        "boxId": "b927c2d0bf0e6d27010d32bba280743e8fc4c6dec0b1702ddc7cd6be27cd078d",
-        "issuedAt": 1735689600000
-      },
-      "signatureHex": "ce2319861e763788c13ffe5f7899ab69b8ef06b78d8483ec06e77be04249d0178d0646a83e4473062b7b33db823897f91d24e76a37d1ba605d7439ee4dee1300"
-    },
-    {
-      "name": "wifi-config",
-      "signedBy": "none",
-      "input": {
-        "ssid": "Home",
-        "psk": "correct-horse-battery-staple",
-        "regulatoryRegion": "US",
-        "issuedAt": 1735689600000
-      },
-      "signatureHex": "",
-      "canonicalHex": "666c6167736869702f776966692d636f6e6669672f76317c486f6d657c636f72726563742d686f7273652d626174746572792d737461706c657c55537c31373335363839363030303030"
     }
   ]
 }

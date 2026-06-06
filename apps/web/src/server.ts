@@ -32,7 +32,6 @@ import {
   type AuthCodeStore,
 } from "./routes/authCode.js";
 import { registerServerRegister } from "./routes/serverRegister.js";
-import { registerNfcRendezvous } from "./routes/nfcRendezvous.js";
 import {
   registerUserPubKeyCert,
   caKeypairFromEnv,
@@ -193,10 +192,6 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   if (isCom) {
     const ca = opts.ca ?? caKeypairFromEnv();
     registerUserPubKeyCert(app, { ca, usernameRegistry });
-    // C3 — NFC tap-to-pair cloud rendezvous. Lives on .com (identity
-    // plane) since both the phone + box already trust it; the blob is
-    // AEAD-sealed so .com is a pure opaque drop-box.
-    registerNfcRendezvous(app);
   }
 
   const bootedAt = Date.now();

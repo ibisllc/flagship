@@ -10,5 +10,4 @@ export * from "./encryption.js";
 export * from "./erasure.js";
 export * from "./manifest.js";
 export * from "./devEntitlements.js";
-export * from "./nfcPair.js";
 export { ed } from "./edSync.js";

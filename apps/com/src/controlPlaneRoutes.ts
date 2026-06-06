@@ -69,12 +69,7 @@ import {
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
-  handleRendezvousLookup,
   handleRevokeServer,
-  handleSerialActivate,
-  handleSerialStatus,
-  handleNfcRendezvousDeposit,
-  handleNfcRendezvousConsume,
   handleServerReleaseName,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
@@ -183,15 +178,6 @@ export interface ControlPlaneEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
-
-  /**
-   * Shared HMAC secret retailers use to sign branded-box activation
-   * requests at the point of sale. See `serialActivation.ts` for the
-   * canonical-bytes scheme. When unset, `POST /api/serial/activate`
-   * returns 403 — the activation API is closed. NOT in git — set via
-   * `wrangler secret put FLAGSHIP_RETAILER_HMAC_SECRET`.
-   */
-  FLAGSHIP_RETAILER_HMAC_SECRET?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -372,16 +358,6 @@ const ROUTE_RE = {
   // decommissioned). Cascades through the boot-unlock leases so the
   // box bricks on its next reboot.
   SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
-  // N-CLOUD-1/3 — branded box serial activation + disambiguation.
-  // Activate is retailer-HMAC-authed; status + rendezvous are public.
-  SERIAL_ACTIVATE: /^\/api\/serial\/activate$/,
-  SERIAL_STATUS: /^\/api\/serial\/([^/]+)\/status$/,
-  RENDEZVOUS_LOOKUP: /^\/api\/rendezvous\/([^/]+)$/,
-  // C3 — NFC tap-to-pair cloud rendezvous. Phone deposits a sealed
-  // WiFi-config blob; box polls + consumes it. Unauthenticated at this
-  // layer (the blob is AEAD-sealed under the K_session both sides
-  // derived from the NFC tap's ECDH). Rate-limited per-IP at the edge.
-  NFC_RENDEZVOUS_WIFI: /^\/api\/nfc\/rendezvous\/([^/]+)\/wifi$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -670,10 +646,6 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           installPolicyFanout: storage.installPolicyFanout,
           ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
-          // N-CLOUD-2: enforce branded-box hardware-serial activation
-          // when the registration body carries `boxSerial`. Self-built
-          // boxes never include it and skip the check.
-          boxSerials: storage.boxSerials,
         },
         await readJson(request),
       ),
@@ -728,59 +700,6 @@ export async function tryControlPlane(
           boxSealedLeases: storage.boxSealedLeases,
         },
         await readJson(request),
-      ),
-    );
-  }
-
-  // N-CLOUD-1 — branded-box activation at retail PoS. HMAC-authed.
-  if (method === "POST" && ROUTE_RE.SERIAL_ACTIVATE.test(path)) {
-    return finish(
-      await handleSerialActivate(
-        {
-          serials: storage.boxSerials,
-          ...(env.FLAGSHIP_RETAILER_HMAC_SECRET
-            ? { retailerHmacSecret: env.FLAGSHIP_RETAILER_HMAC_SECRET }
-            : {}),
-        },
-        await readJson(request),
-        request.headers.get("Authorization") ?? undefined,
-      ),
-    );
-  }
-  // N-CLOUD-1 — public status read of a serial.
-  if (method === "GET" && (m = path.match(ROUTE_RE.SERIAL_STATUS))) {
-    return finish(
-      await handleSerialStatus(
-        { serials: storage.boxSerials },
-        decodeURIComponent(m[1]!),
-      ),
-    );
-  }
-  // N-CLOUD-3 — LAN disambiguation rendezvous by 6-hex stkPub suffix.
-  if (method === "GET" && (m = path.match(ROUTE_RE.RENDEZVOUS_LOOKUP))) {
-    return finish(
-      await handleRendezvousLookup(
-        { serials: storage.boxSerials },
-        decodeURIComponent(m[1]!),
-      ),
-    );
-  }
-  // C3 — NFC rendezvous deposit (phone) + consume (box). The blob is
-  // AEAD-sealed under K_session, so no auth/signature at this layer.
-  if (method === "POST" && (m = path.match(ROUTE_RE.NFC_RENDEZVOUS_WIFI))) {
-    return finish(
-      await handleNfcRendezvousDeposit(
-        { rendezvous: storage.nfcRendezvous },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && (m = path.match(ROUTE_RE.NFC_RENDEZVOUS_WIFI))) {
-    return finish(
-      await handleNfcRendezvousConsume(
-        { rendezvous: storage.nfcRendezvous },
-        decodeURIComponent(m[1]!),
       ),
     );
   }

@@ -100,17 +100,10 @@ export type RateLimitEndpoint =
   // throttle per-IP only; the handler does the full DeviceAdmit
   // signature check under the registered IRK. Mirrors auth-code-issue's
   // posture (a credential-bearing mutating POST).
-  | "device-admit"
-  // C3 — NFC rendezvous deposit/consume. Unauthenticated at this layer
-  // (the blob is AEAD-sealed under K_session), so the surface is
-  // throttled per-IP + per-rendezvousId. Deposits are heavier (full
-  // 8 KB blob) and ought to fire once; consume is light (the box may
-  // poll a handful of times before the deposit lands).
-  | "nfc-rendezvous-deposit"
-  | "nfc-rendezvous-consume";
+  | "device-admit";
 
 interface AxisLimit {
-  axis: "ip" | "irk" | "usernameHash" | "rendezvousId";
+  axis: "ip" | "irk" | "usernameHash";
   /** Per-axis request budget. */
   limit: number;
   /** Window in seconds. */
@@ -231,20 +224,6 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 100, windowSec: 3600 },
   ],
-  // C3 — NFC tap-to-pair cloud rendezvous. The per-IP cap stops a
-  // tight-loop attacker from spraying slot deposits; the per-slot cap
-  // bounds collateral when a single rendezvousId is fuzzed (a real
-  // re-tap on the phone re-uses the same slot — 30 deposits/min is
-  // generous for that legitimate workload). Consumes are looser since
-  // the box may poll a handful of times before the deposit lands.
-  "nfc-rendezvous-deposit": [
-    { axis: "ip", limit: 30, windowSec: 60 },
-    { axis: "rendezvousId", limit: 10, windowSec: 60 },
-  ],
-  "nfc-rendezvous-consume": [
-    { axis: "ip", limit: 60, windowSec: 60 },
-    { axis: "rendezvousId", limit: 30, windowSec: 60 },
-  ],
 };
 
 export interface RateLimitInput {
@@ -255,8 +234,6 @@ export interface RateLimitInput {
   irkPub?: string;
   /** Username hash (last path segment) for the recovery endpoint. */
   usernameHash?: string;
-  /** C3 — opaque rendezvous slot id from the NFC tap-to-pair URL. */
-  rendezvousId?: string;
 }
 
 export interface RateLimitedResult {
@@ -307,7 +284,6 @@ function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string |
   if (axis === "ip") return input.ip;
   if (axis === "irk") return input.irkPub ?? null;
   if (axis === "usernameHash") return input.usernameHash ?? null;
-  if (axis === "rendezvousId") return input.rendezvousId ?? null;
   return null;
 }
 
@@ -448,18 +424,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
   }
-  // C3 — NFC tap-to-pair rendezvous (cloud drop-box).
-  if (/^\/api\/nfc\/rendezvous\/[^/]+\/wifi$/.test(pathname)) {
-    if (m === "POST") return "nfc-rendezvous-deposit";
-    if (m === "GET") return "nfc-rendezvous-consume";
-  }
   return null;
-}
-
-/** Pull the rendezvousId out of the NFC tap-to-pair rendezvous path. */
-export function extractRendezvousId(pathname: string): string | undefined {
-  const m = pathname.match(/^\/api\/nfc\/rendezvous\/([^/]+)\/wifi$/);
-  return m ? decodeURIComponent(m[1]!) : undefined;
 }
 
 /**

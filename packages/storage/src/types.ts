@@ -862,8 +862,6 @@ export interface Storage {
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
-  boxSerials: BoxSerialsStorage;
-  nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
@@ -1575,105 +1573,6 @@ export interface MintReservationStorage {
   /** Release the lease only if `holderPubHex` currently holds it; a no-op
    *  otherwise (a stale holder can't free a successor's lease). */
   release(username: string, holderPubHex: string): Promise<void>;
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// Box serials — branded-tier activation + first-claim binding (migration 0039)
-//
-// Allocated at production time, activated at retail PoS, bound to a
-// stkPub on first ownership claim. See `docs/nfc-box-pairing.md` for
-// the surrounding NFC pairing design and `docs/v1-operational-tasks.md
-// § N-CLOUD` for the API + enforcement scope.
-// ──────────────────────────────────────────────────────────────────────
-
-export interface BoxSerialRecord {
-  serial: string;
-  sku: string;
-  /** Null until the retailer marks the box activated at PoS. */
-  activatedAt: number | null;
-  /** Free-text retailer identifier (store id / register #). Audit only. */
-  activatedBy: string | null;
-  /** Set on first successful ownership claim; one-shot bind. */
-  stkPubHex: string | null;
-  /** Last 6 hex of stkPubHex — denormalized for the rendezvous lookup. */
-  suffix6: string | null;
-  boundAt: number | null;
-  createdAt: number;
-}
-
-export interface BoxSerialsStorage {
-  /** Insert a fresh production row. Returns ok:false reason
-   *  `'duplicate serial'` if the serial already exists. */
-  create(
-    rec: Pick<BoxSerialRecord, "serial" | "sku" | "createdAt">,
-  ): Promise<{ ok: true } | { ok: false; reason: string }>;
-  get(serial: string): Promise<BoxSerialRecord | undefined>;
-  /** Mark a serial activated. Idempotent — returns ok:true with
-   *  `alreadyActivated:true` on a second call. Returns ok:false
-   *  reason `'unknown serial'` when the row doesn't exist. */
-  activate(args: {
-    serial: string;
-    activatedBy: string | null;
-    at: number;
-  }): Promise<
-    | { ok: true; alreadyActivated: boolean }
-    | { ok: false; reason: string }
-  >;
-  /** One-shot bind on first claim. Returns ok:false reason
-   *  `'not activated'` if `activatedAt` is null, `'already bound'`
-   *  if the row has a different stkPubHex set, `'unknown serial'`
-   *  if absent. */
-  bindStk(args: {
-    serial: string;
-    stkPubHex: string;
-    suffix6: string;
-    at: number;
-  }): Promise<
-    | { ok: true; alreadyBound: boolean }
-    | { ok: false; reason: string }
-  >;
-  /** Disambiguation lookup — every row whose suffix6 matches. */
-  listBySuffix6(suffix6: string): Promise<BoxSerialRecord[]>;
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// NFC rendezvous (C3 — cloud side of the NFC tap-to-pair flow).
-//
-// The phone POSTs a sealed WiFi-config blob keyed by
-// PairPayload.hint.cloudRendezvousId; the box polls the same key. The
-// blob is AES-GCM AEAD-sealed under the K_session both sides derived
-// from the NFC tap's ECDH, so the cloud rendezvous is just an opaque
-// drop-box — no signature or auth required at this layer.
-//
-// One-shot semantics: a successful read deletes the blob (a stale blob
-// in the slot would just confuse a future re-tap). TTL 15 min on the
-// deposit side; periodic GC cleans abandoned rows. Re-deposits
-// overwrite (the phone may retry after a typo'd WiFi password).
-//
-// See docs/v1-operational-tasks.md § N-CLOUD.
-// ──────────────────────────────────────────────────────────────────────
-
-export interface NfcRendezvousRecord {
-  /** Matches PairPayload.hint.cloudRendezvousId. */
-  rendezvousId: string;
-  /** Hex-encoded sealed WiFi-config blob (AEAD ciphertext + tag). */
-  sealedHex: string;
-  /** Hex-encoded 12-byte AEAD nonce. */
-  nonceHex: string;
-  /** ms epoch — when the phone deposited the blob. */
-  depositedAt: number;
-  /** ms epoch — deposit + ttlMs; rows past this are evicted. */
-  expiresAt: number;
-}
-
-export interface NfcRendezvousStorage {
-  /** Idempotent upsert — a re-deposit overwrites the prior blob. */
-  put(rec: NfcRendezvousRecord): Promise<void>;
-  /** One-shot read — returns the record and DELETES it atomically.
-   *  Returns undefined when absent or expired. */
-  consume(rendezvousId: string, now: number): Promise<NfcRendezvousRecord | undefined>;
-  /** Periodic cleanup — drop expired rows. Returns the count purged. */
-  purgeExpired(now: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

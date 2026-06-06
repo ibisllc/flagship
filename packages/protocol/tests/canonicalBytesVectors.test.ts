@@ -2,18 +2,13 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  canonicalBoxUnpair,
-  canonicalPair,
-  canonicalWiFiConfig,
   ed,
   verifyAccountRecovery,
-  verifyBoxUnpair,
   verifyDeviceCapabilityGrant,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
   verifyMigrationRequest,
-  verifyPair,
   verifyPbAnnounce,
   verifyPbPeerConfirm,
   verifyPbRequestPeers,
@@ -238,30 +233,6 @@ describe("cross-language canonical-bytes vectors", () => {
           sig,
           irkPub,
         );
-      case "pair": {
-        const hint = i.hint as { mdnsName: string; cloudRendezvousId: string; suffix6: string };
-        return verifyPair(
-          {
-            v: i.v as 1,
-            stkPub: fromHex("stkPub"),
-            eBoxPub: fromHex("eBoxPub"),
-            nonce: fromHex("nonce"),
-            sessionId: fromHex("sessionId"),
-            hint,
-          },
-          sig,
-        );
-      }
-      case "box-unpair":
-        return verifyBoxUnpair(
-          {
-            userId: i.userId as string,
-            boxId: i.boxId as string,
-            issuedAt: i.issuedAt as number,
-          },
-          sig,
-          irkPub,
-        );
     }
     throw new Error(`unknown vector name: ${v.name}`);
   };
@@ -272,44 +243,7 @@ describe("cross-language canonical-bytes vectors", () => {
    * Swift/Kotlin encoders will surface as a string mismatch here.
    */
   const recomputeCanonical = (v: Vector): string => {
-    const i = v.input;
-    const fromHex = (k: string) =>
-      typeof i[k] === "string" ? hexToBytes(i[k] as string) : new Uint8Array(0);
-    let bytes: Uint8Array;
-    switch (v.name) {
-      case "wifi-config":
-        bytes = canonicalWiFiConfig({
-          ssid: i.ssid as string,
-          psk: i.psk as string,
-          regulatoryRegion: i.regulatoryRegion as string,
-          issuedAt: i.issuedAt as number,
-        });
-        break;
-      case "pair": {
-        const hint = i.hint as { mdnsName: string; cloudRendezvousId: string; suffix6: string };
-        bytes = canonicalPair({
-          v: i.v as 1,
-          stkPub: fromHex("stkPub"),
-          eBoxPub: fromHex("eBoxPub"),
-          nonce: fromHex("nonce"),
-          sessionId: fromHex("sessionId"),
-          hint,
-        });
-        break;
-      }
-      case "box-unpair":
-        bytes = canonicalBoxUnpair({
-          userId: i.userId as string,
-          boxId: i.boxId as string,
-          issuedAt: i.issuedAt as number,
-        });
-        break;
-      default:
-        throw new Error(`canonical recompute not wired for ${v.name}`);
-    }
-    let s = "";
-    for (const x of bytes) s += x.toString(16).padStart(2, "0");
-    return s;
+    throw new Error(`canonical recompute not wired for ${v.name}`);
   };
 
   for (const v of file.vectors) {
@@ -323,27 +257,5 @@ describe("cross-language canonical-bytes vectors", () => {
     it(`vector "${v.name}" (signed by ${v.signedBy}) verifies`, () => {
       expect(verifyByName(v)).toBe(true);
     });
-    // For pair + box-unpair we ALSO byte-compare canonical bytes so
-    // a drift that happens to still produce a valid signature on TS
-    // (but breaks Swift/Kotlin) still flags. Other signed vectors
-    // don't have canonical exporters, so they get the signature-only
-    // assertion above.
-    if (v.name === "pair" || v.name === "box-unpair") {
-      it(`vector "${v.name}" canonical-bytes round-trip`, () => {
-        // Build a fresh canonicalHex from current code and compare to
-        // a freshly-derived one; if both encoders agree the recorded
-        // signature would only verify against the same bytes, so this
-        // is a belt-and-suspenders check against subtle encoder bugs
-        // that happen to produce signature-compatible output (e.g. a
-        // leading whitespace getting trimmed before signing).
-        const recomputed = recomputeCanonical(v);
-        // The recorded signature must verify against THIS canonical
-        // shape — already asserted by `verifyByName` above. The
-        // cross-check is that recomputeCanonical produces a sane hex
-        // (non-empty, even length) so the helper itself is wired.
-        expect(recomputed.length).toBeGreaterThan(0);
-        expect(recomputed.length % 2).toBe(0);
-      });
-    }
   }
 });

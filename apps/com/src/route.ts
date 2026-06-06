@@ -29,7 +29,6 @@ import {
   clientIp,
   endpointFor,
   extractIrkPub,
-  extractRendezvousId,
   extractUsernameHash,
   rateLimitedResponse,
   type RateLimitBinding,
@@ -522,19 +521,6 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     let bodyText: string | undefined;
     if (request.method !== "GET" && request.method !== "HEAD") {
       bodyText = await request.text();
-      // C3 — hard size cap on NFC rendezvous deposits. The sealed
-      // WiFi-config blob is well under 1 KB; the JSON envelope around
-      // 16 KB of hex + nonce is comfortably under 32 KB. Reject larger
-      // bodies before they can fill a slot or consume D1 row space.
-      if (
-        rlEndpoint === "nfc-rendezvous-deposit" &&
-        bodyText.length > 32 * 1024
-      ) {
-        return new Response(
-          JSON.stringify({ error: "request body exceeds 32 KB" }),
-          { status: 413, headers: { "content-type": "application/json" } },
-        );
-      }
       buffered = new Request(request.url, {
         method: request.method,
         headers: request.headers,
@@ -551,13 +537,11 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     }
     const irkPub = extractIrkPub(rlEndpoint, parsed);
     const usernameHash = extractUsernameHash(url.pathname);
-    const rendezvousId = extractRendezvousId(url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
       ip: clientIp(request),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
-      ...(rendezvousId ? { rendezvousId } : {}),
     });
     if (rl.limited) return rateLimitedResponse(rl);
   }
