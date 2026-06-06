@@ -31,9 +31,6 @@ import type {
   LlmPromoStorage,
   LlmPromoUsageRecord,
   LuksKeyStorage,
-  MarketplaceListingRecord,
-  MarketplaceSearchQuery,
-  MarketplaceStorage,
   PushTokenRecord,
   PushTokenStorage,
   RoutingRecord,
@@ -1603,161 +1600,6 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   }
 }
 
-export class D1MarketplaceStorage implements MarketplaceStorage {
-  constructor(private readonly db: D1Database) {}
-
-  async upsert(rec: MarketplaceListingRecord): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO marketplace_listings (
-           creator, slug, name, tagline, description_md, category, tags_csv,
-           canonical_url, manifest_hash_hex, screenshot_keys_json, status,
-           scan_grade, scan_report_key, scan_completed_at, featured_until,
-           rank_score, install_count, public_distribution, listed_at, updated_at,
-           irk_signature_hex
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(creator, slug) DO UPDATE SET
-           name=excluded.name,
-           tagline=excluded.tagline,
-           description_md=excluded.description_md,
-           category=excluded.category,
-           tags_csv=excluded.tags_csv,
-           canonical_url=excluded.canonical_url,
-           manifest_hash_hex=excluded.manifest_hash_hex,
-           screenshot_keys_json=excluded.screenshot_keys_json,
-           status=excluded.status,
-           public_distribution=excluded.public_distribution,
-           updated_at=excluded.updated_at,
-           irk_signature_hex=excluded.irk_signature_hex`,
-      )
-      .bind(
-        rec.creator, rec.slug, rec.name, rec.tagline, rec.descriptionMd,
-        rec.category, rec.tagsCsv, rec.canonicalUrl, rec.manifestHashHex,
-        rec.screenshotKeysJson, rec.status,
-        rec.scanGrade ?? null, rec.scanReportKey ?? null, rec.scanCompletedAt ?? null,
-        rec.featuredUntil ?? null,
-        rec.rankScore, rec.installCount, rec.publicDistribution ? 1 : 0,
-        rec.listedAt, rec.updatedAt, rec.irkSignatureHex,
-      )
-      .run();
-  }
-
-  async get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined> {
-    const row = await this.db
-      .prepare(`SELECT * FROM marketplace_listings WHERE creator = ? AND slug = ?`)
-      .bind(creator, slug)
-      .first<RawMarketplaceRow>();
-    return row ? rowToRecord(row) : undefined;
-  }
-
-  async search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]> {
-    const limit = Math.min(q.limit ?? 30, 100);
-    const offset = q.offset ?? 0;
-    const wheres: string[] = [`status = 'listed'`];
-    const args: unknown[] = [];
-    if (q.category) {
-      wheres.push(`category = ?`);
-      args.push(q.category);
-    }
-    if (q.verifiedOnly) {
-      wheres.push(`scan_grade IS NOT NULL`);
-    }
-    if (q.text) {
-      wheres.push(`(name LIKE ? OR tagline LIKE ? OR tags_csv LIKE ?)`);
-      const like = `%${q.text.toLowerCase()}%`;
-      args.push(like, like, like);
-    }
-    const order =
-      q.sort === "newest" ? "listed_at DESC" :
-      q.sort === "name" ? "name ASC" :
-      "rank_score DESC, install_count DESC";
-    const sql = `SELECT * FROM marketplace_listings WHERE ${wheres.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`;
-    args.push(limit, offset);
-    const result = await this.db.prepare(sql).bind(...args).all<RawMarketplaceRow>();
-    return (result.results ?? []).map(rowToRecord);
-  }
-
-  async remove(creator: string, slug: string): Promise<void> {
-    await this.db
-      .prepare(`UPDATE marketplace_listings SET status = 'removed', updated_at = ? WHERE creator = ? AND slug = ?`)
-      .bind(Date.now(), creator, slug)
-      .run();
-  }
-
-  async recordInstall(creator: string, slug: string): Promise<void> {
-    await this.db
-      .prepare(`UPDATE marketplace_listings SET install_count = install_count + 1, updated_at = ? WHERE creator = ? AND slug = ?`)
-      .bind(Date.now(), creator, slug)
-      .run();
-  }
-  async setScanResult(
-    creator: string,
-    slug: string,
-    grade: "A" | "B" | "C" | "D" | "F",
-    reportKey: string,
-    completedAt: number,
-  ): Promise<boolean> {
-    const r = await this.db
-      .prepare(
-        `UPDATE marketplace_listings
-           SET scan_grade = ?, scan_report_key = ?, scan_completed_at = ?, updated_at = ?
-         WHERE creator = ? AND slug = ?`,
-      )
-      .bind(grade, reportKey, completedAt, Date.now(), creator, slug)
-      .run();
-    const meta = (r as { meta?: { changes?: number } }).meta;
-    return meta?.changes === undefined ? true : meta.changes > 0;
-  }
-  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
-    const result = await this.db
-      .prepare(
-        `SELECT * FROM marketplace_listings
-           WHERE status = 'listed'
-             AND (scan_completed_at IS NULL OR scan_completed_at < ?)
-         ORDER BY scan_completed_at ASC NULLS FIRST, listed_at ASC`,
-      )
-      .bind(staleBeforeMs)
-      .all<RawMarketplaceRow>();
-    return (result.results ?? []).map(rowToRecord);
-  }
-}
-
-interface RawMarketplaceRow {
-  creator: string; slug: string; name: string; tagline: string;
-  description_md: string; category: string; tags_csv: string;
-  canonical_url: string; manifest_hash_hex: string; screenshot_keys_json: string;
-  status: string; scan_grade: string | null; scan_report_key: string | null;
-  scan_completed_at: number | null; featured_until: number | null;
-  rank_score: number; install_count: number; public_distribution: number;
-  listed_at: number; updated_at: number; irk_signature_hex: string;
-}
-
-function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
-  return {
-    creator: r.creator,
-    slug: r.slug,
-    name: r.name,
-    tagline: r.tagline,
-    descriptionMd: r.description_md,
-    category: r.category,
-    tagsCsv: r.tags_csv,
-    canonicalUrl: r.canonical_url,
-    manifestHashHex: r.manifest_hash_hex,
-    screenshotKeysJson: r.screenshot_keys_json,
-    status: r.status as "listed" | "private" | "removed",
-    scanGrade: (r.scan_grade ?? undefined) as "A" | "B" | "C" | "D" | "F" | undefined,
-    scanReportKey: r.scan_report_key ?? undefined,
-    scanCompletedAt: r.scan_completed_at ?? undefined,
-    featuredUntil: r.featured_until ?? undefined,
-    rankScore: r.rank_score,
-    installCount: r.install_count,
-    publicDistribution: r.public_distribution !== 0,
-    listedAt: r.listed_at,
-    updatedAt: r.updated_at,
-    irkSignatureHex: r.irk_signature_hex,
-  };
-}
-
 export class D1PushTokenStorage implements PushTokenStorage {
   constructor(private readonly db: D1Database) {}
   async put(rec: PushTokenRecord): Promise<void> {
@@ -2868,7 +2710,6 @@ export class D1Storage implements Storage {
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
-  marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
@@ -2904,7 +2745,6 @@ export class D1Storage implements Storage {
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
-    this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);

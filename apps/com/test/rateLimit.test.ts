@@ -80,7 +80,6 @@ describe("rateLimit — endpoint detection", () => {
 
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
-    expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();
     expect(endpointFor("GET", "/api/username/harry")).toBeNull();
     expect(endpointFor("GET", "/api/recovery")).toBeNull();
   });

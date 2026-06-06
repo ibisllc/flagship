@@ -26,7 +26,6 @@ export * from "./customDomainVerifier.js";
 export * from "./admin.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
-export * from "./marketplace.js";
 export * from "./push.js";
 export * from "./usersDevices.js";
 export * from "./accountResolve.js";

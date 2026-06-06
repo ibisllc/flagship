@@ -850,7 +850,6 @@ export interface Storage {
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
-  marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
@@ -898,71 +897,6 @@ export interface EntitlementRevocationStorage {
     accepted: boolean;
   }>;
   get(username: string): Promise<EntitlementRevocationListRecord | undefined>;
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// Marketplace
-// ──────────────────────────────────────────────────────────────────────
-
-export interface MarketplaceListingRecord {
-  creator: string;
-  slug: string;
-  name: string;
-  tagline: string;
-  descriptionMd: string;
-  category: string;
-  tagsCsv: string;
-  canonicalUrl: string;
-  manifestHashHex: string;
-  screenshotKeysJson: string;       // JSON array of strings
-  status: "listed" | "private" | "removed";
-  scanGrade?: "A" | "B" | "C" | "D" | "F";
-  scanReportKey?: string;
-  scanCompletedAt?: number;
-  featuredUntil?: number;
-  rankScore: number;
-  installCount: number;
-  publicDistribution: boolean;
-  listedAt: number;
-  updatedAt: number;
-  irkSignatureHex: string;
-}
-
-export interface MarketplaceSearchQuery {
-  text?: string;            // free-text search across name + tagline + tags
-  category?: string;
-  verifiedOnly?: boolean;
-  limit?: number;           // default 30
-  offset?: number;          // default 0
-  sort?: "popular" | "newest" | "name";
-}
-
-export interface MarketplaceStorage {
-  upsert(rec: MarketplaceListingRecord): Promise<void>;
-  get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined>;
-  search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
-  remove(creator: string, slug: string): Promise<void>;
-  recordInstall(creator: string, slug: string): Promise<void>;
-  /**
-   * Update scan_grade + scan_report_key + scan_completed_at on an
-   * existing listing. Called by the scanner service after it
-   * pulls the listing's docker image and runs Trivy + custom checks.
-   * Returns false if the listing doesn't exist.
-   */
-  setScanResult(
-    creator: string,
-    slug: string,
-    grade: "A" | "B" | "C" | "D" | "F",
-    reportKey: string,
-    completedAt: number,
-  ): Promise<boolean>;
-  /**
-   * Listings that need a (re)scan (#14 auto-trigger): status='listed'
-   * AND (never scanned OR scanCompletedAt < `staleBeforeMs`). Powers
-   * the authed scan-queue endpoint the nightly CI runner drains so a
-   * listing never ships scan_grade=NULL indefinitely.
-   */
-  listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

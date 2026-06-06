@@ -43,7 +43,6 @@ import type {
   LineagePauseSummary,
   LineageResolveRequest,
   LineageResolveResponse,
-  MarketplaceBrowseResponse,
   OrdersSendRequest,
   OrdersSendResponse,
   OwnedUrl,
@@ -165,7 +164,7 @@ export interface ScreensHttpDeps {
   vibeCode?: VibeCodeRuntime | null;
   /** Phone-orders dispatcher. Required by P1.14. */
   ordersDispatch?: OrdersDispatchLike | null;
-  /** .com control plane URL for proxy endpoints (marketplace, tier, install-events). */
+  /** .com control plane URL for proxy endpoints (tier, install-events). */
   controlPlaneBaseUrl?: string | null;
   /** Override fetch for .com proxies (tests inject; production uses globalThis.fetch). */
   fetchImpl?: FetchLike;
@@ -595,26 +594,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       });
       const out: ServerMetricsResponse = snapshot;
       return jok(out);
-    }
-
-    // ---- P1.4 GET /api/screens/marketplace-browse (proxied to .com)
-    if (path === "/api/screens/marketplace-browse" && method === "GET") {
-      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
-      if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
-      const r = await f(
-        `${trimSlash(deps.controlPlaneBaseUrl)}/api/marketplace/search`,
-        { method: "GET" },
-      );
-      if (!r.ok) return jerr(502, `marketplace fetch failed: ${r.status}`);
-      const upstream = (await r.json()) as { listings?: unknown[] };
-      const installed = new Set(
-        (deps.servicePlatform?.list() ?? []).map((a) => `${a.creator}/${a.slug}`),
-      );
-      const listings = (upstream.listings ?? []).map((raw) =>
-        parseListing(raw, installed),
-      );
-      const body: MarketplaceBrowseResponse = { listings };
-      return jok(body);
     }
 
     // ---- P1.16 GET /api/screens/tier-status (proxied to .com)
@@ -1223,27 +1202,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     }
 
     return jerr(404, "screen route not found");
-  };
-}
-
-function parseListing(
-  raw: unknown,
-  installed: Set<string>,
-): MarketplaceBrowseResponse["listings"][number] {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  const creator = typeof r.creator === "string" ? r.creator : "";
-  const slug = typeof r.slug === "string" ? r.slug : "";
-  return {
-    creator,
-    slug,
-    title: typeof r.title === "string" ? r.title : slug,
-    summary: typeof r.summary === "string" ? r.summary : "",
-    screenshots: Array.isArray(r.screenshots)
-      ? (r.screenshots as unknown[]).filter((s): s is string => typeof s === "string")
-      : [],
-    installCount: typeof r.installCount === "number" ? r.installCount : 0,
-    requiresLlmKey: !!r.requiresLlmKey,
-    alreadyInstalled: installed.has(`${creator}/${slug}`),
   };
 }
 

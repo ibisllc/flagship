@@ -517,51 +517,6 @@ function jsonFail(status: number, body: unknown) {
   };
 }
 
-describe("screens HTTP — P1.4 marketplace-browse (proxy)", () => {
-  it("proxies to .com and tags installed apps", async () => {
-    const upstream = {
-      listings: [
-        { creator: "alice", slug: "habits", title: "Habits", summary: "x", installCount: 5, requiresLlmKey: false, screenshots: ["s1"] },
-        { creator: "bob", slug: "game1", title: "Game", summary: "y", installCount: 1, requiresLlmKey: true, screenshots: [] },
-      ],
-    };
-    const calls: string[] = [];
-    const fakeFetch: FetchLike = async (url: string) => {
-      calls.push(url);
-      return jsonOk(upstream) as never;
-    };
-    const handle = buildScreensHttp({
-      ...COMMON,
-      gate: fakeGate(),
-      controlPlaneBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fakeFetch,
-      // alice/habits is installed locally
-      servicePlatform: fakeServicePlatform([makeInstalledService({ creator: "alice", slug: "habits" })]),
-    });
-    const r = await handle(req({
-      path: "/api/screens/marketplace-browse",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(200);
-    expect(calls[0]).toBe("https://flagshipserver.com/api/marketplace/search");
-    const body = JSON.parse(r!.body as string);
-    const habit = body.listings.find((l: { slug: string }) => l.slug === "habits");
-    expect(habit.alreadyInstalled).toBe(true);
-    const game = body.listings.find((l: { slug: string }) => l.slug === "game1");
-    expect(game.alreadyInstalled).toBe(false);
-    expect(game.requiresLlmKey).toBe(true);
-  });
-
-  it("returns 503 when no control plane is configured", async () => {
-    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
-    const r = await handle(req({
-      path: "/api/screens/marketplace-browse",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(503);
-  });
-});
-
 describe("screens HTTP — P1.16 tier-status", () => {
   it("returns the upstream tier when .com is healthy", async () => {
     const fakeFetch: FetchLike = async () =>

@@ -1493,7 +1493,7 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
   });
 
   it("apex marketing paths (/faq.html, /deck/, /blog/, /docs/) all return coming-soon", async () => {
-    for (const p of ["/faq.html", "/deck/", "/blog/", "/docs/", "/marketplace/", "/status/"]) {
+    for (const p of ["/faq.html", "/deck/", "/blog/", "/docs/", "/status/"]) {
       const r = await route(new Request(`https://flagshipserver.com${p}`), makeEnv());
       expect(r.status, p).toBe(200);
       expect(await r.text(), p).toBe("asset:/coming-soon.html");
