@@ -1,4 +1,4 @@
-// Services tab: list of installed services + marketplace + vibe-code launcher.
+// Services tab: list of installed services + vibe-code launcher.
 
 package com.flagshipserver.app.ui.shell.tabs
 
@@ -13,8 +13,6 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
-import com.flagshipserver.app.ui.screens.MarketplaceListScreen
-import com.flagshipserver.app.ui.screens.MarketplaceDetailScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
@@ -34,10 +32,6 @@ fun ServicesTab() {
                 deepLinker.consume()
                 nav.navigate("app-detail/${link.appId}")
             }
-            DeepLink.Marketplace -> {
-                deepLinker.consume()
-                nav.navigate("marketplace")
-            }
             else -> { /* not for this tab */ }
         }
     }
@@ -46,12 +40,6 @@ fun ServicesTab() {
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
             ServiceDetailScreen(nav, serviceId = id)
-        }
-        composable("marketplace") { MarketplaceListScreen(nav) }
-        composable("marketplace-detail/{creator}/{slug}") { entry ->
-            val creator = entry.arguments?.getString("creator") ?: return@composable
-            val slug = entry.arguments?.getString("slug") ?: return@composable
-            MarketplaceDetailScreen(nav, creator = creator, slug = slug)
         }
         composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
         composable("vibe/describe") { VibeCodeDescribeScreen(nav) }

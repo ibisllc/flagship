@@ -71,9 +71,12 @@ class DeepLinkParseTest {
         assertEquals(DeepLink.AppDetail("plants"), DeepLink.parse(uri))
     }
 
-    @Test fun parsesBareMarketplaceAndCreateServer() {
-        assertEquals(DeepLink.Marketplace, DeepLink.parse(Uri.parse("flagship://marketplace")))
+    @Test fun parsesBareCreateServer() {
         assertEquals(DeepLink.CreateServer, DeepLink.parse(Uri.parse("flagship://create-server")))
+    }
+
+    @Test fun rejectsRetiredMarketplaceHost() {
+        assertNull(DeepLink.parse(Uri.parse("flagship://marketplace")))
     }
 
     @Test fun rejectsForeignScheme() {

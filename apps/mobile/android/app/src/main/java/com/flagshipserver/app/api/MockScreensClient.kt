@@ -49,7 +49,7 @@ class MockScreensClient(
             recentInstallEvents = listOf(
                 RecentInstallEvent(now() - 60_000L * 30, "installed", "harry-plants", "via vibe-code"),
                 RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "harry-wiki", "v1.4.0"),
-                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry-wiki", "marketplace"),
+                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry-wiki", "via vibe-code"),
             ),
         )
     }
@@ -95,22 +95,6 @@ class MockScreensClient(
         )
     }
 
-    override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse {
-        tick()
-        return MarketplaceBrowseResponse(
-            listings = listOf(
-                MarketplaceListing("trent", "scratchpad", "Scratchpad",
-                    "A markdown notes app with offline-first sync.",
-                    emptyList(), 412, false, true),
-                MarketplaceListing("wendy", "wishlist", "Family Wishlist",
-                    "Shared birthday + holiday lists for the household.",
-                    emptyList(), 188, false, false),
-                MarketplaceListing("peggy", "feed-reader", "Tiny Feed Reader",
-                    "Atom + RSS in a clean reader. Optional AI summaries.",
-                    emptyList(), 974, true, false),
-            )
-        )
-    }
 
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         tick()

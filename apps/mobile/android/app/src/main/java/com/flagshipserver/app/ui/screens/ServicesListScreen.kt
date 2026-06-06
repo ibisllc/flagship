@@ -109,11 +109,6 @@ fun ServicesListScreen(nav: NavController) {
                         onClick = { nav.navigate("vibe/describe") },
                         block = true,
                     )
-                    FSGhostButton(
-                        label = "Browse marketplace",
-                        onClick = { nav.navigate("marketplace") },
-                        block = true,
-                    )
                 }
             }
         } else {

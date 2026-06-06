@@ -48,9 +48,9 @@ class AppLinkTest {
         assertEquals(DeepLink.SecretRequests, AppLink.resolve(uri))
     }
 
-    @Test fun appLinkForm_marketplace() {
+    @Test fun appLinkForm_retiredMarketplace_returnsNull() {
         val uri = Uri.parse("https://flagshipserver.com/app/marketplace")
-        assertEquals(DeepLink.Marketplace, AppLink.resolve(uri))
+        assertNull(AppLink.resolve(uri))
     }
 
     @Test fun appLinkForm_appDetail() {
@@ -117,7 +117,7 @@ class AppLinkTest {
         // intent (e.g. via an `android:scheme="http"` in some future
         // intent-filter), the path still translates. Today the only
         // declared scheme is https, but the check is cheap.
-        val uri = Uri.parse("http://flagshipserver.com/app/marketplace")
-        assertEquals(DeepLink.Marketplace, AppLink.resolve(uri))
+        val uri = Uri.parse("http://flagshipserver.com/app/server?podId=p1")
+        assertEquals(DeepLink.ServerDetail("p1"), AppLink.resolve(uri))
     }
 }

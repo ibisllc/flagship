@@ -24,9 +24,6 @@ interface ScreensClient {
     // P1.3 app-detail
     suspend fun appDetail(serviceId: String): AppDetailResponse
 
-    // P1.4 marketplace-browse
-    suspend fun marketplaceBrowse(): MarketplaceBrowseResponse
-
     // P1.5 vibe-code/start
     suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse
 

@@ -19,8 +19,6 @@ sealed interface HomeRoute {
 
 sealed interface AppsRoute {
     data class AppDetail(val appId: String) : AppsRoute
-    data object Marketplace : AppsRoute
-    data class MarketplaceDetail(val creator: String, val slug: String) : AppsRoute
     data object VibeCodeProviderPick : AppsRoute
     data object VibeCodeDescribe : AppsRoute
     data class VibeCodeGenerating(val sessionId: String) : AppsRoute
