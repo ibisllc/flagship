@@ -121,8 +121,27 @@
       <p>Prices are exclusive of sales tax, VAT, and similar. Where we collect tax, it's added at checkout. Where you owe tax we don't collect (some import duties), that's on you.</p>
     </section>
 
+    <section id="marketplace">
+      <h2>5. Marketplace</h2>
+
+      <h3>5.1 Listings</h3>
+      <p>Anyone with a Flagship account may publish a listing. A listing is a directory entry — title, description, screenshots, and a pointer to a canonical pod. We do not host the app's source or data; that lives on the publisher's server.</p>
+
+      <h3>5.2 You list at your own risk</h3>
+      <p>If you publish a listing, you represent that you have the right to do so, that your code does not violate the acceptable-use policy in §6, and that screenshots and descriptions are accurate. We may remove listings that violate these terms, with notice where reasonable.</p>
+
+      <h3>5.3 You install at your own risk</h3>
+      <p>Services are arbitrary code that will run on your hardware in your namespace. The optional security scan is informational, not a guarantee. We do not vet listings, do not sandbox the code beyond the daemon's namespace isolation, and are not responsible for damages caused by installed services. Read the manifest. Trust the publisher or don't install.</p>
+
+      <h3>5.4 Featured placement</h3>
+      <p>Publishers may pay for "featured" placement on the marketplace. Featured listings are clearly labeled. Paying for placement does not buy a security review; the scan grade and the featured tag are independent.</p>
+
+      <h3>5.5 Takedowns</h3>
+      <p>We may remove a listing or revoke a routing entry at our discretion in response to abuse reports (see <a href="/abuse">/abuse</a>), legal demands, or violation of these Terms. We can't read user data on a Flagship server, so takedowns operate on the routing layer (DNS) and the marketplace listing, never on data.</p>
+    </section>
+
     <section id="aup">
-      <h2>5. Acceptable use</h2>
+      <h2>6. Acceptable use</h2>
       <p>You agree not to use Flagship, and not to operate services on a Flagship server, to:</p>
       <ul>
         <li>Store, distribute, or facilitate the creation of <strong>child sexual abuse material (CSAM)</strong>. We will report and revoke without warning.</li>
@@ -138,58 +157,59 @@
     </section>
 
     <section id="ours">
-      <h2>6. Our content and software</h2>
+      <h2>7. Our content and software</h2>
       <p>The Flagship name, logos, and marketing assets are ours. The source code is under BUSL-1.1 (becomes Apache 2.0 on 2030-05-03); see the LICENSE file in the repository for the full text. You may use, modify, and self-host the source under those terms; you may not use the Flagship name to imply endorsement of a fork without our written permission.</p>
     </section>
 
     <section id="yours">
-      <h2>7. Your content</h2>
+      <h2>8. Your content</h2>
       <p>Anything you store on your Flagship server is yours. We do not claim a license to it, do not back it up centrally, and structurally cannot read it. The flip side: we cannot recover it for you, and we cannot moderate it. That tradeoff is the product.</p>
+      <p>For marketplace listing content (descriptions, screenshots) you grant us a non-exclusive, worldwide, royalty-free license to display, reproduce, and distribute the listing as part of operating the marketplace. You can withdraw the license by delisting; we'll remove the listing within 7 days.</p>
     </section>
 
     <section id="warranty">
-      <h2>8. Disclaimers</h2>
+      <h2>9. Disclaimers</h2>
       <p>Except for the express hardware warranty in §3.3, the service is provided "as is" and "as available," without warranty of any kind, express or implied. To the fullest extent permitted by law, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement.</p>
       <p>We do not warrant that the service will be uninterrupted, error-free, or secure against every conceivable threat. We do warrant, in good faith, the architectural properties described in <a href="/security">/security</a> — and we'll fix breaches of those properties as security issues, on the timeline in our security policy.</p>
     </section>
 
     <section id="liability">
-      <h2>9. Limitation of liability</h2>
+      <h2>10. Limitation of liability</h2>
       <p>To the maximum extent permitted by law, our total aggregate liability arising out of or related to these Terms or the service will not exceed the greater of (a) one hundred US dollars ($100) or (b) the amount you paid us in the twelve months preceding the event giving rise to the claim.</p>
       <p>Neither party will be liable for indirect, incidental, special, consequential, or punitive damages, or for loss of profits, revenue, data, or business opportunities, even if advised of the possibility.</p>
       <p>Some jurisdictions don't allow these limits. If you live in one, the limits above apply only to the extent permitted there.</p>
     </section>
 
     <section id="indemnify">
-      <h2>10. Indemnification</h2>
-      <p>You'll defend, indemnify, and hold us harmless from third-party claims arising out of (a) your violation of these Terms, (b) your violation of applicable law, or (c) your content (including services you publish).</p>
+      <h2>11. Indemnification</h2>
+      <p>You'll defend, indemnify, and hold us harmless from third-party claims arising out of (a) your violation of these Terms, (b) your violation of applicable law, or (c) your content (including marketplace listings and services you publish).</p>
     </section>
 
     <section id="term">
-      <h2>11. Termination</h2>
+      <h2>12. Termination</h2>
       <p>You may terminate at any time by deleting your account from the phone app. We may suspend or terminate your account on notice if you breach these Terms; for serious breaches (CSAM, active phishing, ongoing attack) we may act immediately and notify after.</p>
       <p>On termination: routing entries for your subdomain are revoked, sub-processor data scheduled for deletion within 30 days (subject to billing-record retention in §2.4 of the privacy policy), the hardware you bought remains yours.</p>
     </section>
 
     <section id="law">
-      <h2>12. Governing law</h2>
+      <h2>13. Governing law</h2>
       <p>These Terms are governed by the laws of the State of Delaware, United States, excluding its conflict-of-laws rules. The U.N. Convention on Contracts for the International Sale of Goods does not apply.</p>
     </section>
 
     <section id="dispute">
-      <h2>13. Dispute resolution</h2>
+      <h2>14. Dispute resolution</h2>
       <p>If we have a dispute, both sides agree to first try to resolve it by emailing <a href="mailto:legal@flagship.services">legal@flagship.services</a> with a written description and a proposed resolution. We'll respond within 30 days.</p>
       <p>If that doesn't work, the dispute will be resolved by binding individual arbitration administered by the American Arbitration Association under its Consumer Arbitration Rules, in English, in Delaware (or by phone / video where reasonable). Each side bears its own attorneys' fees except as the arbitrator awards. <strong>You and Flagship each waive the right to a jury trial and to participate in a class action.</strong></p>
       <p>You may opt out of this arbitration clause by mailing <a href="mailto:legal@flagship.services">legal@flagship.services</a> within 30 days of accepting these Terms; opting out doesn't affect any other provision. Nothing here prevents either side from seeking injunctive relief in court for IP infringement or unauthorized access.</p>
     </section>
 
     <section id="changes">
-      <h2>14. Changes to these terms</h2>
+      <h2>15. Changes to these terms</h2>
       <p>We may update these Terms. If a change is material, we'll post a note in the dashboard, update the date at the top, and email account-holders at least 14 days before it takes effect. Continued use after that means acceptance. If you don't accept, terminate your account before the effective date.</p>
     </section>
 
     <section id="misc">
-      <h2>15. Miscellaneous</h2>
+      <h2>16. Miscellaneous</h2>
       <ul>
         <li><strong>Entire agreement.</strong> These Terms (with the privacy policy and any plan-specific terms) are the whole deal between you and us regarding the service.</li>
         <li><strong>Severability.</strong> If a clause is unenforceable, the rest stands.</li>
@@ -200,7 +220,7 @@
     </section>
 
     <section id="contact">
-      <h2>16. Contact</h2>
+      <h2>17. Contact</h2>
       <p>Legal questions: <a href="mailto:legal@flagship.services">legal@flagship.services</a>.<br>
       Billing questions: <a href="mailto:billing@flagship.services">billing@flagship.services</a>.<br>
       Postal: Flagship, address available on request.</p>
@@ -220,6 +240,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>

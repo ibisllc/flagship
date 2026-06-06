@@ -138,7 +138,7 @@ export function deviceCapabilityAllows(block, scope) {
  *  it with a fully-scoped block re-enables the button.
  *
  *  Pure DOM mutation so view-layer callsites can hand it any button
- *  reference (vibe-code submit, "add device",
+ *  reference (marketplace install, vibe-code submit, "add device",
  *  etc.) under the same gate.
  *  @param {HTMLButtonElement|HTMLElement|null|undefined} button
  *  @param {DeviceCapabilityBlock|null|undefined} block

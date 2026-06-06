@@ -108,6 +108,131 @@ public struct LlmProviderCredential: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - P1.4 marketplace-browse
+
+public struct MarketplaceListing: Codable, Equatable, Sendable {
+    public let creator: String
+    public let slug: String
+    public let title: String
+    public let summary: String
+    public let screenshots: [String]
+    public let installCount: Int
+    public let requiresLlmKey: Bool
+    public let alreadyInstalled: Bool
+}
+
+public struct MarketplaceBrowseResponse: Codable, Equatable, Sendable {
+    public let listings: [MarketplaceListing]
+}
+
+/// Single-listing fetch (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`).
+/// MIRRORS the webapp's `fetchListing` in
+/// `apps/web/public/webapp/lib/installService.js` — same field is required
+/// (`manifestJson` is opaque JSON the daemon verifies on install). Extra
+/// fields the .com worker returns are tolerated by Codable.
+public struct MarketplaceListingDetail: Codable, Equatable, Sendable {
+    public let creator: String
+    public let slug: String
+    public let title: String
+    public let summary: String
+    public let manifestJson: String
+    public init(
+        creator: String,
+        slug: String,
+        title: String,
+        summary: String,
+        manifestJson: String
+    ) {
+        self.creator = creator
+        self.slug = slug
+        self.title = title
+        self.summary = summary
+        self.manifestJson = manifestJson
+    }
+}
+
+/// Install-marketplace-app request. MIRRORS the webapp wire shape in
+/// `apps/web/public/webapp/lib/installService.js` byte-for-byte: same field
+/// names, same canonical tag (`flagship/install-service/v1`), same envelope
+/// (`{ request, signature }`) — see `installServiceCanonicalBytes` for the
+/// canonical-bytes implementation. The daemon endpoint is
+/// `POST <pod>/api/services` (NOT under `/api/screens/*` — the install
+/// pipeline lives on the service-platform handler in
+/// `packages/server-daemon/src/servicePlatform.ts`).
+public struct InstallServiceRequest: Codable, Equatable, Sendable {
+    public let serverId: String
+    public let creator: String
+    public let slug: String
+    public let manifestJson: String
+    public let addOwnerToMembership: Bool
+    public let issuedAt: Int64
+    public init(
+        serverId: String,
+        creator: String,
+        slug: String,
+        manifestJson: String,
+        addOwnerToMembership: Bool,
+        issuedAt: Int64
+    ) {
+        self.serverId = serverId
+        self.creator = creator
+        self.slug = slug
+        self.manifestJson = manifestJson
+        self.addOwnerToMembership = addOwnerToMembership
+        self.issuedAt = issuedAt
+    }
+}
+
+/// `{request, signature}` envelope expected by `POST <pod>/api/services`.
+/// `signature` is the hex-encoded Ed25519 signature of
+/// `installServiceCanonicalBytes(request)` produced with the user's IRK.
+public struct InstallServiceEnvelope: Codable, Equatable, Sendable {
+    public let request: InstallServiceRequest
+    public let signature: String
+    public init(request: InstallServiceRequest, signature: String) {
+        self.request = request
+        self.signature = signature
+    }
+}
+
+/// Daemon's success body for `POST /api/services`. Mirrors
+/// `installService` in `servicePlatform.ts`.
+public struct InstallServiceResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let serviceId: String
+    public let urlLabel: String
+    public let port: Int?
+    public init(ok: Bool, serviceId: String, urlLabel: String, port: Int? = nil) {
+        self.ok = ok
+        self.serviceId = serviceId
+        self.urlLabel = urlLabel
+        self.port = port
+    }
+}
+
+/// Canonical-bytes for `InstallServiceRequest`, byte-identical with
+/// `canonicalInstallService` in
+/// `apps/web/public/webapp/lib/installService.js` and with the TS protocol
+/// in `packages/protocol/src/auth.ts` (`canonicalInstallService`). Format:
+///
+///     flagship/install-service/v1 | serverId | creator | slug | manifestJson | (1|0) | issuedAt
+///
+/// `addOwnerToMembership` is encoded as `"1"` (true) or `"0"` (false) to
+/// match the webapp; `issuedAt` is a base-10 integer (no separator inside
+/// the value, no padding).
+public func installServiceCanonicalBytes(_ r: InstallServiceRequest) -> Data {
+    let parts: [String] = [
+        "flagship/install-service/v1",
+        r.serverId,
+        r.creator,
+        r.slug,
+        r.manifestJson,
+        r.addOwnerToMembership ? "1" : "0",
+        String(r.issuedAt),
+    ]
+    return Data(parts.joined(separator: "|").utf8)
+}
+
 // MARK: - P1.5 vibe-code/start
 
 public struct VibeCodeStartRequest: Codable, Equatable, Sendable {

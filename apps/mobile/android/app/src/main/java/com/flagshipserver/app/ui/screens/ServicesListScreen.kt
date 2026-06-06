@@ -162,6 +162,11 @@ fun ServicesListScreen(nav: NavController) {
                         onClick = { nav.navigate("build/source") },
                         block = true,
                     )
+                    FSGhostButton(
+                        label = "Browse marketplace",
+                        onClick = { nav.navigate("marketplace") },
+                        block = true,
+                    )
                 }
             }
         } else {

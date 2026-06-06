@@ -66,7 +66,7 @@ function sortedNames(env: AppEnv): string[] {
  * recipient knows what to set on their own box. It carries NO values —
  * the values are sealed at rest on the originating box and never leave
  * it. `store.names(serviceId)` is the source; this is the shape that may
- * be embedded in a share package.
+ * be embedded in a share/marketplace package.
  */
 export interface ExportedEnvSchema {
   /** Declared env-var names. Never values. */

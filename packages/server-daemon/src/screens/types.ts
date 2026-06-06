@@ -91,6 +91,23 @@ export interface AppDetailResponse {
   recentLogs: string[];
 }
 
+// ---------- P1.4 — /api/screens/marketplace-browse ---------------------
+
+export interface MarketplaceListing {
+  creator: string;
+  slug: string;
+  title: string;
+  summary: string;
+  screenshots: string[];
+  installCount: number;
+  requiresLlmKey: boolean;
+  alreadyInstalled: boolean;
+}
+
+export interface MarketplaceBrowseResponse {
+  listings: MarketplaceListing[];
+}
+
 // ---------- P1.5 — /api/screens/vibe-code/start ------------------------
 
 export interface VibeCodeStartRequest {

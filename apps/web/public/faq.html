@@ -113,7 +113,7 @@
     <nav class="toc" aria-label="Sections">
       <a href="#setup">Setup &amp; install</a>
       <a href="#privacy">Privacy &amp; security</a>
-      <a href="#apps">Services</a>
+      <a href="#apps">Services &amp; marketplace</a>
       <a href="#money">Money &amp; subscriptions</a>
       <a href="#endgame">If Flagship goes away</a>
     </nav>
@@ -181,7 +181,7 @@
       <details class="q">
         <summary>What does Flagship the company actually store?</summary>
         <div class="answer">
-          <p>Username, your server's public key, a sealed LUKS-unlock blob (encrypted to your phone), DNS records for <code>your.flagship.services</code>, push-notification tokens, billing data if you paid us money. That's it. No file content, no prompts, no chats, no service traffic. The full inventory lives in <a href="/privacy">/privacy</a>.</p>
+          <p>Username, your server's public key, a sealed LUKS-unlock blob (encrypted to your phone), DNS records for <code>your.flagship.services</code>, push-notification tokens, billing data if you paid us money, and marketplace listing metadata if you publish a service. That's it. No file content, no prompts, no chats, no service traffic. The full inventory lives in <a href="/privacy">/privacy</a>.</p>
         </div>
       </details>
       <details class="q">
@@ -217,14 +217,26 @@
     </div>
   </section>
 
-  <section class="faq-section" id="apps" aria-label="Services">
-    <h2>Services</h2>
-    <p class="section-lede">Services are containers running on your box, namespaced by user.</p>
+  <section class="faq-section" id="apps" aria-label="Services and marketplace">
+    <h2>Services &amp; marketplace</h2>
+    <p class="section-lede">Services are containers running on your box, namespaced by user. The marketplace is a list of pointers, not a code host.</p>
     <div class="qlist">
       <details class="q">
         <summary>What is "vibe-coding" a service?</summary>
         <div class="answer">
           <p>You describe what you want in plain language ("a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <code>plant-water.you.flagship.services</code>. About 90 seconds. You can edit the code if you feel like it.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How does the marketplace work?</summary>
+        <div class="answer">
+          <p>Anyone can publish a listing — a title, description, screenshots, a link to a canonical pod. We host listings; we don't host code. When you install a service, your daemon pulls source from the canonical pod (or a fork you point to), signs it with your server identity, and runs it under your namespace. The marketplace is a directory, not an app store.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Are listings reviewed?</summary>
+        <div class="answer">
+          <p>Optionally, by the lister. Publishers can pay for a security scan (npm audit + trivy + semgrep + dynamic checks) and get a letter grade displayed on their listing. The grade is informational; we don't gate listings behind it. We'll take down listings that violate the acceptable-use policy in <a href="/terms">/terms</a> on report.</p>
         </div>
       </details>
       <details class="q">
@@ -248,7 +260,7 @@
       <details class="q">
         <summary>Can I uninstall a service cleanly?</summary>
         <div class="answer">
-          <p>Yes. Uninstall drops its container, its Postgres schema, its object-storage bucket, its DNS entry, and its cert. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
+          <p>Yes. Uninstall drops its container, its Postgres schema, its object-storage bucket, its DNS entry, and its cert. The marketplace listing (if any) is independent of installs and stays up. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
         </div>
       </details>
     </div>
@@ -297,7 +309,7 @@
       <details class="q">
         <summary>How do you make money long-term?</summary>
         <div class="answer">
-          <p>Hardware margin, subscriptions on the optional add-ons. We don't sell ads, telemetry, model-training rights, or your data — partly because it's the right thing, mostly because we structurally can't.</p>
+          <p>Hardware margin, subscriptions on the optional add-ons, marketplace promotion fees (clearly labeled "featured"). We don't sell ads, telemetry, model-training rights, or your data — partly because it's the right thing, mostly because we structurally can't.</p>
         </div>
       </details>
     </div>
@@ -346,6 +358,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>

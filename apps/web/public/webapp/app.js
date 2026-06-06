@@ -67,6 +67,8 @@ import {
   enterCompanionRequests,
   refreshBadgeOnce as refreshCompanionRequestsBadge,
 } from "./views/companion-requests.js";
+import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
+import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
@@ -116,6 +118,7 @@ const SUB_VIEW_TABS = {
   "view-service-detail": "apps",
   "view-invite-issue": "apps",
   "view-invite-manage": "apps",
+  "view-marketplace": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
@@ -303,6 +306,7 @@ function wireActivityEntries() {
 function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
+  wire("services-list-open-marketplace", enterMarketplace);
   wire("services-list-open-vibe-code", enterBuildSource);
 }
 
@@ -406,6 +410,8 @@ async function boot() {
   initAccountSecurityView();
   initAddDeviceView();
   initJoinView();
+  initTierStatusView();
+  initMarketplaceView();
   initVibeCodeView();
   initBuildSourceView();
   initBuildKeyView();

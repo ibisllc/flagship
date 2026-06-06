@@ -90,6 +90,23 @@ data class AppDetailResponse(
     )
 }
 
+// ---------- P1.4 marketplace-browse ------------------------------------
+
+@Serializable
+data class MarketplaceListing(
+    val creator: String,
+    val slug: String,
+    val title: String,
+    val summary: String,
+    val screenshots: List<String>,
+    val installCount: Int,
+    val requiresLlmKey: Boolean,
+    val alreadyInstalled: Boolean,
+)
+
+@Serializable
+data class MarketplaceBrowseResponse(val listings: List<MarketplaceListing>)
+
 // ---------- P1.5 vibe-code/start ---------------------------------------
 
 /**
