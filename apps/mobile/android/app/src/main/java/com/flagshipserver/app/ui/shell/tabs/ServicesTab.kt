@@ -1,4 +1,4 @@
-// Services tab: list of installed services + vibe-code launcher.
+// Services tab: list of installed services + marketplace + vibe-code launcher.
 
 package com.flagshipserver.app.ui.shell.tabs
 
@@ -16,6 +16,8 @@ import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.ServiceEnvScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
+import com.flagshipserver.app.ui.screens.MarketplaceListScreen
+import com.flagshipserver.app.ui.screens.MarketplaceDetailScreen
 import com.flagshipserver.app.ui.screens.AiKeyStepScreen
 import com.flagshipserver.app.ui.screens.BuildGitScreen
 import com.flagshipserver.app.ui.screens.BuildJournalScreen
@@ -85,6 +87,10 @@ fun ServicesTab() {
                 val pg = java.net.URLEncoder.encode(link.pageId, "UTF-8")
                 nav.navigate("knock-authorize/$srv/$ref/$pg?svc=$svc")
             }
+            DeepLink.Marketplace -> {
+                deepLinker.consume()
+                nav.navigate("marketplace")
+            }
             else -> { /* not for this tab */ }
         }
     }
@@ -105,6 +111,12 @@ fun ServicesTab() {
             val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
+        composable("marketplace") { MarketplaceListScreen(nav) }
+        composable("marketplace-detail/{creator}/{slug}") { entry ->
+            val creator = entry.arguments?.getString("creator") ?: return@composable
+            val slug = entry.arguments?.getString("slug") ?: return@composable
+            MarketplaceDetailScreen(nav, creator = creator, slug = slug)
+        }
         composable("build/source") { BuildSourceChooserScreen(nav) }
         composable("build/git") { BuildGitScreen(nav) }
         // AI-key step for the git-adapt path. On confirm it stows the chosen
@@ -124,7 +136,6 @@ fun ServicesTab() {
         composable("build/journal/{buildId}") { entry ->
             val bid = entry.arguments?.getString("buildId") ?: return@composable
             BuildJournalScreen(nav, buildId = bid)
-        }
         composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
         // AI-key step for the from-scratch path. On confirm it stows the
         // in-memory credential and continues to the describe screen, which

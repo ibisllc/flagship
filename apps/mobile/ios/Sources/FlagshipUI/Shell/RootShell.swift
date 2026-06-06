@@ -271,7 +271,7 @@ public struct RootShell: View {
         switch link {
         case .secretRequests:                         return .activity
         case .serverDetail, .createServer:            return .home
-        case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
+        case .appDetail, .marketplace, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
         case .transferOffer:                          return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected

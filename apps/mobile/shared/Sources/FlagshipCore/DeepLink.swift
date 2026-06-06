@@ -13,6 +13,7 @@ public enum DeepLink: Equatable, Sendable {
     case secretRequests
     case serverDetail(podId: String)
     case appDetail(serviceId: String)
+    case marketplace
     case createServer
     /// Open the recovery-setup flow on the Settings tab. Triggered
     /// in-app from the Home nudge (B9). Not parseable from a URL —
@@ -173,6 +174,8 @@ public enum DeepLink: Equatable, Sendable {
             if let id = params["podId"] { return .serverDetail(podId: id) }
         case "app":
             if let id = params["serviceId"] { return .appDetail(serviceId: id) }
+        case "marketplace":
+            return .marketplace
         case "create-server":
             return .createServer
         case "invite":

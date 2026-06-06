@@ -71,6 +71,7 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.BuildJournal -> RootDestination.APPS
+            com.flagshipserver.app.core.DeepLink.Marketplace -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
             // Slice C — a `/transfer?o=…` take-over link opens the acquirer flow
             // on the Home tab (adding/receiving a server is a Home concern).

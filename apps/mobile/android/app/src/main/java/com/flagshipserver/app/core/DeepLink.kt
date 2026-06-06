@@ -20,6 +20,7 @@ sealed interface DeepLink {
     data object SecretRequests : DeepLink
     data class ServerDetail(val podId: String) : DeepLink
     data class AppDetail(val appId: String) : DeepLink
+    data object Marketplace : DeepLink
     data object CreateServer : DeepLink
     /** Open the recovery-setup flow on the Settings tab. Triggered
      *  in-app from the Home nudge (C9). Internal-only — not parsed
@@ -125,6 +126,7 @@ sealed interface DeepLink {
                 "secret-requests", "secret-request", "unlock-approve", "unlock-approvals" -> SecretRequests
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
+                "marketplace" -> Marketplace
                 "create-server" -> CreateServer
                 "transfer" -> {
                     // flagship://transfer?o=<b64url> — the custom-scheme twin of

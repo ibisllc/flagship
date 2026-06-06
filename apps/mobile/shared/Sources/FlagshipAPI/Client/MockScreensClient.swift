@@ -57,7 +57,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             recentInstallEvents: [
                 RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry--plants", detail: "via vibe-code"),
                 RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry--wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry--wiki", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry--wiki", detail: "marketplace"),
             ]
         )
     }
@@ -137,6 +137,95 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 "[\(Self.relativeTime(45))] GET / → 200",
                 "[\(Self.relativeTime(30))] migration check ok"
             ]
+        )
+    }
+
+    // MARK: - P1.4 marketplace install plumbing
+    //
+    // Tests inspect these recorders to assert the install call shape (path,
+    // request body, signature presence). The Live client posts the same
+    // payload to `<pod>/api/services`.
+    public private(set) var installCalls: [InstallServiceEnvelope] = []
+    public struct ListingFetch: Equatable, Sendable {
+        public let creator: String
+        public let slug: String
+    }
+    public private(set) var listingFetches: [ListingFetch] = []
+    /// When true, the next `installFromMarketplace` call throws to let tests
+    /// exercise the error path.
+    public var installShouldFail: Bool = false
+    public var installFailureMessage: String = "simulated daemon error"
+
+    // MARK: - P1.4 marketplace-browse
+
+    public func marketplaceBrowse() async throws -> MarketplaceBrowseResponse {
+        try await tick()
+        return MarketplaceBrowseResponse(listings: [
+            MarketplaceListing(
+                creator: "trent",
+                slug: "scratchpad",
+                title: "Scratchpad",
+                summary: "A markdown notes app with offline-first sync.",
+                screenshots: [],
+                installCount: 412,
+                requiresLlmKey: false,
+                alreadyInstalled: true
+            ),
+            MarketplaceListing(
+                creator: "wendy",
+                slug: "wishlist",
+                title: "Family Wishlist",
+                summary: "Shared birthday + holiday lists for the household.",
+                screenshots: [],
+                installCount: 188,
+                requiresLlmKey: false,
+                alreadyInstalled: false
+            ),
+            MarketplaceListing(
+                creator: "peggy",
+                slug: "feed-reader",
+                title: "Tiny Feed Reader",
+                summary: "Atom + RSS in a clean reader. Optional AI summaries.",
+                screenshots: [],
+                installCount: 974,
+                requiresLlmKey: true,
+                alreadyInstalled: false
+            )
+        ])
+    }
+
+    /// Deterministic listing detail. The `manifestJson` is opaque (a real
+    /// daemon validates the inner JSON); the mock returns a small, recognizable
+    /// stub so tests can assert it round-trips into the install request.
+    public func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail {
+        try await tick()
+        listingFetches.append(ListingFetch(creator: creator, slug: slug))
+        let manifestJson = """
+        {"name":"\(slug)","version":"1.0.0","creator":"\(creator)"}
+        """
+        return MarketplaceListingDetail(
+            creator: creator,
+            slug: slug,
+            title: slug.capitalized,
+            summary: "Marketplace stub for \(creator)/\(slug)",
+            manifestJson: manifestJson
+        )
+    }
+
+    /// Records the install envelope so tests can assert its shape, then
+    /// returns a deterministic success body. Set `installShouldFail = true`
+    /// to exercise the error path.
+    public func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse {
+        try await tick()
+        installCalls.append(envelope)
+        if installShouldFail {
+            throw ScreensClientError.http(status: 400, message: installFailureMessage)
+        }
+        return InstallServiceResponse(
+            ok: true,
+            serviceId: "\(envelope.request.creator)--\(envelope.request.slug)",
+            urlLabel: envelope.request.slug,
+            port: 8080
         )
     }
 

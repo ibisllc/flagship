@@ -3,7 +3,7 @@ import Flagship
 import FlagshipCore
 import FlagshipAPI
 
-/// Services tab: list → detail; vibe-code launcher. Owns its
+/// Services tab: list → detail; marketplace; vibe-code launcher. Owns its
 /// own NavigationStack with AppsRoute as the path element type. Surfaces
 /// as "Services" in the UI.
 public struct ServicesTab: View {
@@ -53,6 +53,11 @@ public struct ServicesTab: View {
                 path.append(.appDetail(serviceId: id))
             }
             _ = linker.consume()
+        case .marketplace:
+            if !path.contains(.marketplace) {
+                path.append(.marketplace)
+            }
+            _ = linker.consume()
         case .vibeCodeChat(let sessionId):
             if path.last != .vibeCodeChat(sessionId: sessionId) {
                 path.append(.vibeCodeChat(sessionId: sessionId))
@@ -78,6 +83,7 @@ public struct ServicesTab: View {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
                         subheader(c: c, vm: vm)
                         emptyOrList(vm: vm, c: c)
+                        marketplaceCard(c: c)
                         Spacer().frame(height: FS.space.s12)
                     }
                     .padding(.horizontal, FS.space.s6)
@@ -134,6 +140,10 @@ public struct ServicesTab: View {
         switch route {
         case .appDetail(let id):
             ServiceDetailContainer(serviceId: id, path: $path)
+        case .marketplace:
+            MarketplaceContainer(path: $path)
+        case .marketplaceDetail(let creator, let slug):
+            MarketplaceDetailContainer(creator: creator, slug: slug)
         case .buildSource:
             BuildSourceChooserContainer(path: $path)
         case .buildGit:
@@ -271,6 +281,21 @@ public struct ServicesTab: View {
         }
     }
 
+    private func marketplaceCard(c: FSColors) -> some View {
+        Button(action: { path.append(.marketplace) }) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "square.grid.2x2").foregroundColor(c.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Marketplace").foregroundColor(c.text)
+                        Text("Services your neighbours built").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }.buttonStyle(.plain)
+    }
 }
 
 /// Apps tab creator filter (the chip row). `.all` shows everything; `.yours`
@@ -514,6 +539,193 @@ struct ServiceEnvContainer: View {
             client: client,
             signEnvelope: signer
         )
+    }
+}
+
+struct MarketplaceContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @State private var vm: MarketplaceViewModel?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Marketplace").font(.system(size: 32, weight: .medium)).foregroundColor(c.text)
+                Text("Services your neighbours built. One tap to install.")
+                    .font(.system(size: 17)).foregroundColor(c.textMuted)
+                if app.pods.isEmpty {
+                    // The marketplace is a catalog, browsable before you
+                    // own a server. Until the central catalog ships, show
+                    // a friendly placeholder instead of a "not paired" error.
+                    FSCard {
+                        Text("The marketplace is coming soon.")
+                            .foregroundColor(c.textMuted)
+                    }
+                } else if let vm {
+                    @Bindable var bindable = vm
+                    FSField(value: $bindable.searchQuery, label: "", placeholder: "Search marketplace")
+                    switch vm.state {
+                    case .idle, .loading:
+                        VStack { ForEach(0..<3) { _ in ServerCardSkeleton() } }
+                    case .failed(let msg):
+                        ErrorCard(message: msg)
+                    case .loaded:
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+                            ForEach(vm.filtered, id: \.slug) { listing in
+                                Button(action: { path.append(.marketplaceDetail(creator: listing.creator, slug: listing.slug)) }) {
+                                    listingRow(listing: listing, c: c)
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard !app.pods.isEmpty else { return }
+            if vm == nil { vm = MarketplaceViewModel(client: client) }
+            if case .idle = vm?.state { await vm?.load() }
+        }
+    }
+
+    private func listingRow(listing: MarketplaceListing, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(listing.title).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                Text("by \(listing.creator)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                HStack(spacing: FS.space.s2) {
+                    FSPill("\(listing.installCount) deploys", kind: listing.installCount > 0 ? .online : .idle)
+                    if listing.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    if listing.alreadyInstalled { FSPill("Deployed", kind: .idle) }
+                }
+            }
+        }
+    }
+}
+
+struct MarketplaceDetailContainer: View {
+    let creator: String
+    let slug: String
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
+    @State private var listing: MarketplaceListing?
+    @State private var installState: InstallState = .idle
+
+    enum InstallState: Equatable {
+        case idle
+        case installing
+        case succeeded(serviceId: String)
+        case failed(message: String)
+    }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if let l = listing {
+                    Text(l.title).font(FS.font.h2()).foregroundColor(c.text)
+                    Text("by \(l.creator)").foregroundColor(c.textMuted)
+                    FSCard { Text(l.summary).foregroundColor(c.text) }
+                    HStack {
+                        FSPill("\(l.installCount) deploys", kind: .online)
+                        if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    }
+                    installControls(listing: l, c: c)
+                    FSGhostButton("View source", block: true) {}
+                } else {
+                    ServerCardSkeleton()
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            let resp = (try? await client.marketplaceBrowse())?.listings ?? []
+            listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
+        }
+    }
+
+    @ViewBuilder
+    private func installControls(listing l: MarketplaceListing, c: FSColors) -> some View {
+        switch installState {
+        case .idle:
+            FSPrimaryButton(
+                l.alreadyInstalled ? "Already installed" : "Deploy",
+                enabled: !l.alreadyInstalled,
+                block: true,
+                large: true
+            ) {
+                Task { await runInstall(creator: l.creator, slug: l.slug) }
+            }
+            .accessibilityIdentifier("marketplace-deploy-button")
+        case .installing:
+            FSPrimaryButton("Installing…", enabled: false, block: true, large: true) {}
+                .accessibilityIdentifier("marketplace-deploy-installing")
+            ProgressView().padding(.top, FS.space.s2)
+        case .succeeded(let serviceId):
+            FSCard {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                    Text("Installed as \(serviceId).")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                }
+            }
+            .accessibilityIdentifier("marketplace-deploy-success")
+        case .failed(let message):
+            ErrorCard(message: "Install failed: \(message)")
+                .accessibilityIdentifier("marketplace-deploy-error")
+            FSGhostButton("Try again", block: true) {
+                installState = .idle
+            }
+        }
+    }
+
+    private func runInstall(creator: String, slug: String) async {
+        installState = .installing
+        do {
+            // Fetch the full listing (manifestJson lives only on the
+            // single-listing endpoint; marketplaceBrowse returns metadata
+            // only). Mirrors the webapp's two-step fetch in
+            // `installFromMarketplace`.
+            let detail = try await client.marketplaceFetchListing(creator: creator, slug: slug)
+            guard let serverFqdn = app.currentPod?.fqdn else {
+                installState = .failed(message: "no pod paired yet")
+                return
+            }
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let request = InstallServiceRequest(
+                serverId: serverFqdn,
+                creator: creator,
+                slug: slug,
+                manifestJson: detail.manifestJson,
+                addOwnerToMembership: true,
+                issuedAt: issuedAt
+            )
+            let irk = try await Keystore.deriveIRK(reason: "Install \(creator)/\(slug)")
+            let sig = try irk.signature(for: installServiceCanonicalBytes(request))
+            let envelope = InstallServiceEnvelope(
+                request: request,
+                signature: HexUtil.encode(sig)
+            )
+            let resp = try await client.installFromMarketplace(envelope)
+            installState = .succeeded(serviceId: resp.serviceId)
+        } catch let e as ScreensClientError {
+            installState = .failed(message: e.errorDescription ?? "unknown error")
+        } catch {
+            installState = .failed(message: error.localizedDescription)
+        }
     }
 }
 

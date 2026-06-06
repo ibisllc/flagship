@@ -181,6 +181,11 @@ fun ServicesListScreen(nav: NavController) {
                         block = true,
                         modifier = Modifier.testTag("services-build-cta"),
                     )
+                    FSGhostButton(
+                        label = "Browse marketplace",
+                        onClick = { nav.navigate("marketplace") },
+                        block = true,
+                    )
                 }
             }
         } else {

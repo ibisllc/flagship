@@ -49,6 +49,7 @@ import type {
   LineagePauseSummary,
   LineageResolveRequest,
   LineageResolveResponse,
+  MarketplaceBrowseResponse,
   OrdersSendRequest,
   OrdersSendResponse,
   OwnedUrl,
@@ -178,7 +179,7 @@ export interface ScreensHttpDeps {
   vibeCode?: VibeCodeRuntime | null;
   /** Phone-orders dispatcher. Required by P1.14. */
   ordersDispatch?: OrdersDispatchLike | null;
-  /** .com control plane URL for proxy endpoints (tier, install-events). */
+  /** .com control plane URL for proxy endpoints (marketplace, tier, install-events). */
   controlPlaneBaseUrl?: string | null;
   /** Override fetch for .com proxies (tests inject; production uses globalThis.fetch). */
   fetchImpl?: FetchLike;
@@ -645,6 +646,54 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       });
       const out: ServerMetricsResponse = snapshot;
       return jok(out);
+    }
+
+    // ---- P1.4 GET /api/screens/marketplace-browse (proxied to .com)
+    if (path === "/api/screens/marketplace-browse" && method === "GET") {
+      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+      if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
+      const r = await f(
+        `${trimSlash(deps.controlPlaneBaseUrl)}/api/marketplace/search`,
+        { method: "GET" },
+      );
+      if (!r.ok) return jerr(502, `marketplace fetch failed: ${r.status}`);
+      const upstream = (await r.json()) as { listings?: unknown[] };
+      const installed = new Set(
+        (deps.servicePlatform?.list() ?? []).map((a) => `${a.creator}/${a.slug}`),
+      );
+      const listings = (upstream.listings ?? []).map((raw) =>
+        parseListing(raw, installed),
+      );
+      const body: MarketplaceBrowseResponse = { listings };
+      return jok(body);
+    }
+
+    // ---- P1.16 GET /api/screens/tier-status (proxied to .com)
+    if (path === "/api/screens/tier-status" && method === "GET") {
+      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+      if (!deps.controlPlaneBaseUrl) {
+        // No control plane → free tier with no quota visibility.
+        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+        return jok(body);
+      }
+      try {
+        const r = await f(
+          `${trimSlash(deps.controlPlaneBaseUrl)}/api/tier/status`,
+          { method: "GET" },
+        );
+        if (!r.ok) {
+          // Treat as free tier on upstream failure rather than 502 — the
+          // tier dashboard is a soft surface; we don't want a .com
+          // outage to break the webapp's settings view.
+          const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+          return jok(body);
+        }
+        const upstream = (await r.json()) as TierStatusResponse;
+        return jok(upstream);
+      } catch {
+        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
+        return jok(body);
+      }
     }
 
     // ---- P1.5 POST /api/screens/vibe-code/start
@@ -1310,6 +1359,27 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     }
 
     return jerr(404, "screen route not found");
+  };
+}
+
+function parseListing(
+  raw: unknown,
+  installed: Set<string>,
+): MarketplaceBrowseResponse["listings"][number] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const creator = typeof r.creator === "string" ? r.creator : "";
+  const slug = typeof r.slug === "string" ? r.slug : "";
+  return {
+    creator,
+    slug,
+    title: typeof r.title === "string" ? r.title : slug,
+    summary: typeof r.summary === "string" ? r.summary : "",
+    screenshots: Array.isArray(r.screenshots)
+      ? (r.screenshots as unknown[]).filter((s): s is string => typeof s === "string")
+      : [],
+    installCount: typeof r.installCount === "number" ? r.installCount : 0,
+    requiresLlmKey: !!r.requiresLlmKey,
+    alreadyInstalled: installed.has(`${creator}/${slug}`),
   };
 }
 

@@ -123,6 +123,7 @@ public struct HomeTab: View {
                             linker.pending = .startVibeCode
                         }
                     },
+                    onBrowseMarketplace: { linker.pending = .marketplace },
                     onRefresh: {
                         // An explicit pull-to-refresh is a user-initiated
                         // moment — re-run the full server-truth reconcile

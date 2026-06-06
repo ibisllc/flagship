@@ -88,6 +88,10 @@ export async function dispatchInitialView() {
       const { enterRecovery } = await import("../views/recovery.js");
       return enterRecovery();
     }
+    if (q.view === "view-marketplace") {
+      const { enterMarketplace } = await import("../views/marketplace.js");
+      return enterMarketplace();
+    }
     if (q.view === "view-server-detail") {
       const { enterServerDetail } = await import("../views/server-detail.js");
       return enterServerDetail();

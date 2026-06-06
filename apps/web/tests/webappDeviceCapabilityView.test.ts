@@ -18,13 +18,13 @@ describe("webapp device-capability rendering (parity with iOS HomeScreen)", () =
     expect(r.body).toContain('from "../lib/profiles.js"');
   });
 
-  it("home.js gates vibe-code on the active device's scopes", async () => {
+  it("home.js gates install-service + vibe-code on the active device's scopes", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/home.js" });
     expect(r.statusCode).toBe(200);
-    // The vibe-code scope string (matching DEVICE_SCOPES / the Worker wire)
-    // appears as a scope-gate argument. (The "install-service" gate moved
-    // out with the marketplace button — extracted to feat/marketplace.)
+    // Both scope strings (matching DEVICE_SCOPES / the Worker wire) appear
+    // as scope-gate arguments.
+    expect(r.body).toContain('"install-service"');
     expect(r.body).toContain('"vibe-code"');
     // The chip render + the active-capability accessor are exported so
     // tests + future surfaces can reuse them.

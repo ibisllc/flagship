@@ -60,6 +60,9 @@ import type {
   LlmPromoStorage,
   LlmPromoUsageRecord,
   LuksKeyStorage,
+  MarketplaceListingRecord,
+  MarketplaceSearchQuery,
+  MarketplaceStorage,
   PushTokenRecord,
   PushTokenStorage,
   RoutingRecord,
@@ -501,6 +504,89 @@ export class InMemoryLuksKeyStorage implements LuksKeyStorage {
   async deleteSealed(serverDomain: string): Promise<void> {
     this.sealed.delete(serverDomain);
   }
+}
+
+export class InMemoryMarketplaceStorage implements MarketplaceStorage {
+  private listings = new Map<string, MarketplaceListingRecord>();
+  private key(c: string, s: string) { return `${c.toLowerCase()}/${s.toLowerCase()}`; }
+  async upsert(rec: MarketplaceListingRecord): Promise<void> {
+    this.listings.set(this.key(rec.creator, rec.slug), { ...rec });
+  }
+  async get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined> {
+    const r = this.listings.get(this.key(creator, slug));
+    return r ? { ...r } : undefined;
+  }
+  async search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]> {
+    const limit = q.limit ?? 30;
+    const offset = q.offset ?? 0;
+    let all = [...this.listings.values()].filter((l) => l.status === "listed");
+    if (q.category) all = all.filter((l) => l.category === q.category);
+    if (q.verifiedOnly) all = all.filter((l) => !!l.scanGrade);
+    if (q.text) {
+      const needle = q.text.toLowerCase();
+      all = all.filter((l) =>
+        l.name.toLowerCase().includes(needle) ||
+        l.tagline.toLowerCase().includes(needle) ||
+        l.tagsCsv.toLowerCase().includes(needle),
+      );
+    }
+    switch (q.sort ?? "popular") {
+      case "popular":
+        all.sort((a, b) => b.rankScore - a.rankScore || b.installCount - a.installCount);
+        break;
+      case "newest":
+        all.sort((a, b) => b.listedAt - a.listedAt);
+        break;
+      case "name":
+        all.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+    }
+    return all.slice(offset, offset + limit).map((r) => ({ ...r }));
+  }
+  async remove(creator: string, slug: string): Promise<void> {
+    const key = this.key(creator, slug);
+    const r = this.listings.get(key);
+    if (r) this.listings.set(key, { ...r, status: "removed" });
+  }
+  async recordInstall(creator: string, slug: string): Promise<void> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (r) {
+      r.installCount += 1;
+      r.rankScore = computeMarketplaceRank(r);
+    }
+  }
+  async setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (!r) return false;
+    r.scanGrade = grade;
+    r.scanReportKey = reportKey;
+    r.scanCompletedAt = completedAt;
+    r.rankScore = computeMarketplaceRank(r);
+    return true;
+  }
+  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
+    return [...this.listings.values()]
+      .filter(
+        (l) =>
+          l.status === "listed" &&
+          (l.scanCompletedAt === undefined || l.scanCompletedAt < staleBeforeMs),
+      )
+      .map((l) => ({ ...l }));
+  }
+}
+
+export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
+  const installs = Math.log10(l.installCount + 1) * 4;
+  const recency = Math.max(0, 30 - (Date.now() - l.updatedAt) / 86_400_000);
+  const grade = l.scanGrade ? { A: 5, B: 3, C: 1, D: -2, F: -5 }[l.scanGrade] : 0;
+  const featured = l.featuredUntil && l.featuredUntil > Date.now() ? 10 : 0;
+  return installs + recency + grade + featured;
 }
 
 export class InMemoryPushTokenStorage implements PushTokenStorage {
@@ -1796,6 +1882,7 @@ export class InMemoryStorage implements Storage {
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
+  marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();

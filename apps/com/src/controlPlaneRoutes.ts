@@ -144,6 +144,13 @@ import {
   handleGetAuditEvents,
   handlePostDaemonStatus,
   handleUserPubKeyCert,
+  handleMarketplaceList,
+  handleMarketplaceGet,
+  handleMarketplaceSearch,
+  handleMarketplaceRemove,
+  handleMarketplaceInstall,
+  handleMarketplaceScanResult,
+  handleMarketplaceScanQueue,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
@@ -269,6 +276,8 @@ export interface ControlPlaneEnv {
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Hex-encoded Ed25519 pubkey of the marketplace scanner (Flagship-operated). */
+  MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
 
@@ -664,6 +673,11 @@ const ROUTE_RE = {
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
   ADMIN_USERNAME_RECLAIM: /^\/api\/admin\/username\/([^/]+)\/reclaim$/,
   ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
+  MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
+  MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
+  MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
+  MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
+  MARKETPLACE_SCAN_RESULT: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/scan$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -680,6 +694,7 @@ const ROUTE_RE = {
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
+  INTERNAL_MARKETPLACE_SCAN_QUEUE: /^\/api\/internal\/marketplace-scan-queue$/,
   // Plan A — demo-user / Hetzner on-connect provisioning. The two
   // public-rate-limited endpoints (connect, heartbeat) live above the
   // bare GET in matching order so `/connect` and `/heartbeat` win
@@ -2668,6 +2683,17 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "GET" && ROUTE_RE.INTERNAL_MARKETPLACE_SCAN_QUEUE.test(path)) {
+    const sd = parseInt(url.searchParams.get("staleDays") ?? "", 10);
+    return finish(
+      await handleMarketplaceScanQueue(
+        { marketplace: storage.marketplace },
+        bearer(request.headers.get("authorization")),
+        env.SERVICES_CONTROL_SECRET,
+        Number.isFinite(sd) ? sd : undefined,
+      ),
+    );
+  }
   if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
     return finish(
       await handleVoiciShorten(
@@ -2830,6 +2856,87 @@ export async function tryControlPlane(
       await handleGetProvisionStatus(
         { storage: storage.provisionStatus },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+
+  // ── Marketplace ──────────────────────────────────────────────
+  if (method === "POST" && ROUTE_RE.MARKETPLACE_LIST.test(path)) {
+    return finish(
+      await handleMarketplaceList(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.MARKETPLACE_SEARCH.test(path)) {
+    const limit = parseInt(url.searchParams.get("limit") ?? "30", 10) || 30;
+    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
+    const sortRaw = url.searchParams.get("sort");
+    const sort = sortRaw === "newest" || sortRaw === "name" || sortRaw === "popular" ? sortRaw : undefined;
+    return finish(
+      await handleMarketplaceSearch(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        {
+          text: url.searchParams.get("q") ?? undefined,
+          category: url.searchParams.get("cat") ?? undefined,
+          verifiedOnly: url.searchParams.get("verified") === "1",
+          limit,
+          offset,
+          sort,
+        },
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceGet(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceRemove(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_INSTALL))) {
+    return finish(
+      await handleMarketplaceInstall(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_SCAN_RESULT))) {
+    if (!env.MARKETPLACE_SCANNER_PUBKEY_HEX) {
+      return finishPlain({
+        status: 503,
+        body: { error: "marketplace scanner not configured on this deployment" },
+      });
+    }
+    let scannerPubkey: Uint8Array;
+    try {
+      const hex = env.MARKETPLACE_SCANNER_PUBKEY_HEX;
+      scannerPubkey = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < scannerPubkey.length; i++) {
+        scannerPubkey[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      }
+    } catch {
+      return finishPlain({ status: 500, body: { error: "scanner pubkey misconfigured" } });
+    }
+    return finish(
+      await handleMarketplaceScanResult(
+        { marketplace: storage.marketplace, scannerPubkey },
+        await readJson(request),
       ),
     );
   }

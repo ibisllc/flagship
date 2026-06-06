@@ -103,8 +103,8 @@ fun HomeScreen(
      *  header renders a "Device: <label> · browse-only" chip below
      *  the username. Nil ⇒ legacy single-IRK path, no chip. Source:
      *  AppState.deviceCapability. The home screen itself doesn't yet
-     *  render the vibe-code quick-action buttons (those live on the
-     *  Apps tab on Android v1.0); the chip is
+     *  render the install / vibe-code quick-action buttons (those
+     *  live behind the marketplace tab on Android v1.0); the chip is
      *  the first visible v2 surface here. */
     deviceCapability: DeviceCapabilityBlock? = null,
     /** Lowercased fqdns of servers with a LIVE pending boot-unlock request

@@ -115,6 +115,7 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/service-detail.js",
       "/webapp/views/paired-sessions.js",
       "/webapp/views/pod-pair.js",
+      "/webapp/views/marketplace.js",
       "/webapp/views/vibe-code.js",
       "/webapp/views/recovery.js",
       "/webapp/views/install-progress.js",
@@ -137,6 +138,8 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/apps-list", "/webapp/views/services-list.js"],
       ["/api/screens/app-detail/", "/webapp/views/service-detail.js"],
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
+      ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
+      ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
       // install-progress.js no longer uses a /api/screens/* BFF — it reads the
       // SINGLE canonical provisioning channel directly
@@ -149,6 +152,16 @@ describe("/webapp PWA static surface", () => {
       expect(r.statusCode).toBe(200);
       expect(r.body).toContain(endpoint);
     }
+  });
+
+  it("/webapp/lib/installService.js signs canonical install-app + uninstall-app envelopes", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/installService.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("flagship/install-service/v1");
+    expect(r.body).toContain("flagship/uninstall-service/v1");
+    expect(r.body).toContain("/api/marketplace/");
+    expect(r.body).toContain("/api/services");
   });
 
   it("service-worker exposes the offline-replay queue (P2.13)", async () => {
