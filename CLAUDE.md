@@ -83,6 +83,15 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - Tests live next to packages: `packages/<pkg>/tests/`.
 - Canonical-bytes use `|` separator and `flagship/<purpose>/v1` tag prefix.
 - No comments unless the *why* is non-obvious; never explain *what*.
+- **Feature branches hold extracted, unshipped features.** `feat/marketplace`
+  (the marketplace — site + app UI) and `feat/retail-boxes` (the NFC retail
+  tier) were extracted OUT of `main` so `main` ships clean to App Store
+  review. `main` carries no marketplace/NFC *user-facing* surface; the dormant
+  backend stays. **At commit time, always consider a change's impact on those
+  branches** — they don't auto-receive `main`'s commits, so a `main`-only fix
+  to shared code (protocol, storage, daemon, shared UI components) will need
+  re-applying when a feature branch is integrated for release. Extraction is
+  **forward-only** (no history rewrite) so regressions are easy to bisect.
 
 ## Current status & open work
 
