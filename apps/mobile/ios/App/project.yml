@@ -45,7 +45,7 @@ packages:
   FlagshipPkg:
     path: ..
   # Cross-platform package — FlagshipCore + FlagshipAPI (protocol, wire
-  # types, NfcPair, ProvisionTimelineLadder). Platforms: iOS + watchOS +
+  # types, ProvisionTimelineLadder). Platforms: iOS + watchOS +
   # macOS. The Watch app + Watch widget link THIS package's FlagshipCore
   # product, never FlagshipPkg (which has no watchOS slice).
   FlagshipShared:
@@ -100,11 +100,6 @@ targets:
         # to passcode, but the prompt looks stock — TF3 ASC review-bot
         # flags absence.
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."
-        # NFC retail-tier pairing (N-PHONE / C3). The phone reads a
-        # PAIR + SIG NDEF from a branded box's tag, derives a session
-        # key via ECDH, and seals the Wi-Fi config under it. Required
-        # whenever the binary links Core NFC.
-        INFOPLIST_KEY_NFCReaderUsageDescription: "Flagship uses NFC to pair a new Flagship box by tapping your phone to it."
         # ASC review-bot wants a category for every app. Flagship is a
         # tool / utility, not entertainment or social.
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
@@ -169,14 +164,6 @@ targets:
         # grant lands (then `xcodegen generate`), and wire the client
         # `.criticalAlert` authorization + critical-flagged APNs payloads.
         # com.apple.developer.usernotifications.critical-alerts: true
-        # NFC retail-tier pairing (C3 / N-PHONE). NDEF + TAG let us
-        # both read the branded box's PAIR+SIG NDEF and (for diagnostic
-        # workflows) talk to ISO14443 tags directly. The dev portal
-        # also needs Near Field Communication Tag Reading enabled on
-        # com.flagshipserver.app before the Archive will validate.
-        com.apple.developer.nfc.readersession.formats:
-          - NDEF
-          - TAG
 
   FlagshipWidgets:
     type: app-extension
@@ -214,7 +201,7 @@ targets:
           - "Info.plist"
     dependencies:
       # The wire types the watch decodes (WatchProtocol.*) +
-      # cross-platform protocol code (NfcPair, ProvisionTimelineLadder,
+      # cross-platform protocol code (ProvisionTimelineLadder,
       # etc.) live in the FlagshipShared package's FlagshipCore product.
       # The watch links ONLY the cross-platform package — never `Flagship`
       # (Keystore/biometric) or `FlagshipUI` (UIKit/ActivityKit), and

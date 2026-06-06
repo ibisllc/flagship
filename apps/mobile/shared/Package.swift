@@ -2,7 +2,7 @@
 import PackageDescription
 
 // FlagshipShared — cross-platform (iOS + watchOS + macOS) Swift package
-// for protocol envelopes, canonical bytes, NFC pair crypto, the
+// for protocol envelopes, canonical bytes, the
 // provision-timeline ladder projection, and the HTTP/wire-type surface
 // that both the iPhone app + the Watch app + the Watch widget extension
 // consume.
