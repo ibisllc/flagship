@@ -88,7 +88,6 @@ public struct HomeTab: View {
                             linker.pending = .startVibeCode
                         }
                     },
-                    onBrowseMarketplace: { linker.pending = .marketplace },
                     onRefresh: { await vm.load() },
                     onSetUpRecovery: {
                         // Drop the user onto the Settings tab's Recovery

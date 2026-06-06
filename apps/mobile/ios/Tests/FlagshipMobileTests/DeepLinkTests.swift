@@ -40,11 +40,6 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(DeepLink.parse(url), .appDetail(serviceId: "plants"))
     }
 
-    func test_marketplace_host_routes() {
-        let url = URL(string: "flagship://marketplace")!
-        XCTAssertEqual(DeepLink.parse(url), .marketplace)
-    }
-
     func test_createServer_host_routes() {
         let url = URL(string: "flagship://create-server")!
         XCTAssertEqual(DeepLink.parse(url), .createServer)
@@ -79,7 +74,7 @@ final class DeepLinkTests: XCTestCase {
         // takes precedence so a stale notification doesn't override a
         // fresh widget tap.
         let l = DeepLinker()
-        l.enqueue(.marketplace)
+        l.enqueue(.serverDetail(podId: "p1"))
         l.enqueue(.appDetail(serviceId: "wiki"))
         XCTAssertEqual(l.pending, .appDetail(serviceId: "wiki"))
     }

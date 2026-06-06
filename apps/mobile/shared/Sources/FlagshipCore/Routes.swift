@@ -12,8 +12,6 @@ public enum HomeRoute: Hashable, Sendable {
 
 public enum AppsRoute: Hashable, Sendable {
     case appDetail(serviceId: String)
-    case marketplace
-    case marketplaceDetail(creator: String, slug: String)
     case vibeCodeProviderPick
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)

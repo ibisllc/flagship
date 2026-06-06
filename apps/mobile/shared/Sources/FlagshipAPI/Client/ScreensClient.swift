@@ -18,24 +18,6 @@ public protocol ScreensClient: Sendable {
     // P1.3 app-detail
     func appDetail(serviceId: String) async throws -> AppDetailResponse
 
-    // P1.4 marketplace-browse
-    func marketplaceBrowse() async throws -> MarketplaceBrowseResponse
-
-    // P1.4 — single-listing fetch (full manifestJson). Hits
-    // `https://flagshipserver.com/api/marketplace/<creator>/<slug>` directly;
-    // same-origin from the webapp, cross-origin from iOS but the listing
-    // body is public so no auth is required.
-    func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail
-
-    // P1.4 — install a marketplace app on the user's paired pod. POSTs the
-    // IRK-signed envelope to `<podBaseUrl>/api/services` (NOT under
-    // `/api/screens/*`; mirrors the webapp's `installFromMarketplace` in
-    // `apps/web/public/webapp/lib/installService.js`). The caller is
-    // responsible for producing `envelope.signature` by signing
-    // `installServiceCanonicalBytes(envelope.request)` with the user's
-    // IRK private key.
-    func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse
-
     // P1.5 vibe-code/start
     func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse
 

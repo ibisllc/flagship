@@ -40,7 +40,6 @@ public struct HomeScreen: View {
     /// Cancel/delete a pending (in-flight) server straight from the list.
     var onCancelServer: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
-    var onBrowseMarketplace: () -> Void = {}
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
@@ -61,7 +60,6 @@ public struct HomeScreen: View {
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
-        onBrowseMarketplace: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
@@ -81,7 +79,6 @@ public struct HomeScreen: View {
         self.onSetLeader = onSetLeader
         self.onCancelServer = onCancelServer
         self.onVibeCode = onVibeCode
-        self.onBrowseMarketplace = onBrowseMarketplace
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
@@ -260,7 +257,6 @@ public struct HomeScreen: View {
         // nil capability (legacy single-IRK path) enables everything.
         let scopes = deviceCapability?.scopeSet
         let canVibeCode = scopes == nil || scopes!.contains(.vibeCode)
-        let canInstall = scopes == nil || scopes!.contains(.installService)
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
             actionRow(
                 title: "Build a service",
@@ -271,17 +267,6 @@ public struct HomeScreen: View {
                 enabled: canVibeCode,
                 disabledReason: "This device cannot build new services. Use a primary device.",
                 accessibilityId: "quick-action-vibe-code",
-                c: c
-            )
-            actionRow(
-                title: "Browse the marketplace",
-                subtitle: "Deploy services your neighbours have published.",
-                systemImage: "square.grid.2x2",
-                accent: c.success,
-                action: onBrowseMarketplace,
-                enabled: canInstall,
-                disabledReason: "This device cannot install services. Use a primary device.",
-                accessibilityId: "quick-action-install-service",
                 c: c
             )
         }
