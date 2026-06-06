@@ -60,3 +60,5 @@ export * from "./personalizeIso.js";
 export * from "./outstandingOrders.js";
 export * from "./ctMonitor.js";
 export * from "./serviceBlessing.js";
+export * from "./serialActivation.js";
+export * from "./nfcRendezvous.js";

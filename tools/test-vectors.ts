@@ -29,13 +29,18 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  canonicalBoxUnpair,
+  canonicalPair,
+  canonicalWiFiConfig,
   deriveBAK,
   deriveIRK,
   deriveSTK,
   deriveSWK,
   ed,
+  PAIR_PROTOCOL_VERSION,
   signAccountRecovery,
   signAuthCode,
+  signBoxUnpair,
   signDaemonStatusReport,
   signDeviceCapabilityGrant,
   signInstallBlob,
@@ -44,6 +49,7 @@ import {
   signJournalRequest,
   signMembershipMutation,
   signMigrationRequest,
+  signPair,
   signPbAnnounce,
   signPbPeerConfirm,
   signPbRequestPeers,
@@ -60,6 +66,7 @@ import {
   signWatchDelegateKey,
   type AccountRecovery,
   type AuthCode,
+  type BoxUnpair,
   type DaemonStatusReport,
   type DeviceCapabilityGrant,
   type ImageRebuildRequest,
@@ -70,6 +77,7 @@ import {
   type Keypair,
   type MembershipMutation,
   type MigrationRequest,
+  type PairPayload,
   type PbAnnounce,
   type PbPeerConfirm,
   type PbRequestPeers,
@@ -83,6 +91,7 @@ import {
   type SetRoutingTarget,
   type TunnelHello,
   type WatchDelegateKey,
+  type WiFiConfig,
 } from "@flagship/protocol";
 
 function hex(b: Uint8Array): string {
@@ -123,6 +132,16 @@ type Client = "ts" | "webapp" | "swift" | "kotlin";
 const ALL: Client[] = ["ts", "webapp", "swift", "kotlin"];
 /** Clients that implement the device-side surface but not the webapp. */
 const NO_WEBAPP: Client[] = ["ts", "swift", "kotlin"];
+/**
+ * Vectors only the TS suite asserts today. The NFC retail-tier envelopes
+ * (pair / box-unpair / wifi-config) live in @flagship/protocol + its mobile
+ * mirrors, but the Swift/Kotlin/webapp shared-fixture vector tests don't wire
+ * NFC encoders (those clients dispatch by their own wired map and skip-with-
+ * note anything unwired). The TS canonicalBytesVectors test covers them via
+ * verifyPair / verifyBoxUnpair (it asserts EVERY signed vector regardless of
+ * this tag), and nfcPair.test.ts pins the production bytes directly.
+ */
+const TS_ONLY: Client[] = ["ts"];
 
 interface Vector {
   name: string;
@@ -744,6 +763,78 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- NFC retail-tier envelopes (feat/retail). Signed PairPayload (STK, the
+  // box's per-boot ephemeral) + BoxUnpair (IRK, owner rebind-only) +
+  // canonical-bytes-only WiFiConfig (sealed under K_session post-pair, so a
+  // signature adds nothing — the golden vector pins the plaintext shape the
+  // seal consumes so a Swift/Kotlin encoder drift is caught). Fixed eBoxPub /
+  // nonce / sessionId keep the PAIR signature deterministic. ----
+  const FIXED_E_BOX_PUB = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) FIXED_E_BOX_PUB[i] = (i * 5 + 3) & 0xff;
+  const PAIR_NONCE = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) PAIR_NONCE[i] = (i + 17) & 0xff;
+  const PAIR_SESSION_ID = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) PAIR_SESSION_ID[i] = (i * 11 + 5) & 0xff;
+  const suffix6 = hex(stk.publicKey).slice(-6);
+  const pair: PairPayload = {
+    v: PAIR_PROTOCOL_VERSION,
+    stkPub: stk.publicKey,
+    eBoxPub: FIXED_E_BOX_PUB,
+    nonce: PAIR_NONCE,
+    sessionId: PAIR_SESSION_ID,
+    hint: {
+      mdnsName: `flagship-${suffix6}.local`,
+      cloudRendezvousId: `rndz-${suffix6}`,
+      suffix6,
+    },
+  };
+  const pairInput = {
+    v: pair.v,
+    stkPub: hex(pair.stkPub),
+    eBoxPub: hex(pair.eBoxPub),
+    nonce: hex(pair.nonce),
+    sessionId: hex(pair.sessionId),
+    hint: pair.hint,
+  };
+  vectors.push(
+    makeVector("pair", "stk", pairInput, signPair(pair, stk), payloadByName("pair", pairInput), TS_ONLY),
+  );
+
+  // BoxUnpair (IRK) — owner-side rebind-only unpair. boxId is the box's stkPub hex.
+  const unpair: BoxUnpair = {
+    userId: "harry",
+    boxId: hex(stk.publicKey),
+    issuedAt: ISSUED_AT,
+  };
+  const unpairInput = { userId: unpair.userId, boxId: unpair.boxId, issuedAt: unpair.issuedAt };
+  vectors.push(
+    makeVector(
+      "box-unpair",
+      "irk",
+      unpairInput,
+      signBoxUnpair(unpair, irk),
+      payloadByName("box-unpair", unpairInput),
+      TS_ONLY,
+    ),
+  );
+
+  // WiFiConfig (canonical-bytes only — the sealed-plaintext shape).
+  const wifi: WiFiConfig = {
+    ssid: "Home",
+    psk: "correct-horse-battery-staple",
+    regulatoryRegion: "US",
+    issuedAt: ISSUED_AT,
+  };
+  const wifiInput = {
+    ssid: wifi.ssid,
+    psk: wifi.psk,
+    regulatoryRegion: wifi.regulatoryRegion,
+    issuedAt: wifi.issuedAt,
+  };
+  vectors.push(
+    makeVector("wifi-config", "none", wifiInput, new Uint8Array(0), payloadByName("wifi-config", wifiInput), TS_ONLY),
+  );
+
   return vectors;
 }
 
@@ -805,6 +896,41 @@ function selfCheck(vectors: Vector[]): void {
     if (!k) throw new Error(`unknown signer: ${v.signedBy}`);
     if (!ed.verify(hexFromString(v.signatureHex), payloadByName(v.name, v.input as Record<string, unknown>), k.publicKey)) {
       throw new Error(`vector ${v.name}: roundtrip verification failed`);
+    }
+  }
+  // Cross-check the NFC vectors' hand-rolled payloadByName layout against the
+  // PRODUCTION encoders in @flagship/protocol — so a future field-reorder in
+  // canonicalPair/canonicalBoxUnpair/canonicalWiFiConfig can't drift past the
+  // self-consistency check above (which only ties payloadByName to itself).
+  for (const v of vectors) {
+    const i = v.input as Record<string, unknown>;
+    const fromHex = (k: string) => hexFromString(i[k] as string);
+    let prod: Uint8Array | undefined;
+    if (v.name === "pair") {
+      prod = canonicalPair({
+        v: i.v as typeof PAIR_PROTOCOL_VERSION,
+        stkPub: fromHex("stkPub"),
+        eBoxPub: fromHex("eBoxPub"),
+        nonce: fromHex("nonce"),
+        sessionId: fromHex("sessionId"),
+        hint: i.hint as PairPayload["hint"],
+      });
+    } else if (v.name === "box-unpair") {
+      prod = canonicalBoxUnpair({
+        userId: i.userId as string,
+        boxId: i.boxId as string,
+        issuedAt: i.issuedAt as number,
+      });
+    } else if (v.name === "wifi-config") {
+      prod = canonicalWiFiConfig({
+        ssid: i.ssid as string,
+        psk: i.psk as string,
+        regulatoryRegion: i.regulatoryRegion as string,
+        issuedAt: i.issuedAt as number,
+      });
+    }
+    if (prod && hex(prod) !== v.canonicalHex) {
+      throw new Error(`vector ${v.name}: production-encoder canonical-bytes mismatch`);
     }
   }
 }
@@ -979,6 +1105,28 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
         ].join("|"),
       );
     }
+    case "pair": {
+      const hint = i.hint as { mdnsName: string; cloudRendezvousId: string; suffix6: string };
+      return enc(
+        [
+          "flagship/pair/v1",
+          i.v,
+          i.stkPub,
+          i.eBoxPub,
+          i.nonce,
+          i.sessionId,
+          hint.mdnsName,
+          hint.cloudRendezvousId,
+          hint.suffix6,
+        ].join("|"),
+      );
+    }
+    case "box-unpair":
+      return enc(["flagship/box-unpair/v1", i.userId, i.boxId, i.issuedAt].join("|"));
+    case "wifi-config":
+      return enc(
+        ["flagship/wifi-config/v1", i.ssid, i.psk, i.regulatoryRegion, i.issuedAt].join("|"),
+      );
   }
   throw new Error(`unknown vector ${name}`);
 }

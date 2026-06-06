@@ -9,6 +9,10 @@ import type {
   SecretMailboxPurpose,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  BoxSerialRecord,
+  BoxSerialsStorage,
+  NfcRendezvousRecord,
+  NfcRendezvousStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -2613,6 +2617,181 @@ export class D1DeviceCapabilityGrantStorage
   }
 }
 
+interface BoxSerialRow {
+  serial: string;
+  sku: string;
+  activated_at: number | null;
+  activated_by: string | null;
+  stk_pub_hex: string | null;
+  suffix6: string | null;
+  bound_at: number | null;
+  created_at: number;
+}
+
+function rowToBoxSerial(r: BoxSerialRow): BoxSerialRecord {
+  return {
+    serial: r.serial,
+    sku: r.sku,
+    activatedAt: r.activated_at,
+    activatedBy: r.activated_by,
+    stkPubHex: r.stk_pub_hex,
+    suffix6: r.suffix6,
+    boundAt: r.bound_at,
+    createdAt: r.created_at,
+  };
+}
+
+export class D1BoxSerialsStorage implements BoxSerialsStorage {
+  constructor(private readonly db: D1Database) {}
+  async create(rec: Pick<BoxSerialRecord, "serial" | "sku" | "createdAt">) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO box_serials (serial, sku, created_at) VALUES (?1, ?2, ?3)`,
+        )
+        .bind(rec.serial, rec.sku, rec.createdAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate serial" };
+      }
+      throw e;
+    }
+  }
+  async get(serial: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM box_serials WHERE serial = ?1`)
+      .bind(serial)
+      .first<BoxSerialRow>();
+    return r ? rowToBoxSerial(r) : undefined;
+  }
+  async activate(args: { serial: string; activatedBy: string | null; at: number }) {
+    const existing = await this.get(args.serial);
+    if (!existing) return { ok: false as const, reason: "unknown serial" };
+    if (existing.activatedAt !== null) {
+      return { ok: true as const, alreadyActivated: true };
+    }
+    await this.db
+      .prepare(
+        `UPDATE box_serials SET activated_at = ?1, activated_by = ?2
+         WHERE serial = ?3 AND activated_at IS NULL`,
+      )
+      .bind(args.at, args.activatedBy, args.serial)
+      .run();
+    return { ok: true as const, alreadyActivated: false };
+  }
+  async bindStk(args: {
+    serial: string;
+    stkPubHex: string;
+    suffix6: string;
+    at: number;
+  }) {
+    const existing = await this.get(args.serial);
+    if (!existing) return { ok: false as const, reason: "unknown serial" };
+    if (existing.activatedAt === null) {
+      return { ok: false as const, reason: "not activated" };
+    }
+    if (existing.stkPubHex !== null) {
+      if (existing.stkPubHex.toLowerCase() === args.stkPubHex.toLowerCase()) {
+        return { ok: true as const, alreadyBound: true };
+      }
+      return { ok: false as const, reason: "already bound" };
+    }
+    await this.db
+      .prepare(
+        `UPDATE box_serials SET stk_pub_hex = ?1, suffix6 = ?2, bound_at = ?3
+         WHERE serial = ?4 AND stk_pub_hex IS NULL`,
+      )
+      .bind(
+        args.stkPubHex.toLowerCase(),
+        args.suffix6.toLowerCase(),
+        args.at,
+        args.serial,
+      )
+      .run();
+    return { ok: true as const, alreadyBound: false };
+  }
+  async listBySuffix6(suffix6: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM box_serials WHERE suffix6 = ?1 ORDER BY bound_at DESC`,
+      )
+      .bind(suffix6.toLowerCase())
+      .all<BoxSerialRow>();
+    return (r.results ?? []).map(rowToBoxSerial);
+  }
+}
+
+interface NfcRendezvousRow {
+  rendezvous_id: string;
+  sealed_hex: string;
+  nonce_hex: string;
+  deposited_at: number;
+  expires_at: number;
+}
+
+function rowToNfcRendezvous(r: NfcRendezvousRow): NfcRendezvousRecord {
+  return {
+    rendezvousId: r.rendezvous_id,
+    sealedHex: r.sealed_hex,
+    nonceHex: r.nonce_hex,
+    depositedAt: r.deposited_at,
+    expiresAt: r.expires_at,
+  };
+}
+
+export class D1NfcRendezvousStorage implements NfcRendezvousStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: NfcRendezvousRecord) {
+    // Idempotent overwrite — a re-deposit (e.g. phone retried after a
+    // typo'd WiFi password) replaces the prior blob in the same slot.
+    await this.db
+      .prepare(
+        `INSERT INTO nfc_rendezvous
+           (rendezvous_id, sealed_hex, nonce_hex, deposited_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(rendezvous_id) DO UPDATE SET
+           sealed_hex = excluded.sealed_hex,
+           nonce_hex = excluded.nonce_hex,
+           deposited_at = excluded.deposited_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(
+        rec.rendezvousId,
+        rec.sealedHex,
+        rec.nonceHex,
+        rec.depositedAt,
+        rec.expiresAt,
+      )
+      .run();
+  }
+  async consume(rendezvousId: string, now: number) {
+    const r = await this.db
+      .prepare(`SELECT * FROM nfc_rendezvous WHERE rendezvous_id = ?1`)
+      .bind(rendezvousId)
+      .first<NfcRendezvousRow>();
+    if (!r) return undefined;
+    // Always delete on a hit — expired or not — so a stale slot doesn't
+    // linger after the first poll discovers it.
+    await this.db
+      .prepare(`DELETE FROM nfc_rendezvous WHERE rendezvous_id = ?1`)
+      .bind(rendezvousId)
+      .run();
+    if (r.expires_at <= now) return undefined;
+    return rowToNfcRendezvous(r);
+  }
+  async purgeExpired(now: number) {
+    const r = await this.db
+      .prepare(`DELETE FROM nfc_rendezvous WHERE expires_at <= ?1`)
+      .bind(now)
+      .run();
+    const meta = (r as unknown as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
@@ -2642,6 +2821,8 @@ export class D1Storage implements Storage {
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
+  boxSerials: BoxSerialsStorage;
+  nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
@@ -2678,6 +2859,8 @@ export class D1Storage implements Storage {
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
+    this.boxSerials = new D1BoxSerialsStorage(db);
+    this.nfcRendezvous = new D1NfcRendezvousStorage(db);
     this.watchDelegates = new D1WatchDelegateStorage(db);
     this.mintReservations = new D1MintReservationStorage(db);
     this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);

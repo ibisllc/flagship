@@ -16,4 +16,5 @@ export * from "./devEntitlements.js";
 export * from "./daemonStatus.js";
 export * from "./pushRelay.js";
 export * from "./serviceCert.js";
+export * from "./nfcPair.js";
 export { ed } from "./edSync.js";

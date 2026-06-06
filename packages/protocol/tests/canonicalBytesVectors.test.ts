@@ -25,6 +25,7 @@ import {
   deriveSTK,
   verifyAccountRecovery,
   verifyAuthCode,
+  verifyBoxUnpair,
   verifyDaemonStatusReport,
   verifyDeviceCapabilityGrant,
   verifyInstallBlob,
@@ -33,6 +34,7 @@ import {
   verifyJournalRequest,
   verifyMembershipMutation,
   verifyMigrationRequest,
+  verifyPair,
   verifyPbAnnounce,
   verifyPbPeerConfirm,
   verifyPbRequestPeers,
@@ -460,6 +462,30 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           },
           sig,
           stkPub,
+        );
+      // NFC retail-tier (feat/retail): PairPayload is STK-signed by the box;
+      // BoxUnpair is IRK-signed by the owner.
+      case "pair":
+        return verifyPair(
+          {
+            v: i.v as 1,
+            stkPub: fromHex("stkPub"),
+            eBoxPub: fromHex("eBoxPub"),
+            nonce: fromHex("nonce"),
+            sessionId: fromHex("sessionId"),
+            hint: i.hint as { mdnsName: string; cloudRendezvousId: string; suffix6: string },
+          },
+          sig,
+        );
+      case "box-unpair":
+        return verifyBoxUnpair(
+          {
+            userId: i.userId as string,
+            boxId: i.boxId as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
         );
     }
     return undefined;
