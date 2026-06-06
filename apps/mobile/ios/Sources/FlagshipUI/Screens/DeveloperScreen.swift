@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipAPI
 import FlagshipCore
 
 /// Developer-only settings surface. Unlocked by 3-tapping the version
@@ -9,6 +10,10 @@ import FlagshipCore
 ///   - Mock latency slider — pushes the in-memory client's
 ///     simulatedLatency to exercise loading states.
 ///   - Sign-out + wipe Keystore for clean-slate testing.
+///   - 🧪 NFC pair entry (dev-only) — opens the C3 retail-box flow
+///     without affecting the main onboarding chrome. Reachable here
+///     until the owner can hold real hardware + we wire it into the
+///     "Add a box" navigation properly.
 public struct DeveloperScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var dev: DeveloperSettings
@@ -59,6 +64,21 @@ public struct DeveloperScreen: View {
                         Text("Applied to mock responses to exercise loading skeletons + error UI.")
                             .font(FS.font.caption())
                             .foregroundColor(c.textMuted)
+                    }
+                }
+
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        Text("🧪 NFC pair (dev-only)").foregroundColor(c.text)
+                        Text("Opens the C3 retail-box NFC tap flow. On a Simulator the reader will throw `sessionUnavailable`; on a real device the system NFC sheet will appear.")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        NavigationLink("Open NFC pair") {
+                            NfcPairScreen(vm: NfcPairViewModel(
+                                reader: LiveNfcPairReader(),
+                                rendezvous: LiveNfcRendezvousClient()
+                            ))
+                        }
+                        .foregroundColor(c.primary)
                     }
                 }
 
