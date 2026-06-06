@@ -30,6 +30,7 @@ sealed interface DeepLink {
     /** "Create app here" on a server's page: the creation flow pinned to
      *  that server (docs/app-placement.md §3). Internal-only. */
     data class CreateApp(val podId: String) : DeepLink
+    data object Marketplace : DeepLink
     data object CreateServer : DeepLink
     /** Open the recovery-setup flow on the Settings tab. Triggered
      *  in-app from the Home nudge (C9). Internal-only — not parsed
@@ -220,6 +221,7 @@ sealed interface DeepLink {
                 "secret-requests", "secret-request", "unlock-approve", "unlock-approvals" -> SecretRequests
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
+                "marketplace" -> Marketplace
                 "create-server" -> CreateServer
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "transfer" -> {

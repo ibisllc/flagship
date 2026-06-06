@@ -104,6 +104,7 @@
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
           <li>Anonymous <span class="yes">repo adaptations</span> your server shares, which we publish</li>
+          <li><span class="yes">Marketplace listing</span> metadata, if you publish</li>
         </ul>
       </div>
       <div>
@@ -124,7 +125,7 @@
 
     <section id="who">
       <h2>1. Who this policy covers</h2>
-      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients.</p>
+      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients, and the marketplace at <code>/marketplace</code>.</p>
       <p>It does not cover services you install on your own Flagship server. Those services run on hardware you own, under your control, and their privacy practices are theirs. We provide a sandbox; we don't supervise its inhabitants.</p>
       <p>It does not cover services you connect through the BYOK / browser features (Anthropic, OpenAI, Amazon, your bank, etc.). When you log into a third-party service from your Flagship browser, that service's privacy policy governs.</p>
     </section>
@@ -197,6 +198,9 @@
         <li><strong>We may change provider at any time</strong>, based on the best offer available.</li>
       </ul>
       <p>You can add your own AI key at any time, and your server uses that instead.</p>
+
+      <h3 id="marketplace">2.9 Marketplace listing data (only if you publish)</h3>
+      <p>If you publish an app listing, we store the listing fields you submit: title, description, category, screenshots (in R2), the canonical pod URL, your username as author, and timestamps. Listings are public by definition.</p>
     </section>
 
     <section id="processors">
@@ -230,6 +234,7 @@
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
         <li><strong>Repo adaptations</strong>: published, and kept public; our own copy of the file is deleted once it is published, usually within a day. Taken out of the index when the repo's owner asks; git history keeps earlier versions. They carry no personal data.</li>
         <li><strong>Problem reports on adaptations</strong>: notes deleted within 90 days. For a retired adaptation, its private copy and its reports are deleted 180 days after it was retired.</li>
+        <li><strong>Marketplace listings</strong>: kept while published; removed on delisting.</li>
       </ul>
     </section>
 
@@ -309,6 +314,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://webapp.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>
