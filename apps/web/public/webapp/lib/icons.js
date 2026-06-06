@@ -76,7 +76,6 @@ export const HOME_BUTTON_ICONS = {
   "open-pod-pair":          keyIcon,
   "open-server-detail":     serverIcon,
   "open-apps-list":         packageIcon,
-  "open-marketplace":       shoppingBagIcon,
   "open-vibe-code":         sparklesIcon,
   "open-paired-sessions":   usersIcon,
   "open-tier-status":       activityIcon,

@@ -26,7 +26,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toContain(".colophon");
   });
 
-  for (const path of ["/how-it-works.html", "/marketplace/"]) {
+  for (const path of ["/how-it-works.html"]) {
     it(`${path} loads the design tokens + components stylesheets`, async () => {
       const app = buildServer();
       const r = await app.inject({ method: "GET", url: path });
@@ -36,7 +36,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     });
   }
 
-  for (const path of ["/", "/marketplace/"]) {
+  for (const path of ["/"]) {
     it(`${path} carries the Flagship brand in the chrome`, async () => {
       const app = buildServer();
       const r = await app.inject({ method: "GET", url: path });
@@ -144,14 +144,6 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     // landing as fallback. We only assert it isn't a dedicated pricing
     // page anymore (no "Tiny / Standard / Pro" wording).
     expect(r.body).not.toMatch(/<h1[^>]*>\s*Pricing/);
-  });
-
-  it("marketplace page renders sidebar categories + listing grid", async () => {
-    const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/marketplace/" });
-    expect(r.body).toContain("Categories");
-    expect(r.body).toContain("Productivity");
-    expect(r.body).toContain('class="card listing"');
   });
 
   it("the report form continues to live at /security/report.html", async () => {

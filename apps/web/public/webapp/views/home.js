@@ -426,12 +426,6 @@ export async function renderHome() {
   const deviceCap = activeDeviceCapability();
   renderDeviceCapabilityChip(deviceCap);
   applyScopeGateToButton(
-    $("services-list-open-marketplace"),
-    deviceCap,
-    "install-service",
-    "This device cannot install services. Use a primary device.",
-  );
-  applyScopeGateToButton(
     $("services-list-open-vibe-code"),
     deviceCap,
     "vibe-code",
