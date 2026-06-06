@@ -83,23 +83,32 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - Tests live next to packages: `packages/<pkg>/tests/`.
 - Canonical-bytes use `|` separator and `flagship/<purpose>/v1` tag prefix.
 - No comments unless the *why* is non-obvious; never explain *what*.
-- **Feature branches hold extracted, unshipped features.** `feat/marketplace`
-  (the whole marketplace — UI, marketing copy, AND backend) and
-  `feat/retail-boxes` (the NFC retail tier) are extracted OUT of `main` so
-  `main` ships clean and "doesn't think of" them. Extraction is by **removal,
-  not feature flags** — branching IS the gate; there is no gating code in
-  `main`. It is **forward-only** (no history rewrite) and **lossless**:
-  anything removed from `main` must already exist on the feature branch, i.e.
-  `main ∪ feat == the original consolidated tree`.
-  - **DB migrations + the live database are infrastructure, NOT "our code" —
-    never extract them.** A feature-only table living in prod (e.g.
-    `marketplace_listings`, `box_serials`) is fine: developing the feature
-    means checking out its branch and running that code against the live
-    table. `main` keeps every migration; only application code (UI, handlers,
-    adapters, protocol types, tests) is extracted.
+- **Unlaunched features live entirely on their own branch; `main` ships clean.**
+  Every not-yet-launched feature — site literature, app code (iOS/Android/
+  webapp), backend logic, AND tests — lives ONLY on its feature branch, so
+  `main` "doesn't think of" it at all. Current branches: **`feat/marketplace`**
+  (the marketplace) and **`feat/retail`** (getting the app working with
+  retail / NFC boxes). **No marketplace/retail code may sit on `main` until
+  that feature launches** — branching IS the gate, there is NO gating/flag code
+  in `main`.
+  - **Each branch = `main` + exactly one feature.** A branch is built so its
+    diff against `main` is *only* that feature (so merging it ships the
+    feature). Branches are **independent of each other** — you can check out one
+    at a time to work on it; neither carries the other's code.
+  - **Dependencies go through git, not entanglement.** If a feature ever
+    depends on another, branch it OFF that feature's branch — never co-mingle
+    two features on one branch.
+  - **Extraction/reorg is forward-only** (no history rewrite on `main`) and
+    **lossless** — nothing in features/UX/code/tests is lost, only relocated;
+    anything removed from `main` exists on the feature branch.
+  - **Workspace artifacts stay on `main`, never extracted:** DB migrations +
+    repo-root `docs/*` design specs. Neither ships to users or the website —
+    they're dev scaffolding. A feature-only table in prod (`marketplace_listings`,
+    `box_serials`) is fine: develop the feature by checking out its branch and
+    running against the live table. Only *application* code is extracted.
   - **At commit time, weigh impact on the feature branches** — they don't
     auto-receive `main`'s commits, so a `main`-only fix to shared code needs
-    re-applying (or cherry-picking forward) when a branch is integrated.
+    cherry-picking forward when a branch is integrated.
 
 ## Current status & open work
 
