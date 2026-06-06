@@ -36,6 +36,7 @@ export * from "./serverMigration.js";
 export * from "./accountMetadata.js";
 export * from "./directoryKeyDelivery.js";
 export * from "./servicePromote.js";
+export * from "./nfcPair.js";
 export { ed, edVerifyFast } from "./edSync.js";
 export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";
 export * from "./repoAdapter.js";

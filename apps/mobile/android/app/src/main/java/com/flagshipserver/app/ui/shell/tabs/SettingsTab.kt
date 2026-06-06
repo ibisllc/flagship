@@ -23,6 +23,7 @@ import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
 import com.flagshipserver.app.ui.screens.AiKeysManagerScreen
+import com.flagshipserver.app.ui.screens.NfcPairScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
 import com.flagshipserver.app.ui.screens.PostRecoveryScreen
@@ -129,6 +130,8 @@ fun SettingsTab() {
         composable("recovery") { RecoveryScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }
         composable("keyfile-export") { KeyfileExportScreen(nav) }
+        // C3 Wave 2 — NFC retail-tier tap-to-pair (debug builds reach it from Settings).
+        composable("nfc-pair") { NfcPairScreen(nav) }
         composable("providers") { ProvidersScreen(nav) }
         composable("ai-keys") { AiKeysManagerScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
