@@ -125,7 +125,14 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     `echo '${bootstrapB64}' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     `chmod +x /target/usr/local/sbin/flagship-bootstrap.sh; ` +
     wifiLateCommand +
-    `in-target /usr/local/sbin/flagship-bootstrap.sh`;
+    // Run the first-boot bootstrap capturing its output to a log on the target.
+    // On failure, POST the last 16 KB home to the dev late-log endpoint (so we
+    // can read WHY it failed via R2 without a serial console / d-i shell), then
+    // exit non-zero so d-i still flags the failure. Best-effort post (|| true
+    // inside) never masks the real exit code.
+    `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) || ` +
+    `( tail -c 16000 /target/var/log/flagship-bootstrap.log > /tmp/fb-bootstrap-tail.txt 2>/dev/null; ` +
+    `wget -q -O- --post-file=/tmp/fb-bootstrap-tail.txt --timeout=20 https://flagshipserver.com/api/dev/late-log/${beaconSerial}-bootstrap 2>/dev/null; exit 1 )`;
 
   return `# Flagship Burner — debian-installer preseed
 # Generated at burn time. Don't edit by hand.
@@ -178,6 +185,15 @@ d-i base-installer/install-recommends boolean false
 d-i apt-setup/non-free-firmware boolean true
 d-i apt-setup/non-free boolean false
 d-i apt-setup/contrib boolean false
+# A USB netinst booted as a CD-ROM loses its /media/cdrom mount by
+# finish-install; with the firmware netinst, apt-setup then re-scans for the
+# disc and loops forever on "please insert the disc". Force the network mirror
+# and never expect/scan the install CD again (it's already configured above).
+d-i apt-setup/use_mirror boolean true
+d-i apt-setup/cdrom/set-first boolean false
+d-i apt-setup/cdrom/set-next boolean false
+d-i apt-setup/cdrom/set-failed boolean false
+d-i cdrom-detect/eject boolean false
 
 ### Packages. Debian names for the bootstrap's deps (Node 20 itself comes from
 ### the bootstrap's NodeSource one-liner, reused verbatim from the Ubuntu path).
