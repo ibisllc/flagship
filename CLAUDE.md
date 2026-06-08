@@ -91,6 +91,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   retail / NFC boxes). **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
   in `main`.
+  - **`alpine` is a *parked* branch, not a feature-to-launch.** It holds the
+    full Alpine bare-metal installer path (ISO builder + apkovl + installer-tiny
+    + the burner Quick/trailer flow + `/api/personalize-iso`) that `main` shed
+    when we went Debian-only. Same mechanics (it's `main` + the Alpine delta,
+    built by reverting the removal commits — `git diff <pre-extraction> alpine`
+    was empty = lossless), but its purpose is *revival* if/when the Alpine
+    initramfs USB-enumeration blocker is solved, not merging into a launch.
   - **Each branch = `main` + exactly one feature.** A branch is built so its
     diff against `main` is *only* that feature (so merging it ships the
     feature). Branches are **independent of each other** — you can check out one
@@ -114,7 +121,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-05**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-08**.
 
 ### Live in production
 - **Per-user TLS** — one Let's Encrypt cert per user, SANs `[<user>, *.<user>]`, real green padlock (per-box → per-user cutover verified live 2026-06-02). ACME runs on the user's daemon over SNI passthrough; `.services` stays content-blind. Wildcard SANs via DNS-01.
@@ -128,13 +135,15 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 
 ### Open work
 
-**Hardware / boot — the active thread (needs real metal):**
-1. **Alpine bare-metal boot.** The ISO-builder UEFI fix is DONE + locally proven (`scripts/build-flagship-iso.sh` now emits a true BIOS+UEFI hybrid via `xorriso … -boot_image any replay`; the old build silently dropped Alpine's UEFI entry). But on the test box Alpine's initramfs USB stack doesn't come up ("mounting boot media failed" → emergency shell). Next (blind-iterable): rebuild adding `xhci_pci`/`xhci_hcd`/`uas` to the boot cmdline, re-burn, observe how far it gets.
-2. **Ship the Alpine UEFI fix** — re-run the reproducible-build CI → rebuild ISO → upload to R2 as `flagship-alpine-base.iso` → bump the burner's `BaseIsoCache.version` + `sha256Hex` → rebuild + reinstall the signed Mac burner. Until this lands, `POST /api/personalize-iso` 503s and the Alpine "Recommended" path is unavailable.
-3. **Debian-preseed is the working path today** — it boots, autoinstalls, reaches `flagship-pod login:`. The burner "Quick" mode still points at the dead Alpine path (`BurnerMode.swift`) — repoint Quick to Debian-preseed until Alpine boots. `/ready` copy still frames Alpine as recommended — stale, update.
-4. **Verify Debian-preseed reliability** — cmdline injection (`Remaster.swift` grub/isolinux patch) was per-ISO flaky earlier; confirm a burned box registers + gets a cert.
+**Hardware / boot — Debian-only now; getting a box to boot is the gate:**
+> **Decision (2026-06-08): Debian is the sole shipping path; Alpine is parked on the `alpine` branch.** Alpine's initramfs wouldn't enumerate USB on real metal ("mounting boot media failed"), and the fix was hardware-iteration-gated + speculative; Debian-installer already solves the hard UEFI-NVRAM-rejection problem and its whole downstream (bootstrap, boot-stage, LUKS, systemd, register) is shared + Debian-ready. `main` is now Alpine-free + green (tsc · vitest 4356 · iOS 728 · Android · burner swift 72 / pytest 62; Windows burner via its own CI). Remaining work is the **Debian-quick + manifest + phone-home plan** (below), then a live e2e burn.
+1. **Burner "Simple" = cache Debian + burn (Phase 2).** Quick mode is currently removed (it was the Alpine path); re-add a Debian-native Simple mode: a **manifest-driven** base cache (`POST /api/iso-manifest` → server returns `{download:{url,sha256,…}}` or `null`; burner is a dumb executor — downloads + sha-verifies when ordered, shows the URL under the progress bar, logs path+sha on every boot and after each download). Advanced (user-supplied ISO) stays. Mirror across mac/linux/windows.
+2. **`/api/iso-manifest` backend.** New unauthenticated endpoint + a Worker-side config holding the blessed Debian manifest (the fleet lever: hold old releases or fast-track by whether a `download` is emitted). Short `docs/iso-manifest.md` spec.
+3. **Simplify the website (Phase 3)** — `/ready` = copy/download the recipe + get the burner; drop the Alpine "Recommended" framing; advanced/ISO lives only in the burner, not the site.
+4. **Earliest phone-home (Phase 4)** — port the netboot `preseed/early_command` beacon to the burner preseed (`preseed.ts` + Swift `UserData`): Beacon A in `early_command` (pre-boot, busybox-wget, best-effort) + Beacon B at top of `late_command` (guaranteed network), both keyed by `authCode.serial` → the `/api/order/:serial/status` timeline.
+5. **Verify Debian-preseed reliability** — cmdline injection (`Remaster.swift`/`remasterIso.ts` grub+isolinux patch) was per-ISO flaky earlier; add real-Debian-ISO tests, then a burned box must register + get a cert.
 
-*Pending design calls (home, no hardware): Alpine-vs-Debian shipping default; burner UX (make Debian the recommended path); personalized-ISO trailer vs the isohybrid backup-GPT (`sgdisk -e` relocate vs in-ISO recipe file).*
+*Owner-side for the live e2e: host the pinned Debian netinst (R2 or CDN — the manifest endpoint decides per-call; pin the sha to Debian's signed SHA256SUMS for verifiability), seed the manifest config, rebuild + re-sign the Mac burner, run the wipe, then create-account → recipe → burn → boot → padlock.*
 
 **App / recovery:**
 5. **Recovery Phase B re-pair branch (iOS, on-device validation).** Wire `recoveredKeyMatchesRegistered` into post-recovery completion: recovered IRK == registered → instant pair (Phase A); != → re-pair with `oldIrkPub = registeredIrkPubHex` + 3d grace; `KeyfileImportViewModel` instant skip-grace. Backend already deployed.
