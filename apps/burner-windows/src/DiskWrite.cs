@@ -79,9 +79,9 @@ public static class DiskWrite
                 if (read <= 0) break;
                 // Raw block-device writes must be sector-aligned. Full 1 MiB
                 // chunks are aligned; only the FINAL short chunk can be partial
-                // (e.g. a personalized ISO = base + ~1 KB trailer). Pad it with
-                // zeros to the next sector. The box finds the trailer by the ISO
-                // volume size, not the device end, so trailing zeros are
+                // when the image length isn't a sector multiple. Pad it with
+                // zeros to the next sector. The boot data lives within the ISO
+                // volume, not at the device end, so trailing zeros are
                 // harmless — and without this, WriteFile fails with
                 // ERROR_INVALID_PARAMETER on the unbuffered handle.
                 int toWrite = read;

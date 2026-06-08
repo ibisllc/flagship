@@ -303,18 +303,18 @@ public static class Hex
 /// <summary>
 /// Which assembly flow the wizard runs. Mirrors apps/burner-mac BurnerMode.swift.
 ///
-/// - Quick: the user supplies only a recipe. The burner downloads the stock
-///   Flagship Alpine base ISO ONCE (cached), appends the recipe trailer locally
-///   (AlpinePersonalize), and flashes — no per-server 240 MB download.
-/// - Advanced: the user supplies a stock Ubuntu/Debian ISO + a JSON recipe; the
+/// - Advanced: the user supplies a stock Debian/Ubuntu ISO + a JSON recipe; the
 ///   burner remasters in-place (via the Node CLI) then flashes.
+///
+/// (A future Simple/Debian mode that hides the ISO step will re-add a second
+/// case here.)
 /// </summary>
-public enum BurnerMode { Quick, Advanced }
+public enum BurnerMode { Advanced }
 
 public static class BurnerModeExtensions
 {
     public static bool RequiresRecipe(this BurnerMode m) => true;
-    public static bool RequiresUserISO(this BurnerMode m) => m == BurnerMode.Advanced;
-    public static string BakeCtaLabel(this BurnerMode m) => m == BurnerMode.Quick ? "Flash to USB" : "Assemble and flash";
-    public static string MenuLabel(this BurnerMode m) => m == BurnerMode.Quick ? "Quick" : "Advanced";
+    public static bool RequiresUserISO(this BurnerMode m) => true;
+    public static string BakeCtaLabel(this BurnerMode m) => "Assemble and flash";
+    public static string MenuLabel(this BurnerMode m) => "Advanced";
 }

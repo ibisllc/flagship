@@ -12,7 +12,7 @@ namespace Flagship.Burner.Tests;
 /// signInstallBlob (IRK seed 7, expiry 2099). If the C# canonical-byte layout
 /// or the pure-C# Ed25519 verify drifts from the TypeScript, Load() stops
 /// accepting them — that's the regression alarm, and it simultaneously proves
-/// AlpinePersonalize's trailer would sign-verify on a real box.
+/// the recipe a box receives would sign-verify on that box.
 /// </summary>
 public class RecipeTests
 {
@@ -182,19 +182,12 @@ public class RecipeTests
     }
 
     [Fact]
-    public void GoldenRecipePersonalizesWithASignVerifiableTrailer()
+    public void GoldenRecipeReVerifiesUnderItsOwnCanonicalBytes()
     {
-        // End-to-end: the trailer built from the golden recipe carries the real
-        // signature, and re-deriving canonical bytes from the parsed recipe
-        // re-verifies — i.e. a box parsing this trailer would accept it.
+        // Re-deriving canonical bytes from the parsed recipe re-verifies — i.e.
+        // a box receiving this recipe would accept it.
         var r = RecipeLoader.Load(D(GoldenJson));
-        var trailer = AlpinePersonalize.BuildTrailer(r);
-        // Pull the JSON back out and confirm it round-trips to the same fields.
-        int jsonLen = trailer[17] | (trailer[18] << 8) | (trailer[19] << 16) | (trailer[20] << 24);
-        var json = Encoding.UTF8.GetString(trailer, 21, jsonLen);
-        using var doc = JsonDocument.Parse(json);
-        Assert.Equal("home.golden.flagship.services", doc.RootElement.GetProperty("serverDomain").GetString());
-        // The recipe still verifies under its own canonical bytes.
+        Assert.Equal("home.golden.flagship.services", r.ServerDomain);
         Assert.True(RecipeLoader.VerifySignature(r));
     }
 }

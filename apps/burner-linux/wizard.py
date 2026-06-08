@@ -30,8 +30,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-import alpine_personalize
-import base_iso_cache
 from disk_enumerator import (
     DeviceInfo,
     enumerate_devices,
@@ -50,13 +48,8 @@ from cli_runner import (
 )
 
 
-# Burner flows — mirrors apps/burner-mac BurnerMode.
-#   quick    : recipe + USB only. Cache the Alpine base ISO once, append the
-#              recipe trailer locally (alpine_personalize), raw-write. No user
-#              ISO, no per-server download, no Node CLI.
-#   advanced : recipe + a stock Ubuntu/Debian ISO. Remaster via the Node CLI's
-#              `write` subcommand (the pre-Alpine-pipeline flow).
-MODE_QUICK = "quick"
+# Burner flow — recipe + a stock Ubuntu/Debian ISO. Remaster the user-supplied
+# ISO via the Node CLI's `write` subcommand, then flash.
 MODE_ADVANCED = "advanced"
 
 
@@ -85,9 +78,9 @@ class PkexecFlasher:
     """Run `pkexec python3 disk_write.py <image> <device>` and stream its
     control lines (FLAGSHIP_PROGRESS: / FLAGSHIP_PHASE:) + log output.
 
-    Mirrors CLIRunner's lifecycle (start/wait/terminate) but for the local
-    quick-mode raw write. pkexec pops the standard PolicyKit admin-auth dialog;
-    the elevated child is the tiny, auditable flasher — not the whole GUI."""
+    Mirrors CLIRunner's lifecycle (start/wait/terminate) but for a local raw
+    write. pkexec pops the standard PolicyKit admin-auth dialog; the elevated
+    child is the tiny, auditable flasher — not the whole GUI."""
 
     def __init__(
         self,
@@ -200,18 +193,12 @@ class WizardState:
     verified: Optional[VerifyInfo] = None
     out_iso_path: Optional[Path] = None
     is_finished: bool = False
-    # Quick = recipe + USB (Alpine pipeline, default in the GTK view).
-    # Advanced = remaster a user-supplied ISO via the Node CLI. Defaults to
-    # advanced here so the historical "needs all three" semantics hold for the
-    # existing unit tests; build_window flips the GTK model to quick.
+    # The burner remasters a user-supplied Ubuntu/Debian ISO via the Node CLI.
     mode: str = MODE_ADVANCED
-    # 0…1 during the byte-write / one-time download; None = indeterminate/idle.
+    # 0…1 during the byte-write; None = indeterminate/idle.
     progress: Optional[float] = None
-    # Raw phase token: "download" | "personalize" | "remaster" | "write".
+    # Raw phase token: "remaster" | "write".
     phase: Optional[str] = None
-    # True once a (one-time) base-ISO download begins this run — drives the
-    # orange progress bar + the "won't happen again" banner.
-    base_download_started: bool = False
 
     @property
     def requires_user_iso(self) -> bool:
@@ -246,8 +233,6 @@ class WizardState:
     @property
     def phase_label(self) -> Optional[str]:
         return {
-            "download": "One-time download of base image…",
-            "personalize": "Personalizing…",
             "remaster": "Building image…",
             "write": "Writing to USB…",
         }.get(self.phase or "")
@@ -292,11 +277,6 @@ class WizardModel:
         run_lsblk: Optional[Callable[[], str]] = None,
         locate_fn: Optional[Callable[[], Resolved]] = None,
         mode: str = MODE_ADVANCED,
-        # Injectable seams so the quick-mode pipeline is unit-testable without
-        # network / root: default to the real cache + personalize + pkexec.
-        ensure_base_fn: Optional[Callable[..., Path]] = None,
-        personalize_fn: Optional[Callable[..., int]] = None,
-        flasher_factory: Optional[Callable[[str, str], "PkexecFlasher"]] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -304,17 +284,6 @@ class WizardModel:
         self._locate_fn = locate_fn or locate
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
-        self._ensure_base = ensure_base_fn or base_iso_cache.ensure
-        self._personalize = personalize_fn or alpine_personalize.personalize
-        self._flasher_factory = flasher_factory or (
-            lambda image, device: PkexecFlasher(image_path=image, device_path=device)
-        )
-
-    def set_mode(self, mode: str) -> None:
-        if mode not in (MODE_QUICK, MODE_ADVANCED):
-            return
-        self.state.mode = mode
-        self._notify()
 
     def _notify(self) -> None:
         try:
@@ -400,14 +369,10 @@ class WizardModel:
             self._notify()
 
     def run_bake(self) -> None:
-        """Flash the USB. Quick mode = cache the Alpine base + personalize
-        locally + raw-write (no Node CLI). Advanced mode = the Node CLI's
-        `write` subcommand. Both need root for the raw write, so both elevate
+        """Flash the USB. Remaster the user-supplied ISO via the Node CLI's
+        `write` subcommand, which needs root for the raw write and so elevates
         via pkexec."""
-        if self.state.mode == MODE_QUICK:
-            threading.Thread(target=self._run_quick_bake_sync, daemon=True).start()
-        else:
-            threading.Thread(target=self._run_bake_sync, daemon=True).start()
+        threading.Thread(target=self._run_bake_sync, daemon=True).start()
 
     def _run_bake_sync(self) -> None:
         if not self.state.can_flash:
@@ -430,121 +395,6 @@ class WizardModel:
     def _on_bake_ok(self, _stdout_text: str) -> None:
         self.state.is_finished = True
         self._notify()
-
-    # ---- quick mode: Alpine cache + local personalize + raw write ----
-
-    def _set_phase(self, phase: Optional[str], progress: Optional[float] = None) -> None:
-        self.state.phase = phase
-        self.state.progress = progress
-        self._notify()
-
-    def _handle_control_line(self, line: str) -> bool:
-        """Parse a machine-readable control line from the flasher. Returns True
-        if consumed (so it's not shown in the log). Mirrors
-        WizardModel.handleControlLine."""
-        if line.startswith("FLAGSHIP_PROGRESS:"):
-            try:
-                self.state.progress = float(line[len("FLAGSHIP_PROGRESS:"):])
-            except ValueError:
-                self.state.progress = None
-            self._notify()
-            return True
-        if line.startswith("FLAGSHIP_PHASE:"):
-            p = line[len("FLAGSHIP_PHASE:"):]
-            self.state.phase = p
-            if p == "write":
-                self.state.progress = 0.0
-            self._notify()
-            return True
-        return False
-
-    def _run_quick_bake_sync(self) -> None:
-        with self._lock:
-            if self.state.is_running:
-                return
-            self.state.is_running = True
-        self.state.progress = None
-        self.state.phase = None
-        self.state.base_download_started = False
-        self._notify()
-
-        prepared: Optional[Path] = None
-        try:
-            recipe_path = self.state.recipe_path
-            disk = self.state.selected_disk
-            if recipe_path is None or disk is None:
-                return
-
-            # Parse the recipe locally (envelope or flattened).
-            try:
-                recipe = alpine_personalize.parse_recipe(recipe_path.read_bytes())
-            except Exception as e:  # alpine_personalize.RecipeError + IO
-                self._append_log("stderr", f"recipe error: {e}")
-                return
-
-            # 1. One-time base-ISO download (cached for every later server).
-            self._set_phase("download", None)
-
-            def _on_progress(p: float) -> None:
-                self.state.progress = p
-                self._notify()
-
-            def _on_download_start() -> None:
-                self.state.base_download_started = True
-                self._append_log(
-                    "stdout",
-                    "+ one-time download of base image (~240 MB — cached, won't repeat)",
-                )
-                self._notify()
-
-            try:
-                base = self._ensure_base(
-                    progress=_on_progress, on_download_start=_on_download_start
-                )
-            except base_iso_cache.CacheError as e:
-                self._append_log("stderr", str(e))
-                return
-
-            # 2. Personalize locally — append the recipe trailer to the base.
-            self._set_phase("personalize", None)
-            prepared = Path(tempfile.gettempdir()) / f"flagship-prepared-{uuid.uuid4()}.iso"
-            try:
-                self._append_log("stdout", f"+ personalize {recipe.server_domain}")
-                self._personalize(base, recipe, prepared)
-            except alpine_personalize.PersonalizeError as e:
-                self._append_log("stderr", str(e))
-                return
-
-            # 3. Raw write via the pkexec'd flasher.
-            self._set_phase("write", 0.0)
-            flasher = self._flasher_factory(str(prepared), disk.device_path)
-            self._current_runner = flasher
-            self._append_log("stdout", f"+ {flasher.command_string}")
-            try:
-                flasher.start(
-                    on_line=lambda ll: self._append_log(ll.stream, ll.text),
-                    on_control=self._handle_control_line,
-                )
-            except (FileNotFoundError, OSError) as e:
-                self._append_log("stderr", f"spawn failed: {e}")
-                return
-            code = flasher.wait()
-            if code == 0:
-                self.state.is_finished = True
-            else:
-                self._append_log("stderr", f"write failed (code {code})")
-        finally:
-            self._current_runner = None
-            if prepared is not None:
-                try:
-                    prepared.unlink()
-                except OSError:
-                    pass
-            self.state.phase = None
-            self.state.progress = None
-            with self._lock:
-                self.state.is_running = False
-            self._notify()
 
     def run_prepare(self) -> None:
         """Optional path: emit a flashable ISO without writing to the
@@ -626,9 +476,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     gi.require_version("Adw", "1")
     from gi.repository import Adw, Gtk, GLib, Gio  # type: ignore  # noqa: E402
 
-    # Quick is the default flow (recipe + USB, Alpine pipeline); Advanced is
-    # opt-in for users bringing their own Ubuntu/Debian ISO.
-    wizard_model = model if model is not None else WizardModel(mode=MODE_QUICK)
+    wizard_model = model if model is not None else WizardModel(mode=MODE_ADVANCED)
 
     window = Adw.ApplicationWindow(application=application)
     window.set_title("Flagship Burner")
@@ -637,20 +485,6 @@ def build_window(application, model: Optional[WizardModel] = None):
     toolbar = Adw.ToolbarView()
     header = Adw.HeaderBar()
     toolbar.add_top_bar(header)
-
-    # Mode toggle in the header: Quick (default) vs Advanced.
-    mode_switch = Gtk.Switch()
-    mode_switch.set_active(wizard_model.state.mode == MODE_ADVANCED)
-    mode_switch.set_tooltip_text("Advanced: bring your own Ubuntu/Debian ISO")
-
-    def _on_mode_toggled(sw, _pspec):
-        wizard_model.set_mode(MODE_ADVANCED if sw.get_active() else MODE_QUICK)
-
-    mode_switch.connect("notify::active", _on_mode_toggled)
-    mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-    mode_box.append(Gtk.Label(label="Advanced"))
-    mode_box.append(mode_switch)
-    header.pack_end(mode_box)
 
     # Main vertical layout: scrolled wizard cards + log pane.
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -809,37 +643,16 @@ def build_window(application, model: Optional[WizardModel] = None):
     bake_row.append(verify_btn)
     step4["body"].append(bake_row)
 
-    # Progress: ORANGE during the one-time base-image download (with the
-    # "won't happen again" note), accent during the write. The .flagship-warning
-    # CSS class (installed below) recolours the bar's fill orange.
+    # Progress: accent-coloured during the remaster + write.
     progress_bar = Gtk.ProgressBar()
     progress_bar.set_show_text(True)
     progress_bar.set_visible(False)
     step4["body"].append(progress_bar)
 
-    download_note = Gtk.Label(
-        label="One-time download of base image — won't happen again.",
-        xalign=0.0,
-    )
-    download_note.set_wrap(True)
-    download_note.add_css_class("dim-label")
-    download_note.set_visible(False)
-    step4["body"].append(download_note)
-
     out_path_label = Gtk.Label(xalign=0.0)
     out_path_label.set_selectable(True)
     out_path_label.add_css_class("monospace")
     step4["body"].append(out_path_label)
-
-    # Recolour the progress fill orange while the .flagship-warning class is on.
-    _css = Gtk.CssProvider()
-    _css.load_from_data(
-        b"progressbar.flagship-warning > trough > progress {"
-        b" background-color: #e58a00; }"
-    )
-    Gtk.StyleContext.add_provider_for_display(
-        window.get_display(), _css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-    )
 
     # ---- Step 5: done ----
     step5 = _wizard_card(
@@ -893,10 +706,6 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Sync state -> view ----
     def _render() -> None:
         s = wizard_model.state
-        advanced = s.mode == MODE_ADVANCED
-        mode_switch.set_active(advanced)
-        # The user-supplied-ISO step only matters in Advanced mode.
-        step2["card"].set_visible(advanced)
         # recipe status
         if s.recipe_error:
             recipe_status.set_text(s.recipe_error)
@@ -934,10 +743,8 @@ def build_window(application, model: Optional[WizardModel] = None):
         # readiness
         readiness.set_text(s.readiness_summary)
         bake_btn.set_sensitive(s.can_flash and not s.is_running)
-        # Prepare (save-an-ISO) is Advanced-only — Quick has no separate ISO.
-        prep_btn.set_visible(advanced)
         prep_btn.set_sensitive(
-            advanced and s.recipe_path is not None and s.iso_path is not None
+            s.recipe_path is not None and s.iso_path is not None
             and not s.is_running
         )
         verify_btn.set_sensitive(s.recipe_path is not None and not s.is_running)
@@ -946,23 +753,16 @@ def build_window(application, model: Optional[WizardModel] = None):
             log_spinner.start()
         else:
             log_spinner.stop()
-        # progress bar: orange during the one-time download, accent during write.
-        downloading = s.phase == "download" and s.base_download_started
-        if s.is_running and s.phase in ("download", "personalize", "remaster", "write"):
+        # progress bar: accent-coloured during the remaster + write.
+        if s.is_running and s.phase in ("remaster", "write"):
             progress_bar.set_visible(True)
             if s.progress is None:
                 progress_bar.pulse()
             else:
                 progress_bar.set_fraction(max(0.0, min(1.0, s.progress)))
             progress_bar.set_text(s.phase_label or "")
-            if downloading:
-                progress_bar.add_css_class("flagship-warning")
-            else:
-                progress_bar.remove_css_class("flagship-warning")
         else:
             progress_bar.set_visible(False)
-            progress_bar.remove_css_class("flagship-warning")
-        download_note.set_visible(downloading)
         if s.out_iso_path is not None:
             out_path_label.set_text(f"output: {s.out_iso_path}")
         else:

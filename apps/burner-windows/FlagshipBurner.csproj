@@ -33,8 +33,6 @@
     <Compile Include="src\VerifyResult.cs" />
     <Compile Include="src\Recipe.cs" />
     <Compile Include="src\Ed25519Verify.cs" />
-    <Compile Include="src\AlpinePersonalize.cs" />
-    <Compile Include="src\BaseIsoCache.cs" />
     <Compile Include="src\DiskWrite.cs" />
   </ItemGroup>
 

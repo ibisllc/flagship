@@ -91,8 +91,7 @@ public class WizardStateMachineTests
 /// Plain mirror of the Wizard view-model's derived state — same rules,
 /// no WPF dependencies. If the rules in Wizard.cs change, update both.
 ///
-/// Defaults to Advanced (requires an ISO) so the legacy assertions above keep
-/// their shape; the Quick-mode rules are pinned in <see cref="QuickModeRules"/>.
+/// Advanced is the only mode today; it always requires a user-supplied ISO.
 /// </summary>
 internal sealed class WizardStateView
 {
@@ -129,34 +128,9 @@ internal sealed class WizardStateView
     }
 }
 
-/// <summary>Quick mode (the Alpine pipeline) needs recipe + USB only — no ISO.</summary>
-public class QuickModeRules
+/// <summary>Advanced mode (the Debian/Ubuntu remaster) always requires a user ISO.</summary>
+public class AdvancedModeRules
 {
-    [Fact]
-    public void QuickMode_RecipePlusDisk_CanBake_NoIso()
-    {
-        var s = new WizardStateView
-        {
-            Mode = BurnerMode.Quick,
-            RecipePath = @"C:\tmp\recipe.json",
-            SelectedDevice = @"\\.\PhysicalDrive2",
-        };
-        Assert.True(s.CanBake);
-        Assert.Equal(@"Writes to \\.\PhysicalDrive2 · erases what's there", s.ReadinessSummary);
-    }
-
-    [Fact]
-    public void QuickMode_RecipeOnly_NeedsDiskNotIso()
-    {
-        var s = new WizardStateView { Mode = BurnerMode.Quick, RecipePath = @"C:\tmp\recipe.json" };
-        Assert.False(s.CanBake);
-        Assert.Equal("Need: USB drive.", s.ReadinessSummary);
-    }
-
-    [Fact]
-    public void QuickMode_DoesNotRequireUserIso()
-        => Assert.False(BurnerMode.Quick.RequiresUserISO());
-
     [Fact]
     public void AdvancedMode_RequiresUserIso()
         => Assert.True(BurnerMode.Advanced.RequiresUserISO());

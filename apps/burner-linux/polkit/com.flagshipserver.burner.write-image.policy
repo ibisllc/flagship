@@ -3,12 +3,11 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!--
-  Flagship Burner — PolicyKit action for the LOCAL personalize pipeline.
+  Flagship Burner — PolicyKit action for the LOCAL raw-write flasher.
 
-  Quick mode caches the base Alpine ISO, appends the recipe trailer locally
-  (no Node CLI), then raw-writes the prepared image to the USB. That raw write
-  needs CAP_SYS_ADMIN (effectively root), so the GUI pkexec's the small,
-  auditable `disk_write.py` flasher — NOT the whole GUI and NOT Node.
+  The raw write to the USB needs CAP_SYS_ADMIN (effectively root), so the GUI
+  pkexec's the small, auditable `disk_write.py` flasher — NOT the whole GUI and
+  NOT Node.
 
   When the user clicks "Flash to USB", pkexec invokes python3 as root after
   the user authenticates to the PolicyKit agent. The flasher takes exactly two

@@ -4,20 +4,8 @@ GTK4 + libadwaita wrapper around the `@flagship/burner` Node CLI
 (`packages/flagship-burner/`). UX matches `apps/burner-mac/` 1:1: one
 window, five-step wizard.
 
-## Two flows
-
-The header has a **Quick / Advanced** toggle (Quick is the default):
-
-- **Quick** (recipe + USB only) — the burner owns the whole pipeline. It
-  downloads the stock Flagship Alpine base ISO **once** (cached under
-  `$XDG_CACHE_HOME/flagship-burner`, sha256-pinned), appends the signed
-  recipe trailer **locally** (`alpine_personalize.py`, byte-identical to the
-  server's `iso-personalizer/trailer.ts`), and raw-writes the result. No
-  per-server ~240 MB download, no user-supplied ISO, no Node CLI. The trailer
-  is placed at the ISO9660 **volume offset** (the PVD volume-space-size is
-  patched to `fileSize / lbs`) — exactly where the box's installer reads it.
-- **Advanced** (recipe + a stock Ubuntu/Debian ISO) — the pre-Alpine flow:
-  remaster the ISO you bring via the `@flagship/burner` Node CLI, then flash.
+You bring a stock Ubuntu/Debian ISO; the burner remasters it with your signed
+recipe (via the `@flagship/burner` Node CLI) and flashes it to a USB drive.
 
 ## What it does
 
@@ -25,19 +13,16 @@ The header has a **Quick / Advanced** toggle (Quick is the default):
    after the phone scans the QR code. The GUI shells out to
    `flagship-burn verify` and shows you the server-domain + expiry so
    you can sanity-check before flashing.
-2. **ISO** *(Advanced only)* — drag in a stock Ubuntu Server ISO. Run
-   `flagship-burn distros` for accepted SHAs. Hidden in Quick mode.
+2. **ISO** — drag in a stock Ubuntu/Debian Server ISO. Run
+   `flagship-burn distros` for accepted SHAs.
 3. **Drive** — pick a USB drive from a read-only list. Only removable,
    external whole-disks in the 500MB-500GB band appear; internal SSDs,
    NVMe boot drives, and oversized disks are hidden by design — they're
    also hard-refused by the CLI's safety classifier even with an
    explicit `--device`.
-4. **Flash** — Quick mode runs download → personalize → write; the progress
-   bar fills **orange** during the one-time base-image download (with a
-   "won't happen again" note), then accent-coloured during the write. The
-   raw write is elevated by `pkexec python3 disk_write.py <image> <device>`
-   (a small, auditable script — not the whole GUI). Advanced mode invokes the
-   CLI's `write` subcommand wrapped in `pkexec`. Streams output into a log
+4. **Flash** — invokes the CLI's `write` subcommand wrapped in `pkexec` to
+   remaster the ISO and raw-write it to the picked disk. The progress bar is
+   accent-coloured during the remaster + write. Streams output into a log
    pane.
 5. **Done** — shows the resulting server-domain + when the recipe
    expires.
@@ -52,12 +37,10 @@ The header has a **Quick / Advanced** toggle (Quick is the default):
     `sudo dnf install python3-gobject gtk4 libadwaita`
   - Arch:
     `sudo pacman -S python-gobject gtk4 libadwaita`
-- **Node.js 20+** somewhere on `PATH` — **Advanced mode only** (the Node CLI
-  remasters a user-supplied ISO). Quick mode is pure Python (stdlib `urllib` +
-  `hashlib`) and needs no Node.
+- **Node.js 20+** somewhere on `PATH` — the Node CLI remasters the
+  user-supplied ISO.
 - **`lsblk`** — ships on every Linux distro.
 - **`pkexec`** (PolicyKit) — ships on every modern desktop distro.
-- **Network** for Quick mode's one-time base-ISO download (cached thereafter).
 
 ## Run from a checkout
 
@@ -86,14 +69,6 @@ Tests cover:
   parser — mirrors `CLIArgsTests` + `VerifyResultTests`.
 - `wizard` state machine (GUI-agnostic) — `WizardState` readiness,
   `WizardModel.refresh_disks` + `accept_*` callbacks.
-- `alpine_personalize` — trailer wire-format structure, trailer-at-volume-
-  offset placement, sector alignment, recipe parsing (envelope + flattened).
-  Mirrors `AlpinePersonalizeTests.swift`.
-- `base_iso_cache` — XDG cache dir/path resolution, pinned filename/sha/URL,
-  cache-hit short-circuit.
-- quick-mode `WizardModel` pipeline (download → personalize → write phases,
-  the orange-banner state) via injected cache/personalize/flasher seams, the
-  `PkexecFlasher` command vector, and `disk_write` final-block padding.
 
 The view layer is intentionally not unit tested — drive it manually
 with `flagship-burner.py`.
@@ -118,8 +93,7 @@ output from `packages/flagship-burner/dist/`). It does **not** bundle
 Node, GTK4, or libadwaita — those remain runtime prereqs on the host.
 
 To enable the raw write, the user installs the PolicyKit actions once
-(one for the Node-CLI write in Advanced mode, one for the Quick-mode
-local flasher):
+(one for the Node-CLI write, one for the local raw-write flasher):
 
 ```sh
 sudo install -m 644 \
@@ -146,41 +120,19 @@ this with a portal-mediated "open this device" prompt.
 ```
 flagship-burner.py    GTK app entry — wires Adw.Application, opens the wizard window
 wizard.py             GUI-agnostic WizardState + WizardModel + GTK view builder
-                      + PkexecFlasher (Quick-mode raw write) + mode toggle
-alpine_personalize.py Quick mode: recipe parse + trailer build + local personalize
-                      (byte-for-byte port of iso-personalizer/trailer.ts)
-base_iso_cache.py     Quick mode: one-time sha256-pinned base-ISO download + cache
+                      + PkexecFlasher (local raw write)
 disk_write.py         sector-aligned raw write (lib + pkexec CLI entry)
-cli_runner.py         Advanced mode: spawn Node, stream output, locate CLI, parse JSON
+cli_runner.py         spawn Node, stream output, locate CLI, parse JSON
 disk_enumerator.py    lsblk JSON parser + safety classifier (mirrors devices.ts)
-polkit/               PolicyKit action XML — two actions: Node-CLI write (Advanced)
-                      + write-image (Quick, pkexec python3 disk_write.py)
+polkit/               PolicyKit action XML — two actions: Node-CLI write
+                      + write-image (pkexec python3 disk_write.py)
 flatpak/              Flatpak manifest (stub — raw write is sandbox-incompatible)
 appimage/             AppImage build script — produces a relocatable single-file binary
 tests/                pytest unit tests; GUI layer not covered
 ```
 
-### Quick-mode trailer (wire format)
-
-`alpine_personalize.build_trailer` emits, byte-identical to the server's
-`packages/iso-personalizer/src/trailer.ts`:
-
-```
-MAGIC_HEADER("FLAGSHIP-BOOT\0\0\0", 16) || version(0x01, 1) ||
-u32le(jsonLen) || json || signature(64) ||
-MAGIC_FOOTER("\0\0\0FLAGSHIP-END\0", 16) || u32le(totalSize)
-```
-
-`json` is `JSON.stringify(installBlobToJson(blob))` built in the exact field
-order (compact, lowercase hex, **no** `bootUnlockMode`); `signature` is the
-recipe's 64-byte `blobSignature` verbatim. `personalize()` patches the PVD
-volume-space-size (both-endian u32 at byte `32768 + 80`) to `fileSize / lbs`
-so the box's `volumeSpaceSize × lbs` find lands on the trailer, then zero-pads
-the output to the device sector (512) for an aligned raw write. (Verified
-end-to-end against the box's `installer-tiny/src/installer.sh` trailer-find.)
-
-The split keeps every CLI-driving and lsblk-parsing function in modules
-that import cleanly without a display, so `pytest` runs headless on CI.
+The CLI-driving and lsblk-parsing functions live in modules that import
+cleanly without a display, so `pytest` runs headless on CI.
 
 ## License
 

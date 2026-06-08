@@ -32,12 +32,10 @@ public sealed class Wizard : INotifyPropertyChanged
     private VerifyResult? _verified;
     private string? _outIsoPath;
     private CliRunner? _currentRunner;
-    private BurnerMode _mode = BurnerMode.Quick;
+    private BurnerMode _mode = BurnerMode.Advanced;
     private double? _progress;
     private string? _phase;
-    private bool _baseDownloadStarted;
     private Recipe? _parsedRecipe;
-    private System.Threading.CancellationTokenSource? _cts;
 
     /// <summary>
     /// Test seam: set inside RunBakeAsync only on the Advanced branch that
@@ -109,9 +107,8 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Quick = recipe + USB only; the burner caches the Alpine base + appends
-    /// the recipe trailer locally then flashes (no user ISO, no Node).
-    /// Advanced = remaster a stock Ubuntu/Debian ISO via the Node CLI.
+    /// Advanced = remaster a stock Debian/Ubuntu ISO via the Node CLI. This is
+    /// the only mode today; a future Simple/Debian mode will re-add a variant.
     /// </summary>
     public BurnerMode Mode
     {
@@ -126,21 +123,11 @@ public sealed class Wizard : INotifyPropertyChanged
         private set { if (_progress != value) { _progress = value; FireBag(); } }
     }
 
-    /// <summary>Raw phase token: "download" | "personalize" | "remaster" | "write".</summary>
+    /// <summary>Raw phase token: "remaster" | "write".</summary>
     public string? Phase
     {
         get => _phase;
         private set { if (_phase != value) { _phase = value; FireBag(); } }
-    }
-
-    /// <summary>
-    /// True once a (one-time) base-ISO download begins this run — drives the
-    /// "won't happen again" banner under the progress bar.
-    /// </summary>
-    public bool BaseDownloadStarted
-    {
-        get => _baseDownloadStarted;
-        private set { if (_baseDownloadStarted != value) { _baseDownloadStarted = value; FireBag(); } }
     }
 
     // ---- derived (one big bag for simplicity; WPF only reads these
@@ -179,12 +166,12 @@ public sealed class Wizard : INotifyPropertyChanged
 
     public string BakeButtonLabel => IsRunning ? "Working — click to cancel" : Mode.BakeCtaLabel();
 
-    // ---- Quick-mode flow visibility ----
+    // ---- flow visibility ----
 
-    /// <summary>Advanced mode brings its own ISO; Quick hides the ISO row.</summary>
+    /// <summary>Advanced mode brings its own ISO, so the ISO row always shows.</summary>
     public bool ShowIsoRow => Mode.RequiresUserISO();
 
-    // ---- progress (Quick local pipeline) ----
+    // ---- progress ----
 
     /// <summary>Show the linear progress block (vs. the Bake button / done card).</summary>
     public bool ShowProgress => IsRunning;
@@ -194,8 +181,6 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>Human label for the current phase, mirroring WizardModel.phaseLabel.</summary>
     public string? PhaseLabel => Phase switch
     {
-        "download" => "One-time download of base image…",
-        "personalize" => "Personalizing…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
         _ => null,
@@ -211,17 +196,8 @@ public sealed class Wizard : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// Orange (warning) while the one-time download + personalize run on the
-    /// burner; the accent (primary) once the write phase starts filling in —
-    /// so the bar visibly changes color. Mirrors WizardView.progressTint.
-    /// </summary>
-    public Brush ProgressTint => Phase is "download" or "personalize"
-        ? FindBrush("FB.Warning")
-        : FindBrush("FB.Primary");
-
-    /// <summary>The "won't happen again" caption shows only during the download phase.</summary>
-    public bool ShowDownloadBanner => Phase == "download";
+    /// <summary>The progress bar uses the accent (primary) color.</summary>
+    public Brush ProgressTint => FindBrush("FB.Primary");
 
     // Recipe row
     public bool HasRecipePrimary => Verified != null || RecipeError != null || HasRecipe;
@@ -287,9 +263,8 @@ public sealed class Wizard : INotifyPropertyChanged
         Verified = null;
         _parsedRecipe = null;
         RecipePath = path;
-        // Verify LOCALLY (parse + Ed25519) for immediate feedback. This keeps
-        // Quick mode entirely Node-free — the only thing the CLI is still used
-        // for is the Advanced remaster. Mirrors WizardModel.runVerify().
+        // Verify LOCALLY (parse + Ed25519) for immediate feedback before the
+        // CLI remaster runs. Mirrors WizardModel.runVerify().
         _ = RunVerifyAsync();
     }
 
@@ -337,13 +312,12 @@ public sealed class Wizard : INotifyPropertyChanged
 
     public void Cancel()
     {
-        _cts?.Cancel();
         _currentRunner?.Cancel();
     }
 
     /// <summary>
     /// Parse + verify the recipe locally (no CLI). Sets Verified (surfaced in
-    /// the recipe row) + caches the parsed Recipe for the Quick pipeline.
+    /// the recipe row) + caches the parsed Recipe.
     /// </summary>
     public async Task RunVerifyAsync()
     {
@@ -381,166 +355,21 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>
     /// One-click "Bake".
     ///
-    /// Quick mode (default): download+cache the Alpine base ONCE, append the
-    /// recipe trailer locally (AlpinePersonalize), flash the prepared image to
-    /// the raw device (DiskWrite). No per-server 240 MB download, no user ISO,
-    /// no Node. Mirrors WizardModel.runWrite()'s `.quick` branch.
-    ///
-    /// Advanced mode: remaster the user's stock Ubuntu/Debian ISO via the Node
-    /// CLI's `write` subcommand (which also does the raw write).
+    /// Remaster the user's stock Debian/Ubuntu ISO via the Node CLI's `write`
+    /// subcommand (which also does the raw write).
     /// </summary>
     public async Task RunBakeAsync()
     {
         if (!CanBake) return;
-        if (Mode == BurnerMode.Quick)
-        {
-            await RunQuickBakeAsync();
-        }
-        else
-        {
-            var recipe = _recipePath!;
-            var iso = _isoPath!;
-            var disk = SelectedDisk!;
-            DidRemasterForTest = true;
-            Phase = "remaster";
-            await RunCliAsync(
-                entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false),
-                onSuccess: _ => { IsFinished = true; });
-            Phase = null;
-        }
-    }
-
-    /// <summary>
-    /// Quick local pipeline: cache base ISO → personalize → raw-write. All three
-    /// phases stream progress; the download phase paints orange + shows the
-    /// "won't happen again" banner, the write phase fills in the accent color.
-    /// </summary>
-    private async Task RunQuickBakeAsync()
-    {
-        if (IsRunning) return;
+        var recipe = _recipePath!;
+        var iso = _isoPath!;
         var disk = SelectedDisk!;
-        IsRunning = true;
-        Progress = null;
+        DidRemasterForTest = true;
+        Phase = "remaster";
+        await RunCliAsync(
+            entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false),
+            onSuccess: _ => { IsFinished = true; });
         Phase = null;
-        BaseDownloadStarted = false;
-        _cts = new System.Threading.CancellationTokenSource();
-        FireBag();
-
-        // Parse (reuse the cached parse from RunVerifyAsync when present).
-        Recipe parsed;
-        if (_parsedRecipe is Recipe cached)
-        {
-            parsed = cached;
-        }
-        else
-        {
-            try { parsed = await Task.Run(() => RecipeLoader.Load(_recipePath!)); }
-            catch (Exception e)
-            {
-                AppendLog(LogStream.Stderr, (e as RecipeException)?.Message ?? e.Message);
-                FinishQuick();
-                return;
-            }
-        }
-
-        string? prepared = null;
-        try
-        {
-            // 1. One-time base-ISO download (cached for every later server).
-            Phase = "download";
-            string baseIso;
-            try
-            {
-                baseIso = await BaseIsoCache.EnsureAsync(
-                    progress: p => SetProgress(p),
-                    onDownloadStart: () => OnUi(() =>
-                    {
-                        BaseDownloadStarted = true;
-                        AppendLog(LogStream.Stdout,
-                            "+ one-time download of base image (~240 MB — cached, won't repeat)");
-                    }),
-                    notice: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
-                    cancellation: _cts.Token);
-            }
-            catch (Exception e)
-            {
-                AppendLog(LogStream.Stderr, (e as BaseIsoCache.CacheException)?.Message ?? e.Message);
-                return;
-            }
-
-            // 2. Personalize locally — append the recipe trailer to the base.
-            Phase = "personalize";
-            Progress = null;
-            FireBag();
-            prepared = Path.Combine(Path.GetTempPath(), $"flagship-prepared-{Guid.NewGuid():N}.iso");
-            try
-            {
-                AppendLog(LogStream.Stdout, $"+ personalize {parsed.ServerDomain}");
-                var basePath = baseIso;
-                var outPath = prepared;
-                await Task.Run(() => AlpinePersonalize.Personalize(basePath, parsed, outPath));
-            }
-            catch (Exception e)
-            {
-                AppendLog(LogStream.Stderr, (e as AlpinePersonalize.PersonalizeException)?.Message ?? e.Message);
-                TryDeleteFile(prepared);
-                prepared = null;
-                return;
-            }
-
-            // 3. Raw-write the prepared image to the device (sector-aligned).
-            Phase = "write";
-            Progress = 0;
-            FireBag();
-            AppendLog(LogStream.Stdout, $"+ write-image → {disk.DevicePath}");
-            try
-            {
-                var imagePath = prepared;
-                var devicePath = disk.DevicePath;
-                await Task.Run(() => DiskWrite.Write(imagePath, devicePath, p => SetProgress(p)));
-            }
-            catch (Exception e)
-            {
-                AppendLog(LogStream.Stderr, (e as DiskWrite.DiskWriteException)?.Message ?? e.Message);
-                return;
-            }
-            IsFinished = true;
-        }
-        finally
-        {
-            TryDeleteFile(prepared);
-            FinishQuick();
-        }
-    }
-
-    private void FinishQuick()
-    {
-        IsRunning = false;
-        Progress = null;
-        Phase = null;
-        _cts?.Dispose();
-        _cts = null;
-        FireBag();
-    }
-
-    private void SetProgress(double p) => OnUi(() => Progress = Math.Clamp(p, 0.0, 1.0));
-
-    /// <summary>
-    /// Run <paramref name="action"/> on the UI thread. The Quick pipeline's
-    /// download/personalize/write callbacks fire from thread-pool threads
-    /// (Task.Run + ConfigureAwait(false) inside the cache), so any state setter
-    /// that raises PropertyChanged must be marshalled or WPF bindings throw.
-    /// </summary>
-    private static void OnUi(Action action)
-    {
-        if (Application.Current?.Dispatcher.CheckAccess() ?? true) action();
-        else Application.Current.Dispatcher.Invoke(action);
-    }
-
-    private static void TryDeleteFile(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try { if (File.Exists(path)) File.Delete(path); } catch { /* best effort */ }
     }
 
     public async Task RunPrepareAsync()
@@ -672,11 +501,10 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(DiskStatusGlyph), nameof(DiskStatusBrush), nameof(DiskIconBg),
         nameof(DiskRowTag),
         nameof(DoneServerDomain), nameof(DoneOutputPath),
-        nameof(Mode), nameof(Progress), nameof(Phase), nameof(BaseDownloadStarted),
+        nameof(Mode), nameof(Progress), nameof(Phase),
         nameof(ShowIsoRow),
         nameof(ShowProgress), nameof(ProgressIndeterminate), nameof(ProgressValue),
         nameof(PhaseLabel), nameof(ProgressCaption), nameof(ProgressTint),
-        nameof(ShowDownloadBanner),
     };
 
     private static Brush FindBrush(string key)

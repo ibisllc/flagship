@@ -29,13 +29,8 @@ final class WizardModel: ObservableObject {
     /// never part of the signed recipe.
     @Published var wifiSSID = ""
     @Published var wifiPassword = ""
-    /// Quick = flash a pre-personalized Alpine ISO as-is (default).
     /// Advanced = remaster a stock Ubuntu/Debian ISO with a JSON recipe.
-    @Published var mode: BurnerMode = .quick
-
-    /// True once a (one-time) base-ISO download begins this run — drives the
-    /// "won't happen again" banner under the progress bar.
-    @Published var baseDownloadStarted = false
+    @Published var mode: BurnerMode = .advanced
 
     /// Test seam: set inside `runWrite()` only on the branch that actually
     /// runs the remaster step. The model-level unit tests can assert against
@@ -44,8 +39,6 @@ final class WizardModel: ObservableObject {
 
     var phaseLabel: String? {
         switch phase {
-        case "download": return "One-time download of base image…"
-        case "personalize": return "Personalizing…"
         case "remaster": return "Building image…"
         case "write": return "Writing to USB…"
         default: return nil
@@ -191,15 +184,8 @@ final class WizardModel: ObservableObject {
         return (yaml, preseed)
     }
 
-    /// Save a remastered ISO to disk for flashing elsewhere. Advanced mode
-    /// only — Quick mode's input already IS a flashable ISO (the user can
-    /// just copy it themselves), so there's nothing to "prepare".
+    /// Save a remastered ISO to disk for flashing elsewhere.
     func runPrepare() async {
-        guard mode == .advanced else {
-            appendLog(stream: .stderr,
-                      text: "Save-an-ISO is only available in Advanced mode. In Quick mode the input ISO is already flashable.")
-            return
-        }
         guard let recipe = recipe, let iso = iso else { return }
         guard !isRunning else { return }
         isRunning = true
@@ -224,14 +210,9 @@ final class WizardModel: ObservableObject {
 
     /// One-click "Bake".
     ///
-    /// In Quick mode the input ISO is already personalized (the recipe was
-    /// baked into the ISO trailer server-side by /api/personalize-iso) — we
-    /// hand its bytes straight to the privileged helper.
-    ///
-    /// In Advanced mode we first remaster the stock Ubuntu/Debian ISO with
-    /// the user's JSON recipe (unprivileged — the app holds the Downloads
-    /// grant; the helper can't read user folders) then hand the prepared
-    /// image to the helper.
+    /// We first remaster the stock Ubuntu/Debian ISO with the user's JSON
+    /// recipe (unprivileged — the app holds the Downloads grant; the helper
+    /// can't read user folders) then hand the prepared image to the helper.
     func runWrite() async {
         guard let disk = selectedDisk else { return }
         if mode.requiresUserISO && iso == nil { return }
@@ -240,88 +221,34 @@ final class WizardModel: ObservableObject {
         isRunning = true
         progress = nil
         phase = nil
-        baseDownloadStarted = false
         didRemasterForTest = false
         defer { isRunning = false; endProgress() }
 
-        // Path A — Quick: download+cache the Alpine base once, append the recipe
-        // trailer locally, flash. Path B — Advanced: remaster a user ISO first.
+        // Remaster the user-supplied stock ISO with the recipe, then flash.
         let imagePath: String
         var preparedToCleanup: URL? = nil
         defer { if let p = preparedToCleanup { try? FileManager.default.removeItem(at: p) } }
 
-        switch mode {
-        case .quick:
-            guard let recipeURL = recipe else { return }
-            let parsed: Recipe
-            do { parsed = try RecipeLoader.load(contentsOf: recipeURL) }
-            catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-                return
-            }
-            // 1. One-time base-ISO download (cached for every later server).
-            phase = "download"
-            let baseURL: URL
-            do {
-                baseURL = try await BaseIsoCache.ensure(
-                    progress: { [weak self] p in
-                        Task { @MainActor in self?.progress = p; DockProgress.set(p) }
-                    },
-                    onDownloadStart: { [weak self] in
-                        Task { @MainActor in
-                            self?.baseDownloadStarted = true
-                            self?.appendLog(stream: .stdout,
-                                            text: "+ one-time download of base image (≈240 MB — cached, won't repeat)")
-                        }
-                    },
-                    notice: { [weak self] m in
-                        Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(m)") }
-                    })
-            } catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-                return
-            }
-            // 2. Personalize locally — append the recipe trailer to the base.
-            phase = "personalize"
-            progress = nil
-            DockProgress.set(nil)
-            let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
-            do {
-                appendLog(stream: .stdout, text: "+ personalize \(parsed.serverDomain)")
-                try await Task.detached(priority: .userInitiated) {
-                    try AlpinePersonalize.personalize(baseISO: baseURL, recipe: parsed, outURL: preparedURL)
-                }.value
-            } catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-                try? FileManager.default.removeItem(at: preparedURL)
-                return
-            }
-            preparedToCleanup = preparedURL
-            imagePath = preparedURL.path
-
-        case .advanced:
-            guard let iso = iso, let recipe = recipe else { return }
-            phase = "remaster"
-            let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
-            do {
-                let cfgs = try installerConfigs(forRecipe: recipe)
-                appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → prepared image")
-                let used = try await Task.detached(priority: .userInitiated) { () -> String in
-                    try Remaster.remasterInstaller(srcISO: iso, outISO: preparedURL,
-                                                   userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
-                }.value
-                didRemasterForTest = true
-                appendLog(stream: .stdout, text: "+ installer family: \(used)")
-            } catch {
-                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-                try? FileManager.default.removeItem(at: preparedURL)
-                return
-            }
-            preparedToCleanup = preparedURL
-            imagePath = preparedURL.path
+        guard let iso = iso, let recipe = recipe else { return }
+        phase = "remaster"
+        let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
+        do {
+            let cfgs = try installerConfigs(forRecipe: recipe)
+            appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → prepared image")
+            let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                try Remaster.remasterInstaller(srcISO: iso, outISO: preparedURL,
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
+            }.value
+            didRemasterForTest = true
+            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            try? FileManager.default.removeItem(at: preparedURL)
+            return
         }
+        preparedToCleanup = preparedURL
+        imagePath = preparedURL.path
 
         // PRIVILEGED: the signed launchd helper does the raw write.
         do {
@@ -373,13 +300,8 @@ final class WizardModel: ObservableObject {
         stopTail.value = true
         conn.invalidate()
         if result.code == 0 {
-            // Advanced mode: shred the single-use recipe file now that the
-            // burn succeeded. Quick mode has no separate recipe to shred —
-            // the recipe lives inside the ISO trailer and the user keeps
-            // (or discards) the ISO itself.
-            if mode == .advanced, let recipe = recipe {
-                try? FileManager.default.removeItem(at: recipe)
-            }
+            // Shred the single-use recipe file now that the burn succeeded.
+            try? FileManager.default.removeItem(at: recipe)
             isFinished = true
         } else {
             appendLog(stream: .stderr,

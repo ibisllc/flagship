@@ -23,17 +23,15 @@
     <!-- Pull in the platform-agnostic source files we want to test.
          Skip Wizard.cs / MainWindow.* / App.* because they depend on
          WPF. The disk enumerator + verify-result parser + CLI locator
-         + CLI args + the Alpine pipeline (recipe/ed25519/personalize/cache)
-         are all WPF-free. DiskWrite.cs is [SupportedOSPlatform("windows")]
-         but its parsers + pre-open guards run on any host. -->
+         + CLI args + the recipe verify (recipe/ed25519) are all WPF-free.
+         DiskWrite.cs is [SupportedOSPlatform("windows")] but its parsers
+         + pre-open guards run on any host. -->
     <Compile Include="..\src\DiskEnumerator.cs"/>
     <Compile Include="..\src\VerifyResult.cs"/>
     <Compile Include="..\src\CliLocator.cs"/>
     <Compile Include="..\src\CliRunner.cs"/>
     <Compile Include="..\src\Recipe.cs"/>
     <Compile Include="..\src\Ed25519Verify.cs"/>
-    <Compile Include="..\src\AlpinePersonalize.cs"/>
-    <Compile Include="..\src\BaseIsoCache.cs"/>
     <Compile Include="..\src\DiskWrite.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
@@ -43,11 +41,9 @@
     <Compile Include="CliLocatorTests.cs"/>
     <Compile Include="CliArgsTests.cs"/>
     <Compile Include="WizardStateMachineTests.cs"/>
-    <Compile Include="AlpinePersonalizeTests.cs"/>
     <Compile Include="Ed25519VerifyTests.cs"/>
     <Compile Include="RecipeTests.cs"/>
     <Compile Include="DiskWriteTests.cs"/>
-    <Compile Include="BaseIsoCacheTests.cs"/>
   </ItemGroup>
 
   <ItemGroup>

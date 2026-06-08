@@ -14,10 +14,7 @@ finish-args:
   - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
-  # Quick mode downloads the base Alpine ISO ONCE (cached under
-  # $XDG_CACHE_HOME/flagship-burner) before personalizing locally — that's the
-  # only network the app makes. The raw write still won't work in-sandbox, but
-  # verify + personalize (save-an-ISO) do.
+  # The raw write won't work in-sandbox, but verify + prepare (save-an-ISO) do.
   - --share=network
   # Allow reading the user's Downloads folder for recipe + ISO drag-drop.
   - --filesystem=xdg-download:ro
@@ -39,8 +36,6 @@ modules:
       - install -Dm644 wizard.py            ${FLATPAK_DEST}/share/flagship-burner/wizard.py
       - install -Dm644 cli_runner.py        ${FLATPAK_DEST}/share/flagship-burner/cli_runner.py
       - install -Dm644 disk_enumerator.py   ${FLATPAK_DEST}/share/flagship-burner/disk_enumerator.py
-      - install -Dm644 alpine_personalize.py ${FLATPAK_DEST}/share/flagship-burner/alpine_personalize.py
-      - install -Dm644 base_iso_cache.py    ${FLATPAK_DEST}/share/flagship-burner/base_iso_cache.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-burner/disk_write.py
       - install -Dm644 com.flagshipserver.Burner.desktop ${FLATPAK_DEST}/share/applications/com.flagshipserver.Burner.desktop
     sources:
