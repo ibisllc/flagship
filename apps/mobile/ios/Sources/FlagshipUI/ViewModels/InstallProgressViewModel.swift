@@ -9,9 +9,16 @@ import FlagshipAPI
 @MainActor
 public final class InstallProgressViewModel {
     public enum Step: String, Sendable, CaseIterable {
-        case registered, boot, tunnelOnline = "tunnel-online", certIssued = "cert-issued", ready
+        // Early install-time stages (emitted by the box's d-i preseed beacons,
+        // delivered via the .com install-events channel) come first, then the
+        // post-boot lifecycle stages.
+        case started = "d-i-started", partitioning, installing = "installer-running",
+             registered, boot, tunnelOnline = "tunnel-online", certIssued = "cert-issued", ready
         public var title: String {
             switch self {
+            case .started:       return "Installer started"
+            case .partitioning:  return "Preparing disk"
+            case .installing:    return "Installing the system"
             case .registered:   return "Phone-home received"
             case .boot:          return "OS booted"
             case .tunnelOnline:  return "Tunnel up"

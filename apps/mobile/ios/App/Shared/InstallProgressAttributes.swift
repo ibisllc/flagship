@@ -31,6 +31,9 @@ public struct InstallProgressAttributes: ActivityAttributes {
     /// switch. `failed` is terminal but carries a reason via
     /// State.failureReason.
     public enum Step: String, Codable, Sendable, CaseIterable {
+        case started        // Installer started
+        case partitioning   // Preparing disk
+        case installing     // Installing the system
         case registered     // Phone-home received
         case boot           // OS booted
         case tunnelOnline   // Tunnel up
@@ -40,6 +43,9 @@ public struct InstallProgressAttributes: ActivityAttributes {
 
         public var label: String {
             switch self {
+            case .started:      return "Installer started"
+            case .partitioning: return "Preparing disk"
+            case .installing:   return "Installing the system"
             case .registered:   return "Phone-home received"
             case .boot:         return "OS booted"
             case .tunnelOnline: return "Tunnel up"
@@ -51,6 +57,9 @@ public struct InstallProgressAttributes: ActivityAttributes {
 
         public var systemImageName: String {
             switch self {
+            case .started:      return "play.circle.fill"
+            case .partitioning: return "internaldrive.fill"
+            case .installing:   return "arrow.down.circle.fill"
             case .registered:   return "antenna.radiowaves.left.and.right"
             case .boot:         return "power"
             case .tunnelOnline: return "network"
@@ -90,7 +99,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
         /// stages (registered → certIssued); reaches 1.0 only on
         /// `.ready`.
         public var fractionalProgress: Double {
-            let major: [Step] = [.registered, .boot, .tunnelOnline, .certIssued]
+            let major: [Step] = [.started, .partitioning, .installing, .registered, .boot, .tunnelOnline, .certIssued]
             if completedSteps.contains(.ready) { return 1.0 }
             let done = major.filter { completedSteps.contains($0) }.count
             return Double(done) / Double(major.count + 1)

@@ -75,7 +75,7 @@ final class InstallProgressLiveActivityCenter {
     func complete(serverFqdn: String) async {
         guard let activity = currentActivity else { return }
         var completed = activity.content.state.completedSteps
-        for s in [InstallProgressAttributes.Step.registered, .boot, .tunnelOnline, .certIssued, .ready] {
+        for s in [InstallProgressAttributes.Step.started, .partitioning, .installing, .registered, .boot, .tunnelOnline, .certIssued, .ready] {
             if !completed.contains(s) { completed.append(s) }
         }
         let final = InstallProgressAttributes.ContentState(

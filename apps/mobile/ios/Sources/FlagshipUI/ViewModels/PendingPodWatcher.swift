@@ -125,6 +125,9 @@ public final class PendingPodWatcher {
 
     static func mapStep(_ eventName: String) -> InstallProgressViewModel.Step? {
         switch eventName {
+        case "d-i-started":       return .started
+        case "partitioning":      return .partitioning
+        case "installer-running": return .installing
         case "registered":   return .registered
         case "boot":         return .boot
         case "tunnel-online": return .tunnelOnline

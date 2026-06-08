@@ -118,6 +118,9 @@ struct FlagshipApp: App {
     @MainActor
     private static func phaseToStep(_ phase: String) -> InstallProgressViewModel.Step? {
         switch phase {
+        case "d-i-started":    return .started
+        case "partitioning":   return .partitioning
+        case "installer-running", "installing": return .installing
         case "boot", "cloned", "deps", "built", "identity": return .boot
         case "registered":     return .registered
         case "tunnel-online":  return .tunnelOnline
@@ -133,6 +136,9 @@ struct FlagshipApp: App {
     @MainActor
     private static func bridge(_ step: InstallProgressViewModel.Step) -> InstallProgressAttributes.Step {
         switch step {
+        case .started:      return .started
+        case .partitioning: return .partitioning
+        case .installing:   return .installing
         case .registered:   return .registered
         case .boot:         return .boot
         case .tunnelOnline: return .tunnelOnline

@@ -9,6 +9,9 @@ final class PendingPodWatcherTests: XCTestCase {
     // MARK: - mapStep
 
     func test_mapStep_recognizesAllPipelineNames() {
+        XCTAssertEqual(PendingPodWatcher.mapStep("d-i-started"),       .started)
+        XCTAssertEqual(PendingPodWatcher.mapStep("partitioning"),      .partitioning)
+        XCTAssertEqual(PendingPodWatcher.mapStep("installer-running"), .installing)
         XCTAssertEqual(PendingPodWatcher.mapStep("registered"),   .registered)
         XCTAssertEqual(PendingPodWatcher.mapStep("boot"),         .boot)
         XCTAssertEqual(PendingPodWatcher.mapStep("tunnel-online"), .tunnelOnline)
