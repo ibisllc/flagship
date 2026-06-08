@@ -5,6 +5,12 @@
 -- Clears every user / server / demo / install / billing / audit row.
 -- PRESERVES: marketplace_listings (app catalog, not user data), _cf_KV and
 -- sqlite_sequence (Cloudflare/SQLite internals). No CA material lives in D1.
+--
+-- Re-audited 2026-06-08 against every migration through 0046 (created-minus-
+-- dropped table set diffed vs this DELETE list): added acme_account_key_delivery
+-- (0046) + nfc_rendezvous (0040); removed build_tickets (dropped in 0033 — the
+-- stale DELETE would error). Keep this list in sync as migrations land, until
+-- the mass-wipe is disarmed before real users (see CLAUDE.md open-work #11).
 
 -- Identity + naming
 DELETE FROM usernames;
@@ -22,13 +28,14 @@ DELETE FROM routing;
 DELETE FROM box_serials;
 DELETE FROM daemon_status;
 DELETE FROM provision_status;
-DELETE FROM build_tickets;
 DELETE FROM install_events;
 DELETE FROM install_policy_fanout;
 DELETE FROM custom_domain_orders;
+DELETE FROM nfc_rendezvous;
 
 -- Cert authority + mint
 DELETE FROM acme_account_key_grants;
+DELETE FROM acme_account_key_delivery;
 DELETE FROM mint_reservations;
 DELETE FROM entitlement_revocation_lists;
 
