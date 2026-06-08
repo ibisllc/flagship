@@ -70,10 +70,14 @@ export async function handlePostInstallEvent(
   // serials to grow the table unbounded.
   if (deps.authCodes) {
     const code = await deps.authCodes.get(serial);
-    if (!code) return forbidden("unknown serial");
+    if (!code) {
+      console.warn(`[install-events] REJECT serial=${serial} event=${body.event} reason=unknown-serial`);
+      return forbidden("unknown serial");
+    }
   }
 
   if (!checkSerialRate(serial, now)) {
+    console.warn(`[install-events] REJECT serial=${serial} event=${body.event} reason=rate-limited`);
     return forbidden("too many events for this serial; slow down");
   }
 
@@ -85,6 +89,7 @@ export async function handlePostInstallEvent(
     postedAt: now,
   });
   if (!out.ok) return malformed(out.reason);
+  console.log(`[install-events] OK serial=${serial} event=${body.event} seq=${out.seq}`);
   return ok({ ok: true, seq: out.seq });
 }
 
