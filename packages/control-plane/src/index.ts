@@ -9,6 +9,7 @@ export * from "./pubkeyCert.js";
 export * from "./routing.js";
 export * from "./installEvents.js";
 export * from "./provisionStatus.js";
+export * from "./isoManifest.js";
 export * from "./cloudflareDns.js";
 export * from "./brokerDnsClient.js";
 export * from "./dns01.js";

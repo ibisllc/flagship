@@ -59,6 +59,7 @@ import {
   handleDns01Delete,
   handleDns01Publish,
   handleGetInstallEvents,
+  handleIsoManifest,
   handleGetSealedLuksKey,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
@@ -130,6 +131,7 @@ import {
   type CaGate,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
+  type IsoManifest,
 } from "@flagship/control-plane";
 import { D1Storage, D1DemoUsersStorage, type D1Database } from "@flagship/storage";
 import { workerCaTrustChain, caEnforceFromEnv } from "./caTrustChainLoader.js";
@@ -178,6 +180,21 @@ export interface ControlPlaneEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
+
+  /**
+   * The blessed Debian base-ISO manifest the desktop burner should hold,
+   * as a JSON string of the `IsoManifest` shape:
+   *   {"version","url","sha256","sizeBytes","attestation"}
+   * Unset / unparseable / shape-invalid ⇒ treated as unconfigured, and
+   * POST /api/iso-manifest responds `{ download: null }`. Changing this
+   * value server-side IS the "ship a new release / hold an old one"
+   * lever — there is no action/keep/urgent field on the wire. The
+   * `sha256` MUST be pinned to Debian's official signed SHA256SUMS (the
+   * `attestation` URL) so the burner can verify the download end-to-end.
+   * Set via `wrangler secret put FLAGSHIP_ISO_MANIFEST` (or a [vars]
+   * entry once values are public).
+   */
+  FLAGSHIP_ISO_MANIFEST?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -364,6 +381,10 @@ const ROUTE_RE = {
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
+  // Desktop-burner base-ISO manifest channel. The burner POSTs what it
+  // currently holds on every launch; the server decides whether/where to
+  // fetch the blessed Debian base ISO. Unauthenticated, rate-limited.
+  ISO_MANIFEST: /^\/api\/iso-manifest$/,
   // Provisioning-status channel — per-order install progress keyed by the
   // auth-code serial. The box POSTs a named phase; the phone polls it.
   PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
@@ -1641,6 +1662,19 @@ export async function tryControlPlane(
     );
   }
 
+  // ── Desktop-burner base-ISO manifest ──────────────────────────
+  // Unauthenticated + rate-limited (the "iso-manifest" bucket lives in
+  // rateLimit.ts and is applied at the edge in route.ts). The server is
+  // the sole decider; the burner is a dumb executor.
+  if (method === "POST" && ROUTE_RE.ISO_MANIFEST.test(path)) {
+    return finish(
+      handleIsoManifest(
+        { blessedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_MANIFEST) },
+        await readJson(request),
+      ),
+    );
+  }
+
   // ── Provisioning-status channel (per-order install progress) ──
   if (method === "POST" && (m = path.match(ROUTE_RE.PROVISION_STATUS))) {
     const psFanout = buildOptionalV12PushFanout(env);
@@ -2349,6 +2383,43 @@ async function readJson(request: Request): Promise<any> {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Parse the `FLAGSHIP_ISO_MANIFEST` env var (a JSON string of the
+ * IsoManifest shape) into a manifest, or null when unset / unparseable /
+ * shape-invalid. NEVER throws — a bad config simply degrades to
+ * "unconfigured", and POST /api/iso-manifest then answers
+ * `{ download: null }` rather than failing the burner's launch.
+ */
+function parseBlessedIsoManifest(raw: string | undefined): IsoManifest | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const m = parsed as Record<string, unknown>;
+  if (
+    typeof m.version !== "string" ||
+    typeof m.url !== "string" ||
+    typeof m.sha256 !== "string" ||
+    !/^[0-9a-f]{64}$/i.test(m.sha256) ||
+    typeof m.sizeBytes !== "number" ||
+    !Number.isInteger(m.sizeBytes) ||
+    typeof m.attestation !== "string"
+  ) {
+    return null;
+  }
+  return {
+    version: m.version,
+    url: m.url,
+    sha256: m.sha256,
+    sizeBytes: m.sizeBytes,
+    attestation: m.attestation,
+  };
 }
 
 function finish(r: HandlerResponseWithHeaders): Response {

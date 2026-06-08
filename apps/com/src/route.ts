@@ -136,6 +136,11 @@ export interface RouteEnv {
   /** CA private key for /api/users/:username/pubkey-cert (Worker secret). */
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
+  /**
+   * Blessed Debian base-ISO manifest (JSON string) served by
+   * POST /api/iso-manifest. See ControlPlaneEnv.FLAGSHIP_ISO_MANIFEST.
+   */
+  FLAGSHIP_ISO_MANIFEST?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */

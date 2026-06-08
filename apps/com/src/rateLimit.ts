@@ -85,6 +85,11 @@ export type RateLimitEndpoint =
   // grant mint) but the RELEASE is a PUBLIC box poll (per-IP only, generous —
   // a box may poll a few times across a boot). The delivery-revoke is IRK-signed.
   | "acme-key-deposit"
+  // Desktop-burner base-ISO manifest poll. Public (the burner has no
+  // session) + unsigned, so per-IP only. The burner calls this once per
+  // launch; 30/min is generous for a human relaunching while letting us
+  // fence a tight-loop client.
+  | "iso-manifest"
   | "acme-key-release"
   | "acme-key-delivery-revoke"
   | "mint-reservation-acquire"
@@ -190,6 +195,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 50, windowSec: 3600 },
   ],
   "acme-key-release": [{ axis: "ip", limit: 120, windowSec: 60 }],
+  // Desktop-burner base-ISO manifest poll. Per-IP only (no session, no
+  // signed body). 30/min is plenty for once-per-launch; the cap fences a
+  // tight-loop client from hammering the route.
+  "iso-manifest": [{ axis: "ip", limit: 30, windowSec: 60 }],
   "acme-key-delivery-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -423,6 +432,10 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
     return "device-admit";
+  }
+  // Desktop-burner base-ISO manifest poll.
+  if (m === "POST" && pathname === "/api/iso-manifest") {
+    return "iso-manifest";
   }
   return null;
 }

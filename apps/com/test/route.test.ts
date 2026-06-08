@@ -1627,3 +1627,115 @@ describe("/how-to + /how-to.html — folded into /docs", () => {
     expect(r.headers.get("location")).toBe("/docs");
   });
 });
+
+describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
+  // The control-plane dispatch only runs when DB is bound; the handler
+  // itself needs no DB, so a no-op stub is enough to reach it.
+  function stubDb(): import("@flagship/storage").D1Database {
+    return {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => null,
+          all: async () => ({ results: [], success: true, meta: {} }),
+          run: async () => ({ success: true, meta: {} }),
+        }),
+      }),
+      batch: async () => [],
+    } as unknown as import("@flagship/storage").D1Database;
+  }
+
+  const BLESSED = {
+    version: "debian-12.7.0-amd64",
+    url: "https://r2.example.com/iso/debian-12.7.0-amd64-netinst.iso",
+    sha256: "a".repeat(64),
+    sizeBytes: 658505728,
+    attestation:
+      "https://cdimage.debian.org/debian-cd/12.7.0/amd64/iso-cd/SHA256SUMS",
+  };
+
+  it("returns { download: null } when FLAGSHIP_ISO_MANIFEST is unset", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/iso-manifest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "mac",
+          burnerVersion: "1.2.3",
+          current: null,
+        }),
+      }),
+      makeEnv({ DB: stubDb() }),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ download: null });
+    // Handled locally — no upstream proxy hop.
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns the download block when FLAGSHIP_ISO_MANIFEST is set + burner has nothing", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/iso-manifest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "linux",
+          burnerVersion: "1.2.3",
+          current: null,
+        }),
+      }),
+      makeEnv({ DB: stubDb(), FLAGSHIP_ISO_MANIFEST: JSON.stringify(BLESSED) }),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ download: BLESSED });
+  });
+
+  it("returns { download: null } when the burner already holds the blessed sha", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/iso-manifest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "windows",
+          burnerVersion: "1.2.3",
+          current: { version: "debian-12.7.0-amd64", sha256: "a".repeat(64) },
+        }),
+      }),
+      makeEnv({ DB: stubDb(), FLAGSHIP_ISO_MANIFEST: JSON.stringify(BLESSED) }),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ download: null });
+  });
+
+  it("treats an unparseable FLAGSHIP_ISO_MANIFEST as unconfigured (no throw)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/iso-manifest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "mac",
+          burnerVersion: "1.2.3",
+          current: null,
+        }),
+      }),
+      makeEnv({ DB: stubDb(), FLAGSHIP_ISO_MANIFEST: "{not json" }),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ download: null });
+  });
+
+  it("400s on a bad platform", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/iso-manifest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platform: "freebsd",
+          burnerVersion: "1.2.3",
+          current: null,
+        }),
+      }),
+      makeEnv({ DB: stubDb(), FLAGSHIP_ISO_MANIFEST: JSON.stringify(BLESSED) }),
+    );
+    expect(r.status).toBe(400);
+  });
+});
