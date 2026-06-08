@@ -235,6 +235,50 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
     // The NVRAM/removable fix is independent of LUKS — present either way.
     expect(c).toContain("d-i grub-installer/force-efi-extra-removable boolean true");
   });
+
+  // The unconditional disk-wipe + overwrite-confirm flags that stop a prior
+  // install's stale LUKS/LVM/GPT from blocking the auto-partitioner. These must
+  // hold in BOTH storage variants; the literals match EngineTests.swift.
+  it("partman/early_command unconditionally wipes the target disk (both variants)", () => {
+    for (const encryptRoot of [true, false]) {
+      const c = cfg({ encryptRoot });
+      // The wipe runs from partman/early_command after DISK is resolved.
+      expect(c, `encryptRoot=${encryptRoot}`).toContain("d-i partman/early_command string");
+      expect(c).toContain('DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"');
+      // dmsetup clears stale mappings; dd zeroes the front GPT; rereadpt re-reads.
+      expect(c).toContain("dmsetup remove_all 2>/dev/null || true");
+      expect(c).toContain('dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true');
+      // …and the backup GPT header at the disk tail.
+      expect(c).toContain('SZ=$(blockdev --getsz "$DISK" 2>/dev/null || echo 0)');
+      expect(c).toContain('dd if=/dev/zero of="$DISK" bs=512 seek=$((SZ-8192)) count=8192 2>/dev/null || true');
+      expect(c).toContain('blockdev --rereadpt "$DISK" 2>/dev/null || true');
+    }
+  });
+
+  it("the partman/early_command beacon fires the 'partitioning' event before the wipe (both variants)", () => {
+    for (const encryptRoot of [true, false]) {
+      const c = cfg({ encryptRoot });
+      expect(c, `encryptRoot=${encryptRoot}`).toContain('"event":"partitioning"');
+      // Beacon BEFORE the wipe so the phone hears from the box even if the wipe/
+      // partition later fails.
+      expect(c.indexOf('"event":"partitioning"')).toBeLessThan(c.indexOf("dmsetup remove_all"));
+    }
+  });
+
+  it("both variants carry the LVM + crypto overwrite-confirm flags", () => {
+    for (const encryptRoot of [true, false]) {
+      const c = cfg({ encryptRoot });
+      for (const k of [
+        "d-i partman-lvm/confirm boolean true",
+        "d-i partman-lvm/confirm_nooverwrite boolean true",
+        "d-i partman-crypto/confirm boolean true",
+        "d-i partman-crypto/confirm_nooverwrite boolean true",
+        "d-i partman/confirm_nooverwrite boolean true",
+      ]) {
+        expect(c, `encryptRoot=${encryptRoot}: ${k}`).toContain(k);
+      }
+    }
+  });
 });
 
 describe("buildDebianPreseed — first-boot bootstrap (reused verbatim from Ubuntu)", () => {
@@ -409,6 +453,12 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     `( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
     `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+  // Beacon C — fired from partman/early_command (network up by partman), before
+  // the unconditional disk wipe. Byte-identical to EngineTests.swift.
+  const PARTITION_BEACON =
+    `( echo '{"event":"partitioning","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
 
   it("Beacon A — early_command POSTs d-i-started before partman (best-effort)", () => {
     const c = cfg();
@@ -420,6 +470,11 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
   it("Beacon B — late_command POSTs installer-running FIRST, before the blob-decode", () => {
     const c = cfg();
     expect(c).toContain(`d-i preseed/late_command string ${LATE_BEACON}; mkdir -p /target/var/flagship;`);
+  });
+
+  it("Beacon C — partman/early_command POSTs 'partitioning' right before the wipe", () => {
+    const c = cfg();
+    expect(c).toContain(`${PARTITION_BEACON}; \\`);
   });
 
   it("beacons are best-effort (|| true) and use busybox wget --post-file= (no curl in d-i)", () => {

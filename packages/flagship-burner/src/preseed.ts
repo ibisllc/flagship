@@ -61,6 +61,10 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   const beaconDomain = beaconSafe(opts.blob.serverDomain);
   const earlyBeacon = debianBeaconCommand("d-i-started", beaconDomain, beaconSerial);
   const lateBeacon = debianBeaconCommand("installer-running", beaconDomain, beaconSerial);
+  // Beacon fired from partman/early_command (the network IS up by partman, so
+  // this is the most reliable "the box exists" ping — emitted BEFORE the wipe so
+  // the phone hears from the box even if partitioning later fails).
+  const partitionBeacon = debianBeaconCommand("partitioning", beaconDomain, beaconSerial);
   // The exact same first-boot bootstrap as Ubuntu — only the LUKS unlock step
   // adapts to Debian's LVM-on-LUKS (family:"debian").
   const bootstrap = buildBootstrapScript({
@@ -80,8 +84,8 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // escape hatch reproduces a plain regular install for bisecting a boot
   // failure (NOT exposed in CLI/GUI), mirroring userdata.ts encryptRoot:false.
   const storageBlock = encryptRoot
-    ? debianCryptoStorageBlock()
-    : debianPlainStorageBlock();
+    ? debianCryptoStorageBlock(partitionBeacon)
+    : debianPlainStorageBlock(partitionBeacon);
 
   // Wi-Fi (burn-time local input; never in the signed recipe). d-i's netcfg
   // takes WPA directly at install time (unlike networkd, netcfg keys wireless
@@ -214,6 +218,39 @@ d-i preseed/late_command string ${lateCommand}
 }
 
 /**
+ * Unconditional wipe of the resolved target disk, run inside partman/early_command
+ * right after DISK is chosen and BEFORE partman probes it. Zeroing the GPT (the
+ * front 16 MB primary header/table + the 8192-sector backup header at the tail)
+ * and rereadpt makes partman see a blank disk, so a prior install's stale
+ * encrypted VG / LUKS / GPT can't be probed (the real "volume group with no
+ * physical volume" partman failure on a repurposed disk). dmsetup remove_all
+ * first clears any active device-mapper mappings carried over from a prior boot.
+ * INTENTIONAL + UNCONDITIONAL: the burner is plug-and-play and the user already
+ * consented to a destructive install. Every sub-command is guarded (`|| true`)
+ * so it can never abort the install; dmsetup/dd/blockdev all exist in the d-i env.
+ */
+const wipeTargetDisk =
+  `dmsetup remove_all 2>/dev/null || true; ` +
+  `dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true; ` +
+  `SZ=$(blockdev --getsz "$DISK" 2>/dev/null || echo 0); ` +
+  `[ "$SZ" -gt 8192 ] && dd if=/dev/zero of="$DISK" bs=512 seek=$((SZ-8192)) count=8192 2>/dev/null || true; ` +
+  `blockdev --rereadpt "$DISK" 2>/dev/null || true`;
+
+/**
+ * The partman/early_command line shared by both storage variants: resolve the
+ * target disk, set it, phone home (network is up by partman), then wipe it. The
+ * preseed `\`-continuation style is kept (each logical step on its own line).
+ */
+function partmanEarlyCommand(partitionBeacon: string): string {
+  return (
+    `d-i partman/early_command string \\\n` +
+    `  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"; \\\n` +
+    `  ${partitionBeacon}; \\\n` +
+    `  ${wipeTargetDisk}`
+  );
+}
+
+/**
  * partman-crypto LVM-on-LUKS recipe (the locked encrypted default).
  * EXPERIMENTAL — needs live validation (brick risk).
  *
@@ -236,14 +273,13 @@ d-i preseed/late_command string ${lateCommand}
  * in a local QEMU d-i run (2026-05-24): plain recipe clears partman, builds the
  * LUKS volume, and proceeds to base install.
  */
-function debianCryptoStorageBlock(): string {
+function debianCryptoStorageBlock(partitionBeacon: string): string {
   return `### Partitioning — EXPERIMENTAL LVM-on-LUKS (the locked encrypted default).
 # partman-crypto only reliably preseeds LVM-on-LUKS: unencrypted ESP + /boot,
 # then a LUKS container holding one VG (flagship) with a single root LV.
 d-i partman-auto/method string crypto
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-d-i partman/early_command string \\
-  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"
+${partmanEarlyCommand(partitionBeacon)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto-lvm/new_vg_name string flagship
@@ -300,13 +336,12 @@ d-i partman-auto-crypto/erase_disks boolean false`;
  * userdata.ts's plain path. Still forces the removable-media GRUB so the NVRAM
  * fix is exercised independently of the LUKS work.
  */
-function debianPlainStorageBlock(): string {
+function debianPlainStorageBlock(partitionBeacon: string): string {
   return `### Partitioning — DEBUG ESCAPE: plain (unencrypted) ESP + /boot + ext4 root.
 # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
 d-i partman-auto/method string regular
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-d-i partman/early_command string \\
-  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"
+${partmanEarlyCommand(partitionBeacon)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto/choose_recipe select flagship-plain
@@ -339,7 +374,13 @@ d-i partman-auto/expert_recipe string \\
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
 d-i partman/confirm boolean true
-d-i partman/confirm_nooverwrite boolean true`;
+d-i partman/confirm_nooverwrite boolean true
+# Authorize partman to steamroll a prior install's LVM/crypto instead of
+# stalling (the proven cloud preseed carries these; the burner was missing them).
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-crypto/confirm boolean true
+d-i partman-crypto/confirm_nooverwrite boolean true`;
 }
 
 /**

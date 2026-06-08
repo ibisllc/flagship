@@ -224,6 +224,56 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("update-initramfs -u"))
     }
 
+    /// Recently-reconciled-with-the-TS-canonical chunks the Swift port was
+    /// missing (it had been checkpointed at a WIP state). Pins so the drift
+    /// cannot silently reappear. Mirrors the TS assertions in userdata.test.ts.
+    func testBootstrapCarriesReconciledChunks() {
+        // (1) NodeSource install has the npm fallback: a WARN on a failed
+        //     setup_20.x, an explicit distro-npm install if npm is still absent,
+        //     and a FATAL guard so a build can't proceed without npm.
+        let plain = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: false)
+        XCTAssertTrue(plain.contains("curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo \"[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm\""))
+        XCTAssertTrue(plain.contains("if ! command -v npm >/dev/null 2>&1; then"))
+        XCTAssertTrue(plain.contains("apt-get install -y --no-install-recommends npm"))
+        XCTAssertTrue(plain.contains("command -v npm >/dev/null 2>&1 || { echo \"[flagship-bootstrap] FATAL: npm unavailable; cannot build daemon\"; exit 1; }"))
+
+        // (2) report_phase() provisioning-status reporting: the function POSTs
+        //     {"phase":…} to <control-plane>/api/order/$AUTH_CODE_SERIAL/status,
+        //     and the plain body fires the "installing" phase. (registering +
+        //     sealing fire on the encrypted path — asserted below.)
+        XCTAssertTrue(plain.contains("CONTROL_PLANE_BASE=\"$(echo \"$REGISTRATION_URL\" | sed 's|/api/server/register$||')\""))
+        XCTAssertTrue(plain.contains("report_phase() {"))
+        XCTAssertTrue(plain.contains("\"$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status\" >/dev/null 2>&1 || true"))
+        XCTAssertTrue(plain.contains("report_phase installing"))
+
+        // (3) register-before-seal ordering on the encrypted path: registration
+        //     runs in-target BEFORE the destructive re-key/seal (the sealed-key
+        //     upload 404s otherwise), writes registered.flag, and the phase
+        //     reports fire registering→sealing.
+        let enc = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        XCTAssertTrue(enc.contains("report_phase registering"))
+        XCTAssertTrue(enc.contains("echo \"[flagship-bootstrap] registering server with .com (prereq for sealed-key upload)\""))
+        XCTAssertTrue(enc.contains("date > /var/flagship/registered.flag"))
+        XCTAssertTrue(enc.contains("report_phase sealing"))
+        // The register POST must come BEFORE the luksAddKey re-key.
+        let registerIdx = enc.range(of: "registering server with .com")
+        let rekeyIdx = enc.range(of: "cryptsetup luksAddKey")
+        XCTAssertNotNil(registerIdx)
+        XCTAssertNotNil(rekeyIdx)
+        if let r = registerIdx, let k = rekeyIdx {
+            XCTAssertTrue(r.lowerBound < k.lowerBound, "registration must precede the destructive LUKS re-key")
+        }
+
+        // (4) the boot-host bake: the dedicated boot worker is written to
+        //     /boot/flagship-boot-host and the initramfs hook copies it through.
+        XCTAssertTrue(enc.contains("echo \"https://boot.flagshipserver.com\" > /boot/flagship-boot-host"))
+        XCTAssertTrue(enc.contains("cp /boot/flagship-boot-host \"${DESTDIR}/boot/flagship-boot-host\" 2>/dev/null || true"))
+
+        // An explicit bootHost override threads into the bake.
+        let custom = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true, bootHost: "https://boot.example.com")
+        XCTAssertTrue(custom.contains("echo \"https://boot.example.com\" > /boot/flagship-boot-host"))
+    }
+
     // MARK: - Two-tier boot-unlock policy (docs §7a.1) — mirrors the TS tests
 
     /// Default (bootUnlockMode omitted) bakes "auto", emits unlock_via_box_lease
@@ -478,12 +528,21 @@ final class EngineTests: XCTestCase {
     }
 
     /// LVM-on-LUKS storage: ESP + bios_grub + unencrypted /boot + encrypted root.
+    /// Under `partman-auto/method crypto`, partman BUILDS the encrypted LVM itself
+    /// from a PLAIN recipe — the root is just `$lvmok{ }` + `method{ format }`.
+    /// Hand-declaring the LVM (`method{ crypto }`/`vg_name`/`in_vg`/`lv_name`) makes
+    /// partman abort with "No physical volume defined in volume group". Mirrors
+    /// preseed.test.ts.
     func testDebianPreseedCryptoStorage() throws {
         let cfg = try UserData.debianPreseed(recipeJSON: sampleRecipe(), installerGitRef: "main")
         XCTAssertTrue(cfg.contains("d-i partman-auto/method string crypto"))
-        XCTAssertTrue(cfg.contains("method{ crypto }"))
-        XCTAssertTrue(cfg.contains("vg_name{ flagship }"))
-        XCTAssertTrue(cfg.contains("in_vg{ flagship } lv_name{ root }"))
+        XCTAssertFalse(cfg.contains("method{ lvm }"))
+        XCTAssertFalse(cfg.contains("method{ crypto }"))
+        XCTAssertFalse(cfg.contains("vg_name{"))
+        XCTAssertFalse(cfg.contains("in_vg{"))
+        XCTAssertFalse(cfg.contains("lv_name{"))
+        XCTAssertTrue(cfg.contains("$lvmok{ }"))
+        XCTAssertTrue(cfg.contains("d-i partman-auto-lvm/new_vg_name string flagship"))
         XCTAssertTrue(cfg.contains("method{ biosgrub }"))
         XCTAssertTrue(cfg.contains("method{ efi } format{ }"))
         XCTAssertTrue(cfg.contains("label{ FLAGSHIP_BOOT }"))
@@ -598,6 +657,12 @@ final class EngineTests: XCTestCase {
         #"( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
         + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
         + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+    // Beacon C — fired from partman/early_command (network up by partman), before
+    // the unconditional disk wipe. Byte-identical to preseed.test.ts.
+    private static let partitionBeacon =
+        #"( echo '{"event":"partitioning","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
 
     func testDebianPreseedEarlyBeacon() throws {
         let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
@@ -612,6 +677,43 @@ final class EngineTests: XCTestCase {
         let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
         // Beacon B POSTs installer-running FIRST in late_command, before blob-decode.
         XCTAssertTrue(cfg.contains("d-i preseed/late_command string \(Self.lateBeacon); mkdir -p /target/var/flagship;"))
+    }
+
+    func testDebianPreseedPartitionBeaconAndWipe() throws {
+        // The unconditional disk-wipe + the 'partitioning' beacon must hold in
+        // BOTH storage variants; the literals match preseed.test.ts.
+        for encryptRoot in [true, false] {
+            let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main", encryptRoot: encryptRoot)
+            // The wipe runs from partman/early_command after DISK is resolved.
+            XCTAssertTrue(cfg.contains("d-i partman/early_command string"))
+            XCTAssertTrue(cfg.contains(#"DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK""#))
+            XCTAssertTrue(cfg.contains("dmsetup remove_all 2>/dev/null || true"))
+            XCTAssertTrue(cfg.contains(#"dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true"#))
+            XCTAssertTrue(cfg.contains(#"SZ=$(blockdev --getsz "$DISK" 2>/dev/null || echo 0)"#))
+            XCTAssertTrue(cfg.contains(#"dd if=/dev/zero of="$DISK" bs=512 seek=$((SZ-8192)) count=8192 2>/dev/null || true"#))
+            XCTAssertTrue(cfg.contains(#"blockdev --rereadpt "$DISK" 2>/dev/null || true"#))
+            // The 'partitioning' beacon fires BEFORE the wipe.
+            XCTAssertTrue(cfg.contains("\(Self.partitionBeacon); \\"))
+            let beacon = cfg.range(of: #""event":"partitioning""#)!
+            let wipe = cfg.range(of: "dmsetup remove_all")!
+            XCTAssertTrue(beacon.lowerBound < wipe.lowerBound, "beacon must precede the wipe")
+        }
+    }
+
+    func testDebianPreseedOverwriteConfirmFlags() throws {
+        // Both variants authorize partman to steamroll existing LVM/crypto.
+        for encryptRoot in [true, false] {
+            let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main", encryptRoot: encryptRoot)
+            for k in [
+                "d-i partman-lvm/confirm boolean true",
+                "d-i partman-lvm/confirm_nooverwrite boolean true",
+                "d-i partman-crypto/confirm boolean true",
+                "d-i partman-crypto/confirm_nooverwrite boolean true",
+                "d-i partman/confirm_nooverwrite boolean true",
+            ] {
+                XCTAssertTrue(cfg.contains(k), "encryptRoot=\(encryptRoot): missing \(k)")
+            }
+        }
     }
 
     func testDebianPreseedBeaconsBestEffort() throws {

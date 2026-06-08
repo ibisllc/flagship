@@ -8,17 +8,34 @@ import Foundation
 public enum UserDataError: LocalizedError, Equatable {
     case unsafeGitRef(String)
     case badRepo(String)
+    case badBootHost(String)
 
     public var errorDescription: String? {
         switch self {
         case .unsafeGitRef(let r): return "Refusing to embed unsafe git ref: \(r)"
         case .badRepo(let r): return "Repo URL must be https://, got: \(r)"
+        case .badBootHost(let h): return "bootHost must be https://, got: \(h)"
         }
     }
 }
 
 public enum UserData {
     public static let defaultRepoURL = "https://github.com/ibisllc/flagship.git"
+
+    /// The dedicated boot worker (boot.flagshipserver.com). The box's boot-stage
+    /// hits its identity-gated /api/boot/* contract for the LUKS unlock; baked to
+    /// /boot/flagship-boot-host. Enterprise clones override via the bootHost arg.
+    /// Identical to userdata.ts DEFAULT_BOOT_HOST.
+    public static let defaultBootHost = "https://boot.flagshipserver.com"
+
+    /// Strip trailing slashes + require https://, mirroring userdata.ts
+    /// resolveBootstrapInputs' bootHost normalization.
+    static func resolveBootHost(_ raw: String) throws -> String {
+        var h = raw
+        while h.hasSuffix("/") { h.removeLast() }
+        guard h.hasPrefix("https://") else { throw UserDataError.badBootHost(raw) }
+        return h
+    }
 
     /// Build the autoinstall user-data. `recipeJSON` is the raw, already-
     /// verified recipe bytes (embedded as the install-blob the daemon reads).
@@ -34,6 +51,7 @@ public enum UserData {
                                        repoURL: String = defaultRepoURL,
                                        encryptRoot: Bool = true,
                                        bootUnlockMode: String = "auto",
+                                       bootHost: String = defaultBootHost,
                                        wifiSSID: String? = nil,
                                        wifiPassword: String? = nil) throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -42,12 +60,13 @@ public enum UserData {
             throw UserDataError.unsafeGitRef(ref)
         }
         guard repoURL.hasPrefix("https://") else { throw UserDataError.badRepo(repoURL) }
+        let host = try resolveBootHost(bootHost)
 
         // Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
         // Only "approve" is the critical-server path; anything else ⇒ "auto".
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
         let blobB64 = recipeJSON.base64EncodedString()
-        let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode,
+        let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host,
                                                 wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8)
             .base64EncodedString()
         // Emitted only when encryptRoot is on; "" keeps the default path
@@ -133,6 +152,7 @@ public enum UserData {
                                      repoURL: String = defaultRepoURL,
                                      encryptRoot: Bool = true,
                                      bootUnlockMode: String = "auto",
+                                     bootHost: String = defaultBootHost,
                                      wifiSSID: String? = nil,
                                      wifiPassword: String? = nil) throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -141,10 +161,11 @@ public enum UserData {
             throw UserDataError.unsafeGitRef(ref)
         }
         guard repoURL.hasPrefix("https://") else { throw UserDataError.badRepo(repoURL) }
+        let host = try resolveBootHost(bootHost)
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
         let blobB64 = recipeJSON.base64EncodedString()
         let bootstrapB64 = Data(
-            bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, family: "debian",
+            bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host, family: "debian",
                             wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8
         ).base64EncodedString()
 
@@ -156,8 +177,12 @@ public enum UserData {
         let (beaconSerial, beaconDomain) = beaconFields(recipeJSON)
         let earlyBeacon = debianBeaconCommand(event: "d-i-started", domain: beaconDomain, serial: beaconSerial)
         let lateBeacon = debianBeaconCommand(event: "installer-running", domain: beaconDomain, serial: beaconSerial)
+        // Beacon fired from partman/early_command (the network IS up by partman,
+        // so this is the most reliable "the box exists" ping — emitted BEFORE the
+        // wipe so the phone hears from the box even if partitioning later fails).
+        let partitionBeacon = debianBeaconCommand(event: "partitioning", domain: beaconDomain, serial: beaconSerial)
 
-        let storageBlock = encryptRoot ? debianCryptoStorageBlock() : debianPlainStorageBlock()
+        let storageBlock = encryptRoot ? debianCryptoStorageBlock(partitionBeacon) : debianPlainStorageBlock(partitionBeacon)
 
         let ssid = (wifiSSID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let hasWifi = !ssid.isEmpty
@@ -233,7 +258,6 @@ public enum UserData {
         d-i clock-setup/ntp boolean true
 
         \(storageBlock)
-
         ### Base system.
         d-i base-installer/install-recommends boolean false
         d-i apt-setup/non-free-firmware boolean true
@@ -279,19 +303,46 @@ public enum UserData {
         """
     }
 
+    /// Unconditional wipe of the resolved target disk, run inside
+    /// partman/early_command right after DISK is chosen and BEFORE partman probes
+    /// it. Zeroing the GPT (the front 16 MB primary header/table + the 8192-sector
+    /// backup header at the tail) and rereadpt makes partman see a blank disk, so
+    /// a prior install's stale encrypted VG / LUKS / GPT can't be probed (the real
+    /// "volume group with no physical volume" partman failure on a repurposed
+    /// disk). dmsetup remove_all first clears any active device-mapper mappings
+    /// carried over from a prior boot. INTENTIONAL + UNCONDITIONAL: the burner is
+    /// plug-and-play and the user already consented to a destructive install.
+    /// Every sub-command is guarded (`|| true`) so it can never abort the install;
+    /// dmsetup/dd/blockdev all exist in the d-i env. Mirrors preseed.ts.
+    static let wipeTargetDisk =
+        "dmsetup remove_all 2>/dev/null || true; "
+        + "dd if=/dev/zero of=\"$DISK\" bs=1M count=16 2>/dev/null || true; "
+        + "SZ=$(blockdev --getsz \"$DISK\" 2>/dev/null || echo 0); "
+        + "[ \"$SZ\" -gt 8192 ] && dd if=/dev/zero of=\"$DISK\" bs=512 seek=$((SZ-8192)) count=8192 2>/dev/null || true; "
+        + "blockdev --rereadpt \"$DISK\" 2>/dev/null || true"
+
+    /// The partman/early_command line shared by both storage variants: resolve the
+    /// target disk, set it, phone home (network is up by partman), then wipe it.
+    /// The preseed `\`-continuation style is kept. Mirrors preseed.ts.
+    static func partmanEarlyCommand(_ partitionBeacon: String) -> String {
+        "d-i partman/early_command string \\\n"
+        + "  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk \"$DISK\"; \\\n"
+        + "  \(partitionBeacon); \\\n"
+        + "  \(wipeTargetDisk)"
+    }
+
     /// partman-crypto LVM-on-LUKS recipe (the locked encrypted default).
     /// EXPERIMENTAL — needs live validation. Byte-identical intent to preseed.ts
     /// debianCryptoStorageBlock (Swift needs no `$`-escaping; `$primary{}` etc.
     /// are plain literals here).
-    static func debianCryptoStorageBlock() -> String {
+    static func debianCryptoStorageBlock(_ partitionBeacon: String) -> String {
         return """
         ### Partitioning — EXPERIMENTAL LVM-on-LUKS (the locked encrypted default).
         # partman-crypto only reliably preseeds LVM-on-LUKS: unencrypted ESP + /boot,
         # then a LUKS container holding one VG (flagship) with a single root LV.
         d-i partman-auto/method string crypto
         d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-        d-i partman/early_command string \\
-          DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"
+        \(partmanEarlyCommand(partitionBeacon))
         d-i partman-lvm/device_remove_lvm boolean true
         d-i partman-md/device_remove_md boolean true
         d-i partman-auto-lvm/new_vg_name string flagship
@@ -304,29 +355,24 @@ public enum UserData {
         d-i partman-auto/expert_recipe string \\
               flagship-crypto ::                                            \\
                       1 1 1 free                                            \\
-                              $iflabel{ gpt }                               \\
-                              $reusemethod{ }                               \\
+                              $iflabel{ gpt }                              \\
+                              $reusemethod{ }                              \\
                               method{ biosgrub }                            \\
                       .                                                     \\
                       512 512 512 free                                      \\
-                              $iflabel{ gpt }                               \\
-                              $reusemethod{ }                               \\
+                              $iflabel{ gpt }                              \\
+                              $reusemethod{ }                              \\
                               method{ efi } format{ }                       \\
                       .                                                     \\
                       768 768 768 ext4                                      \\
-                              $primary{ } $bootable{ }                      \\
+                              $primary{ } $bootable{ }                    \\
                               method{ format } format{ }                    \\
                               use_filesystem{ } filesystem{ ext4 }          \\
                               label{ FLAGSHIP_BOOT }                        \\
                               mountpoint{ /boot }                           \\
                       .                                                     \\
                       2000 5000 -1 ext4                                     \\
-                              $primary{ }                                   \\
-                              method{ crypto } $lvmok{ }                    \\
-                              vg_name{ flagship }                           \\
-                      .                                                     \\
-                      2000 5000 -1 ext4                                     \\
-                              $lvmok{ } in_vg{ flagship } lv_name{ root }   \\
+                              $lvmok{ }                                    \\
                               method{ format } format{ }                    \\
                               use_filesystem{ } filesystem{ ext4 }          \\
                               label{ FLAGSHIP_ROOT }                        \\
@@ -350,38 +396,37 @@ public enum UserData {
     /// Unencrypted debug-escape layout (encryptRoot:false). Not exposed in the
     /// GUI; reproduces a known-good non-LUKS baseline. Mirrors preseed.ts
     /// debianPlainStorageBlock.
-    static func debianPlainStorageBlock() -> String {
+    static func debianPlainStorageBlock(_ partitionBeacon: String) -> String {
         return """
         ### Partitioning — DEBUG ESCAPE: plain (unencrypted) ESP + /boot + ext4 root.
         # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
         d-i partman-auto/method string regular
         d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-        d-i partman/early_command string \\
-          DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"
+        \(partmanEarlyCommand(partitionBeacon))
         d-i partman-lvm/device_remove_lvm boolean true
         d-i partman-md/device_remove_md boolean true
         d-i partman-auto/choose_recipe select flagship-plain
         d-i partman-auto/expert_recipe string \\
               flagship-plain ::                                             \\
                       1 1 1 free                                            \\
-                              $iflabel{ gpt }                               \\
-                              $reusemethod{ }                               \\
+                              $iflabel{ gpt }                              \\
+                              $reusemethod{ }                              \\
                               method{ biosgrub }                            \\
                       .                                                     \\
                       512 512 512 free                                      \\
-                              $iflabel{ gpt }                               \\
-                              $reusemethod{ }                               \\
+                              $iflabel{ gpt }                              \\
+                              $reusemethod{ }                              \\
                               method{ efi } format{ }                       \\
                       .                                                     \\
                       768 768 768 ext4                                      \\
-                              $primary{ } $bootable{ }                      \\
+                              $primary{ } $bootable{ }                    \\
                               method{ format } format{ }                    \\
                               use_filesystem{ } filesystem{ ext4 }          \\
                               label{ FLAGSHIP_BOOT }                        \\
                               mountpoint{ /boot }                           \\
                       .                                                     \\
                       2000 5000 -1 ext4                                     \\
-                              $primary{ }                                   \\
+                              $primary{ }                                  \\
                               method{ format } format{ }                    \\
                               use_filesystem{ } filesystem{ ext4 }          \\
                               label{ FLAGSHIP_ROOT }                        \\
@@ -391,6 +436,12 @@ public enum UserData {
         d-i partman/choose_partition select finish
         d-i partman/confirm boolean true
         d-i partman/confirm_nooverwrite boolean true
+        # Authorize partman to steamroll a prior install's LVM/crypto instead of
+        # stalling (the proven cloud preseed carries these; the burner was missing them).
+        d-i partman-lvm/confirm boolean true
+        d-i partman-lvm/confirm_nooverwrite boolean true
+        d-i partman-crypto/confirm boolean true
+        d-i partman-crypto/confirm_nooverwrite boolean true
         """
     }
 
@@ -626,7 +677,7 @@ public enum UserData {
     /// sha256 pins hold). "debian" only adapts the LVM-on-LUKS unlock inside the
     /// encrypted block — the plain bootstrap body is identical either way.
     /// Mirrors userdata.ts buildBootstrapScript.
-    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto", family: String = "ubuntu", wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
+    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu", wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
         let plain = bootstrapScriptPlain(ref: ref, repoURL: repoURL, wifiSSID: wifiSSID, wifiPassword: wifiPassword)
         guard encryptRoot else { return plain }
         // Boot-unlock policy is baked into the LUKS block; only "approve" is the
@@ -641,7 +692,7 @@ public enum UserData {
 
         """
         precondition(plain.hasSuffix(tail), "plain bootstrap tail drifted; encrypted splice would be wrong")
-        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, family: fam) + tail
+        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam) + tail
     }
 
     static func bootstrapScriptPlain(ref: String, repoURL: String, wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
@@ -666,8 +717,17 @@ public enum UserData {
         # assume the installer's packages: list ran — a missing jq once parsed the
         # recipe into empty values and mis-sealed the LUKS key. NodeSource refreshes apt.
         export DEBIAN_FRONTEND=noninteractive
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm"
         apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg\(wpaPkg)
+        # Debian's 'nodejs' package does NOT bundle npm (separate package); NodeSource's does.
+        # On Debian 13 the NodeSource setup_20.x repo may not apply, leaving npm/npx absent —
+        # which fails the entire build below (npm install, tsc, gen-identity, seal-for-bak).
+        # Install npm explicitly if it is still missing (no-op when NodeSource provided it).
+        if ! command -v npm >/dev/null 2>&1; then
+            echo "[flagship-bootstrap] npm missing after node install — installing distro npm"
+            apt-get install -y --no-install-recommends npm
+        fi
+        command -v npm >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: npm unavailable; cannot build daemon"; exit 1; }
 
         # Read the install-blob fields the daemon needs.
         BLOB_JSON=/var/flagship/install-blob.json
@@ -678,6 +738,18 @@ public enum UserData {
         PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
         AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
         echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
+
+        # Provisioning-status → .com so the phone renders a live install timeline.
+        # Best-effort: a failed report NEVER fails the install. (The Alpine live
+        # installer can also report the earlier downloading/partitioning phases; the
+        # d-i late_command can only report from here on — clone/build onward.)
+        CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+        report_phase() {
+            curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+                --data '{"phase":"'"$1"'"}' \\
+                "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+        }
+        report_phase installing
 
         # Persist install-time facts the daemon reads on every boot.
         mkdir -p /var/flagship /boot/flagship
@@ -971,7 +1043,7 @@ public enum UserData {
     /// Byte-identical to userdata.ts buildLuksBootstrapBlock(mode, family).
     /// `family` adapts ONLY the LVM-on-LUKS unlock (Debian); Ubuntu (default)
     /// renders the original literals so the cross-language pins hold.
-    static func luksBootstrapBlock(mode: String = "auto", family: String = "ubuntu") -> String {
+    static func luksBootstrapBlock(mode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu") -> String {
         // The only family-specific lines (mirror userdata.ts). Ubuntu = plain
         // LUKS; Debian = LVM-on-LUKS (stage lvm + vgchange after luksOpen +
         // discover the raw LUKS partition by type, label is inside the container).
@@ -1008,6 +1080,30 @@ public enum UserData {
             exit 1
         fi
 
+        # REGISTER FIRST. The sealed-key upload (step B) requires the server to ALREADY be
+        # registered with .com — luksKeys.ts returns 404 "unknown server" otherwise (it
+        # verifies the upload against the registered server identity). The auth-code is
+        # single-use, so we write registered.flag and the deferred first-boot register
+        # service (guarded by !registered.flag) skips. Network is up here (apt + git +
+        # npm already used it). Fail-closed: a failure aborts BEFORE the destructive
+        # re-key, so the burn passphrase still opens the disk (recoverable).
+        # NOTE (design): docs/security-phone-as-unlock-endpoint.md describes first-boot
+        # registration, but the seal/upload runs in-target — so registration must run
+        # in-target too, before it. Keeping register+seal together is the invariant.
+        report_phase registering
+        echo "[flagship-bootstrap] registering server with .com (prereq for sealed-key upload)"
+        npx tsx scripts/install-helper.ts sign-server-register \\
+            --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+            --auth-code-blob /var/flagship/install-blob.json \\
+            > /run/register-payload.json
+        if ! curl -fsS -X POST -H 'content-type: application/json' \\
+            --data @/run/register-payload.json "$REGISTRATION_URL"; then
+            echo "[flagship-bootstrap] FATAL: registration failed — keeping burn passphrase (recoverable), aborting"
+            exit 1
+        fi
+        date > /var/flagship/registered.flag
+        echo "[flagship-bootstrap] registered with .com"
+
         # A. ADD a fresh random key (install.sh's head -c 64 /dev/urandom pattern),
         #    authorized by the burn-time passphrase. NON-destructive: the burn passphrase
         #    still opens the disk until step C, so any failure below stays recoverable.
@@ -1029,6 +1125,7 @@ public enum UserData {
         # B. SEAL the random key for the phone + upload to .com — BEFORE removing the
         #    burn passphrase, so a seal/upload failure leaves the box still openable
         #    (recoverable) instead of bricked. .com stores ciphertext only.
+        report_phase sealing
         SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
             --bak-ed25519-pub "$PHONE_DELEGATED_PUBKEY" \\
             --in "$LUKS_KEY" | tr -d '\\n')"
@@ -1059,9 +1156,14 @@ public enum UserData {
         shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 
         # /boot facts the initramfs unlock hook reads on every boot (mirrors the
-        # files boot-stage.sh expects: server-domain, identity.pem, control plane).
+        # files boot-stage.sh expects: server-domain, identity.pem, boot host).
         echo "$SERVER_DOMAIN" > /boot/server-domain
         echo "$CONTROL_PLANE_BASE" > /boot/control-plane-url
+        # The dedicated boot worker the unlock hook talks to (lease GET / approval
+        # request POST / response poll). Baked so an enterprise clone can override it
+        # without touching code — mirrors /boot/flagship-boot-unlock-mode. Default is
+        # boot.flagshipserver.com.
+        echo "\(bootHost)" > /boot/flagship-boot-host
         # The identity PKCS8 PEM is already at /boot/identity.pem (gen-identity --out-pem).
 
         # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1). Baked
@@ -1108,6 +1210,7 @@ public enum UserData {
         cp /boot/identity.pem "${DESTDIR}/boot/identity.pem"
         cp /boot/server-domain "${DESTDIR}/boot/server-domain"
         cp /boot/control-plane-url "${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
+        cp /boot/flagship-boot-host "${DESTDIR}/boot/flagship-boot-host" 2>/dev/null || true
         cp /boot/flagship-boot-unlock-mode "${DESTDIR}/boot/flagship-boot-unlock-mode" 2>/dev/null || true
         HOOK
         chmod +x /etc/initramfs-tools/hooks/flagship-unlock
@@ -1124,10 +1227,8 @@ public enum UserData {
 
         set -eu
         SERVER_DOMAIN="$(cat /boot/server-domain)"
-        CONTROL_PLANE="$(cat /boot/control-plane-url 2>/dev/null || echo https://flagshipserver.com)"
-        # The dedicated boot worker (boot.flagshipserver.com). Configurable via
-        # /boot/flagship-boot-host so an enterprise clone can repoint it; default
-        # if absent. Mirrors installer/boot-stage.sh.
+        # The dedicated boot worker (boot.flagshipserver.com), baked by the bootstrap.
+        # Configurable so an enterprise clone can repoint it without touching code.
         BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flagshipserver.com)"
         BOOT_HOST="${BOOT_HOST%/}"
         IDENTITY_KEY=/boot/identity.pem
@@ -1157,16 +1258,18 @@ public enum UserData {
                 | xxd -p -c 256 | tr -d '\\n' | tail -c 64
         }
 
-        # base64url-encode stdin (base64 then +→-, /→_, strip '=') — the encoding
-        # apps/boot/src/gate.ts parses the Authorization payload as.
+        # base64url-encode stdin (base64 then +→-, /→_, strip trailing '=') — the
+        # encoding apps/boot/src/gate.ts parses the Authorization payload as.
         b64url() {
             openssl base64 -A | tr '+/' '-_' | tr -d '='
         }
 
         # Build the box-STK `Authorization: Flagship-Boot-v1 <b64url(json)>` header
-        # for a boot-worker request. Canonical bytes MUST match canonicalBootAuth()
-        # in apps/boot/src/gate.ts byte-for-byte. Args: $1 method (uppercase),
-        # $2 path (no query). Uses PUB_HEX (the box STK pub) from the caller's scope.
+        # value. Bound to (method, path, serverDomain); Ed25519 over the canonical bytes
+        #   flagship/boot-auth/v1|box|<serverDomain>|<METHOD>|<path>|<pub>|<nonce>|<issuedAt>
+        # Kept in sync with installer/boot-stage.sh + apps/boot/src/gate.ts.
+        # Args: $1 = HTTP method (uppercase), $2 = request path (no query).
+        # Uses PUB_HEX (the box STK pub) from the calling scope.
         sign_box_auth_header() {
             _bm="$1"
             _bp="$2"
@@ -1180,10 +1283,10 @@ public enum UserData {
         }
 
         # ── unlock_via_box_lease() — LIFTED VERBATIM from installer/boot-stage.sh ──
-        # Self-unlock on the "auto" path: GET the box-sealed lease and unseal it
-        # LOCALLY with the STK key on /boot. .com holds ciphertext only (I1). No
-        # phone, no human. Returns 0 only if it actually unsealed; 404/empty (first
-        # boot, or a revoked lease) ⇒ non-zero so the caller falls back to the relay.
+        # Self-unlock on the "auto" path: GET the box-sealed lease from the boot worker
+        # and unseal it LOCALLY with the STK key on /boot. The worker holds ciphertext
+        # only (I1). No phone, no human. Returns 0 only if it actually unsealed; 404/empty
+        # (first boot, or a revoked lease) ⇒ non-zero so the caller falls back to the relay.
         unlock_via_box_lease() {
             if [ ! -x "$UNSEAL_HELPER" ]; then
                 echo "flagship: box-lease unavailable — $UNSEAL_HELPER missing/not executable"
@@ -1196,7 +1299,7 @@ public enum UserData {
                 return 1
             fi
 
-            # GET /api/boot/lease/:serverDomain — box-STK gated (Flagship-Boot-v1).
+            # GET /api/boot/lease/:serverDomain — box-STK gated.
             LEASE_PATH="/api/boot/lease/${SERVER_DOMAIN}"
             LEASE_URL="${BOOT_HOST}${LEASE_PATH}"
             LEASE_AUTH="$(sign_box_auth_header GET "$LEASE_PATH")"
@@ -1213,9 +1316,9 @@ public enum UserData {
                 return 1
             fi
 
-            # .com returns {serverDomain,leaseId,stkPub,sealedKey,...}; sealedKey is the
-            # box-sealed LUKS key (hex). Extract it the same way unlock_via_relay()
-            # extracts "sealed".
+            # The boot worker returns {serverDomain,leaseId,stkPub,sealedKey,...};
+            # sealedKey is the box-sealed LUKS key (hex). Extract it the same way
+            # unlock_via_relay() extracts "sealed". The box unseals it locally.
             SEALED_KEY=$(sed -n 's/.*"sealedKey":"\\([0-9a-fA-F]*\\)".*/\\1/p' "$LEASE_RESP")
             if [ -z "$SEALED_KEY" ]; then
                 echo "flagship: box-lease 200 but no sealedKey: $(head -c 200 "$LEASE_RESP")"
@@ -1251,11 +1354,12 @@ public enum UserData {
 
             NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
             NOW_MS=$(date +%s%3N)
+            # The SecretRequest body keeps its OWN STK signature (unchanged).
             CANONICAL="flagship/secret-request/v1|${SERVER_DOMAIN}|${PUB_HEX}|unlock-key|${NONCE}|${NOW_MS}"
             SIG="$(sign_canonical "$CANONICAL")"
 
-            # POST /api/boot/request — box-STK gated. The body keeps its OWN STK
-            # signature (separate from the box-auth header); the worker verifies both.
+            # POST /api/boot/request — box-STK gated. Body carries the box's STK-signed
+            # SecretRequest (its own signature, separate from the box-auth header).
             REQ_PATH="/api/boot/request"
             REQ_URL="${BOOT_HOST}${REQ_PATH}"
             REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"
@@ -1273,8 +1377,9 @@ public enum UserData {
             fi
             echo "flagship: posted unlock-key boot-request; waiting up to ${RELAY_WINDOW_SECS}s for the phone"
 
-            # GET /api/boot/response/:serverDomain/:nonce — box-STK gated; the nonce
-            # is a PATH segment bound into the signed header, so re-sign each poll.
+            # GET /api/boot/response/:serverDomain/:nonce — box-STK gated, polled. The
+            # nonce is a PATH segment now (bound into the signed Authorization envelope),
+            # so a fresh header is signed per poll.
             POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"
             POLL_URL="${BOOT_HOST}${POLL_PATH}"
             DEADLINE=$(( $(date +%s) + RELAY_WINDOW_SECS ))
