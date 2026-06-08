@@ -192,12 +192,15 @@ public struct SettingsScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            // Hard-pin the scroll content to the ScrollView's own width. A
+            // vertical ScrollView rubber-bands sideways the moment ANY
+            // descendant reports a width past the viewport (an over-wide row,
+            // a long unbreakable value, a fixed-size child). containerRelative-
+            // Frame clamps the content to the container width exactly, so there
+            // is simply no horizontal scroll range left to drag — independent
+            // of which child would otherwise overflow.
+            .containerRelativeFrame(.horizontal)
         }
-        // Belt-and-suspenders: once no child overflows horizontally (rows
-        // truncate their values) the content width equals the viewport, so
-        // .basedOnSize keeps vertical bounce while leaving no horizontal range
-        // to rubber-band. The actual fix lives in the rows — this modifier
-        // alone can't stop a drag when a child genuinely overflows.
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
