@@ -1,0 +1,40 @@
+# flagship-services-site — the legacy startup marketing site, back online
+# at the flagship.services apex.
+#
+# ⚠️ TEMPORARY DEPLOY. This is a grace-window host for the FORMER operator
+# of the flagship.services URL to transition off it — NOT a product
+# surface and NOT a permanent claim on the apex. Decommission when the
+# former operator has moved: remove this app + detach the apex/www Custom
+# Domains + delete the apex DNS records. See README.md. (Set up 2026-06-06.)
+#
+# DELIBERATELY ISOLATED from the data plane. flagship.services on Fly is
+# raw-TCP SNI passthrough for `<server>.<user>.flagship.services` pods;
+# this Worker only ever attaches to the bare apex + `www` (see the
+# custom-domain note below), which carry NO pod traffic. The per-pod
+# records are created on demand by the daemon via apps/dns-broker and are
+# never first-level — so nothing here can shadow them.
+#
+# Content is the unpacked old_website.zip (tracked at the repo root).
+# Run ./prepare.sh before `wrangler deploy` to materialize ./public.
+name = "flagship-services-site"
+compatibility_date = "2026-05-01"
+
+# workers.dev gives us a stable verification URL before any DNS cutover.
+workers_dev = true
+
+# Apex hookup (live since 2026-06-06). The apex had NO record, so these
+# Custom Domains attached cleanly — Cloudflare auto-provisions the proxied
+# record + edge cert for each. `wrangler deploy` reconciles to exactly
+# this set, so edits here are the source of truth. The standard
+# `wrangler login` OAuth token was sufficient to provision them.
+routes = [
+  { pattern = "flagship.services",     custom_domain = true },
+  { pattern = "www.flagship.services", custom_domain = true },
+]
+
+# Pure static site — no Worker script, just the asset edge.
+[assets]
+directory = "./public"
+# Single-page Arsha template: in-page #anchors only, so falling back to
+# index.html for unknown paths keeps deep links graceful.
+not_found_handling = "single-page-application"
