@@ -391,6 +391,66 @@ describe("buildDebianPreseed — optional Wi-Fi (burn-time local input)", () => 
   });
 });
 
+describe("buildDebianPreseed — phone-home beacons (earliest progress to the phone)", () => {
+  function cfg(): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return buildDebianPreseed({ blob, blobSignatureHex });
+  }
+
+  // The EXACT beacon command strings. These literals are byte-identical to the
+  // Swift twin's (EngineTests.swift) — keep both in lockstep. The serial sits in
+  // the URL, the serverDomain in the detail; both are public correlation hints,
+  // no secrets. busybox wget --post-file= (no curl in mini.iso d-i).
+  const EARLY_BEACON =
+    `( echo '{"event":"d-i-started","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+  const LATE_BEACON =
+    `( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+
+  it("Beacon A — early_command POSTs d-i-started before partman (best-effort)", () => {
+    const c = cfg();
+    expect(c).toContain(`d-i preseed/early_command string ${EARLY_BEACON}`);
+    // The earliest hook fires BEFORE the partman disk-selection early_command.
+    expect(c.indexOf("preseed/early_command")).toBeLessThan(c.indexOf("partman/early_command"));
+  });
+
+  it("Beacon B — late_command POSTs installer-running FIRST, before the blob-decode", () => {
+    const c = cfg();
+    expect(c).toContain(`d-i preseed/late_command string ${LATE_BEACON}; mkdir -p /target/var/flagship;`);
+  });
+
+  it("beacons are best-effort (|| true) and use busybox wget --post-file= (no curl in d-i)", () => {
+    const c = cfg();
+    expect(c).toContain("wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15");
+    // both beacons are wrapped so a not-yet-up network never blocks the install
+    expect(c.match(/\) \|\| true/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it("the serial + serverDomain are inlined (no runtime blob parse in early_command)", () => {
+    const c = cfg();
+    expect(c).toContain("/api/install-events/01TESTABCDEF");
+    expect(c).toContain('"detail":"home.demoalice.flagship.services"');
+  });
+
+  it("sanitizes the inlined serial/domain to an injection-proof set", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const dirty = {
+      ...blob,
+      serverDomain: 'evil"; rm -rf / #',
+      authCode: { ...blob.authCode, serial: "abc$(touch x)def" },
+    };
+    const c = buildDebianPreseed({ blob: dirty, blobSignatureHex });
+    // The dangerous characters are stripped; what's left is the safe subset.
+    expect(c).toContain('"detail":"evilrm-rf"');
+    expect(c).toContain("/api/install-events/abctouchxdef");
+    expect(c).not.toContain("rm -rf /");
+    expect(c).not.toContain("$(touch");
+  });
+});
+
 describe("buildDebianPreseed — input validation (parity with the Ubuntu generator)", () => {
   it("rejects an unsafe git ref", () => {
     const { blob, blobSignatureHex } = signedBlob();

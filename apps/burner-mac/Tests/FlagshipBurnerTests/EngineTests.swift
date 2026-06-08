@@ -581,6 +581,56 @@ final class EngineTests: XCTestCase {
         }
     }
 
+    // MARK: - Phone-home beacons (earliest progress to the phone)
+
+    /// A recipe with the serial + domain the TS twin's beacon test uses, so the
+    /// expected beacon literals below are byte-identical across both suites.
+    private func beaconRecipe() -> Data {
+        Data(#"{"version":2,"serverDomain":"home.demoalice.flagship.services","phoneDelegatedPubKey":"00","authCode":{"serial":"01TESTABCDEF"}}"#.utf8)
+    }
+
+    // The EXACT beacon command strings — byte-identical to preseed.test.ts.
+    private static let earlyBeacon =
+        #"( echo '{"event":"d-i-started","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+    private static let lateBeacon =
+        #"( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+
+    func testDebianPreseedEarlyBeacon() throws {
+        let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
+        // Beacon A POSTs d-i-started before partman (earliest hook).
+        XCTAssertTrue(cfg.contains("d-i preseed/early_command string \(Self.earlyBeacon)"))
+        let early = cfg.range(of: "preseed/early_command")!
+        let partman = cfg.range(of: "partman/early_command")!
+        XCTAssertTrue(early.lowerBound < partman.lowerBound, "the beacon must fire before the partman early_command")
+    }
+
+    func testDebianPreseedLateBeacon() throws {
+        let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
+        // Beacon B POSTs installer-running FIRST in late_command, before blob-decode.
+        XCTAssertTrue(cfg.contains("d-i preseed/late_command string \(Self.lateBeacon); mkdir -p /target/var/flagship;"))
+    }
+
+    func testDebianPreseedBeaconsBestEffort() throws {
+        let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
+        // busybox wget --post-file= (no curl in mini.iso d-i), both wrapped || true.
+        XCTAssertTrue(cfg.contains("wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15"))
+        let occurrences = cfg.components(separatedBy: ") || true").count - 1
+        XCTAssertGreaterThanOrEqual(occurrences, 2)
+        // Serial inlined in the URL, domain in the detail (no runtime blob parse).
+        XCTAssertTrue(cfg.contains("/api/install-events/01TESTABCDEF"))
+        XCTAssertTrue(cfg.contains(#""detail":"home.demoalice.flagship.services""#))
+    }
+
+    func testDebianPreseedBeaconSanitizesInjection() {
+        // Dangerous chars in the serial/domain are stripped to the safe subset.
+        XCTAssertEqual(UserData.beaconSafe("evil\"; rm -rf / #"), "evilrm-rf")
+        XCTAssertEqual(UserData.beaconSafe("abc$(touch x)def"), "abctouchxdef")
+    }
+
     // MARK: - Debian remaster transforms (mirror remasterIso.ts)
 
     func testEditGrubCfgForPreseed() {

@@ -52,6 +52,15 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // can't drift on validation or the encryptRoot/bootUnlockMode defaults).
   const { blobB64, ref, repo, bootHost, encryptRoot, bootUnlockMode } =
     resolveBootstrapInputs(opts);
+  // Phone-home beacons. The serial + serverDomain are known at generation time;
+  // we inline them (never parse the blob at runtime in early_command). Both are
+  // sanitized to an injection-proof set so they can sit unquoted in a URL and
+  // inside a single-quoted JSON literal. These carry only PUBLIC correlation
+  // hints (serial in URL, domain in detail) — no secrets — and are best-effort.
+  const beaconSerial = beaconSafe(opts.blob.authCode.serial);
+  const beaconDomain = beaconSafe(opts.blob.serverDomain);
+  const earlyBeacon = debianBeaconCommand("d-i-started", beaconDomain, beaconSerial);
+  const lateBeacon = debianBeaconCommand("installer-running", beaconDomain, beaconSerial);
   // The exact same first-boot bootstrap as Ubuntu — only the LUKS unlock step
   // adapts to Debian's LVM-on-LUKS (family:"debian").
   const bootstrap = buildBootstrapScript({
@@ -103,6 +112,9 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // install-blob + bootstrap into the target and run the bootstrap there — the
   // exact same two artifacts the Ubuntu late-commands write.
   const lateCommand =
+    // Beacon B — network is guaranteed up by late_command; ping home that the
+    // installer is running, before the blob-decode + bootstrap. Best-effort.
+    `${lateBeacon}; ` +
     `mkdir -p /target/var/flagship; ` +
     `echo '${blobB64}' | base64 -d > /target/var/flagship/install-blob.json; ` +
     `chmod 600 /target/var/flagship/install-blob.json; ` +
@@ -126,6 +138,13 @@ d-i netcfg/hostname string flagship-pod
 # Don't block the install for a slow/absent link.
 d-i netcfg/dhcp_timeout string 60
 d-i netcfg/link_wait_timeout string 30
+
+### Phone-home beacon A — the EARLIEST hook (runs before partman; the network
+### may only just be coming up). Best-effort POST so the owner's phone sees the
+### box the instant d-i starts. busybox wget (no curl in mini.iso d-i) needs
+### --post-file=<path>, so we write the tiny JSON to /tmp first. Wrapped so a
+### not-yet-up network never blocks the install.
+d-i preseed/early_command string ${earlyBeacon}
 
 ### Mirror — pulled from the network (netinst has no full package set).
 d-i mirror/country string manual
@@ -350,4 +369,31 @@ function preseedEscape(s: string): string {
 
 function utf8ToBase64(s: string): string {
   return Buffer.from(s, "utf-8").toString("base64");
+}
+
+/**
+ * Sanitize a value that gets inlined, unquoted, into a beacon URL or a
+ * single-quoted JSON literal. Strips everything outside [A-Za-z0-9._:-] —
+ * enough for an auth-code serial (`^[A-Za-z0-9_-]{8,64}$`) and an FQDN, and
+ * injection-proof for the shell/JSON contexts the beacon command builds.
+ */
+function beaconSafe(s: string): string {
+  return s.replace(/[^A-Za-z0-9._:-]/g, "");
+}
+
+/**
+ * A best-effort phone-home beacon for the d-i environment. Writes the tiny
+ * JSON body to /tmp (busybox wget POST needs `--post-file=<path>`, not stdin —
+ * and mini.iso d-i has NO curl, only busybox wget) then POSTs it to the
+ * EXISTING POST /api/install-events/<serial> endpoint. HTTPS works against
+ * d-i's bundled CA bundle. Wrapped in `( … ) || true` so a down/just-coming-up
+ * network never blocks the install. SECRET-FREE: serial in the URL, domain in
+ * the detail — public correlation hints only. Mirrors post-log.sh's wget shape.
+ */
+function debianBeaconCommand(event: string, domain: string, serial: string): string {
+  return (
+    `( echo '{"event":"${event}","detail":"${domain}"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/install-events/${serial} ) || true`
+  );
 }

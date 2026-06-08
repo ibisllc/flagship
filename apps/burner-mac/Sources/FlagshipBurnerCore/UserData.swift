@@ -148,6 +148,15 @@ public enum UserData {
                             wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8
         ).base64EncodedString()
 
+        // Phone-home beacons. The serial + serverDomain are known at generation
+        // time; we inline them (never parse the blob at runtime in early_command).
+        // Both sanitized to an injection-proof set so they can sit unquoted in a
+        // URL and inside a single-quoted JSON literal. PUBLIC correlation hints
+        // only (serial in URL, domain in detail) — no secrets — best-effort.
+        let (beaconSerial, beaconDomain) = beaconFields(recipeJSON)
+        let earlyBeacon = debianBeaconCommand(event: "d-i-started", domain: beaconDomain, serial: beaconSerial)
+        let lateBeacon = debianBeaconCommand(event: "installer-running", domain: beaconDomain, serial: beaconSerial)
+
         let storageBlock = encryptRoot ? debianCryptoStorageBlock() : debianPlainStorageBlock()
 
         let ssid = (wifiSSID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -166,7 +175,10 @@ public enum UserData {
             : ""
 
         let lateCommand =
-            "mkdir -p /target/var/flagship; "
+            // Beacon B — network is guaranteed up by late_command; ping home that
+            // the installer is running, before the blob-decode + bootstrap.
+            "\(lateBeacon); "
+            + "mkdir -p /target/var/flagship; "
             + "echo '\(blobB64)' | base64 -d > /target/var/flagship/install-blob.json; "
             + "chmod 600 /target/var/flagship/install-blob.json; "
             + "echo '\(bootstrapB64)' | base64 -d > /target/usr/local/sbin/flagship-bootstrap.sh; "
@@ -190,6 +202,13 @@ public enum UserData {
         # Don't block the install for a slow/absent link.
         d-i netcfg/dhcp_timeout string 60
         d-i netcfg/link_wait_timeout string 30
+
+        ### Phone-home beacon A — the EARLIEST hook (runs before partman; the network
+        ### may only just be coming up). Best-effort POST so the owner's phone sees the
+        ### box the instant d-i starts. busybox wget (no curl in mini.iso d-i) needs
+        ### --post-file=<path>, so we write the tiny JSON to /tmp first. Wrapped so a
+        ### not-yet-up network never blocks the install.
+        d-i preseed/early_command string \(earlyBeacon)
 
         ### Mirror — pulled from the network (netinst has no full package set).
         d-i mirror/country string manual
@@ -392,6 +411,42 @@ public enum UserData {
     static func preseedEscape(_ s: String) -> String {
         s.replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// Parse the beacon's (serial, serverDomain) out of the verified recipe JSON.
+    /// Accepts the same `{ "blob": {…} }` envelope the website/.com hand out, and
+    /// the flattened recipe. Both fields are sanitized via beaconSafe so they can
+    /// sit unquoted in the beacon URL/JSON. Returns ("","") if the JSON can't be
+    /// read — the beacon then degrades to an empty serial/domain, never throws.
+    static func beaconFields(_ recipeJSON: Data) -> (serial: String, domain: String) {
+        var obj = (try? JSONSerialization.jsonObject(with: recipeJSON)) as? [String: Any] ?? [:]
+        if let blob = obj["blob"] as? [String: Any] { obj = blob }
+        let domain = (obj["serverDomain"] as? String) ?? ""
+        let serial = ((obj["authCode"] as? [String: Any])?["serial"] as? String) ?? ""
+        return (beaconSafe(serial), beaconSafe(domain))
+    }
+
+    /// Sanitize a value that gets inlined, unquoted, into a beacon URL or a
+    /// single-quoted JSON literal. Strips everything outside [A-Za-z0-9._:-] —
+    /// enough for an auth-code serial and an FQDN, injection-proof for the
+    /// shell/JSON contexts the beacon command builds. Mirrors preseed.ts.
+    static func beaconSafe(_ s: String) -> String {
+        String(s.unicodeScalars.filter { sc in
+            (sc >= "A" && sc <= "Z") || (sc >= "a" && sc <= "z")
+                || (sc >= "0" && sc <= "9") || sc == "." || sc == "_" || sc == ":" || sc == "-"
+        })
+    }
+
+    /// A best-effort phone-home beacon for the d-i environment. Writes the tiny
+    /// JSON body to /tmp (busybox wget POST needs `--post-file=<path>`, not stdin
+    /// — and mini.iso d-i has NO curl, only busybox wget) then POSTs it to the
+    /// EXISTING POST /api/install-events/<serial> endpoint. HTTPS works against
+    /// d-i's bundled CA bundle. Wrapped in `( … ) || true` so a down/just-coming-
+    /// up network never blocks the install. SECRET-FREE. Mirrors preseed.ts.
+    static func debianBeaconCommand(event: String, domain: String, serial: String) -> String {
+        "( echo '{\"event\":\"\(event)\",\"detail\":\"\(domain)\"}' > /tmp/flagship-beacon.json; "
+            + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+            + "https://flagshipserver.com/api/install-events/\(serial) ) || true"
     }
 
     /// curtin custom-storage layout for the OPT-IN LUKS path. EXPERIMENTAL —
