@@ -495,6 +495,98 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(bw.contains("flagship-wifi-safetynet"))
     }
 
+    // MARK: - BRING-UP SAFETY NET + initramfs Wi-Fi (phone-gated unlock in early boot)
+
+    /// CHANGE 1: the encrypted bootstrap KEEPS the burn-time passphrase slot as a
+    /// bring-up recovery net — the luksRemoveKey is guarded off (`if false`), never
+    /// run, so a box whose phone/Wi-Fi auto-unlock doesn't engage can still be
+    /// unlocked by hand. Mirrors the TS userdata.test.ts assertion.
+    func testEncryptedBootstrapKeepsBurnPassphraseRecoverySlot() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        XCTAssertTrue(b.contains("cryptsetup luksAddKey"))
+        XCTAssertTrue(b.contains("cryptsetup luksRemoveKey")) // present but guarded
+        let removeRange = b.range(of: "cryptsetup luksRemoveKey")!
+        let guardRange = b.range(of: "if false; then",
+                                 options: .backwards,
+                                 range: b.startIndex..<removeRange.lowerBound)
+        XCTAssertNotNil(guardRange, "luksRemoveKey must be guarded by `if false; then`")
+        XCTAssertTrue(b.contains("BRING-UP SAFETY NET"))
+        XCTAssertTrue(b.contains("recovery slot"))
+    }
+
+    /// CHANGE 2: the initramfs Wi-Fi hook + premount are emitted ONLY on the
+    /// encrypted Wi-Fi path; absent on wired and on the plain (unencrypted) path.
+    func testInitramfsWifiGating() {
+        let wired = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        XCTAssertFalse(wired.contains("init-premount/flagship-wifi"))
+        XCTAssertFalse(wired.contains("/etc/initramfs-tools/hooks/flagship-wifi"))
+        // Plain path even with creds: no LUKS prompt to unlock past ⇒ no block.
+        let plain = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                             encryptRoot: false, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        XCTAssertFalse(plain.contains("init-premount/flagship-wifi"))
+        // Helper returns "" with no SSID.
+        XCTAssertEqual(UserData.initramfsWifiBlock(ssid: "", password: "x"), "")
+        XCTAssertEqual(UserData.initramfsWifiBlock(ssid: "   ", password: "x"), "")
+    }
+
+    /// The build-time hook stages this box's driver + firmware + wpa_supplicant.
+    func testInitramfsWifiHookStagesDriverFirmwareWpa() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: true, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        XCTAssertTrue(b.contains("cat > /etc/initramfs-tools/hooks/flagship-wifi"))
+        XCTAssertTrue(b.contains("WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)"))
+        XCTAssertTrue(b.contains(#"DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")"#))
+        XCTAssertTrue(b.contains(#"manual_add_modules "$DRV""#))
+        XCTAssertTrue(b.contains(#"for fw in $(modinfo -F firmware "$DRV" 2>/dev/null)"#))
+        XCTAssertTrue(b.contains("for r in regulatory.db regulatory.db.p7s"))
+        XCTAssertTrue(b.contains("copy_exec /sbin/wpa_supplicant"))
+        XCTAssertTrue(b.range(of: #"apt-get install .*wpasupplicant"#, options: .regularExpression) != nil)
+    }
+
+    /// The boot-time premount brings Wi-Fi up (modprobe + wpa_supplicant + bounded
+    /// DHCP). The premount is written via an UNQUOTED heredoc, so the bootstrap
+    /// text carries the shell vars escaped (`\$DRV`).
+    func testInitramfsWifiPremountBringsNetworkUp() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: true, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        XCTAssertTrue(b.contains("cat > /etc/initramfs-tools/scripts/init-premount/flagship-wifi"))
+        XCTAssertTrue(b.contains(#"modprobe "\$DRV""#))
+        XCTAssertTrue(b.contains(#"ip link set "\$IF" up"#))
+        XCTAssertTrue(b.contains("wpa_supplicant -B -i"))
+        XCTAssertTrue(b.contains("/run/flagship-wpa.conf"))
+        XCTAssertTrue(b.contains(#"ipconfig -t 20 "\$IF""#))
+        XCTAssertTrue(b.contains(#"udhcpc -i "\$IF" -n -q -t 5"#))
+        XCTAssertTrue(b.contains("falling through"))
+        // Creds embedded single-quote-escaped (NOT base64; initramfs /bin/sh).
+        XCTAssertTrue(b.contains("WIFI_SSID='HomeNet'"))
+        XCTAssertTrue(b.contains("WIFI_PSK='s3cret'"))
+        let evil = UserData.initramfsWifiBlock(ssid: "Net's AP", password: "p'w")
+        XCTAssertTrue(evil.contains("WIFI_SSID='Net'\\''s AP'"))
+        XCTAssertTrue(evil.contains("WIFI_PSK='p'\\''w'"))
+    }
+
+    /// The Wi-Fi premount (init-premount) precedes the unlock relay (local-top),
+    /// and is emitted before update-initramfs rebuilds the initrd.
+    func testInitramfsWifiOrderedBeforeUnlock() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: true, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        let wifiAt = b.range(of: "init-premount/flagship-wifi")!.lowerBound
+        XCTAssertTrue(b.contains("scripts/local-top/flagship-unlock"))
+        let updateAt = b.range(of: "update-initramfs -u")!.lowerBound
+        XCTAssertTrue(wifiAt < updateAt)
+    }
+
+    /// The initramfs Wi-Fi block must be BYTE-IDENTICAL to the TS twin
+    /// (userdata.ts buildInitramfsWifiBlock). Same cross-language lockstep
+    /// guarantee as wifiSetupScript/wifiSafetyNetBlock. If this fails they drifted.
+    func testInitramfsWifiBlockIsByteIdenticalToTs() {
+        let block = UserData.initramfsWifiBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
+        let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(
+            hash, "e8ae5d4fbf056bf472e64b4e8d1ea88f651c04607bc461938ea8fc42293703b2",
+            "Swift initramfsWifiBlock drifted from the TS twin. Block:\n\(block)")
+    }
+
     // MARK: - Debian (debian-installer / d-i) preseed
 
     private func sampleRecipe() -> Data {

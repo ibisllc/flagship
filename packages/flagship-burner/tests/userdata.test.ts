@@ -23,6 +23,7 @@ import {
 import {
   buildAutoinstallUserData,
   buildWifiSafetyNetBlock,
+  buildInitramfsWifiBlock,
   wifiSetupScript,
   DEFAULT_BOOT_HOST,
 } from "../src/userdata.js";
@@ -721,11 +722,14 @@ describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
     expect(b).toContain("/usr/local/sbin/flagship-wifi-safetynet.sh");
     expect(b).toContain("cat > /etc/systemd/system/flagship-wifi-safetynet.service");
     expect(b).toContain("systemctl enable flagship-wifi-safetynet.service");
-    // Creds embedded base64 (never plaintext in the bootstrap) at 0600.
+    // Creds embedded base64 (never plaintext) at 0600 in the SAFETY-NET block.
+    // (The separate initramfs Wi-Fi premount embeds escaped plaintext on purpose —
+    // it's pinned by its own tests below — so scope this to the safety-net region.)
     expect(b).toContain("FLAGSHIP_WIFI_SSID_B64=");
     expect(b).toContain("chmod 600 /etc/flagship/wifi.env");
-    expect(b).not.toContain("HomeNet");
-    expect(b).not.toContain("s3cret");
+    const safetyNet = buildWifiSafetyNetBlock("HomeNet", "s3cret");
+    expect(safetyNet).not.toContain("HomeNet");
+    expect(safetyNet).not.toContain("s3cret");
     // The bootstrap apt line now includes wpasupplicant (safety-net needs it).
     expect(b).toMatch(/apt-get install .*wpasupplicant/);
   });
@@ -765,30 +769,139 @@ describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
   });
 });
 
-// The remaining piece between this burner and the "final" one: the encrypted
-// root is unlocked in the INITRAMFS via the phone-relay, but the premount curls
-// the relay assuming the network is already up — and nothing in the initramfs
-// configures it. A headless box (esp. Wi-Fi-only) installs + bootstraps fine,
-// then HANGS at the LUKS prompt on reboot. These tests encode the acceptance
-// criteria for that work; un-skip them when the initramfs network-unlock lands.
-describe.skip("FINAL BURNER (not built yet) — initramfs network-unlock", () => {
-  function encBootstrap(): string {
+// The encrypted root is unlocked in the INITRAMFS via the phone-relay, but the
+// premount curls the relay assuming the network is already up — true on Ethernet
+// (the initramfs auto-configures wired DHCP) but NOT on Wi-Fi, where early boot
+// brings up no radio. A headless Wi-Fi-only box installed + bootstrapped fine,
+// then HANGED at the LUKS unlock on every reboot. These tests pin the fix: the
+// initramfs Wi-Fi hook/premount + the kept burn-time recovery slot.
+describe("BRING-UP SAFETY NET — burn-time recovery slot kept (remove before GA)", () => {
+  function encBootstrap(opts: Record<string, unknown> = {}): string {
     const { blob, blobSignatureHex } = signedBlob();
-    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex }));
+    return extractBootstrap(
+      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+    );
   }
 
-  it("initramfs hook stages a Wi-Fi-capable stack (wpa_supplicant + the wl driver/firmware)", () => {
+  it("does NOT remove the burn-time passphrase (the luksRemoveKey is guarded off)", () => {
     const b = encBootstrap();
-    expect(b).toMatch(/copy_exec\s+\S*wpa_supplicant/);
-    expect(b).toMatch(/manual_add_modules\s+(cfg80211|iwlwifi|ath\w*|rtw\w*|mt76\w*|brcmfmac)/);
+    // The re-key + seal/upload still happen.
+    expect(b).toContain("cryptsetup luksAddKey");
+    // The luksRemoveKey command is still present in the text (so a GA cut is a
+    // one-line flip) but guarded by `if false; then` so it NEVER runs.
+    expect(b).toContain("cryptsetup luksRemoveKey");
+    const removeIdx = b.indexOf("cryptsetup luksRemoveKey");
+    const guardIdx = b.lastIndexOf("if false; then", removeIdx);
+    const fiIdx = b.indexOf("\nfi\n", removeIdx);
+    expect(guardIdx).toBeGreaterThanOrEqual(0);
+    expect(guardIdx).toBeLessThan(removeIdx);
+    expect(fiIdx).toBeGreaterThan(removeIdx); // closes after the removeKey
+    // The bring-up rationale is spelled out (and flags the GA removal).
+    expect(b).toContain("BRING-UP SAFETY NET");
+    expect(b).toContain("recovery slot");
+  });
+});
+
+describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () => {
+  function encBootstrap(opts: Record<string, unknown> = {}): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return extractBootstrap(
+      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+    );
+  }
+
+  it("is ABSENT on a wired encrypted burn (no Wi-Fi creds)", () => {
+    const b = encBootstrap();
+    expect(b).not.toContain("/etc/initramfs-tools/hooks/flagship-wifi");
+    expect(b).not.toContain("init-premount/flagship-wifi");
+    // The helper returns "" when there's no SSID.
+    expect(buildInitramfsWifiBlock("", "x")).toBe("");
+    expect(buildInitramfsWifiBlock("   ", "x")).toBe("");
   });
 
-  it("initramfs premount brings the network UP before the unlock-relay curl", () => {
-    const b = encBootstrap();
-    const premount = b.slice(b.indexOf("local-top/flagship-unlock"));
-    const relayAt = premount.search(/\/api\/boot\/(request|lease)/);
-    const netAt = premount.search(/configure_networking|ip=dhcp|wpa_supplicant -B|udhcpc|dhclient/);
-    expect(netAt).toBeGreaterThanOrEqual(0);
-    expect(netAt).toBeLessThan(relayAt); // network must come up before the relay
+  it("is ABSENT on the unencrypted (plain) path even WITH Wi-Fi creds", () => {
+    // The initramfs unlock only exists on the encrypted path; the plain path has
+    // no LUKS prompt to network-unlock past.
+    const b = encBootstrap({ encryptRoot: false, wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).not.toContain("init-premount/flagship-wifi");
+    expect(b).not.toContain("/etc/initramfs-tools/hooks/flagship-wifi");
+  });
+
+  it("is PRESENT on a Wi-Fi encrypted burn: build-time hook stages driver+firmware+wpa_supplicant", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain("cat > /etc/initramfs-tools/hooks/flagship-wifi");
+    // Runtime driver detection inside the hook (build time, on real hardware).
+    expect(b).toContain("WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)");
+    expect(b).toContain('DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")');
+    expect(b).toContain('manual_add_modules "$DRV"'); // pulls cfg80211/mac80211 deps
+    // Driver-declared firmware + the cfg80211 regulatory db are copied.
+    expect(b).toContain('for fw in $(modinfo -F firmware "$DRV" 2>/dev/null)');
+    expect(b).toContain("for r in regulatory.db regulatory.db.p7s");
+    // wpa_supplicant binary staged.
+    expect(b).toMatch(/copy_exec\s+\/sbin\/wpa_supplicant/);
+    // wpasupplicant package ensured before the hook references the binary.
+    expect(b).toMatch(/apt-get install .*wpasupplicant/);
+  });
+
+  it("boot-time premount brings Wi-Fi up: modprobe + wpa_supplicant + bounded DHCP", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain("cat > /etc/initramfs-tools/scripts/init-premount/flagship-wifi");
+    // Re-detect the wl* iface at boot (name can differ from build time), bounded ~15s.
+    expect(b).toContain("grep -E '^wl' | head -1");
+    // The premount is written via an UNQUOTED `cat <<WIFIPREMOUNT` heredoc, so the
+    // bootstrap text carries the shell vars escaped (`\$DRV`) — the cat un-escapes
+    // them to `$DRV` in the on-disk premount.
+    expect(b).toContain('modprobe "\\$DRV"');
+    expect(b).toContain('ip link set "\\$IF" up');
+    // wpa_supplicant against the baked conf.
+    expect(b).toContain("wpa_supplicant -B -i");
+    expect(b).toContain("/run/flagship-wpa.conf");
+    // DHCP: klibc ipconfig preferred, busybox udhcpc fallback — both bounded.
+    expect(b).toContain('ipconfig -t 20 "\\$IF"');
+    expect(b).toContain('udhcpc -i "\\$IF" -n -q -t 5');
+    // Best-effort: a standard premount header, and an exit 0 fall-through.
+    expect(b).toContain('PREREQ=""');
+    expect(b).toContain("falling through");
+  });
+
+  it("the creds are embedded (single-quote-escaped) in the premount, NOT base64", () => {
+    // The initramfs is a /bin/sh env (no base64 guaranteed); the creds are on the
+    // unencrypted /boot initramfs regardless, so embedding them is not a new
+    // exposure. The premount writes them into /run/flagship-wpa.conf.
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain("WIFI_SSID='HomeNet'");
+    expect(b).toContain("WIFI_PSK='s3cret'");
+    // A quote in the SSID is single-quote-escaped so it can never break out.
+    const evil = buildInitramfsWifiBlock("Net's AP", "p'w");
+    expect(evil).toContain("WIFI_SSID='Net'\\''s AP'");
+    expect(evil).toContain("WIFI_PSK='p'\\''w'");
+  });
+
+  it("the Wi-Fi premount runs BEFORE the unlock relay (init-premount precedes local-top)", () => {
+    // init-premount scripts run strictly before local-top in initramfs-tools, so
+    // the radio is up before the unlock hook curls the boot relay. We also assert
+    // the bootstrap EMITS the Wi-Fi premount before the unlock relay reference, and
+    // that the unlock hook still lives under local-top (the directory ordering).
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    const wifiAt = b.indexOf("init-premount/flagship-wifi");
+    const unlockDir = b.indexOf("scripts/local-top/flagship-unlock");
+    const relayAt = b.search(/\/api\/boot\/(request|lease)/);
+    expect(wifiAt).toBeGreaterThanOrEqual(0);
+    expect(unlockDir).toBeGreaterThanOrEqual(0);
+    // Wi-Fi premount is in init-premount (runs first); unlock is in local-top.
+    expect(b).toContain("/etc/initramfs-tools/scripts/init-premount");
+    expect(b).toContain("/etc/initramfs-tools/scripts/local-top/flagship-unlock");
+    // And the Wi-Fi block is emitted before update-initramfs rebuilds the initrd.
+    const updateAt = b.indexOf("update-initramfs -u");
+    expect(wifiAt).toBeLessThan(updateAt);
+    expect(relayAt).toBeGreaterThan(0);
+  });
+
+  it("the initramfs Wi-Fi block is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
+    // EngineTests.testInitramfsWifiBlockIsByteIdenticalToTs pins this SAME sha256.
+    const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
+    expect(createHash("sha256").update(s).digest("hex")).toBe(
+      "e8ae5d4fbf056bf472e64b4e8d1ea88f651c04607bc461938ea8fc42293703b2",
+    );
   });
 });

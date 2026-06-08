@@ -422,7 +422,13 @@ describe("buildDebianPreseed — optional Wi-Fi (burn-time local input)", () => 
     expect(b).toContain("/usr/local/sbin/flagship-wifi-safetynet.sh");
     expect(b).toContain("systemctl enable flagship-wifi-safetynet.service");
     expect(b).toContain("FLAGSHIP_WIFI_SSID_B64=");
-    expect(b).not.toContain("HomeNet"); // creds are base64, never plaintext
+    // The SAFETY-NET block keeps creds base64 (never plaintext). Scope the check
+    // to that block — the separate initramfs Wi-Fi premount embeds escaped
+    // plaintext on purpose (it's on the unencrypted /boot regardless).
+    const snStart = b.indexOf("First-boot Wi-Fi safety-net");
+    const snEnd = b.indexOf("Wi-Fi safety-net installed + enabled");
+    const safetyNet = b.slice(snStart, snEnd);
+    expect(safetyNet).not.toContain("HomeNet"); // creds are base64, never plaintext
     // and wpasupplicant is on the bootstrap apt line on the Wi-Fi path.
     expect(b).toMatch(/apt-get install .*wpasupplicant/);
   });

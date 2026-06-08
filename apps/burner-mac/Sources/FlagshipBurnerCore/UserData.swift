@@ -741,7 +741,7 @@ public enum UserData {
 
         """
         precondition(plain.hasSuffix(tail), "plain bootstrap tail drifted; encrypted splice would be wrong")
-        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam) + tail
+        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam, wifiSSID: wifiSSID ?? "", wifiPassword: wifiPassword ?? "") + tail
     }
 
     static func bootstrapScriptPlain(ref: String, repoURL: String, wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
@@ -1119,6 +1119,118 @@ public enum UserData {
         .replacingOccurrences(of: "__PSK_B64__", with: pskB64)
     }
 
+    /// Escape a string for a single-quoted POSIX-shell scalar (`'...'`).
+    /// Identical to userdata.ts shSingleQuote.
+    static func shSingleQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// INITRAMFS Wi-Fi support for the phone-gated LUKS unlock. The unlock
+    /// premount curls the boot relay assuming the network is already up — true on
+    /// Ethernet (the initramfs auto-configures wired DHCP) but NOT on Wi-Fi. This
+    /// stages the box's actual wl* driver + firmware + wpa_supplicant at
+    /// initramfs-build time, and brings the radio up at boot BEFORE
+    /// local-top/flagship-unlock runs (init-premount runs strictly first). Fully
+    /// best-effort + wall-clock bounded — can NEVER hang the boot. Only emitted on
+    /// the Wi-Fi path (creds present); "" on a wired encrypted burn keeps the LUKS
+    /// block byte-identical. Creds embedded single-quote-escaped (no base64 in the
+    /// initramfs /bin/sh env); they're on the unencrypted /boot regardless.
+    /// Byte-identical to userdata.ts buildInitramfsWifiBlock — keep in lockstep.
+    static func initramfsWifiBlock(ssid: String, password: String) -> String {
+        if ssid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        let ssidQ = shSingleQuote(ssid)
+        let pskQ = shSingleQuote(password)
+        return #"""
+
+        # ── INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot) ────────
+        # The unlock premount curls the boot relay; on Wi-Fi the initramfs has NO net
+        # unless we bake the radio in. Hook = build-time driver/firmware staging;
+        # init-premount = boot-time bring-up, strictly BEFORE local-top/flagship-unlock.
+        # Only present on the Wi-Fi path; never blocks boot (Ethernet/recovery still apply).
+        apt-get install -y --no-install-recommends wpasupplicant || true
+
+        cat > /etc/initramfs-tools/hooks/flagship-wifi <<'WIFIHOOK'
+        #!/bin/sh
+        # Build-time: stage the box's actual wl* driver + firmware + wpa_supplicant into
+        # the initramfs. Detection runs HERE (build time, in-target on real hardware) so
+        # it reflects this box's radio. Guarded so a hiccup never aborts update-initramfs.
+        set -e
+        PREREQ=""
+        prereqs() { echo "$PREREQ"; }
+        case "$1" in prereqs) prereqs; exit 0;; esac
+        . /usr/share/initramfs-tools/hook-functions
+        {
+          WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)
+          DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")
+          manual_add_modules "$DRV"
+          for fw in $(modinfo -F firmware "$DRV" 2>/dev/null); do
+            [ -f "/lib/firmware/$fw" ] && { mkdir -p "$DESTDIR/lib/firmware/$(dirname "$fw")"; cp -a "/lib/firmware/$fw" "$DESTDIR/lib/firmware/$fw"; }
+          done
+          for r in regulatory.db regulatory.db.p7s; do
+            [ -f "/lib/firmware/$r" ] && cp -a "/lib/firmware/$r" "$DESTDIR/lib/firmware/"
+          done
+          copy_exec /sbin/wpa_supplicant
+        } || true
+        WIFIHOOK
+        chmod +x /etc/initramfs-tools/hooks/flagship-wifi
+
+        mkdir -p /etc/initramfs-tools/scripts/init-premount
+        cat > /etc/initramfs-tools/scripts/init-premount/flagship-wifi <<WIFIPREMOUNT
+        #!/bin/sh
+        # Boot-time: bring the baked Wi-Fi up BEFORE local-top/flagship-unlock curls the
+        # relay. Fully best-effort + wall-clock bounded — it can NEVER hang the boot. If
+        # the radio doesn't come up it falls through (Ethernet / box-lease / the kept
+        # burn-time recovery passphrase still unlock the box). Creds embedded single-
+        # quote-escaped (they're on the unencrypted /boot initramfs regardless).
+        PREREQ=""
+        prereqs() { echo "\$PREREQ"; }
+        case "\$1" in prereqs) prereqs; exit 0;; esac
+
+        WIFI_SSID=__SSID_Q__
+        WIFI_PSK=__PSK_Q__
+
+        # Re-detect the wl* interface at boot (the name can differ from build time).
+        IF=""
+        _deadline=\$(( \$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) + 15 ))
+        while [ -z "\$IF" ]; do
+          IF=\$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)
+          [ -n "\$IF" ] && break
+          [ "\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999)" -ge "\$_deadline" ] && break
+          sleep 1
+        done
+        [ -n "\$IF" ] || { echo "flagship-wifi: no wl* interface in 15s — falling through"; exit 0; }
+
+        # Load the driver (the hook staged it) and bring the link up.
+        DRV=\$(basename "\$(readlink -f /sys/class/net/\$IF/device/driver 2>/dev/null)" 2>/dev/null)
+        [ -n "\$DRV" ] && modprobe "\$DRV" 2>/dev/null || true
+        ip link set "\$IF" up 2>/dev/null || true
+
+        # Associate with the baked SSID.
+        printf 'ctrl_interface=/run/wpa_supplicant\nnetwork={\n  ssid="%s"\n  psk="%s"\n  scan_ssid=1\n}\n' \\
+          "\$WIFI_SSID" "\$WIFI_PSK" > /run/flagship-wpa.conf 2>/dev/null || true
+        wpa_supplicant -B -i "\$IF" -D nl80211,wext -c /run/flagship-wpa.conf 2>/dev/null || true
+
+        # DHCP, bounded ~20s: prefer klibc ipconfig, fall back to busybox udhcpc.
+        if command -v ipconfig >/dev/null 2>&1; then
+          ipconfig -t 20 "\$IF" 2>/dev/null || true
+        else
+          _n=0
+          while [ "\$_n" -lt 4 ]; do
+            udhcpc -i "\$IF" -n -q -t 5 2>/dev/null && break
+            _n=\$(( _n + 1 ))
+          done
+        fi
+        echo "flagship-wifi: bring-up attempt complete on \$IF"
+        exit 0
+        WIFIPREMOUNT
+        chmod +x /etc/initramfs-tools/scripts/init-premount/flagship-wifi
+        echo "[flagship-bootstrap] initramfs Wi-Fi hook + premount installed (runs before the unlock relay)"
+
+        """#
+        .replacingOccurrences(of: "__SSID_Q__", with: ssidQ)
+        .replacingOccurrences(of: "__PSK_Q__", with: pskQ)
+    }
+
     /// `mode` is the phone-signed boot-unlock policy
     /// (docs/security-phone-as-unlock-endpoint.md §7a.1). Baked to
     /// /boot/flagship-boot-unlock-mode; the premount script branches on it
@@ -1126,7 +1238,11 @@ public enum UserData {
     /// Byte-identical to userdata.ts buildLuksBootstrapBlock(mode, family).
     /// `family` adapts ONLY the LVM-on-LUKS unlock (Debian); Ubuntu (default)
     /// renders the original literals so the cross-language pins hold.
-    static func luksBootstrapBlock(mode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu") -> String {
+    static func luksBootstrapBlock(mode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu", wifiSSID: String = "", wifiPassword: String = "") -> String {
+        // INITRAMFS Wi-Fi: only on the Wi-Fi path (creds present). Emitted just
+        // before update-initramfs so the hook + premount land in the rebuilt
+        // initrd. Empty on a wired encrypted burn ⇒ byte-identical to before.
+        let initramfsWifi = initramfsWifiBlock(ssid: wifiSSID, password: wifiPassword)
         // The only family-specific lines (mirror userdata.ts). Ubuntu = plain
         // LUKS; Debian = LVM-on-LUKS (stage lvm + vgchange after luksOpen +
         // discover the raw LUKS partition by type, label is inside the container).
@@ -1231,11 +1347,19 @@ public enum UserData {
             exit 1
         fi
 
-        # C. The phone-sealed key is safely stored — NOW it's safe to remove the burn
-        #    passphrase + shred the plaintext. After this, the phone is the only unlock.
-        printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
-            cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
-        echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
+        # C. The phone-sealed key is safely stored. Normally we'd now remove the burn
+        #    passphrase so the phone is the ONLY unlock.
+        #
+        #    BRING-UP SAFETY NET: keep the burn-time passphrase slot so a box whose
+        #    phone/WiFi auto-unlock doesn't engage can still be unlocked by hand. REMOVE
+        #    before GA (it's a known constant). The luksRemoveKey is guarded off (the
+        #    `if false` never runs) rather than deleted, so the GA cut is a one-line flip.
+        if false; then
+            printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
+                cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
+            echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
+        fi
+        echo "[flagship-bootstrap] phone-sealed key stored; burn-time passphrase KEPT as a bring-up recovery slot (remove before GA)"
         shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 
         # /boot facts the initramfs unlock hook reads on every boot (mirrors the
@@ -1528,7 +1652,7 @@ public enum UserData {
         \(terminalUnlock)
         PREMOUNT
         chmod +x /etc/initramfs-tools/scripts/local-top/flagship-unlock
-
+        \(initramfsWifi)
         # Rebuild the initramfs so the hook + premount script land in /boot's initrd.
         update-initramfs -u 2>&1 | tee /var/log/flagship-initramfs.log || \\
             echo "[flagship-bootstrap] WARNING: update-initramfs failed; unlock hook not embedded"
