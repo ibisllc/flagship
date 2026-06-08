@@ -72,9 +72,6 @@
         background: var(--canvas-tinted); color: var(--ink); border: 1px solid var(--border);
       }
       .no-recipe.hidden, .has-recipe.hidden { display: none; }
-      .recommended { display: inline-block; margin-bottom: var(--space-2); padding: 2px 10px;
-        border-radius: 999px; background: var(--accent); color: var(--accent-ink, #fff);
-        font-size: var(--body-xs-size, 0.72rem); font-weight: 600; letter-spacing: 0.02em; }
       .substep { margin-top: var(--space-5); }
       .substep h4 {
         margin: 0 0 var(--space-2); font-size: 15px; font-weight: 600; color: var(--ink);
@@ -82,27 +79,6 @@
       }
       .substep h4 .num { font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
       .substep p { margin: var(--space-1) 0; color: var(--ink-muted); font-size: var(--body-sm-size); }
-      .advanced-disclosure {
-        margin-top: var(--space-6);
-        border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
-        background: var(--canvas-tinted); padding: 0 var(--space-5);
-      }
-      .advanced-disclosure > summary {
-        cursor: pointer; list-style: none;
-        padding: var(--space-4) 0; font-weight: 600; color: var(--ink);
-        font-size: var(--body-sm-size);
-      }
-      .advanced-disclosure > summary::-webkit-details-marker { display: none; }
-      .advanced-disclosure > summary::before {
-        content: "▸"; color: var(--accent); margin-right: var(--space-2);
-        display: inline-block; transition: transform var(--motion-state);
-      }
-      .advanced-disclosure[open] > summary::before { transform: rotate(90deg); }
-      .advanced-disclosure .advanced-intro {
-        margin: 0 0 var(--space-4); color: var(--ink-muted); font-size: var(--body-sm-size);
-      }
-      .advanced-disclosure .step { background: var(--surface); }
-      .advanced-disclosure .step:last-child { margin-bottom: var(--space-5); }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -135,11 +111,10 @@
           A recipe is a tiny signed file — your phone authorized it, and only your phone can.
         </p>
 
-        <!-- Recommended path: the guided Flagship Assembler flow, in one box. -->
+        <!-- The whole flow: copy/download the recipe, then get the burner. -->
         <section class="step">
-          <span class="recommended">Recommended</span>
           <h3>Build your boot USB with the Flagship Assembler</h3>
-          <p>Three quick steps for <strong id="serverDomain">your server</strong>. The Assembler downloads the Flagship base image <strong>once</strong> and bakes your recipe in — no separate ISO download, no balenaEtcher, Rufus, or dd.</p>
+          <p>Three quick steps for <strong id="serverDomain">your server</strong>. The Assembler fetches the right base OS for you and bakes your recipe in — you don't pick or download an OS image, and there's no balenaEtcher, Rufus, or dd.</p>
 
           <div class="substep">
             <h4><span class="num">1</span> Grab your recipe</h4>
@@ -167,22 +142,6 @@
             <p>Open the Assembler, paste this recipe (or open the downloaded file), pick your USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
           </div>
         </section>
-
-        <!-- Advanced: bring your own ISO; the Assembler bakes the same recipe in. -->
-        <details class="advanced-disclosure" id="advancedOptions">
-          <summary>Advanced: bring your own ISO</summary>
-          <p class="advanced-intro">
-            Prefer to start from an OS image you downloaded yourself? Download a stock
-            Alpine, Debian, or Ubuntu ISO, then run the Assembler in <strong>Advanced
-            mode</strong>: point it at your downloaded image and the same recipe (copy it,
-            or open the .json from above) and it remasters that image with your recipe
-            baked in. Flash the result to USB and boot — identical outcome, your choice of
-            base image.
-          </p>
-          <p class="advanced-intro" style="margin-bottom: var(--space-5)">
-            <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">Recommended Linux images →</a>
-          </p>
-        </details>
       </div>
 
       <!-- Shown when someone lands here without a pending recipe. -->

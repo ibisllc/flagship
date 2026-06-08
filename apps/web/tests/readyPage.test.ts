@@ -12,34 +12,32 @@ describe("/ready/ — post-order recipe landing", () => {
     // OS-detected installer surfaces.
     expect(r.body).toContain('id="installerPrimary"');
     expect(r.body).toContain('id="installerOthers"');
-    // The recommended box is badged + reuses the Assembler install-once message.
-    expect(r.body).toContain("Recommended");
+    // The Assembler reuses the install-once message.
     expect(r.body).toContain("only install it");
     // The no-recipe fallback exists for direct navigation.
     expect(r.body).toContain('id="noRecipe"');
     expect(r.body).toContain('src="/ready/ready.js"');
   });
 
-  it("makes the Assembler flow primary and offers bring-your-own-ISO as an Advanced disclosure (no website-built image)", async () => {
+  it("tells one story: copy/download the recipe + get the burner — no ISO/Alpine/Advanced framing", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/" });
     expect(r.statusCode).toBe(200);
 
-    const detailsIdx = r.body.indexOf("<details");
-    expect(detailsIdx).toBeGreaterThan(-1);
+    // The recipe + Assembler affordances are the whole page.
+    expect(r.body).toContain('id="copyRecipe"');
+    expect(r.body).toContain('id="downloadRecipe"');
+    expect(r.body).toContain('id="installerPrimary"');
+    expect(r.body).toContain('id="installerOthers"');
 
-    // The recipe + Assembler affordances are primary — outside the disclosure.
-    expect(r.body.indexOf('id="copyRecipe"')).toBeLessThan(detailsIdx);
-    expect(r.body.indexOf('id="downloadRecipe"')).toBeLessThan(detailsIdx);
-    expect(r.body.indexOf('id="installerPrimary"')).toBeLessThan(detailsIdx);
-    expect(r.body.indexOf('id="installerOthers"')).toBeLessThan(detailsIdx);
+    // The burner fetches the base OS — the user never picks/downloads an image.
+    expect(r.body).toContain("fetches the right base OS");
 
-    // The Advanced path is an explicit collapsible disclosure: bring your own ISO,
-    // the Assembler bakes the same recipe in. No server-built/personalized image.
-    expect(r.body).toMatch(/<details[^>]*class="advanced-disclosure"/);
-    expect(r.body).toContain("Advanced: bring your own ISO");
-    expect(r.body).toContain("remasters that image");
-
+    // No Advanced "bring your own ISO" disclosure, no OS-name framing on the page.
+    expect(r.body).not.toContain("<details");
+    expect(r.body).not.toContain("advanced-disclosure");
+    expect(r.body).not.toMatch(/Advanced mode/i);
+    expect(r.body).not.toMatch(/\bAlpine\b/);
     // The curtailed website-built-image path is gone.
     expect(r.body).not.toContain('id="alpineCta"');
     expect(r.body).not.toContain('id="downloadIso"');

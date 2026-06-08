@@ -61,7 +61,7 @@
             <li><code>flagshipserver.com</code> — the Cloudflare Worker, all <code>/api/*</code> routes, the static site.</li>
             <li><code>web.flagshipserver.com</code> — the webapp PWA: WebAuthn / IRK signing / lease deposit / recovery upload paths.</li>
             <li><code>*.flagship.services</code> — the SNI passthrough plane on Fly, the tunnel hub.</li>
-            <li>The Flagship daemon as shipped in the canonical Alpine ISO (<code>flagship-base-alpine-3.21.0-x86_64.iso</code>). Includes ACME, the local TLS server, the data layer (Postgres / MinIO / Redis / Forgejo / Chromium under <code>/var/flagship/data/</code>).</li>
+            <li>The Flagship daemon as shipped by the Flagship burner on the Debian-based boot image. Includes ACME, the local TLS server, the data layer (Postgres / MinIO / Redis / Forgejo / Chromium under <code>/var/flagship/data/</code>).</li>
             <li>The canonical-bytes layer in <code>@flagship/protocol</code> — sign/verify routines, key derivations, encryption.</li>
             <li>iOS and Android apps once shipped to TestFlight / Play Console.</li>
           </ul>

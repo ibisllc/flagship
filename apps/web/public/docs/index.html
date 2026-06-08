@@ -107,7 +107,7 @@
       <h2>Quick start</h2>
       <p>Three steps. About ten minutes.</p>
       <p><strong>1.</strong> Install the phone app. Pick a username. Approve biometrics. Your master key never leaves the phone.</p>
-      <p><strong>2.</strong> Generate a QR scan. Either order a pre-built box or paste the code at the QR on the <a href="/">homepage</a> to download a personalized installer ISO. Flash, plug in, boot.</p>
+      <p><strong>2.</strong> Mint your server recipe in the app and grab it from <a href="/ready/">/ready</a>. Download the Flagship burner, feed it the recipe, and it writes a boot USB for you. Plug in, boot — or order a pre-built box that's ready to go.</p>
       <p><strong>3.</strong> Vibe-code your first app from the phone. Done.</p>
       <a class="next" href="#how-it-works">Walk through the full flow →</a>
     </section>
@@ -123,8 +123,8 @@
       <h2>How Flagship works</h2>
       <p>Five stages, start to finish. Your phone signs every step — we never see your data, even when you're registering for the first time.</p>
       <p><strong>1 · Pair your phone.</strong> You install the Flagship app. It generates a master key inside your phone's secure enclave (Face ID / Touch ID / Android StrongBox). That key never leaves the phone. From it we derive three more: one for identity (your username), one for backup-authorization (LUKS unlock), one for working keys (per-server secrets). You pick a username; the phone signs a registration request; <code>flagshipserver.com</code> records the username and the public half. No email, no password, no SMS.</p>
-      <p><strong>2 · Shows a QR scan.</strong> Your phone shows a one-time QR — a small signed JSON with the server domain you picked, your phone's delegated pubkey (so the box can verify orders later), and a 24-hour, single-use expiry. Paste it at the QR on the <a href="/">homepage</a> in your browser to download a personalized installer ISO, or let a pre-built box fetch it automatically when you plug it in.</p>
-      <p><strong>3 · Boot &amp; install.</strong> The ISO boots Alpine Linux on your hardware. A first-boot script validates the trailer signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <code>flagshipserver.com</code>, and boots into steady state. Your phone lights up: <em>"Your Flagship is online."</em></p>
+      <p><strong>2 · Mint &amp; deliver a recipe.</strong> Your phone mints a recipe — a small signed file naming the server domain you picked, carrying your phone's delegated pubkey (so the box can verify orders later) and a short, single-use expiry. Grab it from <a href="/ready/">/ready</a>, then hand it to the Flagship burner. The burner fetches the right base OS for you and writes a boot USB — you never pick or download an OS image yourself. A pre-built box fetches its recipe automatically when you plug it in.</p>
+      <p><strong>3 · Boot &amp; install.</strong> The USB boots a hardened Linux base on your hardware. A first-boot script validates the recipe signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <code>flagshipserver.com</code>, and boots into steady state. Your phone lights up: <em>"Your Flagship is online."</em></p>
       <p><strong>4 · Every-boot unlock.</strong> When the box reboots, the LUKS-encrypted root won't open. The boot stage polls <code>flagshipserver.com</code> for an unsealed unlock key. Your phone, woken by a push, asks for biometrics, decrypts the sealed blob locally, and deposits the unsealed key with a 10-minute TTL. The box consumes it; the row is deleted on read; the disk opens. A stolen box without your phone is a brick — even we can't help, because we never had the unsealed key.</p>
       <p><strong>5 · Live. Vibe-code. Share.</strong> From the phone you describe a service in plain language. An LLM writes it (your provider key, or our daily promo). The daemon builds the container, provisions Postgres / object store / KV scoped to the service, deploys it, and registers a subdomain — live within a minute at <code>app.you.flagship.services</code>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.</p>
       <p><strong>If you lose the phone.</strong> Your master key is wrapped with a key that lives in iCloud Keychain (iOS) or Google Block Store (Android). On a fresh phone you can re-derive it with biometrics. If you didn't enroll cloud recovery, the data is gone — like a hardware wallet. We tell you this during setup, in plain words.</p>
@@ -140,7 +140,7 @@
 
     <section class="doc-section" id="burn">
       <h2>Assemble your server</h2>
-      <p>Flagship Assembler turns a spare computer into your personal server. It needs three things — your certificate, a Linux image, and a USB drive. Here's what each one is and how it works.</p>
+      <p>Flagship Assembler turns a spare computer into your personal server. You give it two things — your certificate (the signed recipe) and a USB drive — and it fetches the right hardened Linux base for you and bakes your recipe in. Here's what each piece is and how it works.</p>
 
       <div class="doc-sub" id="certificate">
         <h3>A certificate</h3>
@@ -153,8 +153,9 @@
       </div>
 
       <div class="doc-sub" id="recommended-linux">
-        <h3>A Linux image</h3>
-        <p>The Assembler builds your boot drive on top of a stock Linux installer. We test against a small, pinned list — use one of these for a clean, verified install. <strong>Debian is the recommended choice</strong> — it works on the widest range of machines.</p>
+        <h3>The base OS — handled for you</h3>
+        <p><strong>You don't need to download or pick an OS image.</strong> The Assembler fetches the right hardened Linux base automatically, verifies it, and bakes your recipe in. The pinned base is <strong>Debian 13</strong> — chosen because it boots on the widest range of machines.</p>
+        <p style="color: var(--text-muted);">The technical reference below is for people who want to know exactly what gets written, or who run the Assembler in its advanced bring-your-own-image mode. Everyone else can skip it.</p>
 
         <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · recommended</span></h4>
         <p>The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI. <strong>If you're not sure which to pick, pick Debian.</strong></p>
@@ -189,7 +190,7 @@
           <div class="step">
             <div>
               <h3>Assemble the drive</h3>
-              <p>Drop your certificate, a recommended Linux image, and a USB drive into the Assembler and hit Assemble. Your certificate is baked <em>inside</em> the installer image, so the drive needs nothing from the network to know which server it's setting up.</p>
+              <p>Drop your certificate and a USB drive into the Assembler and hit Assemble. It fetches the base OS for you and bakes your certificate <em>inside</em> the installer image, so the drive needs nothing from the network to know which server it's setting up.</p>
               <p style="color: var(--text-muted);"><strong>The drive is erased</strong> — everything on it is overwritten. Use a spare one.</p>
             </div>
           </div>

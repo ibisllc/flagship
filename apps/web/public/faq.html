@@ -125,19 +125,19 @@
       <details class="q">
         <summary>What hardware do I actually need?</summary>
         <div class="answer">
-          <p>Anything that boots x86_64 Alpine and has at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box — all fine. ARM (Raspberry Pi 4/5) works too if you build the ISO yourself; we don't ship the ARM image as a default yet.</p>
+          <p>Any x86_64 machine with at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box — all fine. The burner handles the OS for you, so you don't need to know or care what it runs.</p>
         </div>
       </details>
       <details class="q">
         <summary>How long does install take?</summary>
         <div class="answer">
-          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. The personalized installer is one file you download from the QR on the <a href="/">homepage</a> after pasting the QR scan your phone minted.</p>
+          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. To make the stick you mint a recipe in the app, grab it from <a href="/ready/">/ready</a>, and hand it to the Flagship burner — it does the rest.</p>
         </div>
       </details>
       <details class="q">
         <summary>Will it wipe the disk?</summary>
         <div class="answer">
-          <p>Yes. The installer formats the target disk, sets up LUKS full-disk encryption with a key only your phone can release, and lays down Alpine. Anything that was on the disk before is gone. The installer asks twice and shows you the device path; we try hard not to surprise anyone.</p>
+          <p>Yes. The installer formats the target disk, sets up LUKS full-disk encryption with a key only your phone can release, and lays down a hardened Linux base. Anything that was on the disk before is gone. The installer asks twice and shows you the device path; we try hard not to surprise anyone.</p>
         </div>
       </details>
       <details class="q">
@@ -155,13 +155,13 @@
       <details class="q">
         <summary>How does the QR scan work?</summary>
         <div class="answer">
-          <p>Open the homepage on the machine you want to install on. The page renders a one-time QR. Scan it from the mobile app — the app composes a sealed install blob, signs it with your master identity key, and pushes it through the relay to your browser. The browser stitches it onto a personalized ISO; you write it to a USB stick and boot. The QR and its session are single-use; if you reload, you get a new one.</p>
+          <p>Open the homepage on your computer. The page renders a one-time QR. Scan it from the mobile app — the app composes a recipe, signs it with your master identity key, and delivers it to your browser, where you land on <a href="/ready/">/ready</a> to copy or download it. Hand that recipe to the Flagship burner; it fetches the base OS for you and writes the boot USB. The QR and its session are single-use; if you reload, you get a new one.</p>
         </div>
       </details>
       <details class="q">
         <summary>Can I run it on a Raspberry Pi?</summary>
         <div class="answer">
-          <p>Probably. We don't ship a default ARM image yet, but the daemon is plain TypeScript and the dependencies are all on Alpine. A Pi 4 with an SSD via USB 3 is fine for a single-user setup. If you do this, please tell us how it went.</p>
+          <p>Not yet. Today the burner targets x86_64 machines; we don't ship an ARM build of the base OS as a default. The daemon itself is plain TypeScript, so a Pi 4 with an SSD is technically capable — if you get there by hand, please tell us how it went.</p>
         </div>
       </details>
     </div>
