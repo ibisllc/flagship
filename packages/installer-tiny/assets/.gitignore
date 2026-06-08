@@ -1,0 +1,4 @@
+# Downloaded base images + QEMU artifacts — large, reproducible via
+# scripts/fetch-base.sh + scripts/build-poc-initramfs.sh. Never committed.
+*
+!.gitignore

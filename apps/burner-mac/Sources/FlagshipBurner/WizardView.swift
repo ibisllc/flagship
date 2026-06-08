@@ -63,8 +63,11 @@ struct WizardView: View {
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
             recipeRow
-            // Bring a stock Ubuntu/Debian ISO to remaster.
-            isoRow
+            // Quick uses the burner's cached Alpine base — no user ISO needed.
+            // Advanced brings a stock Ubuntu/Debian ISO to remaster.
+            if model.mode.requiresUserISO {
+                isoRow
+            }
             diskRow
             wifiRow
             Spacer(minLength: FB.Spacing.s2)
@@ -73,12 +76,12 @@ struct WizardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The remaster runs on the burner before the write; show it in the warning
-    /// (orange) tint so the bar visibly changes color when the write phase
-    /// starts filling in the normal accent.
+    /// Download + personalize run on the burner before the write; show those in
+    /// the warning (orange) tint so the bar visibly changes color when the
+    /// write phase starts filling in the normal accent.
     private var progressTint: Color {
         switch model.phase {
-        case "remaster": return FB.Colors.warning
+        case "download", "personalize": return FB.Colors.warning
         default: return FB.Colors.primary
         }
     }
@@ -90,9 +93,54 @@ struct WizardView: View {
                 .font(FB.Font.title())
                 .foregroundStyle(FB.Colors.ink)
             Spacer()
+            modeMenu
             themeToggle
         }
         .padding(.bottom, FB.Spacing.s1)
+    }
+
+    /// Discreet picker that swaps between the two flows.
+    /// Quick (default) = flash a pre-personalized Alpine ISO straight through.
+    /// Advanced = bring your own stock Ubuntu/Debian ISO + a JSON recipe and
+    /// remaster on-device.
+    private var modeMenu: some View {
+        Menu {
+            ForEach(BurnerMode.allCases, id: \.self) { m in
+                Button {
+                    model.mode = m
+                } label: {
+                    if model.mode == m {
+                        Label(m.menuLabel, systemImage: "checkmark")
+                    } else {
+                        Text(m.menuLabel)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(model.mode.menuLabel)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+            .padding(.horizontal, FB.Spacing.s2)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: FB.Radius.sm)
+                    .fill(FB.Colors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: FB.Radius.sm)
+                    .strokeBorder(FB.Colors.border, lineWidth: 1)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Quick: flash a pre-personalized ISO.\nAdvanced: remaster a stock Ubuntu/Debian ISO with a JSON recipe.")
+        .pointerCursor()
     }
 
     /// Day/night toggle. Shows the side you'd switch *to*: a sun when
@@ -288,6 +336,13 @@ struct WizardView: View {
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                         .monospacedDigit()
+                    if model.phase == "download" {
+                        Text("This won't happen again — every server after this reuses it.")
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.warning)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 280)
+                    }
                 }
                 .frame(minHeight: 28)
             } else if model.isFinished {
@@ -318,9 +373,11 @@ struct WizardView: View {
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                 }
-                // Saving a prepared ISO is the "burn elsewhere" path —
-                // remaster only, no USB.
-                if model.recipe != nil && model.iso != nil {
+                // Saving a prepared ISO is the Advanced "burn elsewhere" path —
+                // remaster only, no USB. Quick mode has nothing to "prepare":
+                // its input ISO is already a flashable image, so the user can
+                // just copy the file.
+                if model.mode == .advanced && model.recipe != nil && model.iso != nil {
                     Button("Or save an ISO file to flash later…") {
                         Task { await model.runPrepare() }
                     }

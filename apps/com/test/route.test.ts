@@ -276,14 +276,14 @@ describe("/build/iso/* — R2 streaming", () => {
       },
     });
     const r = await route(
-      new Request("https://flagshipserver.com/build/iso/flagship-base.iso"),
+      new Request("https://flagshipserver.com/build/iso/alpine-3.21.0-x86_64.iso"),
       env,
     );
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toBe("application/octet-stream");
     expect(r.headers.get("content-length")).toBe("1024");
     expect(r.headers.get("etag")).toBe('"abc123"');
-    expect(r.headers.get("content-disposition")).toContain("flagship-base");
+    expect(r.headers.get("content-disposition")).toContain("alpine-3.21.0");
     const body = new Uint8Array(await r.arrayBuffer());
     expect(body.length).toBe(1024);
     expect(body[0]).toBe(0x42);
@@ -308,6 +308,115 @@ describe("/build/iso/* — R2 streaming", () => {
       env,
     );
     expect(r.status).toBe(500);
+  });
+});
+
+describe("/api/personalize-iso — stream base ISO + appended recipe trailer (#12)", () => {
+  // A fully-signed v2 recipe + a stub base-ISO bucket.
+  async function signedRecipeText() {
+    const { generateUMK, deriveIRK, signAuthCode, signInstallBlob } = await import(
+      "@flagship/protocol"
+    );
+    const { installBlobToJson } = await import("@flagship/iso-personalizer");
+    const irk = deriveIRK(generateUMK());
+    const now = Date.now();
+    const authCode = {
+      version: 1 as const,
+      serial: "ROUTESERIAL01",
+      username: "alice",
+      serverName: "home",
+      serverDomain: "home.alice.flagship.services",
+      delegatedPubKey: irk.publicKey,
+      userPubKey: irk.publicKey,
+      issuedAt: now,
+      expiresAt: now + 3_600_000,
+    };
+    const blob = {
+      version: 2 as const,
+      serverDomain: authCode.serverDomain,
+      username: authCode.username,
+      serverName: authCode.serverName,
+      phoneDelegatedPubKey: irk.publicKey,
+      registrationUrl: "https://flagshipserver.com",
+      authCode,
+      authCodeUserSignature: signAuthCode(authCode, irk),
+      installerGitRef: "main",
+      rckPubKey: irk.publicKey,
+    };
+    const sig = signInstallBlob(blob, irk);
+    return JSON.stringify({
+      ...installBlobToJson(blob),
+      blobSignatureHex: Buffer.from(sig).toString("hex"),
+    });
+  }
+
+  function baseBucket(bytes = 2048) {
+    const buf = new Uint8Array(bytes).fill(0x42);
+    return {
+      ISO_BUCKET: {
+        async get() {
+          return {
+            body: new ReadableStream<Uint8Array>({
+              start(c) {
+                c.enqueue(buf);
+                c.close();
+              },
+            }),
+            size: bytes,
+          };
+        },
+      },
+    };
+  }
+
+  it("405s on GET (must POST a recipe)", async () => {
+    const r = await route(new Request("https://flagshipserver.com/api/personalize-iso"), makeEnv());
+    expect(r.status).toBe(405);
+  });
+
+  it("503s when the base ISO is not yet provisioned in R2", async () => {
+    const env = makeEnv({ ISO_BUCKET: { async get() { return null; } } });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/personalize-iso", {
+        method: "POST",
+        body: await signedRecipeText(),
+      }),
+      env,
+    );
+    expect(r.status).toBe(503);
+  });
+
+  it("streams base + trailer (200, octet-stream, attachment, length > base) for a valid recipe", async () => {
+    const env = makeEnv(baseBucket(2048));
+    const r = await route(
+      new Request("https://flagshipserver.com/api/personalize-iso", {
+        method: "POST",
+        body: await signedRecipeText(),
+      }),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("application/octet-stream");
+    expect(r.headers.get("content-disposition")).toContain("flagship-home.alice.flagship.services.iso");
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    const body = new Uint8Array(await r.arrayBuffer());
+    expect(body.length).toBe(Number(r.headers.get("content-length")));
+    expect(body.length).toBeGreaterThan(2048); // base + appended trailer
+    expect(body[0]).toBe(0x42); // base bytes forwarded verbatim first
+  });
+
+  it("400s (fail-closed) on a tampered recipe", async () => {
+    const env = makeEnv(baseBucket());
+    const recipe = JSON.parse(await signedRecipeText());
+    recipe.installerGitRef = "evil"; // breaks the signature
+    const r = await route(
+      new Request("https://flagshipserver.com/api/personalize-iso", {
+        method: "POST",
+        body: JSON.stringify(recipe),
+      }),
+      env,
+    );
+    expect(r.status).toBe(400);
   });
 });
 

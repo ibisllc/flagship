@@ -23,6 +23,7 @@
         <local:NullToVisibilityConverter x:Key="NullToCollapsed"/>
         <local:NotNullToVisibilityConverter x:Key="NotNullToVisible"/>
         <local:StreamToBrushConverter x:Key="StreamToBrush"/>
+        <local:ModeToggleLabelConverter x:Key="ModeToggleLabel"/>
     </Window.Resources>
 
     <Grid Margin="0">
@@ -34,7 +35,13 @@
 
         <!-- Header -->
         <Grid Grid.Row="0" Margin="22,18,22,8">
-            <StackPanel Orientation="Horizontal"
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
                         VerticalAlignment="Center">
                 <Border Style="{StaticResource IconCircle}"
                         Background="{StaticResource FB.PrimaryFaded}">
@@ -50,6 +57,14 @@
                            VerticalAlignment="Center"
                            Margin="10,0,0,0"/>
             </StackPanel>
+            <!-- Quick / Advanced mode toggle. Quick (default) = recipe + USB,
+                 burner owns the Alpine pipeline. Advanced = bring a stock ISO. -->
+            <Button Grid.Column="2"
+                    x:Name="ModeToggle"
+                    Style="{StaticResource LinkButton}"
+                    Content="{Binding Mode, Converter={StaticResource ModeToggleLabel}}"
+                    Click="ModeToggle_Click"
+                    VerticalAlignment="Center"/>
         </Grid>
 
         <!-- Three drop-rows + bake button -->
@@ -107,8 +122,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Row 2: ISO — the user supplies a stock Debian/Ubuntu ISO,
-                     which the burner remasters with the recipe preseed. -->
+                <!-- Row 2: ISO — Advanced mode only. Quick mode caches the
+                     Alpine base + appends the recipe trailer locally, so the
+                     user never has to supply an ISO. -->
                 <Border x:Name="IsoRow"
                         Style="{StaticResource DropRowBorder}"
                         Tag="{Binding IsoRowTag}"
@@ -229,8 +245,10 @@
                                Visibility="{Binding ShowReadiness,
                                    Converter={StaticResource BoolToVisibility}}"/>
 
-                    <!-- Progress block — the remaster runs indeterminate, then
-                         the write fills in. ProgressTint sets the Foreground. -->
+                    <!-- Progress block (Quick local pipeline + Advanced write).
+                         The bar fills ORANGE during the one-time base download
+                         + personalize, then the accent color during the write.
+                         ProgressTint flips the Foreground accordingly. -->
                     <StackPanel HorizontalAlignment="Center"
                                 Visibility="{Binding ShowProgress,
                                     Converter={StaticResource BoolToVisibility}}">
@@ -246,6 +264,18 @@
                                    HorizontalAlignment="Center"
                                    Margin="0,8,0,0"
                                    Text="{Binding ProgressCaption}"/>
+                        <!-- "won't happen again" — download phase only -->
+                        <TextBlock HorizontalAlignment="Center"
+                                   Margin="0,4,0,0"
+                                   MaxWidth="280"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   FontFamily="{StaticResource FB.Font.Body}"
+                                   FontSize="11.5"
+                                   Foreground="{StaticResource FB.Warning}"
+                                   Text="One-time download of base image — won't happen again. Every server after this reuses it."
+                                   Visibility="{Binding ShowDownloadBanner,
+                                       Converter={StaticResource BoolToVisibility}}"/>
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Center"
                                 Margin="0,6,0,0"

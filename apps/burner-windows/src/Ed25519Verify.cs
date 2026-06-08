@@ -8,7 +8,7 @@ namespace Flagship.Burner;
 /// Minimal, self-contained Ed25519 signature *verification* — pure C#,
 /// no NuGet dependency. .NET 8's BCL ships Ed25519 only via the platform
 /// crypto provider on some OSes (not portably), so we carry a tiny ref
-/// implementation here so the local recipe check matches what the
+/// implementation here so the Quick-mode recipe check matches what the
 /// macOS burner does locally (CryptoKit Curve25519.Signing).
 ///
 /// This is verify-only — we never sign in the burner; the phone signs the

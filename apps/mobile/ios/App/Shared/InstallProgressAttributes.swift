@@ -32,7 +32,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
     /// State.failureReason.
     public enum Step: String, Codable, Sendable, CaseIterable {
         case registered     // Phone-home received
-        case boot           // OS booted
+        case boot           // Booted Alpine
         case tunnelOnline   // Tunnel up
         case certIssued     // TLS cert issued
         case ready          // Server is live
@@ -41,7 +41,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
         public var label: String {
             switch self {
             case .registered:   return "Phone-home received"
-            case .boot:         return "OS booted"
+            case .boot:         return "Booted Alpine"
             case .tunnelOnline: return "Tunnel up"
             case .certIssued:   return "TLS cert issued"
             case .ready:        return "Server is live"

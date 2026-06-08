@@ -120,6 +120,14 @@ public partial class MainWindow : Window
         _wizard.ClearLog();
     }
 
+    // ---- Mode toggle ----
+
+    private void ModeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.IsRunning) return;
+        _wizard.Mode = _wizard.Mode == BurnerMode.Quick ? BurnerMode.Advanced : BurnerMode.Quick;
+    }
+
     // ---- Drag-drop helpers ----
 
     private static void HandleDragEnter(Border row, DragEventArgs e)
@@ -224,6 +232,18 @@ public sealed class StreamToBrushConverter : IValueConverter
         var key = isErr ? "FB.Danger" : "FB.Text";
         return Application.Current.TryFindResource(key) as Brush ?? Brushes.Black;
     }
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Label for the header mode toggle. Shows the mode you'd switch TO, so the
+/// control reads like an action (Quick mode ⇒ "Advanced", and vice-versa).
+/// </summary>
+public sealed class ModeToggleLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is BurnerMode m && m == BurnerMode.Quick ? "Advanced…" : "Quick…";
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }

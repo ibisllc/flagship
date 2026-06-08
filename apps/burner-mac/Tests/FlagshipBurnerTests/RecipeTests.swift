@@ -145,4 +145,14 @@ final class RecipeTests: XCTestCase {
         }
     }
 
+    func testTrailerJSONReSerializesCertAutonomy() throws {
+        // The burner re-serializes the blob into the ISO trailer; it MUST carry
+        // certAutonomy or the daemon→Worker re-verify at /api/server/register
+        // rebuilds the canonical bytes without `ca=…` and rejects the pod.
+        let r = try RecipeLoader.load(data: data(Self.certAutonomyGoldenJSON), now: Self.certAutonomyNow)
+        let json = String(decoding: AlpinePersonalize.installBlobJSON(r), as: UTF8.self)
+        XCTAssertTrue(
+            json.contains(#""certAutonomy":{"mode":"managed","offlineWindowDays":90}"#),
+            "trailer JSON dropped certAutonomy: \(json)")
+    }
 }
