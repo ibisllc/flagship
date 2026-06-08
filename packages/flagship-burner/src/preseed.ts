@@ -242,10 +242,15 @@ grub-efi-amd64 grub2/force_efi_extra_removable boolean true
 # NVRAM write outright: tell grub-installer not to touch NVRAM at all.
 d-i grub-installer/update-nvram boolean false
 
-### Finish — no prompts, just reboot into the installed system.
+### Finish — POWER OFF after install instead of rebooting. A reboot with the
+### USB still plugged re-enters the installer (the firmware boots the USB's
+### removable-media EFI first, and we don't write NVRAM). Powering off removes
+### that race entirely: the box turns itself off = "done" — the user unplugs
+### the USB and powers it on, which boots the installed disk → first real boot
+### → auto-unlock → register → cert.
 d-i finish-install/keep-consoles boolean true
 d-i finish-install/reboot_in_progress note
-d-i debian-installer/exit/poweroff boolean false
+d-i debian-installer/exit/poweroff boolean true
 
 ### First-boot bootstrap — the same install-blob + bootstrap the Ubuntu path
 ### writes, run in the installed target (d-i in-target == curtin in-target).
