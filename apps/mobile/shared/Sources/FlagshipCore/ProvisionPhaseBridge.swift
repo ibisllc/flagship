@@ -1,26 +1,28 @@
 import Foundation
+import FlagshipAPI
 
-/// A provisioning PHASE checkpoint delivered by a `provision-phase`
-/// push from .com (mirror of the Worker fan-out payload's `meta` block
-/// in packages/control-plane/src/provisionEvents.ts).
+/// A provisioning PHASE checkpoint delivered by a `provision-status`
+/// push from .com (mirror of the Worker fan-out payload's `meta` block in
+/// packages/control-plane/src/provisionStatus.ts `fanOutStatusPush`).
 ///
-/// The phone receives one of these on every provisioning step the box
-/// pushes (`boot`/`cloned`/`deps`/`built`/`identity`/`registered` from
-/// the cloud-init bootstrap, `tunnel-online`/`cert-issued`/`ready` from
-/// the daemon, and a terminal `failed`). The shell routes it into the
-/// install-progress Live Activity so provisioning is a glass box.
+/// The canonical push fires on the milestone transitions
+/// (`registering`/`sealing`/`live`/`error`); foregrounded apps still see
+/// every phase by polling `GET /api/order/<serial>/status`. The shell
+/// routes a received push into the install-progress Live Activity + the
+/// Watch timeline so provisioning is a glass box even backgrounded.
+///
+/// The phase is the single canonical `ProvisionStatusPhase` — there is no
+/// fine-grained second vocabulary. `serial` is the per-order key; `detail`
+/// carries the optional error / sub-phase text.
 public struct ProvisionPhaseEvent: Equatable, Sendable {
-    public let username: String
-    public let fqdn: String
-    /// One of `@flagship/protocol` PROVISION_PHASES.
-    public let phase: String
-    /// Present only when `phase == "failed"`.
-    public let error: String?
-    public init(username: String, fqdn: String, phase: String, error: String? = nil) {
-        self.username = username
-        self.fqdn = fqdn
+    public let serial: String
+    public let phase: ProvisionStatusPhase
+    /// Optional detail (error reason, ACME sub-phase, …).
+    public let detail: String?
+    public init(serial: String, phase: ProvisionStatusPhase, detail: String? = nil) {
+        self.serial = serial
         self.phase = phase
-        self.error = error
+        self.detail = detail
     }
 }
 
@@ -37,26 +39,41 @@ public final class ProvisionPhaseBridge {
     public var onPhase: ((_ event: ProvisionPhaseEvent) -> Void)?
     private init() {}
 
-    /// Parse a `provision-phase` push `userInfo` into an event, if it is
+    /// Parse a `provision-status` push `userInfo` into an event, if it is
     /// one. Returns nil for any other category so the caller can fall
-    /// through to its other routes. Exposed (not just used internally)
-    /// so it's unit-testable without UNUserNotificationCenter.
+    /// through to its other routes. Exposed (not just used internally) so
+    /// it's unit-testable without UNUserNotificationCenter.
+    ///
+    /// Recognises the canonical payload (design §2.3):
+    ///   - `category == "provision-status"` OR `meta.kind == "provision-status"`
+    ///   - the phase lives in `meta.phase` (a `ProvisionStatusPhase`), with
+    ///     `meta.serial` / `meta.detail` alongside.
+    /// Two delivery shapes, mirroring the rest of the push handler:
+    ///   - APNs/FCM sealed-payload pushes flatten `meta.*` to the top
+    ///     level of userInfo (kind/phase/serial[/detail]).
+    ///   - Web Push (RFC 8291) carries a nested `meta` dictionary the SW
+    ///     unwraps; we read either shape.
     public static func parse(_ info: [AnyHashable: Any]) -> ProvisionPhaseEvent? {
-        // Two shapes, mirroring the rest of the push handler:
-        //   - APNs/FCM sealed-payload pushes surface discrete fields in
-        //     userInfo (kind/phase/username/fqdn[/error]).
-        //   - Web Push (RFC 8291) carries a JSON `meta` the SW unwraps;
-        //     when it lands flattened the same discrete keys appear.
-        guard (info["kind"] as? String) == "provision-phase" else { return nil }
-        guard let phase = info["phase"] as? String, !phase.isEmpty else { return nil }
-        let username = (info["username"] as? String) ?? ""
-        let fqdn = (info["fqdn"] as? String) ?? ""
-        let error = info["error"] as? String
+        let meta = info["meta"] as? [AnyHashable: Any]
+
+        func field(_ key: String) -> Any? {
+            meta?[key] ?? info[key]
+        }
+
+        let category = info["category"] as? String
+        let kind = (field("kind") as? String)
+        guard category == "provision-status" || kind == "provision-status" else { return nil }
+
+        guard let phaseRaw = field("phase") as? String, !phaseRaw.isEmpty,
+              let phase = ProvisionStatusPhase(rawValue: phaseRaw)
+        else { return nil }
+
+        let serial = (field("serial") as? String) ?? ""
+        let detail = field("detail") as? String
         return ProvisionPhaseEvent(
-            username: username,
-            fqdn: fqdn,
+            serial: serial,
             phase: phase,
-            error: (error?.isEmpty ?? true) ? nil : error
+            detail: (detail?.isEmpty ?? true) ? nil : detail
         )
     }
 }

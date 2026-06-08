@@ -30,13 +30,16 @@ class FlagshipFcmService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
 
-        // Provisioning observability — a `provision-phase` push carries
-        // the discrete phase fields in `data` (username/fqdn/phase[/error]
-        // + title/body/deepLink). Route it into the shared phase model so
-        // the install-progress surface advances, then fall through to the
-        // standard notification (title/body already in `data`).
-        ProvisionPhasePush.parse(data)?.let { event ->
-            ProvisionPhaseBridge.onPhase?.invoke(event)
+        // Provisioning observability — a canonical `provision-status` push
+        // (category=="provision-status") is WAKE-ONLY: the foregrounded
+        // install-progress screen polls GET /api/order/<serial>/status to
+        // drive the UI, so the service just renders the standard
+        // notification (title/body/deepLink already in `data`, pointing at
+        // flagship://install-progress). We still parse it so a missing
+        // deepLink can be synthesized below.
+        val provisionEvent = ProvisionStatusPush.parse(data)
+        if (provisionEvent != null && data["deepLink"].isNullOrEmpty()) {
+            data["deepLink"] = "flagship://install-progress"
         }
 
         // Boot-secret RELAY — a `secret-request` push means the user's box

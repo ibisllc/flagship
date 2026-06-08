@@ -165,7 +165,13 @@ data class OrdersSendResponse(
     val response: Map<String, JsonElement>? = null,
 )
 
-// ---------- P1.15 install-events (SSE) ---------------------------------
+// ---------- P1.15 install-events (SSE) — DEMOTED to debug-only ---------
+//
+// `install-events` is no longer a provisioning-progress UI channel. The
+// ONE canonical channel is `order-status` (ProvisionStatus below). This
+// sealed class + the `ScreensClient.installEvents` SSE flow survive ONLY
+// as a debug decoder for the retained `install_events` table (workspace
+// artifact); no provisioning UI reads it. Do NOT add new UI consumers.
 
 @Serializable
 sealed class InstallEvent {
@@ -176,6 +182,84 @@ sealed class InstallEvent {
     @Serializable @SerialName("ready") data class Ready(val serverFqdn: String, val at: Long) : InstallEvent()
     @Serializable @SerialName("failed") data class Failed(val reason: String, val at: Long) : InstallEvent()
 }
+
+// ---------- Canonical provisioning channel — order-status --------------
+//
+// The ONE provisioning-progress channel + vocabulary. Consumed identically
+// by Swift (iOS ProvisionStatus / ProvisionStatusPhase) and JS (webapp).
+//
+//   GET  /api/order/<serial>/status  → ProvisionStatusRecord (404 = none yet)
+//   POST /api/order/<serial>/status  body { phase, detail? }  (box writes)
+//
+// MIRRORS: packages/storage/src/types.ts `ProvisionStatusRecord` +
+// packages/control-plane/src/provisionStatus.ts `PROVISION_STATUS_PHASES`.
+// Field names + JSON keys are byte-identical with the canonical channel
+// JSON so kotlinx-serialization round-trips with the Worker output.
+
+/** The ONE ordered phase ladder (terminal `error` off-ladder). Wire
+ *  strings are the canonical `ProvisionStatusPhase` values. Forward-compat:
+ *  an unrecognised wire string decodes to [UNKNOWN] (never part of
+ *  [ordered]) so an older binary doesn't crash on a newer Worker. */
+@Serializable
+enum class ProvisionStatusPhase(val wire: String) {
+    @SerialName("booting")      BOOTING("booting"),
+    @SerialName("downloading")  DOWNLOADING("downloading"),
+    @SerialName("partitioning") PARTITIONING("partitioning"),
+    @SerialName("installing")   INSTALLING("installing"),
+    @SerialName("registering")  REGISTERING("registering"),
+    @SerialName("sealing")      SEALING("sealing"),
+    @SerialName("pairing")      PAIRING("pairing"),
+    @SerialName("live")         LIVE("live"),
+    @SerialName("error")        ERROR("error"),
+    @SerialName("unknown")      UNKNOWN("unknown");
+
+    /** Terminal phases stop the poller (success or failure). */
+    val isTerminal: Boolean get() = this == LIVE || this == ERROR
+
+    companion object {
+        /** The happy-path ladder, in order, EXCLUDING terminal `error`
+         *  (and the `unknown` sentinel). */
+        val ordered: List<ProvisionStatusPhase> = listOf(
+            BOOTING, DOWNLOADING, PARTITIONING, INSTALLING,
+            REGISTERING, SEALING, PAIRING, LIVE,
+        )
+
+        /** Forward-compat parse from a wire string → [UNKNOWN] when
+         *  unrecognised (never throws). */
+        fun fromWire(wire: String?): ProvisionStatusPhase =
+            entries.firstOrNull { it.wire == wire } ?: UNKNOWN
+    }
+}
+
+/** One entry in a provision-status row's append-only history. Mirrors
+ *  `ProvisionStatusHistoryEntry`: `{ phase, detail?, ts }`. */
+@Serializable
+data class ProvisionStatusEntry(
+    val phase: String,
+    val detail: String? = null,
+    /** Wall-clock ms of the report. */
+    val ts: Long,
+)
+
+/** GET /api/order/<serial>/status response. Mirrors
+ *  `ProvisionStatusRecord`: `{ serial, serverDomain?, phase, detail?,
+ *  updatedAt, history[] }`. A 404 ("no status") is surfaced as `null`
+ *  by the client, not this type. */
+@Serializable
+data class ProvisionStatusRecord(
+    val serial: String,
+    /** The server FQDN once the box has registered it; null before. */
+    val serverDomain: String? = null,
+    /** The latest reported phase (raw wire string; parse via
+     *  [ProvisionStatusPhase.fromWire]). */
+    val phase: String,
+    /** Free-form latest detail (error text, percentage, etc.). */
+    val detail: String? = null,
+    /** Wall-clock ms of the latest report. */
+    val updatedAt: Long,
+    /** Append-only history of every phase report, oldest first. */
+    val history: List<ProvisionStatusEntry> = emptyList(),
+)
 
 // ---------- P1.16 tier-status ------------------------------------------
 

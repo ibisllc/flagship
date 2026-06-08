@@ -169,18 +169,20 @@ public enum UserData {
                             wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8
         ).base64EncodedString()
 
-        // Phone-home beacons. The serial + serverDomain are known at generation
-        // time; we inline them (never parse the blob at runtime in early_command).
-        // Both sanitized to an injection-proof set so they can sit unquoted in a
-        // URL and inside a single-quoted JSON literal. PUBLIC correlation hints
-        // only (serial in URL, domain in detail) — no secrets — best-effort.
-        let (beaconSerial, beaconDomain) = beaconFields(recipeJSON)
-        let earlyBeacon = debianBeaconCommand(event: "d-i-started", domain: beaconDomain, serial: beaconSerial)
-        let lateBeacon = debianBeaconCommand(event: "installer-running", domain: beaconDomain, serial: beaconSerial)
+        // Phone-home beacons → the canonical order-status channel. The serial is
+        // known at generation time; we inline it (never parse the blob at runtime
+        // in early_command), sanitized to an injection-proof set so it sits
+        // unquoted in the URL. PUBLIC correlation hint only (serial in URL) — no
+        // secrets — best-effort. Each rung maps to ONE canonical ProvisionStatus
+        // phase: earliest hook = `booting`, partman = `partitioning`, late = the
+        // mirror/blob fetch = `downloading`. Mirrors preseed.ts.
+        let beaconSerial = beaconFields(recipeJSON).serial
+        let earlyBeacon = debianBeaconCommand(phase: "booting", serial: beaconSerial)
+        let lateBeacon = debianBeaconCommand(phase: "downloading", serial: beaconSerial)
         // Beacon fired from partman/early_command (the network IS up by partman,
         // so this is the most reliable "the box exists" ping — emitted BEFORE the
         // wipe so the phone hears from the box even if partitioning later fails).
-        let partitionBeacon = debianBeaconCommand(event: "partitioning", domain: beaconDomain, serial: beaconSerial)
+        let partitionBeacon = debianBeaconCommand(phase: "partitioning", serial: beaconSerial)
 
         let storageBlock = encryptRoot ? debianCryptoStorageBlock(partitionBeacon) : debianPlainStorageBlock(partitionBeacon)
 
@@ -505,14 +507,16 @@ public enum UserData {
 
     /// A best-effort phone-home beacon for the d-i environment. Writes the tiny
     /// JSON body to /tmp (busybox wget POST needs `--post-file=<path>`, not stdin
-    /// — and mini.iso d-i has NO curl, only busybox wget) then POSTs it to the
-    /// EXISTING POST /api/install-events/<serial> endpoint. HTTPS works against
-    /// d-i's bundled CA bundle. Wrapped in `( … ) || true` so a down/just-coming-
-    /// up network never blocks the install. SECRET-FREE. Mirrors preseed.ts.
-    static func debianBeaconCommand(event: String, domain: String, serial: String) -> String {
-        "( echo '{\"event\":\"\(event)\",\"detail\":\"\(domain)\"}' > /tmp/flagship-beacon.json; "
+    /// — and mini.iso d-i has NO curl, only busybox wget) then POSTs the canonical
+    /// `{"phase":…}` body to POST /api/order/<serial>/status — the SINGLE
+    /// provisioning channel every surface reads. HTTPS works against d-i's bundled
+    /// CA bundle. Wrapped in `( … ) || true` so a down/just-coming-up network never
+    /// blocks the install. SECRET-FREE (serial in the URL; no detail). Byte-
+    /// identical to preseed.ts debianBeaconCommand — keep in lockstep.
+    static func debianBeaconCommand(phase: String, serial: String) -> String {
+        "( echo '{\"phase\":\"\(phase)\"}' > /tmp/flagship-beacon.json; "
             + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
-            + "https://flagshipserver.com/api/install-events/\(serial) ) || true"
+            + "https://flagshipserver.com/api/order/\(serial)/status ) || true"
     }
 
     /// curtin custom-storage layout for the OPT-IN LUKS path. EXPERIMENTAL —
@@ -702,6 +706,10 @@ public enum UserData {
         // Splice the LUKS block in just before the plain script's final two
         // lines (installed.flag + "done") so the shared body stays verbatim.
         let tail = """
+        # Reached the end cleanly — disarm the error trap so the EXIT handler doesn't
+        # misfire a terminal error phase on a 0 exit. On the encrypted path the LUKS
+        # block is spliced in just ABOVE this line, so the trap still covers the re-key.
+        trap - EXIT
         date > /var/flagship/installed.flag
         echo "[flagship-bootstrap] done"
 
@@ -760,10 +768,28 @@ public enum UserData {
         # d-i late_command can only report from here on — clone/build onward.)
         CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
         report_phase() {
-            curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
-                --data '{"phase":"'"$1"'"}' \\
-                "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+            # $1 = canonical ProvisionStatusPhase, $2 = optional detail (error string)
+            if [ -n "${2:-}" ]; then
+                curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+                    --data '{"phase":"'"$1"'","detail":"'"$2"'"}' \\
+                    "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+            else
+                curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+                    --data '{"phase":"'"$1"'"}' \\
+                    "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+            fi
         }
+        # Error trap — any fatal bootstrap failure reports the terminal canonical
+        # error phase so the phone's timeline shows the stall instead of hanging on the
+        # last good phase. Fires once, only on a non-zero exit (a clean exit clears it
+        # first). Best-effort + never re-raises, so the trap can't itself wedge the
+        # install. The captured exit code is preserved.
+        flagship_on_error() {
+            _rc=$?
+            [ "$_rc" -eq 0 ] && return 0
+            report_phase error "bootstrap exited $_rc"
+        }
+        trap flagship_on_error EXIT
         report_phase installing
 
         # Persist install-time facts the daemon reads on every boot.
@@ -898,6 +924,17 @@ public enum UserData {
         echo "[register] starting"
         cd /opt/flagship
         . /etc/flagship-bootstrap.env
+        # Canonical provisioning-status report (POST /api/order/<serial>/status). On the
+        # plain path the deferred register is where the registering phase first fires —
+        # the encrypted path already reported it inline before its in-target register,
+        # so its registered.flag makes this unit skip (no double-emit). Best-effort.
+        CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+        report_phase() {
+            curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+                --data '{"phase":"'"$1"'"}' \\
+                "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+        }
+        report_phase registering
         npx tsx scripts/install-helper.ts sign-server-register \\
             --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
             --auth-code-blob /var/flagship/install-blob.json \\
@@ -918,6 +955,7 @@ public enum UserData {
         USERNAME=$USERNAME
         SERVER_NAME=$SERVER_NAME
         REGISTRATION_URL=$REGISTRATION_URL
+        AUTH_CODE_SERIAL=$AUTH_CODE_SERIAL
         SERVER_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
         ENV
         chmod 600 /etc/flagship-bootstrap.env
@@ -930,6 +968,10 @@ public enum UserData {
             echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
         echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
         \(wifiSafetyNet)
+        # Reached the end cleanly — disarm the error trap so the EXIT handler doesn't
+        # misfire a terminal error phase on a 0 exit. On the encrypted path the LUKS
+        # block is spliced in just ABOVE this line, so the trap still covers the re-key.
+        trap - EXIT
         date > /var/flagship/installed.flag
         echo "[flagship-bootstrap] done"
 

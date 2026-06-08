@@ -245,6 +245,15 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(plain.contains("report_phase() {"))
         XCTAssertTrue(plain.contains("\"$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status\" >/dev/null 2>&1 || true"))
         XCTAssertTrue(plain.contains("report_phase installing"))
+        // Error trap → terminal `error` phase on a non-zero exit; disarmed on a
+        // clean exit. The deferred-register wrapper fires `registering` on the
+        // plain path and stashes AUTH_CODE_SERIAL for it. Byte-identical to
+        // userdata.test.ts.
+        XCTAssertTrue(plain.contains("trap flagship_on_error EXIT"))
+        XCTAssertTrue(plain.contains("report_phase error \"bootstrap exited $_rc\""))
+        XCTAssertTrue(plain.contains("trap - EXIT"))
+        XCTAssertTrue(plain.contains("report_phase registering"))
+        XCTAssertTrue(plain.contains("AUTH_CODE_SERIAL=$AUTH_CODE_SERIAL"))
 
         // (3) register-before-seal ordering on the encrypted path: registration
         //     runs in-target BEFORE the destructive re-key/seal (the sealed-key
@@ -649,20 +658,23 @@ final class EngineTests: XCTestCase {
     }
 
     // The EXACT beacon command strings — byte-identical to preseed.test.ts.
+    // Each d-i rung POSTs a canonical ProvisionStatusPhase to the single
+    // order-status channel (POST /api/order/<serial>/status). No `detail`
+    // on the beacon (serverDomain is authoritative from registration).
     private static let earlyBeacon =
-        #"( echo '{"event":"d-i-started","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        #"( echo '{"phase":"booting"}' > /tmp/flagship-beacon.json; "#
         + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
-        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+        + "https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true"
     private static let lateBeacon =
-        #"( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        #"( echo '{"phase":"downloading"}' > /tmp/flagship-beacon.json; "#
         + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
-        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+        + "https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true"
     // Beacon C — fired from partman/early_command (network up by partman), before
     // the unconditional disk wipe. Byte-identical to preseed.test.ts.
     private static let partitionBeacon =
-        #"( echo '{"event":"partitioning","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; "#
+        #"( echo '{"phase":"partitioning"}' > /tmp/flagship-beacon.json; "#
         + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
-        + "https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true"
+        + "https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true"
 
     func testDebianPreseedEarlyBeacon() throws {
         let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
@@ -675,7 +687,7 @@ final class EngineTests: XCTestCase {
 
     func testDebianPreseedLateBeacon() throws {
         let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
-        // Beacon B POSTs installer-running FIRST in late_command, before blob-decode.
+        // Beacon B POSTs the downloading phase FIRST in late_command, before blob-decode.
         XCTAssertTrue(cfg.contains("d-i preseed/late_command string \(Self.lateBeacon); mkdir -p /target/var/flagship;"))
     }
 
@@ -694,7 +706,7 @@ final class EngineTests: XCTestCase {
             XCTAssertTrue(cfg.contains(#"blockdev --rereadpt "$DISK" 2>/dev/null || true"#))
             // The 'partitioning' beacon fires BEFORE the wipe.
             XCTAssertTrue(cfg.contains("\(Self.partitionBeacon); \\"))
-            let beacon = cfg.range(of: #""event":"partitioning""#)!
+            let beacon = cfg.range(of: #""phase":"partitioning""#)!
             let wipe = cfg.range(of: "dmsetup remove_all")!
             XCTAssertTrue(beacon.lowerBound < wipe.lowerBound, "beacon must precede the wipe")
         }
@@ -722,9 +734,9 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(cfg.contains("wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15"))
         let occurrences = cfg.components(separatedBy: ") || true").count - 1
         XCTAssertGreaterThanOrEqual(occurrences, 2)
-        // Serial inlined in the URL, domain in the detail (no runtime blob parse).
-        XCTAssertTrue(cfg.contains("/api/install-events/01TESTABCDEF"))
-        XCTAssertTrue(cfg.contains(#""detail":"home.demoalice.flagship.services""#))
+        // Serial inlined in the URL on the canonical order-status channel (no
+        // runtime blob parse, no detail field on the d-i beacon).
+        XCTAssertTrue(cfg.contains("/api/order/01TESTABCDEF/status"))
     }
 
     func testDebianPreseedBeaconSanitizesInjection() {

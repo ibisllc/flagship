@@ -71,7 +71,7 @@ public struct DemoInstallProgressScreen: View {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         DemoProgressBar(
                             fraction: ProvisionProgress.fraction(block?.phase),
-                            failed: block?.phase == "failed"
+                            failed: block?.phase == "error"
                         )
                         .accessibilityIdentifier("install-progress-bar")
                         stepList(c)

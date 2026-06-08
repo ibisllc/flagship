@@ -200,6 +200,38 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).not.toMatch(/systemctl start flagship-daemon\.service/);
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
   });
+
+  it("reports canonical phases ONLY to the order-status channel (one channel)", () => {
+    const b = bootstrap();
+    // The single sink: POST /api/order/<serial>/status.
+    expect(b).toContain("/api/order/$AUTH_CODE_SERIAL/status");
+    // No vestige of the retired install-events / provision-event channels.
+    expect(b).not.toContain("/api/install-events/");
+    expect(b).not.toContain("/provision-event");
+    // `installing` fires from the in-target bootstrap.
+    expect(b).toContain("report_phase installing");
+  });
+
+  it("fires `registering` UNCONDITIONALLY — including on the plain-path deferred register", () => {
+    const b = bootstrap();
+    // The deferred first-boot register wrapper carries its own report_phase +
+    // calls `registering` before the sign/POST, so the plain path emits it too
+    // (the encrypted path emits it inline; registered.flag stops a double-emit).
+    expect(b).toContain("AUTH_CODE_SERIAL=$AUTH_CODE_SERIAL");
+    const wrapperStart = b.indexOf("flagship-first-boot-register.sh <<'WRAPPER'");
+    const wrapperEnd = b.indexOf("WRAPPER\n", wrapperStart);
+    const wrapper = b.slice(wrapperStart, wrapperEnd);
+    expect(wrapper).toContain("report_phase registering");
+    expect(wrapper).toContain("/api/order/$AUTH_CODE_SERIAL/status");
+  });
+
+  it("installs a terminal `error` trap that reports on any non-zero bootstrap exit", () => {
+    const b = bootstrap();
+    expect(b).toContain("trap flagship_on_error EXIT");
+    expect(b).toContain('report_phase error "bootstrap exited $_rc"');
+    // …disarmed on the clean path so a 0 exit never misfires `error`.
+    expect(b).toContain("trap - EXIT");
+  });
 });
 
 describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug escape", () => {

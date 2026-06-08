@@ -1,9 +1,10 @@
 import type {
   AuthCodeStorage,
+  DemoUsersStorage,
   ProvisionStatusStorage,
   PushTokenStorage,
 } from "@flagship/storage";
-import { malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
+import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 import type { V12PushFanout } from "./totp.js";
 
 /**
@@ -30,6 +31,14 @@ export interface ProvisionStatusDeps {
   authCodes?: AuthCodeStorage;
   /** Resolves owner username → registered push subscriptions. */
   pushTokens?: PushTokenStorage;
+  /**
+   * Demo-server mirror. When present, a status POST whose owner maps to a
+   * `provisioning` demo_users row also stamps that row's latest phase, so the
+   * demo install-progress timeline reads off the SAME canonical channel (the
+   * demo VPS bootstrap posts here). Unifies demo + real provisioning onto one
+   * vocabulary. Best-effort: a mirror failure never fails the status write.
+   */
+  demoUsers?: DemoUsersStorage;
   /** Native push fan-out (APNs / FCM / Web Push RFC 8291). Absent ⇒ the
    *  phase is stored but no push fires (no provider secrets configured). */
   pushFanout?: V12PushFanout;
@@ -64,6 +73,21 @@ export type ProvisionStatusPhase = (typeof PROVISION_STATUS_PHASES)[number];
 
 const PHASE_SET: ReadonlySet<string> = new Set(PROVISION_STATUS_PHASES);
 
+/**
+ * The minimal set of phases that fire a NATIVE PUSH banner — the milestones
+ * worth waking a device for. Every phase still updates the polled stream (the
+ * phone's foregrounded install-progress view sees them all via GET), but only
+ * these four ring a notification, so we don't "blast" a banner per rung. Kept
+ * identical across consumers (iOS / Android / webapp parse the same payload —
+ * the gate is here, on the producer).
+ */
+const PUSH_PHASES: ReadonlySet<ProvisionStatusPhase> = new Set([
+  "registering",
+  "sealing",
+  "live",
+  "error",
+]);
+
 const MAX_DETAIL_LEN = 1024;
 
 export async function handlePostProvisionStatus(
@@ -72,10 +96,13 @@ export async function handlePostProvisionStatus(
   body: PostStatusBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   const now = (deps.now ?? (() => Date.now()))();
-  // TODO(security): sign reports with the box identity once registered /
-  // the recipe delegated key. v1 accepts the POST keyed by serial alone —
-  // the serial is a capability the phone + installer share, but it is not
-  // a signature, so a leaked serial lets a third party scribble phases.
+  // NOTE(security): the serial is a capability the phone + installer share, not
+  // a signature, so a leaked serial would let a third party scribble phases. We
+  // narrow that surface the same way install-events does: when an AuthCodeStorage
+  // is wired (production), the POST is gated on the serial mapping to a real,
+  // randomly-issued auth-code. Without one, an attacker can't grow the table on
+  // fabricated serials. (Signing the report with the box identity is the next
+  // step; the gate is the v1 floor.)
   if (!SERIAL_RE.test(serial)) return malformed("malformed serial");
   if (!body || typeof body.phase !== "string") {
     return malformed("phase required");
@@ -88,12 +115,22 @@ export async function handlePostProvisionStatus(
       return malformed("invalid detail");
     }
   }
+  if (deps.authCodes) {
+    const order = await deps.authCodes.get(serial);
+    if (!order) return forbidden("unknown serial");
+  }
 
   await deps.storage.putProvisionStatus(serial, {
     phase: body.phase,
     ...(body.detail !== undefined ? { detail: body.detail } : {}),
     ts: now,
   });
+
+  // Mirror onto the demo_users row (if any) so the demo install-progress
+  // timeline reads off this SAME canonical channel — one vocabulary for both
+  // demo + real boxes. Best-effort + scoped to a still-`provisioning` row so a
+  // replayed serial can't rewind a live demo's phase.
+  await mirrorToDemoRow(deps, serial, body.phase, body.detail, now);
 
   // Push the change to the order owner's devices so the phone's
   // install-progress view updates in real time. Best-effort: any failure
@@ -130,6 +167,37 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
 };
 
 /**
+ * Mirror a canonical phase onto the owner's demo_users row, so the demo
+ * install-progress timeline (rendered off `demoServer.phase`) reads off this
+ * single canonical channel. SERIAL → auth-code → username → demo row. Only
+ * stamps a row that is still `provisioning` (a replayed serial can't rewind a
+ * live demo). Never throws — the canonical status write has already succeeded.
+ */
+async function mirrorToDemoRow(
+  deps: ProvisionStatusDeps,
+  serial: string,
+  phase: string,
+  detail: string | undefined,
+  now: number,
+): Promise<void> {
+  if (!deps.authCodes || !deps.demoUsers) return;
+  try {
+    const order = await deps.authCodes.get(serial);
+    if (!order) return;
+    const row = await deps.demoUsers.get(order.username);
+    if (!row || row.state !== "provisioning") return;
+    await deps.demoUsers.setProvisionPhase(
+      order.username,
+      phase,
+      phase === "error" && detail ? detail : null,
+      now,
+    );
+  } catch {
+    // The mirror is a convenience for the demo timeline; never fail the write.
+  }
+}
+
+/**
  * Resolve the order owner (SERIAL → auth-code → username), then fan out a
  * native push to every device they have registered. Never throws.
  */
@@ -140,6 +208,10 @@ async function fanOutStatusPush(
   detail: string | undefined,
 ): Promise<void> {
   if (!deps.authCodes || !deps.pushTokens || !deps.pushFanout) return;
+  // Minimal-transition gate: only milestone phases ring a banner. The rest
+  // update the polled stream silently. Foregrounded apps still see every phase
+  // via GET .../status.
+  if (!PUSH_PHASES.has(phase as ProvisionStatusPhase)) return;
   try {
     const order = await deps.authCodes.get(serial);
     if (!order) return;

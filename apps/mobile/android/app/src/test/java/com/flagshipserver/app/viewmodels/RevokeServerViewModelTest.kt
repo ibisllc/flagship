@@ -16,6 +16,7 @@ import com.flagshipserver.app.api.DeviceAdmitResponse
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.GatedRecoveryEnvelope
 import com.flagshipserver.app.api.MockFlagshipServerClient
+import com.flagshipserver.app.api.ProvisionStatusRecord
 import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.PushTokenRegisterResponse
 import com.flagshipserver.app.api.AccountResolution
@@ -177,6 +178,7 @@ class RevokeServerViewModelTest {
         override suspend fun releaseServerName(req: ReleaseServerNameRequest) { throw error }
         override suspend fun revokeServer(req: ServerRevocationRequest) { throw error }
         override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse = throw error
+        override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? = throw error
         override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse = throw error
         override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope = throw error
         override suspend fun fetchWrappedUmkWithToken(username: String, fetchTokenHex: String, issuedAt: Long): GatedRecoveryEnvelope = throw error

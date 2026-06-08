@@ -1,69 +1,48 @@
 // Provisioning progress model for the "your server is being installed"
-// UI. Byte-for-byte mirror of packages/protocol/src/provisionProgress.ts
-// (fraction + grouping + per-step state) so the webapp's progress bar +
-// step checklist match iOS / Android exactly.
+// UI — built on the SINGLE canonical vocabulary (ProvisionStatusPhase),
+// the same channel the install timeline reads (GET /api/order/<serial>/status).
+// Byte-for-byte aligned with the canonical control-plane PHASE_TITLES and the
+// canonical group projection, so the webapp's progress bar + step checklist
+// match iOS / Android exactly.
 //
 // Pure (no DOM, no network) so it unit-tests in isolation.
 
-/** The fine-grained ladder, in order, EXCLUDING the terminal `failed`.
- *  Mirror of PROVISION_PHASES (auth.ts) minus `failed`. */
+/** The canonical ladder, in order, EXCLUDING the terminal `error`.
+ *  Mirror of PROVISION_STATUS_PHASES (control-plane) minus `error`. */
 export const PROVISION_LADDER = Object.freeze([
-  "boot",
-  "cloned",
-  "deps",
-  "built",
-  "identity",
-  "registered",
-  "tunnel-online",
-  "acme-order",
-  "dns01-publish-attempt",
-  "dns01-publish-ok",
-  "dns01-propagation-wait",
-  "tlsalpn-served",
-  "acme-validating",
-  "cert-issued",
-  "ready",
+  "booting",
+  "downloading",
+  "partitioning",
+  "installing",
+  "registering",
+  "sealing",
+  "pairing",
+  "live",
 ]);
 
-/** Human title per fine-grained phase. Lockstep with PROVISION_PHASE_TITLES
- *  (protocol) + PHASE_TITLES (control-plane push fan-out). */
+/** Human title per canonical phase. Lockstep with PHASE_TITLES
+ *  (packages/control-plane/src/provisionStatus.ts) — every surface uses these. */
 export const PROVISION_PHASE_TITLES = Object.freeze({
-  boot: "Server booting",
-  cloned: "Code cloned",
-  deps: "Installing dependencies",
-  built: "Build complete",
-  identity: "Identity generated",
-  registered: "Registered with Flagship",
-  "tunnel-online": "Tunnel online",
-  "acme-order": "Requesting certificate",
-  "dns01-publish-attempt": "Publishing DNS challenge",
-  "dns01-publish-ok": "DNS challenge published",
-  "dns01-propagation-wait": "Waiting for DNS",
-  "tlsalpn-served": "Serving TLS challenge",
-  "acme-validating": "Validating certificate",
-  "cert-issued": "TLS certificate issued",
-  ready: "Server is live",
-  failed: "Provisioning failed",
+  booting: "Booting up",
+  downloading: "Downloading",
+  partitioning: "Partitioning disk",
+  installing: "Installing",
+  registering: "Registering with Flagship",
+  sealing: "Sealing your disk key",
+  pairing: "Pairing with your phone",
+  live: "Your server is live",
+  error: "Setup hit a problem",
 });
 
-/** The four user-facing groups, in order. */
+/** The canonical UI group projection (design §1.2), in order. Each
+ *  implementer (iOS / Android / webapp) derives the SAME grouping from this
+ *  table — it is part of the contract. `error` fails the active group. */
 export const PROVISION_STEP_GROUPS = Object.freeze([
-  { key: "booting", label: "Booting", phases: ["boot", "cloned", "deps", "built", "identity"] },
-  { key: "registering", label: "Registering", phases: ["registered", "tunnel-online"] },
-  {
-    key: "securing",
-    label: "Securing (TLS certificate)",
-    phases: [
-      "acme-order",
-      "dns01-publish-attempt",
-      "dns01-publish-ok",
-      "dns01-propagation-wait",
-      "tlsalpn-served",
-      "acme-validating",
-      "cert-issued",
-    ],
-  },
-  { key: "ready", label: "Ready", phases: ["ready"] },
+  { key: "booting", label: "Booting", phases: ["booting", "downloading", "partitioning"] },
+  { key: "installing", label: "Installing", phases: ["installing"] },
+  { key: "registering", label: "Registering", phases: ["registering", "pairing"] },
+  { key: "securing", label: "Securing (TLS certificate)", phases: ["sealing"] },
+  { key: "ready", label: "Ready", phases: ["live"] },
 ]);
 
 /** @param {string} phase */
@@ -77,8 +56,8 @@ function isLadderPhase(phase) {
  */
 export function provisionFraction(phase) {
   if (!phase) return 0;
-  if (phase === "ready") return 1;
-  if (phase === "failed") return 0;
+  if (phase === "live") return 1;
+  if (phase === "error") return 0;
   if (!isLadderPhase(phase)) return 0;
   const idx = PROVISION_LADDER.indexOf(phase);
   if (idx < 0) return 0;
@@ -103,13 +82,13 @@ function groupKeyForPhase(phase) {
 export function provisionStepStates(phase, lastError, prevPhase) {
   const groups = PROVISION_STEP_GROUPS;
 
-  if (phase === "ready") {
+  if (phase === "live") {
     return groups.map((g) => ({ key: g.key, label: g.label, state: "done", detail: null }));
   }
 
-  if (phase === "failed") {
+  if (phase === "error") {
     const failedPhase =
-      prevPhase && isLadderPhase(prevPhase) ? prevPhase : "boot";
+      prevPhase && isLadderPhase(prevPhase) ? prevPhase : "booting";
     const failedGroup = groupKeyForPhase(failedPhase);
     const failedIdx = groups.findIndex((g) => g.key === failedGroup);
     return groups.map((g, i) => {
@@ -119,7 +98,7 @@ export function provisionStepStates(phase, lastError, prevPhase) {
           key: g.key,
           label: g.label,
           state: "failed",
-          detail: lastError && lastError.length > 0 ? lastError : PROVISION_PHASE_TITLES.failed,
+          detail: lastError && lastError.length > 0 ? lastError : PROVISION_PHASE_TITLES.error,
         };
       }
       return { key: g.key, label: g.label, state: "pending", detail: null };
@@ -147,17 +126,17 @@ export function provisionStepStates(phase, lastError, prevPhase) {
 }
 
 /** True when a demoServer block should render a progress bar on the
- *  list (i.e. it has a server still pre-`ready`). A `ready` server (or
+ *  list (i.e. it has a server still pre-`live`). A `live` server (or
  *  one with no demoServer) renders as a normal online server.
  *  @param {{ phase?: string|null, status?: string }|null|undefined} block
  *  @returns {boolean}
  */
 export function shouldShowProgressBar(block) {
   if (!block) return false;
-  if (block.status === "up" && (block.phase == null || block.phase === "ready")) return false;
-  if (block.phase === "ready") return false;
+  if (block.status === "up" && (block.phase == null || block.phase === "live")) return false;
+  if (block.phase === "live") return false;
   if (block.status === "none") return false;
-  // provisioning, OR phase present and not ready, OR failed → show.
+  // provisioning, OR phase present and not live, OR error → show.
   return block.status === "provisioning" || block.phase != null;
 }
 
@@ -171,13 +150,13 @@ function esc(s) {
 }
 
 /** Render the thin determinate progress bar for a list row. Returns ''
- *  when no bar should show (ready / none / absent).
+ *  when no bar should show (live / none / absent).
  *  @param {{ phase?: string|null, status?: string }|null|undefined} block
  *  @returns {string} */
 export function renderListProgressBar(block) {
   if (!shouldShowProgressBar(block)) return "";
   const pct = Math.round(provisionFraction(block?.phase) * 100);
-  const failed = block?.phase === "failed";
+  const failed = block?.phase === "error";
   const cls = failed ? "demo-progress-bar failed" : "demo-progress-bar";
   return (
     `<div class="${cls}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">` +
@@ -195,7 +174,7 @@ export function renderProgressDetail(block) {
   if (!block) return "";
   const steps = provisionStepStates(block.phase, block.lastError);
   const pct = Math.round(provisionFraction(block.phase) * 100);
-  const failed = block.phase === "failed";
+  const failed = block.phase === "error";
   const rows = steps
     .map((s) => {
       const icon =

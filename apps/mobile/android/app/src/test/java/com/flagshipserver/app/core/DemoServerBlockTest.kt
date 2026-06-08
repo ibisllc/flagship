@@ -89,39 +89,40 @@ class DemoServerBlockTest {
     }
 
     @Test fun demoServerBlock_decodesEnrichedPhaseFields_fromWorkerWire() {
-        // Migration 0035 — provisioning observability. Keep byte-identical
-        // with packages/control-plane/src/demoUsers.ts `DemoServerBlock`.
+        // Migration 0035 — provisioning observability. `phase` now carries
+        // canonical ProvisionStatusPhase values (order-status vocabulary).
+        // Keep byte-identical with packages/control-plane/src/demoUsers.ts.
         val json = """
         {
           "fqdn": "home.demoalice.flagship.services",
           "status": "provisioning",
           "ttlIdleMinutes": 30,
-          "phase": "cert-issued",
+          "phase": "sealing",
           "phaseAt": 1700000000000,
           "lastError": null
         }
         """.trimIndent()
         val block = Json { ignoreUnknownKeys = true; explicitNulls = false }
             .decodeFromString(DemoServerBlock.serializer(), json)
-        assertEquals("cert-issued", block.phase)
+        assertEquals("sealing", block.phase)
         assertEquals(1_700_000_000_000L, block.phaseAt)
         assertNull(block.lastError)
     }
 
-    @Test fun demoServerBlock_decodesFailedPhaseWithError() {
+    @Test fun demoServerBlock_decodesErrorPhaseWithError() {
         val json = """
         {
           "fqdn": "home.demoalice.flagship.services",
           "status": "provisioning",
           "ttlIdleMinutes": 30,
-          "phase": "failed",
+          "phase": "error",
           "phaseAt": 1700000000000,
           "lastError": "acme dns-01 timeout"
         }
         """.trimIndent()
         val block = Json { ignoreUnknownKeys = true; explicitNulls = false }
             .decodeFromString(DemoServerBlock.serializer(), json)
-        assertEquals("failed", block.phase)
+        assertEquals("error", block.phase)
         assertEquals("acme dns-01 timeout", block.lastError)
     }
 

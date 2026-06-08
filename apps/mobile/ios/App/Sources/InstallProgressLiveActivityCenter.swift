@@ -2,15 +2,15 @@ import Foundation
 import ActivityKit
 import WidgetKit
 
-/// Bridge between the app's install-events SSE stream and the
-/// ActivityKit Live Activity rendered by InstallProgressLiveActivity
-/// in the widget extension.
+/// Bridge between the canonical provisioning channel (driven through
+/// InstallProgressBridge) and the ActivityKit Live Activity rendered by
+/// InstallProgressLiveActivity in the widget extension.
 ///
 /// Lifecycle:
 ///   start(serial:podName:)       — call .request(...)
 ///   advance(step:)               — call .update(...)
-///   complete(serverFqdn:)        — final .update(.ready) + .end(...)
-///   fail(reason:)                — final .update(.failed) + .end(...)
+///   complete(serverFqdn:)        — final .update(.live) + .end(...)
+///   fail(reason:)                — final .update(.error) + .end(...)
 ///
 /// All updates run on the MainActor; ActivityKit itself is
 /// MainActor-isolated. Falls silent (no-op) on iOS versions that
@@ -33,7 +33,7 @@ final class InstallProgressLiveActivityCenter {
 
         let attributes = InstallProgressAttributes(serial: serial, podName: podName)
         let state = InstallProgressAttributes.ContentState(
-            currentStep: .registered,
+            currentStep: .booting,
             completedSteps: []
         )
         do {
@@ -43,10 +43,10 @@ final class InstallProgressLiveActivityCenter {
                 pushType: nil
             )
         } catch {
-            // Swallowing — Live Activity is best-effort UX; the
-            // in-app InstallProgressScreen still shows the same
-            // info. Crashing the install flow over a missing entitlement
-            // or a user-side disable would be a regression.
+            // Swallowing — Live Activity is best-effort UX; the in-app
+            // PendingServerScreen timeline still shows the same info.
+            // Crashing the install flow over a missing entitlement or a
+            // user-side disable would be a regression.
         }
     }
 
@@ -57,7 +57,7 @@ final class InstallProgressLiveActivityCenter {
         guard let activity = currentActivity else { return }
         var completed = activity.content.state.completedSteps
         let prior = activity.content.state.currentStep
-        if prior != step && !completed.contains(prior) && prior != .failed {
+        if prior != step && !completed.contains(prior) && prior != .error {
             completed.append(prior)
         }
         let next = InstallProgressAttributes.ContentState(
@@ -75,11 +75,11 @@ final class InstallProgressLiveActivityCenter {
     func complete(serverFqdn: String) async {
         guard let activity = currentActivity else { return }
         var completed = activity.content.state.completedSteps
-        for s in [InstallProgressAttributes.Step.started, .partitioning, .installing, .registered, .boot, .tunnelOnline, .certIssued, .ready] {
+        for s in InstallProgressAttributes.Step.ordered {
             if !completed.contains(s) { completed.append(s) }
         }
         let final = InstallProgressAttributes.ContentState(
-            currentStep: .ready,
+            currentStep: .live,
             completedSteps: completed,
             serverFqdn: serverFqdn,
             failureReason: nil
@@ -95,7 +95,7 @@ final class InstallProgressLiveActivityCenter {
     func fail(reason: String) async {
         guard let activity = currentActivity else { return }
         let final = InstallProgressAttributes.ContentState(
-            currentStep: .failed,
+            currentStep: .error,
             completedSteps: activity.content.state.completedSteps,
             serverFqdn: activity.content.state.serverFqdn,
             failureReason: reason

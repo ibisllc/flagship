@@ -26,14 +26,14 @@ function jsonResponse(status: number, body: unknown) {
 }
 
 describe("webapp provisionFraction", () => {
-  it("0 for null/unknown, 1 for ready, 0 for bare failed", () => {
+  it("0 for null/unknown, 1 for live, 0 for bare error", () => {
     expect(provisionFraction(null)).toBe(0);
     expect(provisionFraction("nope")).toBe(0);
-    expect(provisionFraction("ready")).toBe(1);
-    expect(provisionFraction("failed")).toBe(0);
+    expect(provisionFraction("live")).toBe(1);
+    expect(provisionFraction("error")).toBe(0);
   });
 
-  it("monotonic along the ladder", () => {
+  it("monotonic along the canonical ladder", () => {
     let prev = -1;
     for (const p of PROVISION_LADDER) {
       const f = provisionFraction(p);
@@ -41,12 +41,26 @@ describe("webapp provisionFraction", () => {
       prev = f;
     }
   });
+
+  it("the ladder is the canonical 8-phase vocabulary (booting…live)", () => {
+    expect(PROVISION_LADDER).toEqual([
+      "booting",
+      "downloading",
+      "partitioning",
+      "installing",
+      "registering",
+      "sealing",
+      "pairing",
+      "live",
+    ]);
+  });
 });
 
 describe("webapp PROVISION_STEP_GROUPS", () => {
-  it("matches the canonical four groups + labels", () => {
+  it("matches the canonical group projection + labels (design §1.2)", () => {
     expect(PROVISION_STEP_GROUPS.map((g) => g.label)).toEqual([
       "Booting",
+      "Installing",
       "Registering",
       "Securing (TLS certificate)",
       "Ready",
@@ -55,42 +69,43 @@ describe("webapp PROVISION_STEP_GROUPS", () => {
 });
 
 describe("webapp provisionStepStates", () => {
-  it("ACME sub-phase activates securing with its title", () => {
-    const v = provisionStepStates("dns01-propagation-wait");
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending"]);
-    expect(v[2]!.detail).toBe("Waiting for DNS");
+  it("a registering phase activates the Registering group with its title", () => {
+    const v = provisionStepStates("registering");
+    // Booting + Installing done; Registering active; Securing + Ready pending.
+    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending"]);
+    expect(v[2]!.detail).toBe("Registering with Flagship");
   });
 
-  it("failed surfaces lastError on the first group with no hint", () => {
-    const v = provisionStepStates("failed", "boom");
+  it("error surfaces lastError on the first group with no hint", () => {
+    const v = provisionStepStates("error", "boom");
     expect(v[0]!.state).toBe("failed");
     expect(v[0]!.detail).toBe("boom");
   });
 });
 
 describe("webapp shouldShowProgressBar (list-bar visibility)", () => {
-  it("shows for provisioning / mid-phase, hides for ready / none / absent", () => {
+  it("shows for provisioning / mid-phase, hides for live / none / absent", () => {
     expect(shouldShowProgressBar(null)).toBe(false);
     expect(shouldShowProgressBar({ status: "none" })).toBe(false);
-    expect(shouldShowProgressBar({ status: "up", phase: "ready" })).toBe(false);
+    expect(shouldShowProgressBar({ status: "up", phase: "live" })).toBe(false);
     expect(shouldShowProgressBar({ status: "up", phase: null })).toBe(false);
-    expect(shouldShowProgressBar({ status: "provisioning", phase: "deps" })).toBe(true);
+    expect(shouldShowProgressBar({ status: "provisioning", phase: "installing" })).toBe(true);
     expect(shouldShowProgressBar({ status: "provisioning", phase: null })).toBe(true);
-    expect(shouldShowProgressBar({ status: "provisioning", phase: "failed" })).toBe(true);
+    expect(shouldShowProgressBar({ status: "provisioning", phase: "error" })).toBe(true);
   });
 });
 
 describe("webapp render helpers", () => {
-  it("renderListProgressBar emits a sized bar pre-ready and '' when ready", () => {
-    const bar = renderListProgressBar({ status: "provisioning", phase: "registered" });
+  it("renderListProgressBar emits a sized bar pre-live and '' when live", () => {
+    const bar = renderListProgressBar({ status: "provisioning", phase: "registering" });
     expect(bar).toContain("demo-progress-fill");
     expect(bar).toContain("role=\"progressbar\"");
-    expect(renderListProgressBar({ status: "up", phase: "ready" })).toBe("");
+    expect(renderListProgressBar({ status: "up", phase: "live" })).toBe("");
   });
 
-  it("renderProgressDetail includes the four steps + device info + escapes error", () => {
+  it("renderProgressDetail includes the canonical groups + device info + escapes error", () => {
     const html = renderProgressDetail({
-      phase: "failed",
+      phase: "error",
       lastError: "<bad> & ugly",
       ip: "1.2.3.4",
       region: "fsn1",
@@ -98,6 +113,7 @@ describe("webapp render helpers", () => {
       serverType: "cx22",
     });
     expect(html).toContain("Booting");
+    expect(html).toContain("Installing");
     expect(html).toContain("Securing (TLS certificate)");
     expect(html).toContain("1.2.3.4");
     expect(html).toContain("debian-12");
@@ -108,7 +124,7 @@ describe("webapp render helpers", () => {
 });
 
 describe("webapp metadata wire decode", () => {
-  it("parses ip / region / serverType / image off the demoServer block", async () => {
+  it("parses ip / region / serverType / image + canonical phase off the demoServer block", async () => {
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
       username: "demoalice",
       available: false,
@@ -116,7 +132,7 @@ describe("webapp metadata wire decode", () => {
         fqdn: "home.demoalice.flagship.services",
         status: "provisioning",
         ttlIdleMinutes: 30,
-        phase: "acme-validating",
+        phase: "sealing",
         phaseAt: 12345,
         ip: "1.2.3.4",
         region: "fsn1",
@@ -129,7 +145,7 @@ describe("webapp metadata wire decode", () => {
     expect(r.demoServer?.region).toBe("fsn1");
     expect(r.demoServer?.serverType).toBe("cx22");
     expect(r.demoServer?.image).toBe("debian-12");
-    expect(r.demoServer?.phase).toBe("acme-validating");
+    expect(r.demoServer?.phase).toBe("sealing");
   });
 });
 

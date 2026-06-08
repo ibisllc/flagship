@@ -1,6 +1,11 @@
-// Provisioning observability — pin the Android `provision-phase` FCM
-// parser. Mirror of iOS ProvisionPhaseTests + the Worker fan-out
-// payload (packages/control-plane/src/provisionEvents.ts).
+// Provisioning observability — pin the Android canonical `provision-status`
+// FCM parser. Mirror of iOS ProvisionPhaseBridge.parse + the webapp SW
+// branch + the Worker fan-out payload
+// (packages/control-plane/src/provisionStatus.ts `fanOutStatusPush`).
+//
+// Contract point 3 (LOCKED DESIGN §2.3): the FCM `data` map is flat —
+// category/kind == "provision-status", meta.phase flattened to data["phase"],
+// meta.serial → data["serial"], meta.detail → data["detail"].
 
 package com.flagshipserver.app.push
 
@@ -10,70 +15,57 @@ import org.junit.Test
 
 class ProvisionPhasePushTest {
 
-    @Test fun parse_provisionPhasePush_viaCategory() {
-        val e = ProvisionPhasePush.parse(
+    @Test fun parse_provisionStatusPush_viaCategory() {
+        val e = ProvisionStatusPush.parse(
             mapOf(
-                "category" to "provision-phase",
-                "username" to "demoalice",
-                "fqdn" to "home.demoalice.flagship.services",
-                "phase" to "deps",
+                "category" to "provision-status",
+                "kind" to "provision-status",
+                "serial" to "ORDER-123",
+                "phase" to "registering",
+                "title" to "Registering with Flagship",
+                "body" to "Your server is checking in with Flagship.",
+                "deepLink" to "flagship://install-progress",
             )
         )
-        assertEquals("deps", e?.phase)
-        assertEquals("demoalice", e?.username)
-        assertEquals("home.demoalice.flagship.services", e?.fqdn)
-        assertNull(e?.error)
+        assertEquals("registering", e?.phase)
+        assertEquals("ORDER-123", e?.serial)
+        assertNull(e?.detail)
     }
 
-    @Test fun parse_provisionPhasePush_viaKindMeta() {
-        val e = ProvisionPhasePush.parse(
-            mapOf("kind" to "provision-phase", "phase" to "ready")
+    @Test fun parse_provisionStatusPush_viaKindMeta() {
+        val e = ProvisionStatusPush.parse(
+            mapOf("kind" to "provision-status", "serial" to "S", "phase" to "live")
         )
-        assertEquals("ready", e?.phase)
+        assertEquals("live", e?.phase)
+        assertEquals("S", e?.serial)
     }
 
-    @Test fun parse_failedPhaseCarriesError() {
-        val e = ProvisionPhasePush.parse(
+    @Test fun parse_errorPhaseCarriesDetail() {
+        val e = ProvisionStatusPush.parse(
             mapOf(
-                "category" to "provision-phase",
-                "phase" to "failed",
-                "error" to "tunnel never came online",
+                "category" to "provision-status",
+                "serial" to "S",
+                "phase" to "error",
+                "detail" to "tunnel never came online",
             )
         )
-        assertEquals("failed", e?.phase)
-        assertEquals("tunnel never came online", e?.error)
+        assertEquals("error", e?.phase)
+        assertEquals("tunnel never came online", e?.detail)
     }
 
-    @Test fun parse_emptyErrorBecomesNull() {
-        val e = ProvisionPhasePush.parse(
-            mapOf("category" to "provision-phase", "phase" to "ready", "error" to "")
+    @Test fun parse_emptyDetailBecomesNull() {
+        val e = ProvisionStatusPush.parse(
+            mapOf("category" to "provision-status", "serial" to "S", "phase" to "live", "detail" to "")
         )
-        assertNull(e?.error)
+        assertNull(e?.detail)
     }
 
     @Test fun parse_ignoresOtherCategories() {
-        assertNull(ProvisionPhasePush.parse(mapOf("category" to "unlock-approve")))
-        // provision-phase but no phase string → not parseable.
-        assertNull(ProvisionPhasePush.parse(mapOf("category" to "provision-phase")))
-        assertNull(ProvisionPhasePush.parse(emptyMap()))
-    }
-
-    @Test fun bridge_onPhaseFires() {
-        var received: ProvisionPhaseEvent? = null
-        ProvisionPhaseBridge.onPhase = { received = it }
-        try {
-            val e = ProvisionPhasePush.parse(
-                mapOf(
-                    "category" to "provision-phase",
-                    "username" to "demoalice",
-                    "fqdn" to "home.demoalice.flagship.services",
-                    "phase" to "tunnel-online",
-                )
-            )!!
-            ProvisionPhaseBridge.onPhase?.invoke(e)
-            assertEquals("tunnel-online", received?.phase)
-        } finally {
-            ProvisionPhaseBridge.onPhase = null
-        }
+        assertNull(ProvisionStatusPush.parse(mapOf("category" to "unlock-approve")))
+        // The retired channel-C `provision-phase` category is NOT recognized.
+        assertNull(ProvisionStatusPush.parse(mapOf("category" to "provision-phase", "phase" to "deps")))
+        // provision-status but no phase string → not parseable.
+        assertNull(ProvisionStatusPush.parse(mapOf("category" to "provision-status", "serial" to "S")))
+        assertNull(ProvisionStatusPush.parse(emptyMap()))
     }
 }

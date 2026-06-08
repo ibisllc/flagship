@@ -140,7 +140,9 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
       ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
-      ["/api/screens/install-events/", "/webapp/views/install-progress.js"],
+      // install-progress.js no longer uses a /api/screens/* BFF — it reads the
+      // SINGLE canonical provisioning channel directly
+      // (GET /api/order/<serial>/status on flagshipserver.com).
       ["/api/screens/orders/send", "/webapp/views/orders-debug.js"],
       ["/api/screens/browser-tabs/list/", "/webapp/views/browser-viewer.js"],
     ];

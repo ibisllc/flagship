@@ -1,51 +1,59 @@
-// Provisioning observability on Android — parse a `provision-phase`
-// FCM push into a typed event and surface it via a closure bridge.
+// Provisioning observability on Android — parse a canonical
+// `provision-status` FCM push into a typed event.
 //
-// Mirror of iOS ProvisionPhaseBridge (apps/mobile/ios/Sources/
-// FlagshipCore/ProvisionPhaseBridge.swift) and the Worker fan-out
-// payload's discrete fields (packages/control-plane/src/
-// provisionEvents.ts `fanOutPhasePush`).
+// CANONICAL PAYLOAD (LOCKED DESIGN §2.3). The Worker's `fanOutStatusPush`
+// (packages/control-plane/src/provisionStatus.ts) emits:
+//
+//   { category:"provision-status", title, body, deepLink:"flagship://…",
+//     meta: { kind:"provision-status", serial, phase, detail? } }
+//
+// FCM `data` maps are flat string→string, and the Worker's pushBridge
+// (sendFcm) flattens this so the Android service sees:
+//   data["category"] = "provision-status"
+//   data["kind"]     = "provision-status"   (from meta.kind)
+//   data["serial"]   = "<serial>"           (from meta.serial)
+//   data["phase"]    = "<ProvisionStatusPhase>"  (from meta.phase)
+//   data["detail"]   = "<optional>"         (from meta.detail)
+//   data["title"] / data["body"] / data["deepLink"]
+//
+// Per the "foregrounded apps poll" design, push is WAKE-ONLY: the FCM
+// service renders the generic title/body/deepLink notification and the
+// install-progress screen's poller drives the UI. This parser stays as a
+// pure, tested recognizer (contract point 3 — byte-matched to iOS +
+// webapp) and is side-effect-free so it's unit-testable without a
+// FirebaseMessagingService. The old `provision-phase` push (channel C) is
+// RETIRED — this is the ONE provisioning push.
 
 package com.flagshipserver.app.push
 
-/** A provisioning PHASE checkpoint delivered by a `provision-phase`
- *  FCM push from .com. One arrives on every step the box pushes
- *  (boot/cloned/deps/built/identity/registered from the cloud-init
- *  bootstrap, tunnel-online/cert-issued/ready from the daemon, and a
- *  terminal `failed`). One of the @flagship/protocol PROVISION_PHASES. */
-data class ProvisionPhaseEvent(
-    val username: String,
-    val fqdn: String,
+/** A provisioning status checkpoint delivered by a `provision-status`
+ *  FCM push. `phase` is one of the canonical ProvisionStatusPhase wire
+ *  strings (booting…live, terminal `error`). */
+data class ProvisionStatusPushEvent(
+    val serial: String,
     val phase: String,
-    /** Present only when `phase == "failed"`. */
-    val error: String? = null,
+    /** Present on `error` (and any phase the Worker chose to annotate). */
+    val detail: String? = null,
 )
 
-/** Pure parser for a `provision-phase` FCM `data` map. Returns null for
- *  any other category so the FCM service can fall through to its
- *  standard notification path. Pure + side-effect-free → unit-testable
- *  without a FirebaseMessagingService. */
-object ProvisionPhasePush {
-    fun parse(data: Map<String, String>): ProvisionPhaseEvent? {
-        // The category lands either as the FCM `category` field or as the
-        // `kind` meta field (the Worker sets both); accept either.
-        val isPhase = data["category"] == "provision-phase" || data["kind"] == "provision-phase"
-        if (!isPhase) return null
+/** Pure parser for a canonical `provision-status` FCM `data` map. Returns
+ *  null for any other category so the FCM service can fall through to its
+ *  standard notification path. */
+object ProvisionStatusPush {
+    fun parse(data: Map<String, String>): ProvisionStatusPushEvent? {
+        // Recognition key: `category == "provision-status"` OR
+        // `kind == "provision-status"` (the Worker sets both — category at
+        // the FCM top level, kind flattened from meta).
+        val isStatus =
+            data["category"] == "provision-status" || data["kind"] == "provision-status"
+        if (!isStatus) return null
+        // meta.phase is flattened to data["phase"].
         val phase = data["phase"]?.takeIf { it.isNotEmpty() } ?: return null
-        val error = data["error"]?.takeIf { it.isNotEmpty() }
-        return ProvisionPhaseEvent(
-            username = data["username"].orEmpty(),
-            fqdn = data["fqdn"].orEmpty(),
+        val detail = data["detail"]?.takeIf { it.isNotEmpty() }
+        return ProvisionStatusPushEvent(
+            serial = data["serial"].orEmpty(),
             phase = phase,
-            error = error,
+            detail = detail,
         )
     }
-}
-
-/** Closure bridge between the FCM service and the install-progress UI.
- *  The app (MainActivity / shell) sets `onPhase` to advance its
- *  progress model + Live-Activity-equivalent; left null in tests so the
- *  parser stays side-effect-free. */
-object ProvisionPhaseBridge {
-    @Volatile var onPhase: ((ProvisionPhaseEvent) -> Unit)? = null
 }

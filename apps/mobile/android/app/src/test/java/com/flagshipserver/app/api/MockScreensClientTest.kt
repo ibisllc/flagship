@@ -76,15 +76,29 @@ class MockScreensClientTest {
         assertNull(second.reason)
     }
 
-    @Test fun installEvents_emitsFullSequence() = runTest {
-        val events = makeClient().apply { simulatedLatencyMs = 0 }
-            .installEvents("TESTSERIAL")
-            .toList()
-        assertEquals(5, events.size)
-        assertTrue(events.first() is InstallEvent.Registered)
-        val last = events.last()
-        assertTrue(last is InstallEvent.Ready)
-        assertEquals("newbox.harry.flagship.services", (last as InstallEvent.Ready).serverFqdn)
+    @Test fun fetchProvisionStatus_returnsScriptedRecord_orNullWhenAbsent() = runTest {
+        // The ONE canonical provisioning channel lives on
+        // FlagshipServerClient (flagshipserver.com), NOT the pod-gated
+        // ScreensClient — the box is still installing, so no pod exists.
+        // Absent serial mirrors the Worker's 404 "no record yet" → null.
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        assertNull(server.fetchProvisionStatus("ORDER-1"))
+
+        server.provisionStatuses["ORDER-1"] = ProvisionStatusRecord(
+            serial = "ORDER-1",
+            serverDomain = "newbox.harry.flagship.services",
+            phase = "live",
+            updatedAt = 1_700_000_000_000L,
+            history = listOf(
+                ProvisionStatusEntry(phase = "booting", ts = 1L),
+                ProvisionStatusEntry(phase = "live", ts = 2L),
+            ),
+        )
+        val rec = server.fetchProvisionStatus("ORDER-1")
+        assertEquals("live", rec?.phase)
+        assertEquals("newbox.harry.flagship.services", rec?.serverDomain)
+        assertEquals(ProvisionStatusPhase.LIVE, ProvisionStatusPhase.fromWire(rec?.phase))
+        assertTrue(ProvisionStatusPhase.fromWire(rec?.phase).isTerminal)
     }
 
     @Test fun vibeCodeStream_emitsBuildAndDeploy() = runTest {

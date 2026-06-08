@@ -109,7 +109,7 @@ fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 DemoProgressBar(
                     fraction = ProvisionProgress.fraction(block?.phase),
-                    failed = block?.phase == "failed",
+                    failed = block?.phase == "error",
                     modifier = Modifier.testTag("install-progress-bar"),
                 )
                 StepList(block)

@@ -582,10 +582,28 @@ echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 # d-i late_command can only report from here on — clone/build onward.)
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
 report_phase() {
-    curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
-        --data '{"phase":"'"$1"'"}' \\
-        "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+    # $1 = canonical ProvisionStatusPhase, $2 = optional detail (error string)
+    if [ -n "\${2:-}" ]; then
+        curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+            --data '{"phase":"'"$1"'","detail":"'"$2"'"}' \\
+            "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+    else
+        curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+            --data '{"phase":"'"$1"'"}' \\
+            "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+    fi
 }
+# Error trap — any fatal bootstrap failure reports the terminal canonical
+# error phase so the phone's timeline shows the stall instead of hanging on the
+# last good phase. Fires once, only on a non-zero exit (a clean exit clears it
+# first). Best-effort + never re-raises, so the trap can't itself wedge the
+# install. The captured exit code is preserved.
+flagship_on_error() {
+    _rc=$?
+    [ "$_rc" -eq 0 ] && return 0
+    report_phase error "bootstrap exited $_rc"
+}
+trap flagship_on_error EXIT
 report_phase installing
 
 # Persist install-time facts the daemon reads on every boot.
@@ -720,6 +738,17 @@ date
 echo "[register] starting"
 cd /opt/flagship
 . /etc/flagship-bootstrap.env
+# Canonical provisioning-status report (POST /api/order/<serial>/status). On the
+# plain path the deferred register is where the registering phase first fires —
+# the encrypted path already reported it inline before its in-target register,
+# so its registered.flag makes this unit skip (no double-emit). Best-effort.
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+report_phase() {
+    curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+        --data '{"phase":"'"$1"'"}' \\
+        "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+}
+report_phase registering
 npx tsx scripts/install-helper.ts sign-server-register \\
     --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
     --auth-code-blob /var/flagship/install-blob.json \\
@@ -740,6 +769,7 @@ SERVER_DOMAIN=$SERVER_DOMAIN
 USERNAME=$USERNAME
 SERVER_NAME=$SERVER_NAME
 REGISTRATION_URL=$REGISTRATION_URL
+AUTH_CODE_SERIAL=$AUTH_CODE_SERIAL
 SERVER_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
 ENV
 chmod 600 /etc/flagship-bootstrap.env
@@ -752,6 +782,10 @@ systemctl enable flagship-daemon.service flagship-first-boot-register.service ||
     echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
 echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
 ${wifiSafetyNet}
+# Reached the end cleanly — disarm the error trap so the EXIT handler doesn't
+# misfire a terminal error phase on a 0 exit. On the encrypted path the LUKS
+# block is spliced in just ABOVE this line, so the trap still covers the re-key.
+trap - EXIT
 date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
 `;
@@ -895,9 +929,15 @@ echo "[flagship-bootstrap] Wi-Fi safety-net installed + enabled"
  */
 function buildBootstrapScriptEncrypted(args: BootstrapTemplateArgs): string {
   const plain = buildBootstrapScriptPlain(args);
-  // Splice the LUKS block in just before the plain script's final two lines
-  // (installed.flag + "done"), so the shared body is reused verbatim.
-  const tail = `date > /var/flagship/installed.flag
+  // Splice the LUKS block in just before the plain script's final lines (the
+  // error-trap disarm + installed.flag + "done"), so the shared body is reused
+  // verbatim AND the EXIT error-trap still covers the destructive LUKS re-key
+  // (the disarm runs only after the LUKS block completes cleanly).
+  const tail = `# Reached the end cleanly — disarm the error trap so the EXIT handler doesn't
+# misfire a terminal error phase on a 0 exit. On the encrypted path the LUKS
+# block is spliced in just ABOVE this line, so the trap still covers the re-key.
+trap - EXIT
+date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
 `;
   const luks = buildLuksBootstrapBlock(args.bootUnlockMode, args.bootHost, args.family ?? "ubuntu");

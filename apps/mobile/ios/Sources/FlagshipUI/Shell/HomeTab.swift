@@ -216,25 +216,26 @@ public struct HomeTab: View {
                 }
             )
         case .installProgress(let serial, let name, let description):
-            InstallProgressContainer(serial: serial, podName: name) { fqdn in
-                addOnlinePodAndDismiss(name: name, description: description, fqdn: fqdn)
+            // Provisioning now renders the SINGLE canonical timeline
+            // (PendingServerScreen → ProvisionTimelineViewModel → order-
+            // status). Synthesize a pending pod keyed by the auth-code
+            // serial; cancelling drops back home. (Same surface a tapped
+            // pending pod card opens — there is no separate install screen.)
+            PendingServerScreen(
+                pod: PodInfo(
+                    podId: "pending-\(serial)",
+                    name: name,
+                    description: description.isEmpty ? nil : description,
+                    fqdn: "",
+                    status: .pending,
+                    pendingAuthCodeSerial: serial
+                )
+            ) {
+                path.removeAll()
             }
         }
     }
 
-    private func addOnlinePodAndDismiss(name: String, description: String, fqdn: String? = nil) {
-        let user = app.currentUser ?? "you"
-        let slug = SlugUtil.slugify(name)
-        let pod = PodInfo(
-            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
-            name: name,
-            description: description.isEmpty ? nil : description,
-            fqdn: fqdn ?? "\(slug).\(user).flagship.services",
-            status: .online
-        )
-        app.addPod(pod)
-        path.removeAll()
-    }
 
     private func addPendingPod(name: String, description: String, fqdn: String, serial: String) {
         let pod = PodInfo(
@@ -469,35 +470,6 @@ struct DemoInstallProgressContainer: View {
             onAfterCancel()
         } else {
             toasts.warning("Couldn't cancel — try again in a moment.")
-        }
-    }
-}
-
-struct InstallProgressContainer: View {
-    let serial: String
-    let podName: String?
-    let onFinish: (String) -> Void
-    @Environment(\.screensClient) private var client
-    @Environment(\.flagshipServerClient) private var server
-    @State private var vm: InstallProgressViewModel?
-
-    init(serial: String, podName: String? = nil, onFinish: @escaping (String) -> Void) {
-        self.serial = serial
-        self.podName = podName
-        self.onFinish = onFinish
-    }
-
-    var body: some View {
-        ZStack {
-            FSColors.scheme(.light).bg.ignoresSafeArea()
-            if let vm {
-                InstallProgressScreen(vm: vm, onFinish: onFinish)
-            } else {
-                ProgressView()
-            }
-        }
-        .task {
-            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client, podName: podName, server: server) }
         }
     }
 }

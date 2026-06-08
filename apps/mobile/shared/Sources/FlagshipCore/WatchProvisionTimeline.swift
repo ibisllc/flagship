@@ -165,36 +165,4 @@ public extension WatchProtocol {
         }
     }
 
-    /// Map a fine-grained wire PROVISION_PHASES string (the push event
-    /// vocabulary — `boot`, `cloned`, `deps`, `cert-issued`, ...) onto
-    /// the 8-phase `ProvisionStatusPhase.rawValue` ladder the watch
-    /// renders. Many fine wire phases collapse onto one rung — same
-    /// kind of coarse fold the iPhone's InstallProgressViewModel.Step
-    /// mapping does for the Live Activity.
-    enum ProvisionPhaseMapping {
-        public static func map(_ wire: String) -> String {
-            switch wire {
-            case "boot":                    return "booting"
-            case "cloned":                  return "downloading"
-            case "deps", "built":           return "installing"
-            case "identity", "registered":  return "registering"
-            case "tunnel-online":           return "pairing"
-            case "acme-order",
-                 "dns01-publish-attempt",
-                 "dns01-publish-ok",
-                 "dns01-propagation-wait",
-                 "tlsalpn-served",
-                 "acme-validating",
-                 "cert-issued":             return "sealing"
-            case "ready":                   return "live"
-            case "failed":                  return "error"
-            // Already a ladder phase (daemon's structured status channel
-            // can post these directly).
-            case "booting", "downloading", "partitioning", "installing",
-                 "registering", "sealing", "pairing", "live", "error":
-                return wire
-            default:                        return wire
-            }
-        }
-    }
 }

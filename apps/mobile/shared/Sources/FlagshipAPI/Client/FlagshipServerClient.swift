@@ -695,19 +695,78 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         .registering, .sealing, .pairing, .live,
     ]
 
-    /// Human, on-brand title for each step.
+    /// Human, on-brand title for each step. THE single source of phase
+    /// titles for every iOS/watch/widget/push surface — byte-identical
+    /// to `PHASE_TITLES` in packages/control-plane/src/provisionStatus.ts
+    /// so the in-app copy matches the push banner the user just tapped.
     public var title: String {
         switch self {
-        case .booting:      return "Booting"
-        case .downloading:  return "Downloading system"
-        case .partitioning: return "Preparing disk"
+        case .booting:      return "Booting up"
+        case .downloading:  return "Downloading"
+        case .partitioning: return "Partitioning disk"
         case .installing:   return "Installing"
         case .registering:  return "Registering with Flagship"
-        case .sealing:      return "Sealing your disk"
-        case .pairing:      return "Pairing"
-        case .live:         return "Server is live"
-        case .error:        return "Provisioning failed"
+        case .sealing:      return "Sealing your disk key"
+        case .pairing:      return "Pairing with your phone"
+        case .live:         return "Your server is live"
+        case .error:        return "Setup hit a problem"
         case .unknown:      return "Working…"
+        }
+    }
+
+    /// Longer body copy per phase — byte-identical to `PHASE_BODIES` in
+    /// provisionStatus.ts (the push body source). The error body is
+    /// "Setup failed: <detail>" when a detail is present; consumers
+    /// compose that themselves.
+    public var body: String {
+        switch self {
+        case .booting:      return "Your server has booted and started setting itself up."
+        case .downloading:  return "Downloading the server software."
+        case .partitioning: return "Preparing the disk."
+        case .installing:   return "Installing the server software."
+        case .registering:  return "Your server is checking in with Flagship."
+        case .sealing:      return "Sealing your encrypted disk key."
+        case .pairing:      return "Your server is pairing with your phone."
+        case .live:         return "Your server is live and ready to use."
+        case .error:        return "Setup ran into a problem."
+        case .unknown:      return ""
+        }
+    }
+
+    /// The canonical UI group this phase rolls up into. Mirrors the
+    /// contract projection table (design §1.2) — every iOS/Android/
+    /// webapp grouped ladder derives the SAME grouping from this:
+    ///   Booting     ← booting, downloading, partitioning
+    ///   Installing  ← installing
+    ///   Registering ← registering, pairing
+    ///   Securing    ← sealing
+    ///   Ready       ← live
+    /// (`error` fails the currently-active group; it has no group of its
+    /// own and is handled separately by the renderer.)
+    public enum Group: String, Sendable, Equatable, CaseIterable {
+        case booting, installing, registering, securing, ready
+
+        public var label: String {
+            switch self {
+            case .booting:      return "Booting"
+            case .installing:   return "Installing"
+            case .registering:  return "Registering"
+            case .securing:     return "Securing"
+            case .ready:        return "Ready"
+            }
+        }
+    }
+
+    /// Maps a ladder phase onto its canonical UI group. `error`/`unknown`
+    /// have no own group → nil (the renderer fails the active group).
+    public var group: Group? {
+        switch self {
+        case .booting, .downloading, .partitioning: return .booting
+        case .installing:                           return .installing
+        case .registering, .pairing:                return .registering
+        case .sealing:                              return .securing
+        case .live:                                 return .ready
+        case .error, .unknown:                      return nil
         }
     }
 

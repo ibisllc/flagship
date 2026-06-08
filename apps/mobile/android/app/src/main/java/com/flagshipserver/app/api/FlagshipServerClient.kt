@@ -36,6 +36,17 @@ interface FlagshipServerClient {
      *  `revokeServer` + the iOS `revokeServer` shape. */
     suspend fun revokeServer(req: ServerRevocationRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
+
+    /** Canonical provisioning-progress poll — GET /api/order/<serial>/status
+     *  on flagshipserver.com (the control plane; NOT session-gated — the
+     *  box is still installing and no pod exists yet). Returns the latest
+     *  phase + append-only history, or `null` when the box hasn't reported
+     *  yet (the Worker answers 404 → "no record yet" → render booting
+     *  lead-in / pending). This is the ONE provisioning channel; the SSE
+     *  `install-events` flow on ScreensClient is debug-only. Mirrors iOS
+     *  `FlagshipServerClient.fetchProvisionStatus`. */
+    suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord?
+
     suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse
     suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope
 
@@ -998,6 +1009,12 @@ class MockFlagshipServerClient(
      *  `demoServer` block from the user-part row. See
      *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
     var deviceCapabilities: MutableMap<String, DeviceCapabilityBlock> = mutableMapOf(),
+    /** Canonical provisioning channel — mirror of the Worker's
+     *  `provision_status` table, keyed by auth-code SERIAL. When a serial
+     *  is present here, [fetchProvisionStatus] returns the record; absent ⇒
+     *  null (the Worker's 404 "no record yet"). Tests / previews script a
+     *  progression by mutating this map. */
+    var provisionStatuses: MutableMap<String, ProvisionStatusRecord> = mutableMapOf(),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
 
@@ -1134,6 +1151,12 @@ class MockFlagshipServerClient(
             return UsernameAvailabilityResponse(lower, false, "Already claimed.", demoServer = demoBlock)
         }
         return UsernameAvailabilityResponse(lower, true, null, demoServer = demoBlock)
+    }
+
+    override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? {
+        tick()
+        // Absent serial mirrors the Worker's 404 "no record yet" → null.
+        return provisionStatuses[serial]
     }
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse {
@@ -1804,6 +1827,24 @@ class LiveFlagshipServerClient(
             serializer = UsernameAvailabilityCheckBody.serializer(),
             responseSerializer = UsernameAvailabilityResponse.serializer(),
         )
+
+    override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? {
+        // GET /api/order/<serial>/status — 200 carries the record; 404
+        // means "no report yet" → surface as null (the poller renders the
+        // booting lead-in). accept={200,404} so a missing record isn't an
+        // exception.
+        val encoded = java.net.URLEncoder.encode(serial, "UTF-8")
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/order/$encoded/status",
+            accept = setOf(200, 404),
+        )
+        if (resp.status == 404) return null
+        return transport.json.decodeFromString(
+            ProvisionStatusRecord.serializer(),
+            resp.body.decodeToString(),
+        )
+    }
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse =
         transport.postJsonForResponse(

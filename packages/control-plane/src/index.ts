@@ -52,5 +52,4 @@ export * from "./certRevocation.js";
 export * from "./demoUsersAdmin.js";
 export * from "./demoUsersAdminProvision.js";
 export * from "./demoUsersAdminCloudInit.js";
-export * from "./provisionEvents.js";
 export * from "./personalizeIso.js";

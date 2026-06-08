@@ -263,10 +263,12 @@ describe("provision status channel", () => {
     expect(pushFanout).not.toHaveBeenCalled();
   });
 
-  it("unknown order (no owner) → still returns ok, no push", async () => {
+  it("unknown serial under a wired auth-code gate → 403, nothing stored, no push", async () => {
     const storage = new InMemoryStorage();
     const pushFanout = vi.fn(async () => {});
 
+    // With AuthCodeStorage wired (production), the POST is gated on the serial
+    // mapping to a real auth-code. No order seeded → reject.
     const res = await handlePostProvisionStatus(
       {
         storage: storage.provisionStatus,
@@ -278,14 +280,93 @@ describe("provision status channel", () => {
       { phase: "live" },
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     expect(pushFanout).not.toHaveBeenCalled();
-    // The phase was still stored.
+    // Nothing was stored — the gate ran before the write.
+    const get = await handleGetProvisionStatus(
+      { storage: storage.provisionStatus },
+      SERIAL,
+    );
+    expect(get.status).toBe(404);
+  });
+
+  it("without an auth-code gate (dev) any serial-shaped POST is accepted", async () => {
+    const storage = new InMemoryStorage();
+    // No `authCodes` dep → the gate is off; the phase still stores.
+    const res = await handlePostProvisionStatus(
+      { storage: storage.provisionStatus },
+      SERIAL,
+      { phase: "live" },
+    );
+    expect(res.status).toBe(200);
     const get = await handleGetProvisionStatus(
       { storage: storage.provisionStatus },
       SERIAL,
     );
     expect((get.body as { phase: string }).phase).toBe("live");
+  });
+
+  it("only milestone phases ring a push; the rest update the polled stream silently", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice");
+    const pushFanout = vi.fn(async () => {});
+    const deps = {
+      storage: storage.provisionStatus,
+      authCodes: storage.authCodes,
+      pushTokens: storage.pushTokens,
+      pushFanout,
+    };
+
+    // Non-milestone phases store but do NOT push.
+    for (const phase of ["booting", "downloading", "partitioning", "installing", "pairing"]) {
+      const r = await handlePostProvisionStatus(deps, SERIAL, { phase });
+      expect(r.status).toBe(200);
+    }
+    expect(pushFanout).not.toHaveBeenCalled();
+
+    // Milestone phases push.
+    for (const phase of ["registering", "sealing", "live", "error"]) {
+      await handlePostProvisionStatus(deps, SERIAL, { phase });
+    }
+    expect(pushFanout).toHaveBeenCalledTimes(4);
+  });
+
+  it("mirrors the canonical phase onto a provisioning demo_users row", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice", { withToken: false });
+    // A provisioning demo row owned by the same user.
+    await storage.demoUsers.insert({
+      username: "alice",
+      display: "Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: "srv-1",
+      activeServerFqdn: "home.alice.flagship.services",
+      lastActivityAt: 1_000,
+      state: "provisioning",
+      createdAt: 1_000,
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
+    });
+
+    const res = await handlePostProvisionStatus(
+      {
+        storage: storage.provisionStatus,
+        authCodes: storage.authCodes,
+        demoUsers: storage.demoUsers,
+        now: () => 42,
+      },
+      SERIAL,
+      { phase: "installing" },
+    );
+    expect(res.status).toBe(200);
+    const row = await storage.demoUsers.get("alice");
+    expect(row?.provisionPhase).toBe("installing");
+    expect(row?.provisionPhaseAt).toBe(42);
   });
 
   it("a push-fan-out failure does not fail the status POST", async () => {

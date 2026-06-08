@@ -3,26 +3,24 @@ import Observation
 import FlagshipAPI
 import FlagshipCore
 
-/// Polls flagshipserver.com `/api/install-events/<serial>` for each
-/// pending pod and:
+/// Polls flagshipserver.com `GET /api/order/<serial>/status` (the single
+/// canonical provisioning channel) for each pending pod and:
 ///
-///   - Maps each new install-event into an
-///     `InstallProgressViewModel.Step` and fires the
-///     `InstallProgressBridge` callbacks so the Live Activity card
-///     advances on the Lock Screen / Dynamic Island.
-///   - On the terminal `ready` event, flips the pod's status
-///     from `.pending` to `.online` in AppState. The Home tab's
-///     pod card and the Pod Status Widget then reflect the new
-///     state on their next render.
-///   - On `failed`, leaves the pod pending and fires
-///     `InstallProgressBridge.onFailed` so the Live Activity ends
-///     with the failure card (user can tap Cancel Order from the
-///     pending pod's detail page).
+///   - Fires `InstallProgressBridge.onStep(phase:)` for each newly-seen
+///     `ProvisionStatusPhase` so the Live Activity card advances on the
+///     Lock Screen / Dynamic Island.
+///   - On the terminal `.live` phase, flips the pod's status from
+///     `.pending` to `.online` in AppState (using the canonical
+///     `serverDomain`). The Home tab's pod card and the Pod Status Widget
+///     then reflect the new state on their next render.
+///   - On `.error`, leaves the pod pending and fires
+///     `InstallProgressBridge.onFailed` so the Live Activity ends with the
+///     failure card (the user can tap Cancel Order from the pending pod's
+///     detail page).
 ///
-/// One watcher per pending pod. Lifetime: from .pending → terminal
-/// event or pod removal. Polling cadence: 5s while pending, with a
-/// soft cap of 1 hour so an abandoned install eventually stops
-/// burning battery.
+/// One watcher per pending pod. Lifetime: from .pending → terminal phase
+/// or pod removal. Polling cadence: 5s while pending, with a soft cap of
+/// 1 hour so an abandoned install eventually stops burning battery.
 @MainActor
 @Observable
 public final class PendingPodWatcher {
@@ -33,14 +31,27 @@ public final class PendingPodWatcher {
     private let podId: String
     private let app: AppState
     private let server: any FlagshipServerClient
-    private var cursor: Int = 0
+    /// Nanoseconds between polls. Defaults to 5s in production; tests
+    /// inject a tiny value to drive a multi-step progression fast.
+    private let pollIntervalNanos: UInt64
+    /// Index into `ProvisionStatusPhase.ordered` of the furthest phase
+    /// whose `onStep` we've already fired — so we don't re-fire a phase
+    /// the canonical channel keeps reporting on every poll.
+    private var firedThroughIndex: Int = -1
     private var task: Task<Void, Never>?
 
-    public init(serial: String, podId: String, app: AppState, server: any FlagshipServerClient) {
+    public init(
+        serial: String,
+        podId: String,
+        app: AppState,
+        server: any FlagshipServerClient,
+        pollIntervalNanos: UInt64 = PendingPodWatcher.pollInterval
+    ) {
         self.serial = serial
         self.podId = podId
         self.app = app
         self.server = server
+        self.pollIntervalNanos = pollIntervalNanos
     }
 
     public func start() {
@@ -55,7 +66,7 @@ public final class PendingPodWatcher {
                 if !self.podStillPending() { return }
                 let terminal = await self.pollOnce()
                 if terminal { return }
-                try? await Task.sleep(nanoseconds: Self.pollInterval)
+                try? await Task.sleep(nanoseconds: self.pollIntervalNanos)
             }
         }
     }
@@ -70,40 +81,46 @@ public final class PendingPodWatcher {
         return pod.status == .pending
     }
 
-    /// One poll round-trip. Returns true if a terminal event was
-    /// observed (so the outer loop can return without sleeping).
+    /// One poll round-trip. Returns true if a terminal phase was observed
+    /// (so the outer loop can return without sleeping).
     private func pollOnce() async -> Bool {
-        let resp: InstallEventsPollResponse
-        do {
-            resp = try await server.getInstallEvents(serial: serial, since: cursor)
-        } catch {
-            // Treat network errors as "try again next tick" — don't
-            // surface to the user (the install card already shows
-            // "boot disk on the way"; a 5s blip isn't noteworthy).
+        // The single canonical channel. nil on a 404 (no checkpoint yet)
+        // or a network blip — treat as "try again next tick" (the install
+        // card already shows "boot disk on the way"; a 5s gap isn't
+        // noteworthy).
+        guard let status = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil else {
             return false
         }
-        cursor = resp.cursor
-        for record in resp.events {
-            if let step = Self.mapStep(record.eventName) {
-                InstallProgressBridge.shared.onStep?(step)
-            }
-            if record.eventName == "ready" {
-                let fqdn = record.detail.isEmpty ? nil : record.detail
-                flipPodToOnline(fqdn: fqdn)
-                InstallProgressBridge.shared.onComplete?(record.detail)
-                return true
-            }
-            if record.eventName == "failed" {
-                InstallProgressBridge.shared.onFailed?(record.detail)
-                return true
+
+        // Fire onStep for each newly-reached non-terminal ladder phase so
+        // the Live Activity advances monotonically.
+        if let idx = ProvisionStatusPhase.ordered.firstIndex(of: status.phase) {
+            while firedThroughIndex < idx {
+                firedThroughIndex += 1
+                let phase = ProvisionStatusPhase.ordered[firedThroughIndex]
+                if phase != .live {
+                    InstallProgressBridge.shared.onStep?(phase)
+                }
             }
         }
-        return false
+
+        switch status.phase {
+        case .live:
+            let fqdn = (status.serverDomain?.isEmpty ?? true) ? nil : status.serverDomain
+            flipPodToOnline(fqdn: fqdn)
+            InstallProgressBridge.shared.onComplete?(fqdn ?? "")
+            return true
+        case .error:
+            InstallProgressBridge.shared.onFailed?(status.detail ?? "Setup hit a problem")
+            return true
+        default:
+            return false
+        }
     }
 
-    /// Replace the pod's PodInfo with an .online copy. Preserves
-    /// podId, name, description, leader-ness, current-pod-ness so
-    /// the user's selection state is undisturbed.
+    /// Replace the pod's PodInfo with an .online copy. Preserves podId,
+    /// name, description, leader-ness, current-pod-ness so the user's
+    /// selection state is undisturbed.
     private func flipPodToOnline(fqdn: String?) {
         guard let idx = app.pods.firstIndex(where: { $0.podId == podId }) else { return }
         let old = app.pods[idx]
@@ -120,20 +137,6 @@ public final class PendingPodWatcher {
         // so it isn't re-added as pending on the next launch.
         if let user = app.currentUser, !user.isEmpty {
             PendingServerStore().remove(username: user, podId: old.podId)
-        }
-    }
-
-    static func mapStep(_ eventName: String) -> InstallProgressViewModel.Step? {
-        switch eventName {
-        case "d-i-started":       return .started
-        case "partitioning":      return .partitioning
-        case "installer-running": return .installing
-        case "registered":   return .registered
-        case "boot":         return .boot
-        case "tunnel-online": return .tunnelOnline
-        case "cert-issued":  return .certIssued
-        case "ready":        return .ready
-        default:             return nil
         }
     }
 }

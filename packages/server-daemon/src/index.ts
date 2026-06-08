@@ -2,12 +2,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ed,
-  isProvisionPhase,
-  signProvisionEvent,
   signServerRevokeBySelf,
   type Keypair,
-  type ProvisionEvent,
-  type ProvisionPhase,
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
@@ -402,26 +398,16 @@ async function main(): Promise<void> {
   additionalHandlers.push(adminProxyHandle);
   additionalHandlers.push(identityRotateHandle);
 
-  // Provisioning-observability reporter, bound to this daemon's identity
-  // + control plane. Used to push daemon-side phase checkpoints
-  // (tunnel-online → cert-issued → ready) and a terminal failed{}.
-  const reportPhase = (phase: ProvisionPhase, error?: string) =>
-    reportProvisionPhase({
-      serverFqdn: env.serverFqdn!,
-      identity: identityKeypair,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-      phase,
-      ...(error !== undefined ? { error } : {}),
-    });
-
-  // Provisioning-STATUS reporter — the per-order channel the phone polls
-  // (POST /api/order/<serial>/status). Distinct from the signed
-  // provision-event channel above: keyed by the order serial, it carries
-  // the two phases the bootstrap can't (the daemon's pairing handoff +
-  // the genuine first-serve). Best-effort + idempotent (one POST per
-  // phase transition — repeated calls for an already-reported phase are
-  // dropped so renewals / retries don't spam .com). Disabled (a no-op)
-  // when no serial was baked through.
+  // Provisioning-STATUS reporter — the SINGLE canonical channel the phone
+  // polls (POST /api/order/<serial>/status). The box bootstrap reports the
+  // install-time phases (booting → … → sealing); the daemon adds the two only
+  // it can know — `pairing` (entitlement loaded, handoff complete) and `live`
+  // (cert serving) — plus the terminal `error`. The legacy signed
+  // provision-event channel is RETIRED: ACME sub-phases stay in the daemon log
+  // (observability), never their own UI vocabulary. Best-effort + idempotent
+  // (one POST per phase — repeats for an already-reported phase are dropped so
+  // renewals / retries don't spam .com). Disabled (a no-op) when no serial was
+  // baked through.
   const reportedStatusPhases = new Set<string>();
   const reportStatus = (phase: ProvisionStatusPhase, detail?: string) => {
     if (!orderSerial) return;
@@ -460,11 +446,8 @@ async function main(): Promise<void> {
       console.log(
         `[daemon] no entitlement bundle on disk; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
       );
-      // Best-effort observability: report `awaiting-entitlement` only if the
-      // protocol recognizes it as a phase (it is not abused as `failed`).
-      if (isProvisionPhase("awaiting-entitlement")) {
-        void reportPhase("awaiting-entitlement" as ProvisionPhase);
-      }
+      // The awaiting-entitlement handoff is covered by the `pairing` status
+      // report fired once the bundle loads below — no separate UI phase.
       const relayed = await fetchEntitlementViaRelay({
         serverDomain: env.serverFqdn!,
         identity: identityKeypair,
@@ -516,7 +499,7 @@ async function main(): Promise<void> {
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
     console.error(`[daemon] entitlement bundle load failed: ${msg}`);
-    await reportPhase("failed", `entitlements: ${msg}`.slice(0, 280));
+    await reportStatus("error", `entitlements: ${msg}`.slice(0, 280));
     process.exit(1);
   }
 
@@ -532,45 +515,33 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
-      // Push a `cert-issued` THEN `ready` checkpoint the moment ACME
-      // completes (and again on every renewal — harmless, the phone just
-      // refreshes the phase timestamp). Cert acquisition is now
-      // asynchronous + retried in-process (the daemon stays up across
-      // transient ACME failures rather than process.exit-ing), so `ready`
-      // is gated here on the cert actually landing — not emitted eagerly
-      // when startDaemonRuntime resolves (which now happens BEFORE the
-      // first cert attempt). `tunnel-online` is emitted right after the
-      // runtime resolves since the tunnel IS connected by then.
+      // The cert has landed and HTTPS is genuinely serving — the real
+      // "your server is live" moment. Report it ONCE on the single canonical
+      // channel (idempotent: only the first cert/renewal POSTs `live`). Cert
+      // acquisition is async + retried in-process (the daemon stays up across
+      // transient ACME failures rather than process.exit-ing), so `live` is
+      // gated here on the cert actually landing — not when startDaemonRuntime
+      // resolves (which happens BEFORE the first cert attempt).
       onCertIssued: () => {
-        // Sequence the two reports. As fire-and-forget `void` calls they
-        // race, and `cert-issued` frequently lands at .com AFTER `ready`
-        // and overwrites it — so the phase stalls at `cert-issued` even
-        // though the cert is live and serving (observed: demoent4). Chain
-        // them so `ready` is always the last phase stored.
-        void reportPhase("cert-issued")
-          .catch(() => {})
-          .then(() => reportPhase("ready"))
-          .catch(() => {})
-          // The cert has landed and HTTPS is genuinely serving — this is
-          // the real "your server is live" moment. Tell the per-order
-          // status channel (idempotent: only the first cert/renewal POSTs
-          // `live`).
-          .then(() => reportStatus("live"));
+        void reportStatus("live");
       },
-      // Fine-grained ACME observability — map each issuer sub-phase onto
-      // a signed ProvisionEvent so a stuck cert is locatable from the
-      // phone + a public `dig` with no box access. The sub-phase strings
-      // are a subset of PROVISION_PHASES; guard with isProvisionPhase so
-      // an unexpected value can never throw here.
+      // Fine-grained ACME observability stays in the daemon log only — it is
+      // NOT its own UI vocabulary on the canonical channel (the `sealing`/
+      // `live` window covers it for the phone). Pass an optional detail string
+      // through on the (still un-`live`) sealing window so a stuck cert is
+      // locatable, without minting a new phase. `reportStatus` is idempotent
+      // per phase, so this only refreshes the detail until `live` lands.
       onAcmePhase: (phase) => {
-        if (isProvisionPhase(phase)) void reportPhase(phase);
+        if (typeof phase === "string" && phase.length > 0) {
+          void reportStatus("sealing", `acme: ${phase}`.slice(0, 280));
+        }
       },
-      // An ACME attempt failed — the runtime backs off + retries
-      // IN-PROCESS (the box stays up so LE can reach it for TLS-ALPN-01
-      // and DNS-01 has time to propagate). Surface the real error as a
-      // `failed` phase so the phone shows the cause, but DO NOT exit.
+      // An ACME attempt failed — the runtime backs off + retries IN-PROCESS
+      // (the box stays up so LE can reach it for TLS-ALPN-01 and DNS-01 has
+      // time to propagate). Surface the real cause as the terminal canonical
+      // `error` phase so the phone shows it, but DO NOT exit.
       onCertAttemptFailed: (attempt, error) => {
-        void reportPhase("failed", `acme attempt ${attempt}: ${error}`.slice(0, 280));
+        void reportStatus("error", `acme attempt ${attempt}: ${error}`.slice(0, 280));
       },
       orders,
       servicePlatform: {
@@ -594,13 +565,12 @@ async function main(): Promise<void> {
     console.log(
       `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,
     );
-    // startDaemonRuntime now resolves once the tunnel is connected and
-    // the local API + TLS server are serving — BEFORE the first ACME
-    // attempt (cert acquisition is async + retried so a transient ACME
-    // failure can't take the box down). Emit `tunnel-online` here; the
-    // ACME sub-phases stream in via `onAcmePhase`, and `cert-issued` +
-    // `ready` fire from `onCertIssued` once the cert actually lands.
-    void reportPhase("tunnel-online");
+    // startDaemonRuntime now resolves once the tunnel is connected and the
+    // local API + TLS server are serving — BEFORE the first ACME attempt
+    // (cert acquisition is async + retried so a transient ACME failure can't
+    // take the box down). The tunnel-online milestone is no longer its own UI
+    // phase: the canonical channel already shows `pairing` (entitlement loaded)
+    // and advances to `live` from `onCertIssued` once the cert lands.
 
     // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
     // surface now that runtime.servicePlatform / appBackup / urlController
@@ -836,11 +806,10 @@ async function main(): Promise<void> {
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
     console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
-    // Surface the terminal failure to the phone before exiting. The
-    // phase is "ready" because that's the step we were trying to reach
-    // (tunnel + cert + serving); the error carries the real cause.
-    // Await briefly so the POST has a chance to land before exit.
-    await reportPhase("failed", `startup: ${msg}`.slice(0, 280));
+    // Surface the terminal failure to the phone on the single canonical
+    // channel before exiting; the detail carries the real cause. Await briefly
+    // so the POST has a chance to land before exit.
+    await reportStatus("error", `startup: ${msg}`.slice(0, 280));
     process.exit(1);
   }
 
@@ -1120,49 +1089,6 @@ function bytesEqualLocal(a: Uint8Array, b: Uint8Array): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
-}
-
-/**
- * Provisioning observability — push a named daemon-side PHASE checkpoint
- * to .com so the phone's install-progress can track the box past
- * `registered` (tunnel-online → cert-issued → ready) and surface a
- * terminal `failed{phase,error}`.
- *
- * Ed25519-signed by the server identity (same key + posture as
- * daemon-status). ALWAYS fail-open: a dropped checkpoint just leaves the
- * phone on the prior phase until the next one lands — it MUST NEVER
- * abort the daemon. So every failure is swallowed.
- */
-async function reportProvisionPhase(args: {
-  serverFqdn: string;
-  identity: Keypair;
-  controlPlaneBaseUrl: string;
-  phase: ProvisionPhase;
-  error?: string;
-}): Promise<void> {
-  try {
-    const issuedAt = Date.now();
-    const event: ProvisionEvent = {
-      serverDomain: args.serverFqdn,
-      phase: args.phase,
-      error: args.error ?? "",
-      issuedAt,
-    };
-    const sig = signProvisionEvent(event, args.identity);
-    const url = `${args.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/server/${encodeURIComponent(args.serverFqdn)}/provision-event`;
-    await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        phase: args.phase,
-        error: args.error ?? "",
-        issuedAt,
-        signature: bytesToHexLocal(sig),
-      }),
-    });
-  } catch {
-    // Observability is best-effort; never let it break the daemon.
-  }
 }
 
 /**

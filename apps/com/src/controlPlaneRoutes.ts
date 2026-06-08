@@ -85,7 +85,6 @@ import {
   handleAccountResolve,
   handleGetAuditEvents,
   handlePostDaemonStatus,
-  handlePostProvisionEvent,
   handleUserPubKeyCert,
   buildPushForwarder,
   wrapForwarderAsV12Fanout,
@@ -390,7 +389,6 @@ const ROUTE_RE = {
   PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
-  PROVISION_EVENT: /^\/api\/server\/([^/]+)\/provision-event$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
   LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
@@ -1357,26 +1355,11 @@ export async function tryControlPlane(
       ),
     );
   }
-  // Provisioning observability — the box pushes a named PHASE checkpoint
-  // here at each step (bootstrap auth-code-serial channel + daemon
-  // signed channel). .com stores the latest phase + fans out a native
-  // push so the phone's install-progress Live Activity tracks it live.
-  if (method === "POST" && (m = path.match(ROUTE_RE.PROVISION_EVENT))) {
-    const peFanout = buildOptionalV12PushFanout(env);
-    return finish(
-      await handlePostProvisionEvent(
-        {
-          demoUsers: storage.demoUsers,
-          servers: storage.servers,
-          authCodes: storage.authCodes,
-          pushTokens: storage.pushTokens,
-          ...(peFanout ? { pushFanout: peFanout } : {}),
-        },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
-      ),
-    );
-  }
+  // NOTE: the legacy signed provision-event channel (C) is RETIRED — the box +
+  // daemon now report every provisioning phase to the single canonical
+  // order-status channel (POST /api/order/<serial>/status), and the demo VPS
+  // bootstrap posts there too. The provision_event D1 table is retained as a
+  // workspace artifact, but there is no route in front of it.
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_INITIATE))) {
     const rePairFanout = buildOptionalV12PushFanout(env);
     return finishPlain(
@@ -1688,6 +1671,10 @@ export async function tryControlPlane(
           // handler — a push failure never fails the status write.
           authCodes: storage.authCodes,
           pushTokens: storage.pushTokens,
+          // Mirror the canonical phase onto the owner's demo_users row so the
+          // demo install-progress timeline reads off this same channel (the
+          // demo VPS bootstrap posts here now). Best-effort inside the handler.
+          demoUsers: storage.demoUsers,
           ...(psFanout ? { pushFanout: psFanout } : {}),
         },
         decodeURIComponent(m[1]!),

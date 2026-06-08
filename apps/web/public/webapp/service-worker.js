@@ -307,6 +307,36 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  // Provisioning-status push — the SINGLE canonical provisioning payload
+  // (design §2.3). Recognised by `category === "provision-status"` (or
+  // `meta.kind`); `meta.phase` is a canonical ProvisionStatusPhase. iOS +
+  // Android parse this identical shape. We render ONE notification and
+  // deep-link to the install-progress view.
+  const isProvisionStatus =
+    data &&
+    (data.category === "provision-status" ||
+      (data.meta && data.meta.kind === "provision-status"));
+  if (isProvisionStatus) {
+    const title = typeof data.title === "string" ? data.title : "Flagship";
+    const psBody =
+      typeof data.body === "string" ? data.body : "Your server is setting itself up.";
+    const phase =
+      data.meta && typeof data.meta.phase === "string" ? data.meta.phase : "";
+    const deepLink =
+      typeof data.deepLink === "string" ? data.deepLink : "/?view=install-progress";
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body: psBody,
+        tag: "flagship-provision-status",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "provision-status", phase, deepLink },
+      }),
+    );
+    return;
+  }
+
   // Generic fallback for any other (or empty) payload.
   const body = (data && typeof data.body === "string")
     ? data.body

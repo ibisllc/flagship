@@ -1,56 +1,36 @@
 import Foundation
+import FlagshipAPI
 
-/// Provisioning progress model for the "your server is being installed"
-/// UI. Swift mirror of packages/protocol/src/provisionProgress.ts — the
-/// fraction, the four-group labels, and the per-step states must match
-/// the webapp + Android renderers byte-for-byte (validated by the shared
-/// phase ladder + the conformance tests).
+/// Provisioning progress projection for the demo "your server is being
+/// installed" UI. Re-keyed onto the SINGLE canonical
+/// `ProvisionStatusPhase` vocabulary (`booting`…`live`/`error`) + the
+/// canonical UI group projection (design §1.2). The fraction, the group
+/// labels, and the per-step states match the webapp + Android renderers
+/// because all three derive from the same canonical phase ladder + group
+/// table.
+///
+/// Phase strings here are `ProvisionStatusPhase.rawValue` — the demo
+/// `DemoServerBlock.phase` carries canonical values (the Worker's
+/// demoUsers.ts emits them now). `live` is terminal success; `error` is
+/// terminal failure.
 public enum ProvisionProgress {
 
-    /// The fine-grained ladder, in order, EXCLUDING the terminal
-    /// `failed` phase. Mirror of PROVISION_PHASES minus `failed`.
-    public static let ladder: [String] = [
-        "boot",
-        "cloned",
-        "deps",
-        "built",
-        "identity",
-        "registered",
-        "tunnel-online",
-        "acme-order",
-        "dns01-publish-attempt",
-        "dns01-publish-ok",
-        "dns01-propagation-wait",
-        "tlsalpn-served",
-        "acme-validating",
-        "cert-issued",
-        "ready",
-    ]
+    /// The happy-path ladder, in order, EXCLUDING the terminal `error`.
+    /// Mirror of `ProvisionStatusPhase.ordered`.
+    public static let ladder: [String] = ProvisionStatusPhase.ordered.map(\.rawValue)
 
-    /// Human title per fine-grained phase. Lockstep with the protocol's
-    /// PROVISION_PHASE_TITLES + the control-plane push fan-out titles, so
-    /// the in-app step copy matches the push the user just tapped.
-    public static let phaseTitles: [String: String] = [
-        "boot": "Server booting",
-        "cloned": "Code cloned",
-        "deps": "Installing dependencies",
-        "built": "Build complete",
-        "identity": "Identity generated",
-        "registered": "Registered with Flagship",
-        "tunnel-online": "Tunnel online",
-        "acme-order": "Requesting certificate",
-        "dns01-publish-attempt": "Publishing DNS challenge",
-        "dns01-publish-ok": "DNS challenge published",
-        "dns01-propagation-wait": "Waiting for DNS",
-        "tlsalpn-served": "Serving TLS challenge",
-        "acme-validating": "Validating certificate",
-        "cert-issued": "TLS certificate issued",
-        "ready": "Server is live",
-        "failed": "Provisioning failed",
-    ]
+    /// Canonical title per phase — sourced from `ProvisionStatusPhase`
+    /// (provisionStatus.ts PHASE_TITLES). Includes the terminal `error`.
+    public static let phaseTitles: [String: String] = {
+        var m: [String: String] = [:]
+        for p in ProvisionStatusPhase.allCases where p != .unknown {
+            m[p.rawValue] = p.title
+        }
+        return m
+    }()
 
     public enum StepKey: String, Sendable, Equatable {
-        case booting, registering, securing, ready
+        case booting, installing, registering, securing, ready
     }
 
     public struct StepGroup: Sendable, Equatable {
@@ -59,23 +39,17 @@ public enum ProvisionProgress {
         public let phases: [String]
     }
 
-    /// The four user-facing groups, in order.
+    /// The canonical UI groups, in order (design §1.2 projection table).
     public static let stepGroups: [StepGroup] = [
         StepGroup(key: .booting, label: "Booting",
-                  phases: ["boot", "cloned", "deps", "built", "identity"]),
+                  phases: ["booting", "downloading", "partitioning"]),
+        StepGroup(key: .installing, label: "Installing",
+                  phases: ["installing"]),
         StepGroup(key: .registering, label: "Registering",
-                  phases: ["registered", "tunnel-online"]),
-        StepGroup(key: .securing, label: "Securing (TLS certificate)",
-                  phases: [
-                    "acme-order",
-                    "dns01-publish-attempt",
-                    "dns01-publish-ok",
-                    "dns01-propagation-wait",
-                    "tlsalpn-served",
-                    "acme-validating",
-                    "cert-issued",
-                  ]),
-        StepGroup(key: .ready, label: "Ready", phases: ["ready"]),
+                  phases: ["registering", "pairing"]),
+        StepGroup(key: .securing, label: "Securing",
+                  phases: ["sealing"]),
+        StepGroup(key: .ready, label: "Ready", phases: ["live"]),
     ]
 
     public enum StepState: String, Sendable, Equatable {
@@ -86,7 +60,7 @@ public enum ProvisionProgress {
         public let key: StepKey
         public let label: String
         public let state: StepState
-        /// Fine-grained phase title for the ACTIVE / FAILED group; nil
+        /// Canonical phase title for the ACTIVE / FAILED group; nil
         /// otherwise.
         public let detail: String?
         public init(key: StepKey, label: String, state: StepState, detail: String?) {
@@ -104,8 +78,8 @@ public enum ProvisionProgress {
     /// Map a phase to a 0..1 fraction for a determinate progress bar.
     public static func fraction(_ phase: String?) -> Double {
         guard let phase, !phase.isEmpty else { return 0 }
-        if phase == "ready" { return 1 }
-        if phase == "failed" { return 0 }
+        if phase == "live" { return 1 }
+        if phase == "error" { return 0 }
         guard let idx = ladder.firstIndex(of: phase) else { return 0 }
         return Double(idx + 1) / Double(ladder.count)
     }
@@ -116,20 +90,20 @@ public enum ProvisionProgress {
     }
 
     /// Project (phase, lastError, prevPhase) into the per-group checklist
-    /// every detail page renders. See the protocol module for the rules.
+    /// the demo install screen renders.
     public static func stepStates(
         phase: String?,
         lastError: String? = nil,
         prevPhase: String? = nil
     ) -> [StepView] {
-        if phase == "ready" {
+        if phase == "live" {
             return stepGroups.map {
                 StepView(key: $0.key, label: $0.label, state: .done, detail: nil)
             }
         }
 
-        if phase == "failed" {
-            let failedPhase = (prevPhase.map(isLadderPhase) ?? false) ? prevPhase! : "boot"
+        if phase == "error" {
+            let failedPhase = (prevPhase.map(isLadderPhase) ?? false) ? prevPhase! : "booting"
             let failedGroup = groupKey(forPhase: failedPhase)
             let failedIdx = stepGroups.firstIndex { $0.key == failedGroup } ?? 0
             return stepGroups.enumerated().map { (i, g) in
@@ -137,7 +111,7 @@ public enum ProvisionProgress {
                     return StepView(key: g.key, label: g.label, state: .done, detail: nil)
                 }
                 if i == failedIdx {
-                    let d = (lastError?.isEmpty ?? true) ? phaseTitles["failed"] : lastError
+                    let d = (lastError?.isEmpty ?? true) ? phaseTitles["error"] : lastError
                     return StepView(key: g.key, label: g.label, state: .failed, detail: d)
                 }
                 return StepView(key: g.key, label: g.label, state: .pending, detail: nil)
@@ -165,11 +139,11 @@ public enum ProvisionProgress {
     }
 
     /// Should the list (Home) render a thin progress bar for this demo
-    /// server? True for any pre-`ready` server; false for ready / none /
+    /// server? True for any pre-`live` server; false for live / none /
     /// absent (those render as a normal online / empty row).
     public static func shouldShowProgressBar(phase: String?, status: String?) -> Bool {
-        if status == "up", phase == nil || phase == "ready" { return false }
-        if phase == "ready" { return false }
+        if status == "up", phase == nil || phase == "live" { return false }
+        if phase == "live" { return false }
         if status == "none" { return false }
         return status == "provisioning" || phase != nil
     }

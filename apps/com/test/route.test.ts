@@ -459,37 +459,7 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(body.key).toBe("BFD2WVWGSb2i6UH1DCbDmrVVB_UpYxQSdg_qfybBtoslDy");
   });
 
-  it("/api/server/<domain>/provision-event reaches the handler (404 when no demo row)", async () => {
-    const env = makeEnv({
-      DB: {
-        prepare: () => ({
-          bind: () => ({
-            // demo_users.get → no row → handler returns 404.
-            first: async () => null,
-            all: async () => ({ results: [], success: true, meta: {} }),
-            run: async () => ({ success: true, meta: { changes: 0 } }),
-          }),
-        }),
-        batch: async () => [],
-      } as unknown as import("@flagship/storage").D1Database,
-    });
-    const r = await route(
-      new Request(
-        "https://flagshipserver.com/api/server/home.demoalice.flagship.services/provision-event",
-        {
-          method: "POST",
-          body: JSON.stringify({ phase: "cloned", authCodeSerial: "abc" }),
-          headers: { "content-type": "application/json" },
-        },
-      ),
-      env,
-    );
-    expect(r.status).toBe(404);
-    // No upstream call — the route was handled locally.
-    expect(calls).toHaveLength(0);
-  });
-
-  it("/api/server/<domain>/provision-event rejects an unknown phase with 400", async () => {
+  it("/api/order/<serial>/status (canonical channel) reaches the handler + rejects an unknown phase (400)", async () => {
     const env = makeEnv({
       DB: {
         prepare: () => ({
@@ -503,17 +473,17 @@ describe(".com control-plane routes (Worker + D1)", () => {
       } as unknown as import("@flagship/storage").D1Database,
     });
     const r = await route(
-      new Request(
-        "https://flagshipserver.com/api/server/home.demoalice.flagship.services/provision-event",
-        {
-          method: "POST",
-          body: JSON.stringify({ phase: "halfway", authCodeSerial: "abc" }),
-          headers: { "content-type": "application/json" },
-        },
-      ),
+      new Request("https://flagshipserver.com/api/order/01TESTABCDEF/status", {
+        method: "POST",
+        body: JSON.stringify({ phase: "halfway" }),
+        headers: { "content-type": "application/json" },
+      }),
       env,
     );
+    // Handled locally (the canonical channel is the single provisioning sink);
+    // an unknown phase is a 400 from the handler, not an upstream proxy.
     expect(r.status).toBe(400);
+    expect(calls).toHaveLength(0);
   });
 
   it("/api/ca/cert returns the dev CA pubkey when bound to D1 + no FLAGSHIP_CA_PRIV_HEX", async () => {

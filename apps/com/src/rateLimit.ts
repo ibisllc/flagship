@@ -90,6 +90,13 @@ export type RateLimitEndpoint =
   // launch; 30/min is generous for a human relaunching while letting us
   // fence a tight-loop client.
   | "iso-manifest"
+  // Canonical per-order provisioning-status POST (the box reports each phase
+  // once to POST /api/order/<serial>/status). Public — keyed by the order
+  // serial (a capability the phone + installer share), not a signature, so
+  // per-IP only at the edge. A real install posts ~8 phases over a few
+  // minutes; 30/min is generous while fencing a leaked-serial flood (the
+  // handler also gates on the serial mapping to a real auth-code).
+  | "provision-status"
   | "acme-key-release"
   | "acme-key-delivery-revoke"
   | "mint-reservation-acquire"
@@ -199,6 +206,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // signed body). 30/min is plenty for once-per-launch; the cap fences a
   // tight-loop client from hammering the route.
   "iso-manifest": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  // Canonical per-order provisioning-status POST. Per-IP only (no signed
+  // body); 30/min covers a real install's ~8 phases with headroom while
+  // fencing a tight-loop / leaked-serial flood.
+  "provision-status": [{ axis: "ip", limit: 30, windowSec: 60 }],
   "acme-key-delivery-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -436,6 +447,11 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // Desktop-burner base-ISO manifest poll.
   if (m === "POST" && pathname === "/api/iso-manifest") {
     return "iso-manifest";
+  }
+  // Canonical per-order provisioning-status POST. (The GET read isn't rate-
+  // limited here — only the mutating POST the box hits.)
+  if (m === "POST" && /^\/api\/order\/[^/]+\/status$/.test(pathname)) {
+    return "provision-status";
   }
   return null;
 }

@@ -255,13 +255,13 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
     }
   });
 
-  it("the partman/early_command beacon fires the 'partitioning' event before the wipe (both variants)", () => {
+  it("the partman/early_command beacon fires the 'partitioning' phase before the wipe (both variants)", () => {
     for (const encryptRoot of [true, false]) {
       const c = cfg({ encryptRoot });
-      expect(c, `encryptRoot=${encryptRoot}`).toContain('"event":"partitioning"');
+      expect(c, `encryptRoot=${encryptRoot}`).toContain('"phase":"partitioning"');
       // Beacon BEFORE the wipe so the phone hears from the box even if the wipe/
       // partition later fails.
-      expect(c.indexOf('"event":"partitioning"')).toBeLessThan(c.indexOf("dmsetup remove_all"));
+      expect(c.indexOf('"phase":"partitioning"')).toBeLessThan(c.indexOf("dmsetup remove_all"));
     }
   });
 
@@ -441,38 +441,39 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     return buildDebianPreseed({ blob, blobSignatureHex });
   }
 
-  // The EXACT beacon command strings. These literals are byte-identical to the
-  // Swift twin's (EngineTests.swift) — keep both in lockstep. The serial sits in
-  // the URL, the serverDomain in the detail; both are public correlation hints,
-  // no secrets. busybox wget --post-file= (no curl in mini.iso d-i).
+  // The EXACT beacon command strings. ONE canonical channel: each posts a
+  // ProvisionStatusPhase to POST /api/order/<serial>/status. These literals are
+  // byte-identical to the Swift twin's (EngineTests.swift) — keep both in
+  // lockstep. The serial sits in the URL; no secrets. busybox wget --post-file=
+  // (no curl in mini.iso d-i).
   const EARLY_BEACON =
-    `( echo '{"event":"d-i-started","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `( echo '{"phase":"booting"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
-    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true`;
   const LATE_BEACON =
-    `( echo '{"event":"installer-running","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `( echo '{"phase":"downloading"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
-    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true`;
   // Beacon C — fired from partman/early_command (network up by partman), before
   // the unconditional disk wipe. Byte-identical to EngineTests.swift.
   const PARTITION_BEACON =
-    `( echo '{"event":"partitioning","detail":"home.demoalice.flagship.services"}' > /tmp/flagship-beacon.json; ` +
+    `( echo '{"phase":"partitioning"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
-    `https://flagshipserver.com/api/install-events/01TESTABCDEF ) || true`;
+    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true`;
 
-  it("Beacon A — early_command POSTs d-i-started before partman (best-effort)", () => {
+  it("Beacon A — early_command POSTs the booting phase before partman (best-effort)", () => {
     const c = cfg();
     expect(c).toContain(`d-i preseed/early_command string ${EARLY_BEACON}`);
     // The earliest hook fires BEFORE the partman disk-selection early_command.
     expect(c.indexOf("preseed/early_command")).toBeLessThan(c.indexOf("partman/early_command"));
   });
 
-  it("Beacon B — late_command POSTs installer-running FIRST, before the blob-decode", () => {
+  it("Beacon B — late_command POSTs the downloading phase FIRST, before the blob-decode", () => {
     const c = cfg();
     expect(c).toContain(`d-i preseed/late_command string ${LATE_BEACON}; mkdir -p /target/var/flagship;`);
   });
 
-  it("Beacon C — partman/early_command POSTs 'partitioning' right before the wipe", () => {
+  it("Beacon C — partman/early_command POSTs the partitioning phase right before the wipe", () => {
     const c = cfg();
     expect(c).toContain(`${PARTITION_BEACON}; \\`);
   });
@@ -484,13 +485,15 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     expect(c.match(/\) \|\| true/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
-  it("the serial + serverDomain are inlined (no runtime blob parse in early_command)", () => {
+  it("posts to the canonical order-status channel; the serial is inlined (no runtime blob parse)", () => {
     const c = cfg();
-    expect(c).toContain("/api/install-events/01TESTABCDEF");
-    expect(c).toContain('"detail":"home.demoalice.flagship.services"');
+    expect(c).toContain("/api/order/01TESTABCDEF/status");
+    // No phase carries a detail field on the d-i beacon (serverDomain is
+    // authoritative from registration, not the beacon).
+    expect(c).not.toContain('"detail"');
   });
 
-  it("sanitizes the inlined serial/domain to an injection-proof set", () => {
+  it("sanitizes the inlined serial to an injection-proof set", () => {
     const { blob, blobSignatureHex } = signedBlob();
     const dirty = {
       ...blob,
@@ -498,9 +501,9 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
       authCode: { ...blob.authCode, serial: "abc$(touch x)def" },
     };
     const c = buildDebianPreseed({ blob: dirty, blobSignatureHex });
-    // The dangerous characters are stripped; what's left is the safe subset.
-    expect(c).toContain('"detail":"evilrm-rf"');
-    expect(c).toContain("/api/install-events/abctouchxdef");
+    // The dangerous characters are stripped from the serial; the order-status
+    // URL carries only the safe subset, and no domain is inlined into the beacon.
+    expect(c).toContain("/api/order/abctouchxdef/status");
     expect(c).not.toContain("rm -rf /");
     expect(c).not.toContain("$(touch");
   });

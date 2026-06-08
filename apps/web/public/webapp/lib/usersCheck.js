@@ -16,11 +16,13 @@
  *  @property {string} fqdn
  *  @property {"none"|"provisioning"|"up"} status
  *  @property {number} ttlIdleMinutes
- *  @property {?string} [phase]      latest provisioning PHASE checkpoint
- *                                   (one of @flagship/protocol
- *                                   PROVISION_PHASES), null until the
- *                                   first checkpoint arrives. Migration
- *                                   0035 — lockstep with iOS/Android.
+ *  @property {?string} [phase]      latest provisioning PHASE checkpoint —
+ *                                   a canonical ProvisionStatusPhase
+ *                                   (booting…live, terminal `error`), the
+ *                                   SAME vocabulary the real-box install
+ *                                   timeline uses; null until the first
+ *                                   checkpoint arrives. Lockstep with
+ *                                   iOS/Android + the control-plane channel.
  *  @property {?number} [phaseAt]    wall-clock ms the latest phase landed
  *  @property {string} [lastError]   failure detail, only when phase==="failed"
  *  @property {string} [ip]          public IPv4 the provider returned (migration 0036)
@@ -159,15 +161,25 @@ export function applyScopeGateToButton(button, block, scope, disabledTooltip) {
   button.setAttribute("data-device-restricted", scope);
 }
 
-/** Map the raw status to the typed lifecycle. Forward-compat: an
- *  unknown future value collapses to `"provisioning"` so a client
- *  that hasn't been updated still polls instead of opening an
- *  unhealthy pod.
+/** Map a demoServer block to the typed lifecycle. The SINGLE canonical
+ *  phase is the source of truth: `live` → up, `error` → still
+ *  provisioning (the daemon retries — a terminal error isn't a torn-down
+ *  pod), any other ladder phase → provisioning. When no phase has arrived
+ *  yet we fall back to the coarse 3-state `status`. Forward-compat: an
+ *  unknown value collapses to `"provisioning"` so a client that hasn't
+ *  been updated still polls instead of opening an unhealthy pod.
  *  @param {DemoServerBlock|null|undefined} block
  *  @returns {"none"|"provisioning"|"up"|null}
  */
 export function demoLifecycle(block) {
-  if (!block || typeof block.status !== "string") return null;
+  if (!block) return null;
+  // Derive from the canonical phase first (single source).
+  if (typeof block.phase === "string" && block.phase.length > 0) {
+    if (block.phase === "live") return "up";
+    return "provisioning";
+  }
+  // No phase yet — fall back to the coarse lifecycle.
+  if (typeof block.status !== "string") return null;
   if (block.status === "up") return "up";
   if (block.status === "none") return "none";
   return "provisioning";

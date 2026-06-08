@@ -49,10 +49,10 @@ struct FlagshipApp: App {
     }
 
     /// Wire the FlagshipUI InstallProgressBridge to the App-target
-    /// Live Activity. The bridge is set up once at @main init so
-    /// any InstallProgressViewModel — onboarding or in-app — drives
-    /// the Dynamic Island / Lock Screen without each call site
-    /// having to import ActivityKit.
+    /// Live Activity. The bridge is set up once at @main init so the
+    /// canonical provisioning timeline (ProvisionTimelineViewModel /
+    /// PendingServerScreen, or a push) drives the Dynamic Island / Lock
+    /// Screen + the Watch without each call site importing ActivityKit.
     @MainActor
     private static func wireInstallProgressBridge() {
         let b = InstallProgressBridge.shared
@@ -62,8 +62,8 @@ struct FlagshipApp: App {
                 podName: podName ?? "Provisioning"
             )
         }
-        b.onStep = { step in
-            Task { await InstallProgressLiveActivityCenter.shared.advance(to: bridge(step)) }
+        b.onStep = { phase in
+            Task { await InstallProgressLiveActivityCenter.shared.advance(to: bridge(phase)) }
         }
         b.onComplete = { fqdn in
             Task { await InstallProgressLiveActivityCenter.shared.complete(serverFqdn: fqdn) }
@@ -71,79 +71,68 @@ struct FlagshipApp: App {
         b.onFailed = { reason in
             Task { await InstallProgressLiveActivityCenter.shared.fail(reason: reason) }
         }
+        // Rich poll-driven path: forward the full canonical status onto
+        // the Watch timeline (history + serverDomain). Sparse push-driven
+        // updates go through wireProvisionPhaseBridge below.
+        b.onStatus = { status, podName in
+            WatchTimelinePublisher.shared.update(from: status, podName: podName)
+        }
     }
 
-    /// Wire FlagshipCore's ProvisionPhaseBridge (fed by `provision-phase`
+    /// Wire FlagshipCore's ProvisionPhaseBridge (fed by `provision-status`
     /// pushes from .com) into the SAME InstallProgressBridge the
     /// onboarding flow uses. This turns a phase push into a Live Activity
-    /// step transition — provisioning becomes a glass box even when the
-    /// app is backgrounded and the user never opened the progress screen.
+    /// transition — provisioning becomes a glass box even when the app is
+    /// backgrounded and the user never opened the progress screen. The
+    /// phase is the single canonical `ProvisionStatusPhase`.
     @MainActor
     private static func wireProvisionPhaseBridge() {
         ProvisionPhaseBridge.shared.onPhase = { event in
             let progress = InstallProgressBridge.shared
-            // The first checkpoint also kicks off the Live Activity (the
-            // onboarding path normally calls onStart; a push-only path —
-            // e.g. demo-connect from another device — needs it here).
             switch event.phase {
-            case "failed":
-                progress.onFailed?(event.error ?? "Provisioning failed")
-            case "ready":
-                progress.onComplete?(event.fqdn)
+            case .error:
+                progress.onFailed?(event.detail ?? "Setup hit a problem")
+            case .live:
+                // serverDomain isn't carried on the push meta; the Live
+                // Activity already shows the serial — pass the detail or
+                // an empty string (the poll path fills in the FQDN).
+                progress.onComplete?(event.detail ?? "")
             default:
-                if let step = phaseToStep(event.phase) {
-                    progress.onStep?(step)
-                }
+                progress.onStep?(event.phase)
             }
             // Mirror the phase onto the watch's install-progress surface
-            // (W1). The push carries username + fqdn but no serial; the
-            // fqdn doubles as the publisher's continuity key — same
-            // install yields the same fqdn across every phase push, so
-            // history accumulates correctly on the watch.
+            // (W1) keyed by the order serial — same install yields the
+            // same serial across every phase push, so history accumulates
+            // correctly on the watch.
             WatchTimelinePublisher.shared.update(
-                from: event,
-                podName: event.fqdn.isEmpty ? "Provisioning" : event.fqdn,
-                serial: event.fqdn.isEmpty ? event.username : event.fqdn
+                phase: event.phase,
+                serial: event.serial,
+                detail: event.detail,
+                podName: "Provisioning"
             )
         }
     }
 
-    /// Map a wire phase string (`@flagship/protocol` PROVISION_PHASES)
-    /// to the FlagshipUI install-progress Step. The four intermediate
-    /// cloud-init phases (cloned/deps/built/identity) all collapse onto
-    /// `.boot` — the Step enum's coarsest "still setting up" rung — so
-    /// the Live Activity advances monotonically without needing a new
-    /// step per shell command. Returns nil for phases handled elsewhere
-    /// (ready/failed) or unknown future strings.
+    /// One-to-one translation from the canonical `ProvisionStatusPhase`
+    /// to the widget-extension's ActivityAttributes.Step (the
+    /// widget-local twin of the same vocabulary). They're separate types
+    /// only because the widget extension can't link FlagshipAPI; the raw
+    /// strings are identical so this is a total, lossless mapping.
     @MainActor
-    private static func phaseToStep(_ phase: String) -> InstallProgressViewModel.Step? {
+    private static func bridge(_ phase: ProvisionStatusPhase) -> InstallProgressAttributes.Step {
         switch phase {
-        case "d-i-started":    return .started
-        case "partitioning":   return .partitioning
-        case "installer-running", "installing": return .installing
-        case "boot", "cloned", "deps", "built", "identity": return .boot
-        case "registered":     return .registered
-        case "tunnel-online":  return .tunnelOnline
-        case "cert-issued":    return .certIssued
-        case "ready":          return .ready
-        default:               return nil
-        }
-    }
-
-    /// One-to-one translation from FlagshipUI's Step enum to the
-    /// widget-extension's ActivityAttributes.Step. They're separate
-    /// types because the widget extension can't import FlagshipUI.
-    @MainActor
-    private static func bridge(_ step: InstallProgressViewModel.Step) -> InstallProgressAttributes.Step {
-        switch step {
-        case .started:      return .started
+        case .booting:      return .booting
+        case .downloading:  return .downloading
         case .partitioning: return .partitioning
         case .installing:   return .installing
-        case .registered:   return .registered
-        case .boot:         return .boot
-        case .tunnelOnline: return .tunnelOnline
-        case .certIssued:   return .certIssued
-        case .ready:        return .ready
+        case .registering:  return .registering
+        case .sealing:      return .sealing
+        case .pairing:      return .pairing
+        case .live:         return .live
+        case .error:        return .error
+        // Forward-compat sentinel for an unrecognised wire phase — keep
+        // the Live Activity showing "booting" rather than crashing.
+        case .unknown:      return .booting
         }
     }
     // Seed the mock with one demo user so "I already have an account" →

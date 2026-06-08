@@ -9,12 +9,10 @@ import FlagshipAPI
 /// after a soft 1-hour cap so an abandoned install eventually stops
 /// burning battery).
 ///
-/// Distinct from `PendingPodWatcher` (which polls the older
-/// `/api/install-events/<serial>` channel to drive the Live Activity +
-/// flip AppState). This view model is screen-scoped: it lives with the
-/// `PendingServerScreen` and only feeds the in-screen timeline. The two
-/// channels are independent on the Worker; the timeline reads the
-/// per-order status channel keyed by the SAME serial.
+/// This is the SINGLE canonical channel — the box reports every phase
+/// (`booting`…`live`/`error`) exactly once to the per-order status
+/// endpoint and every iOS surface reads from here. The earlier
+/// install-events dual-channel merge has been retired.
 @MainActor
 @Observable
 public final class ProvisionTimelineViewModel {
@@ -37,37 +35,17 @@ public final class ProvisionTimelineViewModel {
     /// Convenience: the latest phase, defaulting to nil before any poll.
     public var phase: ProvisionStatusPhase? { status?.phase }
 
+    /// Called with the freshest status after every successful poll, so a
+    /// host (the App target) can mirror it onto the Watch timeline. nil
+    /// in previews/tests so the VM stays side-effect-free there.
+    public var onStatus: ((ProvisionStatus) -> Void)?
+
     private let serial: String
     private let server: any FlagshipServerClient
     /// Nanoseconds between polls. Defaults to 3s in production; tests
     /// inject a tiny value to drive a multi-step progression fast.
     private let pollIntervalNanos: UInt64
     private var task: Task<Void, Never>?
-
-    // The box's earliest signals (the d-i preseed beacons: booting /
-    // partitioning / installing) land on the install-events channel, NOT on
-    // the per-order status channel the bootstrap's report_phase posts to. We
-    // poll both and merge so ANY signal advances the ladder.
-    private var installCursor: Int = 0
-    private var installFurthest: ProvisionStatusPhase?
-    private var installDomain: String?
-
-    private static func phase(forInstallEvent name: String) -> ProvisionStatusPhase? {
-        switch name {
-        case "d-i-started":       return .booting
-        case "partitioning":      return .partitioning
-        case "installer-running": return .installing
-        case "registered":        return .registering
-        case "ready":             return .live
-        case "failed":            return .error
-        default:                  return nil   // metrics:* and other non-ladder events
-        }
-    }
-
-    private static func ladderIndex(_ p: ProvisionStatusPhase?) -> Int {
-        guard let p else { return -1 }
-        return ProvisionStatusPhase.ordered.firstIndex(of: p) ?? -1
-    }
 
     public init(
         serial: String,
@@ -104,48 +82,15 @@ public final class ProvisionTimelineViewModel {
     /// One poll round-trip. Returns true if a terminal phase was
     /// observed so the loop can return without sleeping.
     private func pollOnce() async -> Bool {
-        // Channel 1 — per-order status (the bootstrap's report_phase). nil on a
-        // 404 (no checkpoint yet) or a network blip.
-        let order: ProvisionStatus? = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil
-
-        // Channel 2 — install-events (the d-i preseed beacons). Accumulate the
-        // furthest ladder phase seen so an early signal lights up the bar even
-        // before the bootstrap reports to the order channel.
-        if let poll = try? await server.getInstallEvents(serial: serial, since: installCursor) {
-            installCursor = poll.cursor
-            for rec in poll.events {
-                guard let ph = Self.phase(forInstallEvent: rec.eventName) else { continue }
-                if ph == .error || Self.ladderIndex(ph) > Self.ladderIndex(installFurthest) {
-                    installFurthest = ph
-                }
-                if rec.eventName == "ready", !rec.detail.isEmpty { installDomain = rec.detail }
-            }
+        // The single canonical channel — per-order status (every phase the
+        // box reports, once each). nil on a 404 (no checkpoint yet) or a
+        // network blip; we just try again next tick.
+        guard let next = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil else {
+            return false
         }
-
-        // Merge: a terminal error on either channel wins; otherwise take the
-        // channel that's further along the ladder. order-status is preferred at
-        // a tie (it carries serverDomain + history + per-step detail).
-        let merged: ProvisionStatus?
-        if order?.phase == .error || installFurthest == .error {
-            merged = order ?? ProvisionStatus(serial: serial, serverDomain: installDomain,
-                                              phase: .error, detail: nil, updatedAt: 0, history: [])
-        } else if Self.ladderIndex(order?.phase) >= Self.ladderIndex(installFurthest) {
-            merged = order
-        } else if let installFurthest {
-            merged = ProvisionStatus(
-                serial: serial,
-                serverDomain: order?.serverDomain ?? installDomain,
-                phase: installFurthest,
-                detail: nil,
-                updatedAt: 0,
-                history: order?.history ?? []
-            )
-        } else {
-            merged = order
-        }
-
-        if let merged { status = merged }
-        if let phase = merged?.phase, phase.isTerminal {
+        status = next
+        onStatus?(next)
+        if next.phase.isTerminal {
             isDone = true
             return true
         }

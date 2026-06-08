@@ -74,6 +74,21 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
     expect(demoLifecycle(undefined)).toBeNull();
   });
 
+  it("demoLifecycle derives from the canonical phase when present (single source)", () => {
+    // The canonical phase is authoritative: `live` → up regardless of a stale
+    // coarse status; any other ladder/terminal phase → provisioning.
+    expect(
+      demoLifecycle({ fqdn: "x", status: "provisioning", phase: "live", ttlIdleMinutes: 30 } as any),
+    ).toBe("up");
+    expect(
+      demoLifecycle({ fqdn: "x", status: "up", phase: "installing", ttlIdleMinutes: 30 } as any),
+    ).toBe("provisioning");
+    // A terminal error is NOT a torn-down pod (the daemon retries) → provisioning.
+    expect(
+      demoLifecycle({ fqdn: "x", status: "up", phase: "error", ttlIdleMinutes: 30 } as any),
+    ).toBe("provisioning");
+  });
+
   it("demoPodStatus maps lifecycle to pod-status label", () => {
     expect(demoPodStatus({ fqdn: "x", status: "up", ttlIdleMinutes: 30 })).toBe("online");
     expect(demoPodStatus({ fqdn: "x", status: "provisioning", ttlIdleMinutes: 30 })).toBe("pending");

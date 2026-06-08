@@ -248,18 +248,18 @@ describe("buildCloudConfigUserData", () => {
     });
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
     const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
-    // A report_phase helper that POSTs to the provision-event endpoint
-    // authenticated by the auth-code serial the box already holds.
+    // A report_phase helper that POSTs canonical phases to the SINGLE
+    // order-status channel, keyed by the auth-code serial the box holds. The
+    // legacy provision-event channel is retired — no vestige of it.
     expect(bootstrap).toContain("report_phase()");
-    expect(bootstrap).toContain("/provision-event");
-    expect(bootstrap).toContain("authCodeSerial");
-    // Every cloud-init checkpoint in the sequence is emitted.
-    expect(bootstrap).toContain("report_phase boot");
-    expect(bootstrap).toContain("report_phase cloned");
-    expect(bootstrap).toContain("report_phase deps");
-    expect(bootstrap).toContain("report_phase built");
-    expect(bootstrap).toContain("report_phase identity");
-    expect(bootstrap).toContain("report_phase registered");
+    expect(bootstrap).toContain("/api/order/$AUTH_CODE_SERIAL/status");
+    expect(bootstrap).not.toContain("/provision-event");
+    expect(bootstrap).not.toContain("authCodeSerial");
+    // Every cloud-init checkpoint is emitted as a canonical ProvisionStatusPhase.
+    expect(bootstrap).toContain("report_phase booting");
+    expect(bootstrap).toContain("report_phase downloading");
+    expect(bootstrap).toContain("report_phase installing");
+    expect(bootstrap).toContain("report_phase registering");
     // Fail-open: the POST must never abort the install.
     expect(bootstrap).toContain("|| true");
   });

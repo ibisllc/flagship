@@ -127,6 +127,12 @@ public struct PendingServerScreen: View {
             return
         }
         let vm = ProvisionTimelineViewModel(serial: serial, server: server)
+        // Mirror each canonical poll result onto the Watch timeline (the
+        // App wires InstallProgressBridge.onStatus → WatchTimelinePublisher).
+        let podName = pod.name
+        vm.onStatus = { status in
+            InstallProgressBridge.shared.onStatus?(status, podName)
+        }
         timeline = vm
         vm.start()
     }

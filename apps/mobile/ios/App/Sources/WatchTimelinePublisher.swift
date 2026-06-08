@@ -6,15 +6,18 @@ import FlagshipCore
 /// context to the paired Watch via `WatchBridge` (which wraps
 /// WCSession.updateApplicationContext).
 ///
-/// Sources:
-///   - Push-driven: `ProvisionPhaseBridge.onPhase` (always running while
-///     the iPhone is foregrounded; fine-grained wire phases get folded
-///     onto the 8-phase ladder).
-///   - Poll-driven: when `PendingServerScreen` is open it polls
-///     `fetchProvisionStatus` every 3s; that path can call
-///     `update(from:podName:)` to forward the richer history.
+/// Single canonical source: the per-order status channel
+/// (`ProvisionStatus`, `ProvisionStatusPhase`). Two feed paths, both
+/// canonical:
+///   - Poll-driven (rich): when `PendingServerScreen` is open it polls
+///     `fetchProvisionStatus` every 3s; the VM forwards each result to
+///     `update(from:podName:)` (full history + serverDomain).
+///   - Push-driven (sparse): a `provision-status` push surfaces the
+///     latest `ProvisionStatusPhase` via `update(phase:serial:detail:
+///     podName:)`, which appends to running history so the rail still
+///     fills to the current rung when the app is backgrounded.
 ///
-/// Either source updates the same shared context; whichever lands more
+/// Either path updates the same shared context; whichever lands more
 /// recently wins. The Watch sees only the latest snapshot.
 @MainActor
 final class WatchTimelinePublisher {
@@ -55,30 +58,26 @@ final class WatchTimelinePublisher {
         commit(ctx)
     }
 
-    /// Update from a push-driven phase event (sparse source — latest
-    /// phase + maybe error). Folds the wire phase onto the ladder and
-    /// appends to running history so the watch can still render the
-    /// rail filled up to the current rung.
-    func update(from event: ProvisionPhaseEvent, podName: String, serial: String) {
-        let mapped = WatchProtocol.ProvisionPhaseMapping.map(event.phase)
+    /// Update from a push-driven canonical phase (sparse source — latest
+    /// `ProvisionStatusPhase` + optional detail). Appends to running
+    /// history (keyed by the order serial) so the watch can still render
+    /// the rail filled up to the current rung.
+    func update(phase: ProvisionStatusPhase, serial: String, detail: String?, podName: String) {
+        let raw = phase.rawValue
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         var history = current?.history ?? []
-        // Skip a duplicate of the latest phase so repeated `boot` push
-        // events don't pile up identical rows.
-        if history.last?.phase != mapped {
-            history.append(.init(phase: mapped, detail: event.error, ts: nowMs))
+        // Skip a duplicate of the latest phase so repeated pushes for the
+        // same phase don't pile up identical rows.
+        if history.last?.phase != raw {
+            history.append(.init(phase: raw, detail: detail, ts: nowMs))
         }
-        let active = mapped != "live" && mapped != "error"
-        let serverDomain: String? = {
-            if !event.fqdn.isEmpty { return event.fqdn }
-            return current?.serverDomain
-        }()
+        let active = phase != .live && phase != .error
         let ctx = WatchProtocol.ProvisionTimelineContext(
             serial: serial,
             podName: podName,
-            serverDomain: serverDomain,
-            phase: mapped,
-            detail: event.error,
+            serverDomain: current?.serverDomain,
+            phase: raw,
+            detail: detail,
             history: history,
             updatedAt: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000),
             active: active

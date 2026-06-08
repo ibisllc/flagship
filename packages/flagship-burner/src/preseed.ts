@@ -42,6 +42,23 @@ import {
 } from "./userdata.js";
 
 /**
+ * The single canonical provisioning vocabulary (mirror of the control-plane
+ * `PROVISION_STATUS_PHASES` allowlist). The d-i beacons report the three
+ * pre-bootstrap rungs (`booting`/`partitioning`/`downloading`); the first-boot
+ * bootstrap + daemon report the rest. ONE channel, ONE vocabulary.
+ */
+export type ProvisionStatusPhase =
+  | "booting"
+  | "downloading"
+  | "partitioning"
+  | "installing"
+  | "registering"
+  | "sealing"
+  | "pairing"
+  | "live"
+  | "error";
+
+/**
  * Build the Debian d-i preseed.cfg. Same options as the Ubuntu generator
  * (UserDataOptions) so the two are drop-in interchangeable behind a
  * family switch — the InstallBlob is embedded base64 verbatim and read back
@@ -52,19 +69,22 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // can't drift on validation or the encryptRoot/bootUnlockMode defaults).
   const { blobB64, ref, repo, bootHost, encryptRoot, bootUnlockMode } =
     resolveBootstrapInputs(opts);
-  // Phone-home beacons. The serial + serverDomain are known at generation time;
-  // we inline them (never parse the blob at runtime in early_command). Both are
-  // sanitized to an injection-proof set so they can sit unquoted in a URL and
-  // inside a single-quoted JSON literal. These carry only PUBLIC correlation
-  // hints (serial in URL, domain in detail) — no secrets — and are best-effort.
+  // Phone-home beacons. The serial is known at generation time; we inline it
+  // (never parse the blob at runtime in early_command). It's sanitized to an
+  // injection-proof set so it can sit unquoted in the URL. The beacon carries
+  // only the serial (URL) + a canonical PHASE name — no secrets — and is
+  // best-effort. ONE channel: POST /api/order/<serial>/status.
   const beaconSerial = beaconSafe(opts.blob.authCode.serial);
-  const beaconDomain = beaconSafe(opts.blob.serverDomain);
-  const earlyBeacon = debianBeaconCommand("d-i-started", beaconDomain, beaconSerial);
-  const lateBeacon = debianBeaconCommand("installer-running", beaconDomain, beaconSerial);
+  // Beacon A — earliest hook (early_command, before partman): the box has
+  // booted the installer. Canonical phase `booting`.
+  const earlyBeacon = debianBeaconCommand("booting", beaconSerial);
+  // Beacon B — late_command (network guaranteed up): the mirror + blob fetch
+  // are happening. Canonical phase `downloading`.
+  const lateBeacon = debianBeaconCommand("downloading", beaconSerial);
   // Beacon fired from partman/early_command (the network IS up by partman, so
   // this is the most reliable "the box exists" ping — emitted BEFORE the wipe so
   // the phone hears from the box even if partitioning later fails).
-  const partitionBeacon = debianBeaconCommand("partitioning", beaconDomain, beaconSerial);
+  const partitionBeacon = debianBeaconCommand("partitioning", beaconSerial);
   // The exact same first-boot bootstrap as Ubuntu — only the LUKS unlock step
   // adapts to Debian's LVM-on-LUKS (family:"debian").
   const bootstrap = buildBootstrapScript({
@@ -439,18 +459,23 @@ function beaconSafe(s: string): string {
 }
 
 /**
- * A best-effort phone-home beacon for the d-i environment. Writes the tiny
- * JSON body to /tmp (busybox wget POST needs `--post-file=<path>`, not stdin —
- * and mini.iso d-i has NO curl, only busybox wget) then POSTs it to the
- * EXISTING POST /api/install-events/<serial> endpoint. HTTPS works against
- * d-i's bundled CA bundle. Wrapped in `( … ) || true` so a down/just-coming-up
- * network never blocks the install. SECRET-FREE: serial in the URL, domain in
- * the detail — public correlation hints only. Mirrors post-log.sh's wget shape.
+ * A best-effort phone-home beacon for the d-i environment, POSTing a canonical
+ * provisioning PHASE to the single order-status channel
+ * (POST /api/order/<serial>/status). Writes the tiny JSON body to /tmp (busybox
+ * wget POST needs `--post-file=<path>`, not stdin — and mini.iso d-i has NO
+ * curl, only busybox wget) then POSTs it. HTTPS works against d-i's bundled CA
+ * bundle. Wrapped in `( … ) || true` so a down/just-coming-up network never
+ * blocks the install. SECRET-FREE: only the serial (in the URL) + the phase
+ * name. Host stays flagshipserver.com — it IS the control plane that owns the
+ * order-status route.
+ *
+ * BYTE-IDENTICAL CONTRACT: this exact string is mirrored by the Swift twin
+ * (apps/burner-mac UserData.debianBeaconCommand). Keep both in lockstep.
  */
-function debianBeaconCommand(event: string, domain: string, serial: string): string {
+function debianBeaconCommand(phase: ProvisionStatusPhase, serial: string): string {
   return (
-    `( echo '{"event":"${event}","detail":"${domain}"}' > /tmp/flagship-beacon.json; ` +
+    `( echo '{"phase":"${phase}"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
-    `https://flagshipserver.com/api/install-events/${serial} ) || true`
+    `https://flagshipserver.com/api/order/${serial}/status ) || true`
   );
 }

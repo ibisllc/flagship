@@ -6,59 +6,38 @@ import XCTest
 @MainActor
 final class PendingPodWatcherTests: XCTestCase {
 
-    // MARK: - mapStep
-
-    func test_mapStep_recognizesAllPipelineNames() {
-        XCTAssertEqual(PendingPodWatcher.mapStep("d-i-started"),       .started)
-        XCTAssertEqual(PendingPodWatcher.mapStep("partitioning"),      .partitioning)
-        XCTAssertEqual(PendingPodWatcher.mapStep("installer-running"), .installing)
-        XCTAssertEqual(PendingPodWatcher.mapStep("registered"),   .registered)
-        XCTAssertEqual(PendingPodWatcher.mapStep("boot"),         .boot)
-        XCTAssertEqual(PendingPodWatcher.mapStep("tunnel-online"), .tunnelOnline)
-        XCTAssertEqual(PendingPodWatcher.mapStep("cert-issued"),  .certIssued)
-        XCTAssertEqual(PendingPodWatcher.mapStep("ready"),        .ready)
-    }
-
-    func test_mapStep_ignoresUnknownEventNames() {
-        XCTAssertNil(PendingPodWatcher.mapStep("failed"))           // failed is handled separately
-        XCTAssertNil(PendingPodWatcher.mapStep("metric:cpu"))
-        XCTAssertNil(PendingPodWatcher.mapStep(""))
-    }
-
-    // MARK: - Mock server install-event scripts
-
     private func makeServer() -> MockFlagshipServerClient {
         let s = MockFlagshipServerClient()
         s.simulatedLatency = 0
         return s
     }
 
-    func test_mockGetInstallEvents_returnsScriptedSequence_andRollsCursor() async throws {
+    // MARK: - Canonical channel (fetchProvisionStatus) scripting
+
+    func test_mockFetchProvisionStatus_advancesScriptAndBuildsHistory() async throws {
         let s = makeServer()
-        s.installEventScripts["01CAFE"] = [
-            (eventName: "registered",    detail: "",                              postedAt: 1),
-            (eventName: "boot",          detail: "",                              postedAt: 2),
-            (eventName: "tunnel-online", detail: "",                              postedAt: 3),
+        s.provisionStatusScripts["01CAFE"] = [
+            (phase: .booting, detail: nil),
+            (phase: .installing, detail: nil),
+            (phase: .registering, detail: nil),
         ]
-        let first = try await s.getInstallEvents(serial: "01CAFE", since: 0)
-        XCTAssertEqual(first.events.count, 3)
-        XCTAssertEqual(first.events.map(\.eventName), ["registered", "boot", "tunnel-online"])
-        XCTAssertEqual(first.cursor, 3)
-        let next = try await s.getInstallEvents(serial: "01CAFE", since: first.cursor)
-        XCTAssertEqual(next.events, [])
-        XCTAssertEqual(next.cursor, 3)
+        let first = try await s.fetchProvisionStatus(serial: "01CAFE")
+        XCTAssertEqual(first?.phase, .booting)
+        XCTAssertEqual(first?.history.map(\.phase), [.booting])
+        let second = try await s.fetchProvisionStatus(serial: "01CAFE")
+        XCTAssertEqual(second?.phase, .installing)
+        XCTAssertEqual(second?.history.map(\.phase), [.booting, .installing])
     }
 
-    func test_mockGetInstallEvents_unknownSerialReturnsEmpty() async throws {
+    func test_mockFetchProvisionStatus_unknownSerialReturnsNil() async throws {
         let s = makeServer()
-        let r = try await s.getInstallEvents(serial: "nope", since: 0)
-        XCTAssertEqual(r.events, [])
-        XCTAssertEqual(r.cursor, 0)
+        let r = try await s.fetchProvisionStatus(serial: "nope")
+        XCTAssertNil(r)
     }
 
     // MARK: - End-to-end watcher
 
-    func test_watcher_flipsPodToOnline_onReadyEvent() async throws {
+    func test_watcher_flipsPodToOnline_onLivePhase() async throws {
         // Set up a paired AppState with one pending pod.
         let app = AppState()
         let pending = PodInfo(
@@ -72,16 +51,22 @@ final class PendingPodWatcherTests: XCTestCase {
         app.completeOnboarding(username: "harry", pods: [pending])
 
         let s = makeServer()
-        s.installEventScripts["AC-01CAFE"] = [
-            (eventName: "registered",    detail: "",                              postedAt: 1),
-            (eventName: "boot",          detail: "",                              postedAt: 2),
-            (eventName: "tunnel-online", detail: "",                              postedAt: 3),
-            (eventName: "cert-issued",   detail: "",                              postedAt: 4),
-            (eventName: "ready",         detail: "home.harry.flagship.services",   postedAt: 5),
+        // One poll serves the whole script (Mock advances one step per
+        // call, but the watcher polls until it sees the terminal phase).
+        s.provisionStatusScripts["AC-01CAFE"] = [
+            (phase: .booting, detail: nil),
+            (phase: .downloading, detail: nil),
+            (phase: .partitioning, detail: nil),
+            (phase: .installing, detail: nil),
+            (phase: .registering, detail: nil),
+            (phase: .sealing, detail: nil),
+            (phase: .pairing, detail: nil),
+            (phase: .live, detail: nil),
         ]
+        s.provisionStatusServerDomains["AC-01CAFE"] = "home.harry.flagship.services"
 
-        // Bridge captures: confirm each step fires + final complete.
-        var observedSteps: [InstallProgressViewModel.Step] = []
+        // Bridge captures: confirm each non-terminal phase fires + final complete.
+        var observedSteps: [ProvisionStatusPhase] = []
         var observedComplete: String?
         InstallProgressBridge.shared.onStep = { observedSteps.append($0) }
         InstallProgressBridge.shared.onComplete = { observedComplete = $0 }
@@ -90,24 +75,26 @@ final class PendingPodWatcherTests: XCTestCase {
             InstallProgressBridge.shared.onComplete = nil
         }
 
-        // Hand-drive a single poll so we don't rely on real time.
-        let watcher = PendingPodWatcher(serial: "AC-01CAFE", podId: "p1", app: app, server: s)
-        // Use Mirror to call the private pollOnce... actually call
-        // start() and wait for the watcher's task to drain the
-        // synchronous scripted events.
+        // 1ms poll cadence so the Mock's one-phase-per-poll progression drains
+        // the whole script quickly without real time.
+        let watcher = PendingPodWatcher(
+            serial: "AC-01CAFE", podId: "p1", app: app, server: s, pollIntervalNanos: 1_000_000
+        )
         watcher.start()
-        // Give the task one runloop tick to drain the entire script
-        // (Mock is no-latency so a single poll covers all 5 events).
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
         watcher.stop()
 
-        XCTAssertEqual(observedSteps, [.registered, .boot, .tunnelOnline, .certIssued, .ready])
+        // onStep fired for every non-terminal phase in ladder order, once each.
+        XCTAssertEqual(
+            observedSteps,
+            [.booting, .downloading, .partitioning, .installing, .registering, .sealing, .pairing]
+        )
         XCTAssertEqual(observedComplete, "home.harry.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online)
         XCTAssertNil(app.pods.first?.pendingAuthCodeSerial)
     }
 
-    func test_watcher_firesOnFailed_onFailedEvent() async throws {
+    func test_watcher_firesOnFailed_onErrorPhase() async throws {
         let app = AppState()
         let pending = PodInfo(
             podId: "p1", name: "Home", description: nil,
@@ -117,17 +104,19 @@ final class PendingPodWatcherTests: XCTestCase {
         app.completeOnboarding(username: "harry", pods: [pending])
 
         let s = makeServer()
-        s.installEventScripts["AC-DEAD"] = [
-            (eventName: "registered", detail: "", postedAt: 1),
-            (eventName: "failed",     detail: "cert-issuance timed out", postedAt: 2),
+        s.provisionStatusScripts["AC-DEAD"] = [
+            (phase: .registering, detail: nil),
+            (phase: .error, detail: "cert-issuance timed out"),
         ]
         var failure: String?
         InstallProgressBridge.shared.onFailed = { failure = $0 }
         defer { InstallProgressBridge.shared.onFailed = nil }
 
-        let watcher = PendingPodWatcher(serial: "AC-DEAD", podId: "p1", app: app, server: s)
+        let watcher = PendingPodWatcher(
+            serial: "AC-DEAD", podId: "p1", app: app, server: s, pollIntervalNanos: 1_000_000
+        )
         watcher.start()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
         watcher.stop()
 
         XCTAssertEqual(failure, "cert-issuance timed out")
@@ -156,10 +145,8 @@ final class PendingPodWatcherTests: XCTestCase {
 
         reg.sync()
         // The pending pod gets a watcher; the online one doesn't.
-        // We can't peek into the registry's dict directly, but
-        // re-syncing after flipping the pending pod online should
-        // stop the watcher cleanly (no crash, no leftover task).
-        // Then a second sync is a no-op.
+        // Re-syncing after flipping the pending pod online should stop the
+        // watcher cleanly (no crash, no leftover task). A second sync is a no-op.
         if let idx = app.pods.firstIndex(where: { $0.podId == "p1" }) {
             var pod = app.pods[idx]
             pod = PodInfo(
@@ -174,9 +161,9 @@ final class PendingPodWatcherTests: XCTestCase {
     }
 
     func test_registry_doesNotStartWatcher_whenSerialIsMissing() {
-        // A pending pod that somehow lost its serial (e.g. legacy
-        // state) shouldn't try to poll — the Worker would 400 on the
-        // empty serial path and we'd loop forever.
+        // A pending pod that somehow lost its serial (e.g. legacy state)
+        // shouldn't try to poll — the Worker would 400 on the empty serial
+        // path and we'd loop forever.
         let app = AppState()
         app.completeOnboarding(
             username: "harry",

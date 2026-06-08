@@ -892,13 +892,16 @@ export interface DemoServerBlock {
   status: "none" | "provisioning" | "up";
   ttlIdleMinutes: number;
   /**
-   * Fine-grained provisioning observability (migration 0035). The
-   * latest named PHASE checkpoint the box pushed — one of
-   * `@flagship/protocol` `PROVISION_PHASES`, or `null` when no
-   * checkpoint has arrived yet. The coarse `status` above is the
-   * three-state lifecycle; `phase` is the step WITHIN provisioning
-   * (clone/npm/build/identity/register/tunnel/cert/ready) so the
-   * phone can render a real progress list instead of a spinner.
+   * Fine-grained provisioning observability (migration 0035). The latest
+   * named PHASE checkpoint, now a canonical `ProvisionStatusPhase`
+   * (booting → downloading → partitioning → installing → registering →
+   * sealing → pairing → live, terminal `error`) — the SAME vocabulary the
+   * real-box install timeline uses. Mirrored here from the single canonical
+   * order-status channel; `null` when no checkpoint has arrived yet. The
+   * coarse `status` above is the three-state lifecycle; `phase` is the step
+   * WITHIN provisioning so the phone can render a real progress list. The
+   * 3-state lifecycle is derivable from this single phase (live → up,
+   * error → failed, else provisioning) — see usersCheck.js demoLifecycle.
    */
   phase: string | null;
   /** Wall-clock ms the latest phase landed; null when `phase` is null. */

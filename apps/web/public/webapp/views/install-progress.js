@@ -1,26 +1,32 @@
-// P2.10 — Install-progress view.
+// Install-progress view — reads the SINGLE canonical provisioning channel.
 //
-// Polls /api/screens/install-events/:serial?since=N (P1.15) and
-// renders the events as a step-by-step progress timeline. Used while
-// a freshly-built ISO is booting / coming online.
+// Polls GET https://flagshipserver.com/api/order/<serial>/status (the one
+// channel the box + daemon report every phase to) and renders the canonical
+// grouped step ladder. Used while a freshly-built ISO is booting / coming
+// online.
 //
-// The user enters a serial number; the view polls every 2s and
-// stops once a `ready` or `failed` event lands.
+// The user enters a serial number; the view polls every 2s and stops once a
+// terminal phase (`live` or `error`) lands. A 404 means "no record yet" — the
+// box hasn't phoned home, so we render the booting lead-in.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import {
+  PROVISION_PHASE_TITLES,
+  renderProgressDetail,
+} from "../lib/provisionProgress.js";
 
 registerView("view-install-progress");
 
 const POLL_INTERVAL_MS = 2_000;
-const TERMINAL_KINDS = new Set(["ready", "failed"]);
+const CONTROL_PLANE_BASE = "https://flagshipserver.com";
+// Terminal canonical phases — stop polling once one lands.
+const TERMINAL_PHASES = new Set(["live", "error"]);
 
 let pollTimer = null;
 let activeSerial = null;
-let cursor = 0;
-let seenEvents = [];
+/** Latest canonical record { phase, detail, serverDomain, history }. */
+let latest = null;
 
 function clearPoll() {
   if (pollTimer) {
@@ -29,74 +35,66 @@ function clearPoll() {
   }
 }
 
-function fmtKind(kind) {
-  switch (kind) {
-    case "registered": return "registered with control plane";
-    case "boot": return "first boot";
-    case "tunnel-online": return "tunnel online";
-    case "cert-issued": return "TLS cert issued";
-    case "ready": return "READY ✓";
-    case "failed": return "FAILED ✗";
-    default: return kind;
-  }
-}
-
 function render() {
   const root = $("install-progress-content");
-  if (!seenEvents.length) {
-    root.innerHTML = '<div class="card placeholder">no events yet — the box may not have booted yet</div>';
+  if (!root) return;
+  if (!latest || !latest.phase) {
+    root.innerHTML =
+      '<div class="card placeholder">waiting for your box to phone home — it may not have booted yet</div>';
     return;
   }
-  root.innerHTML = seenEvents.map((e) => {
-    const cls = e.kind === "failed" ? "err" : e.kind === "ready" ? "ok" : "";
-    const detail = e.kind === "failed" && e.reason
-      ? `<div class="err-detail">${escapeHtml(e.reason)}</div>`
-      : e.kind === "ready" && e.serverFqdn
-      ? `<div class="value text-xs">${escapeHtml(e.serverFqdn)}</div>`
-      : "";
-    return `
-      <div class="card">
-        <div class="row">
-          <span class="value">${escapeHtml(fmtKind(e.kind))}</span>
-          <span class="pill ${cls}">${escapeHtml(new Date(e.at).toLocaleTimeString())}</span>
-        </div>
-        ${detail}
-      </div>
-    `;
-  }).join("");
+  // Reuse the shared canonical step-ladder renderer so the webapp matches
+  // iOS / Android. The block shape it wants overlaps the canonical record
+  // (phase + detail-as-lastError + optional serverDomain).
+  const block = {
+    phase: latest.phase,
+    lastError: latest.phase === "error" ? latest.detail || "" : undefined,
+  };
+  const title = PROVISION_PHASE_TITLES[latest.phase] || latest.phase;
+  const domain = latest.serverDomain
+    ? `<div class="value text-xs">${escapeText(latest.serverDomain)}</div>`
+    : "";
+  root.innerHTML =
+    `<div class="card"><div class="row"><span class="value">${escapeText(title)}</span></div>${domain}</div>` +
+    renderProgressDetail(block);
+}
+
+/** Local minimal escape (the shared renderer escapes its own interpolations;
+ *  this is only for the title + domain we render here). */
+function escapeText(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]),
+  );
 }
 
 async function poll() {
   if (!activeSerial) return;
   try {
-    const body = await screensFetch(
-      `/api/screens/install-events/${encodeURIComponent(activeSerial)}?since=${cursor}`,
+    const resp = await fetch(
+      `${CONTROL_PLANE_BASE}/api/order/${encodeURIComponent(activeSerial)}/status`,
     );
-    const events = Array.isArray(body.events) ? body.events : [];
-    if (events.length > 0) {
-      seenEvents = [...seenEvents, ...events];
-      // Track the highest seq we've seen so the next poll only asks
-      // for newer events.
-      if (typeof body.cursor === "number") cursor = body.cursor;
-      else {
-        // Some upstream variants don't return a cursor; fall back to
-        // counting the events we've appended.
-        cursor = seenEvents.length;
-      }
+    if (resp.status === 404) {
+      // No record yet — box hasn't reported. Keep the booting lead-in.
+      latest = null;
       render();
-      const last = events[events.length - 1];
-      if (last && TERMINAL_KINDS.has(last.kind)) {
+    } else if (resp.ok) {
+      const body = await resp.json();
+      latest = body;
+      render();
+      if (body && TERMINAL_PHASES.has(body.phase)) {
         clearPoll();
         return;
       }
-    }
-  } catch (e) {
-    if (e instanceof ScreensError) {
-      $("install-progress-content").innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
+    } else {
+      const root = $("install-progress-content");
+      if (root) {
+        root.innerHTML = `<div class="card"><p class="err-text">status check failed: HTTP ${resp.status}</p></div>`;
+      }
       clearPoll();
       return;
     }
-    // transient — keep polling
+  } catch (_e) {
+    // transient (network blip) — keep polling
   }
   pollTimer = setTimeout(() => poll().catch(() => {}), POLL_INTERVAL_MS);
 }
@@ -106,8 +104,7 @@ function start() {
   if (!serial) return toast("enter the serial first", "err");
   clearPoll();
   activeSerial = serial;
-  cursor = 0;
-  seenEvents = [];
+  latest = null;
   render();
   poll().catch((e) => toast(String(e), "err"));
 }
@@ -115,8 +112,7 @@ function start() {
 function reset() {
   clearPoll();
   activeSerial = null;
-  cursor = 0;
-  seenEvents = [];
+  latest = null;
   $("ip-serial").value = "";
   render();
 }

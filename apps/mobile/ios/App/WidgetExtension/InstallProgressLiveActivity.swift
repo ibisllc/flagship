@@ -90,14 +90,14 @@ private struct LockScreenView: View {
             ProgressView(value: state.fractionalProgress)
                 .tint(.accentColor)
 
-            if state.currentStep == .failed, let reason = state.failureReason {
-                Label(reason, systemImage: InstallProgressAttributes.Step.failed.systemImageName)
+            if state.currentStep == .error, let reason = state.failureReason {
+                Label(reason, systemImage: InstallProgressAttributes.Step.error.systemImageName)
                     .font(.footnote)
                     .foregroundStyle(.red)
             } else {
                 Label(state.currentStep.label, systemImage: state.currentStep.systemImageName)
                     .font(.footnote)
-                    .foregroundStyle(state.currentStep == .ready ? .green : .secondary)
+                    .foregroundStyle(state.currentStep == .live ? .green : .secondary)
             }
         }
         .padding(.horizontal, 16)

@@ -19,18 +19,78 @@ import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
+import { PROVISION_PHASE_TITLES } from "../lib/provisionProgress.js";
 
 registerView("view-pending-server", { tab: "home" });
 
-let currentOrder = null;
+const CONTROL_PLANE_BASE = "https://flagshipserver.com";
+const POLL_INTERVAL_MS = 3_000;
+const TERMINAL_PHASES = new Set(["live", "error"]);
 
-/** Surface a pending order. */
+let currentOrder = null;
+let statusTimer = null;
+
+function clearStatusPoll() {
+  if (statusTimer) {
+    clearTimeout(statusTimer);
+    statusTimer = null;
+  }
+}
+
+/** Surface a pending order + subscribe to the canonical provisioning channel
+ *  by serial so the card shows live progress and flips to running on `live`. */
 export function enterPendingServer(order) {
   currentOrder = order;
   $("pending-server-name").textContent = order.name || "Pending server";
   $("pending-server-fqdn").textContent = order.fqdn || "—";
   $("pending-server-serial").textContent = order.serial || "—";
   show("view-pending-server");
+  clearStatusPoll();
+  if (order.serial) pollStatus(order.serial).catch(() => {});
+}
+
+/** Poll the SINGLE canonical channel for this order's latest phase. On `live`
+ *  we drop the pending order (it's now a running server) and return home; on
+ *  any other phase we surface the canonical title in the note line. */
+async function pollStatus(serial) {
+  if (!currentOrder || currentOrder.serial !== serial) return;
+  const note = $("pending-server-note");
+  try {
+    const resp = await fetch(
+      `${CONTROL_PLANE_BASE}/api/order/${encodeURIComponent(serial)}/status`,
+    );
+    if (resp.ok) {
+      const body = await resp.json();
+      const phase = body && typeof body.phase === "string" ? body.phase : null;
+      if (note && phase) {
+        const title = PROVISION_PHASE_TITLES[phase] || phase;
+        const detail =
+          phase === "error" && body.detail ? ` — ${body.detail}` : "";
+        note.textContent = `Setup: ${title}${escapeHtml(detail)}`;
+      }
+      if (phase === "live") {
+        // The box is live — it's a running server now, not a pending order.
+        const list = JSON.parse(profileGet("pendingOrders") || "[]");
+        profileSet(
+          "pendingOrders",
+          JSON.stringify(list.filter((o) => o.serial !== serial)),
+        );
+        toast(`${escapeHtml(currentOrder.name || "Your server")} is live`);
+        clearStatusPoll();
+        currentOrder = null;
+        show("view-home");
+        return;
+      }
+      if (phase && TERMINAL_PHASES.has(phase)) {
+        clearStatusPoll();
+        return;
+      }
+    }
+    // 404 (no record yet) / transient — keep polling.
+  } catch (_e) {
+    // network blip — keep polling
+  }
+  statusTimer = setTimeout(() => pollStatus(serial).catch(() => {}), POLL_INTERVAL_MS);
 }
 
 async function runCancel() {
@@ -93,6 +153,7 @@ async function runCancel() {
       JSON.stringify(list.filter((o) => o.serial !== currentOrder.serial)),
     );
     toast(`order cancelled (${escapeHtml(currentOrder.name)})`);
+    clearStatusPoll();
     currentOrder = null;
     show("view-home");
   } catch (e) {
@@ -105,5 +166,8 @@ export function initPendingServerView() {
   $("pending-server-cancel")?.addEventListener("click", () => {
     runCancel().catch((e) => toast(String(e), "err"));
   });
-  $("pending-server-back")?.addEventListener("click", () => show("view-home"));
+  $("pending-server-back")?.addEventListener("click", () => {
+    clearStatusPoll();
+    show("view-home");
+  });
 }
