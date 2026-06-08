@@ -44,6 +44,31 @@ public final class ProvisionTimelineViewModel {
     private let pollIntervalNanos: UInt64
     private var task: Task<Void, Never>?
 
+    // The box's earliest signals (the d-i preseed beacons: booting /
+    // partitioning / installing) land on the install-events channel, NOT on
+    // the per-order status channel the bootstrap's report_phase posts to. We
+    // poll both and merge so ANY signal advances the ladder.
+    private var installCursor: Int = 0
+    private var installFurthest: ProvisionStatusPhase?
+    private var installDomain: String?
+
+    private static func phase(forInstallEvent name: String) -> ProvisionStatusPhase? {
+        switch name {
+        case "d-i-started":       return .booting
+        case "partitioning":      return .partitioning
+        case "installer-running": return .installing
+        case "registered":        return .registering
+        case "ready":             return .live
+        case "failed":            return .error
+        default:                  return nil   // metrics:* and other non-ladder events
+        }
+    }
+
+    private static func ladderIndex(_ p: ProvisionStatusPhase?) -> Int {
+        guard let p else { return -1 }
+        return ProvisionStatusPhase.ordered.firstIndex(of: p) ?? -1
+    }
+
     public init(
         serial: String,
         server: any FlagshipServerClient,
@@ -79,20 +104,48 @@ public final class ProvisionTimelineViewModel {
     /// One poll round-trip. Returns true if a terminal phase was
     /// observed so the loop can return without sleeping.
     private func pollOnce() async -> Bool {
-        let next: ProvisionStatus?
-        do {
-            next = try await server.fetchProvisionStatus(serial: serial)
-        } catch {
-            // Network blip — keep the last good status and try again next
-            // tick. A pending pod already shows "boot disk on the way".
-            return false
+        // Channel 1 — per-order status (the bootstrap's report_phase). nil on a
+        // 404 (no checkpoint yet) or a network blip.
+        let order: ProvisionStatus? = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil
+
+        // Channel 2 — install-events (the d-i preseed beacons). Accumulate the
+        // furthest ladder phase seen so an early signal lights up the bar even
+        // before the bootstrap reports to the order channel.
+        if let poll = try? await server.getInstallEvents(serial: serial, since: installCursor) {
+            installCursor = poll.cursor
+            for rec in poll.events {
+                guard let ph = Self.phase(forInstallEvent: rec.eventName) else { continue }
+                if ph == .error || Self.ladderIndex(ph) > Self.ladderIndex(installFurthest) {
+                    installFurthest = ph
+                }
+                if rec.eventName == "ready", !rec.detail.isEmpty { installDomain = rec.detail }
+            }
         }
-        guard let next else {
-            // 404 — no checkpoint yet. Leave status nil; keep polling.
-            return false
+
+        // Merge: a terminal error on either channel wins; otherwise take the
+        // channel that's further along the ladder. order-status is preferred at
+        // a tie (it carries serverDomain + history + per-step detail).
+        let merged: ProvisionStatus?
+        if order?.phase == .error || installFurthest == .error {
+            merged = order ?? ProvisionStatus(serial: serial, serverDomain: installDomain,
+                                              phase: .error, detail: nil, updatedAt: 0, history: [])
+        } else if Self.ladderIndex(order?.phase) >= Self.ladderIndex(installFurthest) {
+            merged = order
+        } else if let installFurthest {
+            merged = ProvisionStatus(
+                serial: serial,
+                serverDomain: order?.serverDomain ?? installDomain,
+                phase: installFurthest,
+                detail: nil,
+                updatedAt: 0,
+                history: order?.history ?? []
+            )
+        } else {
+            merged = order
         }
-        status = next
-        if next.phase.isTerminal {
+
+        if let merged { status = merged }
+        if let phase = merged?.phase, phase.isTerminal {
             isDone = true
             return true
         }
