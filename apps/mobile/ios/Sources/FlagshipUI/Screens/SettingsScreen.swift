@@ -193,10 +193,11 @@ public struct SettingsScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
         }
-        // The content fits horizontally, so disable sideways bounce —
-        // otherwise a left/right drag rubber-bands the whole page and
-        // springs back. .basedOnSize keeps vertical bounce intact while
-        // pinning the horizontal axis fixed.
+        // Belt-and-suspenders: once no child overflows horizontally (rows
+        // truncate their values) the content width equals the viewport, so
+        // .basedOnSize keeps vertical bounce while leaving no horizontal range
+        // to rubber-band. The actual fix lives in the rows — this modifier
+        // alone can't stop a drag when a child genuinely overflows.
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
@@ -458,7 +459,11 @@ public struct SettingsScreen: View {
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(d.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                        Text(d.label)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(c.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         if quarantined {
                             Image(systemName: "clock.badge.exclamationmark")
                                 .foregroundColor(c.danger)
@@ -733,8 +738,16 @@ public struct SettingsScreen: View {
     private func row(label: String, value: String, mono: Bool = false, c: FSColors) -> some View {
         HStack {
             Text(label).foregroundColor(c.textMuted)
-            Spacer()
-            Text(value).font(mono ? FS.font.mono() : FS.font.body()).foregroundColor(c.text)
+            Spacer(minLength: FS.space.s4)
+            // An unbreakable value (username, key hex, FQDN) has no wrap
+            // opportunity, so without a line limit it reports an ideal width
+            // wider than the screen — that horizontal overflow is what lets the
+            // vertical ScrollView rubber-band sideways. Truncate instead.
+            Text(value)
+                .font(mono ? FS.font.mono() : FS.font.body())
+                .foregroundColor(c.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
     }
 
