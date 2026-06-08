@@ -40,7 +40,7 @@ public struct AddServerChooserScreen: View {
                         icon: "server.rack",
                         accent: c.primary,
                         title: "Provision a new box",
-                        body: "Mint a build code, download a personalized Alpine ISO, flash it to commodity hardware. Cert + tunnel come up automatically.",
+                        body: "Mint a build code, then use the Flagship burner to write it to a USB stick and boot commodity hardware. Cert + tunnel come up automatically.",
                         c: c
                     )
                 }

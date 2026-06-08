@@ -13,7 +13,7 @@ public final class InstallProgressViewModel {
         public var title: String {
             switch self {
             case .registered:   return "Phone-home received"
-            case .boot:          return "Booted Alpine"
+            case .boot:          return "OS booted"
             case .tunnelOnline:  return "Tunnel up"
             case .certIssued:    return "TLS cert issued"
             case .ready:         return "Server is live"
