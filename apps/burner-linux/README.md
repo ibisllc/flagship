@@ -4,8 +4,26 @@ GTK4 + libadwaita wrapper around the `@flagship/burner` Node CLI
 (`packages/flagship-burner/`). UX matches `apps/burner-mac/` 1:1: one
 window, five-step wizard.
 
-You bring a stock Ubuntu/Debian ISO; the burner remasters it with your signed
-recipe (via the `@flagship/burner` Node CLI) and flashes it to a USB drive.
+## Two modes
+
+Both modes remaster a base ISO with your signed recipe via the same
+`@flagship/burner` Node CLI `write` subcommand, then flash it to a USB drive.
+They differ only in *where the base ISO comes from*:
+
+- **Simple (default)** — you don't supply an ISO. The burner fetches a stock
+  **Debian-netinst** base ISO chosen by the **server manifest**
+  (`POST https://flagshipserver.com/api/iso-manifest`), verifies its sha256,
+  and caches it under `~/.cache/flagship-burner/`. Every later burn reuses the
+  cache; the server decides when a new base ships. The burner is a *dumb
+  executor*: it reports the version+sha of whatever it has cached, obeys the
+  manifest's download-or-keep instruction, and verifies the bytes it downloads.
+- **Advanced** — you bring your own stock Ubuntu/Debian ISO (drag it in). No
+  manifest, no download. Toggle "Bring my own ISO (Advanced)" in the header.
+
+The base-ISO download URL is shown live under the progress bar so you can see
+exactly where the bytes are coming from. Both the cached path + sha256 (on
+inspect) and the downloaded path + sha256 + source URL (after a download) are
+written to the log pane.
 
 ## What it does
 
@@ -13,8 +31,9 @@ recipe (via the `@flagship/burner` Node CLI) and flashes it to a USB drive.
    after the phone scans the QR code. The GUI shells out to
    `flagship-burn verify` and shows you the server-domain + expiry so
    you can sanity-check before flashing.
-2. **ISO** — drag in a stock Ubuntu/Debian Server ISO. Run
-   `flagship-burn distros` for accepted SHAs.
+2. **ISO** — *Advanced only.* Drag in a stock Ubuntu/Debian Server ISO. Run
+   `flagship-burn distros` for accepted SHAs. In **Simple** mode this step is
+   hidden — the Debian base ISO is fetched per the server manifest and cached.
 3. **Drive** — pick a USB drive from a read-only list. Only removable,
    external whole-disks in the 500MB-500GB band appear; internal SSDs,
    NVMe boot drives, and oversized disks are hidden by design — they're
@@ -68,7 +87,12 @@ Tests cover:
 - `cli_runner` argument vectors + locator fallback + `verify` JSON
   parser — mirrors `CLIArgsTests` + `VerifyResultTests`.
 - `wizard` state machine (GUI-agnostic) — `WizardState` readiness,
-  `WizardModel.refresh_disks` + `accept_*` callbacks.
+  `WizardModel.refresh_disks` + `accept_*` callbacks, Simple/Advanced
+  `set_mode`, and the Simple-mode base-ensure→CLI-write seam.
+- `iso_manifest_client` — `/api/iso-manifest` POST shape + response
+  parse (download vs keep), mocked HTTP.
+- `iso_base_cache` — manifest-driven keep vs download vs sha-mismatch
+  against a temp cache dir.
 
 The view layer is intentionally not unit tested — drive it manually
 with `flagship-burner.py`.
@@ -120,7 +144,10 @@ this with a portal-mediated "open this device" prompt.
 ```
 flagship-burner.py    GTK app entry — wires Adw.Application, opens the wizard window
 wizard.py             GUI-agnostic WizardState + WizardModel + GTK view builder
-                      + PkexecFlasher (local raw write)
+                      + PkexecFlasher (local raw write); Simple/Advanced modes
+iso_manifest_client.py POST /api/iso-manifest, parse download-or-keep response
+iso_base_cache.py     manifest-driven Debian base-ISO cache (inspect / fetch /
+                      stream-sha256-verify / store) for Simple mode
 disk_write.py         sector-aligned raw write (lib + pkexec CLI entry)
 cli_runner.py         spawn Node, stream output, locate CLI, parse JSON
 disk_enumerator.py    lsblk JSON parser + safety classifier (mirrors devices.ts)

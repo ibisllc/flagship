@@ -301,20 +301,29 @@ public static class Hex
 }
 
 /// <summary>
-/// Which assembly flow the wizard runs. Mirrors apps/burner-mac BurnerMode.swift.
+/// Which assembly flow the wizard runs. Mirrors apps/burner-mac BurnerMode.swift
+/// and apps/burner-linux's BurnerMode.
 ///
-/// - Advanced: the user supplies a stock Debian/Ubuntu ISO + a JSON recipe; the
-///   burner remasters in-place (via the Node CLI) then flashes.
-///
-/// (A future Simple/Debian mode that hides the ISO step will re-add a second
-/// case here.)
+/// - Simple (default): the user supplies only a recipe. The burner fetches the
+///   stock Debian-netinst base ISO per the SERVER manifest (cached, verified by
+///   sha256), then runs the SAME remaster+flash path Advanced uses — the recipe
+///   preseed is baked into the fetched base, then flashed. No user ISO.
+/// - Advanced: the user supplies their own stock Debian/Ubuntu ISO + a JSON
+///   recipe; the burner remasters that ISO in-place (via the Node CLI) then
+///   flashes.
 /// </summary>
-public enum BurnerMode { Advanced }
+public enum BurnerMode { Simple, Advanced }
 
 public static class BurnerModeExtensions
 {
     public static bool RequiresRecipe(this BurnerMode m) => true;
-    public static bool RequiresUserISO(this BurnerMode m) => true;
-    public static string BakeCtaLabel(this BurnerMode m) => "Assemble and flash";
-    public static string MenuLabel(this BurnerMode m) => "Advanced";
+
+    /// <summary>Simple fetches the base from the server; only Advanced needs a user ISO.</summary>
+    public static bool RequiresUserISO(this BurnerMode m) => m == BurnerMode.Advanced;
+
+    public static string BakeCtaLabel(this BurnerMode m) =>
+        m == BurnerMode.Simple ? "Flash to USB" : "Assemble and flash";
+
+    public static string MenuLabel(this BurnerMode m) =>
+        m == BurnerMode.Simple ? "Simple" : "Advanced";
 }

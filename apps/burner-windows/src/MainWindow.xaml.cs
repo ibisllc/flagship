@@ -120,6 +120,14 @@ public partial class MainWindow : Window
         _wizard.ClearLog();
     }
 
+    // ---- Mode toggle ----
+
+    private void ModeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        // Flip between Simple (server-manifest base) and Advanced (user ISO).
+        _wizard.Mode = _wizard.Mode == BurnerMode.Simple ? BurnerMode.Advanced : BurnerMode.Simple;
+    }
+
     // ---- Drag-drop helpers ----
 
     private static void HandleDragEnter(Border row, DragEventArgs e)
@@ -209,6 +217,19 @@ public sealed class NotNullToVisibilityConverter : IValueConverter
         if (value is string s && string.IsNullOrEmpty(s)) return Visibility.Collapsed;
         return Visibility.Visible;
     }
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Label for the mode-switch link: it names the OTHER mode (the one a click
+/// switches TO), so it reads like an action. Simple ⇒ "Advanced…", and
+/// vice-versa.
+/// </summary>
+public sealed class ModeToggleLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is BurnerMode m && m == BurnerMode.Simple ? "Advanced…" : "Simple…";
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
 }

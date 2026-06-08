@@ -14,6 +14,8 @@ import pytest
 from cli_runner import Resolved
 from disk_enumerator import DeviceInfo
 from wizard import (
+    MODE_ADVANCED,
+    MODE_SIMPLE,
     VerifyInfo,
     WizardModel,
     WizardState,
@@ -53,8 +55,8 @@ def test_derive_out_iso_path_keeps_stem():
 # ---- WizardState ----
 
 
-def test_wizard_state_can_flash_requires_all_three():
-    s = WizardState()
+def test_wizard_state_can_flash_requires_all_three_advanced():
+    s = WizardState(mode=MODE_ADVANCED)
     assert s.can_flash is False
     s.recipe_path = Path("/r.json")
     assert s.can_flash is False
@@ -64,15 +66,36 @@ def test_wizard_state_can_flash_requires_all_three():
     assert s.can_flash is True
 
 
-def test_wizard_state_readiness_summary_lists_missing():
+def test_wizard_state_can_flash_simple_no_user_iso():
+    # Simple mode (the default) needs only recipe + USB — the base ISO comes
+    # from the server manifest, not the user.
     s = WizardState()
+    assert s.mode == MODE_SIMPLE
+    assert s.requires_user_iso is False
+    s.recipe_path = Path("/r.json")
+    assert s.can_flash is False
+    s.selected_disk = _make_disk("/dev/sdb")
+    assert s.can_flash is True
+
+
+def test_wizard_state_readiness_summary_lists_missing():
+    s = WizardState(mode=MODE_ADVANCED)
     assert "recipe" in s.readiness_summary
     assert "ISO" in s.readiness_summary
     assert "USB drive" in s.readiness_summary
 
 
+def test_wizard_state_readiness_summary_simple_omits_iso():
+    s = WizardState()  # Simple default
+    summary = s.readiness_summary
+    assert "recipe" in summary
+    assert "ISO" not in summary
+    assert "USB drive" in summary
+
+
 def test_wizard_state_readiness_summary_ready():
     s = WizardState(
+        mode=MODE_ADVANCED,
         recipe_path=Path("/r.json"),
         iso_path=Path("/ubuntu-22.04.iso"),
         selected_disk=_make_disk("/dev/sdb"),
@@ -171,6 +194,70 @@ def test_wizard_model_on_change_fires_on_state_mutation():
     model.state.disks = [_make_disk("/dev/sdb")]
     model.select_disk("/dev/sdb")
     assert sum(fired) >= 1
+
+
+def test_wizard_model_set_mode_switches():
+    model = _model_with_fake_locate(node="/usr/bin/node", entry="/cli.ts")
+    assert model.state.mode == MODE_SIMPLE
+    model.set_mode(MODE_ADVANCED)
+    assert model.state.mode == MODE_ADVANCED
+    model.set_mode(MODE_SIMPLE)
+    assert model.state.mode == MODE_SIMPLE
+
+
+def test_wizard_model_set_mode_ignores_unknown():
+    model = _model_with_fake_locate(node="/usr/bin/node", entry="/cli.ts")
+    model.set_mode("bogus")
+    assert model.state.mode == MODE_SIMPLE
+
+
+def test_simple_bake_ensures_base_then_runs_cli_with_that_iso(tmp_path):
+    # Simple mode: the base ISO returned by ensure_base must be the ISO the
+    # Node-CLI write path receives (same engine as Advanced).
+    base = tmp_path / "flagship-base-debian-12.iso"
+    base.write_bytes(b"iso")
+
+    captured: dict = {}
+
+    def fake_ensure(burner_version, progress=None, on_download_start=None, log=None):
+        captured["burner_version"] = burner_version
+        if log:
+            log(f"cached base {base} sha256=deadbeef")
+        return base
+
+    locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
+    model = WizardModel(locate_fn=locate_fn, ensure_base_fn=fake_ensure)
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.selected_disk = _make_disk("/dev/sdb")
+
+    cli_calls: list = []
+    model._cli_write = lambda recipe, iso, disk: cli_calls.append((recipe, iso, disk))
+
+    model._run_simple_bake_sync()
+
+    assert captured["burner_version"]  # forwarded the burner version
+    assert model.state.base_iso_path == base
+    assert len(cli_calls) == 1
+    _recipe, iso_arg, _disk = cli_calls[0]
+    assert iso_arg == base
+
+
+def test_simple_bake_surfaces_cache_error(tmp_path):
+    import iso_base_cache
+
+    def boom(burner_version, progress=None, on_download_start=None, log=None):
+        raise iso_base_cache.OfflineError("no net")
+
+    locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
+    model = WizardModel(locate_fn=locate_fn, ensure_base_fn=boom)
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.selected_disk = _make_disk("/dev/sdb")
+    model._cli_write = lambda *a: pytest.fail("CLI must not run when base fetch fails")
+
+    model._run_simple_bake_sync()
+
+    assert any(ll.stream == "stderr" for ll in model.state.log_lines)
+    assert model.state.phase is None
 
 
 # ---- helpers ----

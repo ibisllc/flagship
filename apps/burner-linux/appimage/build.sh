@@ -51,6 +51,9 @@ mkdir -p "${APPDIR}/usr/share/polkit-1/actions"
 install -Dm755 "${LINUX_DIR}/flagship-burner.py"   "${APPDIR}/usr/bin/flagship-burner"
 install -Dm644 "${LINUX_DIR}/wizard.py"            "${APPDIR}/usr/share/flagship-burner/wizard.py"
 install -Dm644 "${LINUX_DIR}/cli_runner.py"        "${APPDIR}/usr/share/flagship-burner/cli_runner.py"
+# Simple-mode server-manifest base-ISO cache (manifest client + cache).
+install -Dm644 "${LINUX_DIR}/iso_manifest_client.py" "${APPDIR}/usr/share/flagship-burner/iso_manifest_client.py"
+install -Dm644 "${LINUX_DIR}/iso_base_cache.py"    "${APPDIR}/usr/share/flagship-burner/iso_base_cache.py"
 install -Dm644 "${LINUX_DIR}/disk_enumerator.py"   "${APPDIR}/usr/share/flagship-burner/disk_enumerator.py"
 # disk_write.py is the script pkexec elevates for the raw write — install it
 # 0755 so the polkit-launched python3 can read+exec it.

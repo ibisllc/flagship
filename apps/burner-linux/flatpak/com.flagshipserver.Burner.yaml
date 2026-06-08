@@ -35,6 +35,8 @@ modules:
       - install -Dm755 flagship-burner.py   ${FLATPAK_DEST}/bin/flagship-burner
       - install -Dm644 wizard.py            ${FLATPAK_DEST}/share/flagship-burner/wizard.py
       - install -Dm644 cli_runner.py        ${FLATPAK_DEST}/share/flagship-burner/cli_runner.py
+      - install -Dm644 iso_manifest_client.py ${FLATPAK_DEST}/share/flagship-burner/iso_manifest_client.py
+      - install -Dm644 iso_base_cache.py    ${FLATPAK_DEST}/share/flagship-burner/iso_base_cache.py
       - install -Dm644 disk_enumerator.py   ${FLATPAK_DEST}/share/flagship-burner/disk_enumerator.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-burner/disk_write.py
       - install -Dm644 com.flagshipserver.Burner.desktop ${FLATPAK_DEST}/share/applications/com.flagshipserver.Burner.desktop

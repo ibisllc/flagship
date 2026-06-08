@@ -34,6 +34,8 @@
     <Compile Include="src\Recipe.cs" />
     <Compile Include="src\Ed25519Verify.cs" />
     <Compile Include="src\DiskWrite.cs" />
+    <Compile Include="src\IsoManifestClient.cs" />
+    <Compile Include="src\IsoBaseCache.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -33,6 +33,9 @@
     <Compile Include="..\src\Recipe.cs"/>
     <Compile Include="..\src\Ed25519Verify.cs"/>
     <Compile Include="..\src\DiskWrite.cs"/>
+    <!-- Manifest client + manifest-driven base-ISO cache are WPF-free. -->
+    <Compile Include="..\src\IsoManifestClient.cs"/>
+    <Compile Include="..\src\IsoBaseCache.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
     <Compile Include="CliArgsShim.cs"/>
@@ -44,6 +47,8 @@
     <Compile Include="Ed25519VerifyTests.cs"/>
     <Compile Include="RecipeTests.cs"/>
     <Compile Include="DiskWriteTests.cs"/>
+    <Compile Include="IsoManifestClientTests.cs"/>
+    <Compile Include="IsoBaseCacheTests.cs"/>
   </ItemGroup>
 
   <ItemGroup>

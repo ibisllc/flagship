@@ -3,29 +3,58 @@
 WPF + .NET 8. UX matches `apps/burner-mac/` and `apps/burner-linux/` 1:1:
 one window, drop-rows, big Bake button, collapsed log drawer.
 
-- **Advanced (the only mode today)** — bring a stock Debian/Ubuntu ISO + a
-  recipe; the burner shells out to the `@flagship/burner` Node CLI
-  (`packages/flagship-burner/`) to remaster the ISO with the recipe preseed
-  + flash it to USB.
+Two modes, switchable via the link in the header:
 
-> A future **Simple/Debian** mode that hides the ISO step is planned; it will
-> re-add a second flow here.
+- **Simple (default)** — bring only a recipe. The burner fetches the stock
+  Flagship **Debian-netinst base ISO per the server manifest**
+  (`POST /api/iso-manifest`), caches + sha256-verifies it, then runs the *same*
+  remaster + flash path Advanced uses — the recipe preseed is baked into the
+  fetched base, then flashed. No user ISO. The base is downloaded once and
+  reused for every later server.
+- **Advanced** — bring a stock Debian/Ubuntu ISO + a recipe; the burner shells
+  out to the `@flagship/burner` Node CLI (`packages/flagship-burner/`) to
+  remaster *your* ISO with the recipe preseed + flash it to USB.
+
+### The base-ISO manifest (Simple mode)
+
+The burner is a **dumb executor**. On a Simple bake it:
+
+1. Inspects the cached base ISO (if any) and computes its SHA256 — logging the
+   path + sha.
+2. POSTs `{ platform: "windows", burnerVersion, current: {version, sha256} |
+   null }` to `https://flagshipserver.com/api/iso-manifest`.
+3. The server replies with exactly one of `{ download: {url, sha256, version,
+   sizeBytes, attestation} }` or `{ download: null }`.
+4. If `download` is non-null → fetches `download.url` (the URL is shown under
+   the progress bar), stream-verifies the bytes' SHA256 against
+   `download.sha256` (mismatch → delete + error), caches the verified ISO under
+   `%LOCALAPPDATA%\flagship-burner\flagship-base-<version>.iso`, and logs
+   `downloaded <path> sha256=<hex> from <url>`.
+5. If `download` is null → keeps the cached base.
+
+The burner never decides "do I already have this?" by comparing shas itself —
+it reports `current`, obeys the server's directive, and verifies the bytes it
+downloads. Mirrors the macOS (`IsoManifestClient.swift` / `IsoBaseCache.swift`)
+and Linux (`iso_manifest_client.py` / `iso_base_cache.py`) siblings.
 
 ## What it does
 
 1. **Recipe** — drag in (or click and pick) the signed JSON the website
    produces after the phone scans the QR code. The GUI parses + verifies the
    Ed25519 signature **locally** and shows the server-domain + expiry.
-2. **Ubuntu Server ISO** — drop a stock Debian/Ubuntu ISO. The burner
-   remasters it with the recipe preseed.
+2. **Ubuntu Server ISO** *(Advanced only)* — drop a stock Debian/Ubuntu ISO.
+   The burner remasters it with the recipe preseed. In Simple mode this row is
+   hidden; the base comes from the server manifest instead.
 3. **USB Drive** — pick a USB drive from a read-only list. Only removable
    drives in the 500MB–500GB band appear; internal SSDs, NVMe boot drives,
    and oversized disks are hidden by design. `\\.\PhysicalDrive0` is the
    system disk on every Windows install and is permanently blocked.
-4. **Bake** — invokes the CLI's `write` subcommand (remaster + raw-write) and
-   streams its stdout/stderr into the log drawer; the progress bar runs while
-   the CLI works. The `requireAdministrator` UAC manifest lets the raw open
-   succeed without a second prompt.
+4. **Bake** — Simple mode first runs a one-time base-image download phase (URL
+   shown under the bar), then invokes the CLI's `write` subcommand (remaster +
+   raw-write) on the cached base; Advanced mode runs `write` directly on the
+   user ISO. Both stream stdout/stderr into the log drawer. The
+   `requireAdministrator` UAC manifest lets the raw open succeed without a
+   second prompt.
 
 ## Requirements
 
@@ -118,13 +147,17 @@ src/
   CliLocator.cs         find node.exe + the @flagship/burner CLI entry
   DiskEnumerator.cs     wmic + PowerShell parser + safety classifier
   VerifyResult.cs       decode CLI verify JSON (tolerant of prefix noise)
+  IsoManifestClient.cs  POST /api/iso-manifest (the locked wire contract)
+  IsoBaseCache.cs       manifest-driven base-ISO cache + sha256-verified download
 tests/
   FlagshipBurner.Tests.csproj  xunit; net8.0 (no WPF) → portable
   DiskEnumeratorTests.cs  classifier rules + wmic/PS parser smoke
   VerifyResultTests.cs    JSON tolerance
   CliLocatorTests.cs      env override + parent-climb discovery
   CliArgsTests.cs         argv-vector shapes (must match cli.ts vocab)
-  WizardStateMachineTests.cs  readiness / CanBake rules
+  WizardStateMachineTests.cs  readiness / CanBake rules (Simple + Advanced)
+  IsoManifestClientTests.cs   request/response contract + stubbed round trip
+  IsoBaseCacheTests.cs        keep / download+verify / sha-mismatch (temp dir)
   CliArgsShim.cs          mirror of Wizard.cs::CliArgs (kept in sync by hand)
 ```
 

@@ -23,6 +23,7 @@
         <local:NullToVisibilityConverter x:Key="NullToCollapsed"/>
         <local:NotNullToVisibilityConverter x:Key="NotNullToVisible"/>
         <local:StreamToBrushConverter x:Key="StreamToBrush"/>
+        <local:ModeToggleLabelConverter x:Key="ModeToggleLabel"/>
     </Window.Resources>
 
     <Grid Margin="0">
@@ -50,6 +51,12 @@
                            VerticalAlignment="Center"
                            Margin="10,0,0,0"/>
             </StackPanel>
+            <!-- Mode switch: names the mode a click switches TO (Simple⇄Advanced). -->
+            <Button HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource LinkButton}"
+                    Content="{Binding Mode, Converter={StaticResource ModeToggleLabel}}"
+                    Click="ModeToggle_Click"/>
         </Grid>
 
         <!-- Three drop-rows + bake button -->
@@ -246,6 +253,18 @@
                                    HorizontalAlignment="Center"
                                    Margin="0,8,0,0"
                                    Text="{Binding ProgressCaption}"/>
+                        <!-- The base-image URL being fetched, surfaced directly
+                             under the bar during the download phase only. -->
+                        <TextBlock Style="{StaticResource Caption}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,2,0,0"
+                                   MaxWidth="380"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   FontFamily="{StaticResource FB.Font.Mono}"
+                                   Text="{Binding DownloadUrlCaption}"
+                                   Visibility="{Binding ShowDownloadRow,
+                                       Converter={StaticResource BoolToVisibility}}"/>
                         <Button Style="{StaticResource LinkButton}"
                                 HorizontalAlignment="Center"
                                 Margin="0,6,0,0"

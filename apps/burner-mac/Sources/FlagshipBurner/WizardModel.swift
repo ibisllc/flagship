@@ -29,8 +29,15 @@ final class WizardModel: ObservableObject {
     /// never part of the signed recipe.
     @Published var wifiSSID = ""
     @Published var wifiPassword = ""
-    /// Advanced = remaster a stock Ubuntu/Debian ISO with a JSON recipe.
-    @Published var mode: BurnerMode = .advanced
+    /// Simple = fetch a server-named Debian base ISO + remaster it with the
+    /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
+    /// supplies. Both end in the same remaster+flash path.
+    @Published var mode: BurnerMode = .simple
+
+    /// The base-ISO URL currently being downloaded in Simple mode — surfaced
+    /// under the download progress bar so the user can see exactly what's being
+    /// fetched. nil when not downloading.
+    @Published var baseDownloadURL: String? = nil
 
     /// Test seam: set inside `runWrite()` only on the branch that actually
     /// runs the remaster step. The model-level unit tests can assert against
@@ -39,6 +46,8 @@ final class WizardModel: ObservableObject {
 
     var phaseLabel: String? {
         switch phase {
+        case "download": return "Downloading base image…"
+        case "verify": return "Verifying base image…"
         case "remaster": return "Building image…"
         case "write": return "Writing to USB…"
         default: return nil
@@ -56,10 +65,10 @@ final class WizardModel: ObservableObject {
         if line.hasPrefix("FLAGSHIP_PHASE:") {
             let p = String(line.dropFirst("FLAGSHIP_PHASE:".count))
             phase = p
-            if p == "remaster" {
+            if p == "remaster" || p == "verify" {
                 progress = nil
                 DockProgress.set(nil)
-            } else if p == "write" {
+            } else if p == "write" || p == "download" {
                 progress = 0
                 DockProgress.set(0)
             }
@@ -71,6 +80,7 @@ final class WizardModel: ObservableObject {
     private func endProgress() {
         progress = nil
         phase = nil
+        baseDownloadURL = nil
         DockProgress.set(nil)
     }
 
@@ -184,6 +194,36 @@ final class WizardModel: ObservableObject {
         return (yaml, preseed)
     }
 
+    /// Simple mode: ask the server which Debian base ISO to hold, download +
+    /// verify it if ordered (or reuse the cache), and return the local ISO. The
+    /// download URL is surfaced under the progress bar via `baseDownloadURL`;
+    /// the boot/after-download path+sha logging happens inside IsoBaseCache.
+    private func ensureBaseISO() async throws -> URL {
+        let cache = IsoBaseCache(log: { [weak self] line in
+            Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(line)") }
+        })
+        return try await cache.ensure(progress: { [weak self] phase in
+            Task { @MainActor in
+                guard let self = self else { return }
+                switch phase {
+                case .inspected:
+                    break
+                case .downloading(let url, _, let p):
+                    self.phase = "download"
+                    self.baseDownloadURL = url
+                    self.progress = p
+                    DockProgress.set(p)
+                case .ready:
+                    // Hand off to the verify→remaster phase.
+                    self.phase = "verify"
+                    self.baseDownloadURL = nil
+                    self.progress = nil
+                    DockProgress.set(nil)
+                }
+            }
+        })
+    }
+
     /// Save a remastered ISO to disk for flashing elsewhere.
     func runPrepare() async {
         guard let recipe = recipe, let iso = iso else { return }
@@ -210,9 +250,11 @@ final class WizardModel: ObservableObject {
 
     /// One-click "Bake".
     ///
-    /// We first remaster the stock Ubuntu/Debian ISO with the user's JSON
-    /// recipe (unprivileged — the app holds the Downloads grant; the helper
-    /// can't read user folders) then hand the prepared image to the helper.
+    /// Simple: fetch the server-named Debian base ISO (cached), then remaster it
+    /// with the recipe. Advanced: remaster the user-supplied stock ISO. Either
+    /// way the remaster is unprivileged (the app holds the Downloads grant; the
+    /// helper can't read user folders) and the prepared image is handed to the
+    /// signed helper for the raw write.
     func runWrite() async {
         guard let disk = selectedDisk else { return }
         if mode.requiresUserISO && iso == nil { return }
@@ -221,23 +263,45 @@ final class WizardModel: ObservableObject {
         isRunning = true
         progress = nil
         phase = nil
+        baseDownloadURL = nil
         didRemasterForTest = false
         defer { isRunning = false; endProgress() }
 
-        // Remaster the user-supplied stock ISO with the recipe, then flash.
         let imagePath: String
         var preparedToCleanup: URL? = nil
         defer { if let p = preparedToCleanup { try? FileManager.default.removeItem(at: p) } }
 
-        guard let iso = iso, let recipe = recipe else { return }
+        guard let recipe = recipe else { return }
+
+        // The ISO to remaster: in Simple mode we fetch the server-named Debian
+        // base; in Advanced the user supplied one.
+        let srcISO: URL
+        switch mode {
+        case .simple:
+            phase = "download"
+            do {
+                srcISO = try await ensureBaseISO()
+            } catch {
+                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                return
+            }
+        case .advanced:
+            guard let iso = iso else { return }
+            srcISO = iso
+        }
+
+        // Shared remaster+flash path for both modes.
         phase = "remaster"
+        baseDownloadURL = nil
+        progress = nil
+        DockProgress.set(nil)
         let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
         do {
             let cfgs = try installerConfigs(forRecipe: recipe)
-            appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → prepared image")
+            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → prepared image")
             let used = try await Task.detached(priority: .userInitiated) { () -> String in
-                try Remaster.remasterInstaller(srcISO: iso, outISO: preparedURL,
+                try Remaster.remasterInstaller(srcISO: srcISO, outISO: preparedURL,
                                                userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
             didRemasterForTest = true

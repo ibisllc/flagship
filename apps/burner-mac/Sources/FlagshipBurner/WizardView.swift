@@ -62,15 +62,33 @@ struct WizardView: View {
 
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            modePicker
             recipeRow
-            // Bring a stock Ubuntu/Debian ISO to remaster.
-            isoRow
+            // Advanced brings its own stock Ubuntu/Debian ISO; Simple fetches a
+            // server-named Debian base ISO and shows the download progress.
+            if model.mode.requiresUserISO {
+                isoRow
+            }
             diskRow
             wifiRow
             Spacer(minLength: FB.Spacing.s2)
             bakeRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Simple (default, server-named Debian base) vs Advanced (bring your own
+    /// ISO). Disabled while a burn is running so the inputs can't change mid-run.
+    private var modePicker: some View {
+        Picker("", selection: $model.mode) {
+            ForEach(BurnerMode.allCases, id: \.self) { m in
+                Text(m.menuLabel).tag(m)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .disabled(model.isRunning)
+        .frame(maxWidth: 240)
     }
 
     /// The remaster runs on the burner before the write; show it in the warning
@@ -288,6 +306,17 @@ struct WizardView: View {
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                         .monospacedDigit()
+                    // Show the exact base-ISO URL being fetched, directly under
+                    // the bar, so the download is transparent to the user.
+                    if let url = model.baseDownloadURL {
+                        Text(url)
+                            .font(FB.Font.mono())
+                            .foregroundStyle(FB.Colors.textMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: 300)
+                    }
                 }
                 .frame(minHeight: 28)
             } else if model.isFinished {

@@ -15,10 +15,46 @@ namespace Flagship.Burner.Tests;
 /// </summary>
 public class WizardStateMachineTests
 {
+    // ---- Simple mode (the default): no user ISO, base comes from the server. ----
+
     [Fact]
-    public void NewState_HasNothingReady()
+    public void NewState_Simple_HasNothingReady()
     {
         var s = new WizardStateView();
+        Assert.Equal(BurnerMode.Simple, s.Mode);
+        Assert.False(s.CanBake);
+        Assert.False(s.HasRecipe);
+        Assert.False(s.HasDisk);
+        // Simple mode never asks for an ISO.
+        Assert.Equal("Need: recipe, USB drive.", s.ReadinessSummary);
+    }
+
+    [Fact]
+    public void Simple_AfterRecipeOnly_NeedsDisk()
+    {
+        var s = new WizardStateView { RecipePath = @"C:\tmp\recipe.json" };
+        Assert.False(s.CanBake);
+        Assert.Equal("Need: USB drive.", s.ReadinessSummary);
+    }
+
+    [Fact]
+    public void Simple_RecipeAndDisk_CanBake_NoIsoNeeded()
+    {
+        var s = new WizardStateView
+        {
+            RecipePath = @"C:\tmp\recipe.json",
+            SelectedDevice = @"\\.\PhysicalDrive2",
+        };
+        Assert.True(s.CanBake);
+        Assert.Equal(@"Writes to \\.\PhysicalDrive2 · erases what's there", s.ReadinessSummary);
+    }
+
+    // ---- Advanced mode: the user supplies their own ISO. ----
+
+    [Fact]
+    public void Advanced_NewState_HasNothingReady()
+    {
+        var s = new WizardStateView { Mode = BurnerMode.Advanced };
         Assert.False(s.CanBake);
         Assert.False(s.HasRecipe);
         Assert.False(s.HasIso);
@@ -27,18 +63,19 @@ public class WizardStateMachineTests
     }
 
     [Fact]
-    public void AfterRecipeOnly_NeedsIsoAndDisk()
+    public void Advanced_AfterRecipeOnly_NeedsIsoAndDisk()
     {
-        var s = new WizardStateView { RecipePath = @"C:\tmp\recipe.json" };
+        var s = new WizardStateView { Mode = BurnerMode.Advanced, RecipePath = @"C:\tmp\recipe.json" };
         Assert.False(s.CanBake);
         Assert.Equal("Need: ISO, USB drive.", s.ReadinessSummary);
     }
 
     [Fact]
-    public void AfterRecipeAndIso_NeedsDisk()
+    public void Advanced_AfterRecipeAndIso_NeedsDisk()
     {
         var s = new WizardStateView
         {
+            Mode = BurnerMode.Advanced,
             RecipePath = @"C:\tmp\recipe.json",
             IsoPath = @"C:\tmp\ubuntu.iso",
         };
@@ -47,10 +84,11 @@ public class WizardStateMachineTests
     }
 
     [Fact]
-    public void AllThreeSet_CanBake()
+    public void Advanced_AllThreeSet_CanBake()
     {
         var s = new WizardStateView
         {
+            Mode = BurnerMode.Advanced,
             RecipePath = @"C:\tmp\recipe.json",
             IsoPath = @"C:\tmp\ubuntu.iso",
             SelectedDevice = @"\\.\PhysicalDrive2",
@@ -65,7 +103,6 @@ public class WizardStateMachineTests
         var s = new WizardStateView
         {
             RecipePath = @"C:\tmp\recipe.json",
-            IsoPath = @"C:\tmp\ubuntu.iso",
             SelectedDevice = @"\\.\PhysicalDrive2",
             IsRunning = true,
         };
@@ -79,7 +116,6 @@ public class WizardStateMachineTests
         var s = new WizardStateView
         {
             RecipePath = @"C:\tmp\recipe.json",
-            IsoPath = @"C:\tmp\ubuntu.iso",
             SelectedDevice = @"\\.\PhysicalDrive2",
             IsFinished = true,
         };
@@ -91,7 +127,8 @@ public class WizardStateMachineTests
 /// Plain mirror of the Wizard view-model's derived state — same rules,
 /// no WPF dependencies. If the rules in Wizard.cs change, update both.
 ///
-/// Advanced is the only mode today; it always requires a user-supplied ISO.
+/// Simple is the default mode (base comes from the server, no user ISO);
+/// Advanced requires a user-supplied ISO.
 /// </summary>
 internal sealed class WizardStateView
 {
@@ -100,7 +137,7 @@ internal sealed class WizardStateView
     public string? SelectedDevice { get; set; }
     public bool IsRunning { get; set; }
     public bool IsFinished { get; set; }
-    public BurnerMode Mode { get; set; } = BurnerMode.Advanced;
+    public BurnerMode Mode { get; set; } = BurnerMode.Simple;
 
     private bool RequiresIso => Mode.RequiresUserISO();
 
@@ -128,10 +165,36 @@ internal sealed class WizardStateView
     }
 }
 
-/// <summary>Advanced mode (the Debian/Ubuntu remaster) always requires a user ISO.</summary>
-public class AdvancedModeRules
+/// <summary>Mode-helper pins: Simple fetches the base from the server (no user
+/// ISO); Advanced remasters a user-supplied ISO.</summary>
+public class BurnerModeRules
 {
+    [Fact]
+    public void SimpleMode_DoesNotRequireUserIso()
+        => Assert.False(BurnerMode.Simple.RequiresUserISO());
+
     [Fact]
     public void AdvancedMode_RequiresUserIso()
         => Assert.True(BurnerMode.Advanced.RequiresUserISO());
+
+    [Fact]
+    public void BothModes_RequireRecipe()
+    {
+        Assert.True(BurnerMode.Simple.RequiresRecipe());
+        Assert.True(BurnerMode.Advanced.RequiresRecipe());
+    }
+
+    [Fact]
+    public void MenuLabels_AreSimpleAndAdvanced()
+    {
+        Assert.Equal("Simple", BurnerMode.Simple.MenuLabel());
+        Assert.Equal("Advanced", BurnerMode.Advanced.MenuLabel());
+    }
+
+    [Fact]
+    public void BakeCtaLabels_DifferByMode()
+    {
+        Assert.Equal("Flash to USB", BurnerMode.Simple.BakeCtaLabel());
+        Assert.Equal("Assemble and flash", BurnerMode.Advanced.BakeCtaLabel());
+    }
 }

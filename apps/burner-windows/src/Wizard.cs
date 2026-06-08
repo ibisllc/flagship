@@ -32,10 +32,14 @@ public sealed class Wizard : INotifyPropertyChanged
     private VerifyResult? _verified;
     private string? _outIsoPath;
     private CliRunner? _currentRunner;
-    private BurnerMode _mode = BurnerMode.Advanced;
+    private BurnerMode _mode = BurnerMode.Simple;
     private double? _progress;
     private string? _phase;
     private Recipe? _parsedRecipe;
+    private bool _baseDownloadStarted;
+    private string? _baseDownloadUrl;
+    private System.Threading.CancellationTokenSource? _cts;
+    private readonly IsoBaseCache _baseCache;
 
     /// <summary>
     /// Test seam: set inside RunBakeAsync only on the Advanced branch that
@@ -45,11 +49,20 @@ public sealed class Wizard : INotifyPropertyChanged
     /// </summary>
     public bool DidRemasterForTest { get; private set; }
 
-    public Wizard()
+    public Wizard() : this(null) { }
+
+    /// <param name="baseCache">Injectable for tests (stubbed HTTP + temp cache
+    /// dir). Production passes null → the platform-default manifest-driven
+    /// cache against flagshipserver.com.</param>
+    public Wizard(IsoBaseCache? baseCache)
     {
         Disks = new ObservableCollection<DiskInfo>();
         LogLines = new ObservableCollection<LogLine>();
+        _baseCache = baseCache ?? new IsoBaseCache(burnerVersion: BurnerVersion);
     }
+
+    /// <summary>Reported to the manifest endpoint. Mirrors FlagshipBurner.csproj &lt;Version&gt;.</summary>
+    public const string BurnerVersion = "0.0.1";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -107,13 +120,31 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Advanced = remaster a stock Debian/Ubuntu ISO via the Node CLI. This is
-    /// the only mode today; a future Simple/Debian mode will re-add a variant.
+    /// Simple (default) = fetch the server-manifest Debian-netinst base, then run
+    /// the SAME remaster+flash path Advanced uses. Advanced = remaster a stock
+    /// user-supplied Debian/Ubuntu ISO via the Node CLI.
     /// </summary>
     public BurnerMode Mode
     {
         get => _mode;
         set { if (_mode != value) { _mode = value; FireBag(); } }
+    }
+
+    /// <summary>
+    /// True once a base-image download begins this run — drives the download
+    /// row's visibility (the URL appears under the progress bar).
+    /// </summary>
+    public bool BaseDownloadStarted
+    {
+        get => _baseDownloadStarted;
+        private set { if (_baseDownloadStarted != value) { _baseDownloadStarted = value; FireBag(); } }
+    }
+
+    /// <summary>The base-image URL currently being fetched (shown under the bar). Null when idle.</summary>
+    public string? BaseDownloadUrl
+    {
+        get => _baseDownloadUrl;
+        private set { if (_baseDownloadUrl != value) { _baseDownloadUrl = value; FireBag(); } }
     }
 
     /// <summary>0…1 during the byte-write / download; null means indeterminate (or idle).</summary>
@@ -123,7 +154,7 @@ public sealed class Wizard : INotifyPropertyChanged
         private set { if (_progress != value) { _progress = value; FireBag(); } }
     }
 
-    /// <summary>Raw phase token: "remaster" | "write".</summary>
+    /// <summary>Raw phase token: "download" | "remaster" | "write".</summary>
     public string? Phase
     {
         get => _phase;
@@ -168,7 +199,8 @@ public sealed class Wizard : INotifyPropertyChanged
 
     // ---- flow visibility ----
 
-    /// <summary>Advanced mode brings its own ISO, so the ISO row always shows.</summary>
+    /// <summary>The ISO row shows only in Advanced mode (Simple fetches the base
+    /// from the server manifest, so it hides the user-ISO row).</summary>
     public bool ShowIsoRow => Mode.RequiresUserISO();
 
     // ---- progress ----
@@ -181,6 +213,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>Human label for the current phase, mirroring WizardModel.phaseLabel.</summary>
     public string? PhaseLabel => Phase switch
     {
+        "download" => "Downloading base image…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
         _ => null,
@@ -196,8 +229,22 @@ public sealed class Wizard : INotifyPropertyChanged
         }
     }
 
-    /// <summary>The progress bar uses the accent (primary) color.</summary>
-    public Brush ProgressTint => FindBrush("FB.Primary");
+    /// <summary>
+    /// The download phase paints the warning (orange) tint to signal a one-time
+    /// network fetch; the rest of the pipeline uses the accent (primary) color.
+    /// </summary>
+    public Brush ProgressTint => Phase == "download"
+        ? FindBrush("FB.Warning")
+        : FindBrush("FB.Primary");
+
+    /// <summary>
+    /// Show the download-URL row under the bar — only while a base download is
+    /// actually running. The URL itself comes from BaseDownloadUrl.
+    /// </summary>
+    public bool ShowDownloadRow => Phase == "download" && BaseDownloadStarted && _baseDownloadUrl != null;
+
+    /// <summary>The "from &lt;url&gt;" line shown under the progress bar during download.</summary>
+    public string? DownloadUrlCaption => _baseDownloadUrl is string u ? $"from {u}" : null;
 
     // Recipe row
     public bool HasRecipePrimary => Verified != null || RecipeError != null || HasRecipe;
@@ -312,6 +359,7 @@ public sealed class Wizard : INotifyPropertyChanged
 
     public void Cancel()
     {
+        _cts?.Cancel();
         _currentRunner?.Cancel();
     }
 
@@ -355,12 +403,21 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>
     /// One-click "Bake".
     ///
-    /// Remaster the user's stock Debian/Ubuntu ISO via the Node CLI's `write`
-    /// subcommand (which also does the raw write).
+    /// Simple mode (default): fetch the server-manifest Debian-netinst base ISO
+    /// (cached + sha256-verified), then remaster THAT base with the recipe via
+    /// the Node CLI's `write` subcommand — the SAME remaster+flash path Advanced
+    /// uses, just with a server-supplied base instead of a user-supplied ISO.
+    ///
+    /// Advanced mode: remaster the user's own stock Ubuntu/Debian ISO.
     /// </summary>
     public async Task RunBakeAsync()
     {
         if (!CanBake) return;
+        if (Mode == BurnerMode.Simple)
+        {
+            await RunSimpleBakeAsync();
+            return;
+        }
         var recipe = _recipePath!;
         var iso = _isoPath!;
         var disk = SelectedDisk!;
@@ -370,6 +427,79 @@ public sealed class Wizard : INotifyPropertyChanged
             entry => CliArgs.Write(entry, recipe, iso, device: disk.DevicePath, yes: true, keepRecipe: false),
             onSuccess: _ => { IsFinished = true; });
         Phase = null;
+    }
+
+    /// <summary>
+    /// Simple pipeline: ensure the base ISO via the server manifest (download
+    /// phase surfaces the URL + byte progress), then hand the cached base to the
+    /// SAME CLI `write` remaster+flash path Advanced runs. The burner is a dumb
+    /// executor — it reports the cached sha, obeys the manifest, verifies bytes.
+    /// </summary>
+    private async Task RunSimpleBakeAsync()
+    {
+        if (IsRunning) return;
+        var disk = SelectedDisk!;
+        BaseDownloadStarted = false;
+        BaseDownloadUrl = null;
+        Progress = null;
+        _cts = new System.Threading.CancellationTokenSource();
+
+        // 1. Ensure the base ISO per the server manifest.
+        Phase = "download";
+        IsRunning = true;
+        FireBag();
+
+        string baseIso;
+        try
+        {
+            var ensured = await _baseCache.EnsureAsync(
+                progress: p => SetProgress(p),
+                onDownloadStart: phase => OnUi(() =>
+                {
+                    BaseDownloadStarted = true;
+                    BaseDownloadUrl = phase.Url;
+                }),
+                log: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
+                cancellation: _cts.Token);
+            baseIso = ensured.Path;
+        }
+        catch (Exception e)
+        {
+            AppendLog(LogStream.Stderr, (e as IsoBaseCache.CacheException)?.Message ?? e.Message);
+            FinishSimple();
+            return;
+        }
+
+        // 2. Remaster + flash via the SAME CLI path Advanced uses.
+        DidRemasterForTest = true;
+        Phase = "remaster";
+        Progress = null;
+        FireBag();
+        var recipe = _recipePath!;
+        await RunCliCoreAsync(
+            entry => CliArgs.Write(entry, recipe, baseIso, device: disk.DevicePath, yes: true, keepRecipe: false),
+            onSuccess: _ => { IsFinished = true; });
+        FinishSimple();
+    }
+
+    private void FinishSimple()
+    {
+        IsRunning = false;
+        Phase = null;
+        Progress = null;
+        BaseDownloadStarted = false;
+        BaseDownloadUrl = null;
+        _cts?.Dispose();
+        _cts = null;
+        FireBag();
+    }
+
+    private void SetProgress(double p) => OnUi(() => Progress = Math.Clamp(p, 0.0, 1.0));
+
+    private static void OnUi(Action action)
+    {
+        if (Application.Current?.Dispatcher.CheckAccess() ?? true) action();
+        else Application.Current.Dispatcher.Invoke(action);
     }
 
     public async Task RunPrepareAsync()
@@ -394,14 +524,22 @@ public sealed class Wizard : INotifyPropertyChanged
         if (IsRunning) return;
         IsRunning = true;
         FireBag();
+        await RunCliCoreAsync(argBuilder, onSuccess);
+        IsRunning = false;
+        FireBag();
+    }
 
+    /// <summary>
+    /// CLI body WITHOUT the IsRunning toggle/guard — for callers (Simple bake)
+    /// that already own the running state across a multi-phase pipeline.
+    /// </summary>
+    private async Task RunCliCoreAsync(Func<string, string[]> argBuilder, Action<string> onSuccess)
+    {
         CliLocator.Resolved? resolved = null;
         try { resolved = CliLocator.Locate(); }
         catch (CliLocatorException e)
         {
             AppendLog(LogStream.Stderr, $"CLI locate failed: {e.Message}");
-            IsRunning = false;
-            FireBag();
             return;
         }
 
@@ -429,8 +567,6 @@ public sealed class Wizard : INotifyPropertyChanged
         {
             AppendLog(LogStream.Stderr, $"spawn failed: {e.Message}");
             _currentRunner = null;
-            IsRunning = false;
-            FireBag();
             return;
         }
         _currentRunner = null;
@@ -443,8 +579,6 @@ public sealed class Wizard : INotifyPropertyChanged
         {
             AppendLog(LogStream.Stderr, $"CLI exited {code}");
         }
-        IsRunning = false;
-        FireBag();
     }
 
     private void AppendLog(LogStream stream, string text)
@@ -502,9 +636,11 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(DiskRowTag),
         nameof(DoneServerDomain), nameof(DoneOutputPath),
         nameof(Mode), nameof(Progress), nameof(Phase),
+        nameof(BaseDownloadStarted), nameof(BaseDownloadUrl),
         nameof(ShowIsoRow),
         nameof(ShowProgress), nameof(ProgressIndeterminate), nameof(ProgressValue),
         nameof(PhaseLabel), nameof(ProgressCaption), nameof(ProgressTint),
+        nameof(ShowDownloadRow), nameof(DownloadUrlCaption),
     };
 
     private static Brush FindBrush(string key)

@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import iso_base_cache
 from disk_enumerator import (
     DeviceInfo,
     enumerate_devices,
@@ -48,9 +49,16 @@ from cli_runner import (
 )
 
 
-# Burner flow — recipe + a stock Ubuntu/Debian ISO. Remaster the user-supplied
-# ISO via the Node CLI's `write` subcommand, then flash.
+# Two flows, same remaster+write engine (the Node CLI's `write` subcommand):
+#   simple   : recipe + USB only. The Debian-netinst base ISO is fetched per
+#              the SERVER manifest (/api/iso-manifest) + cached, then handed to
+#              the SAME Node CLI remaster+write path Advanced uses. Default.
+#   advanced : recipe + a user-supplied stock Ubuntu/Debian ISO. Same CLI path.
+MODE_SIMPLE = "simple"
 MODE_ADVANCED = "advanced"
+
+# Reported to /api/iso-manifest as `burnerVersion`. Bump on release.
+BURNER_VERSION = "0.1.0"
 
 
 def locate_flasher() -> str:
@@ -193,12 +201,17 @@ class WizardState:
     verified: Optional[VerifyInfo] = None
     out_iso_path: Optional[Path] = None
     is_finished: bool = False
-    # The burner remasters a user-supplied Ubuntu/Debian ISO via the Node CLI.
-    mode: str = MODE_ADVANCED
-    # 0…1 during the byte-write; None = indeterminate/idle.
+    # Simple = server-manifest Debian base; Advanced = user-supplied ISO.
+    # Both remaster + flash via the Node CLI's `write` subcommand.
+    mode: str = MODE_SIMPLE
+    # 0…1 during the byte-write / base download; None = indeterminate/idle.
     progress: Optional[float] = None
-    # Raw phase token: "remaster" | "write".
+    # Raw phase token: "download" | "remaster" | "write".
     phase: Optional[str] = None
+    # URL of the base ISO being fetched in Simple mode — shown under the bar.
+    download_url: Optional[str] = None
+    # Cached/fetched base ISO path used by the Simple-mode CLI write.
+    base_iso_path: Optional[Path] = None
 
     @property
     def requires_user_iso(self) -> bool:
@@ -233,6 +246,7 @@ class WizardState:
     @property
     def phase_label(self) -> Optional[str]:
         return {
+            "download": "Downloading base image…",
             "remaster": "Building image…",
             "write": "Writing to USB…",
         }.get(self.phase or "")
@@ -276,7 +290,11 @@ class WizardModel:
         on_change: Optional[Callable[[], None]] = None,
         run_lsblk: Optional[Callable[[], str]] = None,
         locate_fn: Optional[Callable[[], Resolved]] = None,
-        mode: str = MODE_ADVANCED,
+        mode: str = MODE_SIMPLE,
+        # Injectable seam so the Simple-mode base fetch is unit-testable
+        # without network: defaults to the real manifest-driven cache.
+        ensure_base_fn: Optional[Callable[..., Path]] = None,
+        burner_version: str = BURNER_VERSION,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -284,6 +302,14 @@ class WizardModel:
         self._locate_fn = locate_fn or locate
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
+        self._ensure_base = ensure_base_fn or iso_base_cache.ensure
+        self._burner_version = burner_version
+
+    def set_mode(self, mode: str) -> None:
+        if mode not in (MODE_SIMPLE, MODE_ADVANCED):
+            return
+        self.state.mode = mode
+        self._notify()
 
     def _notify(self) -> None:
         try:
@@ -369,10 +395,14 @@ class WizardModel:
             self._notify()
 
     def run_bake(self) -> None:
-        """Flash the USB. Remaster the user-supplied ISO via the Node CLI's
-        `write` subcommand, which needs root for the raw write and so elevates
-        via pkexec."""
-        threading.Thread(target=self._run_bake_sync, daemon=True).start()
+        """Flash the USB. Both modes remaster + write via the Node CLI's
+        `write` subcommand (needs root → pkexec). Simple mode first ensures the
+        server-manifest Debian base ISO is cached, then feeds it to the SAME
+        CLI path Advanced uses with a user-supplied ISO."""
+        if self.state.mode == MODE_SIMPLE:
+            threading.Thread(target=self._run_simple_bake_sync, daemon=True).start()
+        else:
+            threading.Thread(target=self._run_bake_sync, daemon=True).start()
 
     def _run_bake_sync(self) -> None:
         if not self.state.can_flash:
@@ -381,6 +411,65 @@ class WizardModel:
         iso = self.state.iso_path
         disk = self.state.selected_disk
         assert recipe is not None and iso is not None and disk is not None
+        self.state.phase = "remaster"
+        self.state.progress = None
+        self._notify()
+        self._cli_write(recipe, iso, disk)
+
+    def _run_simple_bake_sync(self) -> None:
+        """Ensure the server-manifest base ISO, then run the same CLI
+        remaster+write path Advanced uses."""
+        recipe = self.state.recipe_path
+        disk = self.state.selected_disk
+        if recipe is None or disk is None:
+            return
+
+        # 1. Fetch/verify the base ISO per the server manifest. The download
+        #    URL is surfaced via state.download_url (shown under the bar).
+        self.state.phase = "download"
+        self.state.progress = None
+        self.state.download_url = None
+        self._notify()
+
+        def _on_progress(fraction: float, url: str) -> None:
+            self.state.progress = fraction
+            self.state.download_url = url
+            self._notify()
+
+        def _on_download_start(descriptor) -> None:
+            self.state.download_url = descriptor.url
+            self._append_log(
+                "stdout",
+                f"+ fetching base image {descriptor.version} ({descriptor.url})",
+            )
+            self._notify()
+
+        try:
+            base = self._ensure_base(
+                self._burner_version,
+                progress=_on_progress,
+                on_download_start=_on_download_start,
+                log=lambda m: self._append_log("stdout", m),
+            )
+        except iso_base_cache.CacheError as e:
+            self._append_log("stderr", str(e))
+            self.state.phase = None
+            self.state.progress = None
+            self.state.download_url = None
+            self._notify()
+            return
+
+        self.state.base_iso_path = Path(base)
+        self.state.iso_path = Path(base)
+        self.state.download_url = None
+
+        # 2. Same Node-CLI remaster+write path Advanced uses.
+        self.state.phase = "remaster"
+        self.state.progress = None
+        self._notify()
+        self._cli_write(recipe, Path(base), disk)
+
+    def _cli_write(self, recipe: Path, iso: Path, disk: DeviceInfo) -> None:
         def build(entry: str) -> list[str]:
             return args_write(
                 entry,
@@ -394,6 +483,8 @@ class WizardModel:
 
     def _on_bake_ok(self, _stdout_text: str) -> None:
         self.state.is_finished = True
+        self.state.phase = None
+        self.state.progress = None
         self._notify()
 
     def run_prepare(self) -> None:
@@ -456,6 +547,9 @@ class WizardModel:
                 self._append_log("stderr", f"CLI exited {code}")
         finally:
             self._current_runner = None
+            self.state.phase = None
+            self.state.progress = None
+            self.state.download_url = None
             with self._lock:
                 self.state.is_running = False
             self._notify()
@@ -476,7 +570,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     gi.require_version("Adw", "1")
     from gi.repository import Adw, Gtk, GLib, Gio  # type: ignore  # noqa: E402
 
-    wizard_model = model if model is not None else WizardModel(mode=MODE_ADVANCED)
+    wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE)
 
     window = Adw.ApplicationWindow(application=application)
     window.set_title("Flagship Burner")
@@ -485,6 +579,21 @@ def build_window(application, model: Optional[WizardModel] = None):
     toolbar = Adw.ToolbarView()
     header = Adw.HeaderBar()
     toolbar.add_top_bar(header)
+
+    # ---- mode toggle (Simple default / Advanced) ----
+    mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    mode_label = Gtk.Label(label="Bring my own ISO (Advanced)", xalign=0.0)
+    mode_switch = Gtk.Switch()
+    mode_switch.set_active(wizard_model.state.mode == MODE_ADVANCED)
+    mode_switch.set_valign(Gtk.Align.CENTER)
+
+    def _on_mode_toggle(sw, _pspec):
+        wizard_model.set_mode(MODE_ADVANCED if sw.get_active() else MODE_SIMPLE)
+
+    mode_switch.connect("notify::active", _on_mode_toggle)
+    mode_box.append(mode_label)
+    mode_box.append(mode_switch)
+    header.pack_end(mode_box)
 
     # Main vertical layout: scrolled wizard cards + log pane.
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -643,11 +752,20 @@ def build_window(application, model: Optional[WizardModel] = None):
     bake_row.append(verify_btn)
     step4["body"].append(bake_row)
 
-    # Progress: accent-coloured during the remaster + write.
+    # Progress: accent-coloured during the base download + remaster + write.
     progress_bar = Gtk.ProgressBar()
     progress_bar.set_show_text(True)
     progress_bar.set_visible(False)
     step4["body"].append(progress_bar)
+
+    # Download URL surfaced directly under the bar (Simple-mode base fetch).
+    download_url_label = Gtk.Label(xalign=0.0)
+    download_url_label.set_wrap(True)
+    download_url_label.set_selectable(True)
+    download_url_label.add_css_class("dim-label")
+    download_url_label.add_css_class("monospace")
+    download_url_label.set_visible(False)
+    step4["body"].append(download_url_label)
 
     out_path_label = Gtk.Label(xalign=0.0)
     out_path_label.set_selectable(True)
@@ -723,8 +841,12 @@ def build_window(application, model: Optional[WizardModel] = None):
             verify_badge.set_visible(True)
         else:
             verify_badge.set_visible(False)
-        # ISO
-        if s.iso_path:
+        # ISO step — only shown in Advanced (Simple fetches the base itself).
+        step2["card"].set_visible(s.requires_user_iso)
+        # Reflect the toggle if state changed programmatically.
+        if mode_switch.get_active() != (s.mode == MODE_ADVANCED):
+            mode_switch.set_active(s.mode == MODE_ADVANCED)
+        if s.requires_user_iso and s.iso_path:
             iso_status.set_text(f"Loaded: {s.iso_path.name}")
         else:
             iso_status.set_text("")
@@ -753,8 +875,8 @@ def build_window(application, model: Optional[WizardModel] = None):
             log_spinner.start()
         else:
             log_spinner.stop()
-        # progress bar: accent-coloured during the remaster + write.
-        if s.is_running and s.phase in ("remaster", "write"):
+        # progress bar: accent-coloured during the base download + remaster + write.
+        if s.is_running and s.phase in ("download", "remaster", "write"):
             progress_bar.set_visible(True)
             if s.progress is None:
                 progress_bar.pulse()
@@ -763,6 +885,12 @@ def build_window(application, model: Optional[WizardModel] = None):
             progress_bar.set_text(s.phase_label or "")
         else:
             progress_bar.set_visible(False)
+        # Download URL surfaced directly under the bar during the base fetch.
+        if s.phase == "download" and s.download_url:
+            download_url_label.set_text(s.download_url)
+            download_url_label.set_visible(True)
+        else:
+            download_url_label.set_visible(False)
         if s.out_iso_path is not None:
             out_path_label.set_text(f"output: {s.out_iso_path}")
         else:
