@@ -65,7 +65,12 @@ public enum UserData {
         // Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
         // Only "approve" is the critical-server path; anything else ⇒ "auto".
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
-        let blobB64 = recipeJSON.base64EncodedString()
+        // Write the FLAT canonical blob (top-level serverDomain/username/
+        // phoneDelegatedPubKey + nested authCode) — the box bootstrap reads those
+        // top-level. The .com/website hand out the envelope { blob:{…},
+        // blobSignature }; normalizeEnvelope flattens it (no-op for an already-flat
+        // recipe). Matches the TS burner's installBlobToJson output.
+        let blobB64 = RecipeLoader.normalizeEnvelope(recipeJSON).base64EncodedString()
         let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host,
                                                 wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8)
             .base64EncodedString()
@@ -163,7 +168,12 @@ public enum UserData {
         guard repoURL.hasPrefix("https://") else { throw UserDataError.badRepo(repoURL) }
         let host = try resolveBootHost(bootHost)
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
-        let blobB64 = recipeJSON.base64EncodedString()
+        // Write the FLAT canonical blob (top-level serverDomain/username/
+        // phoneDelegatedPubKey + nested authCode) — the box bootstrap reads those
+        // top-level. The .com/website hand out the envelope { blob:{…},
+        // blobSignature }; normalizeEnvelope flattens it (no-op for an already-flat
+        // recipe). Matches the TS burner's installBlobToJson output.
+        let blobB64 = RecipeLoader.normalizeEnvelope(recipeJSON).base64EncodedString()
         let bootstrapB64 = Data(
             bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host, family: "debian",
                             wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8

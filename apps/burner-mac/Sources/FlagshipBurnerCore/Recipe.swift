@@ -170,7 +170,7 @@ public enum RecipeLoader {
     /// Accept both the flattened recipe and the issued envelope that .com /
     /// the website hand out: `{ "blob": {…}, "blobSignature": "…" }`. The
     /// envelope is flattened (blob fields + blobSignatureHex) before decoding.
-    private static func normalizeEnvelope(_ data: Data) -> Data {
+    static func normalizeEnvelope(_ data: Data) -> Data {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return data }
         if var blob = obj["blob"] as? [String: Any], let sig = obj["blobSignature"] as? String {

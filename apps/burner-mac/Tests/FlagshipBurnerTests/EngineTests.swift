@@ -809,6 +809,35 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(s.contains("\"My \\\"Net\\\" \\\\x\":"))
         XCTAssertTrue(s.contains("password: \"p\\\"a\\\\ss\""))
     }
+
+    /// Regression: the .com/website hand out the recipe as an envelope
+    /// { blob:{…}, blobSignature }. The box bootstrap reads serverDomain/
+    /// username/phoneDelegatedPubKey at the TOP LEVEL of install-blob.json, so
+    /// the burner must write the FLATTENED blob — not the raw envelope (which
+    /// nests everything under .blob, making every top-level read null and the
+    /// LUKS re-key abort). This guards the fix.
+    func testEnvelopeRecipeIsFlattenedIntoInstallBlob() throws {
+        let envelope = Data(#"{"blob":{"version":2,"serverDomain":"home.x.flagship.services","username":"x","serverName":"home","phoneDelegatedPubKey":"aa","registrationUrl":"https://flagshipserver.com/api/server/register","authCode":{"version":1,"serial":"AAAA1111BBBB","userPubKey":"bb","issuedAt":0,"expiresAt":0}},"blobSignature":"cc"}"#.utf8)
+        let preseed = try UserData.debianPreseed(recipeJSON: envelope, installerGitRef: "main")
+
+        // Extract the base64 that gets decoded into install-blob.json.
+        let tail = "' | base64 -d > /target/var/flagship/install-blob.json"
+        guard let tailRange = preseed.range(of: tail),
+              let echoRange = preseed.range(of: "echo '", options: .backwards,
+                                            range: preseed.startIndex..<tailRange.lowerBound)
+        else { return XCTFail("install-blob.json write not found in preseed") }
+        let b64 = String(preseed[echoRange.upperBound..<tailRange.lowerBound])
+        guard let decoded = Data(base64Encoded: b64),
+              let obj = try JSONSerialization.jsonObject(with: decoded) as? [String: Any]
+        else { return XCTFail("install-blob.json base64 did not decode to JSON") }
+
+        // Flattened: top-level fields present, the envelope wrapper gone.
+        XCTAssertEqual(obj["serverDomain"] as? String, "home.x.flagship.services")
+        XCTAssertEqual(obj["username"] as? String, "x")
+        XCTAssertEqual(obj["phoneDelegatedPubKey"] as? String, "aa")
+        XCTAssertEqual((obj["authCode"] as? [String: Any])?["serial"] as? String, "AAAA1111BBBB")
+        XCTAssertNil(obj["blob"], "install-blob.json must be the flat blob, not the envelope")
+    }
 }
 
 /// Minimal mirror of RecipeLoader's private DTO, used only to assert that
