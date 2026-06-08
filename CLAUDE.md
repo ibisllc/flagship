@@ -148,9 +148,9 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 > Gates on `main`: `tsc -b` clean · vitest **4379** · iOS **728** + App build · Android · burner-mac swift **90** · burner-linux pytest **88**.
 
 **Remaining to a live box (owner + hardware):**
-1. **Seed the manifest + host the Debian base.** Host the pinned Debian netinst (R2 or its CDN — the endpoint decides per-call) and set Worker env `FLAGSHIP_ISO_MANIFEST` to `{version,url,sha256,sizeBytes,attestation}`, with `sha256` pinned to Debian's official signed SHA256SUMS (the `attestation` url) for verifiability. Until set, the endpoint returns `{download:null}` and Simple mode has no base to fetch.
+1. **Deploy to activate the manifest.** `FLAGSHIP_ISO_MANIFEST` is already seeded in `apps/com/wrangler.toml` [vars] (Debian 13.5.0 netinst, version-pinned cdimage url, official signed sha, size 791 674 880; verified live 2026-06-08) — so just `cd apps/com && npx wrangler deploy` turns Simple-mode downloads on. (To serve from our own R2 instead of Debian's CDN, upload the same bytes and change only the `url` field — sha is unchanged. Re-pin all three on a new Debian point release.)
 2. **Rebuild + re-sign the Mac burner** (it now ships Simple-as-default + the manifest client).
-3. **Run the wipe** (`wrangler d1 execute flagship-state --file=scripts/wipe-all-users-prerelease-2026-06-02.sql --remote`) for the clean slate.
+3. **Run the wipe** (`cd apps/com && npx wrangler d1 execute flagship-state --file=../../scripts/wipe-all-users-prerelease-2026-06-02.sql --remote`) for the clean slate.
 4. **Verify Debian-preseed reliability + live e2e** — cmdline injection (`Remaster.swift`/`remasterIso.ts` grub+isolinux patch) was per-ISO flaky earlier; add real-Debian-ISO tests, then create-account → recipe → burn → boot → watch the phone-home timeline → registers → green padlock.
 
 **App / recovery:**
