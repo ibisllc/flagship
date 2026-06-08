@@ -29,18 +29,18 @@ final class ProvisionProgressTests: XCTestCase {
         }
     }
 
-    func test_ladder_isCanonicalEightPhase() {
+    func test_ladder_isCanonicalNinePhase_installedBetweenInstallingAndRegistering() {
         XCTAssertEqual(
             ProvisionProgress.ladder,
             ["booting", "downloading", "partitioning", "installing",
-             "registering", "sealing", "pairing", "live"]
+             "installed", "registering", "sealing", "pairing", "live"]
         )
     }
 
     func test_stepGroups_canonicalLabels_andCoverEveryPhaseExactlyOnce() {
         XCTAssertEqual(
             ProvisionProgress.stepGroups.map { $0.label },
-            ["Booting", "Installing", "Registering", "Securing", "Ready"]
+            ["Booting", "Installing", "Install complete — unplug the USB", "Registering", "Securing", "Ready"]
         )
         // Every non-terminal phase is covered exactly once (design §1.2
         // projection table). The grouped order is NOT the ladder order —
@@ -52,29 +52,40 @@ final class ProvisionProgressTests: XCTestCase {
     }
 
     func test_stepStates_pairingActivatesRegisteringGroupWithCanonicalTitle() {
-        // `pairing` rolls up into the Registering group (design §1.2).
+        // `pairing` rolls up into the Registering group (design §1.2). Group
+        // order: Booting, Installing, Installed, Registering, Securing, Ready.
         let v = ProvisionProgress.stepStates(phase: "pairing")
-        XCTAssertEqual(v.map { $0.state }, [.done, .done, .active, .pending, .pending])
+        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .active, .pending, .pending])
         let registering = v.first { $0.key == .registering }!
         XCTAssertEqual(registering.detail, "Pairing with your phone")
     }
 
+    func test_stepStates_installedIsActionNeeded_notDone() {
+        // `installed` activates its own Installed group with the unplug
+        // instruction — NOT a done/terminal state (success stays `live`).
+        let v = ProvisionProgress.stepStates(phase: "installed")
+        XCTAssertEqual(v.map { $0.state }, [.done, .done, .active, .pending, .pending, .pending])
+        let installed = v.first { $0.key == .installed }!
+        XCTAssertEqual(installed.state, .active)
+        XCTAssertEqual(installed.detail, "Install complete — unplug the USB")
+    }
+
     func test_stepStates_sealingActivatesSecuringGroup() {
         let v = ProvisionProgress.stepStates(phase: "sealing")
-        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .active, .pending])
+        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .active, .pending])
         XCTAssertEqual(v.first { $0.key == .securing }!.detail, "Sealing your disk key")
     }
 
     func test_stepStates_live_allDone() {
         let v = ProvisionProgress.stepStates(phase: "live")
-        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .done])
+        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .done, .done])
     }
 
     func test_stepStates_errorWithHint_marksOwningGroupAndCarriesError() {
         let v = ProvisionProgress.stepStates(
             phase: "error", lastError: "rate limited by ACME", prevPhase: "sealing"
         )
-        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .failed, .pending])
+        XCTAssertEqual(v.map { $0.state }, [.done, .done, .done, .done, .failed, .pending])
         XCTAssertEqual(v.first { $0.key == .securing }!.detail, "rate limited by ACME")
     }
 
@@ -100,6 +111,7 @@ final class ProvisionProgressTests: XCTestCase {
         XCTAssertEqual(ProvisionStatusPhase.downloading.group, .booting)
         XCTAssertEqual(ProvisionStatusPhase.partitioning.group, .booting)
         XCTAssertEqual(ProvisionStatusPhase.installing.group, .installing)
+        XCTAssertEqual(ProvisionStatusPhase.installed.group, .installed)
         XCTAssertEqual(ProvisionStatusPhase.registering.group, .registering)
         XCTAssertEqual(ProvisionStatusPhase.pairing.group, .registering)
         XCTAssertEqual(ProvisionStatusPhase.sealing.group, .securing)
@@ -113,6 +125,7 @@ final class ProvisionProgressTests: XCTestCase {
         XCTAssertEqual(ProvisionStatusPhase.downloading.title, "Downloading")
         XCTAssertEqual(ProvisionStatusPhase.partitioning.title, "Partitioning disk")
         XCTAssertEqual(ProvisionStatusPhase.installing.title, "Installing")
+        XCTAssertEqual(ProvisionStatusPhase.installed.title, "Install complete — unplug the USB")
         XCTAssertEqual(ProvisionStatusPhase.registering.title, "Registering with Flagship")
         XCTAssertEqual(ProvisionStatusPhase.sealing.title, "Sealing your disk key")
         XCTAssertEqual(ProvisionStatusPhase.pairing.title, "Pairing with your phone")

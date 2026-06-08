@@ -87,7 +87,7 @@ final class PendingPodWatcherTests: XCTestCase {
         // onStep fired for every non-terminal phase in ladder order, once each.
         XCTAssertEqual(
             observedSteps,
-            [.booting, .downloading, .partitioning, .installing, .registering, .sealing, .pairing]
+            [.booting, .downloading, .partitioning, .installing, .installed, .registering, .sealing, .pairing]
         )
         XCTAssertEqual(observedComplete, "home.harry.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online)

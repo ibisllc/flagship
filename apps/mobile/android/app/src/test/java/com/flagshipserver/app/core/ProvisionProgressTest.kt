@@ -39,11 +39,11 @@ class ProvisionProgressTest {
         }
     }
 
-    @Test fun ladder_isCanonicalEightPhaseVocabulary() {
+    @Test fun ladder_isCanonicalNinePhaseVocabulary_installedBetweenInstallingAndRegistering() {
         assertEquals(
             listOf(
                 "booting", "downloading", "partitioning", "installing",
-                "registering", "sealing", "pairing", "live",
+                "installed", "registering", "sealing", "pairing", "live",
             ),
             ProvisionProgress.ladder,
         )
@@ -51,7 +51,7 @@ class ProvisionProgressTest {
 
     @Test fun stepGroups_canonicalProjection_coverEveryLadderPhaseExactlyOnce() {
         assertEquals(
-            listOf("Booting", "Installing", "Registering", "Securing", "Ready"),
+            listOf("Booting", "Installing", "Install complete — unplug the USB", "Registering", "Securing", "Ready"),
             ProvisionProgress.stepGroups.map { it.label },
         )
         // Every ladder phase appears in exactly one group. NOTE: the §1.2
@@ -71,6 +71,7 @@ class ProvisionProgressTest {
             listOf(
                 ProvisionProgress.StepState.DONE,      // Booting
                 ProvisionProgress.StepState.DONE,      // Installing
+                ProvisionProgress.StepState.DONE,      // Installed
                 ProvisionProgress.StepState.DONE,      // Registering
                 ProvisionProgress.StepState.ACTIVE,    // Securing
                 ProvisionProgress.StepState.PENDING,   // Ready
@@ -80,6 +81,20 @@ class ProvisionProgressTest {
         assertEquals(
             "Sealing your disk key",
             v.first { it.key == ProvisionProgress.StepKey.SECURING }.detail,
+        )
+    }
+
+    @Test fun stepStates_installedIsActionNeeded_notDone() {
+        // `installed` activates its own group with the unplug instruction —
+        // NOT a done/terminal state (success stays `live`).
+        val v = ProvisionProgress.stepStates("installed")
+        assertEquals(
+            ProvisionProgress.StepState.ACTIVE,
+            v.first { it.key == ProvisionProgress.StepKey.INSTALLED }.state,
+        )
+        assertEquals(
+            "Install complete — unplug the USB",
+            v.first { it.key == ProvisionProgress.StepKey.INSTALLED }.detail,
         )
     }
 

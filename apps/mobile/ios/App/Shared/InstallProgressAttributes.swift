@@ -41,6 +41,9 @@ public struct InstallProgressAttributes: ActivityAttributes {
         case downloading
         case partitioning
         case installing
+        /// Install finished, box powered off — ACTION-NEEDED (unplug the
+        /// USB + power on). NOT a done/terminal state.
+        case installed
         case registering
         case sealing
         case pairing
@@ -51,7 +54,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
         /// `error`. Mirrors `ProvisionStatusPhase.ordered`.
         public static let ordered: [Step] = [
             .booting, .downloading, .partitioning, .installing,
-            .registering, .sealing, .pairing, .live,
+            .installed, .registering, .sealing, .pairing, .live,
         ]
 
         /// Canonical phase title — byte-identical to
@@ -62,6 +65,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
             case .downloading:  return "Downloading"
             case .partitioning: return "Partitioning disk"
             case .installing:   return "Installing"
+            case .installed:    return "Install complete — unplug the USB"
             case .registering:  return "Registering with Flagship"
             case .sealing:      return "Sealing your disk key"
             case .pairing:      return "Pairing with your phone"
@@ -76,6 +80,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
             case .downloading:  return "arrow.down.circle.fill"
             case .partitioning: return "internaldrive.fill"
             case .installing:   return "shippingbox.fill"
+            case .installed:    return "eject.fill"
             case .registering:  return "antenna.radiowaves.left.and.right"
             case .sealing:      return "lock.fill"
             case .pairing:      return "iphone.radiowaves.left.and.right"
@@ -110,10 +115,11 @@ public struct InstallProgressAttributes: ActivityAttributes {
         }
 
         /// Convenience: 0.0…1.0 progress for ProgressView. Counts
-        /// completedSteps against the seven non-terminal-success stages
-        /// (booting → pairing); reaches 1.0 only on `.live`.
+        /// completedSteps against the eight non-terminal-success stages
+        /// (booting → pairing, incl. the action-needed `installed`);
+        /// reaches 1.0 only on `.live`.
         public var fractionalProgress: Double {
-            let major: [Step] = [.booting, .downloading, .partitioning, .installing, .registering, .sealing, .pairing]
+            let major: [Step] = [.booting, .downloading, .partitioning, .installing, .installed, .registering, .sealing, .pairing]
             if completedSteps.contains(.live) { return 1.0 }
             let done = major.filter { completedSteps.contains($0) }.count
             return Double(done) / Double(major.count + 1)

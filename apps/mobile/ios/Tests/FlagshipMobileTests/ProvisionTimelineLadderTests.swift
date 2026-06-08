@@ -14,7 +14,7 @@ final class ProvisionTimelineLadderTests: XCTestCase {
 
     func test_nilStatus_firstRowCurrentWithWaitingHint_restUpcoming() {
         let rows = ProvisionTimelineLadder.rows(for: nil)
-        XCTAssertEqual(rows.count, 8)
+        XCTAssertEqual(rows.count, 9)
         XCTAssertEqual(rows[0].phase, .booting)
         XCTAssertEqual(rows[0].state, .current)
         XCTAssertEqual(rows[0].detail, "Waiting for the box to phone home…")
@@ -41,7 +41,7 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             ]
         )
         let rows = ProvisionTimelineLadder.rows(for: status)
-        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .current, .upcoming, .upcoming, .upcoming, .upcoming])
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .current, .upcoming, .upcoming, .upcoming, .upcoming, .upcoming])
         XCTAssertEqual(rows[3].phase, .installing)
         XCTAssertEqual(rows[3].detail, "writing rootfs")
         // Earlier rows don't carry their history detail — the timeline
@@ -59,7 +59,8 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             updatedAt: 1_700_000_000_000,
             history: [.init(phase: .sealing, detail: "stale detail", ts: 1_700_000_000_000)]
         )
-        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[5].detail, "live detail")
+        // `sealing` is row index 6 now (installed inserted at index 4).
+        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[6].detail, "live detail")
     }
 
     func test_currentRowDetail_fallsBackToHistory_whenLiveDetailEmpty() {
@@ -71,7 +72,7 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             updatedAt: 1_700_000_000_000,
             history: [.init(phase: .sealing, detail: "from history", ts: 1_700_000_000_000)]
         )
-        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[5].detail, "from history")
+        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[6].detail, "from history")
     }
 
     // MARK: - Terminal live
@@ -112,9 +113,10 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             ]
         )
         let rows = ProvisionTimelineLadder.rows(for: status)
-        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .done, .done, .error, .upcoming, .upcoming])
-        XCTAssertEqual(rows[5].phase, .sealing)
-        XCTAssertEqual(rows[5].detail, "ACME 429 rate-limited")
+        // brokeAt = sealing (row index 6 now). installed inserted at index 4.
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .done, .done, .done, .error, .upcoming, .upcoming])
+        XCTAssertEqual(rows[6].phase, .sealing)
+        XCTAssertEqual(rows[6].detail, "ACME 429 rate-limited")
     }
 
     func test_error_withEmptyHistory_surfaceFailureOnFirstRow() {

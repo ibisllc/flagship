@@ -14,6 +14,9 @@ export const PROVISION_LADDER = Object.freeze([
   "downloading",
   "partitioning",
   "installing",
+  // ACTION-NEEDED: install finished, box powered off, awaiting the user to
+  // unplug the USB + power on. NOT success (`live` is success).
+  "installed",
   "registering",
   "sealing",
   "pairing",
@@ -27,6 +30,7 @@ export const PROVISION_PHASE_TITLES = Object.freeze({
   downloading: "Downloading",
   partitioning: "Partitioning disk",
   installing: "Installing",
+  installed: "Install complete — unplug the USB",
   registering: "Registering with Flagship",
   sealing: "Sealing your disk key",
   pairing: "Pairing with your phone",
@@ -40,6 +44,7 @@ export const PROVISION_PHASE_TITLES = Object.freeze({
 export const PROVISION_STEP_GROUPS = Object.freeze([
   { key: "booting", label: "Booting", phases: ["booting", "downloading", "partitioning"] },
   { key: "installing", label: "Installing", phases: ["installing"] },
+  { key: "installed", label: "Install complete — unplug the USB", phases: ["installed"] },
   { key: "registering", label: "Registering", phases: ["registering", "pairing"] },
   { key: "securing", label: "Securing (TLS certificate)", phases: ["sealing"] },
   { key: "ready", label: "Ready", phases: ["live"] },

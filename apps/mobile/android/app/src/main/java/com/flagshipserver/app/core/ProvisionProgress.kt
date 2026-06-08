@@ -21,6 +21,9 @@ object ProvisionProgress {
         "downloading",
         "partitioning",
         "installing",
+        // ACTION-NEEDED: install finished, box powered off, awaiting the user to
+        // unplug the USB + power on. NOT success (`live` is success).
+        "installed",
         "registering",
         "sealing",
         "pairing",
@@ -34,6 +37,7 @@ object ProvisionProgress {
         "downloading" to "Downloading",
         "partitioning" to "Partitioning disk",
         "installing" to "Installing",
+        "installed" to "Install complete — unplug the USB",
         "registering" to "Registering with Flagship",
         "sealing" to "Sealing your disk key",
         "pairing" to "Pairing with your phone",
@@ -44,7 +48,7 @@ object ProvisionProgress {
     /** The canonical UI group projection, re-keyed onto the 8 phases.
      *  Mirror of the LOCKED DESIGN §1.2 table — every implementer derives
      *  the SAME grouping from it. */
-    enum class StepKey { BOOTING, INSTALLING, REGISTERING, SECURING, READY }
+    enum class StepKey { BOOTING, INSTALLING, INSTALLED, REGISTERING, SECURING, READY }
 
     data class StepGroup(val key: StepKey, val label: String, val phases: List<String>)
 
@@ -52,6 +56,7 @@ object ProvisionProgress {
     val stepGroups: List<StepGroup> = listOf(
         StepGroup(StepKey.BOOTING, "Booting", listOf("booting", "downloading", "partitioning")),
         StepGroup(StepKey.INSTALLING, "Installing", listOf("installing")),
+        StepGroup(StepKey.INSTALLED, "Install complete — unplug the USB", listOf("installed")),
         StepGroup(StepKey.REGISTERING, "Registering", listOf("registering", "pairing")),
         StepGroup(StepKey.SECURING, "Securing", listOf("sealing")),
         StepGroup(StepKey.READY, "Ready", listOf("live")),

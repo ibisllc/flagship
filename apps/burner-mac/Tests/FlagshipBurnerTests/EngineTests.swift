@@ -675,6 +675,13 @@ final class EngineTests: XCTestCase {
         #"( echo '{"phase":"partitioning"}' > /tmp/flagship-beacon.json; "#
         + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
         + "https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true"
+    // Beacon D — fired at the END of late_command, AFTER the bootstrap SUCCEEDS,
+    // BEFORE poweroff. NOT success: the box has not registered yet. Byte-identical
+    // to preseed.test.ts.
+    private static let installedBeacon =
+        #"( echo '{"phase":"installed"}' > /tmp/flagship-beacon.json; "#
+        + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+        + "https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true"
 
     func testDebianPreseedEarlyBeacon() throws {
         let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
@@ -710,6 +717,23 @@ final class EngineTests: XCTestCase {
             let wipe = cfg.range(of: "dmsetup remove_all")!
             XCTAssertTrue(beacon.lowerBound < wipe.lowerBound, "beacon must precede the wipe")
         }
+    }
+
+    func testDebianPreseedInstalledBeaconOnSuccessOnly() throws {
+        let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main")
+        // Success path: bootstrap `&&` the installed beacon, THEN `||` the
+        // failure (dev late-log) branch. Byte-identical to preseed.test.ts.
+        XCTAssertTrue(cfg.contains(
+            "( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && "
+            + "\(Self.installedBeacon) || "
+        ))
+        // The `installed` beacon comes AFTER the bootstrap run and BEFORE the
+        // failure branch's dev late-log POST (success-only; never on failure).
+        let installed = cfg.range(of: #""phase":"installed""#)!
+        let bootstrapRun = cfg.range(of: "flagship-bootstrap.log 2>&1 ) &&")!
+        let lateLog = cfg.range(of: "/api/dev/late-log/")!
+        XCTAssertTrue(bootstrapRun.lowerBound < installed.lowerBound)
+        XCTAssertTrue(installed.lowerBound < lateLog.lowerBound)
     }
 
     func testDebianPreseedOverwriteConfirmFlags() throws {

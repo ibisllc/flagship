@@ -460,6 +460,13 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     `( echo '{"phase":"partitioning"}' > /tmp/flagship-beacon.json; ` +
     `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
     `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true`;
+  // Beacon D — fired at the END of late_command, AFTER the bootstrap SUCCEEDS,
+  // BEFORE poweroff. NOT success: the box has not registered yet. Byte-identical
+  // to EngineTests.swift.
+  const INSTALLED_BEACON =
+    `( echo '{"phase":"installed"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true`;
 
   it("Beacon A — early_command POSTs the booting phase before partman (best-effort)", () => {
     const c = cfg();
@@ -476,6 +483,22 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
   it("Beacon C — partman/early_command POSTs the partitioning phase right before the wipe", () => {
     const c = cfg();
     expect(c).toContain(`${PARTITION_BEACON}; \\`);
+  });
+
+  it("Beacon D — late_command POSTs 'installed' on the bootstrap SUCCESS path only, before poweroff", () => {
+    const c = cfg();
+    // The success path: bootstrap `&&` the installed beacon, THEN `||` the
+    // failure (dev late-log) branch.
+    expect(c).toContain(
+      `( in-target /usr/local/sbin/flagship-bootstrap.sh > /target/var/log/flagship-bootstrap.log 2>&1 ) && ` +
+        `${INSTALLED_BEACON} || `,
+    );
+    // The `installed` beacon must come AFTER the bootstrap run and BEFORE the
+    // failure branch's dev late-log POST (success-only, never on failure).
+    expect(c.indexOf('"phase":"installed"')).toBeGreaterThan(
+      c.indexOf("flagship-bootstrap.log 2>&1 ) &&"),
+    );
+    expect(c.indexOf('"phase":"installed"')).toBeLessThan(c.indexOf("/api/dev/late-log/"));
   });
 
   it("beacons are best-effort (|| true) and use busybox wget --post-file= (no curl in d-i)", () => {

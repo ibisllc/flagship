@@ -42,12 +42,13 @@ describe("webapp provisionFraction", () => {
     }
   });
 
-  it("the ladder is the canonical 8-phase vocabulary (booting…live)", () => {
+  it("the ladder is the canonical 9-phase vocabulary (booting…live), installed between installing and registering", () => {
     expect(PROVISION_LADDER).toEqual([
       "booting",
       "downloading",
       "partitioning",
       "installing",
+      "installed",
       "registering",
       "sealing",
       "pairing",
@@ -61,6 +62,7 @@ describe("webapp PROVISION_STEP_GROUPS", () => {
     expect(PROVISION_STEP_GROUPS.map((g) => g.label)).toEqual([
       "Booting",
       "Installing",
+      "Install complete — unplug the USB",
       "Registering",
       "Securing (TLS certificate)",
       "Ready",
@@ -71,9 +73,18 @@ describe("webapp PROVISION_STEP_GROUPS", () => {
 describe("webapp provisionStepStates", () => {
   it("a registering phase activates the Registering group with its title", () => {
     const v = provisionStepStates("registering");
-    // Booting + Installing done; Registering active; Securing + Ready pending.
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending"]);
-    expect(v[2]!.detail).toBe("Registering with Flagship");
+    // Booting + Installing + Installed done; Registering active; Securing + Ready pending.
+    expect(v.map((s) => s.state)).toEqual(["done", "done", "done", "active", "pending", "pending"]);
+    expect(v[3]!.detail).toBe("Registering with Flagship");
+  });
+
+  it("the 'installed' phase renders as ACTION-NEEDED (active, not done) with the unplug instruction", () => {
+    const v = provisionStepStates("installed");
+    // Booting + Installing done; Install-complete active (NOT done); rest pending.
+    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending", "pending"]);
+    expect(v[2]!.detail).toBe("Install complete — unplug the USB");
+    // Success stays `live`: `installed` is never marked done here.
+    expect(v.some((s) => s.key === "installed" && s.state === "done")).toBe(false);
   });
 
   it("error surfaces lastError on the first group with no hint", () => {

@@ -83,11 +83,13 @@ final class ProvisionTimelineTests: XCTestCase {
         XCTAssertEqual(
             ProvisionStatusPhase.ordered.map(\.rawValue),
             ["booting", "downloading", "partitioning", "installing",
-             "registering", "sealing", "pairing", "live"]
+             "installed", "registering", "sealing", "pairing", "live"]
         )
         XCTAssertTrue(ProvisionStatusPhase.live.isTerminal)
         XCTAssertTrue(ProvisionStatusPhase.error.isTerminal)
         XCTAssertFalse(ProvisionStatusPhase.installing.isTerminal)
+        // `installed` is ACTION-NEEDED, NOT terminal — success stays `live`.
+        XCTAssertFalse(ProvisionStatusPhase.installed.isTerminal)
     }
 
     // MARK: - Client 404 → nil

@@ -125,6 +125,7 @@ struct FlagshipApp: App {
         case .downloading:  return .downloading
         case .partitioning: return .partitioning
         case .installing:   return .installing
+        case .installed:    return .installed
         case .registering:  return .registering
         case .sealing:      return .sealing
         case .pairing:      return .pairing

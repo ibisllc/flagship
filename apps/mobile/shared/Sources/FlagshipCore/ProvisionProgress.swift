@@ -30,7 +30,7 @@ public enum ProvisionProgress {
     }()
 
     public enum StepKey: String, Sendable, Equatable {
-        case booting, installing, registering, securing, ready
+        case booting, installing, installed, registering, securing, ready
     }
 
     public struct StepGroup: Sendable, Equatable {
@@ -45,6 +45,8 @@ public enum ProvisionProgress {
                   phases: ["booting", "downloading", "partitioning"]),
         StepGroup(key: .installing, label: "Installing",
                   phases: ["installing"]),
+        StepGroup(key: .installed, label: "Install complete — unplug the USB",
+                  phases: ["installed"]),
         StepGroup(key: .registering, label: "Registering",
                   phases: ["registering", "pairing"]),
         StepGroup(key: .securing, label: "Securing",

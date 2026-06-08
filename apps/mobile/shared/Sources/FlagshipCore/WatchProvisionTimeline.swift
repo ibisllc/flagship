@@ -90,12 +90,14 @@ public extension WatchProtocol {
     /// FlagshipAPI/SwiftUI deps don't have to cross into the watch
     /// target.
     enum ProvisionTimelineLadder {
-        /// The 8-phase ladder, mirroring `ProvisionStatusPhase.ordered`.
+        /// The 9-phase ladder, mirroring `ProvisionStatusPhase.ordered`.
+        /// `installed` is ACTION-NEEDED (unplug the USB), not success.
         public static let phases: [(phase: String, title: String)] = [
             ("booting",      "Booting"),
             ("downloading",  "Downloading system"),
             ("partitioning", "Preparing disk"),
             ("installing",   "Installing"),
+            ("installed",    "Install complete — unplug the USB"),
             ("registering",  "Registering with Flagship"),
             ("sealing",      "Sealing your disk"),
             ("pairing",      "Pairing"),

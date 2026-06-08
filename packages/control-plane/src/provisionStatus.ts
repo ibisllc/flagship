@@ -62,6 +62,10 @@ export const PROVISION_STATUS_PHASES = [
   "downloading",
   "partitioning",
   "installing",
+  // The d-i install finished but the box has NOT registered yet: it powered
+  // off awaiting the user to unplug the USB and power it back on. NOT success —
+  // registration + cert happen on the first real boot (→ `live`).
+  "installed",
   "registering",
   "sealing",
   "pairing",
@@ -82,6 +86,10 @@ const PHASE_SET: ReadonlySet<string> = new Set(PROVISION_STATUS_PHASES);
  * the gate is here, on the producer).
  */
 const PUSH_PHASES: ReadonlySet<ProvisionStatusPhase> = new Set([
+  // `installed` IS a push milestone: the box has powered off and the user MUST
+  // act (unplug the USB, power on) before it can register — alert even when the
+  // app is backgrounded.
+  "installed",
   "registering",
   "sealing",
   "live",
@@ -147,6 +155,9 @@ const PHASE_TITLES: Record<ProvisionStatusPhase, string> = {
   downloading: "Downloading",
   partitioning: "Partitioning disk",
   installing: "Installing",
+  // ACTION-NEEDED, not success: the push title is the short "Install complete";
+  // the in-ladder step title spells out the action.
+  installed: "Install complete — unplug the USB",
   registering: "Registering with Flagship",
   sealing: "Sealing your disk key",
   pairing: "Pairing with your phone",
@@ -159,6 +170,7 @@ const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
   downloading: "Downloading the server software.",
   partitioning: "Preparing the disk.",
   installing: "Installing the server software.",
+  installed: "Unplug the USB stick, then power the box back on.",
   registering: "Your server is checking in with Flagship.",
   sealing: "Sealing your encrypted disk key.",
   pairing: "Your server is pairing with your phone.",
@@ -219,7 +231,10 @@ async function fanOutStatusPush(
     const tokens = await deps.pushTokens.listByUser(username);
     if (tokens.length === 0) return;
     const p = phase as ProvisionStatusPhase;
-    const title = PHASE_TITLES[p] ?? phase;
+    // The push banner uses the short milestone title; the ladder/step title in
+    // PHASE_TITLES is the longer in-app copy (`installed` spells out the action
+    // in the ladder, but the banner says "Install complete").
+    const title = phase === "installed" ? "Install complete" : PHASE_TITLES[p] ?? phase;
     const baseBody = PHASE_BODIES[p] ?? "";
     const body =
       phase === "error" && detail ? `Setup failed: ${detail}` : baseBody;

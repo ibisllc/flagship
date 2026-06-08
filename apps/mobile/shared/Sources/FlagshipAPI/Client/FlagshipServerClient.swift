@@ -678,6 +678,10 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
     case downloading
     case partitioning
     case installing
+    /// The d-i install finished but the box has NOT registered yet — it
+    /// powered off awaiting the user to unplug the USB + power back on.
+    /// ACTION-NEEDED, not success (`live` is success).
+    case installed
     case registering
     case sealing
     case pairing
@@ -689,10 +693,12 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
 
     /// The happy-path ladder, in order, EXCLUDING the terminal `error`
     /// (and the `unknown` sentinel). The timeline renders one row per
-    /// entry here; `live` is the terminal success state.
+    /// entry here; `live` is the terminal success state. `installed`
+    /// sits between `installing` and `registering` — an action-needed
+    /// rung, not a done state.
     public static let ordered: [ProvisionStatusPhase] = [
         .booting, .downloading, .partitioning, .installing,
-        .registering, .sealing, .pairing, .live,
+        .installed, .registering, .sealing, .pairing, .live,
     ]
 
     /// Human, on-brand title for each step. THE single source of phase
@@ -705,6 +711,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         case .downloading:  return "Downloading"
         case .partitioning: return "Partitioning disk"
         case .installing:   return "Installing"
+        case .installed:    return "Install complete — unplug the USB"
         case .registering:  return "Registering with Flagship"
         case .sealing:      return "Sealing your disk key"
         case .pairing:      return "Pairing with your phone"
@@ -724,6 +731,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         case .downloading:  return "Downloading the server software."
         case .partitioning: return "Preparing the disk."
         case .installing:   return "Installing the server software."
+        case .installed:    return "Unplug the USB stick, then power the box back on."
         case .registering:  return "Your server is checking in with Flagship."
         case .sealing:      return "Sealing your encrypted disk key."
         case .pairing:      return "Your server is pairing with your phone."
@@ -738,18 +746,20 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
     /// webapp grouped ladder derives the SAME grouping from this:
     ///   Booting     ← booting, downloading, partitioning
     ///   Installing  ← installing
+    ///   Installed   ← installed  (ACTION-NEEDED: unplug the USB)
     ///   Registering ← registering, pairing
     ///   Securing    ← sealing
     ///   Ready       ← live
     /// (`error` fails the currently-active group; it has no group of its
     /// own and is handled separately by the renderer.)
     public enum Group: String, Sendable, Equatable, CaseIterable {
-        case booting, installing, registering, securing, ready
+        case booting, installing, installed, registering, securing, ready
 
         public var label: String {
             switch self {
             case .booting:      return "Booting"
             case .installing:   return "Installing"
+            case .installed:    return "Install complete — unplug the USB"
             case .registering:  return "Registering"
             case .securing:     return "Securing"
             case .ready:        return "Ready"
@@ -763,6 +773,7 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
         switch self {
         case .booting, .downloading, .partitioning: return .booting
         case .installing:                           return .installing
+        case .installed:                            return .installed
         case .registering, .pairing:                return .registering
         case .sealing:                              return .securing
         case .live:                                 return .ready

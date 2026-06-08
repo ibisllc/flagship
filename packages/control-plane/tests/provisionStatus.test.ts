@@ -3,6 +3,7 @@ import { InMemoryStorage } from "@flagship/storage";
 import {
   handleGetProvisionStatus,
   handlePostProvisionStatus,
+  PROVISION_STATUS_PHASES,
 } from "../src/provisionStatus.js";
 
 const SERIAL = "01HXAFORDER0001";
@@ -215,6 +216,44 @@ describe("provision status channel", () => {
     expect(arg.targets.map((t) => t.tokenId)).toEqual(["tok-1"]);
     expect(arg.payload.category).toBe("provision-status");
     expect(arg.payload.meta).toMatchObject({ serial: SERIAL, phase: "live" });
+  });
+
+  it("'installed' sits in the ladder between 'installing' and 'registering'", () => {
+    const phases = PROVISION_STATUS_PHASES as readonly string[];
+    const iInstalling = phases.indexOf("installing");
+    const iInstalled = phases.indexOf("installed");
+    const iRegistering = phases.indexOf("registering");
+    expect(iInstalled).toBe(iInstalling + 1);
+    expect(iRegistering).toBe(iInstalled + 1);
+    // `error` stays terminal/off-ladder (last).
+    expect(phases[phases.length - 1]).toBe("error");
+  });
+
+  it("an 'installed' status POST pushes 'Install complete' + the unplug body (ACTION-NEEDED, not success)", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice");
+    const pushFanout = vi.fn(async () => {});
+
+    const res = await handlePostProvisionStatus(
+      {
+        storage: storage.provisionStatus,
+        authCodes: storage.authCodes,
+        pushTokens: storage.pushTokens,
+        pushFanout,
+      },
+      SERIAL,
+      { phase: "installed" },
+    );
+
+    expect(res.status).toBe(200);
+    // `installed` IS a push milestone — the user must act even backgrounded.
+    expect(pushFanout).toHaveBeenCalledTimes(1);
+    const arg = pushFanout.mock.calls[0]![0] as {
+      payload: { title: string; body: string; meta?: Record<string, unknown> };
+    };
+    expect(arg.payload.title).toBe("Install complete");
+    expect(arg.payload.body).toBe("Unplug the USB stick, then power the box back on.");
+    expect(arg.payload.meta).toMatchObject({ serial: SERIAL, phase: "installed" });
   });
 
   it("an 'error' status POST pushes with the failure detail", async () => {
