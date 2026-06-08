@@ -26,9 +26,32 @@ final class WizardModel: ObservableObject {
     /// Raw phase token from the CLI: "remaster" | "write".
     @Published var phase: String? = nil
     /// Optional Wi-Fi for a box with no Ethernet — a burn-time local input,
-    /// never part of the signed recipe.
-    @Published var wifiSSID = ""
-    @Published var wifiPassword = ""
+    /// never part of the signed recipe. Prefilled on launch from the persisted
+    /// store (SSID in UserDefaults, password in the Keychain) and re-persisted
+    /// whenever the user edits them, so they're not retyped every burn.
+    @Published var wifiSSID = "" {
+        didSet {
+            guard !suppressWifiPersist, wifiSSID != oldValue else { return }
+            WifiCredentialStore.saveSSID(wifiSSID)
+        }
+    }
+    @Published var wifiPassword = "" {
+        didSet {
+            guard !suppressWifiPersist, wifiPassword != oldValue else { return }
+            WifiCredentialStore.savePassword(wifiPassword)
+        }
+    }
+
+    /// Set while we prefill the fields on launch so the loaded values don't
+    /// immediately round-trip back through `didSet` into the store.
+    private var suppressWifiPersist = false
+
+    init() {
+        suppressWifiPersist = true
+        wifiSSID = WifiCredentialStore.loadSSID()
+        wifiPassword = WifiCredentialStore.loadPassword()
+        suppressWifiPersist = false
+    }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
     /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
     /// supplies. Both end in the same remaster+flash path.

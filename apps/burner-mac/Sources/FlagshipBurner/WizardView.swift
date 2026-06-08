@@ -21,6 +21,12 @@ enum FlagshipLinks {
 struct WizardView: View {
     @StateObject private var model = WizardModel()
     @State private var showLog = false
+    /// Tracks which Wi-Fi field holds the keyboard focus so we can resign it
+    /// when the log overlay opens — otherwise AppKit leaves the blue focus
+    /// ring drawn over the log (a stale first-responder artifact).
+    @FocusState private var wifiFocus: WifiField?
+
+    private enum WifiField: Hashable { case ssid, password }
     // "" = follow the system appearance until the user picks a side.
     @AppStorage("assembler.theme") private var theme = ""
     @Environment(\.colorScheme) private var effectiveScheme
@@ -40,9 +46,15 @@ struct WizardView: View {
                 .padding(.top, FB.Spacing.s5)
                 .padding(.bottom, FB.Spacing.s3)
             ZStack(alignment: .bottom) {
-                panes
-                    .padding(.horizontal, FB.Spacing.s5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Only render the form when the log is hidden. Conditional
+                // rendering (rather than just layering the log on top) removes
+                // the text fields entirely while the log is up, so neither the
+                // fields nor any leftover focus ring can float over the log.
+                if !showLog {
+                    panes
+                        .padding(.horizontal, FB.Spacing.s5)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
                 if showLog {
                     logOverlay
                         .transition(.move(edge: .bottom))
@@ -56,6 +68,11 @@ struct WizardView: View {
         .background(FB.Colors.bg)
         .preferredColorScheme(preferredScheme)
         .task { await model.refreshDisks() }
+        .onChange(of: showLog) { _, shown in
+            // Drop keyboard focus the instant the log opens so AppKit doesn't
+            // leave a stale focus ring painted where the field used to be.
+            if shown { wifiFocus = nil }
+        }
     }
 
     // MARK: - Body
@@ -80,15 +97,9 @@ struct WizardView: View {
     /// Simple (default, server-named Debian base) vs Advanced (bring your own
     /// ISO). Disabled while a burn is running so the inputs can't change mid-run.
     private var modePicker: some View {
-        Picker("", selection: $model.mode) {
-            ForEach(BurnerMode.allCases, id: \.self) { m in
-                Text(m.menuLabel).tag(m)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .disabled(model.isRunning)
-        .frame(maxWidth: 240)
+        ModePill(selection: $model.mode)
+            .disabled(model.isRunning)
+            .opacity(model.isRunning ? 0.5 : 1)
     }
 
     /// The remaster runs on the burner before the write; show it in the warning
@@ -143,54 +154,64 @@ struct WizardView: View {
 
     // MARK: - Rows
 
-    /// A clickable card with its help link sitting just *below and
-    /// outside* the card, so the link isn't part of the drop/click target.
+    /// A clickable card with a help icon. For most rows the icon floats to the
+    /// right just below the card; the certificate row overrides this and pins
+    /// its icon to the right of the "Paste certificate…" prompt instead.
     private func optionGroup<Card: View>(
         @ViewBuilder card: () -> Card,
-        linkLabel: String,
-        linkURL: URL
+        help: HelpIcon
     ) -> some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s2) {
             card()
-            HelpLink(label: linkLabel, url: linkURL)
-                .padding(.leading, FB.Spacing.s1)
+            HStack {
+                Spacer()
+                help
+            }
+            .padding(.trailing, FB.Spacing.s1)
         }
         .padding(.bottom, FB.Spacing.s2)
     }
 
     private var recipeRow: some View {
-        optionGroup(
-            card: {
-                VStack(alignment: .leading, spacing: FB.Spacing.s2) {
-                    DropRow(
-                        icon: "doc.text.fill",
-                        title: "Certificate",
-                        description: "Drop or choose the JSON certificate — or paste it",
-                        state: recipeRowState(),
-                        isReady: model.verified != nil,
-                        onDrop: { url in model.acceptRecipeFile(url: url) },
-                        onChoose: {
-                            if let url = pickFile(types: [.json, .data]) {
-                                model.acceptRecipeFile(url: url)
-                            }
-                        }
-                    )
-                    // Copy-paste path (preferred on the same machine — nothing
-                    // is written to disk except a 0600 temp the CLI reads). The
-                    // website's /ready/ page offers a "Copy recipe" button.
-                    Button {
-                        let s = NSPasteboard.general.string(forType: .string) ?? ""
-                        model.acceptRecipeText(s)
-                    } label: {
-                        Label("Paste certificate from clipboard", systemImage: "doc.on.clipboard")
-                            .font(FB.Font.caption())
+        // The certificate help icon must sit on the SAME line as the
+        // "Paste certificate…" prompt (right-aligned), so this row builds its
+        // own layout rather than going through the generic `optionGroup`.
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            DropRow(
+                icon: "doc.text.fill",
+                title: "Certificate",
+                description: "Drop or choose the JSON certificate — or paste it",
+                state: recipeRowState(),
+                isReady: model.verified != nil,
+                onDrop: { url in model.acceptRecipeFile(url: url) },
+                onChoose: {
+                    if let url = pickFile(types: [.json, .data]) {
+                        model.acceptRecipeFile(url: url)
                     }
-                    .buttonStyle(.link)
                 }
-            },
-            linkLabel: "Where to get one?",
-            linkURL: FlagshipLinks.certificate
-        )
+            )
+            HStack(alignment: .center, spacing: FB.Spacing.s2) {
+                // Copy-paste path (preferred on the same machine — nothing
+                // is written to disk except a 0600 temp the CLI reads). The
+                // website's /ready/ page offers a "Copy recipe" button.
+                Button {
+                    let s = NSPasteboard.general.string(forType: .string) ?? ""
+                    model.acceptRecipeText(s)
+                } label: {
+                    Label("Paste certificate from clipboard", systemImage: "doc.on.clipboard")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                Spacer()
+                HelpIcon(
+                    title: "Where to get a certificate",
+                    blurb: "Order a server on flagshipserver.com — the /ready page gives you a JSON certificate to copy or download, then paste or drop it here.",
+                    url: FlagshipLinks.certificate
+                )
+            }
+            .padding(.trailing, FB.Spacing.s1)
+        }
+        .padding(.bottom, FB.Spacing.s2)
     }
 
     private func recipeRowState() -> DropRowState {
@@ -228,8 +249,11 @@ struct WizardView: View {
                     }
                 )
             },
-            linkLabel: "List of recommended distros.",
-            linkURL: FlagshipLinks.recommendedDistros
+            help: HelpIcon(
+                title: "Recommended distributions",
+                blurb: "Advanced mode remasters a stock Ubuntu or Debian installer ISO you supply. See the list of distributions known to assemble and boot cleanly.",
+                url: FlagshipLinks.recommendedDistros
+            )
         )
     }
 
@@ -243,8 +267,11 @@ struct WizardView: View {
     private var diskRow: some View {
         optionGroup(
             card: { DiskPickerRow(model: model) },
-            linkLabel: "How does it work?",
-            linkURL: FlagshipLinks.bootingProcess
+            help: HelpIcon(
+                title: "How does it work?",
+                blurb: "The chosen USB drive is formatted and written with a single-use boot image. Booting your box from it installs an encrypted, phone-unlocked server that registers itself automatically.",
+                url: FlagshipLinks.bootingProcess
+            )
         )
     }
 
@@ -264,8 +291,10 @@ struct WizardView: View {
                     .frame(width: 16)
                 TextField("Wi-Fi network (optional)", text: $model.wifiSSID)
                     .textFieldStyle(.roundedBorder)
+                    .focused($wifiFocus, equals: .ssid)
                 SecureField("Password", text: $model.wifiPassword)
                     .textFieldStyle(.roundedBorder)
+                    .focused($wifiFocus, equals: .password)
                     .frame(width: 150)
                     .disabled(!wifiActive)
                     .opacity(wifiActive ? 1 : 0.5)
@@ -425,7 +454,12 @@ struct WizardView: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { withAnimation(.easeOut(duration: 0.22)) { showLog.toggle() } }
+            .onTapGesture {
+                // Resign the field before the overlay animates in so no focus
+                // ring is mid-transition when the log slides up.
+                wifiFocus = nil
+                withAnimation(.easeOut(duration: 0.22)) { showLog.toggle() }
+            }
             .pointerCursor()
             .padding(.horizontal, FB.Spacing.s5)
             .padding(.vertical, FB.Spacing.s2)
@@ -734,18 +768,106 @@ private struct LogPane: View {
     }
 }
 
-// MARK: - Help link
+// MARK: - Mode pill
 
-/// A small inline link that opens an explainer page on the website.
-/// Shows the pointing-hand cursor on hover so it reads as a real link.
-private struct HelpLink: View {
-    let label: String
-    let url: URL
+/// On-brand rounded "pill" segmented toggle for Simple vs Advanced. A filled
+/// teal capsule slides under the selected segment; the selected label reads in
+/// white, the unselected one in muted ink. Replaces the plain `.segmented`
+/// Picker — same two modes, same binding, purely a visual upgrade.
+private struct ModePill: View {
+    @Binding var selection: BurnerMode
+    @Namespace private var pill
+
     var body: some View {
-        Button(label) { NSWorkspace.shared.open(url) }
-            .buttonStyle(.link)
-            .font(FB.Font.caption())
+        HStack(spacing: 0) {
+            ForEach(BurnerMode.allCases, id: \.self) { mode in
+                segment(mode)
+            }
+        }
+        .padding(3)
+        .background(
+            Capsule(style: .continuous)
+                .fill(FB.Colors.surfaceSunken)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(FB.Colors.border, lineWidth: 1)
+        )
+        .frame(width: 240)
+    }
+
+    private func segment(_ mode: BurnerMode) -> some View {
+        let isSelected = selection == mode
+        return Text(mode.menuLabel)
+            .font(FB.Font.rowTitle())
+            .foregroundStyle(isSelected ? Color.white : FB.Colors.textMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, FB.Spacing.s1 + 2)
+            .background(
+                ZStack {
+                    if isSelected {
+                        Capsule(style: .continuous)
+                            .fill(FB.Colors.primary)
+                            .matchedGeometryEffect(id: "selectedSegment", in: pill)
+                    }
+                }
+            )
+            .contentShape(Capsule(style: .continuous))
+            .onTapGesture {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    selection = mode
+                }
+            }
             .pointerCursor()
+    }
+}
+
+// MARK: - Help icon
+
+/// A small circular, brand-filled help button with a white question-mark
+/// glyph. Tapping it shows the same explainer the old text link led to in a
+/// popover — short copy plus a "Learn more" that opens the original URL.
+private struct HelpIcon: View {
+    let title: String
+    let blurb: String
+    let url: URL
+
+    @State private var showPopover = false
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            showPopover.toggle()
+        } label: {
+            Image(systemName: "questionmark.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(FB.Colors.primary)
+                .opacity(isHovering ? 0.8 : 1)
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .onHover { isHovering = $0 }
+        .help(title)
+        .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                Text(title)
+                    .font(FB.Font.rowTitle())
+                    .foregroundStyle(FB.Colors.ink)
+                Text(blurb)
+                    .font(FB.Font.rowHint())
+                    .foregroundStyle(FB.Colors.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Learn more →") {
+                    NSWorkspace.shared.open(url)
+                    showPopover = false
+                }
+                .buttonStyle(.link)
+                .font(FB.Font.caption())
+                .pointerCursor()
+            }
+            .padding(FB.Spacing.s4)
+            .frame(width: 260)
+        }
     }
 }
 
