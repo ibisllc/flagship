@@ -76,7 +76,7 @@ public struct InstallProgressScreen: View {
     }
 
     private func stepRow(_ step: InstallProgressViewModel.Step, c: FSColors) -> some View {
-        let isDone = vm.completed.contains(step)
+        let isDone = isStepDone(step)
         let isActive = !isDone && nextStep == step
         return HStack(spacing: FS.space.s3) {
             ZStack {
@@ -97,7 +97,22 @@ public struct InstallProgressScreen: View {
         }
     }
 
+    /// Highest index among completed steps (-1 if none).
+    private var furthestDoneIndex: Int {
+        vm.completed
+            .compactMap { InstallProgressViewModel.Step.allCases.firstIndex(of: $0) }
+            .max() ?? -1
+    }
+
+    /// A step is done if it (or any LATER step) has been observed — so an
+    /// unreliable earlier beacon that never lands (e.g. the pre-WiFi
+    /// `d-i-started`) doesn't leave a spinner stranded behind the frontier.
+    private func isStepDone(_ step: InstallProgressViewModel.Step) -> Bool {
+        guard let i = InstallProgressViewModel.Step.allCases.firstIndex(of: step) else { return false }
+        return vm.completed.contains(step) || i < furthestDoneIndex
+    }
+
     private var nextStep: InstallProgressViewModel.Step? {
-        InstallProgressViewModel.Step.allCases.first(where: { !vm.completed.contains($0) })
+        InstallProgressViewModel.Step.allCases.first(where: { !isStepDone($0) })
     }
 }
