@@ -36,13 +36,21 @@ public final class InstallProgressViewModel {
     public let serial: String
     public let podName: String?
     private let client: any ScreensClient
+    private let server: (any FlagshipServerClient)?
     private var streamTask: Task<Void, Never>?
     private var bridgeStarted = false
+    private var cursor: Int = 0
 
-    public init(serial: String, client: any ScreensClient, podName: String? = nil) {
+    public init(
+        serial: String,
+        client: any ScreensClient,
+        podName: String? = nil,
+        server: (any FlagshipServerClient)? = nil
+    ) {
         self.serial = serial
         self.client = client
         self.podName = podName
+        self.server = server
     }
 
     public func start() {
@@ -50,6 +58,22 @@ public final class InstallProgressViewModel {
         if !bridgeStarted {
             InstallProgressBridge.shared.onStart?(serial, podName)
             bridgeStarted = true
+        }
+        // During install the daemon doesn't exist yet, so its Screens-BFF SSE
+        // stream is empty and the bar would just spin. The box's d-i beacons —
+        // and the later lifecycle events — land in the .com Worker's
+        // install-events table, which is exactly what PendingPodWatcher polls.
+        // Poll THAT when we have a server client; fall back to the daemon SSE
+        // (mock/demo, or when no server is wired).
+        if let server {
+            streamTask = Task { [weak self] in
+                guard let self else { return }
+                while !Task.isCancelled {
+                    if await self.pollWorkerOnce(server) { break }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                }
+            }
+            return
         }
         streamTask = Task { [weak self] in
             guard let stream = self?.client.installEvents(serial: self?.serial ?? "") else { return }
@@ -72,6 +96,36 @@ public final class InstallProgressViewModel {
                 }
             }
         }
+    }
+
+    /// One poll of the .com Worker's install-events (mirrors
+    /// PendingPodWatcher.pollOnce + reuses its event-name → Step map).
+    /// Returns true on a terminal event (ready/failed) so the loop stops.
+    private func pollWorkerOnce(_ server: any FlagshipServerClient) async -> Bool {
+        let resp: InstallEventsPollResponse
+        do {
+            resp = try await server.getInstallEvents(serial: serial, since: cursor)
+        } catch {
+            return false // transient — try again next tick
+        }
+        cursor = resp.cursor
+        for record in resp.events {
+            if let step = PendingPodWatcher.mapStep(record.eventName) { mark(step) }
+            if record.eventName == "ready" {
+                if !record.detail.isEmpty { serverFqdn = record.detail }
+                mark(.ready)
+                isDone = true
+                InstallProgressBridge.shared.onComplete?(record.detail)
+                return true
+            }
+            if record.eventName == "failed" {
+                failedReason = record.detail
+                isDone = true
+                InstallProgressBridge.shared.onFailed?(record.detail)
+                return true
+            }
+        }
+        return false
     }
 
     public func cancel() {

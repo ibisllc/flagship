@@ -478,6 +478,7 @@ struct InstallProgressContainer: View {
     let podName: String?
     let onFinish: (String) -> Void
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @State private var vm: InstallProgressViewModel?
 
     init(serial: String, podName: String? = nil, onFinish: @escaping (String) -> Void) {
@@ -496,7 +497,7 @@ struct InstallProgressContainer: View {
             }
         }
         .task {
-            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client, podName: podName) }
+            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client, podName: podName, server: server) }
         }
     }
 }
