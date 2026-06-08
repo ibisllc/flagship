@@ -11,6 +11,14 @@
 -- (0046) + nfc_rendezvous (0040); removed build_tickets (dropped in 0033 — the
 -- stale DELETE would error). Keep this list in sync as migrations land, until
 -- the mass-wipe is disarmed before real users (see CLAUDE.md open-work #11).
+--
+-- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
+-- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
+-- is in the repo but not in prod). A --file run is ONE transaction, so the first
+-- DELETE on a table that prod lacks aborts the WHOLE wipe (rolls back, nothing
+-- deleted). Run `bash scripts/wipe-all-users.sh` instead — it deletes each table
+-- independently and skips the ones prod doesn't have. This file is the canonical
+-- TABLE LIST that runner reads.
 
 -- Identity + naming
 DELETE FROM usernames;
