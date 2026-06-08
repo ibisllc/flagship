@@ -180,6 +180,20 @@ BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc
 FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64-v5.iso"
 FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64-v5.iso"
 
+# Blessed base ISO for the desktop burner's Simple mode, served by
+# POST /api/iso-manifest (see docs/iso-manifest.md). The burner is a dumb
+# executor: it reports the ISO it has and downloads this one if the sha
+# differs. NON-SECRET (public Debian facts) — lives in [vars], not a secret.
+#   - `sha256` is the OFFICIAL value from Debian's signed SHA256SUMS
+#     (the `attestation` url; verify the sums file against SHA256SUMS.sign).
+#   - `url` is version-pinned (NOT the rotating current/ symlink) so url+sha
+#     stay consistent. When Debian ships a new point release, re-pin all
+#     three (version/url/sha256) HERE and deploy — no burner reship. Once
+#     13.5.0 is archived, swap the host to cdimage's /cdimage/archive/ path
+#     or to our own R2 copy of the same bytes (sha is unchanged).
+#   - TOML literal string (single quotes): inner JSON double-quotes are kept verbatim.
+FLAGSHIP_ISO_MANIFEST = '{"version":"debian-13.5.0","url":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso","sha256":"95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a","sizeBytes":791674880,"attestation":"https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"}'
+
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the
 # `flagship-iso-temp` R2 bucket (enabled once via

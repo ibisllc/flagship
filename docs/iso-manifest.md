@@ -66,23 +66,37 @@ The blessed manifest comes from a single Worker env var:
 FLAGSHIP_ISO_MANIFEST
 ```
 
-It is a JSON string of the manifest shape:
+It is a JSON string of the manifest shape. It is **public** (Debian facts, no
+secret), so it lives as a `[vars]` entry in `apps/com/wrangler.toml`, not a
+secret — a plain `wrangler deploy` activates it. The currently-seeded value:
 
 ```json
 {
-  "version": "debian-12.7.0-amd64",
-  "url": "https://<r2-host>/iso/debian-12.7.0-amd64-netinst.iso",
-  "sha256": "<the value from Debian's signed SHA256SUMS>",
-  "sizeBytes": 658505728,
-  "attestation": "https://cdimage.debian.org/debian-cd/12.7.0/amd64/iso-cd/SHA256SUMS"
+  "version": "debian-13.5.0",
+  "url": "https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
+  "sha256": "95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a",
+  "sizeBytes": 791674880,
+  "attestation": "https://cdimage.debian.org/debian-cd/13.5.0/amd64/iso-cd/SHA256SUMS"
 }
 ```
 
-Set it with `wrangler secret put FLAGSHIP_ISO_MANIFEST` (or a `[vars]` entry
-once the values are public). If the env var is **unset, unparseable, or fails
-shape validation**, the server treats it as **unconfigured** — it never throws,
-and the endpoint answers `{ "download": null }` so a config typo can never fail
-the burner's launch.
+The `sha256` is the official value from Debian's signed SHA256SUMS for
+`debian-13.5.0-amd64-netinst.iso` (verified live 2026-06-08; size 791 674 880 B).
+The `url` is **version-pinned** (not the rotating `current/` symlink) so `url`
+and `sha256` stay consistent.
+
+**Source choice (R2 vs CDN) is just the `url` field — the burner never
+hardcodes it.** Today it points at Debian's CDN (maximally transparent: the
+burner pulls from the source). To switch to our own R2 copy for permanence /
+reliability, upload the *same bytes* and change only `url` — `sha256` is
+unchanged because it's the same ISO. **On a new Debian point release**, re-pin
+all of `version`/`url`/`sha256` here and deploy (no burner reship); once
+`13.5.0` is archived, move the host to cdimage's `/cdimage/archive/13.5.0/…`
+path or to R2.
+
+If the env var is **unset, unparseable, or fails shape validation**, the server
+treats it as **unconfigured** — it never throws, and the endpoint answers
+`{ "download": null }` so a config typo can never fail the burner's launch.
 
 ## Verifiability — the attestation rule
 
