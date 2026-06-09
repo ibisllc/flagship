@@ -108,6 +108,113 @@ final class PendingServerReconcilerTests: XCTestCase {
         XCTAssertTrue(store.list(username: "harry").isEmpty)
     }
 
+    // Registration is AUTHORITATIVE for online. A server present in the
+    // registered /pods inventory renders as an `.online` pod even though it
+    // has NO local pod and NO lastReported/cert side-channel — the live bug
+    // (a just-live, content-blind box was stranded Pending / invisible).
+    func test_registeredFqdnSurfacesAsOnlinePod_evenWithNoLocalRecord() async {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])
+        let server = makeServer()
+        server.outstandingOrdersByUser["harry"] = []
+        let store = freshStore()
+
+        let r = PendingServerReconciler(
+            app: app, server: server, store: store,
+            fetchRegisteredFqdns: { _ in ["home.harry.flagship.services"] },
+            sign: signer()
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.fqdn, "home.harry.flagship.services")
+        // No pending duplicate, no leftover pending record.
+        XCTAssertEqual(app.pods.filter { $0.status == .pending }.count, 0)
+    }
+
+    // A pending pod whose fqdn becomes registered flips to a SINGLE online
+    // pod (identity unified on the fqdn — no stuck-pending duplicate), and the
+    // local pending record is dropped.
+    func test_pendingPodFlipsAndDedupsWhenFqdnRegisters() async {
+        let app = AppState()
+        let fqdn = "home.harry.flagship.services"
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: PodInfo.podId(forFqdn: fqdn), name: "home",
+                    description: nil, fqdn: fqdn,
+                    status: .pending, pendingAuthCodeSerial: "HOMESER0")
+        ])
+        let store = freshStore()
+        store.add(username: "harry", accountKey: "ABCD", .init(
+            podId: PodInfo.podId(forFqdn: fqdn), name: "home", description: "",
+            fqdn: fqdn, authCodeSerial: "HOMESER0", createdAt: 1))
+
+        let server = makeServer()
+        // The order is still "outstanding" server-side, but the box has now
+        // registered — registration must win over the still-pending order.
+        server.outstandingOrdersByUser["harry"] = [order("HOMESER0", "home")]
+
+        let r = PendingServerReconciler(
+            app: app, server: server, store: store,
+            fetchRegisteredFqdns: { _ in [fqdn] },
+            sign: signer()
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.count, 1, "must collapse to one pod")
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.fqdn, fqdn)
+        XCTAssertNil(app.pods.first?.pendingAuthCodeSerial)
+        XCTAssertTrue(store.list(username: "harry").isEmpty, "pending record dropped")
+    }
+
+    // A registered fqdn keeps the user's typed name from the pending pod
+    // rather than falling back to the fqdn label.
+    func test_registeredFlipPreservesPendingDisplayName() async {
+        let app = AppState()
+        let fqdn = "home.harry.flagship.services"
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: PodInfo.podId(forFqdn: fqdn), name: "My Home Box",
+                    description: nil, fqdn: fqdn,
+                    status: .pending, pendingAuthCodeSerial: "HOMESER0")
+        ])
+        let server = makeServer()
+        server.outstandingOrdersByUser["harry"] = []
+
+        let r = PendingServerReconciler(
+            app: app, server: server,
+            fetchRegisteredFqdns: { _ in [fqdn] },
+            sign: signer()
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.name, "My Home Box")
+    }
+
+    // A nil registered-fqdns fetch (directory unreachable this pass) leaves
+    // online state untouched — a pending pod stays pending, not dropped.
+    func test_nilRegisteredFetchLeavesOnlineStateUntouched() async {
+        let app = AppState()
+        let fqdn = "home.harry.flagship.services"
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: PodInfo.podId(forFqdn: fqdn), name: "home",
+                    description: nil, fqdn: fqdn,
+                    status: .pending, pendingAuthCodeSerial: "HOMESER0")
+        ])
+        let server = makeServer()
+        server.outstandingOrdersByUser["harry"] = [order("HOMESER0", "home")]
+
+        let r = PendingServerReconciler(
+            app: app, server: server,
+            fetchRegisteredFqdns: { _ in nil },
+            sign: signer()
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.first?.status, .pending)
+    }
+
     // A failing server (network blip) leaves local state untouched.
     func test_serverFailureLeavesStateUntouched() async {
         let app = AppState()

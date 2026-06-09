@@ -86,6 +86,16 @@ public struct HomeScreen: View {
         self.onSignInAgain = onSignInAgain
     }
 
+    /// The "couldn't load" ErrorCard is a REAL data-load failure against an
+    /// actual ONLINE server — nothing else. With no server (the welcome empty
+    /// state shows) or only a pending one (still installing — nothing to load
+    /// yet), a failure card reads as "not paired to a server" to a user who
+    /// simply hasn't created one, so it's suppressed. Gated on having at least
+    /// one online server.
+    static func shouldShowLoadError(pods: [PodInfo]) -> Bool {
+        pods.contains(where: { $0.status == .online })
+    }
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -106,13 +116,17 @@ public struct HomeScreen: View {
                 case .loaded(let d):
                     recentActivity(events: d.recentInstallEvents, c: c)
                 case .failed(let msg):
-                    // With no server there's nothing to load — a
-                    // "couldn't load" card is misleading. Leave the
-                    // space empty until the user adds their first server.
-                    if pods.isEmpty {
-                        EmptyView()
-                    } else {
+                    // The "couldn't load" card is a REAL data-load failure
+                    // against an actual online server — nothing else. With no
+                    // server (the welcome empty state shows) OR only a pending
+                    // one (still installing — there's nothing to load yet), a
+                    // failure card is misleading: it reads as "not paired to a
+                    // server" to a user who simply hasn't created one. Gate the
+                    // card on having at least one ONLINE server.
+                    if HomeScreen.shouldShowLoadError(pods: pods) {
                         ErrorCard(message: msg)
+                    } else {
+                        EmptyView()
                     }
                 default:
                     EmptyView()

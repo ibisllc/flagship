@@ -302,6 +302,47 @@ public final class AppState {
         if currentPodId == nil { currentPodId = pod.podId }
     }
 
+    /// Registration is AUTHORITATIVE for online. A server present in the
+    /// registered `/pods` inventory is rendered `.online` regardless of any
+    /// heartbeat / cert side-channel — those aren't populated for a
+    /// content-blind `.com` or a just-live box, so leaning on them stranded
+    /// a live server as Pending. Identity is unified on the fqdn: if a pod
+    /// (pending or otherwise) already exists for this fqdn, it's flipped to
+    /// `.online` in place (preserving leader/current selection); otherwise a
+    /// fresh `.online` pod is added. The online pod always wins over a
+    /// pending duplicate sharing the fqdn. Returns the resolved pod id.
+    @discardableResult
+    public func upsertRegisteredPod(
+        fqdn: String,
+        name: String,
+        description: String? = nil
+    ) -> String {
+        let target = fqdn.lowercased()
+        if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
+            let old = pods[idx]
+            // Already online — nothing to do (don't clobber a richer name).
+            if old.status == .online { return old.podId }
+            pods[idx] = PodInfo(
+                podId: old.podId,
+                name: old.name.isEmpty ? name : old.name,
+                description: old.description ?? description,
+                fqdn: old.fqdn,
+                status: .online,
+                pendingAuthCodeSerial: nil
+            )
+            return old.podId
+        }
+        let id = PodInfo.podId(forFqdn: fqdn)
+        addPod(PodInfo(
+            podId: id,
+            name: name,
+            description: description,
+            fqdn: fqdn,
+            status: .online
+        ))
+        return id
+    }
+
     public func setLeader(_ podId: String) {
         guard pods.contains(where: { $0.podId == podId }) else { return }
         leaderPodId = podId
@@ -382,6 +423,18 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     public let description: String?
     public let fqdn: String
     public let status: Status
+
+    /// Deterministic, fqdn-derived pod id. Pod identity is UNIFIED on the
+    /// normalized fqdn so the registered-`/pods` pod, the outstanding-orders
+    /// reconciler's pod, the pending-pod watcher's flip, and the
+    /// PendingServerStore record all key on the SAME id for a given server —
+    /// no stuck-pending duplicate when a box goes live (a registered pod and a
+    /// pending pod that share an fqdn collapse to one). An empty fqdn (a
+    /// pre-delivery pending pod that has no predicted domain yet) has no
+    /// stable identity, so callers fall back to their own id in that case.
+    public static func podId(forFqdn fqdn: String) -> String {
+        "pod-" + fqdn.lowercased()
+    }
     /// For pods in `.pending` status, the auth-code serial issued at
     /// CreateServer time. Lets Cancel-order revoke the auth-code on
     /// flagshipserver.com instead of just removing the pod locally.

@@ -94,6 +94,40 @@ final class PendingPodWatcherTests: XCTestCase {
         XCTAssertNil(app.pods.first?.pendingAuthCodeSerial)
     }
 
+    // When provisioning reaches `.live` but a registered online pod for the
+    // SAME fqdn already exists under a different podId (the reconciler
+    // surfaced it first), the flip collapses onto that one — a single online
+    // pod, no stuck-pending duplicate.
+    func test_watcher_dedupsOntoExistingOnlinePod_onLivePhase() async throws {
+        let app = AppState()
+        let fqdn = "home.harry.flagship.services"
+        // A legacy random-id pending pod AND a registered online pod for the
+        // same fqdn coexist (the dangerous duplicate this fix prevents).
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: "legacy-rand", name: "Home", description: nil,
+                    fqdn: fqdn, status: .pending, pendingAuthCodeSerial: "AC-LIVE"),
+            PodInfo(podId: PodInfo.podId(forFqdn: fqdn), name: "Home",
+                    description: nil, fqdn: fqdn, status: .online),
+        ])
+
+        let s = makeServer()
+        s.provisionStatusScripts["AC-LIVE"] = [(phase: .live, detail: nil)]
+        s.provisionStatusServerDomains["AC-LIVE"] = fqdn
+
+        let watcher = PendingPodWatcher(
+            serial: "AC-LIVE", podId: "legacy-rand", app: app, server: s,
+            pollIntervalNanos: 1_000_000
+        )
+        watcher.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        watcher.stop()
+
+        XCTAssertEqual(app.pods.count, 1, "must collapse to one pod")
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.fqdn, fqdn)
+        XCTAssertEqual(app.pods.filter { $0.status == .pending }.count, 0)
+    }
+
     func test_watcher_firesOnFailed_onErrorPhase() async throws {
         let app = AppState()
         let pending = PodInfo(

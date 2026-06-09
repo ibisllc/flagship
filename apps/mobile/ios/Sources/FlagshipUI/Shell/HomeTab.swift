@@ -7,6 +7,7 @@ import FlagshipAPI
 public struct HomeTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
@@ -259,8 +260,17 @@ public struct HomeTab: View {
 
 
     private func addPendingPod(name: String, description: String, fqdn: String, serial: String) {
+        // Pod identity is unified on the fqdn so this freshly-delivered
+        // pending pod and the registered `/pods` pod that arrives once the
+        // box goes live collapse to ONE pod (the reconciler / watcher flip it
+        // online in place) — no stuck-pending duplicate. An empty fqdn (no
+        // predicted domain yet) has no stable identity, so we fall back to a
+        // random id for it.
+        let podId = fqdn.isEmpty
+            ? "pod-\(UUID().uuidString.prefix(6).lowercased())"
+            : PodInfo.podId(forFqdn: fqdn)
         let pod = PodInfo(
-            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
+            podId: podId,
             name: name,
             description: description.isEmpty ? nil : description,
             fqdn: fqdn,
@@ -291,9 +301,24 @@ public struct HomeTab: View {
     /// spinner). Best-effort; a failure leaves local state untouched.
     private func reconcileServerTruth() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
+        let mailbox = self.mailbox
         let reconciler = PendingServerReconciler(
             app: app,
             server: server,
+            fetchRegisteredFqdns: { username in
+                // The registered `/pods` inventory is the AUTHORITATIVE
+                // "online" signal — a box that has phoned home + registered.
+                // Identity-plane fetch (no biometric); a failure returns nil
+                // so the reconcile leaves online state untouched on a blip.
+                do {
+                    let dir = try await mailbox.fetchPods(username: username)
+                    return Set(dir.pods
+                        .filter { $0.revokedAt == nil }
+                        .map { $0.serverDomain.lowercased() })
+                } catch {
+                    return nil
+                }
+            },
             sign: { username, issuedAt in
                 let irk = try await Keystore.deriveIRK(reason: "Sync your servers")
                 let bytes = OutstandingOrders.canonicalBytes(username: username, issuedAt: issuedAt)

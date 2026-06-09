@@ -170,17 +170,38 @@ public final class PendingPodWatcher {
         }
     }
 
-    /// Replace the pod's PodInfo with an .online copy. Preserves podId,
-    /// name, description, leader-ness, current-pod-ness so the user's
-    /// selection state is undisturbed.
+    /// Flip the pending pod to `.online`. Provisioning reached `.live`, so —
+    /// like a registered `/pods` entry — the server is authoritatively online.
+    /// Identity is unified on the fqdn: if a registered online pod for the
+    /// same fqdn already exists (e.g. the reconciler surfaced it first under
+    /// the fqdn-derived id while this watcher tracked a legacy random-id
+    /// pending pod), we collapse onto that one rather than leaving a duplicate.
+    /// The common case (ids already match) replaces in place, preserving
+    /// leader / current-pod selection.
     private func flipPodToOnline(fqdn: String?) {
         guard let idx = app.pods.firstIndex(where: { $0.podId == podId }) else { return }
         let old = app.pods[idx]
+        let resolvedFqdn = fqdn ?? old.fqdn
+
+        // If a DIFFERENT pod already holds this fqdn, that one wins (online).
+        // Drop this pending duplicate and ensure the survivor is online.
+        if !resolvedFqdn.isEmpty,
+           app.pods.contains(where: {
+               $0.podId != old.podId && $0.fqdn.lowercased() == resolvedFqdn.lowercased()
+           }) {
+            app.removePod(old.podId)
+            app.upsertRegisteredPod(fqdn: resolvedFqdn, name: old.name, description: old.description)
+            if let user = app.currentUser, !user.isEmpty {
+                PendingServerStore().remove(username: user, podId: old.podId)
+            }
+            return
+        }
+
         let next = PodInfo(
             podId: old.podId,
             name: old.name,
             description: old.description,
-            fqdn: fqdn ?? old.fqdn,
+            fqdn: resolvedFqdn,
             status: .online,
             pendingAuthCodeSerial: nil    // serial no longer relevant once online
         )

@@ -102,4 +102,43 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(s.pods.isEmpty)
         XCTAssertNil(s.leaderPodId)
     }
+
+    // #50 — registration is authoritative for online.
+    func test_upsertRegisteredPod_addsOnlinePodWhenAbsent() {
+        let s = AppState()
+        s.completeOnboarding(username: "harry", pods: [])
+        let id = s.upsertRegisteredPod(fqdn: "home.harry.flagship.services", name: "Home")
+        XCTAssertEqual(s.pods.count, 1)
+        XCTAssertEqual(s.pods.first?.status, .online)
+        XCTAssertEqual(id, PodInfo.podId(forFqdn: "home.harry.flagship.services"))
+    }
+
+    func test_upsertRegisteredPod_flipsPendingPodInPlace() {
+        let fqdn = "home.harry.flagship.services"
+        let s = AppState()
+        s.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: "pending-id", name: "My Home", description: "desc",
+                    fqdn: fqdn, status: .pending, pendingAuthCodeSerial: "SER")
+        ])
+        s.setLeader("pending-id")
+        let id = s.upsertRegisteredPod(fqdn: fqdn, name: "ignored")
+        XCTAssertEqual(s.pods.count, 1, "no duplicate")
+        XCTAssertEqual(id, "pending-id", "flipped in place, podId preserved")
+        XCTAssertEqual(s.pods.first?.status, .online)
+        XCTAssertEqual(s.pods.first?.name, "My Home", "kept the user's typed name")
+        XCTAssertNil(s.pods.first?.pendingAuthCodeSerial)
+        XCTAssertEqual(s.leaderPodId, "pending-id", "leader selection undisturbed")
+    }
+
+    func test_upsertRegisteredPod_isIdempotentForOnlinePod() {
+        let fqdn = "home.harry.flagship.services"
+        let s = AppState()
+        s.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: "online-id", name: "Home", fqdn: fqdn, status: .online)
+        ])
+        let id = s.upsertRegisteredPod(fqdn: fqdn, name: "ignored")
+        XCTAssertEqual(s.pods.count, 1)
+        XCTAssertEqual(id, "online-id")
+        XCTAssertEqual(s.pods.first?.name, "Home")
+    }
 }

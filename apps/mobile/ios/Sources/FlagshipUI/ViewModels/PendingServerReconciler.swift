@@ -41,10 +41,22 @@ public struct PendingServerReconciler {
     /// bytes PLUS the account IRK pub hex (used to key the local cache).
     public typealias Signer = @MainActor (_ username: String, _ issuedAt: Int64) async throws -> (signatureHex: String, irkPubHex: String)
 
+    /// Fetches the REGISTERED `/pods` inventory as a set of normalized
+    /// (lowercased) fqdns — the boxes that have phoned home and registered
+    /// on `.com`. This is the AUTHORITATIVE "online" signal: a server here is
+    /// live regardless of any heartbeat / cert side-channel (those aren't
+    /// populated for a content-blind `.com` or a just-live box, which is
+    /// exactly why a live server was stranded as Pending). A throw / nil ⇒
+    /// couldn't reach the directory this pass; we leave existing state as-is.
+    /// Defaults to an empty set so call-sites that don't wire the directory
+    /// keep their prior behaviour.
+    public typealias RegisteredFqdnsFetcher = @MainActor (_ username: String) async -> Set<String>?
+
     private let app: AppState
     private let server: any FlagshipServerClient
     private let store: PendingServerStore
     private let sign: Signer
+    private let fetchRegisteredFqdns: RegisteredFqdnsFetcher
     private let now: () -> Int64
 
     public init(
@@ -52,12 +64,14 @@ public struct PendingServerReconciler {
         server: any FlagshipServerClient,
         store: PendingServerStore = PendingServerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        fetchRegisteredFqdns: @escaping RegisteredFqdnsFetcher = { _ in [] },
         sign: @escaping Signer
     ) {
         self.app = app
         self.server = server
         self.store = store
         self.now = now
+        self.fetchRegisteredFqdns = fetchRegisteredFqdns
         self.sign = sign
     }
 
@@ -89,7 +103,31 @@ public struct PendingServerReconciler {
         // remnant under the same username).
         store.bindToAccount(username: username, accountKey: irkPubHex)
 
-        // Registered servers (the /pods inventory) are the non-pending pods.
+        // Registration is AUTHORITATIVE for online. Pull the registered
+        // `/pods` inventory and surface every entry as an `.online` pod —
+        // REGARDLESS of lastReported/cert (the channel `.com` returns null
+        // for a content-blind / just-live box). A registered fqdn that
+        // matches an existing pending pod flips that pod online in place
+        // (identity is unified on the fqdn, so no stuck-pending duplicate);
+        // a registered fqdn with no local pod is added fresh. A nil fetch
+        // (couldn't reach the directory) just skips this step — we still
+        // reconcile the outstanding-orders view below.
+        if let registered = await fetchRegisteredFqdns(username) {
+            for fqdn in registered where !fqdn.isEmpty {
+                // Prefer the pending record's display name (the user typed
+                // it at create time) if we have one for this fqdn.
+                let pendingName = app.pods.first(where: {
+                    $0.fqdn.lowercased() == fqdn.lowercased() && $0.status == .pending
+                })?.name
+                app.upsertRegisteredPod(
+                    fqdn: fqdn,
+                    name: pendingName ?? Self.serverNameFromFqdn(fqdn)
+                )
+            }
+        }
+
+        // Registered servers (the /pods inventory) are the non-pending pods
+        // now — including the ones we just flipped online above.
         let liveFqdns = Set(app.pods.filter { $0.status != .pending }.map { $0.fqdn })
         let outstandingSerials = Set(response.orders.map(\.serial))
 
@@ -128,7 +166,14 @@ public struct PendingServerReconciler {
         for order in response.orders {
             if knownSerials.contains(order.serial) { continue }
             if knownFqdns.contains(order.fqdn.lowercased()) { continue }
-            let podId = "pod-\(order.serial.prefix(10).lowercased())"
+            // Identity unified on the fqdn so this pending pod, a later
+            // registered `/pods` pod for the same box, and the store record
+            // all key on ONE id (no stuck-pending duplicate when it goes
+            // live). A serial-keyed fallback only for the degenerate empty-
+            // fqdn order (no predicted domain yet).
+            let podId = order.fqdn.isEmpty
+                ? "pod-\(order.serial.prefix(10).lowercased())"
+                : PodInfo.podId(forFqdn: order.fqdn)
             app.addPod(PodInfo(
                 podId: podId,
                 name: order.serverName,
@@ -146,5 +191,14 @@ public struct PendingServerReconciler {
                 createdAt: Double(order.createdAt) / 1000.0
             ))
         }
+    }
+
+    /// Best-effort display name from a `<server>.<user>.flagship.services`
+    /// fqdn — the leftmost label, used only when we have no pending record
+    /// (which carries the user's typed name) for a registered server we're
+    /// surfacing for the first time.
+    static func serverNameFromFqdn(_ fqdn: String) -> String {
+        let label = fqdn.split(separator: ".").first.map(String.init) ?? fqdn
+        return label.isEmpty ? fqdn : label
     }
 }
