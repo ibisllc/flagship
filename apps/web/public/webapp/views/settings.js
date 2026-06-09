@@ -7,12 +7,21 @@ import {
 } from "../lib/push.js";
 import { $, registerView, show } from "../lib/router.js";
 import { getCertValidityDays, setCertValidityDays } from "../lib/certValidity.js";
-import { getSession, ensureUsername } from "../lib/state.js";
+import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { loadProviders, addProvider, removeProvider, setActive } from "../providers.js";
-import { renderActiveProviderChip } from "./home.js";
+import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
+import { resetDevice } from "../keystore.js";
+import { setSubtitle } from "../lib/router.js";
+import { remove as profileRemove } from "../lib/profilesStore.js";
+import { hasCloudRecovery } from "../lib/recovery.js";
+import {
+  lock as lockTier,
+  signOut as signOutTier,
+  signOutConfirmCopy,
+} from "../lib/sessionTiers.js";
 
 registerView("view-settings");
 
@@ -30,8 +39,26 @@ function isPromoEntry(e) {
 
 export { refreshPushStatus };
 
+/** Reflect the cloud-recovery gate in the static sign-out note so the
+ *  severity is visible before the user even clicks. Best-effort + async;
+ *  defaults to the safe (not-enrolled) framing on any failure. */
+async function refreshSignOutNote() {
+  const note = $("settings-signout-note");
+  if (!note) return;
+  let enrolled = false;
+  try {
+    enrolled = await hasCloudRecovery(getSession().username);
+  } catch {
+    enrolled = false;
+  }
+  note.textContent = enrolled
+    ? "Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
+    : "Erases this device's account key. ⚠️ You have NO cloud recovery — signing out here would permanently lose access on this device.";
+}
+
 export async function renderProviders() {
   void refreshPushStatus();
+  void refreshSignOutNote();
   const session = getSession();
   const list = $("providers-list");
   list.innerHTML = "";
@@ -315,11 +342,56 @@ async function runDisablePush() {
   }
 }
 
+/** Tier 1 — LOCK. Drop the in-memory session and re-gate behind the
+ *  passphrase unlock screen. Removes nothing from storage. */
+function handleLock() {
+  lockTier({ lockSession, show, setSubtitle, stopRenewals });
+}
+
+/** Tier 2 — SIGN OUT. Erase this device's local key material WITHOUT a
+ *  server-side revoke, gated on cloud-recovery enrollment. With recovery
+ *  enrolled the same key comes back via passkey (instant re-pair); without
+ *  it the wipe is permanent, so the confirm carries danger-grade copy. */
+async function handleSignOut() {
+  const username = getSession().username;
+  // Best-effort recovery probe (network). On any failure we fall back to
+  // the NOT-enrolled framing — the safe default is the stronger warning.
+  let enrolled = false;
+  try {
+    enrolled = await hasCloudRecovery(username);
+  } catch {
+    enrolled = false;
+  }
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const copy = signOutConfirmCopy(enrolled);
+  const ok = await inlineConfirm({
+    title: copy.title,
+    message: copy.message,
+    okLabel: copy.okLabel,
+    danger: copy.danger,
+  });
+  if (!ok) return;
+  await signOutTier({
+    resetDevice,
+    lockSession,
+    profileRemove,
+    stopRenewals,
+    show,
+    setSubtitle,
+  });
+  toast("signed out");
+}
+
 export function initSettingsView() {
   $("settings-back")?.addEventListener("click", async () => {
     show("view-home");
     await renderActiveProviderChip();
   });
+  $("settings-lock")?.addEventListener("click", handleLock);
+  $("settings-signout")?.addEventListener("click", () =>
+    handleSignOut().catch((e) => toast(String(e?.message ?? e), "err")),
+  );
+  // Tier 3 — REMOVE THIS DEVICE (danger zone). Unchanged local-reset path.
   $("settings-reset")?.addEventListener("click", handleReset);
   // Account-wide certificate-validity window — reflect the stored value and
   // persist on change. Mirrors the iOS CertValidityScreen.

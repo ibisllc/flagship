@@ -765,9 +765,26 @@
           <button class="secondary full-width mt-2" id="push-disable" style="display: none;">Disable</button>
         </div>
 
+        <h2 class="mt-5">Session</h2>
+        <div class="card">
+          <p class="note">
+            Locks the app behind your passphrase. Nothing is removed — this just hides everything until you unlock again. The cheapest way to step away from a shared computer.
+          </p>
+          <button class="secondary full-width mt-2" id="settings-lock">Lock</button>
+        </div>
+        <div class="card mt-2">
+          <p class="note" id="settings-signout-note">
+            Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put.
+          </p>
+          <button class="secondary full-width mt-2" id="settings-signout">Sign out</button>
+        </div>
+
         <h2 class="mt-5">Danger zone</h2>
         <div class="card danger-zone">
-          <button class="secondary full-width" id="settings-reset">Reset device</button>
+          <p class="note">
+            Permanently remove this device from your account. To cryptographically evict a device (revoke + rotate), open “Paired sessions” and revoke it there.
+          </p>
+          <button class="secondary full-width mt-2" id="settings-reset">Remove this device</button>
         </div>
         <button class="secondary full-width mt-2" id="settings-back">← Back</button>
       </section>
