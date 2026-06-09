@@ -97,6 +97,13 @@ export type RateLimitEndpoint =
   // minutes; 30/min is generous while fencing a leaked-serial flood (the
   // handler also gates on the serial mapping to a real auth-code).
   | "provision-status"
+  // #43 — IRK-signed list of the account's in-flight install orders (the
+  // authority the phone reconciles its local pending-server cache against).
+  // The body identifies the account by `request.username`, not the IRK pub,
+  // so we throttle per-IP only at the edge; the handler does the full IRK
+  // signature check under the registered key. The phone calls this on
+  // account setup + each Home appearance, so the budget is generous.
+  | "outstanding-orders"
   | "acme-key-release"
   | "acme-key-delivery-revoke"
   | "mint-reservation-acquire"
@@ -210,6 +217,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // body); 30/min covers a real install's ~8 phases with headroom while
   // fencing a tight-loop / leaked-serial flood.
   "provision-status": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  // #43 — outstanding-orders reconcile read. Per-IP only (the body carries
+  // `request.username`, not the IRK pub). 60/min is generous for a phone
+  // refreshing Home; the cap fences a tight-loop client.
+  "outstanding-orders": [{ axis: "ip", limit: 60, windowSec: 60 }],
   "acme-key-delivery-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -452,6 +463,13 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // limited here — only the mutating POST the box hits.)
   if (m === "POST" && /^\/api\/order\/[^/]+\/status$/.test(pathname)) {
     return "provision-status";
+  }
+  // #43 — IRK-signed outstanding-orders reconcile read (POST-with-signed-body).
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/outstanding-orders$/.test(pathname)
+  ) {
+    return "outstanding-orders";
   }
   return null;
 }

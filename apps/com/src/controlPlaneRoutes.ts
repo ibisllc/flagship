@@ -81,6 +81,7 @@ import {
   handlePostUsernameRename,
   handleGetUsernameAlias,
   handleGetUserPods,
+  handleListOutstandingOrders,
   handleGetUsersDevices,
   handleAccountResolve,
   handleGetAuditEvents,
@@ -419,6 +420,9 @@ const ROUTE_RE = {
   //   DELETE delivery-revoke (IRK-signed)
   ACME_ACCOUNT_KEY_DELIVERY: /^\/api\/server\/([^/]+)\/acme-account-key$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  // #43 — IRK-signed list of the account's IN-FLIGHT install orders, the
+  // authority the phone reconciles its local pending-server cache against.
+  USER_OUTSTANDING_ORDERS: /^\/api\/users\/([^/]+)\/outstanding-orders$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
   // Phase 3b — vouched cross-device admit. The admin signs a
   // DeviceAdmit (under the account IRK) binding the incoming device's
@@ -1148,6 +1152,22 @@ export async function tryControlPlane(
           routing: storage.routing,
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (
+    method === "POST" &&
+    (m = path.match(ROUTE_RE.USER_OUTSTANDING_ORDERS))
+  ) {
+    return finish(
+      await handleListOutstandingOrders(
+        {
+          authCodes: storage.authCodes,
+          usernames: storage.usernames,
+          provisionStatus: storage.provisionStatus,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
       ),
     );
   }

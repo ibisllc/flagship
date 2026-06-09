@@ -213,6 +213,19 @@ public enum ReleaseServerName {
     }
 }
 
+/// #43 — list the account's OUTSTANDING install orders. Signed by the
+/// account IRK; the cloud verifies it against the registered irkPubHex
+/// before returning the in-flight orders, the authority the phone
+/// reconciles its local pending-server cache against. The protocol-level
+/// tag matches packages/control-plane/src/outstandingOrders.ts
+/// (`tag|username|issuedAt`).
+public enum OutstandingOrders {
+    public static let canonicalTag = "flagship/outstanding-orders/v1"
+    public static func canonicalBytes(username: String, issuedAt: Int64) -> Data {
+        Data([canonicalTag, username, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}
+
 /// P13 — per-server kill-switch envelope. Signed by the account IRK
 /// to declare a server DEAD on its next boot. Unlike ReleaseServerName
 /// (which frees the name so it can be re-claimed), this is the

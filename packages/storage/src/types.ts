@@ -236,6 +236,18 @@ export interface AuthCodeStorage {
    * domain). Returns an empty array when none are active.
    */
   listActiveByServerDomain(serverDomain: string): Promise<AuthCodeRecord[]>;
+  /**
+   * Every OUTSTANDING auth-code for a username — `status='active'` AND not
+   * yet expired (`expiresAt > now`). These are the user's in-flight install
+   * orders: a recipe was minted but the box hasn't registered (which would
+   * mark the code `used`) and the user hasn't cancelled it (`revoked`).
+   *
+   * Drives `POST /api/users/:u/outstanding-orders`, the authority the phone
+   * reconciles its local pending-server cache against: an order present here
+   * is a real in-flight install (surface it); one absent from BOTH this list
+   * and the registered `/pods` inventory is a ghost (drop it).
+   */
+  listOutstandingByUsername(username: string, now: number): Promise<AuthCodeRecord[]>;
 }
 
 export interface ServerStorage {

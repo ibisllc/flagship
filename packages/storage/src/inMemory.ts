@@ -302,6 +302,14 @@ export class InMemoryAuthCodeStorage implements AuthCodeStorage {
       .filter((r) => r.serverDomain === serverDomain && r.status === "active")
       .map((r) => ({ ...r }));
   }
+  async listOutstandingByUsername(username: string, now: number) {
+    return [...this.bySerial.values()]
+      .filter(
+        (r) =>
+          r.username === username && r.status === "active" && r.expiresAt > now,
+      )
+      .map((r) => ({ ...r }));
+  }
 }
 
 export class InMemoryServerStorage implements ServerStorage {

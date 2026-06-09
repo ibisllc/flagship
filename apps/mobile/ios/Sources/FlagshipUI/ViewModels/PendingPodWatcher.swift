@@ -27,6 +27,14 @@ public final class PendingPodWatcher {
     public static let pollInterval: UInt64 = 5_000_000_000   // 5s
     public static let watchTimeout: UInt64  = 60 * 60_000_000_000  // 1h
 
+    /// After this many CONSECUTIVE no-checkpoint (404 → nil) polls, the
+    /// watcher consults `isSerialStillOutstanding` to decide whether the
+    /// serial is a real-but-quiet order (keep waiting) or a dead one
+    /// (unknown/expired/wiped/cancelled → drop, don't spin forever). The
+    /// threshold gives a freshly-minted order that hasn't checkpointed yet
+    /// a few ticks of grace before we challenge it.
+    public static let staleProbeAfterMissedPolls = 3
+
     private let serial: String
     private let podId: String
     private let app: AppState
@@ -39,19 +47,32 @@ public final class PendingPodWatcher {
     /// the canonical channel keeps reporting on every poll.
     private var firedThroughIndex: Int = -1
     private var task: Task<Void, Never>?
+    /// Count of consecutive polls that found NO checkpoint (the canonical
+    /// channel 404'd → nil). Reset to 0 the moment any status arrives.
+    private var consecutiveNoCheckpoint: Int = 0
+    /// #43 — authority for "is this serial still a REAL order?" Returns
+    /// true (still outstanding → keep waiting), false (definitively gone →
+    /// the pod is a ghost; drop it + stop), or nil (couldn't tell — a
+    /// network blip; keep waiting, the canonical channel is still the
+    /// no-checkpoint-yet fallback). Backed by the outstanding-orders
+    /// endpoint via the reconciler. Absent ⇒ legacy behaviour (a 404
+    /// always means "try again"), so existing call-sites are unaffected.
+    private let isSerialStillOutstanding: (@MainActor () async -> Bool?)?
 
     public init(
         serial: String,
         podId: String,
         app: AppState,
         server: any FlagshipServerClient,
-        pollIntervalNanos: UInt64 = PendingPodWatcher.pollInterval
+        pollIntervalNanos: UInt64 = PendingPodWatcher.pollInterval,
+        isSerialStillOutstanding: (@MainActor () async -> Bool?)? = nil
     ) {
         self.serial = serial
         self.podId = podId
         self.app = app
         self.server = server
         self.pollIntervalNanos = pollIntervalNanos
+        self.isSerialStillOutstanding = isSerialStillOutstanding
     }
 
     public func start() {
@@ -85,12 +106,29 @@ public final class PendingPodWatcher {
     /// (so the outer loop can return without sleeping).
     private func pollOnce() async -> Bool {
         // The single canonical channel. nil on a 404 (no checkpoint yet)
-        // or a network blip — treat as "try again next tick" (the install
-        // card already shows "boot disk on the way"; a 5s gap isn't
-        // noteworthy).
+        // or a network blip. Historically we treated this as "try again
+        // next tick" forever — which is exactly why a wiped/expired serial
+        // spun at "booting" indefinitely (#43). We still keep waiting while
+        // the order is plausibly mid-install, but after a few consecutive
+        // no-checkpoint polls we challenge the serial against the
+        // outstanding-orders authority: if it's definitively gone, the pod
+        // is a ghost — drop it and stop.
         guard let status = (try? await server.fetchProvisionStatus(serial: serial)) ?? nil else {
+            consecutiveNoCheckpoint += 1
+            if consecutiveNoCheckpoint >= Self.staleProbeAfterMissedPolls,
+               let authority = isSerialStillOutstanding {
+                // Only a DEFINITIVE "no, this is not a real order" drops the
+                // pod. true (still outstanding) and nil (couldn't tell —
+                // network blip) both keep waiting: no-checkpoint-yet is a
+                // state, not a failure.
+                if await authority() == false {
+                    dropGhostPod()
+                    return true
+                }
+            }
             return false
         }
+        consecutiveNoCheckpoint = 0
 
         // Fire onStep for each newly-reached non-terminal ladder phase so
         // the Live Activity advances monotonically.
@@ -115,6 +153,16 @@ public final class PendingPodWatcher {
             return true
         default:
             return false
+        }
+    }
+
+    /// #43 — the serial is no longer a real order (the outstanding-orders
+    /// authority said so), so this pending pod is a ghost. Remove it from
+    /// AppState + the local pending store so it stops spinning at "booting".
+    private func dropGhostPod() {
+        app.removePod(podId)
+        if let user = app.currentUser, !user.isEmpty {
+            PendingServerStore().remove(username: user, podId: podId)
         }
     }
 
@@ -171,11 +219,20 @@ public final class PendingPodWatcherRegistry {
                   let serial = pod.pendingAuthCodeSerial,
                   !serial.isEmpty
             else { continue }
+            let app = self.app
             let w = PendingPodWatcher(
                 serial: serial,
                 podId: pod.podId,
                 app: app,
-                server: server
+                server: server,
+                isSerialStillOutstanding: { @MainActor [serial] in
+                    // Non-biometric authority: the reconciler caches the
+                    // signed outstanding-orders result here. Nil (never
+                    // reconciled this session) ⇒ keep waiting; otherwise
+                    // membership decides real-order vs. ghost.
+                    guard let known = app.lastKnownOutstandingSerials else { return nil }
+                    return known.contains(serial)
+                }
             )
             watchers[pod.podId] = w
             w.start()

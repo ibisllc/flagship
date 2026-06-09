@@ -160,6 +160,54 @@ final class PendingPodWatcherTests: XCTestCase {
         XCTAssertEqual(app.pods.filter { $0.status == .pending }.count, 0)
     }
 
+    // MARK: - #43 — stale-serial handling
+
+    /// A serial that 404s forever AND is definitively NOT in the outstanding
+    /// authority is a ghost — the watcher drops the pod instead of spinning.
+    func test_watcher_dropsGhost_whenSerialNotOutstanding() async throws {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: "ghost", name: "home1", description: nil,
+                    fqdn: "home1.harry.flagship.services",
+                    status: .pending, pendingAuthCodeSerial: "DEADSER0")
+        ])
+        let s = makeServer()
+        // No script for "DEADSER0" → fetchProvisionStatus returns nil every poll.
+        let watcher = PendingPodWatcher(
+            serial: "DEADSER0", podId: "ghost", app: app, server: s,
+            pollIntervalNanos: 1_000_000,
+            isSerialStillOutstanding: { false }   // definitively gone
+        )
+        watcher.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        watcher.stop()
+
+        XCTAssertTrue(app.pods.isEmpty, "a dead serial's pod should be dropped, not spin")
+    }
+
+    /// A freshly-minted serial that hasn't checkpointed yet but IS still
+    /// outstanding keeps waiting (stays pending) — no-checkpoint-yet is a
+    /// state, not a failure.
+    func test_watcher_keepsWaiting_whenSerialStillOutstanding() async throws {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: "live", name: "home2", description: nil,
+                    fqdn: "home2.harry.flagship.services",
+                    status: .pending, pendingAuthCodeSerial: "LIVESER0")
+        ])
+        let s = makeServer()
+        let watcher = PendingPodWatcher(
+            serial: "LIVESER0", podId: "live", app: app, server: s,
+            pollIntervalNanos: 1_000_000,
+            isSerialStillOutstanding: { true }   // still a real order
+        )
+        watcher.start()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        watcher.stop()
+
+        XCTAssertEqual(app.pods.first?.status, .pending)
+    }
+
     func test_registry_doesNotStartWatcher_whenSerialIsMissing() {
         // A pending pod that somehow lost its serial (e.g. legacy state)
         // shouldn't try to poll — the Worker would 400 on the empty serial

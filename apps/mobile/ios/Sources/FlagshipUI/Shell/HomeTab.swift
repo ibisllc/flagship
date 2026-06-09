@@ -13,6 +13,11 @@ public struct HomeTab: View {
 
     @State private var path: [HomeRoute] = []
     @State private var vm: HomeViewModel?
+    /// #43 — guards the IRK-signed outstanding-orders reconcile to once per
+    /// session on the cheap appearance path (it derives the biometric-gated
+    /// IRK, so we don't fire it on every Home re-render). An explicit pull-
+    /// to-refresh always re-runs it.
+    @State private var didReconcileServerTruth = false
     /// Persistent dismiss for the post-creation backup-reminder banner
     /// (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
     /// store is observed so toggling `dismissed` from "Not now"
@@ -88,7 +93,14 @@ public struct HomeTab: View {
                             linker.pending = .startVibeCode
                         }
                     },
-                    onRefresh: { await vm.load() },
+                    onRefresh: {
+                        // An explicit pull-to-refresh is a user-initiated
+                        // moment — re-run the full server-truth reconcile
+                        // (the biometric prompt is expected here) alongside
+                        // the screen reload.
+                        await reconcileServerTruth()
+                        await vm.load()
+                    },
                     onSetUpRecovery: {
                         // Drop the user onto the Settings tab's Recovery
                         // route. We do that via DeepLinker so the tab
@@ -121,6 +133,15 @@ public struct HomeTab: View {
             // loading, so it's visible (and cancellable) immediately on launch.
             restorePendingServers()
             if case .idle = vm?.detail { await vm?.load() }
+            // #43 — once per session, reconcile the pod list against server
+            // truth (registered /pods + the IRK-signed outstanding-orders
+            // endpoint): surface orders we have no local record of, drop dead
+            // ghosts. Guarded so the biometric IRK derive doesn't fire on
+            // every Home re-render; pull-to-refresh re-runs it on demand.
+            if !didReconcileServerTruth {
+                didReconcileServerTruth = true
+                await reconcileServerTruth()
+            }
             // Refresh cloud-recovery enrollment status when the tab
             // first appears. A failed lookup is silent — better to
             // suppress the nudge for one session than to surface a
@@ -261,6 +282,29 @@ public struct HomeTab: View {
             ))
         }
         path.removeAll()
+    }
+
+    /// #43 — reconcile the pod list against server truth: the registered
+    /// `/pods` inventory (already in AppState) + the IRK-signed
+    /// outstanding-orders endpoint. Surfaces orders we have no local record
+    /// of (fixes home2-invisible) and drops dead ghosts (fixes the home1
+    /// spinner). Best-effort; a failure leaves local state untouched.
+    private func reconcileServerTruth() async {
+        guard let user = app.currentUser, !user.isEmpty else { return }
+        let reconciler = PendingServerReconciler(
+            app: app,
+            server: server,
+            sign: { username, issuedAt in
+                let irk = try await Keystore.deriveIRK(reason: "Sync your servers")
+                let bytes = OutstandingOrders.canonicalBytes(username: username, issuedAt: issuedAt)
+                let sig = try irk.signature(for: bytes)
+                return (
+                    signatureHex: HexUtil.encode(sig),
+                    irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation)
+                )
+            }
+        )
+        await reconciler.reconcile()
     }
 
     /// Re-add persisted pending servers on launch, and drop any that have since

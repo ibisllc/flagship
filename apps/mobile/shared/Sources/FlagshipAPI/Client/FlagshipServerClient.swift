@@ -218,6 +218,17 @@ public protocol FlagshipServerClient: Sendable {
     /// packages/control-plane/src/provisionStatus.ts.
     func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus?
 
+    /// #43 — list the account's OUTSTANDING install orders (every recipe
+    /// minted that the box hasn't registered against and the user hasn't
+    /// cancelled). IRK-signed POST to /api/users/:u/outstanding-orders. This
+    /// is the server authority the phone reconciles its LOCAL pending-server
+    /// cache against: an order present here is a real in-flight install
+    /// (surface it even if there's no local record); a local record whose
+    /// serial is absent from BOTH this list and the registered `/pods`
+    /// inventory is a ghost (drop it). Mirrors handleListOutstandingOrders
+    /// in packages/control-plane/src/outstandingOrders.ts.
+    func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse
+
     /// #28 seal-to-box — grant cert-minting autonomy to ONE box.
     ///
     /// Domain-scoped delivery of an IRK-signed, box-sealed ACME
@@ -1076,6 +1087,51 @@ public struct ReleaseServerNameRequest: Codable, Equatable, Sendable {
     public let signature: String         // hex, IRK
     public init(request: Inner, signature: String) {
         self.request = request; self.signature = signature
+    }
+}
+
+/// #43 — POST /api/users/:u/outstanding-orders. IRK-signed envelope
+/// listing the account's in-flight install orders. Canonical bytes =
+/// `flagship/outstanding-orders/v1|username|issuedAt` (see
+/// FlagshipCore.OutstandingOrders.canonicalBytes), matching the .com
+/// handler. A read, but POST-with-signed-body is the IRK-auth shape.
+public struct OutstandingOrdersRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let issuedAt: Int64
+        public init(username: String, issuedAt: Int64) {
+            self.username = username; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+/// One in-flight install order. `fqdn` is the predicted
+/// `<serverName>.<username>.flagship.services` (identical whether or not
+/// the box has registered). `phase` is the latest reported provisioning
+/// phase, or nil if none reported yet.
+public struct OutstandingOrder: Codable, Equatable, Sendable, Identifiable {
+    public let serial: String
+    public let serverName: String
+    public let fqdn: String
+    public let phase: ProvisionStatusPhase?
+    public let createdAt: Int64
+    public var id: String { serial }
+    public init(serial: String, serverName: String, fqdn: String, phase: ProvisionStatusPhase?, createdAt: Int64) {
+        self.serial = serial; self.serverName = serverName
+        self.fqdn = fqdn; self.phase = phase; self.createdAt = createdAt
+    }
+}
+
+public struct OutstandingOrdersResponse: Codable, Equatable, Sendable {
+    public let username: String
+    public let orders: [OutstandingOrder]
+    public init(username: String, orders: [OutstandingOrder]) {
+        self.username = username; self.orders = orders
     }
 }
 
@@ -2598,6 +2654,19 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             history: Array(history)
         )
     }
+
+    /// #43 — mirror of the Worker's outstanding-orders response, keyed by
+    /// lower-cased username. Tests seed this to model orders the account has
+    /// in flight server-side (including ones the phone has NO local record
+    /// of, the home2-invisible bug). `listOutstandingOrders` returns the
+    /// rows for the requested user; an unseeded user yields an empty list.
+    public var outstandingOrdersByUser: [String: [OutstandingOrder]] = [:]
+
+    public func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse {
+        try await tick()
+        let u = req.request.username.lowercased()
+        return OutstandingOrdersResponse(username: u, orders: outstandingOrdersByUser[u] ?? [])
+    }
 }
 
 // MARK: - Live
@@ -3091,5 +3160,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(ProvisionStatus.self, from: data)
+    }
+
+    public func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse {
+        let encoded = req.request.username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.username
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/users/\(encoded)/outstanding-orders", body: body)
     }
 }

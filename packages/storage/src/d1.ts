@@ -469,6 +469,15 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
       .all<AuthCodeRow>();
     return r.results.map(rowToAuthCode);
   }
+  async listOutstandingByUsername(username: string, now: number) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM auth_codes WHERE username = ? AND status = 'active' AND expires_at > ?",
+      )
+      .bind(username, now)
+      .all<AuthCodeRow>();
+    return r.results.map(rowToAuthCode);
+  }
 }
 
 export class D1ServerStorage implements ServerStorage {
