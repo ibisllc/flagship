@@ -46,10 +46,20 @@ public struct Recipe: Sendable, Equatable {
     /// Cert-autonomy policy — phone-signed; nil omits it from the canonical
     /// bytes. Mirrors @flagship/protocol InstallBlob.certAutonomy.
     public let certAutonomy: RecipeCertAutonomy?
+    /// Disk-encryption policy — phone-signed; nil omits it from the canonical
+    /// bytes. Mirrors @flagship/protocol InstallBlob.diskEncryption. nil ⇒
+    /// "luks" (the box encrypts unless the recipe explicitly says "none").
+    public let diskEncryption: String?
 
     /// The effective mode the box bakes/dispatches on (absence ⇒ "auto").
     public var effectiveBootUnlockMode: String {
         bootUnlockMode == "approve" ? "approve" : "auto"
+    }
+
+    /// Whether the box should LUKS-encrypt the root. Absence ⇒ encrypted; only
+    /// an explicit "none" opts out (the Wi-Fi-only fallback).
+    public var encryptsDisk: Bool {
+        diskEncryption != "none"
     }
 
     public var expiresAtDate: Date {
@@ -123,6 +133,11 @@ public enum RecipeLoader {
         if let ca = r.certAutonomy {
             parts.append("ca=\(ca.mode):\(ca.offlineWindowDays ?? 0)")
         }
+        // diskEncryption appended after certAutonomy with a `de=` prefix. MUST
+        // match @flagship/protocol canonicalInstallBlob byte-for-byte.
+        if let de = r.diskEncryption {
+            parts.append("de=\(de)")
+        }
         return Data(parts.joined(separator: "|").utf8)
     }
 
@@ -165,6 +180,7 @@ public enum RecipeLoader {
             let offlineWindowDays: Int?
         }
         let certAutonomy: CA?
+        let diskEncryption: String?
     }
 
     /// Accept both the flattened recipe and the issued envelope that .com /
@@ -209,7 +225,8 @@ public enum RecipeLoader {
             bootUnlockMode: dto.bootUnlockMode,
             certAutonomy: dto.certAutonomy.map {
                 RecipeCertAutonomy(mode: $0.mode, offlineWindowDays: $0.offlineWindowDays)
-            })
+            },
+            diskEncryption: dto.diskEncryption)
     }
 }
 

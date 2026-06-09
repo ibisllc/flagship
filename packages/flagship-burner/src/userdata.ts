@@ -166,7 +166,12 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
     ref,
     repo,
     bootHost,
-    encryptRoot: opts.encryptRoot !== false,
+    // Disk encryption is phone-signed in the blob (InstallBlob.diskEncryption);
+    // an explicit "none" opts out of LUKS (the Wi-Fi-only fallback), otherwise
+    // (present "luks" OR absent) the box encrypts. The burner-local
+    // `encryptRoot` flag can still force-disable for dev, but it can never
+    // RE-enable a box the signed recipe said to leave unencrypted.
+    encryptRoot: opts.blob.diskEncryption === "none" ? false : opts.encryptRoot !== false,
     bootUnlockMode: opts.blob.bootUnlockMode === "approve" ? "approve" : "auto",
   };
 }

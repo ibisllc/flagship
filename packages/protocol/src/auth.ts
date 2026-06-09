@@ -390,6 +390,24 @@ export interface InstallBlob {
     /** managed-mode only; ignored for "autonomous". */
     offlineWindowDays?: number;
   };
+  /**
+   * Disk-encryption policy chosen at server creation. The phone signs over it
+   * so a compromised network/.com can't DOWNGRADE an encrypted box to plaintext
+   * by tampering with the recipe in transit (the burner verifies the blob
+   * signature, so a flipped value would fail to verify).
+   *
+   *   - "luks" (DEFAULT): the root is LUKS-encrypted; the unlock key is sealed
+   *     to the phone (auto-unlock over the network at early boot). The core
+   *     security property — data-at-rest is unreadable without phone authority.
+   *   - "none": the root is NOT encrypted. The box boots with no network-gated
+   *     unlock, so it survives a Wi-Fi-only environment where the initramfs
+   *     can't reach the network to fetch the sealed key — at the cost of
+   *     at-rest encryption. An explicit, user-chosen weakening; never a default.
+   *
+   * OPTIONAL + backward-compatible: a blob WITHOUT this field canonicalizes
+   * exactly as before; absence is treated as "luks" (encrypted).
+   */
+  diskEncryption?: "luks" | "none";
 }
 
 /**
@@ -951,6 +969,13 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
   // a relay can neither strip it (sig fails) nor flip "managed"→"autonomous".
   if (b.certAutonomy !== undefined) {
     parts.push(`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`);
+  }
+  // Same backward-compatible append, after certAutonomy. The `de=` prefix can't
+  // collide with a bootUnlockMode ("auto"/"approve") or `ca=` token. The signer
+  // commits to it, so a relay can neither strip it (sig fails) nor flip
+  // "luks"→"none" to downgrade an encrypted box to plaintext.
+  if (b.diskEncryption !== undefined) {
+    parts.push(`de=${b.diskEncryption}`);
   }
   return new TextEncoder().encode(parts.join("|"));
 }

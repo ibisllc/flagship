@@ -191,4 +191,43 @@ describe("canonicalInstallBlob — v2 golden bytes", () => {
       verifyInstallBlob({ ...blob, bootUnlockMode: "approve" }, sig, irk.publicKey),
     ).toBe(false);
   });
+
+  it("diskEncryption: absent blob stays legacy; present value is committed (no downgrade)", () => {
+    // Absent → unchanged canonical bytes (old sigs verify, box encrypts).
+    expect(verifyInstallBlob(blob, signInstallBlob(blob, irk), irk.publicKey)).toBe(true);
+
+    const none: InstallBlob = { ...blob, diskEncryption: "none" };
+    const sig = signInstallBlob(none, irk);
+    expect(verifyInstallBlob(none, sig, irk.publicKey)).toBe(true);
+    // Stripping the field (a "none" recipe re-presented as legacy/encrypted)
+    // must fail — the value is committed.
+    expect(verifyInstallBlob(blob, sig, irk.publicKey)).toBe(false);
+    // The dangerous direction: a tampered relay flipping an ENCRYPTED ("luks")
+    // box to "none" (or vice-versa) must fail to verify.
+    const luks: InstallBlob = { ...blob, diskEncryption: "luks" };
+    const luksSig = signInstallBlob(luks, irk);
+    expect(verifyInstallBlob(luks, luksSig, irk.publicKey)).toBe(true);
+    expect(verifyInstallBlob({ ...blob, diskEncryption: "none" }, luksSig, irk.publicKey)).toBe(false);
+    expect(verifyInstallBlob({ ...blob, diskEncryption: "luks" }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("diskEncryption: composes with bootUnlockMode + certAutonomy (appended last)", () => {
+    const all: InstallBlob = {
+      ...blob,
+      bootUnlockMode: "approve",
+      certAutonomy: { mode: "managed", offlineWindowDays: 15 },
+      diskEncryption: "none",
+    };
+    const sig = signInstallBlob(all, irk);
+    expect(verifyInstallBlob(all, sig, irk.publicKey)).toBe(true);
+    // Dropping diskEncryption (the last-appended field) but keeping the others
+    // must fail — it can't be stripped from a signed recipe.
+    expect(
+      verifyInstallBlob(
+        { ...blob, bootUnlockMode: "approve", certAutonomy: { mode: "managed", offlineWindowDays: 15 } },
+        sig,
+        irk.publicKey,
+      ),
+    ).toBe(false);
+  });
 });

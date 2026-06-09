@@ -204,13 +204,20 @@ final class WizardModel: ObservableObject {
     private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
         let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
+        // Disk encryption follows the phone-signed recipe: an explicit "none"
+        // (the Wi-Fi-only fallback) leaves the root unencrypted; otherwise the
+        // box LUKS-encrypts. The choice is in the signed canonical bytes, so a
+        // tampered recipe can't downgrade it without failing verification.
+        let encryptRoot = parsed.encryptsDisk
         let yaml = try UserData.autoinstallYAML(recipeJSON: data,
                                                 installerGitRef: parsed.installerGitRef,
+                                                encryptRoot: encryptRoot,
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
+                                                 encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                  wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)

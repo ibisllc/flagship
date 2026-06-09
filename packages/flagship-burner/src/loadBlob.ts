@@ -169,6 +169,9 @@ export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null
       ? { bootUnlockMode: o.bootUnlockMode as "approve" | "auto" }
       : {}),
     ...(parseCertAutonomy(o.certAutonomy) ?? {}),
+    ...(o.diskEncryption === "luks" || o.diskEncryption === "none"
+      ? { diskEncryption: o.diskEncryption as "luks" | "none" }
+      : {}),
   };
 }
 
