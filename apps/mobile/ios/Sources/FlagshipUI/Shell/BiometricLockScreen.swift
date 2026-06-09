@@ -62,32 +62,43 @@ struct BiometricLockScreen: View {
                 .padding(.horizontal, FS.space.s6)
                 // Always-present escape so a stale Keychain identity (which
                 // survives an app delete+reinstall) or broken/absent biometrics
-                // can never trap the user on this screen with no way forward —
-                // the failure copy promises "sign out and start fresh", so back
-                // it with a real action. Guarded by a confirm because it erases
-                // this device's account identity.
-                Button("Sign out & start over") { showStartOver = true }
+                // can never trap the user on this screen with no way forward.
+                // This is a genuine Tier-2 SIGN OUT — it erases this device's
+                // local key material from the Keychain (every profile, since
+                // the locked user can't pick one) and drops to Welcome. Like
+                // the Settings sign-out it's snoop-hardening, not eviction:
+                // the same key comes back via passkey recovery (instant
+                // re-pair, no rotation). Confirm copy adapts on cloud recovery.
+                Button("Sign out") { showStartOver = true }
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                     .padding(.bottom, FS.space.s10)
-                    .accessibilityIdentifier("lock-start-over-btn")
+                    .accessibilityIdentifier("lock-sign-out-btn")
             }
         }
         .accessibilityIdentifier("biometric-lock-screen")
         .confirmationDialog(
-            "Sign out & start over?",
+            app.hasCloudRecovery ? "Sign out of this device?" : "Sign out without recovery?",
             isPresented: $showStartOver,
             titleVisibility: .visible
         ) {
-            Button("Erase this device's identity & sign out", role: .destructive) {
-                // Full local reset: wipe ALL Keychain profiles (the wrapped UMK /
-                // IRK that survive an app reinstall), then drop to Welcome.
+            Button(
+                app.hasCloudRecovery ? "Sign out" : "Sign out anyway",
+                role: .destructive
+            ) {
+                // Tier-2 sign out from the lock screen: erase ALL Keychain
+                // profiles (the locked user can't choose one) — the wrapped
+                // UMK / IRK that survive an app reinstall — then drop to
+                // Welcome. No server-side revoke; the same key returns via
+                // passkey recovery.
                 Keystore.wipeAllProfiles()
                 app.signOut()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This erases this device's account identity from the Keychain and returns you to the start. You'll need to sign in or recover to use an existing account again.")
+            Text(app.hasCloudRecovery
+                ? "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put."
+                : "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
         }
         // Auto-prompt on first appearance — pattern most password-manager
         // apps follow. Subsequent failures require an explicit tap so we

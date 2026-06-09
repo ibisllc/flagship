@@ -34,11 +34,20 @@ public struct RootShell: View {
                 }
             }
             // B12 — top overlay. The lock screen renders ABOVE the
-            // shell whenever the user requires biometric-at-launch
-            // and the runtime latch is false. Putting it inside the
-            // shell's ZStack (not as a presentation-style overlay)
-            // means it traps interaction without a transition flash.
-            if app.requireBiometricAtLaunch && !app.isUnlocked {
+            // shell whenever the runtime unlock latch is false. Putting
+            // it inside the shell's ZStack (not as a presentation-style
+            // overlay) means it traps interaction without a transition
+            // flash.
+            //
+            // The latch is false in two cases: (a) the user requires
+            // biometric-at-launch and `relockForBackground()` re-armed it,
+            // or (b) the user explicitly tapped Lock (`AppState.lock()`),
+            // which re-gates regardless of the launch preference. Gating on
+            // the latch ALONE (not also `requireBiometricAtLaunch`) is what
+            // lets an explicit Lock work even when auto-lock is off — the
+            // latch starts `true` when the preference is off, so nothing
+            // else flips it spuriously.
+            if !app.isUnlocked {
                 BiometricLockScreen()
                     .transition(.opacity)
                     .zIndex(10)

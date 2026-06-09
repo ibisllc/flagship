@@ -339,6 +339,22 @@ public final class AppState {
         isUnlocked = true
     }
 
+    /// Tier 1 — LOCK. Explicitly re-gate the app behind the biometric
+    /// lock screen WITHOUT touching anything else: the Keychain key
+    /// material, the active session, the pod list — all stay exactly as
+    /// they are. This is the cheapest of the three "leave the app"
+    /// actions: a snoop who picks up the phone sees the lock screen, and
+    /// the user re-enters with Face ID via the existing BiometricLockScreen.
+    ///
+    /// Unlike `relockForBackground()`, this does NOT consult
+    /// `requireBiometricAtLaunch` — locking explicitly is a deliberate
+    /// user action and must always re-gate, even when the auto-lock-on-
+    /// launch preference is off. The lock screen's unlock button drives
+    /// `markUnlocked()` to come back.
+    public func lock() {
+        isUnlocked = false
+    }
+
     /// B12 — call from the SceneDelegate / SwiftUI .scenePhase change
     /// when the app moves to .background. Re-locks the latch so the
     /// next foreground re-shows the gate.

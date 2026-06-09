@@ -144,6 +144,13 @@ public struct RealAccountLoginScreen: View {
             workingView(c: c)
         } else if case .finalized = vm.phase {
             workingView(c: c)
+        } else if case .completed(_, let completesAt) = vm.phase {
+            // Phase B — the registered key rotated since the recovery
+            // envelope was written, so the instant path doesn't apply;
+            // this device re-pairs against the live key behind a grace
+            // window. (The common Phase-A path finalizes immediately and
+            // never reaches here.)
+            graceCountdownView(completesAt: completesAt, vm: vm, c: c)
         } else {
             Text("Welcome back")
                 .font(FS.font.h2()).foregroundColor(c.text)

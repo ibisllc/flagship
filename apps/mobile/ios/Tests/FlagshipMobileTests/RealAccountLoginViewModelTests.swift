@@ -174,6 +174,94 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         XCTAssertNil(server.lastRePairInitiate, "single-device recovery must NOT initiate a re-pair")
     }
 
+    // MARK: - Task #29 / Phase A vs B — recovered-key-matches-registered
+
+    /// PHASE A — the registered IRK still matches the recovered UMK's IRK
+    /// (the common sign-out → recover round-trip: key wiped locally, never
+    /// rotated server-side). The VM must pair INSTANTLY (.finalized) with
+    /// NO re-pair and NO grace. This is the load-bearing path that makes a
+    /// Tier-2 SIGN OUT come back cleanly.
+    func test_singleRecovery_recoveredKeyMatchesRegistered_instantPair() async throws {
+        Keystore.wipe()
+        defer { Keystore.wipe() }
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+        // The IRK the account is registered with == the IRK derived from
+        // this UMK (which is exactly what recovery restores).
+        let registeredIrk = try await Keystore.deriveIRK(reason: "test")
+        let registeredPubHex = HexUtil.encode(registeredIrk.publicKey.rawRepresentation)
+
+        let server = makeServer()
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: registeredPubHex, issuedAt: 1),
+            signature: "s"
+        ))
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else { return XCTFail("enrol failed: \(enrol.phase)") }
+
+        // Simulate the wiped device (Tier-2 sign out erased the key).
+        Keystore.wipe()
+        let spy = InstallSpy()
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
+
+        await vm.startTakeover()
+
+        guard case .finalized(let user) = vm.phase else {
+            return XCTFail("expected .finalized (instant Phase-A pair), got \(vm.phase)")
+        }
+        XCTAssertEqual(user, "harry")
+        XCTAssertEqual(spy.callCount, 1, "recovered UMK installed")
+        XCTAssertNil(server.lastRePairInitiate,
+            "Phase A (key matches) must NOT initiate a re-pair — no rotation, no grace")
+    }
+
+    /// PHASE B — the registered IRK rotated since the recovery envelope was
+    /// written (another device ran Replace / Wipe). The recovered key is
+    /// stale, so the VM must run a REAL re-pair against the live key behind
+    /// a grace window (.completed) carrying `oldIrkPub = registeredIrkPubHex`.
+    func test_singleRecovery_recoveredKeyRotated_rePairsWithGrace() async throws {
+        Keystore.wipe()
+        defer { Keystore.wipe() }
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = makeServer()
+        // The account is registered under a DIFFERENT (rotated) IRK than the
+        // one the recovered UMK derives — simulating a post-rotation account.
+        let rotatedPubHex = String(repeating: "ab", count: 32)
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: rotatedPubHex, issuedAt: 1),
+            signature: "s"
+        ))
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else { return XCTFail("enrol failed: \(enrol.phase)") }
+
+        Keystore.wipe()
+        let spy = InstallSpy()
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
+
+        await vm.startTakeover()
+
+        guard case .completed(let user, _) = vm.phase else {
+            return XCTFail("expected .completed (Phase-B re-pair with grace), got \(vm.phase)")
+        }
+        XCTAssertEqual(user, "harry")
+        let last = try XCTUnwrap(server.lastRePairInitiate,
+            "Phase B (key rotated) MUST initiate a re-pair")
+        XCTAssertEqual(last.body.request.oldIrkPub.lowercased(), rotatedPubHex,
+            "the re-pair must displace the REGISTERED (rotated) key")
+    }
+
     /// No passphrase typed → the single path stops before any unwrap/install.
     func test_singleRecovery_emptyPassphrase_failsBeforeUnwrap() async {
         let server = makeServer()

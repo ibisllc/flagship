@@ -194,6 +194,9 @@ public final class RealAccountLoginViewModel {
         // Gated unwrap of the cloud UMK against the LIVE passkey provider the
         // screen injects. `recover` owns the Argon2id derivation, the gated
         // `/fetch`, the prfSalt anti-coercion guard, and the ACME-key unwrap.
+        // It ALSO captures `registeredIrkPubHex` (the account's currently
+        // registered IRK) from the fetch — the load-bearing signal for the
+        // Phase-A vs Phase-B decision below.
         let recoveryVM = RecoveryViewModel(client: server, webAuthn: webAuthn)
         guard let seed = await recoveryVM.recover(username: username, passphrase: passphraseInput) else {
             if Task.isCancelled { return }
@@ -216,8 +219,85 @@ public final class RealAccountLoginViewModel {
             return
         }
 
-        // This device now holds the account's key — pair immediately, no grace.
-        phase = .finalized(username: username)
+        // Task #29 / Recovery Phase A vs B — the decision the whole
+        // sign-out → recover → instant-repair round-trip rests on. Derive
+        // the IRK from the JUST-installed (recovered) UMK and compare it to
+        // the account's currently registered IRK:
+        //
+        //   • match (or no registered value from a pre-Phase-B Worker) ⇒
+        //     PHASE A. The recovered key IS the registered identity, so this
+        //     device already holds it — pair immediately, no grace, no
+        //     rotation. This is exactly what makes a Tier-2 SIGN OUT (key
+        //     wiped, server untouched) come back cleanly: same key restored,
+        //     instant re-pair.
+        //
+        //   • mismatch ⇒ PHASE B. The registered key rotated since the
+        //     recovery envelope was written (e.g. another device ran Replace
+        //     / Wipe). The recovered key is stale, so we must run a real
+        //     re-pair against the LIVE key — signing the initiate with the
+        //     recovered IRK but carrying `oldIrkPub = registeredIrkPubHex` so
+        //     the Worker keys the takeover on the displaced key — and wait
+        //     out the grace window (.completed → countdown → completeTakeover).
+        let recoveredIrkPubHex: String
+        do {
+            let irk = try await Keystore.deriveIRK(reason: "Verify recovered account key")
+            recoveredIrkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
+        } catch {
+            phase = .failed("Couldn't verify your recovered account key: \(error.localizedDescription)")
+            return
+        }
+
+        if recoveryVM.recoveredKeyMatchesRegistered(recoveredIrkPubHex: recoveredIrkPubHex) {
+            // Phase A — instant pair.
+            phase = .finalized(username: username)
+            return
+        }
+
+        // Phase B — the registered key rotated; re-pair against it with grace.
+        do {
+            let resp = try await initiateRotatedRePair(
+                username: username,
+                oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex
+            )
+            phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch {
+            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
+        }
+    }
+
+    /// Phase B re-pair initiate for the single-device rotated case. Signs
+    /// with the recovered (new) IRK over the canonical bytes, but carries
+    /// the account's registered (displaced) IRK as `oldIrkPub` so the
+    /// Worker keys the takeover on the key it currently knows. No second
+    /// factor — single-device accounts have none.
+    private func initiateRotatedRePair(
+        username: String,
+        oldIrkPubHex: String
+    ) async throws -> RePairInitiateResponse {
+        let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover")
+        let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let canonical = RePairInitiate.canonicalBytes(
+            username: username,
+            newIrkPubHex: newPubHex,
+            oldIrkPubHex: oldIrkPubHex,
+            issuedAt: issuedAt
+        )
+        let signature = try newKey.signature(for: canonical)
+        return try await server.initiateRePair(
+            username: username,
+            body: RePairInitiateRequest(
+                request: .init(
+                    username: username,
+                    newIrkPub: newPubHex,
+                    oldIrkPub: oldIrkPubHex,
+                    issuedAt: issuedAt
+                ),
+                signature: HexUtil.encode(signature),
+                totpProof: nil
+            ),
+            ifMatch: nil
+        )
     }
 
     /// Multi-device takeover (legacy path, pending the Phase-B rework). Still

@@ -96,11 +96,24 @@ public struct SettingsTab: View {
                     onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
+                    onLock: {
+                        // Tier 1 — LOCK. Re-gate behind Face ID with zero
+                        // side effects: no network, the key + session stay
+                        // in the Keychain. Re-entry is the BiometricLockScreen.
+                        app.lock()
+                    },
                     onSignOut: {
-                        Task { @MainActor in
-                            await pushRegistrar?.revoke()
-                            app.signOut()
-                        }
+                        // Tier 2 — SIGN OUT. Erase this device's local key
+                        // material from the Keychain (snoop-hardening at
+                        // rest) but DO NOT revoke server-side: the device
+                        // stays a valid account member, so signing back in
+                        // via passkey recovery restores the SAME IRK and
+                        // re-pairs instantly. Deliberately NO pushRegistrar
+                        // revoke — that's a server mutation reserved for the
+                        // danger-zone eviction below. The confirmation +
+                        // cloud-recovery gate live in SettingsScreen.
+                        Keystore.wipe()
+                        app.signOut()
                     },
                     onOpenProviders: { path.append(.providers) },
                     onOpenSubscription: { path.append(.tierStatus) },

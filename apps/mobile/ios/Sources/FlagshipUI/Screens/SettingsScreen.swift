@@ -34,6 +34,10 @@ public struct SettingsScreen: View {
     @State private var replaceConfirm: Bool = false
     /// E3 — drives the Wipe & restart confirmation dialog.
     @State private var wipeConfirm: Bool = false
+    /// Tier 2 — drives the key-wipe Sign-out confirmation dialog. Copy +
+    /// severity adapt on `hasCloudRecovery` (a wipe without recovery is
+    /// permanent account loss, so it gets the danger-zone framing).
+    @State private var signOutConfirm: Bool = false
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -54,6 +58,12 @@ public struct SettingsScreen: View {
     /// account on this device (the incoming/collaborator side).
     var onScanPairingCode: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
+    /// Tier 1 — LOCK. Re-gate the app behind Face ID without removing
+    /// anything (no network, key + session stay in the Keychain).
+    var onLock: () -> Void = {}
+    /// Tier 2 — SIGN OUT. Wipe this device's local key material from the
+    /// Keychain (snoop-hardening) WITHOUT revoking server-side. Only
+    /// safe when cloud recovery is enrolled; the screen gates on that.
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
     /// P7 — open the dedicated tier-status / subscription screen.
@@ -112,6 +122,7 @@ public struct SettingsScreen: View {
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
         onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
+        onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenSubscription: @escaping () -> Void = {},
@@ -143,6 +154,7 @@ public struct SettingsScreen: View {
         self.onAddDevice = onAddDevice
         self.onScanPairingCode = onScanPairingCode
         self.onRevokeDevice = onRevokeDevice
+        self.onLock = onLock
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenSubscription = onOpenSubscription
@@ -185,7 +197,7 @@ public struct SettingsScreen: View {
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
                 links(c: c)
-                signOut(c: c)
+                sessionActions(c: c)
                 dangerZone(c: c)
                 about(c: c)
 
@@ -263,6 +275,29 @@ public struct SettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
+        }
+        .confirmationDialog(
+            hasCloudRecovery
+                ? "Sign out of this device?"
+                : "Sign out without recovery?",
+            isPresented: $signOutConfirm,
+            titleVisibility: .visible
+        ) {
+            // Without cloud recovery a key-wipe sign-out is permanent
+            // account loss on this device, so it carries the destructive
+            // role + the danger-grade copy. With recovery enrolled it's a
+            // routine confirm — the same IRK comes back via passkey.
+            Button(
+                hasCloudRecovery ? "Sign out" : "Sign out anyway",
+                role: .destructive
+            ) {
+                onSignOut()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(hasCloudRecovery
+                ? "This erases this device's account key from the Keychain so nothing sensitive is left at rest while you're signed out. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair."
+                : "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good. Set up recovery first if you might want to come back.")
         }
     }
 
@@ -643,14 +678,39 @@ public struct SettingsScreen: View {
         }
     }
 
-    private func signOut(c: FSColors) -> some View {
-        // Soft sign-out: clears runtime session + push token but
-        // preserves Keystore (UMK / IRK / wrapped UMK), so re-opening
-        // the app rebinds without a recovery round-trip. Distinct
-        // from "Remove this device from account" below, which is the
-        // permanent eviction.
-        FSDangerButton("Sign out", block: true, large: true, action: onSignOut)
-            .padding(.top, FS.space.s4)
+    /// The three-tier "leave the app" cluster, ordered by increasing
+    /// severity. Tier 3 (Remove this device) lives in the danger zone
+    /// just below.
+    ///
+    ///   - LOCK (tier 1): re-gate behind Face ID. Removes NOTHING — no
+    ///     network, the key + session stay in the Keychain. Cheapest;
+    ///     re-entry is Face ID via the lock screen.
+    ///   - SIGN OUT (tier 2): erase this device's local key material from
+    ///     the Keychain WITHOUT revoking server-side. The device stays a
+    ///     valid account member; this just hardens against an at-rest /
+    ///     memory snoop while signed out. Re-entry is a passkey recovery
+    ///     that restores the SAME key (instant re-pair, no rotation).
+    ///     Gated on cloud recovery — see the confirmation dialog.
+    private func sessionActions(c: FSColors) -> some View {
+        VStack(spacing: FS.space.s3) {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Locks Flagship behind Face ID. Nothing is removed and your apps keep running — just hides the screen until you unlock.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                FSGhostButton("Lock", block: true, large: true, action: onLock)
+                    .accessibilityIdentifier("settings-lock-btn")
+            }
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(hasCloudRecovery
+                    ? "Erases this device's account key from the Keychain so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
+                    : "Erases this device's account key. ⚠️ You have NO cloud recovery — this would permanently lose access.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                FSDangerButton("Sign out", block: true, large: true) {
+                    signOutConfirm = true
+                }
+                .accessibilityIdentifier("settings-sign-out-btn")
+            }
+        }
+        .padding(.top, FS.space.s4)
     }
 
     /// B6a — danger zone. Strictly destructive: revokes this device's

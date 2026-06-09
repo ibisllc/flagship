@@ -73,6 +73,40 @@ final class BiometricGateLogicTests: XCTestCase {
         XCTAssertTrue(s.requireBiometricAtLaunch)
     }
 
+    // MARK: - Tier 1: explicit LOCK
+
+    func test_lock_reGatesWhenBiometricNotRequired() {
+        // The whole point of Tier-1 LOCK: it re-gates even when the
+        // auto-lock-at-launch preference is OFF. A user who never opted
+        // into launch-lock can still deliberately lock the app.
+        let s = AppState(requireBiometricAtLaunch: false)
+        XCTAssertTrue(s.isUnlocked)
+        s.lock()
+        XCTAssertFalse(s.isUnlocked)
+        // The preference is untouched — Lock is a runtime action, not a
+        // settings change.
+        XCTAssertFalse(s.requireBiometricAtLaunch)
+    }
+
+    func test_lock_thenMarkUnlocked_returns() {
+        // Re-entry path: lock → Face ID success → markUnlocked.
+        let s = AppState(requireBiometricAtLaunch: false)
+        s.lock()
+        XCTAssertFalse(s.isUnlocked)
+        s.markUnlocked()
+        XCTAssertTrue(s.isUnlocked)
+    }
+
+    func test_lock_leavesSessionIntact() {
+        // LOCK removes nothing — the session/identity stay exactly as
+        // they were; only the visibility latch flips.
+        let s = AppState(isPaired: true, currentUser: "alice")
+        s.lock()
+        XCTAssertFalse(s.isUnlocked)
+        XCTAssertTrue(s.isPaired)
+        XCTAssertEqual(s.currentUser, "alice")
+    }
+
     func test_privacySettings_roundTripsThroughUserDefaults() {
         let suite = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
         // Unset → default ON (face-unlock by default; the user can opt out).
