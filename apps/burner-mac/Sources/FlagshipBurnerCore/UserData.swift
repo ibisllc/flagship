@@ -1149,6 +1149,12 @@ public enum UserData {
         # Only present on the Wi-Fi path; never blocks boot (Ethernet/recovery still apply).
         apt-get install -y --no-install-recommends wpasupplicant || true
 
+        # OBSERVABILITY: bake the order serial to /boot so the boot-time premount can
+        # beacon its accumulated bring-up log home (see the post-DHCP wget below). The
+        # serial is the same one the bootstrap's other beacons use ($AUTH_CODE_SERIAL,
+        # in scope here); the premount reads the initrd copy the hook stages. Best-effort.
+        echo "$AUTH_CODE_SERIAL" > /boot/flagship-beacon-serial 2>/dev/null || true
+
         cat > /etc/initramfs-tools/hooks/flagship-wifi <<'WIFIHOOK'
         #!/bin/sh
         # Build-time: stage the box's actual wl* driver + firmware + wpa_supplicant into
@@ -1170,6 +1176,11 @@ public enum UserData {
             [ -f "/lib/firmware/$r" ] && cp -a "/lib/firmware/$r" "$DESTDIR/lib/firmware/"
           done
           copy_exec /sbin/wpa_supplicant
+          # OBSERVABILITY: stage the serial (for the post-DHCP beacon) + the busybox wget
+          # the beacon uses, so the boot-time premount can phone its log home.
+          mkdir -p "$DESTDIR/boot"
+          cp /boot/flagship-beacon-serial "$DESTDIR/boot/flagship-beacon-serial" 2>/dev/null || true
+          copy_exec /bin/wget /bin/wget 2>/dev/null || copy_exec /usr/bin/wget /bin/wget 2>/dev/null || true
         } || true
         WIFIHOOK
         chmod +x /etc/initramfs-tools/hooks/flagship-wifi
@@ -1182,12 +1193,39 @@ public enum UserData {
         # the radio doesn't come up it falls through (Ethernet / box-lease / the kept
         # burn-time recovery passphrase still unlock the box). Creds embedded single-
         # quote-escaped (they're on the unencrypted /boot initramfs regardless).
+        #
+        # OBSERVABILITY (no logic change): every stage tees a timestamped line to BOTH a
+        # /run accumulator AND a PERSISTENT log on the unencrypted /boot partition
+        # (/dev/disk/by-label/FLAGSHIP_BOOT → /flagship-wifi.log) so a box that hangs at
+        # the LUKS prompt is diagnosable after a recovery-passphrase hand-unlock (the
+        # no-network case). After DHCP we also best-effort POST the accumulator home (the
+        # network-up-but-unlock-still-failed case). Both are \`|| true\`, never block boot.
         PREREQ=""
         prereqs() { echo "\$PREREQ"; }
         case "\$1" in prereqs) prereqs; exit 0;; esac
 
         WIFI_SSID=__SSID_Q__
         WIFI_PSK=__PSK_Q__
+
+        # OBSERVABILITY: persistent bring-up log on the unencrypted /boot partition.
+        # /boot here is the initrd ramdisk (lost on pivot), so mount the REAL boot fs
+        # (label FLAGSHIP_BOOT) read-write once. Every \`log_stage\` line is timestamped
+        # (uptime seconds + wall-clock when available) and tee'd to the persistent log
+        # AND a /run accumulator the post-DHCP beacon posts. Fully best-effort.
+        FLAGSHIP_WIFI_LOG=/run/flagship-wifi.log
+        FLAGSHIP_BOOTMNT=/run/flagship-bootmnt
+        : > "\$FLAGSHIP_WIFI_LOG" 2>/dev/null || true
+        mkdir -p "\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
+        mount /dev/disk/by-label/FLAGSHIP_BOOT "\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
+        log_stage() {
+          _ts="\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+          _wall="\$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo -)"
+          _line="flagship-wifi [up=\${_ts}s \${_wall}] \$*"
+          echo "\$_line" >&2 || true
+          echo "\$_line" >> "\$FLAGSHIP_WIFI_LOG" 2>/dev/null || true
+          echo "\$_line" >> "\$FLAGSHIP_BOOTMNT/flagship-wifi.log" 2>/dev/null || true
+        }
+        log_stage "premount start (ssid baked)"
 
         # Re-detect the wl* interface at boot (the name can differ from build time).
         IF=""
@@ -1198,29 +1236,64 @@ public enum UserData {
           [ "\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999)" -ge "\$_deadline" ] && break
           sleep 1
         done
-        [ -n "\$IF" ] || { echo "flagship-wifi: no wl* interface in 15s — falling through"; exit 0; }
+        [ -n "\$IF" ] || { log_stage "no wl* interface in 15s — falling through"; exit 0; }
+        log_stage "wl interface detected: \$IF"
 
         # Load the driver (the hook staged it) and bring the link up.
         DRV=\$(basename "\$(readlink -f /sys/class/net/\$IF/device/driver 2>/dev/null)" 2>/dev/null)
+        log_stage "driver resolved: \${DRV:-none}"
         [ -n "\$DRV" ] && modprobe "\$DRV" 2>/dev/null || true
+        log_stage "modprobe done (driver=\${DRV:-none})"
         ip link set "\$IF" up 2>/dev/null || true
+        log_stage "link up requested on \$IF (oper=\$(cat /sys/class/net/\$IF/operstate 2>/dev/null || echo unknown))"
 
         # Associate with the baked SSID.
         printf 'ctrl_interface=/run/wpa_supplicant\nnetwork={\n  ssid="%s"\n  psk="%s"\n  scan_ssid=1\n}\n' \\
           "\$WIFI_SSID" "\$WIFI_PSK" > /run/flagship-wpa.conf 2>/dev/null || true
         wpa_supplicant -B -i "\$IF" -D nl80211,wext -c /run/flagship-wpa.conf 2>/dev/null || true
+        log_stage "wpa_supplicant started on \$IF"
+        # Bounded ~10s wait to observe the association result (does not change the flow —
+        # wpa runs in the background either way; this only records wpa_cli status if any).
+        _a=0
+        while [ "\$_a" -lt 5 ]; do
+          _wstate="\$(wpa_cli -i "\$IF" status 2>/dev/null | sed -n 's/^wpa_state=//p' | head -1)"
+          [ "\$_wstate" = "COMPLETED" ] && break
+          _a=\$(( _a + 1 ))
+          sleep 2
+        done
+        log_stage "association result: wpa_state=\${_wstate:-unknown}"
 
         # DHCP, bounded ~20s: prefer klibc ipconfig, fall back to busybox udhcpc.
         if command -v ipconfig >/dev/null 2>&1; then
+          log_stage "DHCP method: ipconfig"
           ipconfig -t 20 "\$IF" 2>/dev/null || true
         else
+          log_stage "DHCP method: udhcpc"
           _n=0
           while [ "\$_n" -lt 4 ]; do
             udhcpc -i "\$IF" -n -q -t 5 2>/dev/null && break
             _n=\$(( _n + 1 ))
           done
         fi
-        echo "flagship-wifi: bring-up attempt complete on \$IF"
+        _ip="\$(ip -4 -o addr show dev "\$IF" 2>/dev/null | awk '{print \$4}' | head -1)"
+        if [ -n "\$_ip" ]; then
+          log_stage "DHCP result: assigned \$_ip on \$IF (route=\$(ip route show default 2>/dev/null | head -1))"
+        else
+          log_stage "DHCP result: FAILED — no IPv4 address on \$IF"
+        fi
+        log_stage "bring-up attempt complete on \$IF"
+
+        # OBSERVABILITY: now that the network is (maybe) up, best-effort POST the whole
+        # accumulated bring-up log to the dev late-log endpoint — the SAME channel + the
+        # SAME busybox-wget --post-file form the bootstrap's other dev beacons use, keyed
+        # <serial>-wifi. Covers the network-came-up-but-unlock-still-failed case. Wrapped
+        # so a down/just-coming-up network never blocks the imminent unlock relay.
+        _serial="\$(cat /boot/flagship-beacon-serial 2>/dev/null | tr -cd 'A-Za-z0-9._:-')"
+        if [ -n "\$_serial" ] && [ -n "\$_ip" ]; then
+          ( wget -q -O- --post-file="\$FLAGSHIP_WIFI_LOG" --timeout=15 \\
+              "https://flagshipserver.com/api/dev/late-log/\${_serial}-wifi" 2>/dev/null; ) || true
+        fi
+        umount "\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
         exit 0
         WIFIPREMOUNT
         chmod +x /etc/initramfs-tools/scripts/init-premount/flagship-wifi

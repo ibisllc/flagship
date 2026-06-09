@@ -583,7 +583,7 @@ final class EngineTests: XCTestCase {
         let block = UserData.initramfsWifiBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
         let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "e8ae5d4fbf056bf472e64b4e8d1ea88f651c04607bc461938ea8fc42293703b2",
+            hash, "263df5c5188688c38a07f19f41aa80fe01e8d07ddbee0853e4224c43aec5089d",
             "Swift initramfsWifiBlock drifted from the TS twin. Block:\n\(block)")
     }
 

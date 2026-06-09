@@ -901,7 +901,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // EngineTests.testInitramfsWifiBlockIsByteIdenticalToTs pins this SAME sha256.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "e8ae5d4fbf056bf472e64b4e8d1ea88f651c04607bc461938ea8fc42293703b2",
+      "263df5c5188688c38a07f19f41aa80fe01e8d07ddbee0853e4224c43aec5089d",
     );
   });
 });
