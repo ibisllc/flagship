@@ -798,6 +798,30 @@ public enum UserData {
         AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
         echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
+        # ── Brand the box. /etc/issue is shown by getty ABOVE the login prompt (where
+        #    you see "flagship-pod login:"); /etc/motd is shown right after login. Pure
+        #    block-Unicode (no backslashes, so agetty won't eat escapes; the Debian
+        #    console is UTF-8). Single-quoted heredoc ⇒ the art is static.
+        cat > /etc/issue <<'FLAGSHIP_ISSUE'
+
+          ██████ ██     ██████ ██████ ██████ ██  ██ ██████ ██████
+          ██     ██     ██  ██ ██     ██     ██  ██   ██   ██  ██
+          █████  ██     ██████ ██ ███ ██████ ██████   ██   ██████
+          ██     ██     ██  ██ ██  ██     ██ ██  ██   ██   ██
+          ██     ██████ ██  ██ ██████ ██████ ██  ██ ██████ ██
+
+          This is a Flagship box — your personal cloud. You hold the keys.
+
+        FLAGSHIP_ISSUE
+        # MOTD (post-login) names this specific box. Unquoted heredoc ⇒ vars expand.
+        cat > /etc/motd <<FLAGSHIP_MOTD
+
+          Flagship · $SERVER_NAME
+          https://$SERVER_DOMAIN — TLS terminates here, on your hardware.
+          flagship.services is a blind pipe; it never sees your data.
+
+        FLAGSHIP_MOTD
+
         # Provisioning-status → .com so the phone renders a live install timeline.
         # Best-effort: a failed report NEVER fails the install. (The Alpine live
         # installer can also report the earlier downloading/partitioning phases; the
