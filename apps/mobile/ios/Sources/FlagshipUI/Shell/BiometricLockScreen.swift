@@ -20,6 +20,7 @@ struct BiometricLockScreen: View {
     @Environment(AppState.self) private var app
     @State private var status: Status = .idle
     @State private var attemptedAuto = false
+    @State private var showStartOver = false
 
     enum Status: Equatable {
         case idle
@@ -59,10 +60,35 @@ struct BiometricLockScreen: View {
                     Task { await tryUnlock() }
                 }
                 .padding(.horizontal, FS.space.s6)
-                .padding(.bottom, FS.space.s10)
+                // Always-present escape so a stale Keychain identity (which
+                // survives an app delete+reinstall) or broken/absent biometrics
+                // can never trap the user on this screen with no way forward —
+                // the failure copy promises "sign out and start fresh", so back
+                // it with a real action. Guarded by a confirm because it erases
+                // this device's account identity.
+                Button("Sign out & start over") { showStartOver = true }
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .padding(.bottom, FS.space.s10)
+                    .accessibilityIdentifier("lock-start-over-btn")
             }
         }
         .accessibilityIdentifier("biometric-lock-screen")
+        .confirmationDialog(
+            "Sign out & start over?",
+            isPresented: $showStartOver,
+            titleVisibility: .visible
+        ) {
+            Button("Erase this device's identity & sign out", role: .destructive) {
+                // Full local reset: wipe ALL Keychain profiles (the wrapped UMK /
+                // IRK that survive an app reinstall), then drop to Welcome.
+                Keystore.wipeAllProfiles()
+                app.signOut()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This erases this device's account identity from the Keychain and returns you to the start. You'll need to sign in or recover to use an existing account again.")
+        }
         // Auto-prompt on first appearance — pattern most password-manager
         // apps follow. Subsequent failures require an explicit tap so we
         // don't infinite-loop on "User cancelled" if the user genuinely
