@@ -45,18 +45,30 @@ object ProvisionProgress {
         "error" to "Setup hit a problem",
     )
 
-    /** The canonical UI group projection, re-keyed onto the 8 phases.
+    /** The canonical UI group projection, re-keyed onto the phases.
      *  Mirror of the LOCKED DESIGN §1.2 table — every implementer derives
-     *  the SAME grouping from it. */
-    enum class StepKey { BOOTING, INSTALLING, INSTALLED, REGISTERING, SECURING, READY }
+     *  the SAME grouping from it.
+     *
+     *  NOTE: `installed` is NOT a rendered rung. It remains a valid wire
+     *  phase + a push milestone (the notification still tells the user to
+     *  unplug), but the checklist ladder folds it into the `installing`
+     *  row: when the box reports `installed`, the Installing row renders
+     *  DONE carrying the unplug instruction. So there is no INSTALLED
+     *  StepKey and no INSTALLED group here. */
+    enum class StepKey { BOOTING, INSTALLING, REGISTERING, SECURING, READY }
 
     data class StepGroup(val key: StepKey, val label: String, val phases: List<String>)
 
-    /** The user-facing groups, in order. */
+    /** Detail shown on the Installing row when the current phase is
+     *  `installed` (action-needed: install finished, box powered off). */
+    const val INSTALLED_UNPLUG_DETAIL =
+        "Install complete — unplug the USB, then power the box back on."
+
+    /** The user-facing groups, in order. `installed` is intentionally NOT
+     *  its own rung — it folds into the Installing row (see above). */
     val stepGroups: List<StepGroup> = listOf(
         StepGroup(StepKey.BOOTING, "Booting", listOf("booting", "downloading", "partitioning")),
         StepGroup(StepKey.INSTALLING, "Installing", listOf("installing")),
-        StepGroup(StepKey.INSTALLED, "Install complete — unplug the USB", listOf("installed")),
         StepGroup(StepKey.REGISTERING, "Registering", listOf("registering", "pairing")),
         StepGroup(StepKey.SECURING, "Securing", listOf("sealing")),
         StepGroup(StepKey.READY, "Ready", listOf("live")),
@@ -87,6 +99,9 @@ object ProvisionProgress {
     }
 
     private fun groupKeyForPhase(phase: String): StepKey {
+        // `installed` has no rung of its own; it collapses onto Installing
+        // (DONE in the happy path, FAILED if a break lands at `installed`).
+        if (phase == "installed") return StepKey.INSTALLING
         for (g in stepGroups) if (g.phases.contains(phase)) return g.key
         return StepKey.BOOTING
     }
@@ -114,6 +129,23 @@ object ProvisionProgress {
                         val d = if (lastError.isNullOrEmpty()) phaseTitles["error"] else lastError
                         StepView(g.key, g.label, StepState.FAILED, d)
                     }
+                    else -> StepView(g.key, g.label, StepState.PENDING, null)
+                }
+            }
+        }
+
+        // `installed`: install finished, box powered off awaiting the user to
+        // unplug the USB + power back on. It is NOT a rendered rung — the
+        // Installing row goes DONE carrying the unplug instruction, NOTHING is
+        // active, and everything after Installing stays upcoming. (`installed`
+        // is still a wire phase + push milestone — only the ladder drops it.)
+        if (phase == "installed") {
+            val installingIdx = stepGroups.indexOfFirst { it.key == StepKey.INSTALLING }
+            return stepGroups.mapIndexed { i, g ->
+                when {
+                    i < installingIdx -> StepView(g.key, g.label, StepState.DONE, null)
+                    i == installingIdx ->
+                        StepView(g.key, g.label, StepState.DONE, INSTALLED_UNPLUG_DETAIL)
                     else -> StepView(g.key, g.label, StepState.PENDING, null)
                 }
             }

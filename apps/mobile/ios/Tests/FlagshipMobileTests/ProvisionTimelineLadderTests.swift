@@ -14,7 +14,10 @@ final class ProvisionTimelineLadderTests: XCTestCase {
 
     func test_nilStatus_firstRowCurrentWithWaitingHint_restUpcoming() {
         let rows = ProvisionTimelineLadder.rows(for: nil)
-        XCTAssertEqual(rows.count, 9)
+        // The rendered ladder drops `installed` (an action-needed checkpoint,
+        // not a rung), so 8 rows: booting…installing, registering…live.
+        XCTAssertEqual(rows.count, 8)
+        XCTAssertFalse(rows.contains { $0.phase == .installed })
         XCTAssertEqual(rows[0].phase, .booting)
         XCTAssertEqual(rows[0].state, .current)
         XCTAssertEqual(rows[0].detail, "Waiting for the box to phone home…")
@@ -41,7 +44,8 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             ]
         )
         let rows = ProvisionTimelineLadder.rows(for: status)
-        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .current, .upcoming, .upcoming, .upcoming, .upcoming, .upcoming])
+        // 8 rows (installed dropped). installing is index 3, spinning.
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .current, .upcoming, .upcoming, .upcoming, .upcoming])
         XCTAssertEqual(rows[3].phase, .installing)
         XCTAssertEqual(rows[3].detail, "writing rootfs")
         // Earlier rows don't carry their history detail — the timeline
@@ -59,8 +63,8 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             updatedAt: 1_700_000_000_000,
             history: [.init(phase: .sealing, detail: "stale detail", ts: 1_700_000_000_000)]
         )
-        // `sealing` is row index 6 now (installed inserted at index 4).
-        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[6].detail, "live detail")
+        // `sealing` is row index 5 (installed dropped from the rendered ladder).
+        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[5].detail, "live detail")
     }
 
     func test_currentRowDetail_fallsBackToHistory_whenLiveDetailEmpty() {
@@ -72,7 +76,7 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             updatedAt: 1_700_000_000_000,
             history: [.init(phase: .sealing, detail: "from history", ts: 1_700_000_000_000)]
         )
-        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[6].detail, "from history")
+        XCTAssertEqual(ProvisionTimelineLadder.rows(for: status)[5].detail, "from history")
     }
 
     // MARK: - Terminal live
@@ -113,10 +117,10 @@ final class ProvisionTimelineLadderTests: XCTestCase {
             ]
         )
         let rows = ProvisionTimelineLadder.rows(for: status)
-        // brokeAt = sealing (row index 6 now). installed inserted at index 4.
-        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .done, .done, .done, .error, .upcoming, .upcoming])
-        XCTAssertEqual(rows[6].phase, .sealing)
-        XCTAssertEqual(rows[6].detail, "ACME 429 rate-limited")
+        // brokeAt = sealing (row index 5; installed dropped from the ladder).
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .done, .done, .error, .upcoming, .upcoming])
+        XCTAssertEqual(rows[5].phase, .sealing)
+        XCTAssertEqual(rows[5].detail, "ACME 429 rate-limited")
     }
 
     func test_error_withEmptyHistory_surfaceFailureOnFirstRow() {
@@ -146,6 +150,66 @@ final class ProvisionTimelineLadderTests: XCTestCase {
         let rows = ProvisionTimelineLadder.rows(for: status)
         XCTAssertEqual(rows[0].state, .error)
         XCTAssertNil(rows[0].detail)
+    }
+
+    // MARK: - installed (action-needed, folded onto installing)
+
+    func test_installedPhase_rendersInstallingDoneWithUnplugDetail_noSpinner() {
+        let status = ProvisionStatus(
+            serial: "A1",
+            serverDomain: nil,
+            phase: .installed,
+            detail: nil,
+            updatedAt: 1_700_000_004_000,
+            history: [
+                .init(phase: .booting,      detail: nil, ts: 1_700_000_000_000),
+                .init(phase: .downloading,  detail: nil, ts: 1_700_000_001_000),
+                .init(phase: .partitioning, detail: nil, ts: 1_700_000_002_000),
+                .init(phase: .installing,   detail: nil, ts: 1_700_000_003_000),
+                .init(phase: .installed,    detail: nil, ts: 1_700_000_004_000),
+            ]
+        )
+        let rows = ProvisionTimelineLadder.rows(for: status)
+        // 8 rows, no `installed` rung.
+        XCTAssertEqual(rows.count, 8)
+        XCTAssertFalse(rows.contains { $0.phase == .installed })
+        // installing (index 3) is DONE (green, not spinning) and carries the
+        // unplug instruction; everything after it stays upcoming.
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .done, .upcoming, .upcoming, .upcoming, .upcoming])
+        XCTAssertEqual(rows[3].phase, .installing)
+        XCTAssertEqual(rows[3].state, .done)
+        XCTAssertEqual(rows[3].detail, ProvisionTimelineLadder.installedUnplugDetail)
+        XCTAssertEqual(
+            ProvisionTimelineLadder.installedUnplugDetail,
+            "Install complete — unplug the USB, then power the box back on."
+        )
+        // Nothing spins while the box is powered off awaiting an unplug.
+        XCTAssertFalse(rows.contains { $0.state == .current })
+    }
+
+    func test_error_atInstalled_collapsesOntoInstalling() {
+        // The box failed while sitting in the powered-off `installed` gap; in
+        // the rendered ladder that break lands on `installing`.
+        let status = ProvisionStatus(
+            serial: "A1",
+            serverDomain: nil,
+            phase: .error,
+            detail: "never came back after unplug",
+            updatedAt: 1_700_000_010_000,
+            history: [
+                .init(phase: .booting,      detail: nil, ts: 1_700_000_000_000),
+                .init(phase: .downloading,  detail: nil, ts: 1_700_000_001_000),
+                .init(phase: .partitioning, detail: nil, ts: 1_700_000_002_000),
+                .init(phase: .installing,   detail: nil, ts: 1_700_000_003_000),
+                .init(phase: .installed,    detail: nil, ts: 1_700_000_004_000),
+                .init(phase: .error,        detail: "never came back after unplug", ts: 1_700_000_010_000),
+            ]
+        )
+        let rows = ProvisionTimelineLadder.rows(for: status)
+        // installing (index 3) carries the error; registering… stay upcoming.
+        XCTAssertEqual(rows.map(\.state), [.done, .done, .done, .error, .upcoming, .upcoming, .upcoming, .upcoming])
+        XCTAssertEqual(rows[3].phase, .installing)
+        XCTAssertEqual(rows[3].detail, "never came back after unplug")
     }
 
     // MARK: - Forward-compat sentinel

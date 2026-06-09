@@ -90,26 +90,34 @@ public extension WatchProtocol {
     /// FlagshipAPI/SwiftUI deps don't have to cross into the watch
     /// target.
     enum ProvisionTimelineLadder {
-        /// The 9-phase ladder, mirroring `ProvisionStatusPhase.ordered`.
-        /// `installed` is ACTION-NEEDED (unplug the USB), not success.
+        /// The rendered ladder. `installed` is ACTION-NEEDED (unplug the USB),
+        /// NOT a rung — like the phone ladder it's dropped from the visible rows
+        /// and folded onto `installing` (which goes done + carries the unplug
+        /// detail) so the watch checklist matches the phone exactly.
         public static let phases: [(phase: String, title: String)] = [
             ("booting",      "Booting"),
             ("downloading",  "Downloading system"),
             ("partitioning", "Preparing disk"),
             ("installing",   "Installing"),
-            ("installed",    "Install complete — unplug the USB"),
             ("registering",  "Registering with Flagship"),
             ("sealing",      "Sealing your disk"),
             ("pairing",      "Pairing"),
             ("live",         "Server is live"),
         ]
 
+        /// Mirrors `FlagshipCore.ProvisionTimelineLadder.installedUnplugDetail`.
+        public static let installedUnplugDetail =
+            "Install complete — unplug the USB, then power the box back on."
+
         public static func rows(for ctx: ProvisionTimelineContext?) -> [TimelineRow] {
             let ladder = phases
             let currentPhase = ctx?.phase
 
             if currentPhase == "error" {
-                let brokeAt = ctx?.history.last(where: { $0.phase != "error" })?.phase
+                let rawBrokeAt = ctx?.history.last(where: { $0.phase != "error" })?.phase
+                // A break on `installed` collapses onto `installing` in the
+                // rendered ladder.
+                let brokeAt = rawBrokeAt == "installed" ? "installing" : rawBrokeAt
                 let brokeIdx = brokeAt.flatMap { p in ladder.firstIndex(where: { $0.phase == p }) } ?? 0
                 let err = errorDetail(in: ctx)
                 return ladder.enumerated().map { i, entry in
@@ -118,6 +126,21 @@ public extension WatchProtocol {
                     }
                     if i == brokeIdx {
                         return TimelineRow(phase: entry.phase, title: entry.title, state: .error, detail: err)
+                    }
+                    return TimelineRow(phase: entry.phase, title: entry.title, state: .upcoming, detail: nil)
+                }
+            }
+
+            // `installed`: the box is OFF (nothing spins). `installing` goes done
+            // with the unplug detail; everything after stays upcoming.
+            if currentPhase == "installed" {
+                let installingIdx = ladder.firstIndex(where: { $0.phase == "installing" }) ?? 0
+                return ladder.enumerated().map { i, entry in
+                    if i < installingIdx {
+                        return TimelineRow(phase: entry.phase, title: entry.title, state: .done, detail: nil)
+                    }
+                    if i == installingIdx {
+                        return TimelineRow(phase: entry.phase, title: entry.title, state: .done, detail: installedUnplugDetail)
                     }
                     return TimelineRow(phase: entry.phase, title: entry.title, state: .upcoming, detail: nil)
                 }

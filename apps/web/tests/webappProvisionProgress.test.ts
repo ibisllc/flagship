@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PROVISION_LADDER,
   PROVISION_STEP_GROUPS,
+  INSTALLED_DONE_DETAIL,
   provisionFraction,
   provisionStepStates,
   shouldShowProgressBar,
@@ -58,39 +59,67 @@ describe("webapp provisionFraction", () => {
 });
 
 describe("webapp PROVISION_STEP_GROUPS", () => {
-  it("matches the canonical group projection + labels (design §1.2)", () => {
+  it("matches the canonical group projection + labels (design §1.2) — `installed` is NOT a rendered rung", () => {
     expect(PROVISION_STEP_GROUPS.map((g) => g.label)).toEqual([
       "Booting",
       "Installing",
-      "Install complete — unplug the USB",
       "Registering",
       "Securing (TLS certificate)",
       "Ready",
     ]);
+    // No rendered group keys on `installed`; it folds into `installing`.
+    expect(PROVISION_STEP_GROUPS.some((g) => g.key === "installed")).toBe(false);
+    const installing = PROVISION_STEP_GROUPS.find((g) => g.key === "installing")!;
+    expect(installing.phases).toEqual(["installing", "installed"]);
+  });
+
+  it("keeps `installed` a valid WIRE phase + push milestone even though it's not a rendered rung", () => {
+    // The ladder (wire vocabulary) still carries `installed` between
+    // `installing` and `registering` — only the visible checklist drops it.
+    expect(PROVISION_LADDER).toContain("installed");
   });
 });
 
 describe("webapp provisionStepStates", () => {
   it("a registering phase activates the Registering group with its title", () => {
     const v = provisionStepStates("registering");
-    // Booting + Installing + Installed done; Registering active; Securing + Ready pending.
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "done", "active", "pending", "pending"]);
-    expect(v[3]!.detail).toBe("Registering with Flagship");
+    // 5 rendered groups now (installed folded away): Booting + Installing
+    // done; Registering active; Securing + Ready pending.
+    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending"]);
+    expect(v[2]!.detail).toBe("Registering with Flagship");
   });
 
-  it("the 'installed' phase renders as ACTION-NEEDED (active, not done) with the unplug instruction", () => {
+  it("the 'installed' phase folds onto Installing as DONE (no active row) with the unplug-and-power-on instruction", () => {
     const v = provisionStepStates("installed");
-    // Booting + Installing done; Install-complete active (NOT done); rest pending.
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending", "pending"]);
-    expect(v[2]!.detail).toBe("Install complete — unplug the USB");
-    // Success stays `live`: `installed` is never marked done here.
-    expect(v.some((s) => s.key === "installed" && s.state === "done")).toBe(false);
+    // Booting + Installing DONE; nothing active; rest pending. The user
+    // must unplug + power on before anything else advances.
+    expect(v.map((s) => s.state)).toEqual(["done", "done", "pending", "pending", "pending"]);
+    // The Installing row carries the action detail.
+    const installing = v.find((s) => s.key === "installing")!;
+    expect(installing.state).toBe("done");
+    expect(installing.detail).toBe(INSTALLED_DONE_DETAIL);
+    expect(installing.detail).toBe(
+      "Install complete — unplug the USB, then power the box back on.",
+    );
+    // Nothing is the active/current row.
+    expect(v.some((s) => s.state === "active")).toBe(false);
+    // There is NO standalone `installed` rendered rung.
+    expect(v.some((s) => s.key === "installed")).toBe(false);
   });
 
   it("error surfaces lastError on the first group with no hint", () => {
     const v = provisionStepStates("error", "boom");
     expect(v[0]!.state).toBe("failed");
     expect(v[0]!.detail).toBe("boom");
+  });
+
+  it("an error break AT `installed` collapses onto the Installing group (not a missing row)", () => {
+    const v = provisionStepStates("error", "disk full", "installed");
+    // Booting done; Installing failed (installed folds here); rest pending.
+    expect(v.map((s) => s.state)).toEqual(["done", "failed", "pending", "pending", "pending"]);
+    const installing = v.find((s) => s.key === "installing")!;
+    expect(installing.state).toBe("failed");
+    expect(installing.detail).toBe("disk full");
   });
 });
 
