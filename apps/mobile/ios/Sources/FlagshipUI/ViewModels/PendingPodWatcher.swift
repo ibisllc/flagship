@@ -24,8 +24,12 @@ import FlagshipCore
 @MainActor
 @Observable
 public final class PendingPodWatcher {
-    public static let pollInterval: UInt64 = 5_000_000_000   // 5s
-    public static let watchTimeout: UInt64  = 60 * 60_000_000_000  // 1h
+    // `nonisolated` so the init default-argument expression (evaluated in a
+    // nonisolated context) can read them under the Swift 6 language mode — safe
+    // because they're immutable Sendable constants, not main-actor state.
+    // Mirrors ProvisionTimelineViewModel.
+    public nonisolated static let pollInterval: UInt64 = 5_000_000_000   // 5s
+    public nonisolated static let watchTimeout: UInt64  = 60 * 60_000_000_000  // 1h
 
     /// After this many CONSECUTIVE no-checkpoint (404 → nil) polls, the
     /// watcher consults `isSerialStillOutstanding` to decide whether the
@@ -33,7 +37,7 @@ public final class PendingPodWatcher {
     /// (unknown/expired/wiped/cancelled → drop, don't spin forever). The
     /// threshold gives a freshly-minted order that hasn't checkpointed yet
     /// a few ticks of grace before we challenge it.
-    public static let staleProbeAfterMissedPolls = 3
+    public nonisolated static let staleProbeAfterMissedPolls = 3
 
     private let serial: String
     private let podId: String
