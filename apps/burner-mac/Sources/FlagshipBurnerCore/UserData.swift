@@ -210,7 +210,17 @@ public enum UserData {
             ? Data(wifiSetupScript(ssid: ssid, password: wifiPassword ?? "").utf8).base64EncodedString()
             : ""
         let wifiNetcfgBlock = hasWifi ? debianWifiNetcfgBlock(ssid: ssid, password: wifiPassword ?? "") : ""
-        let wifiPackagesBlock = hasWifi ? " wpasupplicant" : ""
+        // wpasupplicant + the non-free Wi-Fi firmware. The Debian installer
+        // ships firmware (so Wi-Fi works during install), but unless we install
+        // it into the target the installed system + initramfs boot with NO radio
+        // firmware — the box installs/registers/seals fine yet can't bring Wi-Fi
+        // up at the LUKS unlock or for the first-boot daemon. Explicit in
+        // pkgsel/include (install-recommends=false can't drop them), resolved
+        // from the non-free-firmware component. Broad chip-agnostic consumer set.
+        // MUST match preseed.ts wifiPackagesBlock byte-for-byte.
+        let wifiPackagesBlock = hasWifi
+            ? " wpasupplicant firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 firmware-misc-nonfree"
+            : ""
         // Run via `in-target` (chroot into /target) so the script's ROOT arg is
         // EMPTY — its `/` already IS the target (passing /target would write to
         // /target/target). Chrooted execution also lets the script's enable

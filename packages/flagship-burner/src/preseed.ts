@@ -129,8 +129,18 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     ? debianWifiNetcfgBlock(ssid, opts.wifiPassword ?? "")
     : "";
   // wpasupplicant in the installed system so the radio comes up on first boot
-  // (the runtime-detected netplan needs it) — matches the Ubuntu path.
-  const wifiPackagesBlock = hasWifi ? " wpasupplicant" : "";
+  // (the runtime-detected netplan needs it) — matches the Ubuntu path. PLUS the
+  // non-free Wi-Fi firmware: the Debian INSTALLER ships firmware (so Wi-Fi works
+  // during install), but unless we explicitly install it into the target the
+  // installed system + the initramfs boot with NO radio firmware — the box then
+  // installs/registers/seals fine yet can't bring Wi-Fi up at the LUKS unlock OR
+  // for the first-boot daemon. apt-setup/non-free-firmware is enabled below, so
+  // these resolve from the non-free-firmware component; explicit in pkgsel/include
+  // so install-recommends=false can't drop them. Broad consumer set (Intel /
+  // Realtek / Atheros-Qualcomm / Broadcom / misc incl. Mediatek) — chip-agnostic.
+  const wifiPackagesBlock = hasWifi
+    ? " wpasupplicant firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 firmware-misc-nonfree"
+    : "";
   // The runtime Wi-Fi setup. Run via `in-target` (chroot into /target), so the
   // script's ROOT arg is EMPTY — its `/` already IS the target (passing /target
   // here would write to /target/target). Running chrooted is also what lets the
