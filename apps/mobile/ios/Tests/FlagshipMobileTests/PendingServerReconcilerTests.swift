@@ -215,6 +215,64 @@ final class PendingServerReconcilerTests: XCTestCase {
         XCTAssertEqual(app.pods.first?.status, .pending)
     }
 
+    // REGRESSION (#53): a FRESH INSTALL — empty PendingServerStore, a
+    // signed-in user, a registered server in /pods — must surface that server
+    // as `.online` on first Home appearance EVEN WHEN the IRK-signed
+    // outstanding-orders fetch throws (the previous code early-returned on that
+    // throw BEFORE the unauthenticated /pods load, so after a reinstall the
+    // live server was invisible). The registered-server load is decoupled from
+    // and never gated by the signed fetch.
+    func test_freshInstall_registeredServerSurfacesOnlineEvenWhenSignedFetchThrows() async {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])   // fresh install: no local pods
+        let store = freshStore()                              // empty PendingServerStore
+        XCTAssertTrue(store.list(username: "harry").isEmpty)
+
+        let server = makeServer()
+        server.shouldFail = true   // the IRK-signed outstanding-orders fetch THROWS
+
+        let r = PendingServerReconciler(
+            app: app, server: server, store: store,
+            fetchRegisteredFqdns: { _ in ["home.harry.flagship.services"] },
+            sign: signer()
+        )
+        await r.reconcile()
+
+        // The registered server is surfaced as online despite the signed throw.
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.fqdn, "home.harry.flagship.services")
+        XCTAssertEqual(app.pods.filter { $0.status == .pending }.count, 0)
+    }
+
+    // Same fresh-install surfacing must hold when the SIGNER itself throws
+    // (biometric unavailable / user-cancelled after sign-in / cold-launch) —
+    // not just when the network call fails.
+    func test_freshInstall_registeredServerSurfacesOnlineEvenWhenSignerThrows() async {
+        struct SignerUnavailable: Error {}
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])
+        let store = freshStore()
+
+        let server = makeServer()
+        server.outstandingOrdersByUser["harry"] = []
+
+        let throwingSigner: PendingServerReconciler.Signer = { _, _ in
+            throw SignerUnavailable()
+        }
+
+        let r = PendingServerReconciler(
+            app: app, server: server, store: store,
+            fetchRegisteredFqdns: { _ in ["home.harry.flagship.services"] },
+            sign: throwingSigner
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.status, .online)
+        XCTAssertEqual(app.pods.first?.fqdn, "home.harry.flagship.services")
+    }
+
     // A failing server (network blip) leaves local state untouched.
     func test_serverFailureLeavesStateUntouched() async {
         let app = AppState()

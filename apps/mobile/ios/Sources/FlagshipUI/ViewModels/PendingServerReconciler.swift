@@ -81,37 +81,23 @@ public struct PendingServerReconciler {
     /// no signed-in user.
     public func reconcile() async {
         guard let username = app.currentUser, !username.isEmpty else { return }
-        let issuedAt = now()
-        let response: OutstandingOrdersResponse
-        let irkPubHex: String
-        do {
-            let signed = try await sign(username, issuedAt)
-            irkPubHex = signed.irkPubHex
-            response = try await server.listOutstandingOrders(
-                .init(
-                    request: .init(username: username, issuedAt: issuedAt),
-                    signature: signed.signatureHex
-                )
-            )
-        } catch {
-            // Couldn't reach / authorise the authority this pass — don't
-            // mutate local state on a blip.
-            return
-        }
 
-        // (d) Bind the cache to this identity (wipes a foreign-account
-        // remnant under the same username).
-        store.bindToAccount(username: username, accountKey: irkPubHex)
-
-        // Registration is AUTHORITATIVE for online. Pull the registered
-        // `/pods` inventory and surface every entry as an `.online` pod —
-        // REGARDLESS of lastReported/cert (the channel `.com` returns null
-        // for a content-blind / just-live box). A registered fqdn that
-        // matches an existing pending pod flips that pod online in place
-        // (identity is unified on the fqdn, so no stuck-pending duplicate);
-        // a registered fqdn with no local pod is added fresh. A nil fetch
-        // (couldn't reach the directory) just skips this step — we still
-        // reconcile the outstanding-orders view below.
+        // STEP 1 — Registration is AUTHORITATIVE for online, and the
+        // registered `/pods` fetch is UNAUTHENTICATED (no IRK / biometric).
+        // It MUST run first and unconditionally so a registered server is
+        // surfaced on a fresh install even when the IRK-signed
+        // outstanding-orders enrichment below fails, returns empty, or the
+        // signer/biometric is unavailable. (Previously this lived AFTER the
+        // signed fetch, whose early-return on any error stranded a live,
+        // freshly-installed server invisible — the reinstall regression.)
+        //
+        // Pull the registered `/pods` inventory and surface every entry as an
+        // `.online` pod — REGARDLESS of lastReported/cert (the channel `.com`
+        // returns null for a content-blind / just-live box). A registered fqdn
+        // that matches an existing pending pod flips that pod online in place
+        // (identity is unified on the fqdn, so no stuck-pending duplicate); a
+        // registered fqdn with no local pod is added fresh. A nil fetch
+        // (couldn't reach the directory) just skips the surfacing.
         if let registered = await fetchRegisteredFqdns(username) {
             for fqdn in registered where !fqdn.isEmpty {
                 // Prefer the pending record's display name (the user typed
@@ -126,8 +112,37 @@ public struct PendingServerReconciler {
             }
         }
 
+        // STEP 2 — the IRK-signed outstanding-orders enrichment (in-flight
+        // pending orders) is best-effort ON TOP of the registered-server load
+        // above. It needs the biometric-gated IRK; if the signer or the call
+        // fails we keep the registered servers we already surfaced and just
+        // skip the pending-order reconcile this pass (don't mutate cache on a
+        // blip).
+        let issuedAt = now()
+        let response: OutstandingOrdersResponse
+        let irkPubHex: String
+        do {
+            let signed = try await sign(username, issuedAt)
+            irkPubHex = signed.irkPubHex
+            response = try await server.listOutstandingOrders(
+                .init(
+                    request: .init(username: username, issuedAt: issuedAt),
+                    signature: signed.signatureHex
+                )
+            )
+        } catch {
+            // Couldn't reach / authorise the outstanding-orders authority this
+            // pass — the registered servers are already surfaced; leave the
+            // pending-order view + local cache untouched.
+            return
+        }
+
+        // (d) Bind the cache to this identity (wipes a foreign-account
+        // remnant under the same username).
+        store.bindToAccount(username: username, accountKey: irkPubHex)
+
         // Registered servers (the /pods inventory) are the non-pending pods
-        // now — including the ones we just flipped online above.
+        // now — including the ones we flipped online in step 1.
         let liveFqdns = Set(app.pods.filter { $0.status != .pending }.map { $0.fqdn })
         let outstandingSerials = Set(response.orders.map(\.serial))
 
