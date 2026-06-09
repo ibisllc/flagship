@@ -452,6 +452,18 @@ public struct Keystore {
         keychainDelete(account: KCKey.pushX25519Priv)
         keychainDelete(account: KCKey.pushTokenId)
         keychainDelete(account: activeProfilePointerAccount)
+        // The per-profile loop above only knows {active, default}; a profile
+        // created under any OTHER id leaves a stale wrappedUMK behind (the
+        // Keychain survives an app delete+reinstall and accumulates across
+        // accounts), and a leftover wrappedUMK whose Secure-Enclave key is gone
+        // fails to unwrap on the next open-account ("authenticationFailure").
+        // So a deliberate full reset sweeps EVERY flagship Keychain item by
+        // class — generic passwords (wrapped UMK / ephemeral / sim-wrap / push /
+        // irk-version / watch-delegate / acme) AND keys (the SE wrapping keys) —
+        // scoped to this app's Keychain access group. Leaves nothing behind.
+        for cls in [kSecClassGenericPassword, kSecClassKey] {
+            SecItemDelete([kSecClass as String: cls] as CFDictionary)
+        }
         activeProfileLock.lock()
         _activeProfileId = defaultProfileId
         _activeProfileHydrated = true
