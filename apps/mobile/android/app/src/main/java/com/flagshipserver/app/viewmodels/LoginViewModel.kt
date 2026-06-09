@@ -350,15 +350,61 @@ class LoginViewModel(
                 } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
             }
 
-            // 2. Derive OLD (v1, the recovered identity's current IRK) +
-            //    NEW (v2) IRK and sign the re-pair with the NEW IRK — the
-            //    entity proving it holds the recovered key. Mirror of the
-            //    ReplaceDevice ceremony.
-            val oldVersion = Keystore.currentIrkVersion()
+            // 2. Recovery Phase A vs B (single-device only) — the decision
+            //    the whole sign-out → recover → instant-repair round-trip
+            //    rests on. Derive the IRK from the JUST-installed (recovered)
+            //    UMK at its current version and compare its pubkey to the
+            //    account's currently registered IRK:
+            //
+            //      • match (or no registered value from a pre-Phase-B
+            //        Worker) ⇒ PHASE A. The recovered key IS the registered
+            //        identity, so this device already holds it — pair
+            //        immediately, no grace, no rotation, no re-pair. This is
+            //        exactly what makes a Tier-2 SIGN OUT (key wiped, server
+            //        untouched) come back cleanly: same key restored,
+            //        instant re-pair.
+            //
+            //      • mismatch ⇒ PHASE B. The registered key rotated since
+            //        the recovery envelope was written (another device ran
+            //        Replace / Wipe). The recovered key is stale, so run a
+            //        real re-pair against the LIVE key behind the grace
+            //        window, carrying oldIrkPub = registeredIrkPubHex.
+            //
+            //    MULTI always takes the re-pair path — the instant-pair
+            //    optimization is single-device only (multi already gated on
+            //    a second factor) — and keys oldIrkPub on the locally
+            //    derived current-version IRK as before.
+            val recoveredVersion = Keystore.currentIrkVersion()
+            Keystore.deriveIRK("Confirm takeover", recoveredVersion)
+            val recoveredPubHex = pubHexForVersion(recoveredVersion)
+
+            if (!isMulti && recoveredKeyMatchesRegistered(recoveredPubHex)) {
+                // Phase A — instant pair. The recovered key matches the
+                // registered identity (or the Worker didn't surface one):
+                // open the account directly, stamp this device admin, and
+                // finish. No server-side re-pair, no grace clock, no
+                // staged rotation.
+                app.completeOnboarding(username = username, pods = emptyList())
+                app.activeProfile?.let { active ->
+                    app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
+                }
+                _phase.value = LoginPhase.Opened
+                return
+            }
+
+            // Phase B (or any multi takeover) — derive the NEW (next-version)
+            // IRK and sign the re-pair with it; the device proves it holds
+            // the recovered key. oldIrkPub displaces the REGISTERED key:
+            // Phase B keys on registeredIrkPubHex (the rotated live key);
+            // multi falls back to the locally derived current-version pub.
+            val oldVersion = recoveredVersion
             val newVersion = oldVersion + 1
             val newSign = Keystore.deriveIRK("Take over your Flagship account", newVersion)
-            Keystore.deriveIRK("Confirm takeover", oldVersion)
-            val oldPubHex = pubHexForVersion(oldVersion)
+            val oldPubHex = if (!isMulti) {
+                resolution.registeredIrkPubHex ?: recoveredPubHex
+            } else {
+                recoveredPubHex
+            }
             val newPubHex = pubHexForVersion(newVersion)
 
             val issuedAt = now()
@@ -427,6 +473,22 @@ class LoginViewModel(
         } catch (t: Throwable) {
             _phase.value = LoginPhase.Failed(humanizedError(t))
         }
+    }
+
+    /**
+     * Recovery Phase A vs B — given the IRK pubkey derived from the
+     * just-recovered UMK, returns true when it matches the account's
+     * currently registered IRK (the key never moved ⇒ instant pair). A
+     * `false` means the key was rotated since the recovery envelope was
+     * written, so this device must re-pair with `oldIrkPub =
+     * registeredIrkPubHex` behind the grace window. When we have no
+     * registered value (pre-Phase-B Worker), we stay on the instant path
+     * rather than force a needless re-pair. Mirror of iOS
+     * RecoveryViewModel.recoveredKeyMatchesRegistered.
+     */
+    private fun recoveredKeyMatchesRegistered(recoveredIrkPubHex: String): Boolean {
+        val registered = resolution.registeredIrkPubHex ?: return true
+        return registered.lowercase() == recoveredIrkPubHex.lowercase()
     }
 
     private fun pubHexForVersion(version: Int): String {

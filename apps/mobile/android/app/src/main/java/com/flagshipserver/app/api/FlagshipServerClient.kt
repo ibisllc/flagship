@@ -318,6 +318,16 @@ data class AccountResolution(
      *  "instant" | "7d" | "24h-totp" | "none". Use [grace] for the
      *  typed parse. */
     val graceModel: String,
+    /** Recovery Phase A vs B — the account's CURRENTLY registered IRK
+     *  pubkey (hex), when the Worker surfaces it. The single-device
+     *  takeover compares this to the IRK derived from the recovered UMK:
+     *  match (or null, from a pre-Phase-B Worker) ⇒ Phase A instant pair
+     *  (the recovered key IS the registered identity — exactly what lets
+     *  a wiped-but-valid device come back after a Tier-2 sign out);
+     *  mismatch ⇒ Phase B re-pair against the live key behind grace,
+     *  carrying oldIrkPub = this value. Mirror of iOS's
+     *  RecoveryViewModel.registeredIrkPubHex. */
+    val registeredIrkPubHex: String? = null,
 ) {
     @Serializable
     data class RecoveryState(
@@ -1658,6 +1668,11 @@ class MockFlagshipServerClient(
             totpEnrolled = totpEnrolledAtByUser[u] != null,
             trustedDeviceCount = devices,
             graceModel = if (kind == "multi") "24h-totp" else "7d",
+            // Recovery Phase A vs B — surface the account's currently
+            // registered IRK so the single-device takeover can tell a
+            // wiped-but-valid device (same key ⇒ instant pair) from a
+            // rotated one (re-pair behind grace).
+            registeredIrkPubHex = irk,
         )
     }
 

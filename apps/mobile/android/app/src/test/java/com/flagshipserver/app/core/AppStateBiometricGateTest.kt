@@ -7,6 +7,7 @@ package com.flagshipserver.app.core
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,6 +70,40 @@ class AppStateBiometricGateTest {
         assertTrue(s.isUnlocked.value)
         // Preference stays — next launch re-arms.
         assertTrue(s.requireBiometricAtLaunch.value)
+    }
+
+    // ─── Tier 1: explicit LOCK ─────────────────────────────────────────
+
+    @Test fun lock_reGatesWhenBiometricNotRequired() {
+        // The whole point of Tier-1 LOCK: it re-gates even when the
+        // auto-lock-at-launch preference is OFF. A user who never opted
+        // into launch-lock can still deliberately lock the app.
+        val s = AppState(requireBiometricAtLaunch = false)
+        assertTrue(s.isUnlocked.value)
+        s.lock()
+        assertFalse(s.isUnlocked.value)
+        // The preference is untouched — Lock is a runtime action, not a
+        // settings change.
+        assertFalse(s.requireBiometricAtLaunch.value)
+    }
+
+    @Test fun lock_thenMarkUnlocked_returns() {
+        // Re-entry path: lock → biometric success → markUnlocked.
+        val s = AppState(requireBiometricAtLaunch = false)
+        s.lock()
+        assertFalse(s.isUnlocked.value)
+        s.markUnlocked()
+        assertTrue(s.isUnlocked.value)
+    }
+
+    @Test fun lock_leavesSessionIntact() {
+        // LOCK removes nothing — the session/identity stay exactly as
+        // they were; only the visibility latch flips.
+        val s = AppState(isPaired = true, currentUser = "alice")
+        s.lock()
+        assertFalse(s.isUnlocked.value)
+        assertTrue(s.isPaired.value)
+        assertEquals("alice", s.currentUser.value)
     }
 
     @Test fun setRequireBiometric_offClearsLatch() {

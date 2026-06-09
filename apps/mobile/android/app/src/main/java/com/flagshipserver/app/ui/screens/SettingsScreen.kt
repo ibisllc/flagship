@@ -60,6 +60,10 @@ fun SettingsScreen(nav: NavController) {
     var versionTaps by remember { mutableIntStateOf(0) }
     // C6a — drives the Remove-this-device confirmation dialog.
     var showRemoveConfirm by remember { mutableStateOf(false) }
+    // Tier 2 — drives the key-wipe Sign-out confirmation dialog. Copy +
+    // severity adapt on hasCloudRecovery (a wipe without recovery is
+    // permanent account loss, so it gets the danger-zone framing).
+    var showSignOutConfirm by remember { mutableStateOf(false) }
     // Account-wide certificate-validity window. Mirrors iOS CertValidityScreen.
     val context = LocalContext.current
     val certStore = remember { CertValidityStore.from(context) }
@@ -181,6 +185,58 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
+        // The three-tier "leave the app" cluster, ordered by increasing
+        // severity (mirror of iOS SettingsScreen.sessionActions). Tier 3
+        // (Remove this device) lives in the danger zone just below.
+        //
+        //   - LOCK (tier 1): re-gate behind BiometricPrompt. Removes
+        //     NOTHING — no network, the key + session stay in the
+        //     AndroidKeyStore. Cheapest; re-entry is the lock screen.
+        //   - SIGN OUT (tier 2): erase this device's local key material
+        //     from the Keystore WITHOUT revoking server-side. The device
+        //     stays a valid account member; this just hardens against an
+        //     at-rest / memory snoop while signed out. Re-entry is a
+        //     recovery sign-in that restores the SAME key (instant
+        //     re-pair, no rotation). Gated on cloud recovery — see the
+        //     confirmation dialog below.
+        Text(
+            "Locks Flagship behind biometrics. Nothing is removed and your " +
+                "servers keep running — just hides the screen until you unlock.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        FSGhostButton(
+            label = "Lock",
+            onClick = {
+                // Tier 1 — LOCK. Re-gate behind biometrics with zero side
+                // effects: no network, the key + session stay in the
+                // Keystore. Re-entry is the BiometricLockScreen.
+                app.lock()
+            },
+            block = true,
+        )
+        Spacer(Modifier.height(FS.space.s4))
+        Text(
+            if (hasRecovery)
+                "Erases this device's account key from the Keystore so nothing's " +
+                    "left at rest while you're signed out. Sign back in with your " +
+                    "recovery passkey to restore it — your account and servers stay put."
+            else
+                "Erases this device's account key. ⚠️ You have NO cloud recovery — " +
+                    "this would permanently lose access.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        FSDangerButton(
+            label = "Sign out",
+            onClick = { showSignOutConfirm = true },
+            block = true,
+        )
+
+        Spacer(Modifier.height(FS.space.s6))
+
         // C6a — danger zone. Same UX semantics as iOS SettingsScreen
         // dangerZone(): two-stage confirm, copy adapts based on
         // whether cloud recovery is enrolled. Strictly destructive —
@@ -282,6 +338,57 @@ fun SettingsScreen(nav: NavController) {
                             "You have no cloud recovery on this account. After removal, no other " +
                                 "device can take over — your account is gone for good. Set up " +
                                 "recovery first if you might want to come back.",
+                    )
+                },
+            )
+        }
+
+        if (showSignOutConfirm) {
+            AlertDialog(
+                onDismissRequest = { showSignOutConfirm = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showSignOutConfirm = false
+                        // Tier 2 — SIGN OUT. Erase this device's local key
+                        // material from the Keystore (snoop-hardening at
+                        // rest) but DO NOT revoke server-side: the device
+                        // stays a valid account member, so signing back in
+                        // via recovery restores the SAME IRK and re-pairs
+                        // instantly. Deliberately NO push-token revoke —
+                        // that's a server mutation reserved for the
+                        // danger-zone eviction below.
+                        Keystore.wipe()
+                        app.signOut()
+                    }) {
+                        Text(
+                            if (hasRecovery) "Sign out" else "Sign out anyway",
+                            color = FS.colors.danger,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSignOutConfirm = false }) {
+                        Text("Cancel")
+                    }
+                },
+                title = {
+                    Text(
+                        if (hasRecovery) "Sign out of this device?"
+                        else "Sign out without recovery?",
+                    )
+                },
+                text = {
+                    Text(
+                        if (hasRecovery)
+                            "This erases this device's account key from the Keystore so " +
+                                "nothing sensitive is left at rest while you're signed out. " +
+                                "Your account and your servers are untouched — sign back in " +
+                                "with your recovery passkey and the same key is restored, no re-pair."
+                        else
+                            "⚠️ You have NO cloud recovery enrolled. Erasing this device's key " +
+                                "with no backup means there's no way to sign back in — your " +
+                                "account access is lost for good. Set up recovery first if you " +
+                                "might want to come back.",
                     )
                 },
             )

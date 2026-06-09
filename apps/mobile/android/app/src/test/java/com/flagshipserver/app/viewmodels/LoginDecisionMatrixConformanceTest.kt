@@ -239,6 +239,10 @@ class LoginDecisionMatrixConformanceTest {
             totpEnrolled = false,
             trustedDeviceCount = 0,
             graceModel = "7d",
+            // A rotated (mismatched) registered IRK forces the Phase-B
+            // re-pair-with-grace path this branch pins. The instant-pair
+            // (Phase A) path is covered in LoginFlowTest.
+            registeredIrkPubHex = "ab".repeat(32),
         )
         val m = loginVm(r, server, app)
         m.begin()

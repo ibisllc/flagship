@@ -232,7 +232,6 @@ class MainActivity : FragmentActivity() {
 private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
     val app = LocalAppState.current
     val isPaired by app.isPaired.collectAsState()
-    val requireGate by app.requireBiometricAtLaunch.collectAsState()
     val isUnlocked by app.isUnlocked.collectAsState()
     val toasts = LocalToastCenter.current
     val toastQueue by toasts.queue.collectAsState()
@@ -253,10 +252,18 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
                 onDismiss = { app.clearSecureAccountNudge() },
             )
         }
-        // C12 — lock overlay above EVERYTHING when armed + locked.
-        // Conditional on isPaired so the Welcome flow isn't gated
-        // (passkey auth is the gate on Welcome).
-        if (isPaired && requireGate && !isUnlocked) {
+        // C12 — lock overlay above EVERYTHING whenever the in-memory
+        // unlock latch is false. Conditional on isPaired so the Welcome
+        // flow isn't gated (passkey auth is the gate on Welcome).
+        //
+        // The latch is false in two cases: (a) the user requires
+        // biometric-at-launch and relockForBackground() re-armed it, or
+        // (b) the user explicitly tapped Lock (AppState.lock()), which
+        // re-gates regardless of the launch preference. Gating on the
+        // latch ALONE (not also requireGate) is what lets an explicit
+        // Lock work even when auto-lock is off — the latch starts `true`
+        // when the preference is off, so nothing else flips it spuriously.
+        if (isPaired && !isUnlocked) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()
         }
         Toaster(queue = toastQueue, onDismiss = { toasts.dismiss(it) })

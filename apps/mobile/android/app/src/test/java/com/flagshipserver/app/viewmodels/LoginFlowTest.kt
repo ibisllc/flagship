@@ -114,12 +114,19 @@ class LoginFlowTest {
         return acmeScalar
     }
 
+    /** A registered-IRK pub that deliberately MISMATCHES the recovered
+     *  UMK's derived IRK, so a single-device takeover takes the Phase-B
+     *  re-pair-with-grace path (the historical behavior these tests pin).
+     *  The Phase-A instant-pair tests pass the truly-derived pub instead. */
+    private val mismatchedRegisteredPub = "cd".repeat(32)
+
     private fun resolution(
         username: String,
         kind: String,
         recoveryPresent: Boolean,
         totpEnrolled: Boolean = false,
         grace: String = if (kind == "multi") "24h-totp" else "7d",
+        registeredIrkPubHex: String? = mismatchedRegisteredPub,
     ) = AccountResolution(
         username = username,
         exists = true,
@@ -132,7 +139,25 @@ class LoginFlowTest {
         totpEnrolled = totpEnrolled,
         trustedDeviceCount = 0,
         graceModel = grace,
+        registeredIrkPubHex = registeredIrkPubHex,
     )
+
+    /** The IRK pubkey the recovered UMK seed derives at v1 — the value
+     *  the account is registered under in the common sign-out → recover
+     *  round-trip. Computed the same way Keystore.deriveIRK(v1) does
+     *  (HKDF-SHA256(umk, salt="flagship/irk/v1", info="ed25519-seed")). */
+    private fun recoveredIrkPubHex(): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(javax.crypto.spec.SecretKeySpec("flagship/irk/v1".toByteArray(), "HmacSHA256"))
+        val prk = mac.doFinal(recoveredSeed)
+        mac.init(javax.crypto.spec.SecretKeySpec(prk, "HmacSHA256"))
+        mac.update("ed25519-seed".toByteArray())
+        mac.update(1.toByte())
+        val seed = mac.doFinal().copyOf(32)
+        return HexUtil.encode(
+            com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey,
+        )
+    }
 
     private fun vm(res: AccountResolution, server: MockFlagshipServerClient, app: AppState) =
         LoginViewModel(
@@ -351,6 +376,90 @@ class LoginFlowTest {
 
         assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
         assertFalse("no account key when none was escrowed", Keystore.hasAcmeAccountKey())
+    }
+
+    // ─── 2b. Recovery Phase A vs B — recovered-key-matches-registered ──
+
+    /** PHASE A — the registered IRK still matches the recovered UMK's IRK
+     *  (the common sign-out → recover round-trip: key wiped locally, never
+     *  rotated server-side). The single takeover must pair INSTANTLY
+     *  (Opened) with NO re-pair and NO grace. This is the load-bearing
+     *  path that makes a Tier-2 SIGN OUT come back cleanly. */
+    @Test fun single_recoveredKeyMatchesRegistered_instantPair() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val m = vm(
+            resolution(
+                "harry", "single", recoveryPresent = true,
+                // The account is registered under the SAME IRK the recovered
+                // UMK derives — exactly what recovery restores.
+                registeredIrkPubHex = recoveredIrkPubHex(),
+            ),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+
+        // Phase A: instant pair — no grace, no re-pair, no staged rotation.
+        assertEquals(LoginPhase.Opened, m.phase.first())
+        assertTrue("Phase A opens the account immediately", app.isPaired.first())
+        assertEquals("harry", app.currentUser.first())
+        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
+        assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
+        assertNull("Phase A (key matches) must NOT initiate a re-pair", server.lastRePairInitiate)
+        assertNull("no rotation staged on the instant path", Keystore.pendingIrkRotationVersion())
+    }
+
+    /** PHASE A — a pre-Phase-B Worker that surfaces NO registered IRK
+     *  (null) also stays on the instant path rather than forcing a
+     *  needless re-pair. */
+    @Test fun single_noRegisteredIrk_staysInstant() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val m = vm(
+            resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = null),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+
+        assertEquals(LoginPhase.Opened, m.phase.first())
+        assertNull("null registered IRK ⇒ Phase A instant pair", server.lastRePairInitiate)
+    }
+
+    /** PHASE B — the registered IRK rotated since the recovery envelope was
+     *  written (another device ran Replace / Wipe). The recovered key is
+     *  stale, so the takeover must run a REAL re-pair against the live key
+     *  behind a grace window, carrying oldIrkPub = registeredIrkPubHex. */
+    @Test fun single_recoveredKeyRotated_rePairsWithGrace() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val rotatedPub = "ab".repeat(32)
+        val m = vm(
+            resolution(
+                "harry", "single", recoveryPresent = true,
+                registeredIrkPubHex = rotatedPub,
+            ),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+
+        assertTrue("Phase B re-pairs behind grace", m.phase.first() is LoginPhase.Grace)
+        assertFalse("not paired during grace", app.isPaired.first())
+        val (_, body, _) = server.lastRePairInitiate!!
+        assertEquals(
+            "the re-pair must displace the REGISTERED (rotated) key",
+            rotatedPub.lowercase(), body.request.oldIrkPub.lowercase(),
+        )
+        assertTrue(verifyRePair(body))
+        assertNotNull("pending rotation staged for completion", Keystore.pendingIrkRotationVersion())
     }
 
     // ─── 3. multi takeover requires the second factor ─────────────────

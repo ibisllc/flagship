@@ -146,6 +146,23 @@ class AppState(
     }
 
     /**
+     * Tier 1 — LOCK. Explicitly re-gate the app behind the biometric
+     * lock screen WITHOUT touching anything else: the Keystore key
+     * material, the active session, the pod list — all stay exactly as
+     * they are. This is the cheapest of the three "leave the app"
+     * actions: a snoop who picks up the phone sees the lock screen, and
+     * the user re-enters with BiometricPrompt via the existing
+     * BiometricLockScreen.
+     *
+     * Unlike [relockForBackground], this does NOT consult
+     * [requireBiometricAtLaunch] — locking explicitly is a deliberate
+     * user action and must always re-gate, even when the auto-lock-on-
+     * launch preference is off. The lock screen's unlock button drives
+     * [markUnlocked] to come back. Mirror of iOS AppState.lock().
+     */
+    fun lock() { _isUnlocked.value = false }
+
+    /**
      * v2 device-addressing — the effective scopes the current device
      * holds under the signed-in user. Null ⇒ legacy single-IRK path
      * (no restriction; every scope implicit). When non-null AND the

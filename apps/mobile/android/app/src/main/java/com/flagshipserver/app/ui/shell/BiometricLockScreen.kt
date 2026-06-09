@@ -19,10 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,8 @@ import androidx.fragment.app.FragmentActivity
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricGate
+import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
@@ -50,6 +55,10 @@ fun BiometricLockScreen() {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<Status>(Status.Idle) }
     var attemptedAuto by remember { mutableStateOf(false) }
+    // Tier 2 — drives the lock-screen Sign-out confirmation. Copy +
+    // severity adapt on cloud recovery (same framing as Settings).
+    var showSignOut by remember { mutableStateOf(false) }
+    val hasRecovery by app.hasCloudRecovery.collectAsState()
 
     val activity = ctx as? FragmentActivity
     Box(
@@ -103,8 +112,65 @@ fun BiometricLockScreen() {
                 block = true,
                 large = true,
             )
+            Spacer(Modifier.height(FS.space.s4))
+            // Always-present escape so broken/absent biometrics can never
+            // trap the user on this screen with no way forward. This is a
+            // genuine Tier-2 SIGN OUT — it erases this device's local key
+            // material from the Keystore (every profile, since the locked
+            // user can't pick one) and drops to Welcome. Like the Settings
+            // sign-out it's snoop-hardening, not eviction: the same key
+            // comes back via passkey recovery (instant re-pair, no
+            // rotation). Confirm copy adapts on cloud recovery.
+            FSGhostButton(
+                label = "Sign out",
+                onClick = { showSignOut = true },
+                block = true,
+            )
             Spacer(Modifier.height(FS.space.s8))
         }
+    }
+    if (showSignOut) {
+        AlertDialog(
+            onDismissRequest = { showSignOut = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignOut = false
+                    // Tier-2 sign out from the lock screen: erase ALL
+                    // Keystore profiles (the locked user can't choose one)
+                    // — the UMK / IRK that survive an app reinstall — then
+                    // drop to Welcome. No server-side revoke; the same key
+                    // returns via passkey recovery.
+                    Keystore.wipeAllProfiles()
+                    app.signOut()
+                }) {
+                    Text(
+                        if (hasRecovery) "Sign out" else "Sign out anyway",
+                        color = FS.colors.danger,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOut = false }) { Text("Cancel") }
+            },
+            title = {
+                Text(
+                    if (hasRecovery) "Sign out of this device?"
+                    else "Sign out without recovery?",
+                )
+            },
+            text = {
+                Text(
+                    if (hasRecovery)
+                        "This erases this device's account key from the Keystore and returns " +
+                            "you to the start. Sign back in with your recovery passkey to " +
+                            "restore it — your account and servers stay put."
+                    else
+                        "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with " +
+                            "no backup means there's no way to sign back in — your account " +
+                            "access is lost for good.",
+                )
+            },
+        )
     }
     // Auto-prompt once on first appearance — matches the iOS flow.
     LaunchedEffect(Unit) {
