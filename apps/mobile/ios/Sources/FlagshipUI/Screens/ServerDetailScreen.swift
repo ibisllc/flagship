@@ -35,8 +35,14 @@ public struct ServerDetailScreen: View {
                 switch state {
                 case .idle, .loading:
                     ServerCardSkeleton()
-                case .failed(let msg):
-                    ErrorCard(message: msg)
+                case .failed:
+                    // A BFF load failure here is transient (the box is online —
+                    // that's why we opened its page — but its daemon hasn't
+                    // answered this request yet, or the network blipped). Show a
+                    // graceful "connecting" state, NEVER the words "not paired to
+                    // a server": the server IS paired; we just don't have its
+                    // detail this instant. Pull-to-refresh retries.
+                    connecting(c: c)
                 case .loaded(let d):
                     overview(d: d, c: c)
                     MetricsSection(state: metrics)
@@ -56,6 +62,31 @@ public struct ServerDetailScreen: View {
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await onRefresh() }
+    }
+
+    /// Graceful placeholder shown when the daemon BFF load fails. The server
+    /// is online (we wouldn't be on its detail page otherwise) — this is a
+    /// transient "reaching the box" state, deliberately worded so it never
+    /// reads as "not paired". Pull-to-refresh re-attempts the load.
+    private func connecting(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    ProgressView()
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Connecting to your server…")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Your server is online. We're fetching its details — this can take a moment right after it comes up. Pull down to refresh.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("server-detail-connecting")
     }
 
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {

@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.sessionStore) private var sessionStore
     @State private var pendingWatchers: PendingPodWatcherRegistry?
 
     var body: some View {
@@ -37,10 +38,18 @@ struct ContentView: View {
             if paired { Task { await registerPush() } }
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            syncPodSession()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            // A `/pods`-reconciled server flips to .online here (not via the
+            // pairing flow), so this is the moment its base URL must be set.
+            syncPodSession()
+        }
+        .onChange(of: app.currentPodId) { _, _ in
+            // Switching the selected server repoints the screens client.
+            syncPodSession()
         }
         .onChange(of: app.leaderPodId) { _, _ in
             PodStatusPublisher(app: app).publish()
@@ -48,7 +57,22 @@ struct ContentView: View {
         .task {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            // Cold-launch restore: point the screens client at the
+            // already-selected online server before the first load.
+            syncPodSession()
         }
+    }
+
+    /// Repoint the live screens client's `podBaseUrl` at the currently
+    /// selected online server (or clear it when there's none / it's pending
+    /// / we've signed out). See `PodSessionSync`. The store write is async;
+    /// `app.currentPod` is read synchronously on the main actor first so the
+    /// detached write captures a value, not the AppState.
+    @MainActor
+    private func syncPodSession() {
+        let pod = app.isPaired ? app.currentPod : nil
+        let store = sessionStore
+        Task { await PodSessionSync.sync(currentPod: pod, store: store) }
     }
 
     /// Lazily wire the registry on first use, then re-sync on every

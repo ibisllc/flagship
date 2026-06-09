@@ -3,10 +3,12 @@ import XCTest
 @testable import FlagshipUI
 @testable import FlagshipCore
 
-/// Home empty-state vs. ErrorCard gating (#50). The "couldn't load" card must
-/// appear ONLY on a genuine data-load failure against an actual ONLINE server
-/// — never for a user who simply hasn't created a server yet (welcome empty
-/// state) or whose only server is still installing (pending).
+/// #51 — the Home dashboard NEVER shows a "couldn't load" / "not paired" card.
+/// When there's no server the Home screen already shows a create-server invite,
+/// and the server list conveys per-server state, so a load failure on the
+/// account-wide recent-activity feed simply drops that section. The card is
+/// gone entirely — `shouldShowLoadError` always returns false, regardless of
+/// pod state (no server, pending-only, online + load failure).
 @MainActor
 final class HomeScreenEmptyStateTests: XCTestCase {
 
@@ -16,23 +18,23 @@ final class HomeScreenEmptyStateTests: XCTestCase {
                 pendingAuthCodeSerial: status == .pending ? "SER" : nil)
     }
 
-    func test_noServers_suppressesErrorCard() {
+    func test_noServers_neverShowsErrorCard() {
         XCTAssertFalse(HomeScreen.shouldShowLoadError(pods: []))
     }
 
-    func test_onlyPendingServer_suppressesErrorCard() {
+    func test_onlyPendingServer_neverShowsErrorCard() {
         let pods = [pod(.pending, "home.harry.flagship.services")]
         XCTAssertFalse(HomeScreen.shouldShowLoadError(pods: pods))
     }
 
-    func test_onlineServer_showsErrorCardOnFailure() {
+    func test_onlineServerLoadFailure_neverShowsErrorCard() {
+        // The owner is firm: even a genuine load failure against an online
+        // server must NOT surface a "couldn't load" card on Home.
         let pods = [pod(.online, "home.harry.flagship.services")]
-        XCTAssertTrue(HomeScreen.shouldShowLoadError(pods: pods))
+        XCTAssertFalse(HomeScreen.shouldShowLoadError(pods: pods))
     }
 
-    func test_offlineOnlyServer_suppressesErrorCard() {
-        // Offline ≠ online; there's still nothing we successfully loaded, so a
-        // "couldn't load" card would be misleading.
+    func test_offlineOnlyServer_neverShowsErrorCard() {
         let pods = [pod(.offline, "home.harry.flagship.services")]
         XCTAssertFalse(HomeScreen.shouldShowLoadError(pods: pods))
     }

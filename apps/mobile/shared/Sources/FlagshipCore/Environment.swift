@@ -70,6 +70,24 @@ public extension EnvironmentValues {
     }
 }
 
+/// The pod session store backing `LiveScreensClient` — holds the
+/// per-pod `podBaseUrl` + session token. Exposed in the environment so
+/// the shell can repoint `podBaseUrl` at whichever server is currently
+/// selected + online (a `/pods`-reconciled server never ran the pairing
+/// flow that historically set it, so without this its daemon BFF is
+/// unreachable and every screen load fails). Defaults to a UserDefaults-
+/// backed store so previews/tests get a real (in-memory-ish) writer.
+private struct SessionStoreKey: EnvironmentKey {
+    static let defaultValue: any SessionStoring = SessionStore()
+}
+
+public extension EnvironmentValues {
+    var sessionStore: any SessionStoring {
+        get { self[SessionStoreKey.self] }
+        set { self[SessionStoreKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed

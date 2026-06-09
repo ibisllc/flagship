@@ -16,12 +16,19 @@ struct FlagshipApp: App {
     @State private var pushRegistrar: PushRegistrar?
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
+    // The session store backing the live screens client. Owned here so
+    // the shell can repoint `podBaseUrl` at the currently selected online
+    // server (see PodSessionSync). The same instance is injected into the
+    // environment so views drive it without reaching into the client.
+    private let sessionStore: any SessionStoring
 
     init() {
         // Keychain-backed token persistence: pod base URL stays in
         // UserDefaults (non-secret), the 32-byte session token lives
         // in Keychain with WhenUnlockedThisDeviceOnly access.
-        self.liveClient = LiveScreensClient(store: KeychainSessionStore())
+        let store = KeychainSessionStore()
+        self.sessionStore = store
+        self.liveClient = LiveScreensClient(store: store)
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -186,6 +193,7 @@ struct FlagshipApp: App {
                 .environment(dev)
                 .environment(privacy)
                 .environment(\.screensClient, activeClient)
+                .environment(\.sessionStore, sessionStore)
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pairingRelayClient, pairingRelay)

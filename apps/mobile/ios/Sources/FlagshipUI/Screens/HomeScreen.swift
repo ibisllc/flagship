@@ -86,14 +86,15 @@ public struct HomeScreen: View {
         self.onSignInAgain = onSignInAgain
     }
 
-    /// The "couldn't load" ErrorCard is a REAL data-load failure against an
-    /// actual ONLINE server — nothing else. With no server (the welcome empty
-    /// state shows) or only a pending one (still installing — nothing to load
-    /// yet), a failure card reads as "not paired to a server" to a user who
-    /// simply hasn't created one, so it's suppressed. Gated on having at least
-    /// one online server.
+    /// The Home dashboard NEVER renders a "couldn't load" card. When there's
+    /// no server the Home screen already shows a create-server invite, and the
+    /// server list itself conveys per-server state — so a load failure on the
+    /// account-wide recent-activity feed has no card to show: the recent-
+    /// activity section is simply absent. (Historically this gated the card on
+    /// having an online server; the card is now gone entirely.) Kept as a pure
+    /// function so the suppression is unit-testable; it always returns false.
     static func shouldShowLoadError(pods: [PodInfo]) -> Bool {
-        pods.contains(where: { $0.status == .online })
+        false
     }
 
     public var body: some View {
@@ -115,20 +116,13 @@ public struct HomeScreen: View {
                 switch state {
                 case .loaded(let d):
                     recentActivity(events: d.recentInstallEvents, c: c)
-                case .failed(let msg):
-                    // The "couldn't load" card is a REAL data-load failure
-                    // against an actual online server — nothing else. With no
-                    // server (the welcome empty state shows) OR only a pending
-                    // one (still installing — there's nothing to load yet), a
-                    // failure card is misleading: it reads as "not paired to a
-                    // server" to a user who simply hasn't created one. Gate the
-                    // card on having at least one ONLINE server.
-                    if HomeScreen.shouldShowLoadError(pods: pods) {
-                        ErrorCard(message: msg)
-                    } else {
-                        EmptyView()
-                    }
                 default:
+                    // No "couldn't load" card on Home — EVER. A load failure on
+                    // the account-wide recent-activity feed just drops the
+                    // section; the create-server invite + the server list (with
+                    // each server's own status pill) already convey state, and a
+                    // "not paired to a server" card would be wrong for a user who
+                    // has a server or simply hasn't created one yet.
                     EmptyView()
                 }
                 Spacer().frame(height: FS.space.s12)
