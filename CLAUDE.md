@@ -147,6 +147,34 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 >
 > Gates on `main`: `tsc -b` clean · vitest **4379** · iOS **728** + App build · Android · burner-mac swift **90** · burner-linux pytest **88**.
 
+**Wi-Fi unlock + no-LUKS escape hatch — DONE (agent, 2026-06-08):**
+> A Wi-Fi-only box installed + sealed fine but **hung at the early-boot LUKS
+> unlock on every reboot**: the initramfs unlock premount curls the boot relay
+> assuming the network is up (true on Ethernet's auto-DHCP, false on Wi-Fi where
+> the early-boot env brings up no radio). Two landed fixes, both with byte-identical
+> TS↔Swift generators (sha-pinned) + green gates (vitest 4406 · iOS 728→738 ·
+> Android 583 · burner swift 104 · tsc clean):
+> - ✅ **Wi-Fi in the initramfs** (`b1dd738`): a build-time hook stages the box's
+>   actual `wl*` driver + firmware + `wpa_supplicant`; a boot-time `init-premount`
+>   (runs strictly before `local-top/flagship-unlock`) associates + DHCPs, fully
+>   best-effort + wall-clock bounded so it can never hang boot. Only on the
+>   encrypted Wi-Fi path; wired burns byte-identical. **Also keeps the burn-time
+>   LUKS passphrase as a bring-up recovery slot** (`luksRemoveKey` guarded off, not
+>   deleted) — a KNOWN CONSTANT; flip the guard back on before GA.
+> - ✅ **No-LUKS server option** (`dad6bf0`+`f4231a2`): phone-signed
+>   `InstallBlob.diskEncryption` ("luks"|"none"), appended last in canonical bytes
+>   as `de=<mode>` (absent ⇒ encrypted; a relay can't downgrade luks→none without
+>   breaking the sig). Toggle in every create-server flow (iOS/Android/webapp +
+>   demo/dev mint), default ON; OFF provisions an unencrypted box that boots
+>   without needing network at unlock. Help entry added for "stuck at installed".
+> - ✅ **Install checklist** (`d92e1ea`): dropped the redundant `installed` rung
+>   (it spun while the box was powered off); Installing now goes green + carries
+>   "unplug the USB" detail. `installed` stays a wire phase + push milestone.
+>
+> Owner-side next: rebuild+re-sign the Mac burner (below), then a live Wi-Fi
+> reburn to confirm the initramfs radio actually associates + DHCPs before the
+> unlock relay (the static tests prove the script text, not the kernel/net path).
+
 **Remaining to a live box (owner + hardware):**
 1. **Deploy to activate the manifest.** `FLAGSHIP_ISO_MANIFEST` is already seeded in `apps/com/wrangler.toml` [vars] (Debian 13.5.0 netinst, version-pinned cdimage url, official signed sha, size 791 674 880; verified live 2026-06-08) — so just `cd apps/com && npx wrangler deploy` turns Simple-mode downloads on. (To serve from our own R2 instead of Debian's CDN, upload the same bytes and change only the `url` field — sha is unchanged. Re-pin all three on a new Debian point release.)
 2. **Rebuild + re-sign the Mac burner** (it now ships Simple-as-default + the manifest client).
