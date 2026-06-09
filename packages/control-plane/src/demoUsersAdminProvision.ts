@@ -57,6 +57,7 @@ import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
   deriveDemoUserIrk,
+  parseDiskEncryption,
   _internalDefaultDemoPrimaryScopes,
 } from "./demoUsersAdmin.js";
 import {
@@ -151,6 +152,9 @@ export interface DemoProvisionDeps {
 export interface AdminSnapshotNowBody {
   region?: unknown;
   size?: unknown;
+  /** Disk-encryption choice threaded into the signed InstallBlob (auth.ts
+   *  `de=` field). "luks"/absent ⇒ encrypted; "none" ⇒ unencrypted boot. */
+  diskEncryption?: unknown;
 }
 
 const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
@@ -325,6 +329,10 @@ export async function handleAdminSnapshotNow(
   const now = nowOf(deps);
   const region = typeof body?.region === "string" ? body.region : deps.defaultRegion;
   const size = typeof body?.size === "string" ? body.size : deps.defaultSize;
+  const diskEncryption = parseDiskEncryption(body?.diskEncryption);
+  if (diskEncryption !== undefined && typeof diskEncryption === "object") {
+    return malformed(diskEncryption.error);
+  }
   const serverName = "home";
 
   // Re-derive the User IRK + delegated + RCK keypair from the KEK +
@@ -390,6 +398,9 @@ export async function handleAdminSnapshotNow(
     authCodeUserSignature: authCodeSig,
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
+    // Carry diskEncryption ONLY for "none" — keeps the signed bytes
+    // byte-identical to a legacy recipe for the default encrypted case.
+    ...(diskEncryption === "none" ? { diskEncryption: "none" as const } : {}),
   };
   const blobSig = signInstallBlob(blob, userIrk);
 

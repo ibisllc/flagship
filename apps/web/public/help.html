@@ -171,6 +171,15 @@
     <p>Three things that can knock a working install offline. Each one resolves on its own most of the time; if it doesn't, here's where to look.</p>
 
     <div class="symptom">
+      <h3>My install is stuck at "installed"</h3>
+      <p>The install finished and the box powered off so you could unplug the USB stick and power it back on — but after you do, it never comes up. This almost always means the box can't reach the network early in boot, so it can't fetch the key that unlocks its encrypted disk. It's the usual symptom on a <strong>Wi-Fi-only</strong> box (the disk-unlock step runs before Wi-Fi is available). Two fixes:</p>
+      <ol>
+        <li><strong>Plug in an Ethernet cable.</strong> A wired connection is up early enough for the box to fetch its unlock key and finish booting. This is the simplest fix and keeps your disk encrypted.</li>
+        <li><strong>Or create a new server with disk encryption turned off.</strong> In the app's "Create a server" screen (or the web app), uncheck <strong>Encrypt disk</strong>, then re-burn. A box with the disk unencrypted boots without needing the network to unlock — so it works on Wi-Fi-only setups. The trade-off: your data is no longer encrypted at rest, which is less safe if the box is stolen. Choose this only when a wired connection isn't an option.</li>
+      </ol>
+    </div>
+
+    <div class="symptom">
       <h3>The dashboard says "Offline"</h3>
       <p>The tunnel from your box to <code>flagship.services</code> is down. Check, in order:</p>
       <ol>

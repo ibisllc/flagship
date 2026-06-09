@@ -179,6 +179,10 @@ async function runFlow() {
   });
 
   const installerGitRef = "main";
+  // Disk-encryption choice (auth.ts `de=` field). "luks"/absent ⇒ encrypted;
+  // "none" ⇒ unencrypted boot for a Wi-Fi-only box. Carried in the SIGNED
+  // blob so a relay can't downgrade an encrypted box to plaintext.
+  const diskEncryption = ($("diskEncryption")?.value === "none") ? "none" : "luks";
   const blob = {
     version: 1,
     serverDomain: code.serverDomain,
@@ -193,13 +197,21 @@ async function runFlow() {
     installerGitRef,
     rckPubKey: rck.publicKey,
   };
-  const blobMsg = canonical([
+  const blobParts = [
     TAG_INSTALL_BLOB, blob.version, blob.serverDomain, blob.username, blob.serverName,
     bytesToHex(blob.phoneDelegatedPubKey), blob.registrationUrl,
     blob.authCode.serial, bytesToHex(blob.authCode.userPubKey),
     bytesToHex(blob.authCodeUserSignature), blob.issuedAt, blob.expiresAt,
     installerGitRef, bytesToHex(blob.rckPubKey),
-  ]);
+  ];
+  // Append `de=<mode>` LAST, only for "none" — keeps the absent/encrypted case
+  // byte-identical to the legacy bytes (mirror of the protocol's append-last
+  // rule for diskEncryption). The box re-derives the same bytes to verify.
+  if (diskEncryption === "none") {
+    blob.diskEncryption = "none";
+    blobParts.push(`de=${diskEncryption}`);
+  }
+  const blobMsg = canonical(blobParts);
   const blobSig = await sign(irk.keypair.privateKey, blobMsg);
 
   const ttlMs = parseInt($("ttlMs").value, 10);
@@ -226,6 +238,8 @@ async function runFlow() {
         expiresAt: blob.expiresAt,
         installerGitRef: installerGitRef,
         rckPubKey: bytesToHex(blob.rckPubKey),
+        // Echo diskEncryption exactly as signed (present iff "none").
+        ...(blob.diskEncryption !== undefined ? { diskEncryption: blob.diskEncryption } : {}),
       },
       signature: bytesToHex(blobSig),
       ttlMs,

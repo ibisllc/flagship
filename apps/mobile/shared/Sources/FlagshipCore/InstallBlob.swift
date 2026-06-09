@@ -39,6 +39,13 @@ public struct InstallBlob: Equatable, Sendable {
     /// holds a sealed account key and renews itself indefinitely. Optional +
     /// conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
     public var certAutonomy: CertAutonomy?
+    /// Disk-encryption policy chosen at server creation: "luks" (the default —
+    /// LUKS-encrypt the data disk) or "none" (plaintext, for boxes that can't
+    /// keep network at boot, e.g. Wi-Fi-only). Optional + conditionally
+    /// appended LAST to canonicalBytes with a `de=` prefix; nil ⇒ omitted ⇒
+    /// legacy bytes verify unchanged ⇒ consumers treat absence as "luks".
+    /// MUST match the TS `de=<mode>` append byte-for-byte.
+    public var diskEncryption: String?
 
     public init(
         version: Int = 2,
@@ -52,7 +59,8 @@ public struct InstallBlob: Equatable, Sendable {
         installerGitRef: String = "main",
         rckPubKey: Data,
         bootUnlockMode: String? = nil,
-        certAutonomy: CertAutonomy? = nil
+        certAutonomy: CertAutonomy? = nil,
+        diskEncryption: String? = nil
     ) {
         self.version = version
         self.serverDomain = serverDomain
@@ -66,6 +74,7 @@ public struct InstallBlob: Equatable, Sendable {
         self.rckPubKey = rckPubKey
         self.bootUnlockMode = bootUnlockMode
         self.certAutonomy = certAutonomy
+        self.diskEncryption = diskEncryption
     }
 
     /// Mirrors the TS InstallBlob.certAutonomy shape.
@@ -104,6 +113,15 @@ public struct InstallBlob: Equatable, Sendable {
         // can't collide with a bootUnlockMode value. MUST match TS exactly.
         if let ca = certAutonomy {
             parts.append("ca=\(ca.mode):\(ca.offlineWindowDays ?? 0)")
+        }
+        // diskEncryption appended LAST, after certAutonomy, with a `de=` prefix
+        // that can't collide with a bootUnlockMode ("auto"/"approve") or `ca=`
+        // token. Absent ⇒ omitted (legacy bytes verify unchanged). The signer
+        // commits to it, so a relay can neither strip it (sig fails) nor flip
+        // "luks"→"none" to downgrade an encrypted box to plaintext. MUST match
+        // the TS canonicalInstallBlob `de=${mode}` append byte-for-byte.
+        if let de = diskEncryption {
+            parts.append("de=\(de)")
         }
         return Data(parts.joined(separator: "|").utf8)
     }

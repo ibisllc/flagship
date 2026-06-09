@@ -89,6 +89,15 @@ public final class CreateServerViewModel {
     /// autonomous boxes. Carried in the SIGNED InstallBlob (trailer.ts
     /// reconstructs `certAutonomy` so the daemon's canonical bytes match).
     public var certCanMint: Bool = false
+    /// Whether this server LUKS-encrypts its data disk. On (default) = "luks":
+    /// the box encrypts and unlocks at boot via the cloud-held key. Off =
+    /// "none": the disk is plaintext — less safe, but for boxes that can't keep
+    /// network at boot (e.g. Wi-Fi-only, where the unlock-key fetch can't run).
+    /// Carried in the SIGNED InstallBlob: "none" rides the wire as the trailing
+    /// `de=none`; "luks" stays absent so the recipe bytes match the encrypted
+    /// default + a pre-diskEncryption verifier still accepts it (absence ⇒
+    /// "luks"), mirroring how bootUnlockMode "auto" stays off the wire.
+    public var encryptDisk: Bool = true
     /// Account-wide cert validity window (days), read at mint time so the
     /// managed blob's `offlineWindowDays` matches the user's Settings choice.
     private let certValidity: CertValidityStore
@@ -310,7 +319,11 @@ public final class CreateServerViewModel {
             // admin device knows the renewal deadline.
             certAutonomy: certCanMint
                 ? InstallBlob.CertAutonomy(mode: "autonomous")
-                : InstallBlob.CertAutonomy(mode: "managed", offlineWindowDays: certValidity.days)
+                : InstallBlob.CertAutonomy(mode: "managed", offlineWindowDays: certValidity.days),
+            // Only "none" rides the wire; "luks" (the encrypted default) stays
+            // absent so the recipe bytes match a pre-diskEncryption verifier.
+            // The box treats absence as "luks".
+            diskEncryption: encryptDisk ? nil : "none"
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
         return SignedInstallBlob(blob: blob, signatureHex: HexUtil.encode(blobSig))
@@ -345,6 +358,11 @@ public struct SignedInstallBlob: Sendable {
         /// so the daemon reconstructs identical canonical bytes. Optional only
         /// for legacy/absent recipes — the phone always emits it.
         public let certAutonomy: OnWireCertAutonomy?
+        /// Disk-encryption policy. Only present for "none" servers — nil
+        /// (omitted from JSON) for the "luks" encrypted default, mirroring the
+        /// burner's RecipeDTO + trailer.ts. The box reads `blob.diskEncryption`
+        /// from this JSON; absent ⇒ "luks".
+        public let diskEncryption: String?
     }
     /// Mirrors trailer.ts `InstallBlobJson.certAutonomy`
     /// (`{ mode, offlineWindowDays? }`). `offlineWindowDays` is omitted from the
@@ -392,7 +410,8 @@ public struct SignedInstallBlob: Sendable {
                 bootUnlockMode: blob.bootUnlockMode,
                 certAutonomy: blob.certAutonomy.map {
                     OnWireCertAutonomy(mode: $0.mode, offlineWindowDays: $0.offlineWindowDays)
-                }
+                },
+                diskEncryption: blob.diskEncryption
             ),
             blobSignature: signatureHex
         )

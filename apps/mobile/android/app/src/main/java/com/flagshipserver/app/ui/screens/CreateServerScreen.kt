@@ -115,6 +115,9 @@ fun CreateServerScreen(
     // renews; the window is the account-wide CertValidityStore). true =
     // "autonomous" (the box renews its own cert forever).
     var certCanMint by remember { mutableStateOf(false) }
+    // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
+    // "none": plaintext disk, for boxes that can't keep network at boot.
+    var encryptDisk by remember { mutableStateOf(true) }
 
     val scroll = rememberScrollState()
     Column(
@@ -146,6 +149,8 @@ fun CreateServerScreen(
                 onBootUnlockMode = { bootUnlockMode = it },
                 certCanMint = certCanMint,
                 onCertCanMint = { certCanMint = it },
+                encryptDisk = encryptDisk,
+                onEncryptDisk = { encryptDisk = it },
                 error = error,
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
@@ -177,6 +182,9 @@ fun CreateServerScreen(
                                     .takeIf { it == ServerSettingsStore.Mode.APPROVE }?.wire,
                                 certCanMint = certCanMint,
                                 certValidityDays = CertValidityStore.from(context).days,
+                                // Only "none" rides the wire; "luks" (default)
+                                // stays absent (legacy bytes + webapp parity).
+                                diskEncryption = if (encryptDisk) null else "none",
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -265,6 +273,8 @@ private fun DesignPhase(
     onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
     certCanMint: Boolean,
     onCertCanMint: (Boolean) -> Unit,
+    encryptDisk: Boolean,
+    onEncryptDisk: (Boolean) -> Unit,
     error: String?,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
@@ -292,7 +302,9 @@ private fun DesignPhase(
             BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
             Spacer(Modifier.height(FS.space.s4))
             CertAutonomyPicker(canMint = certCanMint, onCanMint = onCertCanMint)
-        }
+            Spacer(Modifier.height(FS.space.s4))
+            DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
+}
     }
     if (error != null) {
         Spacer(Modifier.height(FS.space.s2))
@@ -397,6 +409,37 @@ private fun CertAutonomyPicker(
         title = "This server renews its own",
         subtitle = "Give this box a sealed, revocable key so it renews its own certificate indefinitely. Only for a physically-secure, always-on machine.",
         onClick = { onCanMint(true) },
+    )
+}
+
+// Disk encryption — a binary, default ON. ON = "luks" (full-disk encryption,
+// the box needs network at boot to fetch its unlock key). OFF = "none":
+// plaintext disk, less safe, but it boots with no network — for Wi-Fi-only
+// boxes that can't keep a connection at boot. Default-OFF rides "de=none" on
+// the signed wire; ON stays absent (legacy bytes).
+@Composable
+private fun DiskEncryptionPicker(
+    encryptDisk: Boolean,
+    onEncryptDisk: (Boolean) -> Unit,
+) {
+    Text(
+        "Encrypt disk",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = encryptDisk,
+        title = "Encrypt the disk (recommended)",
+        subtitle = "Full-disk LUKS encryption. The box fetches its unlock key at boot, so it needs a network connection to come back up after a power cut.",
+        onClick = { onEncryptDisk(true) },
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = !encryptDisk,
+        title = "Don't encrypt my disk",
+        subtitle = "Less safe — anyone with the disk can read it. Choose this only for a box that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
+        onClick = { onEncryptDisk(false) },
     )
 }
 
@@ -519,6 +562,10 @@ private suspend fun prepareDelivery(
     bootUnlockMode: String? = null,
     certCanMint: Boolean = false,
     certValidityDays: Int = CertValidityStore.DEFAULT_DAYS,
+    // "none" when the user opted out of disk encryption; null ⇒ the LUKS
+    // default (omitted from the signed canonical bytes + the wire, like
+    // bootUnlockMode's "auto").
+    diskEncryption: String? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -572,6 +619,7 @@ private suspend fun prepareDelivery(
         rckPubKey = rck.publicKey,
         bootUnlockMode = bootUnlockMode,
         certAutonomy = certAutonomy,
+        diskEncryption = diskEncryption,
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
@@ -598,6 +646,7 @@ private suspend fun prepareDelivery(
                 mode = certAutonomy.mode,
                 offlineWindowDays = certAutonomy.offlineWindowDays,
             ),
+            diskEncryption = diskEncryption,
         ),
         blobSignature = blobSigHex,
     )

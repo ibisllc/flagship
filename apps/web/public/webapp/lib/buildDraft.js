@@ -78,6 +78,9 @@ export async function saveDraft(draft) {
     // Per-user-cert offline-autonomy window chosen for this draft, so a
     // resumed draft restores the picker. { mode, offlineWindowDays? }.
     certAutonomy: draft.certAutonomy,
+    // Disk-encryption choice ("luks" | "none") so a resumed draft restores
+    // the "Encrypt disk" toggle. Absent ⇒ encrypted ("luks").
+    diskEncryption: draft.diskEncryption,
   };
   await new Promise((resolve, reject) => {
     const r = store.put(record);
@@ -157,6 +160,17 @@ export function canonicalInstallBlob(b) {
   // the Swift InstallBlob.canonicalBytes() or the recipe fails box verification.
   if (b.certAutonomy !== undefined) {
     parts.push(`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`);
+  }
+  // Same backward-compatible append, AFTER certAutonomy. The `de=` prefix
+  // can't collide with a bootUnlockMode ("auto"/"approve") or `ca=` token.
+  // A blob WITHOUT diskEncryption (absent ⇒ "luks") canonicalizes byte-for-
+  // byte as before, so existing recipes keep verifying; when present the
+  // signer commits to it so a relay can't flip "luks"→"none" to downgrade an
+  // encrypted box to plaintext. MUST stay byte-identical to
+  // packages/protocol/src/auth.ts canonicalInstallBlob and the Swift /
+  // Kotlin InstallBlob canonical bytes or the recipe fails box verification.
+  if (b.diskEncryption !== undefined) {
+    parts.push(`de=${b.diskEncryption}`);
   }
   return new TextEncoder().encode(parts.join("|"));
 }

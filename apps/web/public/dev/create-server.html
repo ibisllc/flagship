@@ -125,6 +125,13 @@
               <option value="14400000">4 hours</option>
             </select>
           </div>
+          <div class="field">
+            <label for="diskEncryption">Disk encryption</label>
+            <select id="diskEncryption">
+              <option value="luks" selected>encrypt (luks, default)</option>
+              <option value="none">don't encrypt (none — Wi-Fi-only boxes)</option>
+            </select>
+          </div>
         </div>
         <div style="margin-top: 1rem;">
           <button id="goBtn" type="button">Save &amp; mint a build code</button>

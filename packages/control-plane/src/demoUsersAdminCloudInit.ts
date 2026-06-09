@@ -57,6 +57,7 @@ import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
   deriveDemoUserIrk,
+  parseDiskEncryption,
   _internalDefaultDemoPrimaryScopes,
 } from "./demoUsersAdmin.js";
 import {
@@ -99,6 +100,9 @@ export interface DemoCloudInitDeps {
 export interface AdminCloudInitNowBody {
   region?: unknown;
   size?: unknown;
+  /** Disk-encryption choice threaded into the signed InstallBlob (auth.ts
+   *  `de=` field). "luks"/absent ⇒ encrypted; "none" ⇒ unencrypted boot. */
+  diskEncryption?: unknown;
 }
 
 const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
@@ -581,6 +585,10 @@ export async function handleAdminCloudInitNow(
   const now = nowOf(deps);
   const region = typeof body?.region === "string" ? body.region : deps.defaultRegion;
   const size = typeof body?.size === "string" ? body.size : deps.defaultSize;
+  const diskEncryption = parseDiskEncryption(body?.diskEncryption);
+  if (diskEncryption !== undefined && typeof diskEncryption === "object") {
+    return malformed(diskEncryption.error);
+  }
   const serverName = "home";
   const installerGitRef = deps.installerGitRef ?? DEFAULT_INSTALLER_GIT_REF;
 
@@ -642,6 +650,9 @@ export async function handleAdminCloudInitNow(
     authCodeUserSignature: authCodeSig,
     installerGitRef,
     rckPubKey: rck.publicKey,
+    // Carry diskEncryption ONLY for "none" — keeps the signed bytes
+    // byte-identical to a legacy recipe for the default encrypted case.
+    ...(diskEncryption === "none" ? { diskEncryption: "none" as const } : {}),
   };
   const blobSig = signInstallBlob(blob, userIrk);
   const blobJson = installBlobJsonShortString(blob, blobSig);
@@ -773,6 +784,9 @@ interface InstallBlobJsonShort {
   authCodeUserSignature: string;
   installerGitRef: string;
   rckPubKey: string;
+  /** Present iff the blob carries diskEncryption ("none") — the box reads
+   *  this from the embedded recipe to decide whether to LUKS-encrypt root. */
+  diskEncryption?: "luks" | "none";
 }
 
 function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
@@ -797,6 +811,8 @@ function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
+    // Echo diskEncryption exactly as signed (present iff "none").
+    ...(b.diskEncryption !== undefined ? { diskEncryption: b.diskEncryption } : {}),
   };
   return JSON.stringify(json);
 }

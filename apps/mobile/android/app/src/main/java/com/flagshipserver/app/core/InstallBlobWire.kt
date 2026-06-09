@@ -35,6 +35,12 @@ data class WireBlob(
     // webapp onWireBlob.certAutonomy + iOS OnWireCertAutonomy. trailer.ts
     // reconstructs it so the daemon's canonical bytes match the signature.
     val certAutonomy: WireCertAutonomy? = null,
+    // Disk-encryption policy: "luks" | "none". Only present when the user
+    // opted out of encryption ("none") — null (omitted, encodeDefaults=false)
+    // for the "luks" default, mirroring the webapp's onWireBlob. The box reads
+    // blob.diskEncryption; absent ⇒ "luks". trailer.ts reconstructs it so the
+    // daemon's canonical bytes match the signature.
+    val diskEncryption: String? = null,
 )
 
 @Serializable

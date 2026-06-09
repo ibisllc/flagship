@@ -88,6 +88,8 @@ public struct CreateServerStubScreen: View {
                         recipeTtlPicker(c: c)
                     case 1:
                         bootUnlockPicker(c: c)
+                        Divider().background(c.border)
+                        diskEncryptionToggle(c: c)
                     case 2:
                         certAutonomyPicker(c: c)
                     default:
@@ -237,6 +239,30 @@ public struct CreateServerStubScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("cs-bootunlock-\(mode.rawValue)")
+    }
+
+    // MARK: - Disk-encryption toggle
+    //
+    // Default ON (LUKS-encrypt the data disk; the box fetches its unlock key at
+    // boot). OFF = "none": plaintext disk — less safe, but the only option for a
+    // box that can't keep network at boot (e.g. Wi-Fi-only, where the boot-time
+    // unlock-key fetch can't run). Carried in the SIGNED InstallBlob via the
+    // trailing `de=none` (encrypted stays absent ⇒ legacy bytes).
+    private func diskEncryptionToggle(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Toggle(isOn: $vm.encryptDisk) {
+                Text("Encrypt disk")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(c.text)
+            }
+            .tint(c.primary)
+            .accessibilityIdentifier("cs-encrypt-disk-toggle")
+            Text(vm.encryptDisk
+                 ? "Recommended. Your data disk is LUKS-encrypted; the box unlocks it at boot."
+                 : "Less safe — the disk is left unencrypted. Only for boxes that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
+                .font(.caption)
+                .foregroundColor(c.textMuted)
+        }
     }
 
     // MARK: - Cert-autonomy picker

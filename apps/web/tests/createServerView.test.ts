@@ -478,6 +478,127 @@ describe("canonicalInstallBlob — certAutonomy byte-parity (per-user-cert)", ()
   });
 });
 
+describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`)", () => {
+  // Same deterministic-Ed25519 trick: identical signatures ⟺ identical signed
+  // bytes. The box re-derives these bytes when it verifies the recipe, so any
+  // drift in the `de=` suffix fails box verification. We pin the EXACT suffix
+  // and prove the webapp mirror matches @flagship/protocol byte-for-byte.
+  const irk = deriveIRK({ seed: new Uint8Array(32).fill(7) });
+
+  function makeBlob(opts: {
+    bootUnlockMode?: "auto" | "approve";
+    certAutonomy?: { mode: "managed" | "autonomous"; offlineWindowDays?: number };
+    diskEncryption?: "luks" | "none";
+  }): InstallBlob {
+    const blob: InstallBlob = {
+      version: 2,
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      serverName: "home",
+      phoneDelegatedPubKey: new Uint8Array(32).fill(0xaa),
+      registrationUrl: "https://flagship.services/api/server/register",
+      authCode: {
+        version: 1,
+        serial: "01ABCDEF0123456789ABCDEF01",
+        username: "alice",
+        serverName: "home",
+        serverDomain: "home.alice.flagship.services",
+        delegatedPubKey: new Uint8Array(32).fill(0xee),
+        userPubKey: new Uint8Array(32).fill(0xbb),
+        issuedAt: 1_700_000_000_000,
+        expiresAt: 1_700_000_360_000,
+      },
+      authCodeUserSignature: new Uint8Array(64).fill(0xcc),
+      installerGitRef: "main",
+      rckPubKey: new Uint8Array(32).fill(0xdd),
+    };
+    if (opts.bootUnlockMode !== undefined) blob.bootUnlockMode = opts.bootUnlockMode;
+    if (opts.certAutonomy !== undefined) blob.certAutonomy = opts.certAutonomy;
+    if (opts.diskEncryption !== undefined) blob.diskEncryption = opts.diskEncryption;
+    return blob;
+  }
+
+  for (const de of ["none", "luks"] as const) {
+    it(`emits the 'de=${de}' token and matches the TS canonical bytes`, () => {
+      const blob = makeBlob({ diskEncryption: de });
+      const jsBytes = jsCanonicalInstallBlob(blob);
+      const text = new TextDecoder().decode(jsBytes);
+      // de= is the final '|'-joined field (no boot/ca here).
+      expect(text.endsWith(`|de=${de}`)).toBe(true);
+      // Deterministic-Ed25519 byte-parity against @flagship/protocol.
+      const tsSig = signInstallBlob(blob, irk);
+      const jsSig = ed.sign(jsBytes, irk.privateKey);
+      expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
+    });
+  }
+
+  it("absent diskEncryption ⇒ legacy bytes (no de= token; treated as luks)", () => {
+    const text = new TextDecoder().decode(jsCanonicalInstallBlob(makeBlob({})));
+    expect(text).not.toContain("de=");
+    // The legacy blob still verifies under TS (no field appended).
+    const blob = makeBlob({});
+    const sig = signInstallBlob(blob, irk);
+    expect(ed.verify(sig, jsCanonicalInstallBlob(blob), irk.publicKey)).toBe(true);
+  });
+
+  it("appends de= LAST, after bootUnlockMode AND certAutonomy", () => {
+    const blob = makeBlob({
+      bootUnlockMode: "approve",
+      certAutonomy: { mode: "managed", offlineWindowDays: 7 },
+      diskEncryption: "none",
+    });
+    const text = new TextDecoder().decode(jsCanonicalInstallBlob(blob));
+    expect(text.endsWith("|approve|ca=managed:7|de=none")).toBe(true);
+    // Byte-identical to the TS canonical form with all three appends.
+    const tsSig = signInstallBlob(blob, irk);
+    const jsSig = ed.sign(jsCanonicalInstallBlob(blob), irk.privateKey);
+    expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
+  });
+
+  it("the de= form is exactly the legacy bytes + the appended token", () => {
+    const baseText = new TextDecoder().decode(jsCanonicalInstallBlob(makeBlob({})));
+    const withDe = new TextDecoder().decode(
+      jsCanonicalInstallBlob(makeBlob({ diskEncryption: "none" })),
+    );
+    expect(withDe).toBe(baseText + "|de=none");
+  });
+
+  it("buildDraft.canonicalInstallBlob appends de= after certAutonomy", () => {
+    const caIdx = LIB_SRC.indexOf("b.certAutonomy !== undefined");
+    const deIdx = LIB_SRC.indexOf("b.diskEncryption !== undefined");
+    expect(caIdx).toBeGreaterThan(-1);
+    expect(deIdx).toBeGreaterThan(caIdx);
+    expect(LIB_SRC).toContain("`de=${b.diskEncryption}`");
+  });
+});
+
+describe("create-server view — encrypt-disk toggle (FEATURE B)", () => {
+  it("renders an 'Encrypt disk' checkbox, CHECKED (encrypted) by default", () => {
+    expect(INDEX_HTML).toMatch(/<input type="checkbox" id="cs-encrypt-disk" checked/);
+    expect(INDEX_HTML).toContain("Encrypt disk");
+  });
+
+  it("captions the unsafe trade-off + the Wi-Fi-only use case", () => {
+    expect(INDEX_HTML).toContain("cs-encrypt-disk-hint");
+    expect(INDEX_HTML).toMatch(/Wi-Fi-only/);
+    expect(INDEX_HTML).toMatch(/not encrypted/);
+    expect(INDEX_HTML).toMatch(/less safe/);
+  });
+
+  it("reads the checkbox (default luks) and threads diskEncryption onto the blob", () => {
+    expect(VIEW_SRC).toContain("cs-encrypt-disk");
+    expect(VIEW_SRC).toMatch(/export function readDiskEncryption\(/);
+    // Default-safe: absent control ⇒ "luks"; unchecked ⇒ "none".
+    expect(VIEW_SRC).toMatch(/return el\.checked \? "luks" : "none"/);
+    // Only "none" is set on the blob (luks = absent field = legacy bytes).
+    expect(VIEW_SRC).toMatch(
+      /if \(inputs\.diskEncryption === "none"\) blob\.diskEncryption = "none"/,
+    );
+    // The downloaded recipe carries whatever the blob carried.
+    expect(VIEW_SRC).toMatch(/onWireBlob\.diskEncryption = blob\.diskEncryption/);
+  });
+});
+
 describe("create-server view — cert-autonomy picker (per-user-cert)", () => {
   it("renders the who-renews question prompt", () => {
     expect(INDEX_HTML).toContain("Who renews this server's certificate?");

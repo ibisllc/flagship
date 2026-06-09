@@ -340,6 +340,7 @@ async function resumeDraft(id) {
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
   restoreCertAutonomy(d.certAutonomy);
+  restoreDiskEncryption(d.diskEncryption);
   toast(`resumed ${d.serverName}`);
 }
 
@@ -365,7 +366,21 @@ function readInputs() {
   // docs/per-user-cert-worklist.md). Carried in the SIGNED InstallBlob so a
   // relay can't silently weaken "managed" → "autonomous".
   const certAutonomy = readCertAutonomy();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, certAutonomy };
+  // Disk-encryption choice (auth.ts `de=` field). Carried in the SIGNED
+  // InstallBlob so a relay can't downgrade an encrypted box to plaintext.
+  // Default "luks" (encrypted); the user opts OUT explicitly.
+  const diskEncryption = readDiskEncryption();
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, certAutonomy, diskEncryption };
+}
+
+// Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
+// is CHECKED (encrypted, "luks") by default; unchecked ⇒ "none". When the
+// control is absent we fail safe to "luks". Exported for the unit test.
+export function readDiskEncryption() {
+  const el = $("cs-encrypt-disk");
+  // A checkbox: `checked` true ⇒ encrypted. Absent control ⇒ default encrypted.
+  if (!el) return "luks";
+  return el.checked ? "luks" : "none";
 }
 
 // Read the selected boot-unlock mode from the radio group. Defaults to
@@ -397,6 +412,15 @@ function restoreCertAutonomy(certAutonomy) {
   const el = $("cs-cert-autonomy");
   if (!el) return;
   el.value = certAutonomy?.mode === "autonomous" ? "autonomous" : "managed";
+}
+
+// Restore the "Encrypt disk" checkbox from a saved draft's diskEncryption
+// value. "none" ⇒ unchecked (don't encrypt); everything else (or absent) ⇒
+// checked (encrypted, the default).
+function restoreDiskEncryption(diskEncryption) {
+  const el = $("cs-encrypt-disk");
+  if (!el) return;
+  el.checked = diskEncryption !== "none";
 }
 
 // Recipe TTL bounds — single user-facing knob. 5 min floor, 24 hour
@@ -638,6 +662,11 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // blob. Appended AFTER bootUnlockMode in canonicalInstallBlob as
   // `ca=<mode>:<days>`; the signer commits to it so a relay can't weaken it.
   if (inputs.certAutonomy !== undefined) blob.certAutonomy = inputs.certAutonomy;
+  // Disk-encryption: carry the field ONLY for "none". "luks" is the
+  // absent-field default, so an encrypted recipe signs/serialises
+  // byte-identically to a legacy pre-diskEncryption recipe (old verifiers
+  // keep accepting it). Appended LAST in canonicalInstallBlob as `de=none`.
+  if (inputs.diskEncryption === "none") blob.diskEncryption = "none";
   const blobBytes = canonicalInstallBlob(blob);
   const blobSig = await signWithIrk(session.umk, blobBytes);
 
@@ -666,6 +695,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // burner round-trips it (installBlobFromJson) and re-derives the same
   // canonical bytes for box verification (iso-personalizer InstallBlobJson).
   if (blob.certAutonomy !== undefined) onWireBlob.certAutonomy = blob.certAutonomy;
+  // Mirror the conditional from the canonical blob: present iff "none", so the
+  // downloaded recipe JSON carries exactly what was signed (the burner round-
+  // trips it and re-derives the same `de=none` token for box verification).
+  if (blob.diskEncryption !== undefined) onWireBlob.diskEncryption = blob.diskEncryption;
   return { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
 }
 
@@ -810,6 +843,7 @@ export function initCreateServerView() {
     $("cs-relay-session").value = "";
     $("cs-match-code").textContent = "— — —";
     restoreCertAutonomy(null);
+    restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });
   $("create-server-back")?.addEventListener("click", () => {

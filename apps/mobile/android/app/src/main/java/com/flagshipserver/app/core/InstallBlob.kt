@@ -30,6 +30,12 @@ data class InstallBlob(
     // holds a sealed account key and renews itself indefinitely. Optional +
     // conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
     var certAutonomy: CertAutonomy? = null,
+    // Disk-encryption policy from server creation: "luks" (default — LUKS
+    // full-disk encryption with a phone-/box-managed unlock key) or "none"
+    // (plaintext disk, for boxes that can't keep network at boot). Optional +
+    // conditionally appended LAST below — null ⇒ legacy bytes (absence ==
+    // "luks"). MUST match the TS `de=<mode>` bytes.
+    var diskEncryption: String? = null,
 ) {
     companion object {
         // Tag stays v1 — the inner `version` field discriminates the
@@ -68,6 +74,12 @@ data class InstallBlob(
         // can't collide with a bootUnlockMode value. MUST match TS exactly
         // (`ca=${mode}:${offlineWindowDays ?? 0}`).
         certAutonomy?.let { parts.add("ca=${it.mode}:${it.offlineWindowDays ?: 0}") }
+        // diskEncryption appended LAST (after certAutonomy) with a `de=` prefix
+        // that can't collide with bootUnlockMode ("auto"/"approve") or `ca=`.
+        // The signer commits to it, so a relay can't strip it (sig fails) nor
+        // flip "luks"→"none" to downgrade an encrypted box to plaintext. MUST
+        // match TS canonicalInstallBlob (`de=${diskEncryption}`).
+        diskEncryption?.let { parts.add("de=$it") }
         return parts.joinToString("|").toByteArray()
     }
 }

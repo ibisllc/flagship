@@ -456,6 +456,134 @@ describe("handleAdminMintDeviceGrant", () => {
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────
+// FEATURE B — diskEncryption ("don't encrypt my disk") threads through the
+// demo/dev mint path into the SIGNED recipe.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Reconstruct a verifiable InstallBlob from the returned JSON, carrying
+ *  diskEncryption iff the JSON did (so the `de=` token is part of the
+ *  canonical bytes when present). */
+function blobFromJson(blobJson: {
+  serverDomain: string;
+  username: string;
+  serverName: string;
+  phoneDelegatedPubKey: string;
+  registrationUrl: string;
+  authCode: {
+    serial: string;
+    username: string;
+    serverName: string;
+    serverDomain: string;
+    delegatedPubKey: string;
+    userPubKey: string;
+    issuedAt: number;
+    expiresAt: number;
+  };
+  authCodeUserSignature: string;
+  installerGitRef: string;
+  rckPubKey: string;
+  diskEncryption?: "luks" | "none";
+}): InstallBlob {
+  const blob: InstallBlob = {
+    version: 2,
+    serverDomain: blobJson.serverDomain,
+    username: blobJson.username,
+    serverName: blobJson.serverName,
+    phoneDelegatedPubKey: hexToBytes(blobJson.phoneDelegatedPubKey),
+    registrationUrl: blobJson.registrationUrl,
+    authCode: {
+      version: 1,
+      serial: blobJson.authCode.serial,
+      username: blobJson.authCode.username,
+      serverName: blobJson.authCode.serverName,
+      serverDomain: blobJson.authCode.serverDomain,
+      delegatedPubKey: hexToBytes(blobJson.authCode.delegatedPubKey),
+      userPubKey: hexToBytes(blobJson.authCode.userPubKey),
+      issuedAt: blobJson.authCode.issuedAt,
+      expiresAt: blobJson.authCode.expiresAt,
+    },
+    authCodeUserSignature: hexToBytes(blobJson.authCodeUserSignature),
+    installerGitRef: blobJson.installerGitRef,
+    rckPubKey: hexToBytes(blobJson.rckPubKey),
+  };
+  if (blobJson.diskEncryption !== undefined) blob.diskEncryption = blobJson.diskEncryption;
+  return blob;
+}
+
+type ClaimBody = {
+  blob: Parameters<typeof blobFromJson>[0];
+  blobSignature: string;
+};
+
+describe("handleAdminClaimAndIssue — diskEncryption (FEATURE B)", () => {
+  it("diskEncryption:'none' carries the field into the signed recipe + verifies", async () => {
+    const h = await mkHarness({ seed: true });
+    const r = await handleAdminClaimAndIssue(h.deps, {
+      username: "demoalice",
+      serverName: "home",
+      diskEncryption: "none",
+    });
+    expect(r.status).toBe(200);
+    const body = r.body as ClaimBody;
+    // The recipe JSON echoes the field.
+    expect(body.blob.diskEncryption).toBe("none");
+    // And the returned signature verifies over a blob that carries de=none
+    // (i.e. the field is part of the SIGNED canonical bytes).
+    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demoalice");
+    const blob = blobFromJson(body.blob);
+    expect(blob.diskEncryption).toBe("none");
+    expect(verifyInstallBlob(blob, hexToBytes(body.blobSignature), userIrk.publicKey)).toBe(true);
+    // Stripping the field would change the canonical bytes ⇒ verify fails.
+    const stripped = { ...blob };
+    delete stripped.diskEncryption;
+    expect(verifyInstallBlob(stripped, hexToBytes(body.blobSignature), userIrk.publicKey)).toBe(false);
+  });
+
+  it("absent diskEncryption ⇒ no field in the recipe; legacy bytes still verify", async () => {
+    const h = await mkHarness({ seed: true });
+    const r = await handleAdminClaimAndIssue(h.deps, {
+      username: "demoalice",
+      serverName: "home",
+    });
+    expect(r.status).toBe(200);
+    const body = r.body as ClaimBody;
+    expect(body.blob.diskEncryption).toBeUndefined();
+    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demoalice");
+    const blob = blobFromJson(body.blob);
+    expect(blob.diskEncryption).toBeUndefined();
+    expect(verifyInstallBlob(blob, hexToBytes(body.blobSignature), userIrk.publicKey)).toBe(true);
+  });
+
+  it("explicit diskEncryption:'luks' is treated as the default (omitted ⇒ legacy bytes)", async () => {
+    const h = await mkHarness({ seed: true });
+    const r = await handleAdminClaimAndIssue(h.deps, {
+      username: "demoalice",
+      serverName: "home",
+      diskEncryption: "luks",
+    });
+    expect(r.status).toBe(200);
+    const body = r.body as ClaimBody;
+    // "luks" is the absent-field default — it MUST NOT appear (keeps the
+    // signed bytes byte-identical to a legacy recipe).
+    expect(body.blob.diskEncryption).toBeUndefined();
+    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demoalice");
+    expect(
+      verifyInstallBlob(blobFromJson(body.blob), hexToBytes(body.blobSignature), userIrk.publicKey),
+    ).toBe(true);
+  });
+
+  it("rejects an unknown diskEncryption value (400)", async () => {
+    const h = await mkHarness({ seed: true });
+    const r = await handleAdminClaimAndIssue(h.deps, {
+      username: "demoalice",
+      serverName: "home",
+      diskEncryption: "aes",
+    });
+    expect(r.status).toBe(400);
+  });
+});
+
 function hexToBytes(s: string): Uint8Array {
   const out = new Uint8Array(s.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);

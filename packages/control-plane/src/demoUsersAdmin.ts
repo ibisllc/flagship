@@ -246,6 +246,23 @@ export interface AdminClaimAndIssueBody {
   username?: unknown;
   serverName?: unknown;
   scopes?: unknown;
+  /** Disk-encryption choice for the minted recipe (auth.ts `de=` field).
+   *  "luks" (default / absent) ⇒ encrypted; "none" ⇒ unencrypted boot for a
+   *  box that can't keep network at early-boot (Wi-Fi-only). */
+  diskEncryption?: unknown;
+}
+
+/** Parse + validate the optional disk-encryption choice from an admin body.
+ *  Returns `"none"` only when explicitly requested; absent / "luks" ⇒
+ *  undefined (omit the field so the blob canonicalizes legacy-identically).
+ *  Throws on any other value so a typo can't silently ship an encrypted box. */
+export function parseDiskEncryption(
+  raw: unknown,
+): "none" | undefined | { error: string } {
+  if (raw === undefined || raw === null) return undefined;
+  if (raw === "luks") return undefined;
+  if (raw === "none") return "none";
+  return { error: 'diskEncryption must be "luks" or "none"' };
 }
 
 export async function handleAdminClaimAndIssue(
@@ -276,6 +293,11 @@ export async function handleAdminClaimAndIssue(
     scopes = out;
   } else {
     return malformed("scopes must be a non-empty array of known DeviceScope strings");
+  }
+
+  const diskEncryption = parseDiskEncryption(body.diskEncryption);
+  if (diskEncryption !== undefined && typeof diskEncryption === "object") {
+    return malformed(diskEncryption.error);
   }
 
   const username = body.username.toLowerCase();
@@ -358,6 +380,9 @@ export async function handleAdminClaimAndIssue(
     authCodeUserSignature: authCodeSig,
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
+    // Carry diskEncryption ONLY for "none". "luks"/absent ⇒ omitted, so the
+    // signed bytes stay byte-identical to a legacy pre-diskEncryption recipe.
+    ...(diskEncryption === "none" ? { diskEncryption: "none" as const } : {}),
   };
   const blobSig = signInstallBlob(blob, userIrk);
 
@@ -536,6 +561,9 @@ interface InstallBlobJson {
   authCodeUserSignature: string;
   installerGitRef: string;
   rckPubKey: string;
+  /** Present iff the blob carries diskEncryption (i.e. "none"). Mirrors the
+   *  signed blob so the recipe JSON the operator hands out round-trips it. */
+  diskEncryption?: "luks" | "none";
 }
 
 function installBlobToJson(b: InstallBlob): InstallBlobJson {
@@ -560,5 +588,7 @@ function installBlobToJson(b: InstallBlob): InstallBlobJson {
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
+    // Echo diskEncryption exactly as signed (present iff "none").
+    ...(b.diskEncryption !== undefined ? { diskEncryption: b.diskEncryption } : {}),
   };
 }
