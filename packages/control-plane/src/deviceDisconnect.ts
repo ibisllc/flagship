@@ -19,11 +19,13 @@
  *     "signature": "<hex IRK signature over canonicalbytes>"
  *   }
  *
- * Phase 2 keeps the signature gate "structurally present" — same
- * pragmatism as `RePairInitiate.totpProof`. Phase 5 (audit) will
- * wire the actual ed25519 verify against the current IRK + a
- * canonical-bytes envelope (TAG_DEVICE_DISCONNECT). The QUARANTINE
- * gate, however, is real:
+ * The signature gate is a REAL ed25519 verify (task #39): the body's
+ * `signature` must verify over the canonical
+ * `flagship/device-disconnect/v1` envelope under the account's CURRENT
+ * IRK (`usernames.get(username).irkPubHex`). This closes the earlier
+ * fail-open gap where any non-empty signature string was accepted, so a
+ * rotated-out / terminated device can no longer kick siblings. The
+ * QUARANTINE gate is also real:
  *
  *   - look up `callerTokenId` in push_tokens
  *   - if that row's `quarantineUntil > now`, reject with 403
@@ -40,7 +42,9 @@ import type {
   PushTokenStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import { verifyDeviceDisconnect } from "@flagship/protocol";
 import { recordAuditEvent } from "./auditEvents.js";
+import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
 import type { V12PushFanout } from "./totp.js";
 
@@ -94,11 +98,35 @@ export async function handleDeviceDisconnect(
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
     return { status: 403, body: { error: "stale request" } };
   }
-  // Phase 2 — structural-only signature gate, matching the
-  // totpProof structural check on RePairInitiate. Phase 5 swaps
-  // this for a canonical-bytes verifyDeviceDisconnect against the
-  // user's current IRK.
-  if (b.signature.length === 0) {
+  // Real IRK proof (task #39 — closes the SEV-HIGH fail-open gap that
+  // previously accepted ANY non-empty signature string). The request
+  // must carry an ed25519 signature over the canonical
+  // `flagship/device-disconnect/v1` envelope made with the account's
+  // CURRENT IRK. A rotated-out / terminated device whose key no longer
+  // matches `userRec.irkPubHex` cannot silence push on a sibling.
+  const signerRec = await deps.usernames.get(r.username);
+  if (!signerRec) {
+    return { status: 403, body: { error: "invalid signature" } };
+  }
+  let sigBytes: Uint8Array;
+  let irkPub: Uint8Array;
+  try {
+    sigBytes = hexToBytes(b.signature);
+    irkPub = hexToBytes(signerRec.irkPubHex);
+  } catch {
+    return { status: 403, body: { error: "invalid signature" } };
+  }
+  const verified = verifyDeviceDisconnect(
+    {
+      username: r.username,
+      targetTokenId: r.targetTokenId,
+      callerTokenId: r.callerTokenId,
+      issuedAt: r.issuedAt,
+    },
+    sigBytes,
+    irkPub,
+  );
+  if (!verified) {
     return { status: 403, body: { error: "invalid signature" } };
   }
 

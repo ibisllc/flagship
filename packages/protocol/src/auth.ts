@@ -28,6 +28,7 @@ const TAG_INVITE_ACCEPT = "flagship/invite-accept/v1";
 const TAG_TUNNEL_HELLO = "flagship/tunnel-hello/v1";
 const TAG_REGISTER_SERVER = "flagship/register-server/v1";
 const TAG_ACCOUNT_RECOVERY = "flagship/account-recovery/v1";
+const TAG_DEVICE_DISCONNECT = "flagship/device-disconnect/v1";
 const TAG_PB_ANNOUNCE = "pb/announce/v1";
 const TAG_PB_REQUEST_PEERS = "pb/request-peers/v1";
 const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
@@ -80,6 +81,25 @@ export interface AccountRecovery {
   newPushTokenHash: Bytes;
   /** Claim of which platform the new device is running ('apns' | 'fcm'). */
   platform: "apns" | "fcm";
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed request for one device to kick a SIBLING device off the
+ * account (`POST /api/users/:u/devices/:id/disconnect`). The signing
+ * device proves account ownership with the user's current IRK; the
+ * canonical bytes bind the username, the target token being removed,
+ * and the caller's own token, so a captured signature can't be replayed
+ * against a different target or a different account, and `issuedAt`
+ * bounds the replay window the handler enforces.
+ */
+export interface DeviceDisconnect {
+  /** Lowercased account username. */
+  username: string;
+  /** push_tokens id of the device being kicked off. */
+  targetTokenId: string;
+  /** push_tokens id of the device issuing the request. */
+  callerTokenId: string;
   issuedAt: number;
 }
 
@@ -585,6 +605,15 @@ function canonicalAccountRecovery(r: AccountRecovery): Bytes {
   );
 }
 
+function canonicalDeviceDisconnect(d: DeviceDisconnect): Bytes {
+  legacyFieldGuard("username", d.username);
+  legacyFieldGuard("targetTokenId", d.targetTokenId);
+  legacyFieldGuard("callerTokenId", d.callerTokenId);
+  return new TextEncoder().encode(
+    `${TAG_DEVICE_DISCONNECT}|${d.username.toLowerCase()}|${d.targetTokenId}|${d.callerTokenId}|${d.issuedAt}`,
+  );
+}
+
 function canonicalPbAnnounce(a: PbAnnounce): Bytes {
   return new TextEncoder().encode(
     [
@@ -801,6 +830,18 @@ export function signAccountRecovery(r: AccountRecovery, irk: Keypair): Bytes {
 export function verifyAccountRecovery(r: AccountRecovery, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalAccountRecovery(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signDeviceDisconnect(d: DeviceDisconnect, irk: Keypair): Bytes {
+  return ed.sign(canonicalDeviceDisconnect(d), irk.privateKey);
+}
+
+export function verifyDeviceDisconnect(d: DeviceDisconnect, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalDeviceDisconnect(d), irkPub);
   } catch {
     return false;
   }

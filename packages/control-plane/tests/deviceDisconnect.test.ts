@@ -1,25 +1,32 @@
 /**
- * v1.2 Plan B Phase 2 — POST /api/users/:u/devices/:id/disconnect tests.
+ * POST /api/users/:u/devices/:id/disconnect tests.
  *
- * Covers the quarantine gate, the audit-event emission, and the
- * happy-path remove. Phase 5 will replace the structural signature
- * check with a real ed25519 verifyDeviceDisconnect; until then,
- * the tests only assert that a non-empty signature is accepted and
- * an empty one rejected.
+ * Covers the real ed25519 IRK-proof gate (task #39 — closing the
+ * earlier fail-open hole), the quarantine gate, the audit-event
+ * emission, and the happy-path remove. Every request body is signed
+ * with the account's CURRENT IRK; the negative tests exercise a
+ * rotated-out IRK, garbage hex, and an empty signature.
  */
 
 import { describe, expect, it } from "vitest";
 import { InMemoryStorage } from "@flagship/storage";
+import { deriveIRK, signDeviceDisconnect } from "@flagship/protocol";
 import { handleDeviceDisconnect } from "../src/deviceDisconnect.js";
+import { bytesToHex } from "../src/hex.js";
 import { RE_PAIR_QUARANTINE_MS } from "../src/rePair.js";
 
 const USERNAME = "alice";
+
+// The account's current IRK. Every legitimate request is signed with this.
+const ACCOUNT_IRK = deriveIRK({ seed: new Uint8Array(32).fill(0x11) });
+// A rotated-out / foreign key that no longer matches userRec.irkPubHex.
+const OTHER_IRK = deriveIRK({ seed: new Uint8Array(32).fill(0x22) });
 
 async function setup(): Promise<InMemoryStorage> {
   const s = new InMemoryStorage();
   await s.usernames.put({
     username: USERNAME,
-    irkPubHex: "aa".repeat(32),
+    irkPubHex: bytesToHex(ACCOUNT_IRK.publicKey),
     claimedAt: 1,
   });
   return s;
@@ -47,17 +54,23 @@ function disconnectBody(args: {
   targetTokenId: string;
   callerTokenId: string;
   issuedAt?: number;
+  /** Override the signature hex (negative tests). */
   signature?: string;
+  /** Sign with a non-account key to simulate a rotated-out device. */
+  signWith?: typeof ACCOUNT_IRK;
+  /** Username embedded in the signed envelope (defaults to USERNAME). */
+  username?: string;
 }) {
-  return {
-    request: {
-      username: USERNAME,
-      targetTokenId: args.targetTokenId,
-      callerTokenId: args.callerTokenId,
-      issuedAt: args.issuedAt ?? Date.now(),
-    },
-    signature: args.signature ?? "aa",
+  const request = {
+    username: args.username ?? USERNAME,
+    targetTokenId: args.targetTokenId,
+    callerTokenId: args.callerTokenId,
+    issuedAt: args.issuedAt ?? Date.now(),
   };
+  const signature =
+    args.signature ??
+    bytesToHex(signDeviceDisconnect(request, args.signWith ?? ACCOUNT_IRK));
+  return { request, signature };
 }
 
 describe("handleDeviceDisconnect — quarantine + happy path", () => {
@@ -214,7 +227,7 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
     expect((res.body as { error: string }).error).toMatch(/stale/);
   });
 
-  it("403s on an empty signature (Phase 2 structural gate)", async () => {
+  it("403s on an empty signature", async () => {
     const s = await setup();
     await seedDevice(s, { tokenId: "caller" });
     await seedDevice(s, { tokenId: "target" });
@@ -229,6 +242,122 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
       disconnectBody({ targetTokenId: "target", callerTokenId: "caller", signature: "" }),
     );
     expect(res.status).toBe(403);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // task #39 — real IRK-proof enforcement (the fail-open fix)
+  // ──────────────────────────────────────────────────────────────
+
+  it("accepts a valid signature made with the account's CURRENT IRK", async () => {
+    const s = await setup();
+    await seedDevice(s, { tokenId: "caller", label: "Trusted iPhone" });
+    await seedDevice(s, { tokenId: "target", label: "Old iPad" });
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
+    );
+    expect(res.status).toBe(200);
+    expect(await s.pushTokens.get("target")).toBeUndefined();
+  });
+
+  it("rejects a signature made with a rotated-out / foreign IRK", async () => {
+    const s = await setup();
+    await seedDevice(s, { tokenId: "caller" });
+    await seedDevice(s, { tokenId: "target" });
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({
+        targetTokenId: "target",
+        callerTokenId: "caller",
+        signWith: OTHER_IRK,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/signature/);
+    // Target preserved — the bogus signer could NOT silence push.
+    expect(await s.pushTokens.get("target")).not.toBeUndefined();
+  });
+
+  it("rejects a garbage (non-hex) signature", async () => {
+    const s = await setup();
+    await seedDevice(s, { tokenId: "caller" });
+    await seedDevice(s, { tokenId: "target" });
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({
+        targetTokenId: "target",
+        callerTokenId: "caller",
+        signature: "zz-not-hex",
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await s.pushTokens.get("target")).not.toBeUndefined();
+  });
+
+  it("rejects a well-formed signature whose targetTokenId was tampered after signing", async () => {
+    const s = await setup();
+    await seedDevice(s, { tokenId: "caller" });
+    await seedDevice(s, { tokenId: "target" });
+    await seedDevice(s, { tokenId: "victim" });
+    // Sign for `target`, then point both the URL + body at `victim`.
+    const signedForTarget = disconnectBody({
+      targetTokenId: "target",
+      callerTokenId: "caller",
+    });
+    const tampered = {
+      request: { ...signedForTarget.request, targetTokenId: "victim" },
+      signature: signedForTarget.signature,
+    };
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "victim",
+      tampered,
+    );
+    expect(res.status).toBe(403);
+    expect(await s.pushTokens.get("victim")).not.toBeUndefined();
+  });
+
+  it("still enforces quarantine even with a valid current-IRK signature", async () => {
+    const s = await setup();
+    const future = Date.now() + RE_PAIR_QUARANTINE_MS;
+    await seedDevice(s, { tokenId: "caller", quarantineUntil: future });
+    await seedDevice(s, { tokenId: "target" });
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { reason: string }).reason).toBe("quarantine");
+    expect(await s.pushTokens.get("target")).not.toBeUndefined();
   });
 
   it("403s on username / url mismatch", async () => {
@@ -293,7 +422,7 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
     const future = Date.now() + RE_PAIR_QUARANTINE_MS;
     await s.usernames.put({
       username: USERNAME,
-      irkPubHex: "aa".repeat(32),
+      irkPubHex: bytesToHex(ACCOUNT_IRK.publicKey),
       claimedAt: 1,
       accountType: "multi",
     });
@@ -320,7 +449,7 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
     const s = await setup();
     await s.usernames.put({
       username: USERNAME,
-      irkPubHex: "aa".repeat(32),
+      irkPubHex: bytesToHex(ACCOUNT_IRK.publicKey),
       claimedAt: 1,
       accountType: "multi",
     });

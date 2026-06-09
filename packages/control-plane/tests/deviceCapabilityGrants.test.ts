@@ -500,3 +500,54 @@ describe("requireDeviceScope", () => {
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────
+// task #39 — pin the latent grant-authorization gap.
+//
+// `requireDeviceScope` is the only function that turns a
+// DeviceCapabilityGrant (and therefore its revocation) into an
+// operationally meaningful authorization decision. Today it is exercised
+// ONLY by tests — no production handler calls it — which means revoking a
+// grant currently changes nothing an attacker could exploit. We don't
+// want to wire it into anything new here, but we DO want a guard: if
+// someone later adds a grant-accepting handler, they must consciously
+// either consume `requireDeviceScope` (so revocation bites) or update
+// this pin. The test scans control-plane source for production callers.
+// ──────────────────────────────────────────────────────────────────────
+
+describe("requireDeviceScope has no production consumers (latent grant gap)", () => {
+  it("is not called by any control-plane src/*.ts handler today", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+
+    const here = dirname(fileURLToPath(import.meta.url));
+    const srcDir = join(here, "..", "src");
+
+    const callers: string[] = [];
+    for (const name of readdirSync(srcDir)) {
+      if (!name.endsWith(".ts")) continue;
+      // The definition lives in deviceCapabilityGrants.ts — skip it; we
+      // care about OTHER files invoking it.
+      if (name === "deviceCapabilityGrants.ts") continue;
+      const raw = readFileSync(join(srcDir, name), "utf8");
+      // Strip line + block comments so prose that mentions the name
+      // (e.g. "...verification at requireDeviceScope (defense-in-depth")
+      // isn't mistaken for a call site.
+      const code = raw
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      // A production CALL site looks like `requireDeviceScope(` — an
+      // import or a comment mentioning the name does not.
+      if (/\brequireDeviceScope\s*\(/.test(code)) {
+        callers.push(name);
+      }
+    }
+
+    // If this fails, a new handler started authorizing via device grants.
+    // Either that's intended (grants now bite — update this pin and make
+    // sure handleRevokeDeviceGrant's effect is covered for that path), or
+    // it's a half-wired hole. Do NOT just delete the assertion.
+    expect(callers).toEqual([]);
+  });
+});
