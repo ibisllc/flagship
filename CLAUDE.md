@@ -121,7 +121,66 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-09**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
+
+### 2026-06-10 session — ENCRYPTED BOX e2e PROVEN ON METAL + cert-model plan
+
+**⭐ MILESTONE: the encrypted-box end-to-end works on real hardware.** After a long
+debug chain, a real encrypted box (`abc5.harry1.flagship.services`) reached a genuine
+**Let's Encrypt green padlock** (issuer CN=YR1, per-user cert `[harry1, *.harry1]`),
+serving content, `.services` content-blind. The #27 saga's entire downstream is
+validated. (The unlock was MANUAL via the `manual` keyword + recovery passphrase — the
+PHONE-approval unlock still needs a fresh end-to-end run, see TODO.)
+
+**NEXT SESSION = EXECUTE THE CERT-MODEL MIGRATION.** Full detailed plan in
+`docs/cert-model-A-prime-migration.md` (all decisions LOCKED). Headline: move off the
+current model **C** (per-box key + per-user wildcard `*.<user>`, each box re-mints →
+hits LE's duplicate-cert limit at >5 boxes + forced the `--` name hack) to **A′**:
+- **A′ = per-box wildcard** `[<server>.<user>, *.<server>.<user>]` — box-local key,
+  never shared, distinct per box (no duplicate-limit), covers `<service>.<server>.<user>`.
+- **Revert `--`** flattening → hierarchical `<service>.<server>.<user>`.
+- **Three trust tiers** (the share-URL encodes the assurance): canonical
+  `<service>.<server>.<user>` (security+hardware, pinned) · `<service>.<user>` (security,
+  hardware-agnostic, leader-routed — the EXISTING multi-server mechanism, KEPT) ·
+  `voi.ci/<blurb>` (convenience redirector, visible 302, trust-us).
+- **Canonical long-form HTTPS = the root primitive** — incl. delivering a tier-2
+  `<service>.<user>` key to a box over its own pinned pipe (phone→box direct, NOT `.com`).
+- **voi.ci stays a path redirector** (no per-service certs, no voi.ci LE exposure).
+- **Cert-fingerprint pinning** (hard-fail) off the STK-signed daemon-status fingerprint
+  — the real defense against a `.com` rogue cert.
+- **PSL** for flagship.services: file once there are real users (per LE).
+- The post-cert-rebuild **test TODO** lives at the bottom of that doc (the rebuild
+  touches names/certs/DNS/routing/all clients → full validation pass follows).
+
+**What landed this session (all committed + pushed; `main` green, tree clean):**
+- **Boot-unlock brought up on metal** — initramfs Wi-Fi (op-mode module staging, DNS
+  resolv.conf+NSS, CA bundle, wired DHCP) `7db385a`/`de10869`/`c2617a9`/`8101e6b`;
+  Beacon E `installing`; **wait-forever for phone + `manual` keyword override + mailbox
+  heartbeat** `964cd88`; boot worker fixes — **service binding to the identity plane**
+  `d17ae01` (same-zone Worker→Worker fetch was returning HTML), **fetch `this`-binding
+  1101 fix** `242ab68`, no-store directory reads `76aa05e`.
+- **#52 sign-out gate** `8f9c9c0` · **/pods serial→orderRef** `aa78e2b` · **iOS
+  install-progress** `48a4b9e` · **decommission failed servers (free the name)**
+  `240ac3e` + dead-server status `e4b38e5` · **3-state liveness (waiting/coming-online/
+  dead)** `56910d1` · **monotonic install checklist (phase order)** `97f63c5` ·
+  **liveness bridge (live box reads online) + daemon-status heartbeat** `41a039a` ·
+  Dock progress contrast `73cf35f`.
+- **Cert-security (committed, NOT deployed — deploy WITH the cert rebuild):** CAA
+  CA-restriction publishing `ca29a0b`; CT-log rogue-cert monitor (6h cron, owner
+  push) `1f8086e`.
+- **Notify pipe FIXED (root cause of "no phone permission ever"):** the boot→`.com`
+  notify shared secret was mismatched (silent 401) → re-synced `NOTIFY_SHARED_SECRET`
+  (boot) and `BOOT_NOTIFY_SECRET` (.com) to one value. (No commit — secret rotation.)
+- Security tracking added to the pre-GA list `b52762f` (/pods enumeration; CAA+CT;
+  daemon reporting).
+
+**OWNER-SIDE (carry into next session):** rebuild the iOS app (push token + all the
+UX); deploy `.com` + apply migration `0047_ct_alerts.sql` + wire `CloudflareDnsClient`
+as the CAA client (do this WITH the cert rebuild); rebuild+re-sign the Mac burner after
+the A′ daemon change; then the phone-approval unlock e2e.
+
+Gates (2026-06-10): `npx vitest run` 4517 (351 files) · iOS 824 · Android 620 · burner
+175 TS + 105 swift · webapp green · `npx tsc -b` clean.
 
 ### 2026-06-09 session — what landed + the live encrypted-unlock failure
 

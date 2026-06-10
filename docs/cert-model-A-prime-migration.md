@@ -13,6 +13,18 @@ test boxes (abc*) get decommissioned, not migrated.
 > anything). Let's Encrypt handles the issuance MITM; CAA + CT + client-side
 > cert-fingerprint **pinning** make it verifiable that we are not cheating.
 
+## Root primitive (owner direction — foundational)
+
+**HTTPS/WSS to a box's canonical long-form URL `<server>.<user>.flagship.services` is
+THE primitive** — the most secure starting point we can build, because that name is
+served by a cert minted on the box's own metal and pinned to the box's STK-signed
+fingerprint. Everything bootstraps from it:
+- It is the channel for **delivering a `<service>.<user>` cert key to a box** (tier 2,
+  below): the phone mints the shared service cert, opens the box's canonical pinned
+  pipe, and hands the box the key over it — **`.com` is NOT in the key-delivery loop**
+  (phone → box direct, cert-pinned). "We can't build anything more secure as a
+  starting point" — so we anchor on it rather than inventing a side channel.
+
 ## Model recap (how we got here)
 
 - **A** (original, security-first): per-box, box's own name, box-local key. Clean,
@@ -182,24 +194,68 @@ existing voi.ci appId/blurb encoding still maps correctly after the name change.
 Surface the STK-signed `certSha256` to the clients; pin on connect to
 `<server>.<user>` (+ voi.ci). The daemon heartbeat already reports it.
 
-### Phase 5 — shared multi-server services `<service>.<user>` (most complex; can defer)
-Phone (or leader) mints `<service>.<user>`, seals the key to each serving box's STK,
-delivers via `.com` (ciphertext only); leader-selection harness routes the name to
-the current leader. Opt-in, one-service blast radius. Build last.
+### Phase 5 — preserve tier 2 (`<service>.<user>`) under A′ — REQUIRED, not optional
+The multi-server mechanism ALREADY EXISTS (the harness exposes multi-server APIs) and
+must be KEPT (owner direction). CRUCIAL: today tier 2 rides the per-user wildcard
+`*.<user>` that every box holds (model C) — A′ REMOVES that wildcard, so tier 2 must
+move to a shared PER-SERVICE cert or it regresses. The path:
+1. The phone (trust root) mints the `<service>.<user>` cert (DNS-01; `.com` publishes
+   the TXT). Distinct per service → no duplicate-cert limit.
+2. The phone DELIVERS the key to each serving box **over the box's canonical pinned
+   pipe** (`<server>.<user>` HTTPS — the root primitive; NOT via `.com`). The box then
+   serves `<service>.<user>` with it.
+3. The EXISTING leader-selection routing directs `<service>.<user>` requests to the
+   chosen box. `voi.ci/<blurb>` → `<service>.<user>` → that routing.
+Blast radius is one service; the key lives only on the boxes that serve it, delivered
+over the strongest channel we have. This is the integral consequence of dropping the
+per-user wildcard — schedule it WITH Phase 1/2, not after.
 
-## Decisions to lock before executing
+## Decisions — ALL LOCKED (owner, this session)
 
-1. **A′ confirmed** as the model (per-box wildcard, box-local key, no sharing)? (Y/N)
-2. **Revert `--`** to hierarchical names? (Y/N — recommended Y)
-3. **voi.ci = redirector only** (DECIDED): no per-service certs, no LE increase, no
-   PSL for voi.ci; just keep the path redirector and update its targets. ✓ locked.
-4. **File PSL** for flagship.services once there are real users (deferred per LE)?
-5. **Shared multi-server services**: in-scope this migration (Phase 5) or later?
-   (rec: later — A′ + redirector cover the common case first.)
-6. **Pinning**: pin to the STK-signed fingerprint (recommended) — confirm the clients
-   should hard-fail on mismatch (vs warn). (rec: hard-fail.)
-7. **Tier 2 (`<service>.<user>`) availability**: is it offered for EVERY service
-   (every service gets leader-selection + a shared cert, so voi.ci/blurb always has a
-   service+user target), or ONLY for services the owner opts into hardware-agnostic
-   mode (single-box services stay canonical-only, and voi.ci/blurb → canonical)?
-   This decides how early Phase 5 (shared cert + leader) is actually needed.
+1. **A′** — per-box wildcard `*.<server>.<user>`, box-local key, never shared. ✓
+2. **Revert `--`** to hierarchical `<service>.<server>.<user>`. ✓
+3. **voi.ci = path redirector only** — no per-service certs, no LE increase, no PSL for
+   voi.ci; keep the redirector, retarget it to the post-revert names. ✓
+4. **PSL for flagship.services** — file as soon as there are real users (deferred per
+   LE's own guidance). ✓
+5. **Tier 2 (`<service>.<user>`) KEPT** — the existing multi-server/leader mechanism
+   stays; preserving it under A′ is REQUIRED (Phase 5), via shared per-service cert +
+   canonical-pipe key delivery. ✓
+6. **Pinning** — clients pin the STK-signed fingerprint and HARD-FAIL on mismatch. ✓
+7. **Canonical long-form HTTPS is the root primitive** — including delivering the
+   tier-2 service key to a box. ✓
+
+## Post-cert-rebuild test TODO (run AFTER the rebuild — it touches everything)
+
+The cert/name rebuild changes issuance, names, DNS, routing, and every client, so a
+full validation pass must follow it. Open tests:
+- **Full regression sweep**: `npx vitest run`, iOS XCTests, Android gradle, burner
+  swift, webapp — all green post-rebuild.
+- **A′ issuance e2e (hardware)**: fresh burn → box mints `[<server>.<user>,
+  *.<server>.<user>]`, serves BOTH `<server>.<user>` AND `<service>.<server>.<user>`
+  with a real LE green padlock.
+- **`--` → hierarchical**: every URL builder/parser/display/route on all 3 surfaces +
+  voi.ci targets + manifest/appId encoding; no stale `--` anywhere.
+- **Tier 2 e2e**: phone mints `<service>.<user>`, delivers the key over the box's
+  canonical pinned pipe, box serves it, leader routing works, `voi.ci/<blurb>` 302s to
+  it.
+- **Cert pinning**: client connects to `<server>.<user>` and ACCEPTS the box-reported
+  fingerprint; client REJECTS (hard-fail) a mismatched cert.
+- **CAA**: `dig CAA` shows the LE restriction on the user zone; an off-list CA is
+  refused.
+- **CT monitoring**: the cron runs; a planted unexpected cert (test) → owner push +
+  audit, deduped; no false alarm with no baseline.
+- **Liveness (hardware)**: a live box (provision live + daemon heartbeat) reads
+  "online" in the app; the daemon-status heartbeat populates real cert info.
+- **Phone-approval unlock e2e**: now that the notify pipe is fixed — fresh box waits →
+  Approve from the app (push AND poll paths) → disk unlocks. (Never yet done end-to-end
+  with a phone approval; manual-unlock proven.)
+- **Decommission e2e**: delete a dead/pending server from the phone → name freed →
+  reusable; mid-install box that later registers is cleanly rejected.
+- **voi.ci redirector**: `voi.ci/<blurb>` → correct post-revert target; non-security
+  link-sharing only.
+- **Deploys to flip on**: apply D1 migration `0047_ct_alerts.sql`; wire
+  `CloudflareDnsClient` as the CAA client; deploy `.com`; rebuild+re-sign the Mac
+  burner; rebuild iOS app (push token + all UX).
+- **Carry-over checks**: #52 same-day-rotation (why a live rotation beat the 3d grace);
+  Recovery Phase B on-device validation; iOS owner-device confirmations.
