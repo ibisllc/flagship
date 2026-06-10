@@ -1217,6 +1217,15 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
       .run();
   }
 
+  async refreshExpiry(serverDomain: string, requestNonceHex: string, expiresAt: number) {
+    await this.db
+      .prepare(
+        "UPDATE secret_mailbox SET expires_at = ?1 WHERE server_domain = ?2 AND request_nonce_hex = ?3",
+      )
+      .bind(expiresAt, serverDomain, requestNonceHex)
+      .run();
+  }
+
   async putResponse(
     serverDomain: string,
     requestNonceHex: string,

@@ -38,12 +38,13 @@ const HEX128 = /^[0-9a-f]{128}$/;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes
 const LEASE_ID = /^[0-9a-fA-F]{16,128}$/;
 
-// 30 min — ALIGNED to the box's relay poll window (default 1800s = 30 min in
-// the burner/boot-stage). The request stays visible + approvable on the phone
-// for exactly as long as the box is still polling; once it lapses the phone
-// shows "box stopped waiting" instead of a stale Approve that can't be heard.
-// (The box re-posts on every boot, so this is just the single-boot lifetime.)
-const DEFAULT_MAILBOX_TTL_MS = 30 * 60_000;
+// 10 min — the LIVENESS window, not a deadline. The box waits for the phone
+// effectively forever and re-announces (heartbeat) every ~2 min, refreshing
+// this row's expiry, so a waiting box keeps the request visible + approvable
+// indefinitely. Once the box powers off the heartbeats stop and the row lapses
+// in ~10 min, which is how the phone honestly flips from "waiting" to "box
+// stopped — power-cycle it." Re-announce refreshes expiry but does NOT re-push.
+const DEFAULT_MAILBOX_TTL_MS = 10 * 60_000;
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 
@@ -291,7 +292,11 @@ async function handlePostRequest(
 ): Promise<BootResponse> {
   const now = deps.now ?? (() => Date.now());
   const ttlMs = deps.mailboxTtlMs ?? DEFAULT_MAILBOX_TTL_MS;
-  const pushDedupMs = deps.pushDedupMs ?? DEFAULT_PUSH_DEDUP_MS;
+  // Push dedup is no longer consulted on a re-announce: a heartbeat (duplicate
+  // nonce) refreshes the TTL and returns deduped WITHOUT re-notifying, so a
+  // single push fires per nonce regardless of heartbeat cadence. The
+  // pushDedupMs config surface is retained for callers but unused here.
+  void (deps.pushDedupMs ?? DEFAULT_PUSH_DEDUP_MS);
 
   // Rule 1 — malformed body (the box's STK-signed SecretRequest envelope).
   const b = body as {
@@ -388,19 +393,22 @@ async function handlePostRequest(
     consumedAt: null,
   });
 
-  // Idempotency + per-nonce dedup. A duplicate nonce is NOT an error —
-  // the box re-announcing/polling collapses to the existing pending row.
-  // We only fire the notify pipe when no push has fired for this row
-  // within the dedup window, so repeated announces send ONE push.
+  // Idempotency + per-nonce dedup. A duplicate nonce is NOT an error — it is
+  // the box's HEARTBEAT re-announcing the SAME parked request (same nonce). A
+  // heartbeat must (a) refresh the row's TTL so a short DEFAULT_MAILBOX_TTL_MS
+  // stays alive while the box waits, and (b) NEVER re-notify — the first
+  // announce already pushed the phone. So on a duplicate we bump expires_at and
+  // return deduped without touching the notify pipe.
   if (!put.ok) {
     if (put.reason !== "duplicate nonce") {
       return { status: 409, body: { error: put.reason } };
     }
-    const existing = await deps.secretMailbox.getRequest(r.serverDomain, nonceHex);
-    if (existing && existing.expiresAt > now() && now() - existing.lastPushAt < pushDedupMs) {
-      // A recent push already fired — collapse (no second push).
-      return { status: 200, body: { ok: true, requestNonceHex: nonceHex, deduped: true } };
-    }
+    const refreshedExpiry = now() + ttlMs;
+    await deps.secretMailbox.refreshExpiry(r.serverDomain, nonceHex, refreshedExpiry);
+    return {
+      status: 200,
+      body: { ok: true, requestNonceHex: nonceHex, deduped: true, expiresAt: refreshedExpiry },
+    };
   }
 
   // Fire the notify pipe (server-to-server → identity plane → push).

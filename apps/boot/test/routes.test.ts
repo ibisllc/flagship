@@ -325,6 +325,31 @@ describe("boot routes — request → notify → response → poll round-trip", 
     expect(notify.calls.length).toBe(1);
   });
 
+  it("a heartbeat re-announce EXTENDS the parked row's expiresAt (keeps a waiting box alive)", async () => {
+    const { req, body } = secretRequestBody(0x67);
+    const reqPath = "/api/boot/request";
+    const nonceHex = bytesToHex(req.nonce);
+
+    const first = await routeBoot(deps, "POST", reqPath, boxAuth("POST", reqPath, 64), body);
+    expect(first?.status).toBe(200);
+    const row1 = await deps.secretMailbox.getRequest(SERVER_A, nonceHex);
+    const firstExpiry = row1!.expiresAt;
+    expect(firstExpiry).toBeGreaterThan(now);
+
+    // Time advances toward the original TTL; the box heartbeats the SAME nonce.
+    now += 9 * 60_000;
+    const beat = await routeBoot(deps, "POST", reqPath, boxAuth("POST", reqPath, 65), body);
+    expect(beat?.status).toBe(200);
+    expect((beat!.body as { deduped?: boolean }).deduped).toBe(true);
+
+    const row2 = await deps.secretMailbox.getRequest(SERVER_A, nonceHex);
+    // expires_at bumped forward to now+ttl — strictly later than the first.
+    expect(row2!.expiresAt).toBeGreaterThan(firstExpiry);
+    expect(row2!.expiresAt).toBe(now + 10 * 60_000);
+    // Still exactly one push — the heartbeat does NOT re-notify.
+    expect(notify.calls.length).toBe(1);
+  });
+
   it("box cannot POST a response (owner-only write route)", async () => {
     const { req } = secretRequestBody(0x77);
     const sealed = buildSealedSecretResponse(new Uint8Array(32).fill(1), req);

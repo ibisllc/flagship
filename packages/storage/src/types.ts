@@ -696,6 +696,13 @@ export interface SecretMailboxStorage {
   /** Confirm a push fired for a row (writes lastPushAt). */
   touchLastPushAt(serverDomain: string, requestNonceHex: string, at: number): Promise<void>;
   /**
+   * Extend a parked request's TTL. Called on every (re-)announce so a
+   * heartbeat re-POST keeps a waiting box's row alive; when the box powers
+   * off the heartbeats stop and the row lapses (the "box stopped" signal).
+   * No-op when no matching row exists.
+   */
+  refreshExpiry(serverDomain: string, requestNonceHex: string, expiresAt: number): Promise<void>;
+  /**
    * Phone stores its sealed reply against an existing request. Returns
    * `ok:false` with `'unknown request'` when no matching un-expired row
    * exists, or `'already answered'` when a reply is already on file

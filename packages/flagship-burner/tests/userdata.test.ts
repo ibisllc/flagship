@@ -1074,7 +1074,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "32909666b0834b7f368091f364890473c1a373adde6af6a0a05cc9b07695553e",
+      "3af3dcbada6cffa651bf6aaf6edd697efbb9f78d2e04d113d280cf953eaf6a77",
     );
   });
 });

@@ -1751,7 +1751,7 @@ public enum UserData {
         BOOT_HOST="${BOOT_HOST%/}"
         IDENTITY_KEY=/boot/identity.pem
         UNSEAL_HELPER=/bin/flagship-unseal
-        RELAY_WINDOW_SECS="${FLAGSHIP_RELAY_WINDOW_SECS:-1800}"
+        RELAY_WINDOW_SECS="${FLAGSHIP_RELAY_WINDOW_SECS:-31536000}"
         OUT_UNLOCK=/run/unlock-key
         # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
         # Baked by the bootstrap; default "auto" if the file is absent.
@@ -1886,6 +1886,8 @@ public enum UserData {
             NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
             NOW_MS=$(now_ms)
             # The SecretRequest body keeps its OWN STK signature (unchanged).
+            # NONCE/NOW_MS/CANONICAL/SIG/REQ_BODY are built ONCE here and reused for every
+            # (re-)announce — a heartbeat re-POST replays the SAME signed envelope.
             CANONICAL="flagship/secret-request/v1|${SERVER_DOMAIN}|${PUB_HEX}|unlock-key|${NONCE}|${NOW_MS}"
             SIG="$(sign_canonical "$CANONICAL")"
 
@@ -1893,27 +1895,43 @@ public enum UserData {
             # SecretRequest (its own signature, separate from the box-auth header).
             REQ_PATH="/api/boot/request"
             REQ_URL="${BOOT_HOST}${REQ_PATH}"
-            REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"
             REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
                 "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
 
-            POST_RESP=/run/flagship-secret-request-resp.json
-            POST_CODE=$(curl -sS -o "$POST_RESP" -w "%{http_code}" \\
-                -X POST -H 'content-type: application/json' \\
-                -H "Authorization: $REQ_AUTH" \\
-                --max-time 30 -d "$REQ_BODY" "$REQ_URL" || echo "000")
-            if [ "$POST_CODE" != "200" ]; then
+            # post_request: (re-)announce the SAME signed REQ_BODY with a FRESH box-auth
+            # header. Idempotent on the worker (same nonce) — the first call parks the
+            # request + pushes the phone; later calls only refresh the parked row's TTL.
+            post_request() {
+                POST_RESP=/run/flagship-secret-request-resp.json
+                REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"
+                POST_CODE=$(curl -sS -o "$POST_RESP" -w "%{http_code}" \\
+                    -X POST -H 'content-type: application/json' \\
+                    -H "Authorization: $REQ_AUTH" \\
+                    --max-time 30 -d "$REQ_BODY" "$REQ_URL" || echo "000")
+                [ "$POST_CODE" = "200" ]
+            }
+
+            # Initial announce. A failed FIRST announce is fatal (fall through to manual);
+            # later heartbeat re-announce failures are non-fatal — we keep polling.
+            if ! post_request; then
                 echo "flagship: relay boot-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
                 return 1
             fi
-            echo "flagship: posted unlock-key boot-request; waiting up to ${RELAY_WINDOW_SECS}s for the phone"
+            echo "flagship: posted unlock-key boot-request; waiting for phone approval (type 'manual' then Enter to unlock by passphrase)"
 
             # GET /api/boot/response/:serverDomain/:nonce — box-STK gated, polled. The
             # nonce is a PATH segment now (bound into the signed Authorization envelope),
             # so a fresh header is signed per poll.
             POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"
             POLL_URL="${BOOT_HOST}${POLL_PATH}"
+            # Effectively wait forever for the phone (default ~1 year); the DEADLINE is a
+            # backstop so an env override (FLAGSHIP_RELAY_WINDOW_SECS) can still bound it.
             DEADLINE=$(( $(date +%s) + RELAY_WINDOW_SECS ))
+            # Re-announce the parked request every HEARTBEAT_SECS so a short worker TTL
+            # stays alive while we wait; when the box powers off the TTL lapses and the
+            # phone honestly sees "box stopped".
+            HEARTBEAT_SECS="${FLAGSHIP_RELAY_HEARTBEAT_SECS:-120}"
+            LAST_ANNOUNCE=$(date +%s)
             ATTEMPT=0
             while [ "$(date +%s)" -lt "$DEADLINE" ]; do
                 ATTEMPT=$((ATTEMPT + 1))
@@ -1947,16 +1965,33 @@ public enum UserData {
                 elif [ "$CODE" = "404" ]; then
                     : # no reply yet — expected; keep polling
                 else
+                    # Transient non-200 — we wait forever now, so log and keep polling.
                     echo "flagship: relay boot-response HTTP $CODE; body: $(head -c 200 "$RESP" 2>/dev/null)"
-                    return 1
+                fi
+
+                # Heartbeat: re-announce the parked request to refresh its TTL. A failed
+                # re-post is non-fatal — keep polling.
+                if [ $(( $(date +%s) - LAST_ANNOUNCE )) -ge "$HEARTBEAT_SECS" ]; then
+                    if post_request; then
+                        echo "flagship: heartbeat re-announced boot-request (TTL refreshed)"
+                    else
+                        echo "flagship: heartbeat re-announce failed (HTTP $POST_CODE); continuing"
+                    fi
+                    LAST_ANNOUNCE=$(date +%s)
                 fi
 
                 BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 3 : 15))
-                echo "flagship: no phone reply yet (attempt $ATTEMPT); sleeping $BACKOFF"
-                sleep "$BACKOFF"
+                echo "flagship: no phone reply yet (attempt $ATTEMPT); waiting $BACKOFF (type 'manual' then Enter to unlock by passphrase)"
+                # Interruptible wait: any line typed on the console (e.g. Enter) drops to
+                # the manual disk passphrase prompt. On a headless box read -t blocks for
+                # BACKOFF and times out (acts as the sleep) — so it waits forever.
+                if read -t "$BACKOFF" -r _key < /dev/console 2>/dev/null && [ "$_key" = "manual" ]; then
+                    echo "flagship: manual unlock selected — falling through to the disk passphrase prompt"
+                    return 1
+                fi
             done
 
-            echo "flagship: relay window (${RELAY_WINDOW_SECS}s) elapsed with no phone reply"
+            echo "flagship: relay backstop window (${RELAY_WINDOW_SECS}s) elapsed with no phone reply"
             return 1
         }
 

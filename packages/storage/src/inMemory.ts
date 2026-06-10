@@ -621,6 +621,11 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     if (r) r.lastPushAt = at;
   }
 
+  async refreshExpiry(serverDomain: string, requestNonceHex: string, expiresAt: number) {
+    const r = this.rows.get(this.k(serverDomain, requestNonceHex));
+    if (r) r.expiresAt = expiresAt;
+  }
+
   async putResponse(
     serverDomain: string,
     requestNonceHex: string,
