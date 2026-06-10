@@ -138,11 +138,43 @@ export function renderPendingCard(order) {
   `;
 }
 
-/** Classify the server's live status into one of three buckets. */
-export function classifyServer(server, pod) {
+/** Grace window (ms) after registration during which a not-yet-online box
+ *  reads "coming online" rather than "never came online". 20 minutes —
+ *  shared across iOS/Android (PodInfo.comingOnlineGraceMs /
+ *  COMING_ONLINE_GRACE_MS). */
+export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
+
+/**
+ * Classify the server's live status. A registered box that hasn't checked in
+ * is NOT automatically dead: distinguish
+ *   - waiting-for-approval: a LIVE pending unlock request exists for it (the
+ *     box is actively trying to boot and waiting for the owner) → no delete;
+ *   - coming-online: registered recently, no live request, inside the grace
+ *     window → provisioning, no delete;
+ *   - never-seen: registered, no live request, no check-in, past the grace
+ *     window → genuinely dead, offer the free-the-name delete.
+ *
+ * @param {object} server  registered server (may carry `revoked`)
+ * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert)
+ * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
+ */
+export function classifyServer(server, pod, opts = {}) {
   if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
-  if (!pod || pod.lastReported == null) return { kind: "never-seen", label: "never seen" };
-  const ageMs = Date.now() - pod.lastReported;
+  const now = opts.now ?? Date.now();
+  if (!pod || pod.lastReported == null) {
+    // Registered but never checked in. A live unlock request means it's
+    // actively waiting for the owner — not dead.
+    if (opts.hasLiveUnlockRequest) {
+      return { kind: "waiting-for-approval", label: "waiting for approval" };
+    }
+    // Within the grace window after registration ⇒ still coming online.
+    const registeredAt = pod?.registeredAt;
+    if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
+      return { kind: "coming-online", label: "coming online…" };
+    }
+    return { kind: "never-seen", label: "never seen" };
+  }
+  const ageMs = now - pod.lastReported;
   // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
@@ -181,12 +213,12 @@ function formatDays(ms) {
  * leases mean the daemon is reachable without phone tap) and otherwise
  * label the row as "phone-tap only" — accurate to the default.
  */
-export function renderServerCard(server, pod) {
-  const c = classifyServer(server, pod);
+export function renderServerCard(server, pod, opts = {}) {
+  const c = classifyServer(server, pod, opts);
   const dot = `<span class="server-dot server-dot--${c.kind}" aria-hidden="true"></span>`;
   const pillClass = c.kind === "online" ? "pill ok"
     : c.kind === "revoked" || c.kind === "cert-expired" ? "pill err"
-    : c.kind === "cert-expiring-soon" ? "pill warn"
+    : c.kind === "cert-expiring-soon" || c.kind === "waiting-for-approval" ? "pill warn"
     : "pill";
   const apps = pod?.appsServed ?? [];
   const serviceCount = Array.isArray(apps) ? apps.length : 0;
@@ -567,11 +599,26 @@ export async function renderHome() {
       return;
     }
 
+    // Account-level "which boxes are waiting for my unlock approval?" — ONE
+    // fetch, reused by every card so a registered-but-not-yet-checked-in box
+    // with a LIVE unlock request reads "waiting for approval" (not "never
+    // seen") and keeps its delete button hidden. Best-effort: a failure (no
+    // UMK, network blip) leaves the set empty so cards fall back to the
+    // age-based grace classification.
+    const awaitingApproval = await fetchAwaitingApprovalSet();
+
     // Registered servers first (authoritative), pending orders below.
     for (const s of body.servers) {
       const card = document.createElement("div");
       card.className = "card server-card";
-      card.innerHTML = renderServerCard(s, podStatusByDomain.get(s.serverId.toLowerCase()));
+      const hasLiveUnlockRequest = awaitingApproval.has(
+        String(s.serverId ?? "").toLowerCase(),
+      );
+      card.innerHTML = renderServerCard(
+        s,
+        podStatusByDomain.get(s.serverId.toLowerCase()),
+        { hasLiveUnlockRequest },
+      );
       list.appendChild(card);
     }
     for (const order of pendingOrders) {
@@ -606,6 +653,31 @@ export async function renderHome() {
     sessionStatusEl.textContent = "no servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
+  }
+}
+
+/**
+ * Account-level set of lowercased fqdns that have a LIVE (non-expired) pending
+ * boot-unlock request right now — the box is actively waiting for the owner's
+ * approval. Reuses the same `fetchVerifiedRequests` the per-server approval
+ * flow uses (IRK-signed mailbox-auth read; re-verified against the directory
+ * STK). Best-effort: any failure (no UMK, network) yields an EMPTY set so the
+ * card classification falls back to the registration-age grace window — never
+ * mislabels a box as waiting on a blip.
+ *
+ * @returns {Promise<Set<string>>}
+ */
+async function fetchAwaitingApprovalSet() {
+  try {
+    const { fetchVerifiedRequests } = await import("../lib/bootApproval.js");
+    const reqs = await fetchVerifiedRequests();
+    return new Set(
+      (reqs ?? [])
+        .filter((r) => r.purpose === "unlock-key")
+        .map((r) => String(r.serverDomain ?? "").toLowerCase()),
+    );
+  } catch {
+    return new Set();
   }
 }
 

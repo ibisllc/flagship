@@ -69,6 +69,12 @@ public struct ServerDetailScreen: View {
                         // a server": the server IS paired; we just don't have its
                         // detail this instant. Pull-to-refresh retries.
                         connecting(c: c)
+                        // Even before the daemon BFF answers, a box at the boot-
+                        // unlock step is actively waiting for the owner — surface
+                        // the Approve card here too (it renders nothing when idle).
+                        if let fqdn = deadServerFqdn, !fqdn.isEmpty {
+                            BootUnlockApprovalCard(serverDomain: fqdn)
+                        }
                     }
                 case .loaded(let d):
                     overview(d: d, c: c)

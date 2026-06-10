@@ -91,6 +91,11 @@ fun HomeScreen(
      *  Apps tab on Android v1.0); the chip is
      *  the first visible v2 surface here. */
     deviceCapability: DeviceCapabilityBlock? = null,
+    /** Lowercased fqdns of servers with a LIVE pending boot-unlock request
+     *  (the box is waiting for the owner's approval). Drives the per-card
+     *  liveness classification — a waiting box reads "Waiting for approval",
+     *  never "Never came online". Source: AppState.serversAwaitingApproval. */
+    awaitingApproval: Set<String> = emptySet(),
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -151,6 +156,9 @@ fun HomeScreen(
                     PodCard(
                         pod = pod,
                         isLeader = pod.podId == leaderPodId,
+                        liveness = pod.livenessState(
+                            hasLiveUnlockRequest = awaitingApproval.contains(pod.fqdn.lowercase()),
+                        ),
                         onTap = { onOpenPod(pod) },
                         onSetLeader = { onSetLeader(pod) },
                         onDelete = { onDeleteServer(pod) },
@@ -236,11 +244,16 @@ fun PodCard(
      *  server via the release/free-the-name flow. No-op default keeps the
      *  card previewable + leaves a live server's card unchanged. */
     onDelete: () -> Unit = {},
+    /** Derived per-server liveness. Defaults to deriving from the pod alone
+     *  (no live unlock request known) so existing callers / previews keep
+     *  their behaviour; the Home list supplies the account-level signal. */
+    liveness: PodInfo.LivenessState = pod.livenessState(hasLiveUnlockRequest = false),
 ) {
-    // A pending order, or a registered box whose daemon never checked in, is
-    // deletable straight from the list via the release flow. A live, checked-in
-    // server is NOT — it keeps the lost/stolen revoke on its detail page.
-    val deletable = pod.status == PodInfo.Status.PENDING || !pod.cameOnline
+    // A pending order, or a GENUINELY dead box (registered, no live unlock
+    // request, no check-in, past the grace window), is deletable straight from
+    // the list via the release flow. A live, checked-in server — OR one that's
+    // waiting for approval / still coming online — is NOT.
+    val deletable = pod.status == PodInfo.Status.PENDING || liveness == PodInfo.LivenessState.DEAD
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
@@ -271,21 +284,48 @@ fun PodCard(
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // A registered box whose daemon never checked in shows a
-                    // SINGLE "Never came online" status (not "Online" —
-                    // registration alone isn't live), so the owner knows to
-                    // decommission it. Pending installs keep their own status.
-                    val neverCameOnline = pod.status == PodInfo.Status.ONLINE && !pod.cameOnline
+                    // Liveness-driven pill: a box waiting for unlock approval
+                    // reads "Waiting for approval", a recently-registered box
+                    // "Coming online…", and only a genuinely-stale box "Never
+                    // came online" (with the deletable framing).
+                    val pillLabel: String
+                    val pillKind: FSPillKind
+                    val pillTag: String?
+                    when (liveness) {
+                        PodInfo.LivenessState.DEAD -> {
+                            pillLabel = "Never came online"; pillKind = FSPillKind.Offline
+                            pillTag = "pod-card-never-online"
+                        }
+                        PodInfo.LivenessState.WAITING_FOR_APPROVAL -> {
+                            pillLabel = "Waiting for approval"; pillKind = FSPillKind.Provisioning
+                            pillTag = "pod-card-waiting-approval"
+                        }
+                        PodInfo.LivenessState.COMING_ONLINE -> {
+                            // A pre-registration pending pod keeps its install-flow
+                            // "Pending" wording; a registered-but-not-yet-online box
+                            // reads "Coming online".
+                            if (pod.status == PodInfo.Status.PENDING) {
+                                pillLabel = "Pending"; pillTag = null
+                            } else {
+                                pillLabel = "Coming online…"; pillTag = "pod-card-coming-online"
+                            }
+                            pillKind = FSPillKind.Provisioning
+                        }
+                        PodInfo.LivenessState.ONLINE -> {
+                            pillLabel = pod.status.name.lowercase().replaceFirstChar { it.uppercase() }
+                            pillKind = when (pod.status) {
+                                PodInfo.Status.ONLINE -> FSPillKind.Online
+                                PodInfo.Status.PENDING -> FSPillKind.Provisioning
+                                PodInfo.Status.OFFLINE -> FSPillKind.Offline
+                                PodInfo.Status.UNKNOWN -> FSPillKind.Offline
+                            }
+                            pillTag = null
+                        }
+                    }
                     FSPill(
-                        label = if (neverCameOnline) "Never came online"
-                            else pod.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                        kind = if (neverCameOnline) FSPillKind.Offline else when (pod.status) {
-                            PodInfo.Status.ONLINE -> FSPillKind.Online
-                            PodInfo.Status.PENDING -> FSPillKind.Provisioning
-                            PodInfo.Status.OFFLINE -> FSPillKind.Offline
-                            PodInfo.Status.UNKNOWN -> FSPillKind.Offline
-                        },
-                        modifier = if (neverCameOnline) Modifier.testTag("pod-card-never-online") else Modifier,
+                        label = pillLabel,
+                        kind = pillKind,
+                        modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
                     )
                 }
                 // "Your server is being installed" — a thin determinate

@@ -19,6 +19,10 @@ public struct HomeTab: View {
     /// IRK, so we don't fire it on every Home re-render). An explicit pull-
     /// to-refresh always re-runs it.
     @State private var didReconcileServerTruth = false
+    /// Account-level "which boxes are waiting for my unlock approval?" poller.
+    /// Populates `app.serversAwaitingApproval` so the list / detail / checklist
+    /// can read a per-server waiting state from ONE fetch (no N pollers).
+    @State private var approvalWatcher: BootApprovalWatcher?
     /// Persistent dismiss for the post-creation backup-reminder banner
     /// (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
     /// store is observed so toggling `dismissed` from "Not now"
@@ -82,6 +86,7 @@ public struct HomeTab: View {
                     ),
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
+                    awaitingApproval: app.serversAwaitingApproval,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -107,8 +112,10 @@ public struct HomeTab: View {
                         // An explicit pull-to-refresh is a user-initiated
                         // moment — re-run the full server-truth reconcile
                         // (the biometric prompt is expected here) alongside
-                        // the screen reload.
+                        // the screen reload + a fresh approval poll (so a box
+                        // that just started waiting surfaces its Approve card).
                         await reconcileServerTruth()
+                        await approvalWatcher?.pollOnce()
                         await vm.load()
                     },
                     onSetUpRecovery: {
@@ -157,7 +164,16 @@ public struct HomeTab: View {
             // suppress the nudge for one session than to surface a
             // network blip on the landing screen.
             await refreshRecoveryStatus()
+            // Start the account-level approval poll so a box waiting for its
+            // unlock surfaces an Approve affordance on the list/checklist
+            // without waiting for a push or a per-card poller.
+            if approvalWatcher == nil {
+                let w = BootApprovalWatcher(app: app, makeCoordinator: makeApprovalCoordinator)
+                approvalWatcher = w
+                w.start()
+            }
         }
+        .onDisappear { approvalWatcher?.stop() }
         .onChange(of: app.currentPodId) { _, _ in
             Task { await vm?.load() }
         }
@@ -330,6 +346,36 @@ public struct HomeTab: View {
             ))
         }
         if navigateHome { path.removeAll() }
+    }
+
+    /// Build the boot-approval coordinator for the account-level watcher.
+    /// Mirrors `BootUnlockApprovalCard.makeCoordinator` — same mailbox + active
+    /// account + Keystore-derived keys — so the list poll and the per-card poll
+    /// resolve the identical request set. The IRK derive only fires for the
+    /// signed mailbox-auth read (not a destructive action).
+    private func makeApprovalCoordinator() -> ApprovalSource? {
+        guard let username = app.currentUser else { return nil }
+        return SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: {
+                try await Keystore.deriveIRK(reason: "Check for boxes waiting to unlock")
+            },
+            unsealSeedProvider: { serverDomain in
+                var seeds: [Data] = []
+                if let bak = try? await Keystore.deriveBAK(
+                    serverId: serverDomain,
+                    reason: "Unseal the disk key for \(serverDomain)"
+                ) {
+                    seeds.append(bak.rawRepresentation)
+                }
+                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
+                    seeds.append(irk.rawRepresentation)
+                }
+                return seeds
+            },
+            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+        )
     }
 
     /// #43 + #56 — reconcile the pod list against server truth from ONE
@@ -601,11 +647,12 @@ struct ServerDetailContainer: View {
                 ServerDetailScreen(
                     state: detailVm.detail,
                     metrics: metricsVm.state,
-                    // A registered box whose daemon never checked in surfaces the
-                    // decommission/free-the-name card (distinct from the lost/
-                    // stolen Revoke). Defaults to a live server when the pod is
-                    // momentarily absent from AppState.
-                    deadServer: pod.map { !$0.cameOnline } ?? false,
+                    // The decommission/free-the-name card surfaces ONLY for a
+                    // GENUINELY dead box (registered, no live unlock request, no
+                    // check-in, past the grace window) — never for one that's
+                    // waiting for approval or still coming online. Defaults to a
+                    // live server when the pod is momentarily absent from AppState.
+                    deadServer: pod.map { app.liveness(for: $0) == .dead } ?? false,
                     serverName: pod?.name,
                     deadServerFqdn: pod?.fqdn,
                     onRefresh: {

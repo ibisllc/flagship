@@ -99,7 +99,8 @@ public struct PendingServerReconciler {
             app.upsertRegisteredPod(
                 fqdn: fqdn,
                 name: pendingName ?? Self.serverNameFromFqdn(fqdn),
-                cameOnline: entry.cameOnline
+                cameOnline: entry.cameOnline,
+                registeredAt: entry.registeredAt ?? 0
             )
         }
 

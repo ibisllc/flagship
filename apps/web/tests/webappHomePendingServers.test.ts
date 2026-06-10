@@ -234,3 +234,34 @@ describe("webapp dead-registered server delete (free the name)", () => {
     expect(html).not.toContain("js-delete-dead-server");
   });
 });
+
+describe("webapp classifyServer — three states of a registered-but-not-online box", () => {
+  const server = { serverId: "box.demo.flagship.services" };
+  const now = 1_000_000_000_000;
+
+  it("waiting-for-approval: a live unlock request means it is NOT dead", () => {
+    // No check-in, registered long ago — but a live unlock request is the
+    // overriding signal: the box is actively trying to boot.
+    const pod = { lastReported: null, registeredAt: now - 60 * 60 * 1000 };
+    const c = classifyServer(server, pod, { hasLiveUnlockRequest: true, now });
+    expect(c.kind).toBe("waiting-for-approval");
+    const html = renderServerCard(server, pod, { hasLiveUnlockRequest: true, now });
+    expect(html).not.toContain("js-delete-dead-server");
+  });
+
+  it("coming-online: registered within the grace window, no live request", () => {
+    const pod = { lastReported: null, registeredAt: now - 5 * 60 * 1000 };
+    const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(c.kind).toBe("coming-online");
+    const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(html).not.toContain("js-delete-dead-server");
+  });
+
+  it("never-seen (dead): no live request + past the grace window", () => {
+    const pod = { lastReported: null, registeredAt: now - 60 * 60 * 1000 };
+    const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(c.kind).toBe("never-seen");
+    const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(html).toContain("js-delete-dead-server");
+  });
+});

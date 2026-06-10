@@ -161,6 +161,13 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// reached the cloud. The phone derives `cameOnline` from this client-side
     /// (no backend change needed; the field was already in the /pods response).
     public let lastReported: Int64?
+    /// Wall-clock ms the box's registration was admitted (`registeredAt` in the
+    /// `/pods` wire response, already present). Threaded onto the client model
+    /// so the phone can compute a "coming online" grace window for a box that
+    /// registered recently but hasn't checked in yet — distinct from a box
+    /// registered long ago that genuinely never came online. nil ⇒ a pre-field
+    /// Worker response (defaults to 0 downstream, i.e. no grace).
+    public let registeredAt: Int64?
     /// True iff the directory carries a `currentCert` block for this box (the
     /// daemon reported a real cert). Decoded as a presence flag — the cert
     /// detail itself isn't needed to tell a dead box from a live one.
@@ -170,10 +177,12 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         identityPubKey: String,
         revokedAt: Int64? = nil,
         lastReported: Int64? = nil,
+        registeredAt: Int64? = nil,
         hasCert: Bool = false
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
-        self.revokedAt = revokedAt; self.lastReported = lastReported; self.hasCert = hasCert
+        self.revokedAt = revokedAt; self.lastReported = lastReported
+        self.registeredAt = registeredAt; self.hasCert = hasCert
     }
 
     public init(from decoder: Decoder) throws {
@@ -182,6 +191,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.identityPubKey = try c.decode(String.self, forKey: .identityPubKey)
         self.revokedAt = try c.decodeIfPresent(Int64.self, forKey: .revokedAt)
         self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
+        self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
@@ -197,6 +207,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encode(identityPubKey, forKey: .identityPubKey)
         try c.encodeIfPresent(revokedAt, forKey: .revokedAt)
         try c.encodeIfPresent(lastReported, forKey: .lastReported)
+        try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
     }
 
@@ -206,7 +217,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, currentCert
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert
     }
 }
 

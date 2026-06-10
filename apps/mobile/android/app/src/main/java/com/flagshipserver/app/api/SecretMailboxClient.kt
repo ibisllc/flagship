@@ -157,6 +157,11 @@ data class PodDirectoryEntry(
      *  field was already in the /pods response; the phone derives `cameOnline`
      *  from it client-side (no backend change). Mirror of iOS. */
     val lastReported: Long? = null,
+    /** Wall-clock ms the box's registration was admitted (`registeredAt` in the
+     *  `/pods` wire response). Threaded so the phone can compute a "coming
+     *  online" grace window. null ⇒ a pre-field Worker (treated as 0 = no grace).
+     *  Mirror of iOS PodDirectoryEntry.registeredAt. */
+    val registeredAt: Long? = null,
     /** Present when the daemon has reported a real cert. Decoded as a presence
      *  signal for `cameOnline`. */
     val currentCert: PodCurrentCert? = null,

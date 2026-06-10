@@ -27,7 +27,9 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.BootApprovalWatcher
 import com.flagshipserver.app.core.PendingServerReconciler
+import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
@@ -59,6 +61,24 @@ fun HomeTab() {
     // (the never-ported "home2" fix) and ages out dead pending ghosts. A pure
     // read — NO biometric prompt; Face ID stays only on mutations.
     val reconciler = remember(mailbox) { PendingServerReconciler(app, mailbox) }
+    // Account-level "which boxes are waiting for my unlock approval?" poller.
+    // Populates app.serversAwaitingApproval so the list / detail / checklist
+    // read a per-server waiting state from ONE fetch (no N pollers).
+    val approvalWatcher = remember(mailbox) {
+        BootApprovalWatcher(
+            app = app,
+            makeCoordinator = {
+                app.currentUser.value?.let {
+                    SecretRequestCoordinator(
+                        mailbox = mailbox,
+                        username = it,
+                        irk = com.flagshipserver.app.keystore.KeystoreIrkAccess(),
+                    )
+                }
+            },
+        )
+    }
+    val awaitingApproval by app.serversAwaitingApproval.collectAsState()
     val ctx = LocalContext.current
     // Persistent dismiss for the post-creation backup-reminder banner
     // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
@@ -71,6 +91,16 @@ fun HomeTab() {
     // Reconcile the server list against `/pods` on first appearance and
     // whenever the signed-in account changes. Best-effort + silent.
     LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
+
+    // Account-level approval poll: keep app.serversAwaitingApproval fresh so a
+    // box waiting for unlock surfaces its Approve affordance on the list /
+    // checklist without a push or a per-card poller. 5s cadence, matching iOS.
+    LaunchedEffect(app.currentUser.value) {
+        while (true) {
+            approvalWatcher.pollOnce()
+            kotlinx.coroutines.delay(5_000)
+        }
+    }
 
     // Refresh cloud-recovery enrolment state AND E7 account-reset
     // detection when the tab first appears AND whenever a pod
@@ -154,7 +184,7 @@ fun HomeTab() {
                     // failure the pod is kept so the name never strands.
                     scope.launch { decommissionServer(pod, app, server, toasts) }
                 },
-                onRefresh = { scope.launch { vm.load(); reconciler.reconcile() } },
+                onRefresh = { scope.launch { vm.load(); reconciler.reconcile(); approvalWatcher.pollOnce() } },
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
@@ -163,6 +193,7 @@ fun HomeTab() {
                 accountWasReset = reset,
                 onSignInAgain = { app.signOut() },
                 deviceCapability = capability,
+                awaitingApproval = awaitingApproval,
             )
         }
         composable("server-detail/{podId}") { entry ->

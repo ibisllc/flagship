@@ -34,6 +34,11 @@ public struct HomeScreen: View {
     /// when their scope is absent. Nil ⇒ legacy single-IRK path; no
     /// chip, all actions enabled. Source: AppState.deviceCapability.
     let deviceCapability: DeviceCapabilityBlock?
+    /// Lowercased fqdns of servers with a LIVE pending boot-unlock request
+    /// (the box is waiting for the owner's approval). Drives the per-card
+    /// liveness classification — a waiting box reads "Waiting for approval",
+    /// never "Never came online". Source: AppState.serversAwaitingApproval.
+    let awaitingApproval: Set<String>
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -58,6 +63,7 @@ public struct HomeScreen: View {
         showRecoveryBackupBanner: Bool = false,
         accountWasReset: Bool = false,
         deviceCapability: DeviceCapabilityBlock? = nil,
+        awaitingApproval: Set<String> = [],
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteDeadServer: @escaping (PodInfo) -> Void = { _ in },
@@ -78,6 +84,7 @@ public struct HomeScreen: View {
         self.showRecoveryBackupBanner = showRecoveryBackupBanner
         self.accountWasReset = accountWasReset
         self.deviceCapability = deviceCapability
+        self.awaitingApproval = awaitingApproval
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -363,8 +370,11 @@ public struct HomeScreen: View {
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
                     ForEach(pods) { pod in
+                        let liveness = pod.livenessState(
+                            hasLiveUnlockRequest: awaitingApproval.contains(pod.fqdn.lowercased())
+                        )
                         Button(action: { onOpenPod(pod) }) {
-                            PodCard(pod: pod, isLeader: pod.podId == leaderPodId)
+                            PodCard(pod: pod, isLeader: pod.podId == leaderPodId, liveness: liveness)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
@@ -391,12 +401,12 @@ public struct HomeScreen: View {
                                 } label: {
                                     Label("Cancel server", systemImage: "xmark.circle")
                                 }
-                            } else if !pod.cameOnline {
-                                // Registered during install but never came online:
-                                // a dead box. Decommission it via the same release
-                                // flow (frees the name for reuse) — distinct from
-                                // the lost/stolen Revoke (a live, checked-in server
-                                // still uses the detail-page danger zone).
+                            } else if liveness == .dead {
+                                // GENUINELY dead: registered, no live unlock
+                                // request, no check-in, and past the grace
+                                // window. Decommission via the release flow
+                                // (frees the name) — NOT offered for a box that's
+                                // waiting for approval or still coming online.
                                 Button(role: .destructive) {
                                     onDeleteDeadServer(pod)
                                 } label: {
@@ -511,10 +521,15 @@ public struct PodCard: View {
     @Environment(\.colorScheme) private var scheme
     public let pod: PodInfo
     public let isLeader: Bool
+    /// Derived per-server liveness. Defaults to deriving from the pod alone
+    /// (no live unlock request known) so existing callers / previews keep their
+    /// behaviour; the Home list supplies the account-level waiting signal.
+    public let liveness: PodInfo.LivenessState
 
-    public init(pod: PodInfo, isLeader: Bool = false) {
+    public init(pod: PodInfo, isLeader: Bool = false, liveness: PodInfo.LivenessState? = nil) {
         self.pod = pod
         self.isLeader = isLeader
+        self.liveness = liveness ?? pod.livenessState(hasLiveUnlockRequest: false)
     }
 
     public var body: some View {
@@ -539,14 +554,12 @@ public struct PodCard: View {
                         Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                     }
                     HStack(spacing: FS.space.s2) {
-                        // A box that registered during install but whose daemon
-                        // never checked in shows a SINGLE "Never came online"
-                        // status (not "Online" — registration alone isn't live)
-                        // so the owner knows to decommission it.
+                        // Liveness-driven pill: a box waiting for unlock approval
+                        // reads "Waiting for approval", a recently-registered box
+                        // "Coming online…", and only a genuinely-stale box
+                        // "Never came online" (with the deletable framing).
                         FSPill(statusLabel, kind: statusKind)
-                            .accessibilityIdentifier(
-                                neverCameOnline ? "pod-card-never-online" : "pod-card-status"
-                            )
+                            .accessibilityIdentifier(pillAccessibilityId)
                         // Leader only makes sense for a server that actually
                         // came online (the leader is the daemon the screens
                         // point at) — never badge a dead box as Leader.
@@ -575,29 +588,43 @@ public struct PodCard: View {
             }
         }
     }
-    /// A registered server whose daemon never checked in. `cameOnline`
-    /// defaults true, so this is only ever set for a box detected dead from
-    /// the directory (null lastReported + cert) — pending installs keep their
-    /// own "Pending" status.
-    private var neverCameOnline: Bool {
-        pod.status == .online && !pod.cameOnline
+    private var pillAccessibilityId: String {
+        switch liveness {
+        case .dead:               return "pod-card-never-online"
+        case .waitingForApproval: return "pod-card-waiting-approval"
+        case .comingOnline where pod.status != .pending: return "pod-card-coming-online"
+        default:                  return "pod-card-status"
+        }
     }
     private var statusLabel: String {
-        if neverCameOnline { return "Never came online" }
-        switch pod.status {
-        case .online:  return "Online"
-        case .offline: return "Offline"
-        case .unknown: return "Checking"
-        case .pending: return "Pending"
+        switch liveness {
+        case .dead:               return "Never came online"
+        case .waitingForApproval: return "Waiting for approval"
+        case .comingOnline:
+            // A pre-registration pending pod keeps its install-flow "Pending"
+            // wording; a registered-but-not-yet-online box reads "Coming online".
+            return pod.status == .pending ? "Pending" : "Coming online…"
+        case .online:
+            switch pod.status {
+            case .online:  return "Online"
+            case .offline: return "Offline"
+            case .unknown: return "Checking"
+            case .pending: return "Pending"
+            }
         }
     }
     private var statusKind: FSPillKind {
-        if neverCameOnline { return .offline }
-        switch pod.status {
-        case .online:  return .online
-        case .offline: return .offline
-        case .unknown: return .idle
-        case .pending: return .provisioning
+        switch liveness {
+        case .dead:               return .offline
+        case .waitingForApproval: return .provisioning
+        case .comingOnline:       return .provisioning
+        case .online:
+            switch pod.status {
+            case .online:  return .online
+            case .offline: return .offline
+            case .unknown: return .idle
+            case .pending: return .provisioning
+            }
         }
     }
 }

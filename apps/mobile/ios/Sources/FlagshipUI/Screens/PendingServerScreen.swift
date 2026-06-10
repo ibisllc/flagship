@@ -53,6 +53,15 @@ public struct PendingServerScreen: View {
                     }
                 }
 
+                // The box reaches the boot-unlock step DURING provisioning (an
+                // encrypted disk asks the owner to release its key over the boot
+                // relay). Surface the Approve card right on the checklist so the
+                // owner can approve without hunting through a buried danger zone;
+                // it renders nothing until a live request for this box exists.
+                if let domain = approvalDomain, !domain.isEmpty {
+                    BootUnlockApprovalCard(serverDomain: domain)
+                }
+
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {
                     FSCard {
                         VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -95,6 +104,15 @@ public struct PendingServerScreen: View {
     }
 
     // MARK: - Copy
+
+    /// The fqdn to watch for a boot-unlock request. The pod carries it once
+    /// known; the create-flow's serial-keyed pending pod (no fqdn yet) falls
+    /// back to the domain the provision-status timeline resolves.
+    private var approvalDomain: String? {
+        if !pod.fqdn.isEmpty { return pod.fqdn }
+        let resolved = timeline?.status?.serverDomain
+        return (resolved?.isEmpty == false) ? resolved : nil
+    }
 
     private var pillLabel: String {
         switch timeline?.status?.phase {

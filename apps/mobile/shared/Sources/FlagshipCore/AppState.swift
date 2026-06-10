@@ -120,6 +120,28 @@ public final class AppState {
     /// (the watcher keeps its legacy keep-waiting behaviour).
     public var lastKnownOutstandingOrderRefs: Set<String>?
 
+    /// Lowercased fqdns of servers that currently have a LIVE pending boot-
+    /// unlock request in the identity-plane mailbox (a box waiting for the
+    /// owner's approval). Populated by ONE account-level poll
+    /// (`BootApprovalWatcher`) so the list / card / detail can read a per-server
+    /// "is it waiting for me?" without N pollers. Empty ⇒ none waiting (or not
+    /// polled yet this session).
+    public var serversAwaitingApproval: Set<String> = []
+
+    /// True iff [fqdn] has a live pending unlock request right now. Case-folds
+    /// the lookup. The single bridge from the account-level set into the
+    /// per-server liveness classifier.
+    public func hasLiveUnlockRequest(forFqdn fqdn: String) -> Bool {
+        serversAwaitingApproval.contains(fqdn.lowercased())
+    }
+
+    /// Liveness for [pod] using the account-level waiting set. Convenience over
+    /// `PodInfo.livenessState(hasLiveUnlockRequest:)` so callsites don't repeat
+    /// the set lookup.
+    public func liveness(for pod: PodInfo) -> PodInfo.LivenessState {
+        pod.livenessState(hasLiveUnlockRequest: hasLiveUnlockRequest(forFqdn: pod.fqdn))
+    }
+
     /// W3 — durable list of clouds this phone is a member of. The
     /// single-identity `currentUser` / `pods` / `deviceCapability`
     /// fields reflect the ACTIVE profile (the one the rest of the UI
@@ -366,7 +388,8 @@ public final class AppState {
         fqdn: String,
         name: String,
         description: String? = nil,
-        cameOnline: Bool = true
+        cameOnline: Bool = true,
+        registeredAt: Int64 = 0
     ) -> String {
         let target = fqdn.lowercased()
         if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
@@ -382,7 +405,9 @@ public final class AppState {
                 fqdn: old.fqdn,
                 status: .online,
                 pendingAuthCodeSerial: nil,
-                cameOnline: cameOnline
+                cameOnline: cameOnline,
+                // Keep a known registration time; never downgrade to 0.
+                registeredAt: registeredAt > 0 ? registeredAt : old.registeredAt
             )
             return old.podId
         }
@@ -393,7 +418,8 @@ public final class AppState {
             description: description,
             fqdn: fqdn,
             status: .online,
-            cameOnline: cameOnline
+            cameOnline: cameOnline,
+            registeredAt: registeredAt
         ))
         return id
     }
@@ -487,6 +513,20 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// decommission/free-the-name delete instead of the lost/stolen revoke.
     public let cameOnline: Bool
 
+    /// Wall-clock ms the box's registration was admitted (from `/pods`
+    /// `registeredAt`). Drives the "coming online" grace window: a box that
+    /// registered RECENTLY but hasn't checked in yet is provisioning, not dead.
+    /// 0 ⇒ unknown / not registered (pending pods, demo, a pre-field Worker) —
+    /// treated as "no grace" so a genuinely-old dead box is never masked.
+    public let registeredAt: Int64
+
+    /// Shared grace window (ms) after registration during which a not-yet-
+    /// online box reads "Coming online…" rather than "Never came online".
+    /// 20 minutes — long enough to cover a slow first boot + LUKS unlock, short
+    /// enough that a genuinely-dead box flips to the deletable state. Mirrored
+    /// in Android `PodInfo.COMING_ONLINE_GRACE_MS`.
+    public static let comingOnlineGraceMs: Int64 = 20 * 60 * 1000
+
     /// Deterministic, fqdn-derived pod id. Pod identity is UNIFIED on the
     /// normalized fqdn so the registered-`/pods` pod, the outstanding-orders
     /// reconciler's pod, the pending-pod watcher's flip, and the
@@ -518,7 +558,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         status: Status = .unknown,
         pendingAuthCodeSerial: String? = nil,
         demoServer: DemoServerBlock? = nil,
-        cameOnline: Bool = true
+        cameOnline: Bool = true,
+        registeredAt: Int64 = 0
     ) {
         self.podId = podId
         self.name = name
@@ -528,5 +569,42 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.pendingAuthCodeSerial = pendingAuthCodeSerial
         self.demoServer = demoServer
         self.cameOnline = cameOnline
+        self.registeredAt = registeredAt
+    }
+
+    /// Derived per-server liveness — the single classifier the list, the
+    /// detail page, and the post-creation checklist share. `hasLiveUnlockRequest`
+    /// is the account-level signal (a pending unlock-key request for this box's
+    /// fqdn in the identity-plane mailbox) supplied by the caller; `now` is
+    /// injectable for tests.
+    public enum LivenessState: Equatable, Sendable {
+        /// Daemon checked in (or holds a cert) — a live server.
+        case online
+        /// A live unlock request exists for this box: it's actively trying to
+        /// boot and waiting for the owner's approval. NOT dead.
+        case waitingForApproval
+        /// Registered recently, no live request yet, still inside the grace
+        /// window — provisioning, not dead.
+        case comingOnline
+        /// Registered, no live request, no check-in, and past the grace window
+        /// — the box genuinely never came online. Offer the free-the-name delete.
+        case dead
+    }
+
+    /// Classify a registered/pending pod. `online` short-circuits on
+    /// `cameOnline`. Otherwise a live unlock request wins (waitingForApproval);
+    /// failing that, a recent registration is `comingOnline` and an old one is
+    /// `dead`. Pending (pre-registration) pods are reported `comingOnline` so
+    /// they never read as dead — the list keeps its own Pending pill for them.
+    public func livenessState(
+        hasLiveUnlockRequest: Bool,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+    ) -> LivenessState {
+        if status == .online && cameOnline { return .online }
+        if hasLiveUnlockRequest { return .waitingForApproval }
+        if status == .pending { return .comingOnline }
+        let age = now - registeredAt
+        if registeredAt > 0 && age <= PodInfo.comingOnlineGraceMs { return .comingOnline }
+        return .dead
     }
 }

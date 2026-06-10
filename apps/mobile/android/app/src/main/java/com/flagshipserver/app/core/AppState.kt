@@ -210,6 +210,27 @@ class AppState(
         return _profiles.value.firstOrNull { it.cloudName == name }
     }
 
+    /**
+     * Lowercased fqdns of servers with a LIVE pending boot-unlock request (a
+     * box waiting for the owner's approval). Populated by ONE account-level
+     * poll (BootApprovalWatcher) so the list / card / detail can read a
+     * per-server "is it waiting for me?" without N pollers. Empty ⇒ none
+     * waiting (or not polled yet). Mirror of iOS AppState.serversAwaitingApproval.
+     */
+    private val _serversAwaitingApproval = MutableStateFlow<Set<String>>(emptySet())
+    val serversAwaitingApproval: StateFlow<Set<String>> = _serversAwaitingApproval.asStateFlow()
+    fun setServersAwaitingApproval(fqdns: Set<String>) {
+        _serversAwaitingApproval.value = fqdns.map { it.lowercase() }.toSet()
+    }
+
+    /** True iff [fqdn] has a live pending unlock request right now. */
+    fun hasLiveUnlockRequest(fqdn: String): Boolean =
+        _serversAwaitingApproval.value.contains(fqdn.lowercase())
+
+    /** Liveness for [pod] using the account-level waiting set. */
+    fun liveness(pod: PodInfo): PodInfo.LivenessState =
+        pod.livenessState(hasLiveUnlockRequest = hasLiveUnlockRequest(pod.fqdn))
+
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
 
@@ -319,6 +340,7 @@ class AppState(
         name: String,
         description: String? = null,
         cameOnline: Boolean = true,
+        registeredAt: Long = 0,
     ): String {
         val target = fqdn.lowercase()
         val existing = _pods.value
@@ -336,12 +358,14 @@ class AppState(
                     status = PodInfo.Status.ONLINE,
                     pendingAuthCodeSerial = null,
                     cameOnline = cameOnline,
+                    // Keep a known registration time; never downgrade to 0.
+                    registeredAt = if (registeredAt > 0) registeredAt else old.registeredAt,
                 )
             }
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
-        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline))
+        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline, registeredAt = registeredAt))
         return id
     }
 
@@ -400,8 +424,35 @@ data class PodInfo(
      *  decommission/free-the-name delete instead of the lost/stolen revoke.
      *  Mirror of iOS PodInfo.cameOnline. */
     val cameOnline: Boolean = true,
+    /** Wall-clock ms the box's registration was admitted (from `/pods`
+     *  `registeredAt`). Drives the "coming online" grace window: a box that
+     *  registered RECENTLY but hasn't checked in yet is provisioning, not dead.
+     *  0 ⇒ unknown / not registered. Mirror of iOS PodInfo.registeredAt. */
+    val registeredAt: Long = 0,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
+
+    /** Derived per-server liveness — the single classifier the list, the
+     *  detail page, and the post-creation checklist share. Mirror of iOS
+     *  PodInfo.LivenessState. */
+    enum class LivenessState { ONLINE, WAITING_FOR_APPROVAL, COMING_ONLINE, DEAD }
+
+    /** Classify this pod. `ONLINE` short-circuits on [cameOnline]. Otherwise a
+     *  live unlock request wins (WAITING_FOR_APPROVAL); failing that, a recent
+     *  registration is COMING_ONLINE and an old one is DEAD. Pending
+     *  (pre-registration) pods report COMING_ONLINE so they never read dead.
+     *  Mirror of iOS PodInfo.livenessState. */
+    fun livenessState(
+        hasLiveUnlockRequest: Boolean,
+        now: Long = System.currentTimeMillis(),
+    ): LivenessState {
+        if (status == Status.ONLINE && cameOnline) return LivenessState.ONLINE
+        if (hasLiveUnlockRequest) return LivenessState.WAITING_FOR_APPROVAL
+        if (status == Status.PENDING) return LivenessState.COMING_ONLINE
+        val age = now - registeredAt
+        if (registeredAt > 0 && age <= COMING_ONLINE_GRACE_MS) return LivenessState.COMING_ONLINE
+        return LivenessState.DEAD
+    }
 
     companion object {
         /** #56 — deterministic, fqdn-derived pod id. Pod identity is UNIFIED
@@ -411,6 +462,11 @@ data class PodInfo(
          *  identity, so callers fall back to their own id in that case.
          *  Mirror of iOS PodInfo.podId(forFqdn:). */
         fun podId(fqdn: String): String = "pod-" + fqdn.lowercase()
+
+        /** Shared grace window (ms) after registration during which a not-yet-
+         *  online box reads "Coming online…" rather than "Never came online".
+         *  20 minutes. Mirror of iOS PodInfo.comingOnlineGraceMs. */
+        const val COMING_ONLINE_GRACE_MS: Long = 20L * 60L * 1000L
     }
 }
 
