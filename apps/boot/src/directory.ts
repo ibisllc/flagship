@@ -98,7 +98,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (!user) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/pods`,
-      { headers: { accept: "application/json" } },
+      { headers: { accept: "application/json" }, cache: "no-store" },
     );
     if (!res.ok) return null;
     let body: unknown;
@@ -137,7 +137,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (stk === null) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/pubkey-cert`,
-      { headers: { accept: "application/json" } },
+      { headers: { accept: "application/json" }, cache: "no-store" },
     );
     if (!res.ok) return null;
     let body: unknown;
@@ -169,7 +169,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (stk === null) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/watch-delegates`,
-      { headers: { accept: "application/json" } },
+      { headers: { accept: "application/json" }, cache: "no-store" },
     );
     if (!res.ok) return [];
     let body: unknown;
