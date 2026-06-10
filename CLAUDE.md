@@ -126,23 +126,33 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 ### 2026-06-09 session — what landed + the live encrypted-unlock failure
 
 **NEXT SESSION — FIRST MOVES (in order):**
-1. `bash scripts/wipe-all-users.sh` (clean slate).
-2. Rebuild the iOS app in Xcode — `main` has the consolidated server list (#56), the three-tier session model (#46), and the keychain self-heal.
-3. **Encrypted Wi-Fi e2e (#27) — the ONE piece the project still has to prove.** The Mac burner is current (firmware #45 + `/boot` Wi-Fi beacons #44 + FLAGSHIP console banner + the new `debug` user). Create a fresh account → **enroll Cloud Recovery FIRST** (so a sign-out can't rotate the identity, see #52) → create a server with **Encrypt disk ON** (default) → burn → boot → unplug USB → power on → watch LUKS-unlock-over-Wi-Fi.
+1. **Deploy the Worker** — `npx tsc -b && cd apps/com && npx wrangler deploy`. One deploy ships three things: the `/pods` orderRef hardening (`aa78e2b`), and (already-seeded) `FLAGSHIP_ISO_MANIFEST` Simple-mode downloads.
+2. `bash scripts/wipe-all-users.sh` (clean slate).
+3. Rebuild the iOS app in Xcode — `main` has the consolidated server list (#56), orderRef reconciliation, the #52 sign-out gate, the three-tier session model (#46), and the keychain self-heal.
+4. **Rebuild + re-sign the Mac burner** — it is NO LONGER current: `main` now carries the 2026-06-09 initramfs Wi-Fi hardening + the `installing` beacon (`7db385a`); a reburn from the old binary would re-test the broken hook.
+5. **Encrypted Wi-Fi e2e (#27) — the ONE piece the project still has to prove.** Create a fresh account → **enroll Cloud Recovery FIRST** (sign-out is now BLOCKED without it, #52) → create a server with **Encrypt disk ON** (default) → burn with the rebuilt burner → boot → unplug USB → power on → watch LUKS-unlock-over-Wi-Fi. If it still fails: console-login as `debug` / `flagship`, read **`/boot/flagship-wifi-build.log`** (NEW — stage-by-stage build-time staging log: interface/driver/firmware/binaries, each OK or MISSING) + `/boot/flagship-wifi.log` (an empty one now means "premount never ran", nothing else).
 
-**#27 LIVE FAILURE (2026-06-09):** an encrypted Wi-Fi-only box installed/sealed/registered fine but **failed to auto-unlock** — stuck at `Please unlock disk`, `curl (6) could not resolve host boot.flagshipserver.com` (NO network in the initramfs), Wi-Fi beacon empty (DHCP never succeeded). After a hand-unlock with the burn-time recovery passphrase the **full-OS daemon also didn't check in** (daemons=0) — so Wi-Fi isn't engaging on this box in EITHER context, despite #45. DIAGNOSE next: console-login as **`debug` / `flagship`** (the new debug user — `flagship` is SSH-key-only), `cat /boot/flagship-wifi.log` → which stage died (interface / driver / **firmware copied into the initrd?** / wpa associate / DHCP). Leading suspect: the #44 build-time hook isn't staging the driver+firmware into the initrd. Fix in `buildInitramfsWifiBlock` (TS `userdata.ts` + Swift `UserData.swift`). Everything downstream of unlock is PROVEN — the no-LUKS box reached a real Let's Encrypt green padlock (`*.harry.flagship.services`) on hardware.
+**2026-06-09 evening sweep (agent) — four task closures on `main`:**
+- `7db385a` **#27 hardening + Beacon E** — see the updated LIVE FAILURE note below.
+- `8f9c9c0` **#52 DONE** — Tier-2 sign-out is blocked without cloud recovery on iOS + Android + webapp (shared `SignOutPolicy`, enforced at the action layer that calls `Keystore.wipe()`, not just dialog copy; blocked dialog routes into recovery enrollment; demo/mock sessions exempt). The re-pair audit answered the open question: single-device re-pair-by-grace with a brand-new self-signed IRK is the **designed** takeover path (no credential to initiate, old key has no veto, only T+0/+1d/+3d alerts) — so blocking the no-recovery wipe is the correct fix. One loose end: the observed live rotation completed same-day, which the 3d grace shouldn't permit — check whether a stale pending re-pair row predated it.
+- `aa78e2b` **/pods serial → orderRef** (details in the SECURITY list below).
+- **Android #56 parity was already DONE** (`f0acd5d`, complete port + 6 pending-state tests) — the "in flight" note below was stale.
+- **Recovery Phase B iOS re-pair branch (open-work item 5) is already fully wired + tested** — `registeredIrkPubHex` captured (RecoveryViewModel:184), `recoveredKeyMatchesRegistered` (:239), Phase A/B branch in `RealAccountLoginViewModel.startSingleDeviceTakeover()` (:250) calling `initiateRotatedRePair` with `oldIrkPub = registeredIrkPubHex`, KeyfileImportViewModel instant skip-grace. Only on-device validation remains.
+
+**#27 LIVE FAILURE (2026-06-09):** an encrypted Wi-Fi-only box installed/sealed/registered fine but **failed to auto-unlock** — stuck at `Please unlock disk`, `curl (6) could not resolve host boot.flagshipserver.com` (NO network in the initramfs), Wi-Fi beacon empty (DHCP never succeeded). After a hand-unlock with the burn-time recovery passphrase the **full-OS daemon also didn't check in** (daemons=0) — so Wi-Fi isn't engaging on this box in EITHER context, despite #45. Everything downstream of unlock is PROVEN — the no-LUKS box reached a real Let's Encrypt green padlock (`*.harry.flagship.services`) on hardware.
+**→ HARDENED (`7db385a`, agent audit, awaits a real reburn):** the build-time hook was confirmed able to silently no-op exactly as suspected — driver detection unvalidated (empty `wl*` lookup fed `manual_add_modules ""` behind `|| true`), Debian-13 `.xz`/`.zst` firmware variants never matched, and `wpa_cli` + `ip` (both used by the premount) never staged. Hook now validates every step + logs to `/boot/flagship-wifi-build.log`, stages firmware variants + dependency-module firmware + `cfg80211`/`mac80211`, copies `wpa_cli`/`ip`, falls back to `copy_modules_dir kernel/drivers/net/wireless`; premount logs before mounting, waits (bounded) for FLAGSHIP_BOOT, records the mount result; iface wait 15s→30s; the full-OS Wi-Fi safety-net unit dropped its `After=network.target` chicken-and-egg. TS↔Swift byte-identical, sha pins updated. The static tests prove the script text — the kernel/net path needs the live reburn (FIRST MOVES above).
 
 **DEPLOY GOTCHA (cost real time this session):** `wrangler deploy` bundles apps/com's import of the BUILT `@flagship/control-plane` `dist/` — a control-plane change that isn't compiled silently ships stale. ALWAYS `npx tsc -b && cd apps/com && npx wrangler deploy`. (This is why the outstanding-orders endpoint "deployed" yet never worked.)
 
-**App server-list — CONSOLIDATED (#56, LIVE):** one unauthenticated `GET /api/users/:u/pods` now returns registered `pods` (`state:"online"`) + active `pending` orders (`state:"pending"`, with `serial`/fqdn/phase) — **no more biometric Face ID on a list refresh**, and a just-created server appears instantly. Server `bae3537` (deployed via tsc -b + wrangler, verified `pending` key live), webapp `792a620`. Replaces the split-brain (registered `/pods` + biometric-signed `outstanding-orders` whose silent per-order `provision_status` failure swallowed the whole list) that caused the entire "server doesn't appear / Face ID on refresh" saga. iOS done; webapp done; **Android parity in flight**.
+**App server-list — CONSOLIDATED (#56, LIVE):** one unauthenticated `GET /api/users/:u/pods` now returns registered `pods` (`state:"online"`) + active `pending` orders (`state:"pending"`, with `serial`/fqdn/phase) — **no more biometric Face ID on a list refresh**, and a just-created server appears instantly. Server `bae3537` (deployed via tsc -b + wrangler, verified `pending` key live), webapp `792a620`. Replaces the split-brain (registered `/pods` + biometric-signed `outstanding-orders` whose silent per-order `provision_status` failure swallowed the whole list) that caused the entire "server doesn't appear / Face ID on refresh" saga. iOS done; webapp done; Android done (`f0acd5d`). Wire note: `pending[].serial` was replaced by `orderRef` in `aa78e2b` (see SECURITY below) — deploy before judging client pending behavior against prod.
 
 **SECURITY — pre-production cleanup (track to GA):**
 - **Remove the `debug` user.** The burner now installs a sudo `debug` / `flagship` console user (a deliberate backdoor for bring-up — `flagship` is SSH-key-only, so on-box log reading was impossible; `/etc/issue` warns loudly). REMOVE before production.
-- **#52 — harden Tier-2 sign-out.** A no-recovery Tier-2 "Sign out" wiped the only local key, and sign-in re-paired the account under a NEW IRK (rotated `harry` live). `claimUsername` is SAFE (storage rejects a different-IRK re-claim, `d1.ts:213`); the rotation came via the recovery/re-pair path. BLOCK Tier-2 sign-out when `hasCloudRecovery` is false + audit how re-pair authorized rotating to a brand-new key.
-- **/pods serial exposure.** The consolidated `/pods` returns pending orders' auth-code `serial` unauthenticated — a knower-of-the-username could scribble fake provision-status phases (minor DoS). Harden: sign the box's provision-status reports, or gate the serial.
+- **#52 — DONE (`8f9c9c0`).** Tier-2 sign-out is blocked on all three surfaces when `hasCloudRecovery` is false (action-layer `SignOutPolicy` gate; blocked dialog routes to recovery enrollment; demo exempt). Audit verdict: the rotation rode the DESIGNED single-device re-pair-by-grace path (no credential to initiate, no old-key veto) — see the evening-sweep note above. Possible follow-up: require a credential on the single-device re-pair initiate, and check why the live rotation beat the 3d grace.
+- **/pods serial exposure — HARDENED (`aa78e2b`, not yet deployed).** The unauthenticated `/pods` `pending[]` no longer carries the auth-code `serial` (a provision-status write capability); it ships an opaque `orderRef = hex(sha256("flagship/order-ref/v1|" + serial))` (`orderRefForSerial`, control-plane `podInventory.ts`; byte-identical mirrors in iOS `FlagshipCore.OrderRef` + Android `core.OrderRef`, pinned cross-platform vector). The creating device reconciles by hashing its locally-stored serial; a non-creating device reconciles by fqdn and shows list-level phase only (it never learns the serial, so no deep-progress poll / cancel-revoke there). All surfaces + tests updated in lockstep. Deploy needs the usual `npx tsc -b && cd apps/com && npx wrangler deploy`.
 - Remove the **burn-time LUKS recovery passphrase** (`flagship-burn-time-luks-rekey-me-immediately`, a kept known constant) + disarm the mass-wipe (#35) — before GA.
 
-Gates (2026-06-09): `npx vitest run` 4400+ · iOS 780 XCTests · burner 172 (TS) + 104 (swift) · webapp 1006 · `npx tsc -b` clean.
+Gates (2026-06-09 evening): `npx vitest run` 4465 (348 files) · iOS 793 XCTests · Android 611 · burner 175 (TS) + 105 (swift) · webapp 1012 · `npx tsc -b` clean.
 
 ### Live in production
 - **Per-user TLS** — one Let's Encrypt cert per user, SANs `[<user>, *.<user>]`, real green padlock (per-box → per-user cutover verified live 2026-06-02). ACME runs on the user's daemon over SNI passthrough; `.services` stays content-blind. Wildcard SANs via DNS-01.
@@ -202,26 +212,16 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 3. **Run the wipe** — `bash scripts/wipe-all-users.sh` (NOT the raw `--file` .sql: prod D1 drifts from the repo's migrations, and a one-transaction `--file` run aborts on the first table prod lacks; the runner deletes each table independently and skips absent ones).
 4. **Verify Debian-preseed reliability + live e2e** — cmdline injection (`Remaster.swift`/`remasterIso.ts` grub+isolinux patch) was per-ISO flaky earlier; add real-Debian-ISO tests, then create-account → recipe → burn → boot → watch the phone-home timeline → registers → green padlock.
 
-**Install / provisioning polish (agent-doable, off the critical path):**
-- **Beacon the partitioning→installing transition.** During the Debian
-  base-system install (the multi-minute `debootstrap`/apt phase) the phone
-  checklist sits on "partitioning" with no ping — d-i has no *command*-level
-  preseed hook in that window (`partman/early_command` is before partitioning,
-  `preseed/late_command` is after the base install). The fix: from
-  `partman/early_command` (which already runs + already sends the "partitioning"
-  beacon, so network + the auth-code serial are in scope), drop a small
-  executable into **`/usr/lib/base-installer.d/`** that POSTs `phase:"installing"`
-  to `/api/order/<serial>/status`. base-installer runs it right after
-  partitioning, filling the gap. MUST be bulletproof — backgrounded, `wget -T`
-  timeout, `|| true`, `exit 0` — so it can NEVER block or fail base-installer.
-  Add to BOTH generators (`packages/flagship-burner/src/preseed.ts` +
-  `apps/burner-mac/.../UserData.swift`), byte-identical. NOT locally testable
-  (no d-i dry-run) → validate on a real burn, NOT bundled into a critical
-  encrypted-unlock test burn. (Cosmetic: the install completes fine without it;
-  the metal screen shows real progress — it is a lag, not a hang.)
+**Install / provisioning polish:**
+- ✅ **Beacon the partitioning→installing transition — DONE (`7db385a`).**
+  `partman/early_command` now drops a backgrounded best-effort
+  `/usr/lib/base-installer.d/05flagship-beacon` that POSTs `phase:"installing"`
+  via the shared `debianBeaconCommand` idiom; byte-identical in both generators,
+  pinned by tests. NOT locally testable (no d-i dry-run) → observe on the next
+  real burn's checklist (cosmetic if it doesn't fire: lag, not hang).
 
 **App / recovery:**
-5. **Recovery Phase B re-pair branch (iOS, on-device validation).** Wire `recoveredKeyMatchesRegistered` into post-recovery completion: recovered IRK == registered → instant pair (Phase A); != → re-pair with `oldIrkPub = registeredIrkPubHex` + 3d grace; `KeyfileImportViewModel` instant skip-grace. Backend already deployed.
+5. **Recovery Phase B re-pair branch — CODE DONE, on-device validation only.** The full Phase A/B branch is already wired + tested (see the 2026-06-09 evening-sweep note): validate on a real device that a rotated-key recovery lands in re-pair-with-grace and an unrotated one pairs instantly. Backend already deployed.
 6. **iOS owner-device confirmations** (from 2026-06-02, never confirmed on device): cross-device-QR recovery fix (`f4593a3`); Passwords-app icon flips to the teal ring; a real burn → box registers → green padlock.
 7. **iOS diagnostics:** jetsam memory crash after ~14 min (use the Memory Graph Debugger; note which screen grows); input-field delay on "I already have an account" (confirm with a Release/Profile build).
 
