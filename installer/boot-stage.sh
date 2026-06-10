@@ -136,6 +136,18 @@ b64url() {
     openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
 
+# Epoch milliseconds, PORTABLE. GNU date supports %3N; busybox date (the
+# initramfs copy of this routine) prints %N literally, corrupting the signed
+# envelope + body issuedAt. Keep this helper in sync with the initramfs premount
+# in packages/flagship-burner/src/userdata.ts.
+now_ms() {
+    _ms=$(date +%s%3N 2>/dev/null)
+    case "$_ms" in
+        ''|*[!0-9]*) _ms=$(( $(date +%s) * 1000 ));;
+    esac
+    echo "$_ms"
+}
+
 # Build the box-STK `Authorization: Flagship-Boot-v1 <b64url(json)>` header
 # value for a boot-worker request. Bound to the exact (method, path,
 # serverDomain) so a captured header cannot be retargeted to another route
@@ -151,7 +163,7 @@ sign_box_auth_header() {
     _bm="$1"
     _bp="$2"
     _bnonce=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\n')
-    _bnow=$(date +%s%3N)
+    _bnow=$(now_ms)
     # Canonical bytes — MUST match canonicalBootAuth() in apps/boot/src/gate.ts
     # byte-for-byte (tag|role|serverDomain|METHOD|path|pubHexLower|nonceHexLower|issuedAt).
     _bcanon="flagship/boot-auth/v1|box|${SERVER_DOMAIN}|${_bm}|${_bp}|${PUB_HEX}|${_bnonce}|${_bnow}"
@@ -245,7 +257,7 @@ unlock_via_relay() {
     fi
 
     NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\n')
-    NOW_MS=$(date +%s%3N)
+    NOW_MS=$(now_ms)
     # The SecretRequest body keeps its OWN STK signature (unchanged):
     # canonicalSecretRequest join order: tag|serverDomain|hex(stkPub)|purpose|hex(nonce)|issuedAt
     CANONICAL="flagship/secret-request/v1|${SERVER_DOMAIN}|${PUB_HEX}|unlock-key|${NONCE}|${NOW_MS}"

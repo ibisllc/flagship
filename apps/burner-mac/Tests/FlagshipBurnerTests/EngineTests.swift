@@ -636,7 +636,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "3e0390e4f1cfb9b6a89c5e0930536d23b4708fe6d61d980eb6eb658b37e1d627",
+            hash, "0c6fcc3a8fdc5bc0d8f0058b7ee55ee3705642b890af5497202a9ebf4a8e7e7c",
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 

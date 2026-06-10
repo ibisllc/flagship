@@ -1611,6 +1611,19 @@ b64url() {
     openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
 
+# Epoch milliseconds, PORTABLE. The full OS has GNU date (\`%3N\` = millis), but
+# the initramfs has busybox date, which prints \`%N\` LITERALLY — that injected a
+# non-numeric issuedAt into the signed envelope + body JSON, so the boot worker
+# rejected BOTH as malformed (proven on metal). Use %3N only when it yields pure
+# digits; otherwise fall back to whole seconds × 1000.
+now_ms() {
+    _ms=$(date +%s%3N 2>/dev/null)
+    case "$_ms" in
+        ''|*[!0-9]*) _ms=$(( $(date +%s) * 1000 ));;
+    esac
+    echo "$_ms"
+}
+
 # Build the box-STK \`Authorization: Flagship-Boot-v1 <b64url(json)>\` header
 # value. Bound to (method, path, serverDomain); Ed25519 over the canonical bytes
 #   flagship/boot-auth/v1|box|<serverDomain>|<METHOD>|<path>|<pub>|<nonce>|<issuedAt>
@@ -1621,7 +1634,7 @@ sign_box_auth_header() {
     _bm="$1"
     _bp="$2"
     _bnonce=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
-    _bnow=$(date +%s%3N)
+    _bnow=$(now_ms)
     _bcanon="flagship/boot-auth/v1|box|\${SERVER_DOMAIN}|\${_bm}|\${_bp}|\${PUB_HEX}|\${_bnonce}|\${_bnow}"
     _bsig="$(sign_canonical "$_bcanon")"
     _bjson="$(printf '{"role":"box","serverDomain":"%s","method":"%s","path":"%s","pubKeyHex":"%s","nonceHex":"%s","issuedAt":%s,"signatureHex":"%s"}' \\
@@ -1700,7 +1713,7 @@ unlock_via_relay() {
     fi
 
     NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
-    NOW_MS=$(date +%s%3N)
+    NOW_MS=$(now_ms)
     # The SecretRequest body keeps its OWN STK signature (unchanged).
     CANONICAL="flagship/secret-request/v1|\${SERVER_DOMAIN}|\${PUB_HEX}|unlock-key|\${NONCE}|\${NOW_MS}"
     SIG="$(sign_canonical "$CANONICAL")"
