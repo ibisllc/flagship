@@ -121,6 +121,7 @@ function deps(storage: InMemoryStorage) {
     routing: storage.routing,
     authCodes: storage.authCodes,
     servers: storage.servers,
+    luksKeys: storage.luksKeys,
   };
 }
 
@@ -250,5 +251,77 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
     const storage = await setUpClaimedHarry();
     const r = await handleServerReleaseName(deps(storage), { request: {} });
     expect(r.status).toBe(400);
+  });
+
+  // Decommission / delete-a-failed-server: the two shapes the phone deletes.
+
+  it("decommissions a PENDING order: revokes the auth-code + frees the name (no server record)", async () => {
+    // A pending order has a routing reservation + an active auth-code, but the
+    // box never registered, so there's NO server record. Release must still
+    // revoke the code + free the name, and serverRevoked is false (not an error).
+    const storage = await setUpClaimedHarry();
+    await seedRouting(storage, 1);
+    await storage.authCodes.put(activeAuthCode("PENDING1"));
+
+    const { body } = releaseBody();
+    const r = await handleServerReleaseName(deps(storage), body);
+
+    expect(r.status).toBe(200);
+    const out = r.body as { authCodesRevoked: number; serverRevoked: boolean; routingReleased: boolean };
+    expect(out.routingReleased).toBe(true);
+    expect(out.authCodesRevoked).toBe(1);
+    expect(out.serverRevoked).toBe(false);
+    // The auth-code is dead → register rejects it (mid-install-safe; no resurrection).
+    expect((await storage.authCodes.get("PENDING1"))?.status).toBe("revoked");
+    expect(await storage.routing.get(DOMAIN)).toBeUndefined();
+  });
+
+  it("decommissions a REGISTERED-DEAD server: revokes the record + clears the sealed LUKS blob", async () => {
+    // A box that registered during install but never came online: it has a
+    // server record (and a sealed LUKS blob from the seal step) but no live
+    // daemon. Release revokes the record + frees the name + clears the blob so
+    // a reused name starts clean.
+    const storage = await setUpClaimedHarry();
+    await seedRouting(storage, 1);
+    await storage.authCodes.put(activeAuthCode("DEAD1"));
+    await storage.servers.put({
+      serverDomain: DOMAIN,
+      username: "harry",
+      identityPubKeyHex: "22".repeat(32),
+      registeredAt: Date.now(),
+    });
+    await storage.luksKeys.putSealed({
+      serverDomain: DOMAIN,
+      sealedKeyHex: "ab".repeat(48),
+      sealedAt: Date.now(),
+    });
+
+    const { body } = releaseBody();
+    const r = await handleServerReleaseName(deps(storage), body);
+
+    expect(r.status).toBe(200);
+    const out = r.body as { authCodesRevoked: number; serverRevoked: boolean };
+    expect(out.authCodesRevoked).toBe(1);
+    expect(out.serverRevoked).toBe(true);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+    // Sealed material is gone — a reused name doesn't inherit a stale blob.
+    expect(await storage.luksKeys.getSealed(DOMAIN)).toBeUndefined();
+  });
+
+  it("stays idempotent + safe without the optional luksKeys dep", async () => {
+    // Existing callers that don't wire luksKeys must behave exactly as before.
+    const storage = await setUpClaimedHarry();
+    await seedRouting(storage, 1);
+    const { body } = releaseBody();
+    const r = await handleServerReleaseName(
+      {
+        usernames: storage.usernames,
+        routing: storage.routing,
+        authCodes: storage.authCodes,
+        servers: storage.servers,
+      },
+      body,
+    );
+    expect(r.status).toBe(200);
   });
 });

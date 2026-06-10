@@ -686,6 +686,7 @@ export async function tryControlPlane(
           routing: storage.routing,
           authCodes: storage.authCodes,
           servers: storage.servers,
+          luksKeys: storage.luksKeys,
         },
         await readJson(request),
       ),

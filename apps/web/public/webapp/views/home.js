@@ -1,9 +1,11 @@
-import { bytesToHex } from "../keystore.js";
+import { bytesToHex, signWithIrk } from "../keystore.js";
 import { decorateHomeGrid } from "../lib/icons.js";
 import { tickRenewals } from "../lib/leases.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
+import { toast } from "../lib/toast.js";
+import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import {
   deviceCapabilityChipText,
@@ -132,11 +134,12 @@ export function renderPendingCard(order) {
       <span class="server-meta-chip">${escapeHtml(String(order.fqdn))}</span>
     </div>
     ${bar}
+    <div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(String(order.fqdn))}">Delete server (free name)</button></div>
   `;
 }
 
 /** Classify the server's live status into one of three buckets. */
-function classifyServer(server, pod) {
+export function classifyServer(server, pod) {
   if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
   if (!pod || pod.lastReported == null) return { kind: "never-seen", label: "never seen" };
   const ageMs = Date.now() - pod.lastReported;
@@ -178,7 +181,7 @@ function formatDays(ms) {
  * leases mean the daemon is reachable without phone tap) and otherwise
  * label the row as "phone-tap only" — accurate to the default.
  */
-function renderServerCard(server, pod) {
+export function renderServerCard(server, pod) {
   const c = classifyServer(server, pod);
   const dot = `<span class="server-dot server-dot--${c.kind}" aria-hidden="true"></span>`;
   const pillClass = c.kind === "online" ? "pill ok"
@@ -192,6 +195,13 @@ function renderServerCard(server, pod) {
   const autoUnlock = pod?.routingTarget
     ? "auto-unlock on"
     : "phone-tap only";
+  // A box that registered during install but whose daemon never checked in
+  // (`never-seen`) is a dead install — offer the decommission / free-the-name
+  // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
+  // never deletable from here. `data-fqdn` is read by the delegated handler.
+  const deadDelete = c.kind === "never-seen"
+    ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server (free name)</button></div>`
+    : "";
   return `
     <div class="row row-top">
       <div class="server-card-head">
@@ -205,6 +215,7 @@ function renderServerCard(server, pod) {
       ${certCountdown ? `<span class="server-meta-chip">${escapeHtml(certCountdown)}</span>` : ""}
       <span class="server-meta-chip">${escapeHtml(autoUnlock)}</span>
     </div>
+    ${deadDelete}
   `;
 }
 
@@ -569,6 +580,15 @@ export async function renderHome() {
       card.innerHTML = renderPendingCard(order);
       list.appendChild(card);
     }
+    // Delegate the "Delete server (free name)" taps on dead/pending cards to
+    // the release flow. One listener on the list survives card re-renders.
+    list.querySelectorAll(".js-delete-dead-server").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const fqdn = btn.getAttribute("data-fqdn") || "";
+        void deleteDeadServer(fqdn, btn);
+      });
+    });
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user
@@ -586,6 +606,63 @@ export async function renderHome() {
     sessionStatusEl.textContent = "no servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
+  }
+}
+
+/**
+ * Decommission a registered-but-dead (never-came-online) or pending server
+ * from the home list. Frees the name via the owner-IRK-signed
+ * `ReleaseServerName` release — the SAME path the pending-server cancel uses
+ * and distinct from the lost/stolen revoke (this is for a box that never
+ * checked in, with no live state to brick). On success the list is re-rendered
+ * so the card disappears; on failure the name stays reserved (we never strand
+ * it half-deleted) and a toast surfaces the error.
+ *
+ * @param {string} serverDomain  `<server>.<user>.flagship.services`
+ * @param {HTMLButtonElement} [btn]
+ */
+async function deleteDeadServer(serverDomain, btn) {
+  if (!serverDomain) return;
+  const session = getSession();
+  const username = session.username;
+  if (!username) {
+    toast("unlock the webapp first", "warn");
+    return;
+  }
+  const ok = confirm(
+    `Delete "${serverDomain}"? This frees the name for reuse and the box can no longer come online. This server never checked in.`,
+  );
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = "deleting…"; }
+  try {
+    const out = await releaseServerName({
+      username,
+      serverDomain,
+      umk: session.umk,
+      signWithIrk,
+    });
+    if (out && out.pending) {
+      // P14 Phase 2 — companion profile (no local UMK): the release is queued
+      // for the owner to approve. Surface the pending sheet; don't drop the
+      // card locally (the name isn't freed until the owner signs).
+      const { showCompanionPendingSheet, outcomeToastCopy } = await import(
+        "../lib/companionPendingSheet.js"
+      );
+      const result = await showCompanionPendingSheet(out);
+      if (result.outcome !== "approved") {
+        const { text, kind } = outcomeToastCopy(result.outcome);
+        toast(text, kind);
+        if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
+        return;
+      }
+    }
+    toast(`deleted — "${serverDomain}" is free again`);
+    await renderHome();
+  } catch (e) {
+    // Keep the card: the name is still reserved, so re-render would just hide
+    // a name the user can't reuse. Surface the error + re-enable the button.
+    toast(`delete failed: ${e.message ?? e}`, "err");
+    if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
   }
 }
 

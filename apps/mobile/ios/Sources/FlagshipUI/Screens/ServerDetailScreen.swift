@@ -10,6 +10,18 @@ public struct ServerDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
     let state: LoadingState<ServerDetailResponse>
     let metrics: LoadingState<ServerMetricsResponse>
+    /// True for a registered box whose daemon never checked in (the install
+    /// reserved + registered, but it never came online). Surfaces the
+    /// decommission/free-the-name card and a "Never came online" framing in
+    /// place of the transient "Connecting…" state, since this box will never
+    /// connect. Distinct from the lost/stolen Revoke danger zone.
+    let deadServer: Bool
+    /// Display name for the decommission card / its toast. Falls back to the FQDN.
+    let serverName: String?
+    /// FQDN to sign the release for, sourced from the pod (the failed-load path
+    /// has no `ServerDetailResponse.serverFqdn`). The loaded path prefers the
+    /// response's own FQDN.
+    let deadServerFqdn: String?
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -17,12 +29,18 @@ public struct ServerDetailScreen: View {
     public init(
         state: LoadingState<ServerDetailResponse>,
         metrics: LoadingState<ServerMetricsResponse>,
+        deadServer: Bool = false,
+        serverName: String? = nil,
+        deadServerFqdn: String? = nil,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.state = state
         self.metrics = metrics
+        self.deadServer = deadServer
+        self.serverName = serverName
+        self.deadServerFqdn = deadServerFqdn
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -36,13 +54,22 @@ public struct ServerDetailScreen: View {
                 case .idle, .loading:
                     ServerCardSkeleton()
                 case .failed:
-                    // A BFF load failure here is transient (the box is online —
-                    // that's why we opened its page — but its daemon hasn't
-                    // answered this request yet, or the network blipped). Show a
-                    // graceful "connecting" state, NEVER the words "not paired to
-                    // a server": the server IS paired; we just don't have its
-                    // detail this instant. Pull-to-refresh retries.
-                    connecting(c: c)
+                    if deadServer {
+                        // This box registered during install but never came
+                        // online; its daemon BFF will never answer. Show the
+                        // dead-server explanation + the decommission card
+                        // instead of the transient "Connecting…" placeholder.
+                        neverCameOnline(c: c)
+                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName)
+                    } else {
+                        // A BFF load failure here is transient (the box is online —
+                        // that's why we opened its page — but its daemon hasn't
+                        // answered this request yet, or the network blipped). Show a
+                        // graceful "connecting" state, NEVER the words "not paired to
+                        // a server": the server IS paired; we just don't have its
+                        // detail this instant. Pull-to-refresh retries.
+                        connecting(c: c)
+                    }
                 case .loaded(let d):
                     overview(d: d, c: c)
                     MetricsSection(state: metrics)
@@ -52,6 +79,12 @@ public struct ServerDetailScreen: View {
                     BootUnlockApprovalCard(serverDomain: d.serverFqdn)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
+                    if deadServer {
+                        // Registered but never came online: offer the
+                        // decommission/free-the-name action with its FQDN
+                        // (the release path) ALONGSIDE the lost/stolen Revoke.
+                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName)
+                    }
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -88,6 +121,31 @@ public struct ServerDetailScreen: View {
             }
         }
         .accessibilityIdentifier("server-detail-connecting")
+    }
+
+    /// Shown for a registered box that never came online. Unlike `connecting`,
+    /// this is a terminal state — the box will never answer — so it explains
+    /// the situation and points at the decommission card below it.
+    private func neverCameOnline(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.large)
+                        .foregroundColor(c.danger)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This server never came online")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("The install reserved this name and registered the box, but its software never checked in. If the install failed, you can decommission it below — that frees the name so you can try again.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("server-detail-never-online")
     }
 
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {
@@ -589,6 +647,73 @@ struct CertAutonomyCard: View {
         default:
             break
         }
+    }
+}
+
+/// Decommission a registered-but-dead server (one that never came online).
+/// Frees the name via the owner-IRK-signed `ReleaseServerName` release flow —
+/// the SAME path the pending-cancel uses — so a failed install can be cleaned
+/// up + the name reused. Distinct from `DangerZoneCard`'s lost/stolen Revoke:
+/// this is for a box that never checked in (no risk of bricking a live box),
+/// frees the name for reuse, and uses the shared `cancelPendingServer` helper
+/// which keeps the pod on a release failure (so the name never strands
+/// half-deleted) and removes it on success.
+struct DecommissionDeadServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
+
+    let serverDomain: String
+    let displayName: String?
+
+    @State private var confirming = false
+    @State private var working = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("DECOMMISSION")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("This server never came online. Delete it to free the name for reuse — the box can no longer come online afterward.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton(working ? "Deleting…" : "Delete this server (free the name)", block: true) {
+                        confirming = true
+                    }
+                    .disabled(working)
+                    .accessibilityIdentifier("sd-decommission-dead-server")
+                }
+            }
+        }
+        .alert("Delete \(displayName ?? "this server")?", isPresented: $confirming) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { Task { await fire() } }
+        } message: {
+            Text("This frees the name for reuse and the box can no longer come online. This server never checked in.")
+        }
+    }
+
+    @MainActor
+    private func fire() async {
+        guard !working else { return }
+        working = true
+        defer { working = false }
+        // Build a pod shaped for the shared release helper. The fqdn is what
+        // the release signs over; the podId is fqdn-derived so a success removal
+        // hits the same pod AppState holds.
+        let pod = PodInfo(
+            podId: PodInfo.podId(forFqdn: serverDomain),
+            name: displayName ?? PendingServerReconciler.serverNameFromFqdn(serverDomain),
+            fqdn: serverDomain,
+            status: .online,
+            cameOnline: false
+        )
+        await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
     }
 }
 

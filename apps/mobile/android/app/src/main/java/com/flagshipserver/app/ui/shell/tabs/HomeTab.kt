@@ -26,7 +26,9 @@ import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.PendingServerReconciler
+import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
 import com.flagshipserver.app.ui.screens.AddServerMode
@@ -47,6 +49,7 @@ fun HomeTab() {
     val app = LocalAppState.current
     val client = LocalScreensClient.current
     val server = LocalFlagshipServerClient.current
+    val toasts = LocalToastCenter.current
     val pods by app.pods.collectAsState()
     val scope = rememberCoroutineScope()
     val vm = remember { HomeViewModel(client) }
@@ -143,6 +146,14 @@ fun HomeTab() {
                 },
                 onAddServer = { nav.navigate("add-server-chooser") },
                 onSetLeader = { app.setLeader(it.podId) },
+                onDeleteServer = { pod ->
+                    // Decommission a pending or registered-but-dead server via
+                    // the shared release flow (frees the name). The IRK
+                    // biometric fires when signing; the confirm dialog lives in
+                    // the PodCard. On success removePod updates the list; on
+                    // failure the pod is kept so the name never strands.
+                    scope.launch { decommissionServer(pod, app, server, toasts) }
+                },
                 onRefresh = { scope.launch { vm.load(); reconciler.reconcile() } },
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },

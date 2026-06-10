@@ -222,6 +222,49 @@ class PendingServerReconcilerTest {
         assertFalse(p.fqdn.isEmpty())
     }
 
+    // Decommission support: a registered box with NO daemon check-in + no cert
+    // is "registered but never came online" — the reconciler flips its pod's
+    // cameOnline false (UI marks it + offers the free-the-name delete). A box
+    // that has reported, or holds a cert, stays cameOnline=true.
+    @Test fun registeredDeadBox_flagsCameOnlineFalse() = runTest {
+        val app = signedInApp()
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(
+                PodDirectoryEntry(
+                    serverDomain = "dead.harry.flagship.services",
+                    identityPubKey = "00".repeat(32),
+                    lastReported = null,
+                    currentCert = null,
+                ),
+                PodDirectoryEntry(
+                    serverDomain = "live.harry.flagship.services",
+                    identityPubKey = "11".repeat(32),
+                    lastReported = 123L,
+                ),
+            )
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+
+        val dead = app.pods.value.first { it.fqdn == "dead.harry.flagship.services" }
+        assertFalse(dead.cameOnline)
+        assertEquals(PodInfo.Status.ONLINE, dead.status)
+
+        val live = app.pods.value.first { it.fqdn == "live.harry.flagship.services" }
+        assertTrue(live.cameOnline)
+    }
+
+    // PodDirectoryEntry.cameOnline derivation matches the iOS rule.
+    @Test fun podDirectoryEntry_cameOnlineDerivation() {
+        assertFalse(PodDirectoryEntry("d", "00".repeat(32)).cameOnline)
+        assertTrue(PodDirectoryEntry("d", "00".repeat(32), lastReported = 1L).cameOnline)
+        assertTrue(
+            PodDirectoryEntry(
+                "d", "00".repeat(32),
+                currentCert = com.flagshipserver.app.api.PodCurrentCert(sha256 = "ab"),
+            ).cameOnline,
+        )
+    }
+
     // Mixed-deploy tolerance: a pre-cutover Worker entry that still carries
     // `serial` (and no `orderRef`) decodes without crashing — the unknown
     // key is ignored and orderRef defaults to empty.

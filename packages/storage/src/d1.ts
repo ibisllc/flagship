@@ -991,6 +991,12 @@ export class D1LuksKeyStorage implements LuksKeyStorage {
       .first<{ server_domain: string; sealed_key_hex: string; sealed_at: number }>();
     return r ? { serverDomain: r.server_domain, sealedKeyHex: r.sealed_key_hex, sealedAt: r.sealed_at } : undefined;
   }
+  async deleteSealed(serverDomain: string): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM sealed_luks_keys WHERE server_domain = ?")
+      .bind(serverDomain)
+      .run();
+  }
 }
 
 export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {

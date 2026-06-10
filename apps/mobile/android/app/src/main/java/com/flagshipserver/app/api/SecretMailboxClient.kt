@@ -138,12 +138,33 @@ data class LeaseDepositPost(val lease: BoxSealedLeaseWire, val signature: String
 @Serializable
 data class BootResponsePost(val response: SecretResponseBody)
 
+/** Minimal cert presence shape — we only need "is there a cert" to tell a
+ *  dead box from a live one, so we decode just one field. Mirrors the iOS
+ *  presence-flag decode. */
+@Serializable
+data class PodCurrentCert(
+    val sha256: String? = null,
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
     val identityPubKey: String,   // hex (32 bytes) — the STK
     val revokedAt: Long? = null,
-)
+    /** Wall-clock ms of the box's last daemon-status check-in, or null if the
+     *  daemon has NEVER reported. A registered server with `lastReported ==
+     *  null` AND no cert is a "registered but never came online" box. The
+     *  field was already in the /pods response; the phone derives `cameOnline`
+     *  from it client-side (no backend change). Mirror of iOS. */
+    val lastReported: Long? = null,
+    /** Present when the daemon has reported a real cert. Decoded as a presence
+     *  signal for `cameOnline`. */
+    val currentCert: PodCurrentCert? = null,
+) {
+    /** A box that has reported daemon status OR holds a cert has come online
+     *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */
+    val cameOnline: Boolean get() = lastReported != null || currentCert != null
+}
 
 /** #56 — an active outstanding install order, surfaced in the SAME
  *  unauthenticated `/pods` response as registered servers. A just-created,

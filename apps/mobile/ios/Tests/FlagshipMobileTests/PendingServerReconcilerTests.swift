@@ -219,6 +219,43 @@ final class PendingServerReconcilerTests: XCTestCase {
     }
 
     // A registered fqdn with NO local pod surfaces as `.online`.
+    // Decommission support: PodDirectoryEntry.cameOnline = lastReported != nil
+    // || currentCert present. Drives the "Never came online" pill + the
+    // free-the-name delete (vs the lost/stolen revoke for a live box).
+    func test_cameOnlineDerivation() {
+        XCTAssertFalse(PodDirectoryEntry(serverDomain: "d", identityPubKey: "00").cameOnline)
+        XCTAssertTrue(
+            PodDirectoryEntry(serverDomain: "d", identityPubKey: "00", lastReported: 1).cameOnline
+        )
+        XCTAssertTrue(
+            PodDirectoryEntry(serverDomain: "d", identityPubKey: "00", hasCert: true).cameOnline
+        )
+    }
+
+    // A registered box that never checked in surfaces ONLINE but cameOnline=false
+    // (the dead-install case); one that has reported stays cameOnline=true.
+    func test_registeredDeadBox_flagsCameOnlineFalse() async {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])
+        let store = freshStore()
+        let dir = PodsDirectoryResponse(
+            username: "harry",
+            pods: [
+                PodDirectoryEntry(serverDomain: "dead.harry.flagship.services", identityPubKey: "00"),
+                PodDirectoryEntry(serverDomain: "live.harry.flagship.services", identityPubKey: "11", lastReported: 123),
+            ],
+            pending: []
+        )
+        let r = PendingServerReconciler(app: app, store: store, fetchPods: fetcher(dir))
+        await r.reconcile()
+
+        let dead = app.pods.first { $0.fqdn == "dead.harry.flagship.services" }
+        XCTAssertEqual(dead?.status, .online)
+        XCTAssertEqual(dead?.cameOnline, false)
+        let live = app.pods.first { $0.fqdn == "live.harry.flagship.services" }
+        XCTAssertEqual(live?.cameOnline, true)
+    }
+
     func test_registeredFqdnSurfacesAsOnlinePod_evenWithNoLocalRecord() async {
         let app = AppState()
         app.completeOnboarding(username: "harry", pods: [])

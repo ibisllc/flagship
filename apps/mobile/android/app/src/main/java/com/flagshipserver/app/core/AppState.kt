@@ -314,26 +314,34 @@ class AppState(
      *  clobbering a richer name); otherwise a fresh ONLINE pod is added. The
      *  online pod always wins over a pending duplicate sharing the fqdn.
      *  Returns the resolved pod id. Mirror of iOS AppState.upsertRegisteredPod. */
-    fun upsertRegisteredPod(fqdn: String, name: String, description: String? = null): String {
+    fun upsertRegisteredPod(
+        fqdn: String,
+        name: String,
+        description: String? = null,
+        cameOnline: Boolean = true,
+    ): String {
         val target = fqdn.lowercase()
         val existing = _pods.value
         val idx = existing.indexOfFirst { it.fqdn.lowercase() == target }
         if (idx >= 0) {
             val old = existing[idx]
-            // Already online — nothing to do (don't clobber a richer name).
-            if (old.status == PodInfo.Status.ONLINE) return old.podId
+            // Already online with a confirmed check-in — nothing to do (don't
+            // clobber a richer name). A previously-dead pod that has since come
+            // online is re-flowed below so its "never came online" pill clears.
+            if (old.status == PodInfo.Status.ONLINE && old.cameOnline) return old.podId
             _pods.value = existing.toMutableList().also {
                 it[idx] = old.copy(
                     name = old.name.ifEmpty { name },
                     description = old.description ?: description,
                     status = PodInfo.Status.ONLINE,
                     pendingAuthCodeSerial = null,
+                    cameOnline = cameOnline,
                 )
             }
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
-        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE))
+        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline))
         return id
     }
 
@@ -384,6 +392,14 @@ data class PodInfo(
      *  detail page can show the step list + the device info block. Null
      *  for non-demo pods. Mirror of iOS PodInfo.demoServer. */
     val demoServer: com.flagshipserver.app.api.DemoServerBlock? = null,
+    /** False for a server that registered its STK during install but whose
+     *  daemon never checked in (no `lastReported`, no cert in `/pods`) — a
+     *  "registered but never came online" box. Defaults true so every other
+     *  path is unaffected; only the reconciler flips it false from the
+     *  directory. The UI marks the pod "Never came online" and offers the
+     *  decommission/free-the-name delete instead of the lost/stolen revoke.
+     *  Mirror of iOS PodInfo.cameOnline. */
+    val cameOnline: Boolean = true,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 

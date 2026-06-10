@@ -365,20 +365,24 @@ public final class AppState {
     public func upsertRegisteredPod(
         fqdn: String,
         name: String,
-        description: String? = nil
+        description: String? = nil,
+        cameOnline: Bool = true
     ) -> String {
         let target = fqdn.lowercased()
         if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
             let old = pods[idx]
-            // Already online — nothing to do (don't clobber a richer name).
-            if old.status == .online { return old.podId }
+            // Already online with a confirmed check-in — nothing to do (don't
+            // clobber a richer name). A previously-dead pod that has since come
+            // online must still be re-flowed below so its pill clears.
+            if old.status == .online && old.cameOnline { return old.podId }
             pods[idx] = PodInfo(
                 podId: old.podId,
                 name: old.name.isEmpty ? name : old.name,
                 description: old.description ?? description,
                 fqdn: old.fqdn,
                 status: .online,
-                pendingAuthCodeSerial: nil
+                pendingAuthCodeSerial: nil,
+                cameOnline: cameOnline
             )
             return old.podId
         }
@@ -388,7 +392,8 @@ public final class AppState {
             name: name,
             description: description,
             fqdn: fqdn,
-            status: .online
+            status: .online,
+            cameOnline: cameOnline
         ))
         return id
     }
@@ -473,6 +478,14 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     public let description: String?
     public let fqdn: String
     public let status: Status
+    /// False for a server that registered its STK during install but whose
+    /// daemon has NEVER checked in (no `lastReported`, no cert in `/pods`) —
+    /// a "registered but never came online" box. Defaults true so every
+    /// other path (pending pods, live pods, the create flow) is unaffected;
+    /// only the reconciler flips it false from the directory derivation. The
+    /// UI uses it to mark the pod "Never came online" and to offer the
+    /// decommission/free-the-name delete instead of the lost/stolen revoke.
+    public let cameOnline: Bool
 
     /// Deterministic, fqdn-derived pod id. Pod identity is UNIFIED on the
     /// normalized fqdn so the registered-`/pods` pod, the outstanding-orders
@@ -504,7 +517,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         fqdn: String,
         status: Status = .unknown,
         pendingAuthCodeSerial: String? = nil,
-        demoServer: DemoServerBlock? = nil
+        demoServer: DemoServerBlock? = nil,
+        cameOnline: Bool = true
     ) {
         self.podId = podId
         self.name = name
@@ -513,5 +527,6 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.status = status
         self.pendingAuthCodeSerial = pendingAuthCodeSerial
         self.demoServer = demoServer
+        self.cameOnline = cameOnline
     }
 }

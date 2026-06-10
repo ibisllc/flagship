@@ -450,6 +450,13 @@ export interface LuksKeyStorage {
   putSealed(rec: SealedLuksKeyRecord): Promise<void>;
   /** Public read of the sealed blob (useless without the phone). */
   getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined>;
+  /**
+   * Drop the sealed blob for a domain. Called on server release so a reused
+   * name starts clean. Idempotent — deleting an absent row is a no-op. The
+   * stale blob is harmless if left (it's sealed to the old box's STK and is
+   * overwritten on reuse), but clearing it keeps the reservation tidy.
+   */
+  deleteSealed(serverDomain: string): Promise<void>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

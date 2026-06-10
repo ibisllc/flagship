@@ -6,6 +6,7 @@ import {
 } from "@flagship/protocol";
 import type {
   AuthCodeStorage,
+  LuksKeyStorage,
   RoutingStorage,
   ServerStorage,
   UsernameStorage,
@@ -121,6 +122,13 @@ export interface ServerReleaseDeps {
   routing: RoutingStorage;
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
+  /**
+   * Optional. When wired, the sealed LUKS blob for the released domain is
+   * dropped so a reused name starts clean. Optional so existing callers /
+   * tests need no change; absence just leaves the blob (harmless — it's
+   * sealed to the old box's STK and overwritten on reuse).
+   */
+  luksKeys?: LuksKeyStorage;
   freshnessMs?: number;
   now?: () => number;
 }
@@ -212,6 +220,20 @@ export async function handleServerReleaseName(
     "released-by-owner",
     now,
   );
+
+  // 4. Best-effort: drop the sealed LUKS blob so a reused name starts clean.
+  //    Optional dep + idempotent delete — a missing blob is fine.
+  //
+  //    NOT cleaned here: the boot worker's box_sealed_leases + secret_mailbox
+  //    rows for this domain. They live on the SEPARATE boot.flagshipserver.com
+  //    worker/DB, unreachable from this .com handler. They're harmless stale:
+  //    a lease is sealed to the old box STK (boxStkForDomain returns null once
+  //    the server record is revoked above, so the relay 404s and the lease
+  //    can't be used), and both get overwritten on name reuse. Future work:
+  //    a release→boot-worker cleanup hop if we want the rows GC'd eagerly.
+  if (deps.luksKeys) {
+    await deps.luksKeys.deleteSealed(r.serverDomain);
+  }
 
   return ok({
     ok: true,

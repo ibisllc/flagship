@@ -86,16 +86,20 @@ public struct PendingServerReconciler {
         // content-blind / just-live box). A registered fqdn matching a pending
         // pod flips it online in place (identity unified on the fqdn); a new
         // fqdn is added fresh.
-        let registeredFqdns = directory.pods
-            .filter { $0.revokedAt == nil }
-            .map { $0.serverDomain }
-        for fqdn in registeredFqdns where !fqdn.isEmpty {
+        let registeredEntries = directory.pods.filter { $0.revokedAt == nil }
+        for entry in registeredEntries where !entry.serverDomain.isEmpty {
+            let fqdn = entry.serverDomain
             let pendingName = app.pods.first(where: {
                 $0.fqdn.lowercased() == fqdn.lowercased() && $0.status == .pending
             })?.name
+            // `cameOnline` — the box has reported daemon status or holds a
+            // cert. A registered box with neither is "registered but never
+            // came online"; the UI marks it + offers the decommission/free-
+            // the-name delete instead of the lost/stolen revoke.
             app.upsertRegisteredPod(
                 fqdn: fqdn,
-                name: pendingName ?? Self.serverNameFromFqdn(fqdn)
+                name: pendingName ?? Self.serverNameFromFqdn(fqdn),
+                cameOnline: entry.cameOnline
             )
         }
 

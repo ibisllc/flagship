@@ -154,8 +154,59 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     public let serverDomain: String
     public let identityPubKey: String   // hex (32 bytes) — the STK
     public let revokedAt: Int64?
-    public init(serverDomain: String, identityPubKey: String, revokedAt: Int64? = nil) {
-        self.serverDomain = serverDomain; self.identityPubKey = identityPubKey; self.revokedAt = revokedAt
+    /// Wall-clock ms of the box's last daemon-status check-in, or nil if the
+    /// daemon has NEVER reported. A registered server with `lastReported ==
+    /// nil` AND no cert is a "registered but never came online" box — the
+    /// install reserved the name + registered the STK, but the daemon never
+    /// reached the cloud. The phone derives `cameOnline` from this client-side
+    /// (no backend change needed; the field was already in the /pods response).
+    public let lastReported: Int64?
+    /// True iff the directory carries a `currentCert` block for this box (the
+    /// daemon reported a real cert). Decoded as a presence flag — the cert
+    /// detail itself isn't needed to tell a dead box from a live one.
+    public let hasCert: Bool
+    public init(
+        serverDomain: String,
+        identityPubKey: String,
+        revokedAt: Int64? = nil,
+        lastReported: Int64? = nil,
+        hasCert: Bool = false
+    ) {
+        self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
+        self.revokedAt = revokedAt; self.lastReported = lastReported; self.hasCert = hasCert
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.serverDomain = try c.decode(String.self, forKey: .serverDomain)
+        self.identityPubKey = try c.decode(String.self, forKey: .identityPubKey)
+        self.revokedAt = try c.decodeIfPresent(Int64.self, forKey: .revokedAt)
+        self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
+        // `currentCert` is an object-or-null on the wire; decode it as a
+        // presence flag (we only need "is there a cert" here).
+        let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
+        self.hasCert = cert != nil
+    }
+
+    /// Encode mirrors the wire shape (the presence flag round-trips through a
+    /// minimal `currentCert` object). The type is decode-only in practice, but
+    /// a custom `init(from:)` suppresses Encodable synthesis, so we provide it.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(serverDomain, forKey: .serverDomain)
+        try c.encode(identityPubKey, forKey: .identityPubKey)
+        try c.encodeIfPresent(revokedAt, forKey: .revokedAt)
+        try c.encodeIfPresent(lastReported, forKey: .lastReported)
+        if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
+    }
+
+    /// `cameOnline` derivation, shared by the reconciler. A box that has
+    /// reported daemon status OR holds a cert has come online at least once.
+    public var cameOnline: Bool { lastReported != nil || hasCert }
+
+    private struct CurrentCert: Codable, Equatable { let sha256: String? }
+    private enum CodingKeys: String, CodingKey {
+        case serverDomain, identityPubKey, revokedAt, lastReported, currentCert
     }
 }
 

@@ -39,6 +39,9 @@ public struct HomeScreen: View {
     var onSetLeader: (PodInfo) -> Void = { _ in }
     /// Cancel/delete a pending (in-flight) server straight from the list.
     var onCancelServer: (PodInfo) -> Void = { _ in }
+    /// Decommission a registered-but-dead server (one that never came online)
+    /// straight from the list — frees the name via the same release flow.
+    var onDeleteDeadServer: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
@@ -57,6 +60,7 @@ public struct HomeScreen: View {
         deviceCapability: DeviceCapabilityBlock? = nil,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
+        onDeleteDeadServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
@@ -78,6 +82,7 @@ public struct HomeScreen: View {
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
         self.onCancelServer = onCancelServer
+        self.onDeleteDeadServer = onDeleteDeadServer
         self.onVibeCode = onVibeCode
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
@@ -384,6 +389,17 @@ public struct HomeScreen: View {
                                 } label: {
                                     Label("Cancel server", systemImage: "xmark.circle")
                                 }
+                            } else if !pod.cameOnline {
+                                // Registered during install but never came online:
+                                // a dead box. Decommission it via the same release
+                                // flow (frees the name for reuse) — distinct from
+                                // the lost/stolen Revoke (a live, checked-in server
+                                // still uses the detail-page danger zone).
+                                Button(role: .destructive) {
+                                    onDeleteDeadServer(pod)
+                                } label: {
+                                    Label("Delete server (free name)", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -522,6 +538,13 @@ public struct PodCard: View {
                     }
                     HStack(spacing: FS.space.s2) {
                         FSPill(statusLabel, kind: statusKind)
+                        // A box that registered during install but whose daemon
+                        // never checked in — distinguishes a dead install from a
+                        // live server so the owner knows to decommission it.
+                        if pod.status != .pending && !pod.cameOnline {
+                            FSPill("Never came online", kind: .offline)
+                                .accessibilityIdentifier("pod-card-never-online")
+                        }
                         if isLeader { LeaderBadge() }
                         Spacer(minLength: 0)
                     }

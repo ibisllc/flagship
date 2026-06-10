@@ -21,6 +21,8 @@ import {
   fetchPodInventory,
   pendingWithoutRegisteredTwin,
   renderPendingCard,
+  renderServerCard,
+  classifyServer,
 } from "../public/webapp/views/home.js";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -191,5 +193,44 @@ describe("webapp renderPendingCard", () => {
     });
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img");
+  });
+
+  it("offers the decommission/free-the-name delete on a pending card", () => {
+    const html = renderPendingCard({
+      fqdn: "wiki.demo.flagship.services",
+      serverName: "wiki",
+      phase: "installing",
+    });
+    expect(html).toContain("js-delete-dead-server");
+    expect(html).toContain('data-fqdn="wiki.demo.flagship.services"');
+    expect(html).toContain("Delete server (free name)");
+  });
+});
+
+describe("webapp dead-registered server delete (free the name)", () => {
+  // A registered box whose daemon never checked in.
+  const deadServer = { serverId: "dead.demo.flagship.services" };
+
+  it("classifies a registered box with no check-in as never-seen", () => {
+    expect(classifyServer(deadServer, undefined).kind).toBe("never-seen");
+    expect(classifyServer(deadServer, { lastReported: null }).kind).toBe("never-seen");
+  });
+
+  it("renders the delete (free name) action for a never-seen server", () => {
+    const html = renderServerCard(deadServer, { lastReported: null });
+    expect(html).toContain("js-delete-dead-server");
+    expect(html).toContain('data-fqdn="dead.demo.flagship.services"');
+    expect(html).toContain("Delete server (free name)");
+  });
+
+  it("does NOT render the delete action for a live server", () => {
+    // A box that checked in recently is online — deletion stays behind the
+    // lost/stolen revoke, not the free-the-name path.
+    const html = renderServerCard(
+      { serverId: "live.demo.flagship.services" },
+      { lastReported: Date.now() },
+    );
+    expect(classifyServer({ serverId: "live.demo.flagship.services" }, { lastReported: Date.now() }).kind).toBe("online");
+    expect(html).not.toContain("js-delete-dead-server");
   });
 });

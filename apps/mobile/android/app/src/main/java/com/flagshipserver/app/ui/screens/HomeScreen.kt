@@ -15,8 +15,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -53,6 +59,9 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     onSetLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
+    /** Decommission a pending or registered-but-dead (never-came-online)
+     *  server via the release/free-the-name flow. No-op default. */
+    onDeleteServer: (PodInfo) -> Unit = {},
     /** When true, renders the C9 recovery-setup nudge card above the
      *  server list. Source-of-truth is AppState.shouldShowRecoveryNudgeNow();
      *  the shell evaluates that and passes the resolved boolean so this
@@ -144,6 +153,7 @@ fun HomeScreen(
                         isLeader = pod.podId == leaderPodId,
                         onTap = { onOpenPod(pod) },
                         onSetLeader = { onSetLeader(pod) },
+                        onDelete = { onDeleteServer(pod) },
                     )
                 }
                 FSGhostButton(
@@ -222,7 +232,15 @@ fun PodCard(
     isLeader: Boolean,
     onTap: () -> Unit,
     onSetLeader: () -> Unit,
+    /** Decommission a pending OR registered-but-dead (never-came-online)
+     *  server via the release/free-the-name flow. No-op default keeps the
+     *  card previewable + leaves a live server's card unchanged. */
+    onDelete: () -> Unit = {},
 ) {
+    // A pending order, or a registered box whose daemon never checked in, is
+    // deletable straight from the list via the release flow. A live, checked-in
+    // server is NOT — it keeps the lost/stolen revoke on its detail page.
+    val deletable = pod.status == PodInfo.Status.PENDING || !pod.cameOnline
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
@@ -260,6 +278,15 @@ fun PodCard(
                             PodInfo.Status.UNKNOWN -> FSPillKind.Offline
                         },
                     )
+                    // Registered during install but never came online — a dead
+                    // box. Distinguishes it from a live server in the list.
+                    if (pod.status != PodInfo.Status.PENDING && !pod.cameOnline) {
+                        FSPill(
+                            label = "Never came online",
+                            kind = FSPillKind.Offline,
+                            modifier = Modifier.testTag("pod-card-never-online"),
+                        )
+                    }
                 }
                 // "Your server is being installed" — a thin determinate
                 // bar on a demo server still pre-`ready`.
@@ -277,9 +304,36 @@ fun PodCard(
             }
             FSGhostButton(label = "Open", onClick = onTap)
         }
-        if (!isLeader && pod.status == PodInfo.Status.ONLINE) {
+        if (!isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline) {
             Spacer(Modifier.height(FS.space.s2))
             FSGhostButton(label = "Make leader", onClick = onSetLeader)
+        }
+        if (deletable) {
+            var confirming by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(FS.space.s2))
+            FSGhostButton(
+                label = "Delete server (free name)",
+                onClick = { confirming = true },
+                modifier = Modifier.testTag("pod-card-delete"),
+            )
+            if (confirming) {
+                AlertDialog(
+                    onDismissRequest = { confirming = false },
+                    title = { Text("Delete ${pod.name}?") },
+                    text = {
+                        Text(
+                            "This frees the name for reuse and the box can no longer come online. " +
+                                if (pod.status == PodInfo.Status.PENDING) "This install hasn't completed." else "This server never checked in.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { confirming = false; onDelete() }) { Text("Delete") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirming = false }) { Text("Cancel") }
+                    },
+                )
+            }
         }
     }
 }

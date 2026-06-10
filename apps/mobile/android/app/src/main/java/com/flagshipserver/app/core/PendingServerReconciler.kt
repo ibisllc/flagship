@@ -58,15 +58,21 @@ class PendingServerReconciler(
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod
         // flips it online in place (identity unified on the fqdn); a new fqdn
         // is added fresh. Registered SUPERSEDES pending.
-        val registeredFqdns = directory.pods
-            .filter { it.revokedAt == null }
-            .map { it.serverDomain }
-            .filter { it.isNotEmpty() }
-        for (fqdn in registeredFqdns) {
+        val registeredEntries = directory.pods
+            .filter { it.revokedAt == null && it.serverDomain.isNotEmpty() }
+        for (entry in registeredEntries) {
+            val fqdn = entry.serverDomain
             val pendingName = app.pods.value.firstOrNull {
                 it.fqdn.lowercase() == fqdn.lowercase() && it.status == PodInfo.Status.PENDING
             }?.name
-            app.upsertRegisteredPod(fqdn = fqdn, name = pendingName ?: serverNameFromFqdn(fqdn))
+            // `cameOnline` — a registered box with no daemon check-in + no cert
+            // is "registered but never came online"; the UI marks it + offers
+            // the decommission/free-the-name delete instead of the revoke.
+            app.upsertRegisteredPod(
+                fqdn = fqdn,
+                name = pendingName ?: serverNameFromFqdn(fqdn),
+                cameOnline = entry.cameOnline,
+            )
         }
 
         // The non-pending pods are the live ones now (including the ones we

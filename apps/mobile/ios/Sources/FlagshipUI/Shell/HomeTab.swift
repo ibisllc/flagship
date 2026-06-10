@@ -24,6 +24,10 @@ public struct HomeTab: View {
     /// store is observed so toggling `dismissed` from "Not now"
     /// re-renders Home and the banner disappears immediately.
     @State private var recoveryBannerStore = RecoveryBannerStore()
+    /// The dead-registered pod awaiting a delete confirmation (set by the
+    /// Home list's "Delete server (free name)" context action). Non-nil ⇒
+    /// the destructive confirm dialog is shown.
+    @State private var pendingDeleteDeadPod: PodInfo?
 
     public init() {}
 
@@ -81,6 +85,11 @@ public struct HomeTab: View {
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
+                    },
+                    onDeleteDeadServer: { pod in
+                        // Confirm before decommissioning a registered-but-dead box.
+                        // The IRK biometric fires when signing the release.
+                        pendingDeleteDeadPod = pod
                     },
                     onAddServer: { path.append(.addServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
@@ -159,6 +168,22 @@ public struct HomeTab: View {
             if hasOnline {
                 Task { await refreshRecoveryStatus() }
             }
+        }
+        .alert(
+            "Delete \(pendingDeleteDeadPod?.name ?? "server")?",
+            isPresented: Binding(
+                get: { pendingDeleteDeadPod != nil },
+                set: { if !$0 { pendingDeleteDeadPod = nil } }
+            ),
+            presenting: pendingDeleteDeadPod
+        ) { pod in
+            Button("Delete", role: .destructive) {
+                pendingDeleteDeadPod = nil
+                Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteDeadPod = nil }
+        } message: { _ in
+            Text("This frees the name for reuse and the box can no longer come online. This server never checked in.")
         }
     }
 
@@ -562,8 +587,11 @@ struct ServerDetailContainer: View {
     let podId: String
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+
+    private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -573,6 +601,13 @@ struct ServerDetailContainer: View {
                 ServerDetailScreen(
                     state: detailVm.detail,
                     metrics: metricsVm.state,
+                    // A registered box whose daemon never checked in surfaces the
+                    // decommission/free-the-name card (distinct from the lost/
+                    // stolen Revoke). Defaults to a live server when the pod is
+                    // momentarily absent from AppState.
+                    deadServer: pod.map { !$0.cameOnline } ?? false,
+                    serverName: pod?.name,
+                    deadServerFqdn: pod?.fqdn,
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()

@@ -423,6 +423,9 @@ export class InMemoryLuksKeyStorage implements LuksKeyStorage {
     const r = this.sealed.get(serverDomain);
     return r ? { ...r } : undefined;
   }
+  async deleteSealed(serverDomain: string): Promise<void> {
+    this.sealed.delete(serverDomain);
+  }
 }
 
 export class InMemoryPushTokenStorage implements PushTokenStorage {
