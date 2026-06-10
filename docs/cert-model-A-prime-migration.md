@@ -36,8 +36,29 @@ test boxes (abc*) get decommissioned, not migrated.
 |---|---|---|---|
 | A box | `<server>.<user>.flagship.services` | per-box cert (apex SAN) | the box |
 | A service on a box | `<service>.<server>.<user>.flagship.services` | per-box **wildcard** `*.<server>.<user>` | the box |
-| A short alias for a service | `<slug>.voi.ci` | a box-minted voi.ci cert (separate) | the box |
 | A shared multi-box service | `<service>.<user>.flagship.services` | a shared cert | phone or leader box |
+| A short share-link for a service | `voi.ci/<blurb>` (PATH redirector) | none for the service — voi.ci has ONE cert for itself; it 302-redirects to the cert-bearing URL | the voi.ci worker |
+
+## Three explicit trust tiers (the share-URL encodes the assurance)
+
+The address you choose to share declares how much you trust us:
+1. **Full canonical** `<service>.<server>.<user>.flagship.services` — **security + HARDWARE
+   assurance**. You're talking to THIS box; its per-box cert is pinnable to the
+   box's STK-signed fingerprint. Use for key exchange / private data when you care
+   which metal.
+2. **service+user** `<service>.<user>.flagship.services` — **security, hardware-AGNOSTIC**.
+   Real cert, still verifiable, but the leader-selection harness picks which box
+   answers. Use when you want the service securely and don't care which box runs it.
+3. **voi.ci/blurb** — **convenience; you trust US for the security+hardware juggling.**
+   A short path link that VISIBLY 302-redirects to tier 1 or 2 (the user lands on,
+   and sees, the real cert-bearing flagship.services URL). NOT a zero-trust pipe (the
+   redirector is flagship-controlled) — that's the explicit trade for a short link.
+   For zero-trust, share tier 1 or 2 directly.
+
+voi.ci stays exactly as it is today: `voi.ci/<blurb>` assigned once per service (in
+lieu of the `<service>.<user>` URL, presupposing leader-selection), redirecting to the
+cert-bearing address. It carries NO per-service certs and NO Let's-Encrypt exposure of
+its own beyond the single cert voi.ci needs to serve the redirector over HTTPS.
 
 ## Answers to your specific questions
 
@@ -81,34 +102,22 @@ TLS layer: each presented name still needs (a) a cert that covers it and (b) a D
 record. So `<slug>.voi.ci` works as a secure pipe only if the box holds a cert for
 `<slug>.voi.ci`. "Idempotent" = same routing fabric, but per-name cert + DNS still required.
 
-**6. "voi.ci limits — does the limit only affect the top-domain in the cert?"**
-LE's limit is **per registered domain**, and a cert counts against the limit of
-**every** registered domain it names. So `voi.ci` has its OWN 5000-or-default budget,
-and a multi-SAN cert spanning `flagship.services` + `voi.ci` spends BOTH per issuance
-— which also **couples failure domains** (a voi.ci-limit stall would block the box's
-flagship cert renewal too). → Recommendation: **separate certs** per name-family
-(one per-box flagship wildcard cert; one voi.ci cert), given the rate headroom — it
-decouples failure domains at the cost of one extra issuance per box.
-
-**7. "Can we expect LE to be lenient for voi.ci / tag it to the prior request?"**
-Rate increases are granted per registered domain, so you file a **separate increase
-request for `voi.ci`**, referencing the same use case (they were lenient for
-flagship.services; likely similar). Until granted, voi.ci has the default (~50/week)
-— enough for early testing, not for every box minting a voi.ci SAN at scale. Treat
-the voi.ci-CNAME-cert layer as gated on that increase.
-
-**8. "Redirector (`voi.ci/slug`) vs CNAME-cert (`slug.voi.ci`) — enough value?"**
-- **Redirector** (`voi.ci/slug` → 302 → flagship URL): simplest, one voi.ci cert.
-  BUT the entry point is a `.com`-controlled redirect — NOT a secure pipe (it can be
-  MITM'd / re-pointed, and it can't be cert-pinned). Fine for casual link-sharing,
-  WRONG for the secure pipe (key exchange / private data).
-- **CNAME-cert** (`slug.voi.ci` served directly with a box-minted cert): the short
-  name IS a verifiable, pinnable secure pipe (works for WSS/API, stable forever),
-  because the box holds its cert. Costs voi.ci issuances + the rate increase.
-- **Recommendation:** the canonical `<service>.<server>.<user>` is ALWAYS the secure
-  pipe. Offer `slug.voi.ci` as an **opt-in short secure address** (CNAME-cert) for
-  services that want a stable short URL; offer `voi.ci/slug` redirectors only for
-  pure share-a-link discovery, explicitly NOT for secure pipes.
+**6/7/8. voi.ci — DECIDED: stays a path redirector, NOT CNAME-certs.**
+(Owner direction.) Asking LE to bless `voi.ci` certs would smear the security root
+across two registered domains and defeat the purpose of `flagship.services` being THE
+security root. So: **voi.ci carries no per-service certs** — `voi.ci/<blurb>` simply
+302-redirects to the cert-bearing flagship.services URL. Consequences:
+- **No voi.ci LE rate-limit exposure** beyond the single cert voi.ci needs for itself
+  (the redirector host). No separate LE increase. No PSL question for voi.ci.
+- The redirect is **visible** — the client lands on (and sees) the real
+  flagship.services URL, where the cert + pinning apply.
+- The three trust tiers (above) make the trust trade explicit: zero-trust users share
+  the canonical or service+user URL; "just give me a short link, I trust you" users
+  share voi.ci/blurb. The redirector being flagship-controlled is the acknowledged
+  price of the convenience tier, not a hidden weakness.
+- Keep CURRENT behavior: one `voi.ci/<blurb>` per service, in lieu of `<service>.<user>`
+  (so it presupposes leader-selection). Migration touches only its redirect TARGETS,
+  to match the post-`--`-revert names.
 
 ## Cert-fingerprint pinning (the "we're not cheating" proof)
 
@@ -129,9 +138,8 @@ rejects anything else.**
 - `flagship.services` (raised to 5000/week): per-box wildcard = 1 issuance/box/~60d;
   shared-service cert = 1/service; all DISTINCT names → no duplicate-cert limit.
   Comfortable to tens of thousands of boxes; PSL later for per-user budgets.
-- `voi.ci` (default until raised): 1 issuance per slug-cert. Gate the voi.ci layer on
-  a separate LE increase. Keep voi.ci certs SEPARATE from flagship certs (decoupled
-  failure domains).
+- `voi.ci`: NO per-service certs (redirector only) → no LE rate exposure beyond the
+  one cert voi.ci needs to serve the redirector. No increase, no PSL needed for voi.ci.
 
 ## Migration phases (next session)
 
@@ -164,12 +172,11 @@ Switch `<service>--<server>.<user>` → `<service>.<server>.<user>` everywhere i
 constructed/parsed/displayed/routed. Lossless; pre-launch so no stored back-compat
 needed, but grep exhaustively (URL builders, voi.ci appId, manifests, all 3 clients).
 
-### Phase 3 — voi.ci CNAME-certs (gated on the voi.ci LE increase)
-1. Assign each service-on-a-box a forever `<slug>.voi.ci` (slug→box-service mapping,
-   stored). 2. Box mints a SEPARATE cert for its `<slug>.voi.ci` name(s). 3. DNS:
-   `A <slug>.voi.ci` (or `*.voi.ci`) → passthrough; routing: slug→box tunnel.
-   4. Passthrough accepts the voi.ci apex SNI. 5. Decide redirector vs CNAME-cert per
-   §8 (default: canonical = pipe; voi.ci CNAME-cert opt-in; redirector for casual).
+### Phase 3 — voi.ci redirect targets (light; keep the existing redirector)
+voi.ci stays the existing path redirector (NO certs per service). Only update the
+redirect-target construction so `voi.ci/<blurb>` 302s to the post-`--`-revert
+cert-bearing URL (tier 1 canonical or tier 2 service+user, as today). Verify the
+existing voi.ci appId/blurb encoding still maps correctly after the name change.
 
 ### Phase 4 — client cert-fingerprint pinning
 Surface the STK-signed `certSha256` to the clients; pin on connect to
@@ -184,10 +191,15 @@ the current leader. Opt-in, one-service blast radius. Build last.
 
 1. **A′ confirmed** as the model (per-box wildcard, box-local key, no sharing)? (Y/N)
 2. **Revert `--`** to hierarchical names? (Y/N — recommended Y)
-3. **voi.ci layer**: CNAME-cert (opt-in, gated on LE increase) vs redirector vs both?
-   And: separate voi.ci certs (recommended) vs combined multi-SAN?
-4. **File the voi.ci LE rate increase** now-ish (separate request)?
-5. **File PSL** for flagship.services once there are real users (deferred per LE)?
-6. **Shared multi-server services**: in-scope this migration (Phase 5) or later?
-7. **Pinning**: pin to the STK-signed fingerprint (recommended) — confirm the clients
-   should hard-fail on mismatch (vs warn).
+3. **voi.ci = redirector only** (DECIDED): no per-service certs, no LE increase, no
+   PSL for voi.ci; just keep the path redirector and update its targets. ✓ locked.
+4. **File PSL** for flagship.services once there are real users (deferred per LE)?
+5. **Shared multi-server services**: in-scope this migration (Phase 5) or later?
+   (rec: later — A′ + redirector cover the common case first.)
+6. **Pinning**: pin to the STK-signed fingerprint (recommended) — confirm the clients
+   should hard-fail on mismatch (vs warn). (rec: hard-fail.)
+7. **Tier 2 (`<service>.<user>`) availability**: is it offered for EVERY service
+   (every service gets leader-selection + a shared cert, so voi.ci/blurb always has a
+   service+user target), or ONLY for services the owner opts into hardware-agnostic
+   mode (single-box services stay canonical-only, and voi.ci/blurb → canonical)?
+   This decides how early Phase 5 (shared cert + leader) is actually needed.
