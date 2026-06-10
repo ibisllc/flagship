@@ -48,6 +48,8 @@ import {
   runDemoW11SnapshotPoller,
   schedulePendingRePairAlerts,
   scheduleQuarantineAlerts,
+  runCtScan,
+  createCrtShSource,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 
@@ -330,6 +332,17 @@ export async function scheduled(
   if (controller.cron === "0 */6 * * *") {
     ctx.waitUntil(runBackup(env, now, controller.cron));
     ctx.waitUntil(runCustomDomainVerify(env, now));
+    // CT monitoring (server-side, defense-in-depth) — slow cadence
+    // alongside the existing 6-hourly work. Independently guarded so a
+    // crt.sh outage or scan error can never break the backup / verify
+    // tasks. See packages/control-plane/src/ctMonitor.ts for the honest
+    // threat-model note (this catches external mis-issuance + a
+    // non-suppressing .com; the phone-side watcher is Phase 2).
+    ctx.waitUntil(
+      runCtMonitor(env, now).catch((e) => {
+        console.error("[ct-monitor] cron pass failed", e);
+      }),
+    );
     return;
   }
   if (controller.cron === "*/10 * * * *") {
@@ -525,6 +538,42 @@ export async function runCustomDomainVerify(
     },
     now: () => now.getTime(),
   });
+}
+
+/**
+ * CT-monitoring cron pass (server-side, defense-in-depth). Queries
+ * crt.sh for each active user's `flagship.services` names and pushes the
+ * owner when it sees a leaf cert the user's own boxes did NOT report
+ * minting. No-ops without the DB binding. Best-effort + bounded — the
+ * scan never throws and caps its per-run domain / CT-query budget.
+ * When no push provider secrets are configured the alert is audit-only.
+ */
+export async function runCtMonitor(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<{
+  usersScanned: number;
+  alerted: number;
+  audited: number;
+} | null> {
+  if (!env.DB) return null;
+  const storage = new D1Storage(env.DB);
+  const fanout = buildOptionalV12PushFanoutFromEnv(env);
+  const result = await runCtScan({
+    servers: storage.servers,
+    daemonStatus: storage.daemonStatus,
+    auditEvents: storage.auditEvents,
+    ctAlerts: storage.ctAlerts,
+    ctSource: createCrtShSource(),
+    pushTokens: storage.pushTokens,
+    ...(fanout ? { pushFanout: fanout } : {}),
+    now: () => now.getTime(),
+  });
+  return {
+    usersScanned: result.usersScanned,
+    alerted: result.alerted,
+    audited: result.audited,
+  };
 }
 
 /**

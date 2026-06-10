@@ -84,7 +84,8 @@ bucket_name = "flagship-backups"
 # Cron triggers.
 #  * `0 */6 * * *` — D1 → R2 backup (gzipped JSONL). First run of each
 #    calendar month (UTC) also writes a monthly snapshot kept forever.
-#    Also drives the custom-domain verification pass.
+#    Also drives the custom-domain verification pass AND the server-side
+#    CT-monitoring scan (crt.sh → owner push on an unexpected cert).
 #  * `*/10 * * * *` — Plan A demo-user reaper (destroys idle Hetzner
 #    VPSs past their per-row ttl_idle_minutes) AND provisioning poller
 #    (promotes provisioning → up rows when Hetzner reports running +

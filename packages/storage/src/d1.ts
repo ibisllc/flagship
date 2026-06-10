@@ -59,6 +59,7 @@ import type {
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
+  CtAlertStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -2588,6 +2589,7 @@ export class D1Storage implements Storage {
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
+  ctAlerts: CtAlertStorage;
   namespace: NamespaceStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
@@ -2621,7 +2623,40 @@ export class D1Storage implements Storage {
     this.mintReservations = new D1MintReservationStorage(db);
     this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);
     this.acmeAccountKeyDelivery = new D1AcmeAccountKeyDeliveryStorage(db);
+    this.ctAlerts = new D1CtAlertStorage(db);
     this.namespace = new D1NamespaceStorage(db);
+  }
+}
+
+/** D1 CtAlertStorage — owner-push dedup ledger for the CT watcher.
+ *  claimAlertSlot uses INSERT ... and treats a UNIQUE/PRIMARY-KEY
+ *  collision as "already alerted" (returns false). Migration 0047. */
+export class D1CtAlertStorage implements CtAlertStorage {
+  constructor(private readonly db: D1Database) {}
+  async claimAlertSlot(username: string, certSha256: string, now: number) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO ct_alerts (username, cert_sha256, alerted_at)
+           VALUES (?1, ?2, ?3)`,
+        )
+        .bind(username.toLowerCase(), certSha256.toLowerCase(), now)
+        .run();
+      return true;
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY|constraint/i.test(msg)) return false;
+      throw e;
+    }
+  }
+  async has(username: string, certSha256: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT 1 FROM ct_alerts WHERE username = ?1 AND cert_sha256 = ?2 LIMIT 1`,
+      )
+      .bind(username.toLowerCase(), certSha256.toLowerCase())
+      .first();
+    return !!r;
   }
 }
 

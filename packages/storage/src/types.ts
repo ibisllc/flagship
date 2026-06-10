@@ -375,7 +375,13 @@ export type AuditEventKind =
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
   // decommissioned}. Cascades through every active boot-unlock lease
   // on the server so the box bricks on the next reboot.
-  | "server-revoked";
+  | "server-revoked"
+  // CT monitoring (server-side, defense-in-depth). Logged for EVERY
+  // CT-observed cert under the user's names that isn't accounted for
+  // by a daemon-reported baseline cert. When a baseline exists and the
+  // observed cert is newer than the baseline, this row is ALSO paired
+  // with an owner push — a possible rogue / mis-issued certificate.
+  | "ct-unexpected-cert";
 
 /**
  * Plan B Phase 5 — recovery-method tag stored next to a re-pair
@@ -901,7 +907,41 @@ export interface Storage {
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
+  ctAlerts: CtAlertStorage;
   namespace: NamespaceStorage;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// CT (Certificate Transparency) monitoring — alert dedup ledger
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One row per (username, certSha256) that the server-side CT watcher has
+ * already raised an OWNER PUSH for. Used purely for idempotency: the
+ * scan never pushes twice for the same observed cert. (Audit rows live
+ * in audit_events and are separately deduped by the scan against this
+ * same ledger before append.)
+ *
+ * certSha256 is the normalized lowercase-hex, colon-free leaf-cert
+ * sha256 (the comparison form the scan uses for both CT + baseline).
+ */
+export interface CtAlertRecord {
+  username: string;
+  certSha256: string;
+  /** ms since epoch — when the alert first fired. */
+  alertedAt: number;
+}
+
+export interface CtAlertStorage {
+  /**
+   * Atomically claim the (username, certSha256) alert slot. Returns
+   * true exactly once (the first caller); subsequent calls for the same
+   * pair return false. The scan only pushes + audit-logs when this
+   * returns true, so a cert can never re-alert across cron ticks.
+   */
+  claimAlertSlot(username: string, certSha256: string, now: number): Promise<boolean>;
+  /** Test/inspection: has this pair already been alerted? */
+  has(username: string, certSha256: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

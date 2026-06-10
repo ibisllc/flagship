@@ -313,10 +313,12 @@ describe("scheduled — D1 → R2 backup", () => {
       cron: "0 */6 * * *",
     };
     await scheduled(controller, env, ctx);
-    // scheduled() now schedules two jobs: the D1→R2 backup AND the
-    // custom-domain verify pass (#79B). The verify pass no-ops here
-    // (no SERVICES_* on env) but is still waitUntil'd.
-    expect(waits).toHaveLength(2);
+    // scheduled() now schedules three jobs on the 6-hourly cron: the
+    // D1→R2 backup, the custom-domain verify pass (#79B), AND the
+    // server-side CT-monitoring scan. The verify + CT passes no-op /
+    // run harmlessly here (no SERVICES_* on env, no servers in the DB)
+    // but are still waitUntil'd.
+    expect(waits).toHaveLength(3);
     await Promise.all(waits);
     expect(r2.puts).toHaveLength(1);
     expect(r2.puts[0]!.key).toBe("d1/hourly/2026-05-11-06.jsonl.gz");

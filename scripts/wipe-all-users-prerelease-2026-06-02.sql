@@ -82,3 +82,4 @@ DELETE FROM llm_promo_usage;
 -- Audit + telemetry
 DELETE FROM audit_events;
 DELETE FROM qr_pipe_metrics;
+DELETE FROM ct_alerts;

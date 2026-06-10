@@ -1,4 +1,6 @@
 import type {
+  CtAlertRecord,
+  CtAlertStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -1128,6 +1130,7 @@ export class InMemoryStorage implements Storage {
   mintReservations = new InMemoryMintReservationStorage();
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
   acmeAccountKeyDelivery = new InMemoryAcmeAccountKeyDeliveryStorage();
+  ctAlerts = new InMemoryCtAlertStorage();
   namespace = new InMemoryNamespaceStorage();
 }
 
@@ -1233,6 +1236,30 @@ export class InMemoryWatchDelegateStorage implements WatchDelegateStorage {
     const r = this.byId.get(grantId);
     if (!r) throw new Error("unknown grantId");
     r.revokedAt = revokedAt;
+  }
+}
+
+/**
+ * In-memory CtAlertStorage — owner-push dedup ledger for the CT watcher.
+ * Keyed by `<username>|<certSha256>`; the first claimAlertSlot wins.
+ */
+export class InMemoryCtAlertStorage implements CtAlertStorage {
+  private byKey = new Map<string, CtAlertRecord>();
+  private key(u: string, sha: string) {
+    return `${u.toLowerCase()}|${sha.toLowerCase()}`;
+  }
+  async claimAlertSlot(username: string, certSha256: string, now: number) {
+    const k = this.key(username, certSha256);
+    if (this.byKey.has(k)) return false;
+    this.byKey.set(k, {
+      username: username.toLowerCase(),
+      certSha256: certSha256.toLowerCase(),
+      alertedAt: now,
+    });
+    return true;
+  }
+  async has(username: string, certSha256: string) {
+    return this.byKey.has(this.key(username, certSha256));
   }
 }
 
