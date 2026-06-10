@@ -159,11 +159,44 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     }
 }
 
+/// #56 — an active outstanding install order, surfaced in the SAME
+/// unauthenticated `/pods` response as registered servers. A just-created,
+/// not-yet-registered server now rides this list instead of the fragile
+/// biometric-IRK `outstanding-orders` path, so a list refresh triggers NO
+/// Face ID prompt. Mirrors control-plane `PendingPodEntry`.
+public struct PendingPodEntry: Codable, Equatable, Sendable {
+    public let serial: String
+    public let serverName: String
+    /// `<serverName>.<username>.flagship.services` — the reserved FQDN.
+    public let fqdn: String
+    /// Latest reported provisioning phase, or nil.
+    public let phase: String?
+    public let createdAt: Int64
+    public init(serial: String, serverName: String, fqdn: String, phase: String?, createdAt: Int64) {
+        self.serial = serial; self.serverName = serverName
+        self.fqdn = fqdn; self.phase = phase; self.createdAt = createdAt
+    }
+}
+
 public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
     public let username: String
     public let pods: [PodDirectoryEntry]
-    public init(username: String, pods: [PodDirectoryEntry]) {
-        self.username = username; self.pods = pods
+    /// #56 — active outstanding orders, merged into the same fetch. Optional on
+    /// the wire so a pre-#56 Worker response (no `pending` key) still decodes.
+    public let pending: [PendingPodEntry]
+    public init(username: String, pods: [PodDirectoryEntry], pending: [PendingPodEntry] = []) {
+        self.username = username; self.pods = pods; self.pending = pending
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.username = try c.decode(String.self, forKey: .username)
+        self.pods = try c.decode([PodDirectoryEntry].self, forKey: .pods)
+        self.pending = try c.decodeIfPresent([PendingPodEntry].self, forKey: .pending) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case username, pods, pending
     }
 
     /// The STK registered for `serverDomain`, lowercased-domain match.
@@ -344,6 +377,8 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Sendable {
     public var pending: [PendingSecretRequest] = []
     public var directory: [PodDirectoryEntry] = []
+    /// #56 — active outstanding orders the merged `/pods` fetch returns.
+    public var directoryPending: [PendingPodEntry] = []
     public var sealedLuksKeyHex: String?
     public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
     public private(set) var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
@@ -363,7 +398,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return SealedLuksKeyResponse(serverDomain: serverDomain, sealedKey: hex, sealedAt: 1)
     }
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
-        PodsDirectoryResponse(username: username, pods: directory)
+        PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending)
     }
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
         deposited.append((lease, signatureHex, bootAuth))

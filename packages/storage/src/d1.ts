@@ -723,10 +723,18 @@ export class D1ProvisionStatusStorage implements ProvisionStatusStorage {
       .run();
   }
   async getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null> {
-    const r = await this.db
-      .prepare("SELECT * FROM provision_status WHERE serial = ?")
-      .bind(serial)
-      .first<ProvisionStatusRow>();
+    // #56 — swallow a missing-table / query failure and return null. This
+    // lookup only ENRICHES the authoritative server list (the merged `/pods`);
+    // it must never be the reason the list 500s or comes back empty.
+    let r: ProvisionStatusRow | null;
+    try {
+      r = await this.db
+        .prepare("SELECT * FROM provision_status WHERE serial = ?")
+        .bind(serial)
+        .first<ProvisionStatusRow>();
+    } catch {
+      return null;
+    }
     if (!r) return null;
     let history: ProvisionStatusHistoryEntry[] = [];
     try {

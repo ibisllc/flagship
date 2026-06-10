@@ -294,39 +294,28 @@ public struct HomeTab: View {
         path.removeAll()
     }
 
-    /// #43 — reconcile the pod list against server truth: the registered
-    /// `/pods` inventory (already in AppState) + the IRK-signed
-    /// outstanding-orders endpoint. Surfaces orders we have no local record
-    /// of (fixes home2-invisible) and drops dead ghosts (fixes the home1
-    /// spinner). Best-effort; a failure leaves local state untouched.
+    /// #43 + #56 — reconcile the pod list against server truth from ONE
+    /// unauthenticated `/pods` fetch (registered servers + active orders).
+    /// Surfaces orders we have no local record of (fixes home2-invisible) and
+    /// drops dead ghosts (fixes the home1 spinner). NO biometric prompt — a
+    /// list refresh is a pure read; Face ID stays only on mutations
+    /// (create-server / release / revoke). Best-effort; a failure leaves local
+    /// state untouched.
     private func reconcileServerTruth() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
         let mailbox = self.mailbox
         let reconciler = PendingServerReconciler(
             app: app,
-            server: server,
-            fetchRegisteredFqdns: { username in
-                // The registered `/pods` inventory is the AUTHORITATIVE
-                // "online" signal — a box that has phoned home + registered.
-                // Identity-plane fetch (no biometric); a failure returns nil
-                // so the reconcile leaves online state untouched on a blip.
+            fetchPods: { username in
+                // The merged `/pods` directory is the AUTHORITATIVE list:
+                // registered boxes (online) + in-flight orders (pending).
+                // Identity-plane fetch, no biometric; a failure returns nil so
+                // the reconcile leaves state untouched on a blip.
                 do {
-                    let dir = try await mailbox.fetchPods(username: username)
-                    return Set(dir.pods
-                        .filter { $0.revokedAt == nil }
-                        .map { $0.serverDomain.lowercased() })
+                    return try await mailbox.fetchPods(username: username)
                 } catch {
                     return nil
                 }
-            },
-            sign: { username, issuedAt in
-                let irk = try await Keystore.deriveIRK(reason: "Sync your servers")
-                let bytes = OutstandingOrders.canonicalBytes(username: username, issuedAt: issuedAt)
-                let sig = try irk.signature(for: bytes)
-                return (
-                    signatureHex: HexUtil.encode(sig),
-                    irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation)
-                )
             }
         )
         await reconciler.reconcile()

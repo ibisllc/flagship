@@ -27,6 +27,8 @@ import type {
   DaemonStatusStorage,
   ServerStorage,
   RoutingStorage,
+  AuthCodeStorage,
+  ProvisionStatusStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes } from "./hex.js";
 import {
@@ -40,7 +42,29 @@ export interface PodInventoryDeps {
   daemonStatus: DaemonStatusStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
+  /** #56 — outstanding (active, unexpired) install orders, surfaced in the
+   *  same UNAUTHENTICATED list so a just-created, not-yet-registered server
+   *  no longer rides the fragile biometric-IRK `outstanding-orders` path. */
+  authCodes?: AuthCodeStorage;
+  /** Latest provisioning phase per order (joined by serial). Each lookup is
+   *  individually guarded so a `provision_status` failure can never empty or
+   *  500 the authoritative list. */
+  provisionStatus?: ProvisionStatusStorage;
   now?: () => number;
+}
+
+/** A still-in-flight install order, shaped for the merged `/pods` list. */
+export interface PendingPodEntry {
+  serial: string;
+  serverName: string;
+  /** `<serverName>.<username>.flagship.services` — the reserved FQDN, identical
+   *  whether or not the box has registered yet. */
+  fqdn: string;
+  /** Latest reported provisioning phase, or null on any lookup failure / when
+   *  no provision-status storage is wired. */
+  phase: string | null;
+  createdAt: number;
+  state: "pending";
 }
 
 export async function handleGetUserPods(
@@ -84,11 +108,55 @@ export async function handleGetUserPods(
             }
           : null,
         appsServed,
+        // #56 — registered servers are always online; lets the unified client
+        // reconciler key on `state` without a second authenticated fetch.
+        state: "online" as const,
       };
     }),
   );
 
-  return ok({ username, pods, fetchedAt: (deps.now ?? (() => Date.now()))() });
+  const now = (deps.now ?? (() => Date.now()))();
+
+  // #56 — outstanding install orders, merged into the same unauthenticated
+  // list. The per-order phase enrichment is individually try/catch-guarded:
+  // a provision_status failure yields `phase: null` and NEVER drops the order
+  // or fails the whole list (this list is the phone's authoritative reconciler
+  // source — it must not be silently emptied by an enrichment hiccup).
+  let pending: PendingPodEntry[] = [];
+  if (deps.authCodes) {
+    try {
+      const codes = await deps.authCodes.listOutstandingByUsername(username, now);
+      pending = await Promise.all(
+        codes.map(async (c) => {
+          let phase: string | null = null;
+          if (deps.provisionStatus) {
+            try {
+              const ps = await deps.provisionStatus.getProvisionStatus(c.serial);
+              phase = ps?.phase ?? null;
+            } catch {
+              phase = null;
+            }
+          }
+          return {
+            serial: c.serial,
+            serverName: c.serverName,
+            fqdn: c.serverDomain,
+            phase,
+            createdAt: c.recordedAt,
+            state: "pending" as const,
+          };
+        }),
+      );
+      // Newest first — the phone surfaces the freshest in-flight install on top.
+      pending.sort((a, b) => b.createdAt - a.createdAt);
+    } catch {
+      // A failure to list outstanding orders must not break the registered
+      // inventory; degrade to an empty pending list.
+      pending = [];
+    }
+  }
+
+  return ok({ username, pods, pending, fetchedAt: now });
 }
 
 interface DaemonStatusBody {

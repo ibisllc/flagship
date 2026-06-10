@@ -1150,6 +1150,8 @@ export async function tryControlPlane(
           daemonStatus: storage.daemonStatus,
           servers: storage.servers,
           routing: storage.routing,
+          authCodes: storage.authCodes,
+          provisionStatus: storage.provisionStatus,
         },
         decodeURIComponent(m[1]!),
       ),
