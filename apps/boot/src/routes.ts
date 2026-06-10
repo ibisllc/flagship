@@ -38,11 +38,12 @@ const HEX128 = /^[0-9a-f]{128}$/;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes
 const LEASE_ID = /^[0-9a-fA-F]{16,128}$/;
 
-// 40 min — must comfortably exceed the box's relay poll window (default
-// 1800s = 30 min in the burner/boot-stage) so a parked unlock request stays
-// visible + approvable on the phone for the whole time the box is waiting.
+// 30 min — ALIGNED to the box's relay poll window (default 1800s = 30 min in
+// the burner/boot-stage). The request stays visible + approvable on the phone
+// for exactly as long as the box is still polling; once it lapses the phone
+// shows "box stopped waiting" instead of a stale Approve that can't be heard.
 // (The box re-posts on every boot, so this is just the single-boot lifetime.)
-const DEFAULT_MAILBOX_TTL_MS = 40 * 60_000;
+const DEFAULT_MAILBOX_TTL_MS = 30 * 60_000;
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 
