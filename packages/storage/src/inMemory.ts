@@ -302,6 +302,13 @@ export class InMemoryAuthCodeStorage implements AuthCodeStorage {
       .filter((r) => r.serverDomain === serverDomain && r.status === "active")
       .map((r) => ({ ...r }));
   }
+  async latestByServerDomain(serverDomain: string) {
+    const matches = [...this.bySerial.values()]
+      .filter((r) => r.serverDomain === serverDomain)
+      .sort((a, b) => b.recordedAt - a.recordedAt);
+    const top = matches[0];
+    return top ? { ...top } : undefined;
+  }
   async listOutstandingByUsername(username: string, now: number) {
     return [...this.bySerial.values()]
       .filter(

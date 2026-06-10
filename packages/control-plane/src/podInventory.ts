@@ -97,6 +97,8 @@ export async function handleGetUserPods(
     statusByDomain.set(s.serverDomain.toLowerCase(), s);
   }
 
+  const now = (deps.now ?? (() => Date.now()))();
+
   const pods = await Promise.all(
     servers.map(async (s) => {
       const routing = await deps.routing.get(s.serverDomain);
@@ -112,13 +114,39 @@ export async function handleGetUserPods(
           /* corrupt row — treat as empty */
         }
       }
+      // #56 liveness bridge — a genuinely-live, serving box does NOT populate
+      // daemon_status (the daemon never POSTs the daemon-status report), so a
+      // registered server whose install order reached phase "live" would
+      // otherwise be wrongly shown as "never came online" (lastReported null).
+      // When there's no daemon_status row, fall back to the provision-status
+      // signal: join domain → latest auth-code serial (used-inclusive, since a
+      // registered server's code is `used`) → provision_status(serial).phase;
+      // if "live", treat the box as having come online by setting lastReported
+      // to the provision-status updatedAt. Every lookup is guarded so a failure
+      // NEVER drops a server or fails the list. Only runs when daemon_status is
+      // absent — adds up to 2 extra queries per daemon_status-less server
+      // (fine for small N; remove once daemons POST real heartbeats).
+      let lastReported = status?.lastReported ?? null;
+      if (!status && deps.authCodes && deps.provisionStatus) {
+        try {
+          const code = await deps.authCodes.latestByServerDomain(s.serverDomain);
+          if (code) {
+            const ps = await deps.provisionStatus.getProvisionStatus(code.serial);
+            if (ps?.phase === "live") {
+              lastReported = ps.updatedAt ?? now;
+            }
+          }
+        } catch {
+          /* enrichment failure must never drop the server */
+        }
+      }
       return {
         serverDomain: s.serverDomain,
         identityPubKey: s.identityPubKeyHex,
         registeredAt: s.registeredAt,
         revokedAt: s.revokedAt ?? null,
         routingTarget: routing?.currentTargetHex ?? null,
-        lastReported: status?.lastReported ?? null,
+        lastReported,
         currentCert: status
           ? {
               sha256: status.certSha256,
@@ -133,8 +161,6 @@ export async function handleGetUserPods(
       };
     }),
   );
-
-  const now = (deps.now ?? (() => Date.now()))();
 
   // #56 — outstanding install orders, merged into the same unauthenticated
   // list. The per-order phase enrichment is individually try/catch-guarded:

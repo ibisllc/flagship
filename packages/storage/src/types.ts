@@ -237,6 +237,15 @@ export interface AuthCodeStorage {
    */
   listActiveByServerDomain(serverDomain: string): Promise<AuthCodeRecord[]>;
   /**
+   * The single most-recently-recorded auth-code reserving `serverDomain`,
+   * regardless of status. Unlike `listActiveByServerDomain` (active codes
+   * only), this includes `used` codes — a REGISTERED server's code is `used`,
+   * so the /pods liveness bridge needs a used-inclusive latest-by-domain
+   * lookup to join a registered server back to its order's provision-status
+   * serial. Returns undefined when no code ever reserved the domain.
+   */
+  latestByServerDomain(serverDomain: string): Promise<AuthCodeRecord | undefined>;
+  /**
    * Every OUTSTANDING auth-code for a username — `status='active'` AND not
    * yet expired (`expiresAt > now`). These are the user's in-flight install
    * orders: a recipe was minted but the box hasn't registered (which would

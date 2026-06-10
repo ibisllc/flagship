@@ -74,6 +74,21 @@ describe("InMemoryStorage", () => {
     expect(await s.authCodes.markUsed("S003", 1_700_000_500_000)).toMatchObject({ ok: false });
   });
 
+  it("auth codes: latestByServerDomain returns the most-recent code regardless of status (used-inclusive)", async () => {
+    const s = new InMemoryStorage();
+    const dom = "home.harry.flagship.services";
+    // Two codes on the same domain: an older `used` one (the registered
+    // server's code) and a newer one. latest must be the newest by recordedAt.
+    await s.authCodes.put({ ...authCode("OLD0001", "used"), recordedAt: 100 });
+    await s.authCodes.put({ ...authCode("NEW0001", "used"), recordedAt: 200 });
+    const latest = await s.authCodes.latestByServerDomain(dom);
+    expect(latest?.serial).toBe("NEW0001");
+    // A `used` code is still returned (unlike listActiveByServerDomain).
+    expect(await s.authCodes.listActiveByServerDomain(dom)).toEqual([]);
+    // Unknown domain → undefined.
+    expect(await s.authCodes.latestByServerDomain("ghost.flagship.services")).toBeUndefined();
+  });
+
   it("servers: put/get/listForUser/revoke", async () => {
     const s = new InMemoryStorage();
     await s.servers.put({

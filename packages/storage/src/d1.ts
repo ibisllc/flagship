@@ -469,6 +469,15 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
       .all<AuthCodeRow>();
     return r.results.map(rowToAuthCode);
   }
+  async latestByServerDomain(serverDomain: string) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM auth_codes WHERE server_domain = ? ORDER BY recorded_at DESC LIMIT 1",
+      )
+      .bind(serverDomain)
+      .first<AuthCodeRow>();
+    return r ? rowToAuthCode(r) : undefined;
+  }
   async listOutstandingByUsername(username: string, now: number) {
     const r = await this.db
       .prepare(

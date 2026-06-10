@@ -11,6 +11,7 @@ import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
+import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
 import { RepairStatsAccumulator } from "./peerBackup/repairStatsAccumulator.js";
@@ -503,6 +504,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Signed daemon-status heartbeat — populates `daemon_status` with REAL cert
+  // info + a fresh heartbeat so /pods shows true current liveness (the proper
+  // fix for the "never came online" regression; the /pods provision-status
+  // bridge is the fallback when this hasn't run yet). Fired from onCertIssued
+  // (first report the instant the cert lands) + periodically thereafter.
+  const statusHeartbeat = startDaemonStatusHeartbeat({
+    serverDomain: env.serverFqdn!,
+    identity: identityKeypair,
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+  });
+
   let runtime: DaemonRuntime;
   try {
     runtime = await startDaemonRuntime({
@@ -522,8 +534,12 @@ async function main(): Promise<void> {
       // transient ACME failures rather than process.exit-ing), so `live` is
       // gated here on the cert actually landing — not when startDaemonRuntime
       // resolves (which happens BEFORE the first cert attempt).
-      onCertIssued: () => {
+      onCertIssued: (cert, notAfter, names) => {
         void reportStatus("live");
+        // Feed the signed daemon-status heartbeat with the freshly-issued
+        // cert so /pods gets REAL fingerprint/validity/issuer + a fresh
+        // lastReported (true liveness), fired immediately + on renewals.
+        statusHeartbeat.update(cert, notAfter, names);
       },
       // Fine-grained ACME observability stays in the daemon log only — it is
       // NOT its own UI vocabulary on the canonical channel (the `sealing`/

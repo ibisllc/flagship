@@ -50,7 +50,12 @@ function deps(
 
 interface PodsResponse {
   username: string;
-  pods: Array<{ serverDomain: string; state: string }>;
+  pods: Array<{
+    serverDomain: string;
+    state: string;
+    lastReported: number | null;
+    currentCert: { sha256: string | null } | null;
+  }>;
   pending: Array<{
     orderRef: string;
     serverName: string;
@@ -202,5 +207,116 @@ describe("GET /api/users/:u/pods (merged registered + pending)", () => {
     const out = r.body as PodsResponse;
     expect(out.pods).toHaveLength(1);
     expect(out.pending).toEqual([]);
+  });
+});
+
+describe("GET /api/users/:u/pods — liveness bridge (no daemon_status row)", () => {
+  it("a registered server with no daemon_status but provision_status 'live' is reported online (lastReported populated)", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage); // home1, registered, but NO daemon_status row
+    // The registered server's auth-code is `used`; join domain → serial.
+    await storage.authCodes.put(
+      authCode("LIVESER01", "home1", { status: "used", usedAt: NOW - 40_000 }),
+    );
+    await storage.provisionStatus.putProvisionStatus("LIVESER01", {
+      phase: "live",
+      ts: NOW - 30_000,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    expect(r.status).toBe(200);
+    const out = r.body as PodsResponse;
+    expect(out.pods).toHaveLength(1);
+    // Bridge set lastReported to the provision-status updatedAt → cameOnline.
+    expect(out.pods[0]?.lastReported).toBe(NOW - 30_000);
+    // The bridge sets liveness only — cert details stay null without daemon_status.
+    expect(out.pods[0]?.currentCert).toBeNull();
+  });
+
+  it("a registered server with NO daemon_status and NO live provision_status stays lastReported:null (still 'never came online')", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    await storage.authCodes.put(
+      authCode("MIDSER001", "home1", { status: "used", usedAt: NOW - 40_000 }),
+    );
+    await storage.provisionStatus.putProvisionStatus("MIDSER001", {
+      phase: "installing",
+      ts: NOW - 30_000,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse;
+    expect(out.pods).toHaveLength(1);
+    expect(out.pods[0]?.lastReported).toBeNull();
+  });
+
+  it("a registered server with NO auth-code at all stays lastReported:null", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse;
+    expect(out.pods[0]?.lastReported).toBeNull();
+  });
+
+  it("a server WITH daemon_status is unchanged and does NOT consult provision_status (no bridge lookup)", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 30 * 86_400_000,
+      certIssuer: "Let's Encrypt",
+      servicesServedJson: JSON.stringify(["home1.harry.flagship.services"]),
+      lastReported: NOW - 1_000,
+    });
+    await storage.authCodes.put(
+      authCode("HASSER001", "home1", { status: "used", usedAt: NOW - 40_000 }),
+    );
+    // A provision_status row that, if consulted, would NOT change the answer —
+    // but the bridge must not even look (guarded `if (!status ...)`).
+    let provisionConsulted = false;
+    const spyProvision: ProvisionStatusStorage = {
+      putProvisionStatus: storage.provisionStatus.putProvisionStatus.bind(
+        storage.provisionStatus,
+      ),
+      async getProvisionStatus(serial) {
+        provisionConsulted = true;
+        return storage.provisionStatus.getProvisionStatus(serial);
+      },
+    };
+
+    const r = await handleGetUserPods(
+      deps(storage, { provisionStatus: spyProvision }),
+      "harry",
+    );
+    const out = r.body as PodsResponse;
+    expect(out.pods[0]?.lastReported).toBe(NOW - 1_000);
+    expect(out.pods[0]?.currentCert?.sha256).toBe("ab".repeat(32));
+    expect(provisionConsulted).toBe(false);
+  });
+
+  it("a bridge lookup failure NEVER drops the server or fails the list", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage); // no daemon_status → bridge runs
+    const throwingProvision: ProvisionStatusStorage = {
+      putProvisionStatus: storage.provisionStatus.putProvisionStatus.bind(
+        storage.provisionStatus,
+      ),
+      async getProvisionStatus() {
+        throw new Error("provision_status table missing");
+      },
+    };
+    await storage.authCodes.put(
+      authCode("THROWSER1", "home1", { status: "used", usedAt: NOW - 40_000 }),
+    );
+
+    const r = await handleGetUserPods(
+      deps(storage, { provisionStatus: throwingProvision }),
+      "harry",
+    );
+    expect(r.status).toBe(200);
+    const out = r.body as PodsResponse;
+    expect(out.pods).toHaveLength(1);
+    expect(out.pods[0]?.lastReported).toBeNull();
   });
 });
