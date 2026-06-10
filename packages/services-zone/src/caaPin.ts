@@ -25,6 +25,16 @@ const DEFAULT_CA_DOMAIN = "letsencrypt.org";
 /** Default ACME validation method to pin (matches the wildcard DNS-01 path). */
 const DEFAULT_VALIDATION_METHODS = ["dns-01"] as const;
 
+/**
+ * Default `iodef` reporting endpoint a CA emails on a CAA-violating
+ * issuance attempt (RFC 8659 §4.4). A `mailto:` URI.
+ *
+ * TODO(confirm-address): point this at a monitored inbox. `security@`
+ * is the convention; swap in the real address (or an https:// incident
+ * webhook) when the security inbox is finalised.
+ */
+const DEFAULT_IODEF = "mailto:security@flagshipserver.com";
+
 export interface CaaIssueValueOptions {
   /**
    * The CA the `issue` property authorises. Defaults to `letsencrypt.org`.
@@ -72,7 +82,7 @@ export interface CaaRecord {
   name: string;
   type: "CAA";
   flags: 0;
-  tag: "issue";
+  tag: "issue" | "issuewild" | "iodef";
   value: string;
 }
 
@@ -116,3 +126,104 @@ export function buildUserZoneCaaRecords(
 export function expectedCertSans(username: string, apex: string): string[] {
   return [`${username}.${apex}`, `*.${username}.${apex}`];
 }
+
+// ---------------------------------------------------------------------------
+// PHASE 1 — CA-RESTRICTION CAA (no account pinning).
+//
+// This is the layer we publish *today*, at the point a user's zone records are
+// set up (server registration). It restricts issuance for the user's zone to
+// Let's Encrypt and nobody else — a defense-in-depth layer against EXTERNAL
+// mis-issuance / a CA tricked into issuing for `*.<user>.flagship.services`.
+//
+// HONEST SCOPE: `.com` is authoritative for the `flagship.services` zone, so
+// CAA alone does NOT stop a *malicious* `.com` — it could rewrite this record
+// before tricking a CA. CAA's value here is twofold: (a) it blocks OTHER CAs
+// and externally-tricked issuance outright, and (b) it is defense-in-depth —
+// any rewrite of this record is itself an anomaly a CT/zone monitor can flag.
+// The malicious-`.com` defense proper is Certificate-Transparency monitoring
+// (`ctMonitor.ts`), not CAA.
+//
+// PHASE 2 (NOT BUILT — see the TODO block at the bottom of this file): RFC 8657
+// `accounturi` account pinning, via `buildUserZoneCaaRecords` above, which binds
+// issuance to a specific ACME account. That depends on a per-user shared ACME
+// account decision that has not been made yet.
+// ---------------------------------------------------------------------------
+
+export interface CaRestrictionCaaOptions {
+  /** CA the `issue`/`issuewild` properties authorise. Default `letsencrypt.org`. */
+  caDomain?: string;
+  /**
+   * `iodef` reporting URI a violating CA contacts. Default
+   * `mailto:security@flagshipserver.com`. Pass an empty string to omit the
+   * `iodef` record entirely.
+   */
+  iodef?: string;
+}
+
+/**
+ * Build the PHASE-1 CA-restriction CAA record set for one user's zone — no
+ * account pinning. Three records per name:
+ *
+ *   - `0 issue "letsencrypt.org"`      — only LE may issue non-wildcard certs.
+ *   - `0 issuewild "letsencrypt.org"`  — only LE may issue wildcard certs.
+ *   - `0 iodef "mailto:security@…"`    — where a violating CA reports.
+ *
+ * Emitted at BOTH the user-zone apex `<user>.flagship.services` and the
+ * wildcard `*.<user>.flagship.services`: a wildcard cert's authorisation is
+ * checked against the CAA record at the wildcard node itself, so the wildcard
+ * record is not redundant with the apex one (RFC 8659 §3 tree-climbing applies
+ * to each requested name independently).
+ *
+ * `flags` is `0` (non-critical) throughout.
+ */
+export function buildUserZoneCaRestrictionCaaRecords(
+  userZone: string,
+  opts: CaRestrictionCaaOptions = {},
+): CaaRecord[] {
+  const caDomain = opts.caDomain ?? DEFAULT_CA_DOMAIN;
+  const iodef = opts.iodef ?? DEFAULT_IODEF;
+  const names = [userZone, `*.${userZone}`];
+  const recs: CaaRecord[] = [];
+  for (const name of names) {
+    recs.push({ name, type: "CAA", flags: 0, tag: "issue", value: caDomain });
+    recs.push({ name, type: "CAA", flags: 0, tag: "issuewild", value: caDomain });
+    if (iodef) {
+      recs.push({ name, type: "CAA", flags: 0, tag: "iodef", value: iodef });
+    }
+  }
+  return recs;
+}
+
+/**
+ * Render a {@link CaaRecord} as its zone-file presentation rdata, e.g.
+ *
+ *   `0 issue "letsencrypt.org"`
+ *
+ * This is the canonical string DNS providers accept as the record `content`
+ * (and what `dig CAA` prints), so it doubles as a stable idempotency key:
+ * two records with identical rdata at the same name are the same record.
+ */
+export function caaRecordRdata(rec: CaaRecord): string {
+  return `${rec.flags} ${rec.tag} "${rec.value}"`;
+}
+
+// ===========================================================================
+// TODO(phase-2, accounturi pinning — RFC 8657): once a per-user ACME account
+// exists (the per-user shared-ACME-account decision is NOT yet made), tighten
+// the `issue` / `issuewild` values from the bare CA domain to the account-
+// pinned form by APPENDING `; accounturi=<the user's ACME account URL>`:
+//
+//     0 issue     "letsencrypt.org; accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/<ID>"
+//     0 issuewild "letsencrypt.org; accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/<ID>"
+//
+// `buildCaaIssueValue` / `buildUserZoneCaaRecords` above ALREADY emit this
+// account-pinned value (and `validationmethods=dns-01`). The phase-2 wiring is:
+//   1. resolve the user's ACME account URL,
+//   2. swap `buildUserZoneCaRestrictionCaaRecords` for `buildUserZoneCaaRecords`
+//      (or thread `accountUri` through this builder) at the publish call-site in
+//      the control-plane server-register path,
+//   3. KEEP IT IN SYNC: if the account ever rotates (re-registration, key
+//      change, account migration) the CAA `accounturi` MUST be re-published to
+//      the new URL, or LE will refuse to renew the legitimately-pinned cert.
+// Until phase 2 lands, the CA-restriction records above are the published set.
+// ===========================================================================

@@ -49,16 +49,31 @@ export class CloudflareDnsClient {
    */
   async upsert(opts: {
     name: string;
-    type: "A" | "AAAA" | "TXT" | "CNAME";
+    type: "A" | "AAAA" | "TXT" | "CNAME" | "CAA";
     content: string;
+    /**
+     * CAA only: Cloudflare's API rejects a free-form `content` for CAA and
+     * requires the structured `{ flags, tag, value }` form. When `type` is
+     * `"CAA"` this MUST be supplied; `content` is still used as the
+     * idempotency key (the zone-file presentation rdata, e.g.
+     * `0 issue "letsencrypt.org"`).
+     */
+    data?: { flags: number; tag: string; value: string };
     ttl?: number;
     proxied?: boolean;
   }): Promise<CloudflareDnsRecord> {
     const proxied = opts.proxied ?? false;
     const ttl = opts.ttl ?? 60;
+    const isCaa = opts.type === "CAA";
 
     const existing = await this.list(opts.name, opts.type);
-    if (existing.length > 0) {
+    // CAA can legitimately have multiple records at one name (issue + issuewild
+    // + iodef), so dedupe by exact rdata rather than just (name,type): a record
+    // whose presentation form already matches is a no-op.
+    if (isCaa) {
+      const match = existing.find((r) => r.content === opts.content && r.ttl === ttl);
+      if (match) return match;
+    } else if (existing.length > 0) {
       const r = existing[0]!;
       if (r.content === opts.content && r.proxied === proxied && r.ttl === ttl) {
         return r;
@@ -75,16 +90,13 @@ export class CloudflareDnsClient {
       return body.result;
     }
 
+    const createBody: Record<string, unknown> = isCaa
+      ? { type: "CAA", name: opts.name, data: opts.data, ttl }
+      : { type: opts.type, name: opts.name, content: opts.content, ttl, proxied };
     const resp = await fetch(`${CF_API}/zones/${this.cfg.zoneId}/dns_records`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({
-        type: opts.type,
-        name: opts.name,
-        content: opts.content,
-        ttl,
-        proxied,
-      }),
+      body: JSON.stringify(createBody),
     });
     const body = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: unknown };
     if (!body.success || !body.result) {

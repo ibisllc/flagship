@@ -41,6 +41,92 @@ class FakeDns implements Pick<CloudflareDnsClient, "upsert"> {
   }
 }
 
+/** CAA-capable client that dedupes by (name, rdata) like the real CF client. */
+class FakeCaaDns {
+  caa = new Map<string, { id: string; name: string; content: string }>();
+  calls = 0;
+  created = 0;
+  async upsert(opts: {
+    name: string;
+    type: "CAA";
+    content: string;
+    data?: { flags: number; tag: string; value: string };
+  }): Promise<{ id: string; name: string; content: string }> {
+    this.calls += 1;
+    const key = `${opts.name}|${opts.content}`;
+    const hit = this.caa.get(key);
+    if (hit) return hit;
+    this.created += 1;
+    const rec = { id: `caa-${this.created}`, name: opts.name, content: opts.content };
+    this.caa.set(key, rec);
+    return rec;
+  }
+}
+
+/** Build a fully-signed register request for `username`/`server`. */
+async function buildRegister(username: string, serverName: string) {
+  const usernames = new InMemoryUsernameStorage();
+  const irk = makeKey();
+  await usernames.put({ username, irkPubHex: bytesToHex(irk.publicKey), claimedAt: 1_000 });
+  const serverDomain = `${serverName}.${username}.flagship.services`;
+  const issued: AuthCode = {
+    version: 1,
+    serial: "abcd1234",
+    username,
+    serverName,
+    serverDomain,
+    delegatedPubKey: makeKey().publicKey,
+    userPubKey: irk.publicKey,
+    issuedAt: 1_000,
+    expiresAt: 1_000 + 60 * 60_000,
+  };
+  const acSig = signAuthCode(issued, irk);
+  const authCodes = new InMemoryAuthCodeStorage();
+  await authCodes.put({
+    serial: issued.serial,
+    username: issued.username,
+    serverName: issued.serverName,
+    serverDomain: issued.serverDomain,
+    delegatedPubKeyHex: bytesToHex(issued.delegatedPubKey),
+    userPubKeyHex: bytesToHex(issued.userPubKey),
+    userSignatureHex: bytesToHex(acSig),
+    issuedAt: issued.issuedAt,
+    expiresAt: issued.expiresAt,
+    status: "active",
+    recordedAt: issued.issuedAt,
+  });
+  const identity = makeKey();
+  const nonce = new Uint8Array(16);
+  crypto.getRandomValues(nonce);
+  const issuedAt = 2_000;
+  const reg: ServerRegisterRequest = {
+    authCode: issued,
+    authCodeUserSignature: acSig,
+    serverIdentityPubKey: identity.publicKey,
+    issuedAt,
+    nonce,
+  };
+  const sig = signServerRegister(reg, identity);
+  return {
+    authCodes,
+    issuedAt,
+    body: {
+      request: {
+        authCode: {
+          ...issued,
+          delegatedPubKey: bytesToHex(issued.delegatedPubKey),
+          userPubKey: bytesToHex(issued.userPubKey),
+        },
+        authCodeUserSignature: bytesToHex(acSig),
+        serverIdentityPubKey: bytesToHex(identity.publicKey),
+        issuedAt,
+        nonce: bytesToHex(nonce),
+      },
+      signature: bytesToHex(sig),
+    },
+  };
+}
+
 describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
   it("publishes ONLY the two user-zone A records (pod apex resolves via the wildcard)", async () => {
     const usernames = new InMemoryUsernameStorage();
@@ -131,5 +217,102 @@ describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
       expect(u.type).toBe("A");
       expect(u.content).toBe("203.0.113.42");
     }
+  });
+
+  it("publishes the CA-restriction CAA record set when a caa client is wired", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const fakeDns = new FakeDns();
+    const caaDns = new FakeCaaDns();
+    const r = await handleServerRegister(
+      {
+        authCodes,
+        servers: new InMemoryServerStorage(),
+        dns: {
+          client: fakeDns as unknown as CloudflareDnsClient,
+          servicesIpv4: "203.0.113.42",
+          caa: { client: caaDns },
+        },
+        now: () => issuedAt,
+      },
+      body,
+    );
+    expect(r.status).toBe(200);
+    // CAA published at the user-zone apex + wildcard, restricting to LE.
+    const caaSet = [...caaDns.caa.values()].map((v) => `${v.name} :: ${v.content}`).sort();
+    expect(caaSet).toEqual(
+      [
+        'alice.flagship.services :: 0 issue "letsencrypt.org"',
+        'alice.flagship.services :: 0 issuewild "letsencrypt.org"',
+        'alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
+        '*.alice.flagship.services :: 0 issue "letsencrypt.org"',
+        '*.alice.flagship.services :: 0 issuewild "letsencrypt.org"',
+        '*.alice.flagship.services :: 0 iodef "mailto:security@flagshipserver.com"',
+      ].sort(),
+    );
+    expect((r.body as { caaPublished: unknown[] }).caaPublished).toHaveLength(6);
+  });
+
+  it("does NOT duplicate CAA across a re-register of a second pod under the same user", async () => {
+    const caaDns = new FakeCaaDns();
+    for (const server of ["home", "media"]) {
+      const { authCodes, issuedAt, body } = await buildRegister("alice", server);
+      const r = await handleServerRegister(
+        {
+          authCodes,
+          servers: new InMemoryServerStorage(),
+          dns: {
+            client: new FakeDns() as unknown as CloudflareDnsClient,
+            servicesIpv4: "203.0.113.42",
+            caa: { client: caaDns },
+          },
+          now: () => issuedAt,
+        },
+        body,
+      );
+      expect(r.status).toBe(200);
+    }
+    // Two registrations, but only ONE user zone → 6 distinct CAA records, no dupes.
+    expect(caaDns.created).toBe(6);
+    expect(caaDns.caa.size).toBe(6);
+    expect(caaDns.calls).toBe(12); // 6 per register × 2, half no-ops
+  });
+
+  it("skips CAA (no throw) when no caa client is configured", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const r = await handleServerRegister(
+      {
+        authCodes,
+        servers: new InMemoryServerStorage(),
+        dns: { client: new FakeDns() as unknown as CloudflareDnsClient, servicesIpv4: "203.0.113.42" },
+        now: () => issuedAt,
+      },
+      body,
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as { caaPublished: unknown[] }).caaPublished).toEqual([]);
+  });
+
+  it("a CAA failure does NOT fail registration (best-effort)", async () => {
+    const { authCodes, issuedAt, body } = await buildRegister("alice", "home");
+    const throwingCaa = {
+      async upsert(): Promise<never> {
+        throw new Error("CAA write refused");
+      },
+    };
+    const r = await handleServerRegister(
+      {
+        authCodes,
+        servers: new InMemoryServerStorage(),
+        dns: {
+          client: new FakeDns() as unknown as CloudflareDnsClient,
+          servicesIpv4: "203.0.113.42",
+          caa: { client: throwingCaa },
+        },
+        now: () => issuedAt,
+      },
+      body,
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as { caaError?: string }).caaError).toMatch(/CAA write refused/);
   });
 });

@@ -8,6 +8,7 @@
   "references": [
     { "path": "../iso-personalizer" },
     { "path": "../protocol" },
+    { "path": "../services-zone" },
     { "path": "../storage" }
   ],
   "include": ["src/**/*"]

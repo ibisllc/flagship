@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildCaaIssueValue,
   buildUserZoneCaaRecords,
+  buildUserZoneCaRestrictionCaaRecords,
+  caaRecordRdata,
   expectedCertSans,
 } from "../src/caaPin.js";
 
@@ -77,6 +79,54 @@ describe("buildUserZoneCaaRecords", () => {
         `pki.goog; accounturi=${ACCT}; validationmethods=dns-01,http-01`,
       );
     }
+  });
+});
+
+describe("buildUserZoneCaRestrictionCaaRecords (PHASE 1 — no account pinning)", () => {
+  it("emits issue + issuewild + iodef at both the apex and the wildcard", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services");
+    expect(recs).toEqual([
+      { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "issue", value: "letsencrypt.org" },
+      { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "issuewild", value: "letsencrypt.org" },
+      { name: "alice.flagship.services", type: "CAA", flags: 0, tag: "iodef", value: "mailto:security@flagshipserver.com" },
+      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "issue", value: "letsencrypt.org" },
+      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "issuewild", value: "letsencrypt.org" },
+      { name: "*.alice.flagship.services", type: "CAA", flags: 0, tag: "iodef", value: "mailto:security@flagshipserver.com" },
+    ]);
+  });
+
+  it("carries NO accounturi (that is PHASE 2)", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("bob.flagship.services");
+    for (const r of recs) {
+      expect(r.value).not.toContain("accounturi");
+      expect(r.value).not.toContain(";");
+    }
+  });
+
+  it("honours a custom caDomain and iodef", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("eve.flagship.services", {
+      caDomain: "pki.goog",
+      iodef: "mailto:abuse@example.com",
+    });
+    expect(recs.find((r) => r.tag === "issue")!.value).toBe("pki.goog");
+    expect(recs.find((r) => r.tag === "issuewild")!.value).toBe("pki.goog");
+    expect(recs.find((r) => r.tag === "iodef")!.value).toBe("mailto:abuse@example.com");
+  });
+
+  it("omits the iodef record when iodef is the empty string", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("eve.flagship.services", { iodef: "" });
+    expect(recs.some((r) => r.tag === "iodef")).toBe(false);
+    // issue + issuewild at apex and wildcard = 4 records.
+    expect(recs).toHaveLength(4);
+  });
+});
+
+describe("caaRecordRdata", () => {
+  it("renders the zone-file presentation form", () => {
+    const recs = buildUserZoneCaRestrictionCaaRecords("alice.flagship.services");
+    expect(caaRecordRdata(recs[0]!)).toBe('0 issue "letsencrypt.org"');
+    expect(caaRecordRdata(recs[1]!)).toBe('0 issuewild "letsencrypt.org"');
+    expect(caaRecordRdata(recs[2]!)).toBe('0 iodef "mailto:security@flagshipserver.com"');
   });
 });
 

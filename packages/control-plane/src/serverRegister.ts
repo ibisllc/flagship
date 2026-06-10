@@ -13,6 +13,8 @@ import type {
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
+import { publishUserZoneCaa, type CaaUpsertClient } from "./caaPublish.js";
+import type { CaRestrictionCaaOptions } from "@flagship/services-zone";
 /**
  * Minimum DNS-client surface `handleServerRegister` needs. Both
  * `CloudflareDnsClient` (direct CF token, dev/legacy) and
@@ -50,6 +52,19 @@ export interface ServerRegisterDeps {
     servicesIpv4: string;
     /** IPv6 address (optional). */
     servicesIpv6?: string;
+    /**
+     * When the DNS client also supports CAA (`type:"CAA"` with a structured
+     * `data` field — the `CloudflareDnsClient` does), the user-zone CAA
+     * CA-restriction records are published alongside the A/AAAA records, once
+     * per user. Defaults to the same `client`. Best-effort: a CAA failure
+     * never fails registration. See `caaPublish.ts` for scope (PHASE-1
+     * CA-restriction only; PHASE-2 accounturi pinning is a TODO).
+     */
+    caa?: {
+      client: CaaUpsertClient;
+      /** Override the CA domain / iodef. Defaults to LE + security@. */
+      options?: CaRestrictionCaaOptions;
+    };
   };
   /** N0d-2: when all three are provided, a successful new-server
    *  registration fans a category-only ("server-registered"),
@@ -249,6 +264,8 @@ export async function handleServerRegister(
   // Best-effort: a DNS failure shouldn't fail registration.
   let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
+  let caaPublished: { name: string; rdata: string }[] = [];
+  let caaError: string | undefined;
   if (deps.dns) {
     const podApex = authCode.serverDomain;
     const userZone = userZoneOf(podApex);
@@ -273,6 +290,34 @@ export async function handleServerRegister(
     } catch (e) {
       dnsError = String((e as Error).message ?? e);
     }
+
+    // CAA CA-restriction (defense-in-depth against EXTERNAL mis-issuance):
+    // restrict cert issuance for `<user>.flagship.services` + its wildcard to
+    // Let's Encrypt. Published once per user, keyed on the user zone (NOT the
+    // pod). Each record is idempotent (keyed by its exact rdata), so a
+    // re-register / a second pod under the user is a no-op. PHASE-1 only — no
+    // accounturi pinning yet (see caaPublish.ts / caaPin.ts TODO). Best-effort:
+    // a CAA failure must never fail registration.
+    //
+    // Requires a CAA-capable client. The production `BrokerDnsClient` exposes
+    // A/AAAA + ACME-TXT only and does NOT carry CAA — so the Worker wires its
+    // CAA-capable `CloudflareDnsClient` here explicitly. When no `caa.client`
+    // is configured we skip (no silent broker-throw).
+    // TODO(broker-caa): teach the dns-broker a `publishCaa` RPC so production
+    // can publish CAA through the broker's pinned credentials too, then default
+    // `caa.client` to `deps.dns.client`.
+    const caaClient: CaaUpsertClient | undefined = deps.dns.caa?.client;
+    if (userZone && caaClient) {
+      try {
+        caaPublished = await publishUserZoneCaa({
+          client: caaClient,
+          userZone,
+          options: deps.dns.caa?.options,
+        });
+      } catch (e) {
+        caaError = String((e as Error).message ?? e);
+      }
+    }
   }
 
   return ok({
@@ -281,6 +326,8 @@ export async function handleServerRegister(
     registeredAt: now,
     dnsPublished,
     dnsError,
+    caaPublished,
+    caaError,
   });
 }
 

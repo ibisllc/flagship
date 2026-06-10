@@ -18,6 +18,7 @@
   "dependencies": {
     "@flagship/iso-personalizer": "*",
     "@flagship/protocol": "*",
+    "@flagship/services-zone": "*",
     "@flagship/storage": "*",
     "@noble/hashes": "^1.5.0",
     "otpauth": "^9.5.1",
