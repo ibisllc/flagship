@@ -49,9 +49,13 @@ const PENNANT_SVG = `
  * Returns `{ statusByDomain, pending }`:
  *   - `statusByDomain`: Map keyed by lower-cased serverDomain, used to
  *     enrich the registered server cards from /api/me/servers.
- *   - `pending`: the raw pending-order array (each `{ serial, serverName,
- *     fqdn, phase, createdAt, state }`). Empty when the field is absent
- *     (backward-compatible with a pre-#56 Worker).
+ *   - `pending`: the raw pending-order array (each `{ orderRef, serverName,
+ *     fqdn, phase, createdAt, state }`). `orderRef` is the opaque
+ *     sha256("flagship/order-ref/v1|" + serial) — the raw auth-code serial
+ *     never rides this unauthenticated response (it's a provision-status
+ *     write capability); deep-progress polling uses the serial saved
+ *     locally at order creation (views/pending-server.js). Empty when the
+ *     field is absent (backward-compatible with a pre-#56 Worker).
  *
  * Best-effort: any error resolves to empty so the home view still renders
  * the base cards.

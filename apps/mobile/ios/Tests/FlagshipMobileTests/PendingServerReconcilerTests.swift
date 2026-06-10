@@ -27,16 +27,29 @@ final class PendingServerReconcilerTests: XCTestCase {
         { _ in dir }
     }
 
+    /// The wire entry carries the OPAQUE orderRef, never the raw serial —
+    /// exactly what the hardened Worker emits.
     private func order(_ serial: String, _ name: String) -> PendingPodEntry {
         PendingPodEntry(
-            serial: serial, serverName: name,
+            orderRef: OrderRef.compute(serial: serial), serverName: name,
             fqdn: "\(name).harry.flagship.services",
             phase: "booting", createdAt: 1_000
         )
     }
 
+    // OrderRef must match the control-plane byte-for-byte (pinned vector
+    // from packages/control-plane/tests/podInventory.test.ts).
+    func test_orderRefMatchesControlPlaneVector() {
+        XCTAssertEqual(
+            OrderRef.compute(serial: "HOME2SER"),
+            "e0970cb9bd5fd0967cdc259ec8ca1619d1a98c44abc8eadd3fc8d4c2e6fb6442"
+        )
+    }
+
     // (a) A pending order with NO local record surfaces as a pending pod —
-    // from the single merged fetch, with NO signer / biometric.
+    // from the single merged fetch, with NO signer / biometric. It carries
+    // NO raw serial (this device didn't mint the order; the unauthenticated
+    // directory only ships the opaque ref).
     func test_surfacesPendingOrderWithNoLocalRecord() async {
         let app = AppState()
         app.completeOnboarding(username: "harry", pods: [])
@@ -52,10 +65,59 @@ final class PendingServerReconcilerTests: XCTestCase {
         let pod = app.pods.first
         XCTAssertEqual(pod?.status, .pending)
         XCTAssertEqual(pod?.name, "home2")
-        XCTAssertEqual(pod?.pendingAuthCodeSerial, "HOME2SER")
+        XCTAssertNil(pod?.pendingAuthCodeSerial, "raw serial must not be reconstructed from /pods")
         XCTAssertEqual(pod?.fqdn, "home2.harry.flagship.services")
+        XCTAssertEqual(store.list(username: "harry").map(\.authCodeSerial), [""])
+        XCTAssertEqual(app.lastKnownOutstandingOrderRefs, [OrderRef.compute(serial: "HOME2SER")])
+    }
+
+    // A directory-surfaced (serial-less) pod SURVIVES the next reconcile
+    // while its order is still outstanding (matched by fqdn), and ages out
+    // once the order disappears.
+    func test_serialLessPendingPod_survivesThenAgesOut() async {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])
+        let store = freshStore()
+
+        let dir = directory(pending: [order("HOME2SER", "home2")])
+        let r1 = PendingServerReconciler(app: app, store: store, fetchPods: fetcher(dir))
+        await r1.reconcile()
+        await r1.reconcile()   // second pass: still outstanding → still ONE pod
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.status, .pending)
+
+        // Order gone server-side → the serial-less pod is a ghost.
+        let r2 = PendingServerReconciler(app: app, store: store, fetchPods: fetcher(directory()))
+        await r2.reconcile()
+        XCTAssertTrue(app.pods.isEmpty)
+        XCTAssertTrue(store.list(username: "harry").isEmpty)
+    }
+
+    // A pod created on THIS device (raw serial held locally) reconciles by
+    // hashing the serial against the directory's refs — it keeps the serial
+    // (deep-progress capability) and is NOT duplicated.
+    func test_locallyCreatedPodKeepsSerialAndDedupsByRef() async {
+        let app = AppState()
+        let fqdn = "home2.harry.flagship.services"
+        app.completeOnboarding(username: "harry", pods: [
+            PodInfo(podId: PodInfo.podId(forFqdn: fqdn), name: "home2",
+                    description: nil, fqdn: fqdn,
+                    status: .pending, pendingAuthCodeSerial: "HOME2SER")
+        ])
+        let store = freshStore()
+        store.add(username: "harry", .init(
+            podId: PodInfo.podId(forFqdn: fqdn), name: "home2", description: "",
+            fqdn: fqdn, authCodeSerial: "HOME2SER", createdAt: 1))
+
+        let r = PendingServerReconciler(
+            app: app, store: store,
+            fetchPods: fetcher(directory(pending: [order("HOME2SER", "home2")]))
+        )
+        await r.reconcile()
+
+        XCTAssertEqual(app.pods.count, 1)
+        XCTAssertEqual(app.pods.first?.pendingAuthCodeSerial, "HOME2SER")
         XCTAssertEqual(store.list(username: "harry").map(\.authCodeSerial), ["HOME2SER"])
-        XCTAssertEqual(app.lastKnownOutstandingSerials, ["HOME2SER"])
     }
 
     // A fresh install (empty store) surfaces a registered server AND a pending
@@ -80,7 +142,7 @@ final class PendingServerReconcilerTests: XCTestCase {
         let pending = app.pods.first { $0.status == .pending }
         XCTAssertEqual(online?.fqdn, "home1.harry.flagship.services")
         XCTAssertEqual(pending?.fqdn, "home2.harry.flagship.services")
-        XCTAssertEqual(pending?.pendingAuthCodeSerial, "HOME2SER")
+        XCTAssertNil(pending?.pendingAuthCodeSerial, "the directory never hands out the raw serial")
     }
 
     // Pull-to-refresh surfaces a pending order with NO Face ID: the fetcher is
@@ -102,7 +164,7 @@ final class PendingServerReconcilerTests: XCTestCase {
         await r.reconcile()   // pull-to-refresh
 
         XCTAssertEqual(fetchCount, 1)
-        XCTAssertEqual(app.pods.first?.pendingAuthCodeSerial, "REFSER01")
+        XCTAssertEqual(app.pods.first?.fqdn, "refreshed.harry.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .pending)
     }
 
@@ -240,7 +302,7 @@ final class PendingServerReconcilerTests: XCTestCase {
         await r.reconcile()
 
         XCTAssertEqual(app.pods.first?.status, .pending)
-        XCTAssertNil(app.lastKnownOutstandingSerials)
+        XCTAssertNil(app.lastKnownOutstandingOrderRefs)
     }
 
     // A revoked registered entry does NOT surface as online.

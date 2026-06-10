@@ -108,14 +108,17 @@ public final class AppState {
     /// docs/v2-device-addressing-and-real-ticket.md §5.2.
     public var deviceCapability: DeviceCapabilityBlock?
 
-    /// #43 — the set of auth-code serials the IRK-signed outstanding-orders
-    /// endpoint last reported as live in-flight orders. Populated by the
-    /// PendingServerReconciler (which holds the signed result); read by the
+    /// #43 — the set of opaque order refs (`OrderRef.compute(serial:)`,
+    /// sha256 of the canonical-tagged serial) the unauthenticated `/pods`
+    /// fetch last reported as live in-flight orders. The raw serial is a
+    /// provision-status write capability, so the directory only ever ships
+    /// the ref. Populated by the PendingServerReconciler; read by the
     /// PendingPodWatcher as a NON-biometric authority for "is this serial
-    /// still a real order?" so a wiped/expired serial stops spinning at
-    /// "booting" instead of polling forever. Nil ⇒ never reconciled this
-    /// session (the watcher keeps its legacy keep-waiting behaviour).
-    public var lastKnownOutstandingSerials: Set<String>?
+    /// still a real order?" (it hashes its locally-stored serial and tests
+    /// membership) so a wiped/expired serial stops spinning at "booting"
+    /// instead of polling forever. Nil ⇒ never reconciled this session
+    /// (the watcher keeps its legacy keep-waiting behaviour).
+    public var lastKnownOutstandingOrderRefs: Set<String>?
 
     /// W3 — durable list of clouds this phone is a member of. The
     /// single-identity `currentUser` / `pods` / `deviceCapability`

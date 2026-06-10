@@ -29,14 +29,22 @@ import FlagshipCore
 /// tagged pending). A list refresh triggers NO biometric prompt. Biometric
 /// stays ONLY on mutations (create-server / release / revoke), never on a read.
 ///
+/// HARDENING — the unauthenticated `pending[]` carries an opaque `orderRef`
+/// (`hex(sha256("flagship/order-ref/v1|" + serial))`), NEVER the raw
+/// auth-code serial: the serial is a write capability for fake provision
+/// phases. A pod created on THIS device keeps its raw serial locally (for
+/// the deep-progress poll + cancel revoke) and reconciles by hashing it;
+/// a pod surfaced from the directory on another device reconciles by fqdn
+/// and carries no serial.
+///
 /// Rules, applied in one pass over the single fetch:
 ///   - Upsert every registered entry as `.online` (identity unified on the
 ///     normalized fqdn, so a pending pod for the same box flips online in
 ///     place — no stuck-pending duplicate).
-///   - Surface every pending order that has no local pod yet (by serial or
+///   - Surface every pending order that has no local pod yet (by orderRef or
 ///     fqdn) as a `.pending` pod.
-///   - Drop any LOCAL pending record whose fqdn/serial is in NEITHER array
-///     (age-out dead serials — the home1 ghost).
+///   - Drop any LOCAL pending record whose fqdn/orderRef is in NEITHER array
+///     (age-out dead orders — the home1 ghost).
 @MainActor
 public struct PendingServerReconciler {
     /// Fetches the merged `/pods` directory (registered + pending) for the
@@ -94,45 +102,67 @@ public struct PendingServerReconciler {
         // The registered servers are the non-pending pods now (including the
         // ones we just flipped online).
         let liveFqdns = Set(app.pods.filter { $0.status != .pending }.map { $0.fqdn })
-        let outstandingSerials = Set(directory.pending.map(\.serial))
+        // The unauthenticated directory carries OPAQUE order refs
+        // (sha256 of the canonical-tagged serial), never the raw serial —
+        // the serial is a provision-status write capability. A pod this
+        // device created holds the raw serial locally; we hash it to test
+        // membership. A pod surfaced from the directory on a non-creating
+        // device matches by fqdn instead.
+        let outstandingRefs = Set(directory.pending.map(\.orderRef))
+        let outstandingFqdns = Set(directory.pending.map { $0.fqdn.lowercased() })
 
-        // Publish the authoritative serial set so the PendingPodWatcher can
+        // Publish the authoritative ref set so the PendingPodWatcher can
         // tell "unknown serial" (drop) from "no checkpoint yet" (keep waiting)
         // WITHOUT a biometric prompt.
-        app.lastKnownOutstandingSerials = outstandingSerials
+        app.lastKnownOutstandingOrderRefs = outstandingRefs
 
         // Drop any pending record whose box has since registered.
         store.reconcile(username: username, liveFqdns: liveFqdns)
 
-        // Drop ghosts: local pending records whose serial is in neither array.
+        // Drop ghosts: local pending records whose order is in neither array.
         let droppedPodIds = store.dropGhosts(
             username: username,
-            outstandingSerials: outstandingSerials,
+            outstandingOrderRefs: outstandingRefs,
+            outstandingFqdns: outstandingFqdns,
             liveFqdns: liveFqdns
         )
         for podId in droppedPodIds {
             app.removePod(podId)
         }
-        // An in-memory-only pending pod (never persisted) whose serial is dead
-        // is dropped too.
+        // An in-memory-only pending pod (never persisted) whose order is dead
+        // is dropped too. Pods with a locally-stored serial match by hashed
+        // ref; serial-less pods (surfaced from the directory) match by fqdn.
         for pod in app.pods where pod.status == .pending {
-            guard let serial = pod.pendingAuthCodeSerial, !serial.isEmpty else { continue }
-            if !outstandingSerials.contains(serial) && !liveFqdns.contains(pod.fqdn) {
+            let stillOutstanding: Bool
+            if let serial = pod.pendingAuthCodeSerial, !serial.isEmpty {
+                stillOutstanding = outstandingRefs.contains(OrderRef.compute(serial: serial))
+            } else {
+                stillOutstanding = outstandingFqdns.contains(pod.fqdn.lowercased())
+            }
+            if !stillOutstanding && !liveFqdns.contains(pod.fqdn) {
                 app.removePod(pod.podId)
             }
         }
 
-        // Surface every outstanding order that has no pod yet.
-        let knownSerials = Set(app.pods.compactMap { $0.pendingAuthCodeSerial })
+        // Surface every outstanding order that has no pod yet. The new pod
+        // carries NO auth-code serial (this device didn't mint the order, so
+        // it has no right to the deep-progress/cancel-revoke capability) —
+        // it shows list-level state and flips online via the next reconcile.
+        let knownRefs = Set(
+            app.pods
+                .compactMap { $0.pendingAuthCodeSerial }
+                .filter { !$0.isEmpty }
+                .map { OrderRef.compute(serial: $0) }
+        )
         let knownFqdns = Set(app.pods.map { $0.fqdn.lowercased() })
         for order in directory.pending {
-            if knownSerials.contains(order.serial) { continue }
-            if knownFqdns.contains(order.fqdn.lowercased()) { continue }
+            if !order.orderRef.isEmpty && knownRefs.contains(order.orderRef) { continue }
+            if !order.fqdn.isEmpty && knownFqdns.contains(order.fqdn.lowercased()) { continue }
             // Identity unified on the fqdn so this pending pod and a later
             // registered `/pods` pod for the same box key on ONE id. A
-            // serial-keyed fallback only for the degenerate empty-fqdn order.
+            // ref-keyed fallback only for the degenerate empty-fqdn order.
             let podId = order.fqdn.isEmpty
-                ? "pod-\(order.serial.prefix(10).lowercased())"
+                ? "pod-\(order.orderRef.prefix(10).lowercased())"
                 : PodInfo.podId(forFqdn: order.fqdn)
             app.addPod(PodInfo(
                 podId: podId,
@@ -140,14 +170,14 @@ public struct PendingServerReconciler {
                 description: nil,
                 fqdn: order.fqdn,
                 status: .pending,
-                pendingAuthCodeSerial: order.serial
+                pendingAuthCodeSerial: nil
             ))
             store.add(username: username, .init(
                 podId: podId,
                 name: order.serverName,
                 description: "",
                 fqdn: order.fqdn,
-                authCodeSerial: order.serial,
+                authCodeSerial: "",
                 createdAt: Double(order.createdAt) / 1000.0
             ))
         }

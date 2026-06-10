@@ -150,10 +150,17 @@ data class PodDirectoryEntry(
  *  not-yet-registered server now rides this list instead of the fragile
  *  biometric-IRK `outstanding-orders` path, so a list refresh triggers NO
  *  biometric prompt. Mirrors control-plane `PendingPodEntry` /
- *  iOS `PendingPodEntry`. */
+ *  iOS `PendingPodEntry`.
+ *
+ *  `orderRef` — NOT the raw auth-code serial — identifies the order:
+ *  `hex(sha256("flagship/order-ref/v1|" + serial))` (core.OrderRef). The
+ *  serial is a provision-status write capability, so it never rides this
+ *  unauthenticated response; a device that minted the order computes the
+ *  same ref locally to reconcile, and keeps polling deep install progress
+ *  with its locally-stored serial. Defaulted for mixed-deploy tolerance. */
 @Serializable
 data class PendingPodEntry(
-    val serial: String,
+    val orderRef: String = "",
     val serverName: String,
     /** `<serverName>.<username>.flagship.services` — the reserved FQDN,
      *  identical whether or not the box has registered yet. */

@@ -120,28 +120,38 @@ public struct PendingServerStore {
     }
 
     /// #43 rule (b/c) — reconcile the local cache against SERVER TRUTH. A
-    /// pending record survives only if its serial is still a real order
-    /// (present in `outstandingSerials`, the authority for "this serial is a
-    /// live order") OR its fqdn has registered (`liveFqdns`, handled by the
-    /// caller flipping it online). Everything else is a ghost — a serial that
-    /// was wiped/expired/cancelled server-side — and is dropped so it stops
-    /// spinning forever at "booting".
+    /// pending record survives only if its order is still real OR its fqdn
+    /// has registered (`liveFqdns`, handled by the caller flipping it
+    /// online). Everything else is a ghost — an order that was wiped /
+    /// expired / cancelled server-side — and is dropped so it stops spinning
+    /// forever at "booting".
+    ///
+    /// The unauthenticated `/pods` directory no longer carries raw serials
+    /// (a serial is a provision-status write capability) — it carries opaque
+    /// `orderRef`s (`OrderRef.compute(serial:)`). A record written by THIS
+    /// device holds the raw serial, so we hash it and test membership in
+    /// `outstandingOrderRefs`. A record surfaced from the directory on a
+    /// NON-creating device has no serial (empty), so it survives by fqdn
+    /// membership in `outstandingFqdns` instead.
     ///
     /// Returns the dropped podIds so the caller can also remove them from
     /// AppState in the same pass.
     @discardableResult
     public func dropGhosts(
         username: String,
-        outstandingSerials: Set<String>,
+        outstandingOrderRefs: Set<String>,
+        outstandingFqdns: Set<String>,
         liveFqdns: Set<String>
     ) -> [String] {
         var env = loadEnvelope(username: username)
         let liveLower = Set(liveFqdns.map { $0.lowercased() })
+        let outstandingLower = Set(outstandingFqdns.map { $0.lowercased() })
         var dropped: [String] = []
         env.records = env.records.filter { rec in
-            let keep =
-                outstandingSerials.contains(rec.authCodeSerial) ||
-                liveLower.contains(rec.fqdn.lowercased())
+            let stillOutstanding = rec.authCodeSerial.isEmpty
+                ? outstandingLower.contains(rec.fqdn.lowercased())
+                : outstandingOrderRefs.contains(OrderRef.compute(serial: rec.authCodeSerial))
+            let keep = stillOutstanding || liveLower.contains(rec.fqdn.lowercased())
             if !keep { dropped.append(rec.podId) }
             return keep
         }

@@ -337,7 +337,11 @@ public struct HomeTab: View {
                 description: rec.description.isEmpty ? nil : rec.description,
                 fqdn: rec.fqdn,
                 status: .pending,
-                pendingAuthCodeSerial: rec.authCodeSerial
+                // A record surfaced from the unauthenticated directory on a
+                // non-creating device has no serial (the /pods response only
+                // carries opaque orderRefs) — restore it serial-less so the
+                // watcher / cancel paths don't run with an empty capability.
+                pendingAuthCodeSerial: rec.authCodeSerial.isEmpty ? nil : rec.authCodeSerial
             ))
         }
     }

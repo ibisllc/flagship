@@ -23,6 +23,7 @@
  */
 
 import { verifyTunnelHelloV2 } from "@flagship/protocol";
+import { sha256 } from "@noble/hashes/sha256";
 import type {
   DaemonStatusStorage,
   ServerStorage,
@@ -30,7 +31,7 @@ import type {
   AuthCodeStorage,
   ProvisionStatusStorage,
 } from "@flagship/storage";
-import { HEX64, HEX128, hexToBytes } from "./hex.js";
+import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import {
   forbidden,
   malformed,
@@ -53,9 +54,27 @@ export interface PodInventoryDeps {
   now?: () => number;
 }
 
+/**
+ * Deterministic opaque reference for an install order, safe for the
+ * UNAUTHENTICATED `/pods` list. The auth-code `serial` is a capability
+ * (anyone who knows username+serial can POST fake provision phases to
+ * `/api/order/<serial>/status` + `/api/install-events/<serial>`), so the
+ * raw serial must never ride an unauthenticated response. A client that
+ * minted the order knows the real serial and computes the same ref locally
+ * to reconcile; deep-progress polling keeps using the LOCALLY-stored serial.
+ */
+export function orderRefForSerial(serial: string): string {
+  return bytesToHex(
+    sha256(new TextEncoder().encode(`flagship/order-ref/v1|${serial}`)),
+  );
+}
+
 /** A still-in-flight install order, shaped for the merged `/pods` list. */
 export interface PendingPodEntry {
-  serial: string;
+  /** `hex(sha256("flagship/order-ref/v1|" + serial))` — opaque order ref.
+   *  NEVER the raw auth-code serial (that's a provision-status write
+   *  capability and this list is unauthenticated). */
+  orderRef: string;
   serverName: string;
   /** `<serverName>.<username>.flagship.services` — the reserved FQDN, identical
    *  whether or not the box has registered yet. */
@@ -138,7 +157,7 @@ export async function handleGetUserPods(
             }
           }
           return {
-            serial: c.serial,
+            orderRef: orderRefForSerial(c.serial),
             serverName: c.serverName,
             fqdn: c.serverDomain,
             phase,

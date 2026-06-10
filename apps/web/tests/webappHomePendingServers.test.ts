@@ -45,7 +45,7 @@ describe("webapp fetchPodInventory — one merged fetch", () => {
         ],
         pending: [
           {
-            serial: "AB12",
+            orderRef: "94fa2ec15363579a4b39efe6666012ca35cbaf5eebddb9301f3947ace45d8034",
             serverName: "wiki",
             fqdn: "wiki.demo.flagship.services",
             phase: "installing",
@@ -93,8 +93,8 @@ describe("webapp fetchPodInventory — one merged fetch", () => {
         username: "demo",
         pods: [],
         pending: [
-          { serial: "X", serverName: "ok", fqdn: "ok.demo.flagship.services", state: "pending" },
-          { serial: "Y", serverName: "broken" /* no fqdn */, state: "pending" },
+          { orderRef: "aa".repeat(32), serverName: "ok", fqdn: "ok.demo.flagship.services", state: "pending" },
+          { orderRef: "bb".repeat(32), serverName: "broken" /* no fqdn */, state: "pending" },
           null,
         ],
       }),

@@ -82,14 +82,21 @@ final class PendingServerStoreTests: XCTestCase {
 
     // MARK: - #43 — drop ghosts against server truth (rule b/c)
 
-    /// A local pending record whose serial is in NEITHER the outstanding
-    /// orders NOR the registered set is a ghost — dropped, and its podId
-    /// returned so the caller can purge AppState too.
+    /// A local pending record whose order is in NEITHER the outstanding
+    /// set NOR the registered set is a ghost — dropped, and its podId
+    /// returned so the caller can purge AppState too. The outstanding set
+    /// holds OPAQUE orderRefs (the unauthenticated /pods never carries the
+    /// raw serial); the store hashes its locally-held serial to match.
     func test_dropGhosts_removesDeadSerial() {
         let (s, _) = fresh()
         s.add(username: "u", .init(podId: "ghost", name: "Home1", description: "", fqdn: "home1.u.flagship.services", authCodeSerial: "DEAD", createdAt: 1))
         s.add(username: "u", .init(podId: "live", name: "Home2", description: "", fqdn: "home2.u.flagship.services", authCodeSerial: "LIVE", createdAt: 2))
-        let dropped = s.dropGhosts(username: "u", outstandingSerials: ["LIVE"], liveFqdns: [])
+        let dropped = s.dropGhosts(
+            username: "u",
+            outstandingOrderRefs: [OrderRef.compute(serial: "LIVE")],
+            outstandingFqdns: ["home2.u.flagship.services"],
+            liveFqdns: []
+        )
         XCTAssertEqual(dropped, ["ghost"])
         XCTAssertEqual(s.list(username: "u").map(\.podId), ["live"])
     }
@@ -99,8 +106,30 @@ final class PendingServerStoreTests: XCTestCase {
     func test_dropGhosts_keepsRegisteredFqdn() {
         let (s, _) = fresh()
         s.add(username: "u", .init(podId: "reg", name: "Home", description: "", fqdn: "home.u.flagship.services", authCodeSerial: "USED", createdAt: 1))
-        let dropped = s.dropGhosts(username: "u", outstandingSerials: [], liveFqdns: ["HOME.u.flagship.services"])
+        let dropped = s.dropGhosts(username: "u", outstandingOrderRefs: [], outstandingFqdns: [], liveFqdns: ["HOME.u.flagship.services"])
         XCTAssertTrue(dropped.isEmpty)
         XCTAssertEqual(s.list(username: "u").map(\.podId), ["reg"])
+    }
+
+    /// A SERIAL-LESS record (surfaced from the unauthenticated directory on
+    /// a non-creating device — only the opaque orderRef ever crossed the
+    /// wire) survives by fqdn membership in the outstanding orders, and is
+    /// dropped once that order disappears.
+    func test_dropGhosts_serialLessRecordMatchesByFqdn() {
+        let (s, _) = fresh()
+        s.add(username: "u", .init(podId: "remote", name: "Home", description: "", fqdn: "home.u.flagship.services", authCodeSerial: "", createdAt: 1))
+
+        var dropped = s.dropGhosts(
+            username: "u",
+            outstandingOrderRefs: [OrderRef.compute(serial: "UNKNOWN-TO-THIS-DEVICE")],
+            outstandingFqdns: ["HOME.u.flagship.services"],
+            liveFqdns: []
+        )
+        XCTAssertTrue(dropped.isEmpty)
+        XCTAssertEqual(s.list(username: "u").map(\.podId), ["remote"])
+
+        dropped = s.dropGhosts(username: "u", outstandingOrderRefs: [], outstandingFqdns: [], liveFqdns: [])
+        XCTAssertEqual(dropped, ["remote"])
+        XCTAssertTrue(s.list(username: "u").isEmpty)
     }
 }

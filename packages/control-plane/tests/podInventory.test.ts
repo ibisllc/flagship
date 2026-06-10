@@ -4,7 +4,11 @@ import {
   type AuthCodeRecord,
   type ProvisionStatusStorage,
 } from "@flagship/storage";
-import { handleGetUserPods, type PodInventoryDeps } from "../src/podInventory.js";
+import {
+  handleGetUserPods,
+  orderRefForSerial,
+  type PodInventoryDeps,
+} from "../src/podInventory.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -48,7 +52,7 @@ interface PodsResponse {
   username: string;
   pods: Array<{ serverDomain: string; state: string }>;
   pending: Array<{
-    serial: string;
+    orderRef: string;
     serverName: string;
     fqdn: string;
     phase: string | null;
@@ -81,10 +85,38 @@ describe("GET /api/users/:u/pods (merged registered + pending)", () => {
     expect(out.pods[0]?.state).toBe("online");
 
     expect(out.pending).toHaveLength(1);
-    expect(out.pending[0]?.serial).toBe("PENDING01");
+    expect(out.pending[0]?.orderRef).toBe(orderRefForSerial("PENDING01"));
     expect(out.pending[0]?.fqdn).toBe("home2.harry.flagship.services");
     expect(out.pending[0]?.state).toBe("pending");
     expect(out.pending[0]?.phase).toBeNull();
+  });
+
+  it("NEVER exposes the raw auth-code serial anywhere in the unauthenticated response", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    await storage.authCodes.put(authCode("SECRETSER", "home2"));
+    await storage.provisionStatus.putProvisionStatus("SECRETSER", {
+      phase: "installing",
+      ts: NOW - 5_000,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    expect(r.status).toBe(200);
+    // The serial is a write capability (fake provision phases via
+    // /api/order/<serial>/status + /api/install-events/<serial>) — the
+    // whole body must not contain it, only the opaque sha256 orderRef.
+    expect(JSON.stringify(r.body)).not.toContain("SECRETSER");
+    const out = r.body as PodsResponse;
+    expect(out.pending[0]?.orderRef).toBe(orderRefForSerial("SECRETSER"));
+    expect((out.pending[0] as Record<string, unknown>).serial).toBeUndefined();
+  });
+
+  it("orderRef is the canonical-bytes sha256 (deterministic, client-recomputable)", () => {
+    // Pinned vector — iOS/Android/webapp compute the SAME hex locally from
+    // the serial they stored at order creation, to reconcile against /pods.
+    expect(orderRefForSerial("HOME2SER")).toBe(
+      "e0970cb9bd5fd0967cdc259ec8ca1619d1a98c44abc8eadd3fc8d4c2e6fb6442",
+    );
   });
 
   it("keeps the registered pods array backward-compatible when there are no orders", async () => {
@@ -129,7 +161,7 @@ describe("GET /api/users/:u/pods (merged registered + pending)", () => {
     // List is intact: registered server AND the order survive; phase degrades.
     expect(out.pods).toHaveLength(1);
     expect(out.pending).toHaveLength(1);
-    expect(out.pending[0]?.serial).toBe("PENDING01");
+    expect(out.pending[0]?.orderRef).toBe(orderRefForSerial("PENDING01"));
     expect(out.pending[0]?.phase).toBeNull();
   });
 
@@ -146,7 +178,9 @@ describe("GET /api/users/:u/pods (merged registered + pending)", () => {
 
     const r = await handleGetUserPods(deps(storage), "harry");
     const out = r.body as PodsResponse;
-    expect(out.pending.map((p) => p.serial)).toEqual(["LIVE00001"]);
+    expect(out.pending.map((p) => p.orderRef)).toEqual([
+      orderRefForSerial("LIVE00001"),
+    ]);
   });
 
   it("stays UNAUTHENTICATED — no signature / IRK required to read the merged list", async () => {

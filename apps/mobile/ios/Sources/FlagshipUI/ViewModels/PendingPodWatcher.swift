@@ -252,11 +252,12 @@ public final class PendingPodWatcherRegistry {
                 server: server,
                 isSerialStillOutstanding: { @MainActor [serial] in
                     // Non-biometric authority: the reconciler caches the
-                    // signed outstanding-orders result here. Nil (never
-                    // reconciled this session) ⇒ keep waiting; otherwise
-                    // membership decides real-order vs. ghost.
-                    guard let known = app.lastKnownOutstandingSerials else { return nil }
-                    return known.contains(serial)
+                    // unauthenticated `/pods` result here as OPAQUE order
+                    // refs (the raw serial never rides that response). We
+                    // hash our locally-stored serial and test membership.
+                    // Nil (never reconciled this session) ⇒ keep waiting.
+                    guard let known = app.lastKnownOutstandingOrderRefs else { return nil }
+                    return known.contains(OrderRef.compute(serial: serial))
                 }
             )
             watchers[pod.podId] = w

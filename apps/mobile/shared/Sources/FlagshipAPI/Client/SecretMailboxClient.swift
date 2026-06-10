@@ -164,17 +164,39 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 /// not-yet-registered server now rides this list instead of the fragile
 /// biometric-IRK `outstanding-orders` path, so a list refresh triggers NO
 /// Face ID prompt. Mirrors control-plane `PendingPodEntry`.
+///
+/// `orderRef` — NOT the raw auth-code serial — identifies the order:
+/// `hex(sha256("flagship/order-ref/v1|" + serial))` (FlagshipCore.OrderRef).
+/// The serial is a provision-status write capability, so it never rides
+/// this unauthenticated response; a device that minted the order computes
+/// the same ref locally to reconcile, and keeps polling deep install
+/// progress with its locally-stored serial.
 public struct PendingPodEntry: Codable, Equatable, Sendable {
-    public let serial: String
+    /// Opaque sha256 order ref (64 hex chars). Empty if a pre-cutover
+    /// Worker response omitted it (mixed-deploy tolerance).
+    public let orderRef: String
     public let serverName: String
     /// `<serverName>.<username>.flagship.services` — the reserved FQDN.
     public let fqdn: String
     /// Latest reported provisioning phase, or nil.
     public let phase: String?
     public let createdAt: Int64
-    public init(serial: String, serverName: String, fqdn: String, phase: String?, createdAt: Int64) {
-        self.serial = serial; self.serverName = serverName
+    public init(orderRef: String, serverName: String, fqdn: String, phase: String?, createdAt: Int64) {
+        self.orderRef = orderRef; self.serverName = serverName
         self.fqdn = fqdn; self.phase = phase; self.createdAt = createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.orderRef = try c.decodeIfPresent(String.self, forKey: .orderRef) ?? ""
+        self.serverName = try c.decode(String.self, forKey: .serverName)
+        self.fqdn = try c.decode(String.self, forKey: .fqdn)
+        self.phase = try c.decodeIfPresent(String.self, forKey: .phase)
+        self.createdAt = try c.decodeIfPresent(Int64.self, forKey: .createdAt) ?? 0
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case orderRef, serverName, fqdn, phase, createdAt
     }
 }
 

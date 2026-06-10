@@ -34,8 +34,10 @@ class PendingServerReconcilerTest {
     private fun registered(fqdn: String) =
         PodDirectoryEntry(serverDomain = fqdn, identityPubKey = "00".repeat(32))
 
+    // The wire entry carries the OPAQUE orderRef, never the raw serial —
+    // exactly what the hardened Worker emits.
     private fun order(serial: String, name: String, fqdn: String, phase: String? = null) =
-        PendingPodEntry(serial = serial, serverName = name, fqdn = fqdn, phase = phase, createdAt = 1L)
+        PendingPodEntry(orderRef = OrderRef.compute(serial), serverName = name, fqdn = fqdn, phase = phase, createdAt = 1L)
 
     // (1) registered + pending BOTH surface from one /pods fetch.
     @Test fun registeredAndPending_bothSurfaceFromOneFetch() = runTest {
@@ -57,7 +59,8 @@ class PendingServerReconcilerTest {
         val pending = pods.first { it.fqdn == "work.harry.flagship.services" }
         assertEquals(PodInfo.Status.PENDING, pending.status)
         assertEquals("Work", pending.name)
-        assertEquals("S-1", pending.pendingAuthCodeSerial)
+        // The directory never hands out the raw serial — only the opaque ref.
+        assertNull(pending.pendingAuthCodeSerial)
     }
 
     // (2) a pending order with NO local record appears as a pending pod.
@@ -72,8 +75,59 @@ class PendingServerReconcilerTest {
         assertEquals(1, app.pods.value.size)
         val pod = app.pods.value.single()
         assertEquals(PodInfo.Status.PENDING, pod.status)
-        assertEquals("S-9", pod.pendingAuthCodeSerial)
+        assertNull(pod.pendingAuthCodeSerial)
         assertEquals(PodInfo.podId("music.harry.flagship.services"), pod.podId)
+    }
+
+    // A directory-surfaced (serial-less) pod SURVIVES the next reconcile
+    // while its order is still outstanding (matched by fqdn), and ages out
+    // once the order disappears.
+    @Test fun serialLessPendingPod_survivesThenAgesOut() = runTest {
+        val app = signedInApp()
+        val mailbox = MockSecretMailboxClient().apply {
+            pendingOrders = listOf(order("S-9", "Music", "music.harry.flagship.services"))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+        PendingServerReconciler(app, mailbox).reconcile() // still outstanding → still ONE pod
+        assertEquals(1, app.pods.value.size)
+        assertEquals(PodInfo.Status.PENDING, app.pods.value.single().status)
+
+        // Order gone server-side → the serial-less pod is a ghost.
+        mailbox.pendingOrders = emptyList()
+        PendingServerReconciler(app, mailbox).reconcile()
+        assertTrue(app.pods.value.isEmpty())
+    }
+
+    // A pod created on THIS device (raw serial held locally) reconciles by
+    // hashing the serial against the directory's refs — it keeps the serial
+    // (deep-progress capability) and is NOT duplicated or dropped.
+    @Test fun locallyCreatedPod_keepsSerialAndDedupsByRef() = runTest {
+        val app = signedInApp()
+        app.addPod(
+            PodInfo(
+                podId = PodInfo.podId("music.harry.flagship.services"),
+                name = "Music",
+                fqdn = "music.harry.flagship.services",
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = "S-9",
+            ),
+        )
+        val mailbox = MockSecretMailboxClient().apply {
+            pendingOrders = listOf(order("S-9", "Music", "music.harry.flagship.services"))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+
+        assertEquals(1, app.pods.value.size)
+        assertEquals("S-9", app.pods.value.single().pendingAuthCodeSerial)
+    }
+
+    // OrderRef must match the control-plane byte-for-byte (pinned vector
+    // from packages/control-plane/tests/podInventory.test.ts).
+    @Test fun orderRef_matchesControlPlaneVector() {
+        assertEquals(
+            "e0970cb9bd5fd0967cdc259ec8ca1619d1a98c44abc8eadd3fc8d4c2e6fb6442",
+            OrderRef.compute("HOME2SER"),
+        )
     }
 
     // (3) a registered server SUPERSEDES a pending one for the same fqdn:
@@ -149,20 +203,36 @@ class PendingServerReconcilerTest {
         assertTrue(app.pods.value.isEmpty())
     }
 
-    // The new `pending` array decodes from the live Worker JSON shape.
+    // The new `pending` array decodes from the live Worker JSON shape —
+    // which carries the opaque `orderRef`, never the raw auth-code serial.
     @Test fun pendingArray_decodesFromWorkerJson() {
+        val ref = OrderRef.compute("S-1")
         val resp = json.decodeFromString(
             PodsDirectoryResponse.serializer(),
             """{"username":"harry","pods":[],"pending":[
-                {"serial":"S-1","serverName":"Work","fqdn":"work.harry.flagship.services","phase":"installing","createdAt":1717000000000,"state":"pending"}
+                {"orderRef":"$ref","serverName":"Work","fqdn":"work.harry.flagship.services","phase":"installing","createdAt":1717000000000,"state":"pending"}
             ],"fetchedAt":1717000000000}""",
         )
         assertEquals(1, resp.pending.size)
         val p = resp.pending.single()
-        assertEquals("S-1", p.serial)
+        assertEquals(ref, p.orderRef)
         assertEquals("installing", p.phase)
         assertEquals("pending", p.state)
         assertNotNull(p.fqdn)
         assertFalse(p.fqdn.isEmpty())
+    }
+
+    // Mixed-deploy tolerance: a pre-cutover Worker entry that still carries
+    // `serial` (and no `orderRef`) decodes without crashing — the unknown
+    // key is ignored and orderRef defaults to empty.
+    @Test fun pendingArray_toleratesLegacySerialKey() {
+        val resp = json.decodeFromString(
+            PodsDirectoryResponse.serializer(),
+            """{"username":"harry","pods":[],"pending":[
+                {"serial":"S-1","serverName":"Work","fqdn":"work.harry.flagship.services","state":"pending"}
+            ]}""",
+        )
+        assertEquals(1, resp.pending.size)
+        assertEquals("", resp.pending.single().orderRef)
     }
 }
