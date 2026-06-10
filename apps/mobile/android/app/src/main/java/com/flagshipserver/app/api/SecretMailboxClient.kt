@@ -145,10 +145,32 @@ data class PodDirectoryEntry(
     val revokedAt: Long? = null,
 )
 
+/** #56 — an active outstanding install order, surfaced in the SAME
+ *  unauthenticated `/pods` response as registered servers. A just-created,
+ *  not-yet-registered server now rides this list instead of the fragile
+ *  biometric-IRK `outstanding-orders` path, so a list refresh triggers NO
+ *  biometric prompt. Mirrors control-plane `PendingPodEntry` /
+ *  iOS `PendingPodEntry`. */
+@Serializable
+data class PendingPodEntry(
+    val serial: String,
+    val serverName: String,
+    /** `<serverName>.<username>.flagship.services` — the reserved FQDN,
+     *  identical whether or not the box has registered yet. */
+    val fqdn: String,
+    /** Latest reported provisioning phase, or null on any lookup failure. */
+    val phase: String? = null,
+    val createdAt: Long = 0,
+    val state: String = "pending",
+)
+
 @Serializable
 data class PodsDirectoryResponse(
     val username: String,
     val pods: List<PodDirectoryEntry> = emptyList(),
+    /** #56 — active outstanding orders, merged into the same fetch. Has a
+     *  default so a pre-#56 Worker response (no `pending` key) still decodes. */
+    val pending: List<PendingPodEntry> = emptyList(),
 ) {
     /** The STK registered for `serverDomain` (case-insensitive, non-
      *  revoked). Null when the directory can't vouch for the box. */
@@ -250,6 +272,9 @@ class LiveSecretMailboxClient(
 class MockSecretMailboxClient : SecretMailboxClient {
     var pending: List<PendingSecretRequest> = emptyList()
     var directory: List<PodDirectoryEntry> = emptyList()
+    /** #56 — outstanding install orders surfaced by [fetchPods] alongside
+     *  the registered [directory]. */
+    var pendingOrders: List<PendingPodEntry> = emptyList()
     var sealedLuksKeyHex: String? = null
     var lastPostedAuth: MailboxAuthEnvelope? = null
     var lastPostedResponse: SecretResponseBody? = null
@@ -274,7 +299,7 @@ class MockSecretMailboxClient : SecretMailboxClient {
     }
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
-        PodsDirectoryResponse(username, directory)
+        PodsDirectoryResponse(username, directory, pendingOrders)
 
     override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
         deposited.add(Triple(lease, signatureHex, bootAuth))

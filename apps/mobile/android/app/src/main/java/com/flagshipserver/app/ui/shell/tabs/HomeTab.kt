@@ -25,6 +25,8 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.PendingServerReconciler
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
 import com.flagshipserver.app.ui.screens.AddServerMode
@@ -48,6 +50,12 @@ fun HomeTab() {
     val pods by app.pods.collectAsState()
     val scope = rememberCoroutineScope()
     val vm = remember { HomeViewModel(client) }
+    val mailbox = LocalSecretMailboxClient.current
+    // #56 — reconcile the server list against ONE unauthenticated `/pods`
+    // fetch (registered servers + active orders). Surfaces in-flight orders
+    // (the never-ported "home2" fix) and ages out dead pending ghosts. A pure
+    // read — NO biometric prompt; Face ID stays only on mutations.
+    val reconciler = remember(mailbox) { PendingServerReconciler(app, mailbox) }
     val ctx = LocalContext.current
     // Persistent dismiss for the post-creation backup-reminder banner
     // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
@@ -56,6 +64,10 @@ fun HomeTab() {
     val recoveryBannerStore = remember { RecoveryBannerStore.fromContext(ctx) }
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
+
+    // Reconcile the server list against `/pods` on first appearance and
+    // whenever the signed-in account changes. Best-effort + silent.
+    LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
 
     // Refresh cloud-recovery enrolment state AND E7 account-reset
     // detection when the tab first appears AND whenever a pod
@@ -131,7 +143,7 @@ fun HomeTab() {
                 },
                 onAddServer = { nav.navigate("add-server-chooser") },
                 onSetLeader = { app.setLeader(it.podId) },
-                onRefresh = { scope.launch { vm.load() } },
+                onRefresh = { scope.launch { vm.load(); reconciler.reconcile() } },
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },

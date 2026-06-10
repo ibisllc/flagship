@@ -305,6 +305,38 @@ class AppState(
         if (_currentPodId.value == null) _currentPodId.value = pod.podId
     }
 
+    /** #56 — registration is AUTHORITATIVE for online. A server present in the
+     *  registered `/pods` inventory is rendered ONLINE regardless of any
+     *  heartbeat / cert side-channel (those aren't populated for a
+     *  content-blind `.com` or a just-live box). Identity is unified on the
+     *  fqdn: if a pod (pending or otherwise) already exists for this fqdn it's
+     *  flipped to ONLINE in place (preserving leader/current selection and not
+     *  clobbering a richer name); otherwise a fresh ONLINE pod is added. The
+     *  online pod always wins over a pending duplicate sharing the fqdn.
+     *  Returns the resolved pod id. Mirror of iOS AppState.upsertRegisteredPod. */
+    fun upsertRegisteredPod(fqdn: String, name: String, description: String? = null): String {
+        val target = fqdn.lowercase()
+        val existing = _pods.value
+        val idx = existing.indexOfFirst { it.fqdn.lowercase() == target }
+        if (idx >= 0) {
+            val old = existing[idx]
+            // Already online — nothing to do (don't clobber a richer name).
+            if (old.status == PodInfo.Status.ONLINE) return old.podId
+            _pods.value = existing.toMutableList().also {
+                it[idx] = old.copy(
+                    name = old.name.ifEmpty { name },
+                    description = old.description ?: description,
+                    status = PodInfo.Status.ONLINE,
+                    pendingAuthCodeSerial = null,
+                )
+            }
+            return old.podId
+        }
+        val id = PodInfo.podId(fqdn)
+        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE))
+        return id
+    }
+
     fun setLeader(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId
@@ -354,6 +386,16 @@ data class PodInfo(
     val demoServer: com.flagshipserver.app.api.DemoServerBlock? = null,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
+
+    companion object {
+        /** #56 — deterministic, fqdn-derived pod id. Pod identity is UNIFIED
+         *  on the normalized fqdn so a registered-`/pods` pod and a pending
+         *  order for the same box key on the SAME id — no stuck-pending
+         *  duplicate when a box goes live. An empty fqdn has no stable
+         *  identity, so callers fall back to their own id in that case.
+         *  Mirror of iOS PodInfo.podId(forFqdn:). */
+        fun podId(fqdn: String): String = "pod-" + fqdn.lowercase()
+    }
 }
 
 /// Tiny utility for normalizing a user-supplied server name into a DNS
