@@ -59,7 +59,7 @@ npx vitest run                                  # everything (~30s)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
-cd apps/com && npx wrangler deploy              # Worker
+npx tsc -b && (cd apps/com && npx wrangler deploy)   # Worker — tsc -b FIRST: it bundles the BUILT control-plane dist/, so a deploy without a rebuild silently ships stale handler logic
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
@@ -121,7 +121,28 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-08**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-09**.
+
+### 2026-06-09 session — what landed + the live encrypted-unlock failure
+
+**NEXT SESSION — FIRST MOVES (in order):**
+1. `bash scripts/wipe-all-users.sh` (clean slate).
+2. Rebuild the iOS app in Xcode — `main` has the consolidated server list (#56), the three-tier session model (#46), and the keychain self-heal.
+3. **Encrypted Wi-Fi e2e (#27) — the ONE piece the project still has to prove.** The Mac burner is current (firmware #45 + `/boot` Wi-Fi beacons #44 + FLAGSHIP console banner + the new `debug` user). Create a fresh account → **enroll Cloud Recovery FIRST** (so a sign-out can't rotate the identity, see #52) → create a server with **Encrypt disk ON** (default) → burn → boot → unplug USB → power on → watch LUKS-unlock-over-Wi-Fi.
+
+**#27 LIVE FAILURE (2026-06-09):** an encrypted Wi-Fi-only box installed/sealed/registered fine but **failed to auto-unlock** — stuck at `Please unlock disk`, `curl (6) could not resolve host boot.flagshipserver.com` (NO network in the initramfs), Wi-Fi beacon empty (DHCP never succeeded). After a hand-unlock with the burn-time recovery passphrase the **full-OS daemon also didn't check in** (daemons=0) — so Wi-Fi isn't engaging on this box in EITHER context, despite #45. DIAGNOSE next: console-login as **`debug` / `flagship`** (the new debug user — `flagship` is SSH-key-only), `cat /boot/flagship-wifi.log` → which stage died (interface / driver / **firmware copied into the initrd?** / wpa associate / DHCP). Leading suspect: the #44 build-time hook isn't staging the driver+firmware into the initrd. Fix in `buildInitramfsWifiBlock` (TS `userdata.ts` + Swift `UserData.swift`). Everything downstream of unlock is PROVEN — the no-LUKS box reached a real Let's Encrypt green padlock (`*.harry.flagship.services`) on hardware.
+
+**DEPLOY GOTCHA (cost real time this session):** `wrangler deploy` bundles apps/com's import of the BUILT `@flagship/control-plane` `dist/` — a control-plane change that isn't compiled silently ships stale. ALWAYS `npx tsc -b && cd apps/com && npx wrangler deploy`. (This is why the outstanding-orders endpoint "deployed" yet never worked.)
+
+**App server-list — CONSOLIDATED (#56, LIVE):** one unauthenticated `GET /api/users/:u/pods` now returns registered `pods` (`state:"online"`) + active `pending` orders (`state:"pending"`, with `serial`/fqdn/phase) — **no more biometric Face ID on a list refresh**, and a just-created server appears instantly. Server `bae3537` (deployed via tsc -b + wrangler, verified `pending` key live), webapp `792a620`. Replaces the split-brain (registered `/pods` + biometric-signed `outstanding-orders` whose silent per-order `provision_status` failure swallowed the whole list) that caused the entire "server doesn't appear / Face ID on refresh" saga. iOS done; webapp done; **Android parity in flight**.
+
+**SECURITY — pre-production cleanup (track to GA):**
+- **Remove the `debug` user.** The burner now installs a sudo `debug` / `flagship` console user (a deliberate backdoor for bring-up — `flagship` is SSH-key-only, so on-box log reading was impossible; `/etc/issue` warns loudly). REMOVE before production.
+- **#52 — harden Tier-2 sign-out.** A no-recovery Tier-2 "Sign out" wiped the only local key, and sign-in re-paired the account under a NEW IRK (rotated `harry` live). `claimUsername` is SAFE (storage rejects a different-IRK re-claim, `d1.ts:213`); the rotation came via the recovery/re-pair path. BLOCK Tier-2 sign-out when `hasCloudRecovery` is false + audit how re-pair authorized rotating to a brand-new key.
+- **/pods serial exposure.** The consolidated `/pods` returns pending orders' auth-code `serial` unauthenticated — a knower-of-the-username could scribble fake provision-status phases (minor DoS). Harden: sign the box's provision-status reports, or gate the serial.
+- Remove the **burn-time LUKS recovery passphrase** (`flagship-burn-time-luks-rekey-me-immediately`, a kept known constant) + disarm the mass-wipe (#35) — before GA.
+
+Gates (2026-06-09): `npx vitest run` 4400+ · iOS 780 XCTests · burner 172 (TS) + 104 (swift) · webapp 1006 · `npx tsc -b` clean.
 
 ### Live in production
 - **Per-user TLS** — one Let's Encrypt cert per user, SANs `[<user>, *.<user>]`, real green padlock (per-box → per-user cutover verified live 2026-06-02). ACME runs on the user's daemon over SNI passthrough; `.services` stays content-blind. Wildcard SANs via DNS-01.
