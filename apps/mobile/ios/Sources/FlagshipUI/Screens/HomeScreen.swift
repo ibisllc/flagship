@@ -368,7 +368,9 @@ public struct HomeScreen: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            if pod.status != .pending && pod.podId != leaderPodId {
+                            // Leader = the daemon the screens point at; only a
+                            // server that came online can be one.
+                            if pod.status != .pending && pod.cameOnline && pod.podId != leaderPodId {
                                 Button {
                                     onSetLeader(pod)
                                 } label: {
@@ -537,15 +539,18 @@ public struct PodCard: View {
                         Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                     }
                     HStack(spacing: FS.space.s2) {
-                        FSPill(statusLabel, kind: statusKind)
                         // A box that registered during install but whose daemon
-                        // never checked in — distinguishes a dead install from a
-                        // live server so the owner knows to decommission it.
-                        if pod.status != .pending && !pod.cameOnline {
-                            FSPill("Never came online", kind: .offline)
-                                .accessibilityIdentifier("pod-card-never-online")
-                        }
-                        if isLeader { LeaderBadge() }
+                        // never checked in shows a SINGLE "Never came online"
+                        // status (not "Online" — registration alone isn't live)
+                        // so the owner knows to decommission it.
+                        FSPill(statusLabel, kind: statusKind)
+                            .accessibilityIdentifier(
+                                neverCameOnline ? "pod-card-never-online" : "pod-card-status"
+                            )
+                        // Leader only makes sense for a server that actually
+                        // came online (the leader is the daemon the screens
+                        // point at) — never badge a dead box as Leader.
+                        if isLeader && pod.cameOnline { LeaderBadge() }
                         Spacer(minLength: 0)
                     }
                     // "Your server is being installed" — a thin
@@ -570,7 +575,15 @@ public struct PodCard: View {
             }
         }
     }
+    /// A registered server whose daemon never checked in. `cameOnline`
+    /// defaults true, so this is only ever set for a box detected dead from
+    /// the directory (null lastReported + cert) — pending installs keep their
+    /// own "Pending" status.
+    private var neverCameOnline: Bool {
+        pod.status == .online && !pod.cameOnline
+    }
     private var statusLabel: String {
+        if neverCameOnline { return "Never came online" }
         switch pod.status {
         case .online:  return "Online"
         case .offline: return "Offline"
@@ -579,6 +592,7 @@ public struct PodCard: View {
         }
     }
     private var statusKind: FSPillKind {
+        if neverCameOnline { return .offline }
         switch pod.status {
         case .online:  return .online
         case .offline: return .offline

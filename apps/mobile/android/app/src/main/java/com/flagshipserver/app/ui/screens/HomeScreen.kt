@@ -253,7 +253,9 @@ fun PodCard(
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    if (isLeader) FSPill("Leader", kind = FSPillKind.Online)
+                    // Leader = the daemon the screens point at; only badge a
+                    // server that actually came online.
+                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
                 }
                 if (!pod.description.isNullOrEmpty()) {
                     Text(
@@ -269,24 +271,22 @@ fun PodCard(
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // A registered box whose daemon never checked in shows a
+                    // SINGLE "Never came online" status (not "Online" —
+                    // registration alone isn't live), so the owner knows to
+                    // decommission it. Pending installs keep their own status.
+                    val neverCameOnline = pod.status == PodInfo.Status.ONLINE && !pod.cameOnline
                     FSPill(
-                        label = pod.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                        kind = when (pod.status) {
+                        label = if (neverCameOnline) "Never came online"
+                            else pod.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                        kind = if (neverCameOnline) FSPillKind.Offline else when (pod.status) {
                             PodInfo.Status.ONLINE -> FSPillKind.Online
                             PodInfo.Status.PENDING -> FSPillKind.Provisioning
                             PodInfo.Status.OFFLINE -> FSPillKind.Offline
                             PodInfo.Status.UNKNOWN -> FSPillKind.Offline
                         },
+                        modifier = if (neverCameOnline) Modifier.testTag("pod-card-never-online") else Modifier,
                     )
-                    // Registered during install but never came online — a dead
-                    // box. Distinguishes it from a live server in the list.
-                    if (pod.status != PodInfo.Status.PENDING && !pod.cameOnline) {
-                        FSPill(
-                            label = "Never came online",
-                            kind = FSPillKind.Offline,
-                            modifier = Modifier.testTag("pod-card-never-online"),
-                        )
-                    }
                 }
                 // "Your server is being installed" — a thin determinate
                 // bar on a demo server still pre-`ready`.
