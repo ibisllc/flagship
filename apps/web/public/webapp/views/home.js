@@ -10,6 +10,7 @@ import {
   applyScopeGateToButton,
 } from "../lib/usersCheck.js";
 import { loadProviders } from "../providers.js";
+import { renderListProgressBar } from "../lib/provisionProgress.js";
 import {
   get as recoveryStoreGet,
   set as recoveryStoreSet,
@@ -38,14 +39,26 @@ const PENNANT_SVG = `
 `;
 
 /**
- * #31 — fetch per-pod liveness + cert state from .com's public pod
- * inventory endpoint. Returns a map keyed by lower-cased serverDomain.
- * Best-effort: any error resolves to an empty map so the home view
- * still renders the base card.
+ * #31 / #56 — fetch the consolidated pod inventory from .com's public,
+ * UNAUTHENTICATED endpoint. ONE fetch returns BOTH the registered pods
+ * (liveness + cert state, `state:"online"`) AND the active in-flight
+ * install orders (`pending[]`, `state:"pending"`). Mirrors the iOS
+ * consolidation (commit bae3537): no second signed/biometric fetch — a
+ * just-created, not-yet-registered server surfaces from this same call.
+ *
+ * Returns `{ statusByDomain, pending }`:
+ *   - `statusByDomain`: Map keyed by lower-cased serverDomain, used to
+ *     enrich the registered server cards from /api/me/servers.
+ *   - `pending`: the raw pending-order array (each `{ serial, serverName,
+ *     fqdn, phase, createdAt, state }`). Empty when the field is absent
+ *     (backward-compatible with a pre-#56 Worker).
+ *
+ * Best-effort: any error resolves to empty so the home view still renders
+ * the base cards.
  */
-async function fetchPodStatusMap(username, servers) {
-  const out = new Map();
-  if (!username || !servers?.length) return out;
+export async function fetchPodInventory(username) {
+  const out = { statusByDomain: new Map(), pending: [] };
+  if (!username) return out;
   try {
     const r = await fetch(
       `https://flagshipserver.com/api/users/${encodeURIComponent(username)}/pods`,
@@ -53,12 +66,69 @@ async function fetchPodStatusMap(username, servers) {
     if (!r.ok) return out;
     const body = await r.json();
     for (const p of body.pods ?? []) {
-      out.set(String(p.serverDomain ?? "").toLowerCase(), p);
+      out.statusByDomain.set(String(p.serverDomain ?? "").toLowerCase(), p);
+    }
+    // The `pending` array is new + backward-compatible: a pre-#56 Worker
+    // omits it, so a missing/non-array value degrades to no pending cards.
+    if (Array.isArray(body.pending)) {
+      out.pending = body.pending.filter(
+        (p) => p && typeof p.fqdn === "string" && p.fqdn.length > 0,
+      );
     }
   } catch {
-    /* offline / cors — fall back to bare cards */
+    /* offline / cors — fall back to bare cards, no pending */
   }
   return out;
+}
+
+/**
+ * #56 — merge the registered servers (authoritative, from the paired
+ * session's /api/me/servers) with the in-flight pending orders (from the
+ * unauthenticated /pods `pending[]`). Identity is unified on the
+ * normalized fqdn (a registered server's `serverId` === a pod's
+ * `serverDomain` === a pending order's `fqdn`); a REGISTERED server always
+ * SUPERSEDES a pending order with the same fqdn, so a box that finished
+ * registering between the two reads never shows as both online and
+ * pending. Returns the pending orders that have no registered twin, newest
+ * first (the array already arrives newest-first from the server, but we
+ * don't depend on that here).
+ *
+ * @param {Array<{serverId:string}>} servers  registered servers
+ * @param {Array<{fqdn:string,createdAt?:number}>} pending  pending orders
+ */
+export function pendingWithoutRegisteredTwin(servers, pending) {
+  const registeredFqdns = new Set(
+    (servers ?? []).map((s) => String(s.serverId ?? "").toLowerCase()),
+  );
+  return (pending ?? [])
+    .filter((p) => !registeredFqdns.has(String(p.fqdn ?? "").toLowerCase()))
+    .slice()
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+}
+
+/** Render one pending-order card body: the reserved FQDN, a "pending"
+ *  pill, and (when a provisioning phase is known) the thin determinate
+ *  progress bar shared with the create-server flow. Pure string builder
+ *  so it's unit-testable alongside the registered-card renderer.
+ *  @param {{fqdn:string,serverName?:string,phase?:string|null}} order */
+export function renderPendingCard(order) {
+  const dot = `<span class="server-dot server-dot--provisioning" aria-hidden="true"></span>`;
+  const label = order.serverName || order.fqdn;
+  const bar = renderListProgressBar({ phase: order.phase ?? null, status: "provisioning" });
+  return `
+    <div class="row row-top">
+      <div class="server-card-head">
+        ${dot}
+        <span class="value server-fqdn">${escapeHtml(String(label))}</span>
+      </div>
+      <span class="pill warn">pending</span>
+    </div>
+    <div class="server-card-meta mt-2">
+      <span class="server-meta-chip">installing</span>
+      <span class="server-meta-chip">${escapeHtml(String(order.fqdn))}</span>
+    </div>
+    ${bar}
+  `;
 }
 
 /** Classify the server's live status into one of three buckets. */
@@ -463,19 +533,36 @@ export async function renderHome() {
     const body = await r.json();
     sessionStatusEl.textContent = "paired";
     sessionStatusEl.classList.add("ok");
-    if (!body.servers.length) {
+    // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
+    // returns BOTH the registered pods (liveness/cert enrichment) AND the
+    // in-flight install orders (`pending[]`). No second signed fetch — a
+    // just-created, not-yet-registered server rides this same call.
+    // Failures here are non-fatal: registered cards fall back to the bare
+    // label + active/revoked pill and pending simply doesn't surface.
+    const { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
+      session.username,
+    );
+    // Registered server always supersedes a pending order with the same
+    // fqdn (identity unified on the normalized fqdn).
+    const pendingOrders = pendingWithoutRegisteredTwin(body.servers, pending);
+
+    // Zero registered AND zero pending → the honest empty zero-state.
+    if (!body.servers.length && !pendingOrders.length) {
       renderEmptyServersList(list, { reason: "no-servers", username: session.username });
       return;
     }
-    // #31 — fan-out to /api/users/:u/pods on .com (no auth, public
-    // read of server registration + daemon-status). Failures here are
-    // non-fatal: the cards fall back to the bare label + active/revoked
-    // pill if the fetch can't complete.
-    const podStatusByDomain = await fetchPodStatusMap(session.username, body.servers);
+
+    // Registered servers first (authoritative), pending orders below.
     for (const s of body.servers) {
       const card = document.createElement("div");
       card.className = "card server-card";
       card.innerHTML = renderServerCard(s, podStatusByDomain.get(s.serverId.toLowerCase()));
+      list.appendChild(card);
+    }
+    for (const order of pendingOrders) {
+      const card = document.createElement("div");
+      card.className = "card server-card server-card--pending";
+      card.innerHTML = renderPendingCard(order);
       list.appendChild(card);
     }
     // Silent auto-renewal of long-lived leases. Fires on every home

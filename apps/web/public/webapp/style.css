@@ -1010,6 +1010,11 @@ body.no-tabs .tab-bar { display: none; }
 .server-dot--cert-expiring-soon { background: var(--warn); }
 .server-dot--cert-expired { background: var(--err); }
 .server-dot--revoked { background: var(--err); }
+/* #56 — an in-flight install order (not yet registered): amber + pulse. */
+.server-dot--provisioning {
+  background: var(--warn);
+  animation: server-dot-pulse 2.2s ease-out infinite;
+}
 @keyframes server-dot-pulse {
   0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 50%, transparent); }
   60%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 0%, transparent); }
