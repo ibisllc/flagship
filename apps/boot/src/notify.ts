@@ -49,7 +49,10 @@ export class HttpNotifyPipe implements NotifyPipe {
   constructor(opts: HttpNotifyPipeOpts) {
     this.url = `${opts.identityPlaneUrl.replace(/\/$/, "")}/api/internal/notify-owner`;
     this.secret = opts.sharedSecret;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // Bind the global fetch — calling it via `this.fetchImpl(...)` would
+    // otherwise throw "Illegal invocation" (Cloudflare requires
+    // `this === globalThis`). Same bug class as directory.ts.
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
   }
 
   async notifyOwner(args: {

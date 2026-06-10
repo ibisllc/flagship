@@ -45,6 +45,35 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
     expect(await dir.boxStkForDomain(SERVER)).toBe(boxStk);
   });
 
+  // Regression: #27 boot-unlock 1101. With no injected fetchImpl the client
+  // must NOT invoke the global fetch as `this.fetchImpl(...)` with the client
+  // as `this` — Cloudflare throws "Illegal invocation" unless `this` is the
+  // global. The default must be bound to globalThis.
+  it("default fetch is bound to globalThis (Workers Illegal-invocation guard)", async () => {
+    const seenThis: unknown[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = function (this: unknown) {
+      seenThis.push(this);
+      return Promise.resolve(
+        new Response(JSON.stringify({ pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    } as unknown as typeof fetch;
+    try {
+      const dir = new HttpDirectoryClient({ identityPlaneUrl: base, apex }); // no fetchImpl → default
+      const got = await dir.boxStkForDomain(SERVER);
+      expect(got).toBe(boxStk);
+      expect(seenThis).toHaveLength(1);
+      // Bound → globalThis. Unbound (the bug) would be the directory client.
+      expect(seenThis[0]).toBe(globalThis);
+      expect(seenThis[0]).not.toBe(dir);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   it("returns null for a revoked pod", async () => {
     const dir = new HttpDirectoryClient({
       identityPlaneUrl: base,

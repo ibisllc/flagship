@@ -86,7 +86,11 @@ export class HttpDirectoryClient implements DirectoryClient {
   constructor(opts: HttpDirectoryClientOpts) {
     this.base = opts.identityPlaneUrl.replace(/\/$/, "");
     this.apex = opts.apex;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // MUST bind the global fetch: calling it as `this.fetchImpl(...)` sets
+    // `this` to the client instance, which Cloudflare rejects with
+    // "Illegal invocation" (it requires `this === globalThis`). Confirmed
+    // on metal as the #27 boot-unlock 1101. Injected test mocks pass through.
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
   }
 
   async boxStkForDomain(serverDomain: string): Promise<string | null> {
