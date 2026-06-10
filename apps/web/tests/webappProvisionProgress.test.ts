@@ -43,39 +43,46 @@ describe("webapp provisionFraction", () => {
     }
   });
 
-  it("the ladder is the canonical 9-phase vocabulary (booting…live), installed between installing and registering", () => {
+  it("the ladder is the canonical 9-phase vocabulary in MONOTONIC wire order (downloading after installing, installed after sealing)", () => {
     expect(PROVISION_LADDER).toEqual([
       "booting",
-      "downloading",
       "partitioning",
       "installing",
-      "installed",
+      "downloading",
       "registering",
       "sealing",
+      "installed",
       "pairing",
       "live",
     ]);
+    const idx = (p: string) => PROVISION_LADDER.indexOf(p);
+    expect(idx("downloading")).toBeGreaterThan(idx("installing"));
+    expect(idx("installed")).toBeGreaterThan(idx("sealing"));
   });
 });
 
 describe("webapp PROVISION_STEP_GROUPS", () => {
-  it("matches the canonical group projection + labels (design §1.2) — `installed` is NOT a rendered rung", () => {
+  it("matches the canonical group projection + labels (design §1.2) — `installed` is its own rung after Securing", () => {
     expect(PROVISION_STEP_GROUPS.map((g) => g.label)).toEqual([
       "Booting",
       "Installing",
       "Registering",
       "Securing (TLS certificate)",
+      "Install complete — unplug the USB",
       "Ready",
     ]);
-    // No rendered group keys on `installed`; it folds into `installing`.
-    expect(PROVISION_STEP_GROUPS.some((g) => g.key === "installed")).toBe(false);
+    // `installed` is now its own rendered rung, positioned after Securing.
+    expect(PROVISION_STEP_GROUPS.some((g) => g.key === "installed")).toBe(true);
     const installing = PROVISION_STEP_GROUPS.find((g) => g.key === "installing")!;
-    expect(installing.phases).toEqual(["installing", "installed"]);
+    expect(installing.phases).toEqual(["installing", "downloading"]);
+    const installed = PROVISION_STEP_GROUPS.find((g) => g.key === "installed")!;
+    expect(installed.phases).toEqual(["installed"]);
+    // `installed` sorts after `securing`.
+    const keys = PROVISION_STEP_GROUPS.map((g) => g.key);
+    expect(keys.indexOf("installed")).toBeGreaterThan(keys.indexOf("securing"));
   });
 
-  it("keeps `installed` a valid WIRE phase + push milestone even though it's not a rendered rung", () => {
-    // The ladder (wire vocabulary) still carries `installed` between
-    // `installing` and `registering` — only the visible checklist drops it.
+  it("keeps `installed` a valid WIRE phase + push milestone", () => {
     expect(PROVISION_LADDER).toContain("installed");
   });
 });
@@ -83,28 +90,30 @@ describe("webapp PROVISION_STEP_GROUPS", () => {
 describe("webapp provisionStepStates", () => {
   it("a registering phase activates the Registering group with its title", () => {
     const v = provisionStepStates("registering");
-    // 5 rendered groups now (installed folded away): Booting + Installing
-    // done; Registering active; Securing + Ready pending.
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "active", "pending", "pending"]);
+    // 6 rendered groups now (installed is its own rung after Securing):
+    // Booting + Installing done; Registering active; Securing + Installed +
+    // Ready pending.
+    expect(v.map((s) => s.state)).toEqual([
+      "done", "done", "active", "pending", "pending", "pending",
+    ]);
     expect(v[2]!.detail).toBe("Registering with Flagship");
   });
 
-  it("the 'installed' phase folds onto Installing as DONE (no active row) with the unplug-and-power-on instruction", () => {
+  it("the 'installed' phase is its own ACTIVE rung (after Securing) carrying the unplug-and-power-on instruction", () => {
     const v = provisionStepStates("installed");
-    // Booting + Installing DONE; nothing active; rest pending. The user
-    // must unplug + power on before anything else advances.
-    expect(v.map((s) => s.state)).toEqual(["done", "done", "pending", "pending", "pending"]);
-    // The Installing row carries the action detail.
-    const installing = v.find((s) => s.key === "installing")!;
-    expect(installing.state).toBe("done");
-    expect(installing.detail).toBe(INSTALLED_DONE_DETAIL);
-    expect(installing.detail).toBe(
+    // Booting…Securing DONE; Installed active (action needed); Ready pending.
+    expect(v.map((s) => s.state)).toEqual([
+      "done", "done", "done", "done", "active", "pending",
+    ]);
+    // The Installed row carries the action detail.
+    const installed = v.find((s) => s.key === "installed")!;
+    expect(installed.state).toBe("active");
+    expect(installed.detail).toBe(INSTALLED_DONE_DETAIL);
+    expect(installed.detail).toBe(
       "Install complete — unplug the USB, then power the box back on.",
     );
-    // Nothing is the active/current row.
-    expect(v.some((s) => s.state === "active")).toBe(false);
-    // There is NO standalone `installed` rendered rung.
-    expect(v.some((s) => s.key === "installed")).toBe(false);
+    // `installed` IS a standalone rendered rung now.
+    expect(v.some((s) => s.key === "installed")).toBe(true);
   });
 
   it("error surfaces lastError on the first group with no hint", () => {
@@ -113,13 +122,15 @@ describe("webapp provisionStepStates", () => {
     expect(v[0]!.detail).toBe("boom");
   });
 
-  it("an error break AT `installed` collapses onto the Installing group (not a missing row)", () => {
+  it("an error break AT `installed` fails the Installed group (its own rung)", () => {
     const v = provisionStepStates("error", "disk full", "installed");
-    // Booting done; Installing failed (installed folds here); rest pending.
-    expect(v.map((s) => s.state)).toEqual(["done", "failed", "pending", "pending", "pending"]);
-    const installing = v.find((s) => s.key === "installing")!;
-    expect(installing.state).toBe("failed");
-    expect(installing.detail).toBe("disk full");
+    // Booting…Securing done; Installed failed; Ready pending.
+    expect(v.map((s) => s.state)).toEqual([
+      "done", "done", "done", "done", "failed", "pending",
+    ]);
+    const installed = v.find((s) => s.key === "installed")!;
+    expect(installed.state).toBe("failed");
+    expect(installed.detail).toBe("disk full");
   });
 });
 

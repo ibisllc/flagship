@@ -30,7 +30,7 @@ public enum ProvisionProgress {
     }()
 
     public enum StepKey: String, Sendable, Equatable {
-        case booting, installing, installed, registering, securing, ready
+        case booting, installing, registering, securing, installed, ready
     }
 
     public struct StepGroup: Sendable, Equatable {
@@ -39,18 +39,24 @@ public enum ProvisionProgress {
         public let phases: [String]
     }
 
+    /// Detail shown on the Installed group when the current phase is
+    /// `installed` (action-needed: install finished, box powered off). The
+    /// long form (spells out BOTH actions) — byte-identical across surfaces.
+    public static let installedUnplugDetail =
+        "Install complete — unplug the USB, then power the box back on."
+
     /// The canonical UI groups, in order (design §1.2 projection table).
     public static let stepGroups: [StepGroup] = [
         StepGroup(key: .booting, label: "Booting",
-                  phases: ["booting", "downloading", "partitioning"]),
+                  phases: ["booting", "partitioning"]),
         StepGroup(key: .installing, label: "Installing",
-                  phases: ["installing"]),
-        StepGroup(key: .installed, label: "Install complete — unplug the USB",
-                  phases: ["installed"]),
+                  phases: ["installing", "downloading"]),
         StepGroup(key: .registering, label: "Registering",
                   phases: ["registering", "pairing"]),
         StepGroup(key: .securing, label: "Securing",
                   phases: ["sealing"]),
+        StepGroup(key: .installed, label: "Install complete — unplug the USB",
+                  phases: ["installed"]),
         StepGroup(key: .ready, label: "Ready", phases: ["live"]),
     ]
 
@@ -134,7 +140,8 @@ public enum ProvisionProgress {
                 return StepView(key: g.key, label: g.label, state: .done, detail: nil)
             }
             if i == activeIdx {
-                return StepView(key: g.key, label: g.label, state: .active, detail: phaseTitles[phase])
+                let detail = phase == "installed" ? Self.installedUnplugDetail : phaseTitles[phase]
+                return StepView(key: g.key, label: g.label, state: .active, detail: detail)
             }
             return StepView(key: g.key, label: g.label, state: .pending, detail: nil)
         }

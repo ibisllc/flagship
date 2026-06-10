@@ -218,13 +218,30 @@ describe("provision status channel", () => {
     expect(arg.payload.meta).toMatchObject({ serial: SERIAL, phase: "live" });
   });
 
-  it("'installed' sits in the ladder between 'installing' and 'registering'", () => {
+  it("the canonical order is MONOTONIC + matches the box's real emission timeline", () => {
     const phases = PROVISION_STATUS_PHASES as readonly string[];
-    const iInstalling = phases.indexOf("installing");
-    const iInstalled = phases.indexOf("installed");
-    const iRegistering = phases.indexOf("registering");
-    expect(iInstalled).toBe(iInstalling + 1);
-    expect(iRegistering).toBe(iInstalled + 1);
+    // The true wire order the box emits (ground-truth from a real box's status
+    // history): booting → partitioning → installing → downloading →
+    // registering → sealing → installed → pairing → live.
+    expect(phases).toEqual([
+      "booting",
+      "partitioning",
+      "installing",
+      "downloading",
+      "registering",
+      "sealing",
+      "installed",
+      "pairing",
+      "live",
+      "error",
+    ]);
+    const idx = (p: string) => phases.indexOf(p);
+    // `downloading` (the flagship bootstrap fetch) comes AFTER `installing`
+    // (the base-system install) — the bug this fix closes (it used to be before).
+    expect(idx("downloading")).toBeGreaterThan(idx("installing"));
+    // `installed` (the final pre-poweroff checkpoint) comes AFTER `sealing`.
+    expect(idx("installed")).toBeGreaterThan(idx("sealing"));
+    expect(idx("installed")).toBeGreaterThan(idx("registering"));
     // `error` stays terminal/off-ladder (last).
     expect(phases[phases.length - 1]).toBe("error");
   });

@@ -38,14 +38,17 @@ public struct InstallProgressAttributes: ActivityAttributes {
     /// (carries a reason via `State.failureReason`).
     public enum Step: String, Codable, Sendable, CaseIterable {
         case booting
-        case downloading
         case partitioning
         case installing
-        /// Install finished, box powered off — ACTION-NEEDED (unplug the
-        /// USB + power on). NOT a done/terminal state.
-        case installed
+        /// The flagship bootstrap (git clone + apt + nodejs) — the post-install
+        /// software fetch, AFTER the base OS install, so it follows `installing`.
+        case downloading
         case registering
         case sealing
+        /// Install finished, box registered + sealed, then powered off —
+        /// ACTION-NEEDED (unplug the USB + power on). The final pre-poweroff
+        /// checkpoint, after `sealing`. NOT a done/terminal state.
+        case installed
         case pairing
         case live
         case error
@@ -53,8 +56,8 @@ public struct InstallProgressAttributes: ActivityAttributes {
         /// The happy-path ladder, in order, EXCLUDING the terminal
         /// `error`. Mirrors `ProvisionStatusPhase.ordered`.
         public static let ordered: [Step] = [
-            .booting, .downloading, .partitioning, .installing,
-            .installed, .registering, .sealing, .pairing, .live,
+            .booting, .partitioning, .installing, .downloading,
+            .registering, .sealing, .installed, .pairing, .live,
         ]
 
         /// Canonical phase title — byte-identical to
@@ -119,7 +122,7 @@ public struct InstallProgressAttributes: ActivityAttributes {
         /// (booting → pairing, incl. the action-needed `installed`);
         /// reaches 1.0 only on `.live`.
         public var fractionalProgress: Double {
-            let major: [Step] = [.booting, .downloading, .partitioning, .installing, .installed, .registering, .sealing, .pairing]
+            let major: [Step] = [.booting, .partitioning, .installing, .downloading, .registering, .sealing, .installed, .pairing]
             if completedSteps.contains(.live) { return 1.0 }
             let done = major.filter { completedSteps.contains($0) }.count
             return Double(done) / Double(major.count + 1)

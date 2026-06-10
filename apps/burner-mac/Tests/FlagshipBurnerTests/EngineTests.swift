@@ -239,12 +239,14 @@ final class EngineTests: XCTestCase {
 
         // (2) report_phase() provisioning-status reporting: the function POSTs
         //     {"phase":…} to <control-plane>/api/order/$AUTH_CODE_SERIAL/status,
-        //     and the plain body fires the "installing" phase. (registering +
-        //     sealing fire on the encrypted path — asserted below.)
+        //     and the bootstrap start fires the "downloading" phase (the
+        //     flagship git-clone/apt/node fetch — AFTER the base OS install, so
+        //     it follows "installing" on the wire). (registering + sealing fire
+        //     on the encrypted path — asserted below.)
         XCTAssertTrue(plain.contains("CONTROL_PLANE_BASE=\"$(echo \"$REGISTRATION_URL\" | sed 's|/api/server/register$||')\""))
         XCTAssertTrue(plain.contains("report_phase() {"))
         XCTAssertTrue(plain.contains("\"$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status\" >/dev/null 2>&1 || true"))
-        XCTAssertTrue(plain.contains("report_phase installing"))
+        XCTAssertTrue(plain.contains("report_phase downloading"))
         // Error trap → terminal `error` phase on a non-zero exit; disarmed on a
         // clean exit. The deferred-register wrapper fires `registering` on the
         // plain path and stashes AUTH_CODE_SERIAL for it. Byte-identical to
@@ -636,7 +638,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "3af3dcbada6cffa651bf6aaf6edd697efbb9f78d2e04d113d280cf953eaf6a77",
+            hash, "efe44ae8ff2f3660d8e076a7c00e710915e89443a4cd9c555613b7627976a91e",
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 

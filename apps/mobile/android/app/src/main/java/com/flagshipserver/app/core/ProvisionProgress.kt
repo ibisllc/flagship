@@ -18,14 +18,18 @@ object ProvisionProgress {
      *  Mirror of `PROVISION_STATUS_PHASES` minus `error`. */
     val ladder: List<String> = listOf(
         "booting",
-        "downloading",
         "partitioning",
         "installing",
-        // ACTION-NEEDED: install finished, box powered off, awaiting the user to
-        // unplug the USB + power on. NOT success (`live` is success).
-        "installed",
+        // The flagship bootstrap (git clone + apt + nodejs) — the post-install
+        // software fetch. The base OS is already on the USB, so this follows
+        // `installing` on the wire.
+        "downloading",
         "registering",
         "sealing",
+        // ACTION-NEEDED: install finished, box registered + sealed, then powered
+        // off awaiting the user to unplug the USB + power on. The final
+        // pre-poweroff checkpoint — sorts AFTER sealing. NOT success.
+        "installed",
         "pairing",
         "live",
     )
@@ -49,28 +53,28 @@ object ProvisionProgress {
      *  Mirror of the LOCKED DESIGN §1.2 table — every implementer derives
      *  the SAME grouping from it.
      *
-     *  NOTE: `installed` is NOT a rendered rung. It remains a valid wire
-     *  phase + a push milestone (the notification still tells the user to
-     *  unplug), but the checklist ladder folds it into the `installing`
-     *  row: when the box reports `installed`, the Installing row renders
-     *  DONE carrying the unplug instruction. So there is no INSTALLED
-     *  StepKey and no INSTALLED group here. */
-    enum class StepKey { BOOTING, INSTALLING, REGISTERING, SECURING, READY }
+     *  NOTE: `installed` is its OWN rendered rung, positioned AFTER SECURING
+     *  (sealing) — the final pre-poweroff checkpoint (registered + sealed,
+     *  then powered off awaiting the user). When it's current the box is OFF,
+     *  so its row renders ACTIVE (action-needed, nothing spins) carrying the
+     *  unplug instruction; `live` is the terminal success. */
+    enum class StepKey { BOOTING, INSTALLING, REGISTERING, SECURING, INSTALLED, READY }
 
     data class StepGroup(val key: StepKey, val label: String, val phases: List<String>)
 
-    /** Detail shown on the Installing row when the current phase is
+    /** Detail shown on the Installed row when the current phase is
      *  `installed` (action-needed: install finished, box powered off). */
     const val INSTALLED_UNPLUG_DETAIL =
         "Install complete — unplug the USB, then power the box back on."
 
-    /** The user-facing groups, in order. `installed` is intentionally NOT
-     *  its own rung — it folds into the Installing row (see above). */
+    /** The user-facing groups, in order. `installed` is its own rung after
+     *  Securing (see above). */
     val stepGroups: List<StepGroup> = listOf(
-        StepGroup(StepKey.BOOTING, "Booting", listOf("booting", "downloading", "partitioning")),
-        StepGroup(StepKey.INSTALLING, "Installing", listOf("installing")),
+        StepGroup(StepKey.BOOTING, "Booting", listOf("booting", "partitioning")),
+        StepGroup(StepKey.INSTALLING, "Installing", listOf("installing", "downloading")),
         StepGroup(StepKey.REGISTERING, "Registering", listOf("registering", "pairing")),
         StepGroup(StepKey.SECURING, "Securing", listOf("sealing")),
+        StepGroup(StepKey.INSTALLED, "Install complete — unplug the USB", listOf("installed")),
         StepGroup(StepKey.READY, "Ready", listOf("live")),
     )
 
@@ -99,9 +103,6 @@ object ProvisionProgress {
     }
 
     private fun groupKeyForPhase(phase: String): StepKey {
-        // `installed` has no rung of its own; it collapses onto Installing
-        // (DONE in the happy path, FAILED if a break lands at `installed`).
-        if (phase == "installed") return StepKey.INSTALLING
         for (g in stepGroups) if (g.phases.contains(phase)) return g.key
         return StepKey.BOOTING
     }
@@ -134,23 +135,6 @@ object ProvisionProgress {
             }
         }
 
-        // `installed`: install finished, box powered off awaiting the user to
-        // unplug the USB + power back on. It is NOT a rendered rung — the
-        // Installing row goes DONE carrying the unplug instruction, NOTHING is
-        // active, and everything after Installing stays upcoming. (`installed`
-        // is still a wire phase + push milestone — only the ladder drops it.)
-        if (phase == "installed") {
-            val installingIdx = stepGroups.indexOfFirst { it.key == StepKey.INSTALLING }
-            return stepGroups.mapIndexed { i, g ->
-                when {
-                    i < installingIdx -> StepView(g.key, g.label, StepState.DONE, null)
-                    i == installingIdx ->
-                        StepView(g.key, g.label, StepState.DONE, INSTALLED_UNPLUG_DETAIL)
-                    else -> StepView(g.key, g.label, StepState.PENDING, null)
-                }
-            }
-        }
-
         if (phase == null || !isLadderPhase(phase)) {
             // No checkpoint yet → first group active, no detail.
             return stepGroups.mapIndexed { i, g ->
@@ -158,12 +142,19 @@ object ProvisionProgress {
             }
         }
 
+        // `installed` is its own ACTIVE rung (after Securing): install finished,
+        // box registered + sealed, then powered off awaiting the user. The box
+        // is OFF so nothing spins, but the row is ACTIVE (action-needed)
+        // carrying the unplug instruction; everything before it is DONE.
         val activeGroup = groupKeyForPhase(phase)
         val activeIdx = stepGroups.indexOfFirst { it.key == activeGroup }
         return stepGroups.mapIndexed { i, g ->
             when {
                 i < activeIdx -> StepView(g.key, g.label, StepState.DONE, null)
-                i == activeIdx -> StepView(g.key, g.label, StepState.ACTIVE, phaseTitles[phase])
+                i == activeIdx -> {
+                    val detail = if (phase == "installed") INSTALLED_UNPLUG_DETAIL else phaseTitles[phase]
+                    StepView(g.key, g.label, StepState.ACTIVE, detail)
+                }
                 else -> StepView(g.key, g.label, StepState.PENDING, null)
             }
         }

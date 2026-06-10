@@ -90,17 +90,18 @@ public extension WatchProtocol {
     /// FlagshipAPI/SwiftUI deps don't have to cross into the watch
     /// target.
     enum ProvisionTimelineLadder {
-        /// The rendered ladder. `installed` is ACTION-NEEDED (unplug the USB),
-        /// NOT a rung — like the phone ladder it's dropped from the visible rows
-        /// and folded onto `installing` (which goes done + carries the unplug
-        /// detail) so the watch checklist matches the phone exactly.
+        /// The rendered ladder, in MONOTONIC wire order: `downloading` (the
+        /// flagship software fetch) follows `installing`, and `installed`
+        /// (ACTION-NEEDED — unplug the USB) is its own rung AFTER `sealing` (the
+        /// final pre-poweroff checkpoint), matching the phone ladder exactly.
         public static let phases: [(phase: String, title: String)] = [
             ("booting",      "Booting"),
-            ("downloading",  "Downloading system"),
             ("partitioning", "Preparing disk"),
             ("installing",   "Installing"),
+            ("downloading",  "Downloading system"),
             ("registering",  "Registering with Flagship"),
             ("sealing",      "Sealing your disk"),
+            ("installed",    "Install complete — unplug the USB"),
             ("pairing",      "Pairing"),
             ("live",         "Server is live"),
         ]
@@ -114,10 +115,7 @@ public extension WatchProtocol {
             let currentPhase = ctx?.phase
 
             if currentPhase == "error" {
-                let rawBrokeAt = ctx?.history.last(where: { $0.phase != "error" })?.phase
-                // A break on `installed` collapses onto `installing` in the
-                // rendered ladder.
-                let brokeAt = rawBrokeAt == "installed" ? "installing" : rawBrokeAt
+                let brokeAt = ctx?.history.last(where: { $0.phase != "error" })?.phase
                 let brokeIdx = brokeAt.flatMap { p in ladder.firstIndex(where: { $0.phase == p }) } ?? 0
                 let err = errorDetail(in: ctx)
                 return ladder.enumerated().map { i, entry in
@@ -126,21 +124,6 @@ public extension WatchProtocol {
                     }
                     if i == brokeIdx {
                         return TimelineRow(phase: entry.phase, title: entry.title, state: .error, detail: err)
-                    }
-                    return TimelineRow(phase: entry.phase, title: entry.title, state: .upcoming, detail: nil)
-                }
-            }
-
-            // `installed`: the box is OFF (nothing spins). `installing` goes done
-            // with the unplug detail; everything after stays upcoming.
-            if currentPhase == "installed" {
-                let installingIdx = ladder.firstIndex(where: { $0.phase == "installing" }) ?? 0
-                return ladder.enumerated().map { i, entry in
-                    if i < installingIdx {
-                        return TimelineRow(phase: entry.phase, title: entry.title, state: .done, detail: nil)
-                    }
-                    if i == installingIdx {
-                        return TimelineRow(phase: entry.phase, title: entry.title, state: .done, detail: installedUnplugDetail)
                     }
                     return TimelineRow(phase: entry.phase, title: entry.title, state: .upcoming, detail: nil)
                 }
@@ -167,11 +150,16 @@ public extension WatchProtocol {
                 }
                 if i == curIdx {
                     let isLive = entry.phase == "live"
+                    // `installed`: the box is OFF (nothing spins), but it's still
+                    // the current action-needed rung carrying the unplug detail.
+                    let detail = entry.phase == "installed"
+                        ? installedUnplugDetail
+                        : detailFor(entry.phase, in: ctx)
                     return TimelineRow(
                         phase: entry.phase,
                         title: entry.title,
                         state: isLive ? .done : .current,
-                        detail: detailFor(entry.phase, in: ctx)
+                        detail: detail
                     )
                 }
                 return TimelineRow(phase: entry.phase, title: entry.title, state: .upcoming, detail: nil)

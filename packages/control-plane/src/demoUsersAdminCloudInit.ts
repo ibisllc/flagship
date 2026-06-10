@@ -312,7 +312,7 @@ if ! git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship; then
     git -C /opt/flagship checkout "$GIT_REF" || true
 fi
 cd /opt/flagship
-report_phase downloading
+report_phase installing
 # Use npm-install instead of npm-ci. Debian's nodejs-18 + npm-9.2
 # combo handles our workspace-heavy package-lock unreliably with ci
 # (silently no-ops on workspaces). install is more forgiving and
@@ -323,7 +323,7 @@ npm install --no-audit --no-fund --workspaces --include-workspace-root 2>&1 \\
     | tee /var/log/flagship-npm.log
 NPM_RC=\${PIPESTATUS[0]}
 echo "[flagship-bootstrap] npm install exit=$NPM_RC"
-report_phase downloading
+report_phase installing
 # Verify the critical workspace symlink ended up in place.
 if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
     echo "[flagship-bootstrap] WARN: workspace @flagship/protocol not symlinked — retrying with explicit symlinks"
@@ -340,7 +340,7 @@ fi
 echo "[flagship-bootstrap] tsc -b"
 npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || \\
     echo "[flagship-bootstrap] warning: tsc -b reported errors"
-report_phase installing
+report_phase downloading
 
 # 6. Generate server identity.
 mkdir -p /var/flagship/identity
@@ -352,7 +352,7 @@ npx tsx scripts/install-helper.ts gen-identity \\
 chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
 SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
-report_phase installing
+report_phase downloading
 
 # 6b. Mint the IRK-signed entitlement bundle the daemon presents on
 #     every tunnel HELLO (N12b). The RootEntitlement binds this box's

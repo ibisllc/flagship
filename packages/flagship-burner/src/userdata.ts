@@ -648,7 +648,7 @@ flagship_on_error() {
     report_phase error "bootstrap exited $_rc"
 }
 trap flagship_on_error EXIT
-report_phase installing
+report_phase downloading
 
 # Persist install-time facts the daemon reads on every boot.
 mkdir -p /var/flagship /boot/flagship

@@ -11,14 +11,18 @@
  *  Mirror of PROVISION_STATUS_PHASES (control-plane) minus `error`. */
 export const PROVISION_LADDER = Object.freeze([
   "booting",
-  "downloading",
   "partitioning",
   "installing",
-  // ACTION-NEEDED: install finished, box powered off, awaiting the user to
-  // unplug the USB + power on. NOT success (`live` is success).
-  "installed",
+  // The flagship bootstrap (git clone + apt + nodejs) — the post-install
+  // software fetch. The base OS is already on the USB, so this follows
+  // `installing` on the wire.
+  "downloading",
   "registering",
   "sealing",
+  // ACTION-NEEDED: install finished, box registered + sealed, then powered
+  // off awaiting the user to unplug the USB + power on. The final pre-poweroff
+  // checkpoint — sorts AFTER sealing. NOT success (`live` is success).
+  "installed",
   "pairing",
   "live",
 ]);
@@ -42,24 +46,22 @@ export const PROVISION_PHASE_TITLES = Object.freeze({
  *  implementer (iOS / Android / webapp) derives the SAME grouping from this
  *  table — it is part of the contract. `error` fails the active group.
  *
- *  NOTE: the wire phase `installed` is DELIBERATELY ABSENT as its own
- *  rendered rung. It folds into the `installing` group: when `installed`
- *  lands, the `installing` row renders DONE (green, not spinning) carrying
- *  the unplug-and-power-on instruction, and nothing is the active row (the
- *  user must act before the box can register). `installed` REMAINS a valid
- *  wire phase + push milestone — see PROVISION_LADDER and the
- *  control-plane PROVISION_STATUS_PHASES; only the visible checklist drops
- *  it. The `installing` group therefore claims BOTH `installing` and
- *  `installed` so an error break at either collapses onto it. */
+ *  NOTE: the wire phase `installed` is its OWN rendered rung, positioned
+ *  AFTER `securing` (sealing) — the final pre-poweroff checkpoint (the box
+ *  registered + sealed, then powered off awaiting the user to unplug the USB +
+ *  power on). When `installed` is current the box is OFF, so its row renders
+ *  ACTIVE (action-needed, nothing spins) carrying the unplug-and-power-on
+ *  instruction; `live` is the terminal success. */
 export const PROVISION_STEP_GROUPS = Object.freeze([
-  { key: "booting", label: "Booting", phases: ["booting", "downloading", "partitioning"] },
-  { key: "installing", label: "Installing", phases: ["installing", "installed"] },
+  { key: "booting", label: "Booting", phases: ["booting", "partitioning"] },
+  { key: "installing", label: "Installing", phases: ["installing", "downloading"] },
   { key: "registering", label: "Registering", phases: ["registering", "pairing"] },
   { key: "securing", label: "Securing (TLS certificate)", phases: ["sealing"] },
+  { key: "installed", label: "Install complete — unplug the USB", phases: ["installed"] },
   { key: "ready", label: "Ready", phases: ["live"] },
 ]);
 
-/** Detail copy shown on the (DONE) `installing` row when the box reaches the
+/** Detail copy shown on the `installed` row when the box reaches the
  *  `installed` wire phase: the install finished and the box powered off
  *  awaiting the user. Longer than PROVISION_PHASE_TITLES.installed (the push
  *  banner's short form) because the in-ladder row spells out BOTH actions. */
@@ -135,28 +137,18 @@ export function provisionStepStates(phase, lastError, prevPhase) {
     }));
   }
 
-  // `installed` is an ACTION-NEEDED waypoint, not a rendered rung: the
-  // install finished and the box powered off awaiting the user. The
-  // `installing` group renders DONE (carrying the unplug-and-power-on
-  // instruction) and NOTHING is active — the ladder is "paused" on the
-  // user. Everything after `installing` stays upcoming.
-  if (phase === "installed") {
-    const installingIdx = groups.findIndex((g) => g.key === "installing");
-    return groups.map((g, i) => {
-      if (i < installingIdx) return { key: g.key, label: g.label, state: "done", detail: null };
-      if (i === installingIdx) {
-        return { key: g.key, label: g.label, state: "done", detail: INSTALLED_DONE_DETAIL };
-      }
-      return { key: g.key, label: g.label, state: "pending", detail: null };
-    });
-  }
-
+  // `installed` is its own ACTION-NEEDED rung (after Securing): the install
+  // finished, the box registered + sealed, then powered off awaiting the
+  // user. The box is OFF so nothing spins, but the row is still ACTIVE
+  // (action needed) carrying the unplug-and-power-on instruction. Everything
+  // before it is DONE; `live` stays upcoming.
   const activeGroup = groupKeyForPhase(phase);
   const activeIdx = groups.findIndex((g) => g.key === activeGroup);
   return groups.map((g, i) => {
     if (i < activeIdx) return { key: g.key, label: g.label, state: "done", detail: null };
     if (i === activeIdx) {
-      return { key: g.key, label: g.label, state: "active", detail: PROVISION_PHASE_TITLES[phase] };
+      const detail = phase === "installed" ? INSTALLED_DONE_DETAIL : PROVISION_PHASE_TITLES[phase];
+      return { key: g.key, label: g.label, state: "active", detail };
     }
     return { key: g.key, label: g.label, state: "pending", detail: null };
   });

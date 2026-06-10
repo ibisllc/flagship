@@ -39,35 +39,40 @@ class ProvisionProgressTest {
         }
     }
 
-    @Test fun ladder_isCanonicalNinePhaseVocabulary_installedBetweenInstallingAndRegistering() {
+    @Test fun ladder_isCanonicalNinePhase_monotonic_downloadingAfterInstalling_installedAfterSealing() {
         assertEquals(
             listOf(
-                "booting", "downloading", "partitioning", "installing",
-                "installed", "registering", "sealing", "pairing", "live",
+                "booting", "partitioning", "installing", "downloading",
+                "registering", "sealing", "installed", "pairing", "live",
             ),
             ProvisionProgress.ladder,
         )
+        val idx = { p: String -> ProvisionProgress.ladder.indexOf(p) }
+        assertTrue("downloading after installing", idx("downloading") > idx("installing"))
+        assertTrue("installed after sealing", idx("installed") > idx("sealing"))
     }
 
-    @Test fun stepGroups_canonicalProjection_dropInstalledRung_coverEveryOtherPhaseOnce() {
-        // `installed` is NOT a rendered rung — it folds into Installing. So the
-        // ladder is 5 rows (no "Install complete" group) and the flattened
-        // group phases cover every ladder phase EXCEPT `installed`.
+    @Test fun stepGroups_canonicalProjection_installedIsOwnRungAfterSecuring_coverEveryPhaseOnce() {
+        // `installed` is its own rung now, positioned after Securing.
         assertEquals(
-            listOf("Booting", "Installing", "Registering", "Securing", "Ready"),
+            listOf("Booting", "Installing", "Registering", "Securing", "Install complete — unplug the USB", "Ready"),
             ProvisionProgress.stepGroups.map { it.label },
         )
         val flat = ProvisionProgress.stepGroups.flatMap { it.phases }
-        // `installed` stays a valid wire/ladder phase but renders nowhere.
-        assertEquals((ProvisionProgress.ladder.toSet() - "installed"), flat.toSet())
+        // Every ladder phase is covered exactly once.
+        assertEquals(ProvisionProgress.ladder.toSet(), flat.toSet())
         assertEquals("no phase appears in two groups", flat.size, flat.toSet().size)
         assertEquals(
-            "groups cover the ladder minus installed",
-            ProvisionProgress.ladder.size - 1, flat.size,
+            "groups cover the whole ladder",
+            ProvisionProgress.ladder.size, flat.size,
         )
-        // `installed` is still on the canonical ladder (wire phase + push
-        // milestone) even though it isn't a rendered rung.
         assertTrue(ProvisionProgress.ladder.contains("installed"))
+        // `installed` sorts after `securing`.
+        val keys = ProvisionProgress.stepGroups.map { it.key }
+        assertTrue(
+            keys.indexOf(ProvisionProgress.StepKey.INSTALLED) >
+                keys.indexOf(ProvisionProgress.StepKey.SECURING),
+        )
     }
 
     @Test fun stepStates_sealingActivatesSecuringWithCanonicalTitle() {
@@ -78,6 +83,7 @@ class ProvisionProgressTest {
                 ProvisionProgress.StepState.DONE,      // Installing
                 ProvisionProgress.StepState.DONE,      // Registering
                 ProvisionProgress.StepState.ACTIVE,    // Securing
+                ProvisionProgress.StepState.PENDING,   // Installed
                 ProvisionProgress.StepState.PENDING,   // Ready
             ),
             v.map { it.state },
@@ -88,49 +94,48 @@ class ProvisionProgressTest {
         )
     }
 
-    @Test fun stepStates_installed_installingRowDoneWithUnplugDetail_nothingActive() {
-        // `installed` is NOT its own rung. The Installing row goes DONE carrying
-        // the unplug instruction; Booting stays DONE; everything after
-        // Installing is upcoming; NOTHING is the active/current row.
+    @Test fun stepStates_installed_installedRowActiveWithUnplugDetail() {
+        // `installed` is its own ACTIVE rung (after Securing) carrying the
+        // unplug instruction. Everything before it is DONE; Ready stays pending.
         val v = ProvisionProgress.stepStates("installed")
         assertEquals(
             listOf(
                 ProvisionProgress.StepState.DONE,      // Booting
-                ProvisionProgress.StepState.DONE,      // Installing (carries detail)
-                ProvisionProgress.StepState.PENDING,   // Registering
-                ProvisionProgress.StepState.PENDING,   // Securing
+                ProvisionProgress.StepState.DONE,      // Installing
+                ProvisionProgress.StepState.DONE,      // Registering
+                ProvisionProgress.StepState.DONE,      // Securing
+                ProvisionProgress.StepState.ACTIVE,    // Installed (carries detail)
                 ProvisionProgress.StepState.PENDING,   // Ready
             ),
             v.map { it.state },
         )
-        val installing = v.first { it.key == ProvisionProgress.StepKey.INSTALLING }
-        assertEquals(ProvisionProgress.StepState.DONE, installing.state)
+        val installed = v.first { it.key == ProvisionProgress.StepKey.INSTALLED }
+        assertEquals(ProvisionProgress.StepState.ACTIVE, installed.state)
         assertEquals(
             "Install complete — unplug the USB, then power the box back on.",
-            installing.detail,
+            installed.detail,
         )
-        assertEquals(ProvisionProgress.INSTALLED_UNPLUG_DETAIL, installing.detail)
-        // Nothing is active/current.
-        assertFalse(v.any { it.state == ProvisionProgress.StepState.ACTIVE })
+        assertEquals(ProvisionProgress.INSTALLED_UNPLUG_DETAIL, installed.detail)
     }
 
-    @Test fun stepStates_errorAtInstalled_collapsesOntoInstallingRow() {
-        // A break with prevPhase=installed fails the Installing row (installed
-        // folds onto installing), not a phantom Installed rung.
+    @Test fun stepStates_errorAtInstalled_failsTheInstalledRung() {
+        // A break with prevPhase=installed fails the Installed rung (its own
+        // rung now).
         val v = ProvisionProgress.stepStates("error", "mount failed", "installed")
         assertEquals(
             listOf(
                 ProvisionProgress.StepState.DONE,      // Booting
-                ProvisionProgress.StepState.FAILED,    // Installing
-                ProvisionProgress.StepState.PENDING,   // Registering
-                ProvisionProgress.StepState.PENDING,   // Securing
+                ProvisionProgress.StepState.DONE,      // Installing
+                ProvisionProgress.StepState.DONE,      // Registering
+                ProvisionProgress.StepState.DONE,      // Securing
+                ProvisionProgress.StepState.FAILED,    // Installed
                 ProvisionProgress.StepState.PENDING,   // Ready
             ),
             v.map { it.state },
         )
         assertEquals(
             "mount failed",
-            v.first { it.key == ProvisionProgress.StepKey.INSTALLING }.detail,
+            v.first { it.key == ProvisionProgress.StepKey.INSTALLED }.detail,
         )
     }
 

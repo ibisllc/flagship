@@ -203,11 +203,12 @@ sealed class InstallEvent {
 @Serializable
 enum class ProvisionStatusPhase(val wire: String) {
     @SerialName("booting")      BOOTING("booting"),
-    @SerialName("downloading")  DOWNLOADING("downloading"),
     @SerialName("partitioning") PARTITIONING("partitioning"),
     @SerialName("installing")   INSTALLING("installing"),
+    @SerialName("downloading")  DOWNLOADING("downloading"),
     @SerialName("registering")  REGISTERING("registering"),
     @SerialName("sealing")      SEALING("sealing"),
+    @SerialName("installed")    INSTALLED("installed"),
     @SerialName("pairing")      PAIRING("pairing"),
     @SerialName("live")         LIVE("live"),
     @SerialName("error")        ERROR("error"),
@@ -218,10 +219,11 @@ enum class ProvisionStatusPhase(val wire: String) {
 
     companion object {
         /** The happy-path ladder, in order, EXCLUDING terminal `error`
-         *  (and the `unknown` sentinel). */
+         *  (and the `unknown` sentinel). `installed` is the final pre-poweroff
+         *  action-needed rung, after `sealing`. */
         val ordered: List<ProvisionStatusPhase> = listOf(
-            BOOTING, DOWNLOADING, PARTITIONING, INSTALLING,
-            REGISTERING, SEALING, PAIRING, LIVE,
+            BOOTING, PARTITIONING, INSTALLING, DOWNLOADING,
+            REGISTERING, SEALING, INSTALLED, PAIRING, LIVE,
         )
 
         /** Forward-compat parse from a wire string → [UNKNOWN] when

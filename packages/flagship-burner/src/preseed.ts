@@ -49,12 +49,12 @@ import {
  */
 export type ProvisionStatusPhase =
   | "booting"
-  | "downloading"
   | "partitioning"
   | "installing"
-  | "installed"
+  | "downloading"
   | "registering"
   | "sealing"
+  | "installed"
   | "pairing"
   | "live"
   | "error";

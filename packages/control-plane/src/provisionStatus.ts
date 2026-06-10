@@ -59,15 +59,20 @@ const SERIAL_RE = /^[A-Za-z0-9_-]{8,64}$/;
  */
 export const PROVISION_STATUS_PHASES = [
   "booting",
-  "downloading",
   "partitioning",
   "installing",
-  // The d-i install finished but the box has NOT registered yet: it powered
-  // off awaiting the user to unplug the USB and power it back on. NOT success —
-  // registration + cert happen on the first real boot (→ `live`).
-  "installed",
+  // The flagship bootstrap (git clone + apt + nodejs) runs AFTER the base OS
+  // install — the base ISO is already on the USB, so `downloading` is the
+  // post-install software fetch, NOT an early/base-ISO step. It follows
+  // `installing` on the wire.
+  "downloading",
   "registering",
   "sealing",
+  // The d-i install finished + the box has registered + sealed: it powered off
+  // awaiting the user to unplug the USB and power it back on. NOT live yet —
+  // the daemon serves on the first real boot (→ `live`). This is the final
+  // pre-poweroff checkpoint, so it sorts AFTER sealing.
+  "installed",
   "pairing",
   "live",
   "error",

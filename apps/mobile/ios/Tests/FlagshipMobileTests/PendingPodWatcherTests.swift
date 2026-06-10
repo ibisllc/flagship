@@ -55,11 +55,12 @@ final class PendingPodWatcherTests: XCTestCase {
         // call, but the watcher polls until it sees the terminal phase).
         s.provisionStatusScripts["AC-01CAFE"] = [
             (phase: .booting, detail: nil),
-            (phase: .downloading, detail: nil),
             (phase: .partitioning, detail: nil),
             (phase: .installing, detail: nil),
+            (phase: .downloading, detail: nil),
             (phase: .registering, detail: nil),
             (phase: .sealing, detail: nil),
+            (phase: .installed, detail: nil),
             (phase: .pairing, detail: nil),
             (phase: .live, detail: nil),
         ]
@@ -87,7 +88,7 @@ final class PendingPodWatcherTests: XCTestCase {
         // onStep fired for every non-terminal phase in ladder order, once each.
         XCTAssertEqual(
             observedSteps,
-            [.booting, .downloading, .partitioning, .installing, .installed, .registering, .sealing, .pairing]
+            [.booting, .partitioning, .installing, .downloading, .registering, .sealing, .installed, .pairing]
         )
         XCTAssertEqual(observedComplete, "home.harry.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online)

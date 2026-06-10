@@ -210,8 +210,10 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // No vestige of the retired install-events / provision-event channels.
     expect(b).not.toContain("/api/install-events/");
     expect(b).not.toContain("/provision-event");
-    // `installing` fires from the in-target bootstrap.
-    expect(b).toContain("report_phase installing");
+    // `downloading` fires from the START of the in-target bootstrap (the
+    // git-clone/apt/node flagship software fetch — AFTER the base OS install,
+    // so it follows `installing` on the wire, matching the late_command beacon).
+    expect(b).toContain("report_phase downloading");
   });
 
   it("fires `registering` UNCONDITIONALLY — including on the plain-path deferred register", () => {
@@ -1074,7 +1076,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "3af3dcbada6cffa651bf6aaf6edd697efbb9f78d2e04d113d280cf953eaf6a77",
+      "efe44ae8ff2f3660d8e076a7c00e710915e89443a4cd9c555613b7627976a91e",
     );
   });
 });

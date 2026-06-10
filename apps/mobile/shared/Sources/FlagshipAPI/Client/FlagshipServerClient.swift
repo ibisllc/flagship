@@ -686,15 +686,18 @@ public struct InstallEventsPollResponse: Codable, Equatable, Sendable {
 /// canonical `ordered` ladder so the timeline still renders cleanly).
 public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIterable {
     case booting
-    case downloading
     case partitioning
     case installing
-    /// The d-i install finished but the box has NOT registered yet — it
-    /// powered off awaiting the user to unplug the USB + power back on.
-    /// ACTION-NEEDED, not success (`live` is success).
-    case installed
+    /// The flagship bootstrap (git clone + apt + nodejs) — the post-install
+    /// software fetch. The base OS is already on the USB, so this follows
+    /// `installing` on the wire.
+    case downloading
     case registering
     case sealing
+    /// The install finished + the box has registered + sealed: it powered off
+    /// awaiting the user to unplug the USB + power back on. ACTION-NEEDED, the
+    /// final pre-poweroff checkpoint — sorts AFTER sealing (`live` is success).
+    case installed
     case pairing
     case live
     case error
@@ -705,11 +708,11 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
     /// The happy-path ladder, in order, EXCLUDING the terminal `error`
     /// (and the `unknown` sentinel). The timeline renders one row per
     /// entry here; `live` is the terminal success state. `installed`
-    /// sits between `installing` and `registering` — an action-needed
-    /// rung, not a done state.
+    /// sits between `sealing` and `pairing` — the final pre-poweroff
+    /// action-needed rung, not a done state.
     public static let ordered: [ProvisionStatusPhase] = [
-        .booting, .downloading, .partitioning, .installing,
-        .installed, .registering, .sealing, .pairing, .live,
+        .booting, .partitioning, .installing, .downloading,
+        .registering, .sealing, .installed, .pairing, .live,
     ]
 
     /// Human, on-brand title for each step. THE single source of phase
@@ -755,24 +758,24 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
     /// The canonical UI group this phase rolls up into. Mirrors the
     /// contract projection table (design §1.2) — every iOS/Android/
     /// webapp grouped ladder derives the SAME grouping from this:
-    ///   Booting     ← booting, downloading, partitioning
-    ///   Installing  ← installing
-    ///   Installed   ← installed  (ACTION-NEEDED: unplug the USB)
+    ///   Booting     ← booting, partitioning
+    ///   Installing  ← installing, downloading
     ///   Registering ← registering, pairing
     ///   Securing    ← sealing
+    ///   Installed   ← installed  (ACTION-NEEDED: unplug the USB)
     ///   Ready       ← live
     /// (`error` fails the currently-active group; it has no group of its
     /// own and is handled separately by the renderer.)
     public enum Group: String, Sendable, Equatable, CaseIterable {
-        case booting, installing, installed, registering, securing, ready
+        case booting, installing, registering, securing, installed, ready
 
         public var label: String {
             switch self {
             case .booting:      return "Booting"
             case .installing:   return "Installing"
-            case .installed:    return "Install complete — unplug the USB"
             case .registering:  return "Registering"
             case .securing:     return "Securing"
+            case .installed:    return "Install complete — unplug the USB"
             case .ready:        return "Ready"
             }
         }
@@ -782,11 +785,11 @@ public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIter
     /// have no own group → nil (the renderer fails the active group).
     public var group: Group? {
         switch self {
-        case .booting, .downloading, .partitioning: return .booting
-        case .installing:                           return .installing
-        case .installed:                            return .installed
+        case .booting, .partitioning:               return .booting
+        case .installing, .downloading:             return .installing
         case .registering, .pairing:                return .registering
         case .sealing:                              return .securing
+        case .installed:                            return .installed
         case .live:                                 return .ready
         case .error, .unknown:                      return nil
         }

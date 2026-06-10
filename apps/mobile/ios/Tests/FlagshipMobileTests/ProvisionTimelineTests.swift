@@ -82,9 +82,13 @@ final class ProvisionTimelineTests: XCTestCase {
     func test_provisionStatusPhase_ladderIsTheContractOrder() {
         XCTAssertEqual(
             ProvisionStatusPhase.ordered.map(\.rawValue),
-            ["booting", "downloading", "partitioning", "installing",
-             "installed", "registering", "sealing", "pairing", "live"]
+            ["booting", "partitioning", "installing", "downloading",
+             "registering", "sealing", "installed", "pairing", "live"]
         )
+        // MONOTONIC: downloading after installing; installed after sealing.
+        let ord = ProvisionStatusPhase.ordered
+        XCTAssertGreaterThan(ord.firstIndex(of: .downloading)!, ord.firstIndex(of: .installing)!)
+        XCTAssertGreaterThan(ord.firstIndex(of: .installed)!, ord.firstIndex(of: .sealing)!)
         XCTAssertTrue(ProvisionStatusPhase.live.isTerminal)
         XCTAssertTrue(ProvisionStatusPhase.error.isTerminal)
         XCTAssertFalse(ProvisionStatusPhase.installing.isTerminal)
