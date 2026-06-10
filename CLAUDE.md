@@ -181,6 +181,24 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 3. **Run the wipe** — `bash scripts/wipe-all-users.sh` (NOT the raw `--file` .sql: prod D1 drifts from the repo's migrations, and a one-transaction `--file` run aborts on the first table prod lacks; the runner deletes each table independently and skips absent ones).
 4. **Verify Debian-preseed reliability + live e2e** — cmdline injection (`Remaster.swift`/`remasterIso.ts` grub+isolinux patch) was per-ISO flaky earlier; add real-Debian-ISO tests, then create-account → recipe → burn → boot → watch the phone-home timeline → registers → green padlock.
 
+**Install / provisioning polish (agent-doable, off the critical path):**
+- **Beacon the partitioning→installing transition.** During the Debian
+  base-system install (the multi-minute `debootstrap`/apt phase) the phone
+  checklist sits on "partitioning" with no ping — d-i has no *command*-level
+  preseed hook in that window (`partman/early_command` is before partitioning,
+  `preseed/late_command` is after the base install). The fix: from
+  `partman/early_command` (which already runs + already sends the "partitioning"
+  beacon, so network + the auth-code serial are in scope), drop a small
+  executable into **`/usr/lib/base-installer.d/`** that POSTs `phase:"installing"`
+  to `/api/order/<serial>/status`. base-installer runs it right after
+  partitioning, filling the gap. MUST be bulletproof — backgrounded, `wget -T`
+  timeout, `|| true`, `exit 0` — so it can NEVER block or fail base-installer.
+  Add to BOTH generators (`packages/flagship-burner/src/preseed.ts` +
+  `apps/burner-mac/.../UserData.swift`), byte-identical. NOT locally testable
+  (no d-i dry-run) → validate on a real burn, NOT bundled into a critical
+  encrypted-unlock test burn. (Cosmetic: the install completes fine without it;
+  the metal screen shows real progress — it is a lag, not a hang.)
+
 **App / recovery:**
 5. **Recovery Phase B re-pair branch (iOS, on-device validation).** Wire `recoveredKeyMatchesRegistered` into post-recovery completion: recovered IRK == registered → instant pair (Phase A); != → re-pair with `oldIrkPub = registeredIrkPubHex` + 3d grace; `KeyfileImportViewModel` instant skip-grace. Backend already deployed.
 6. **iOS owner-device confirmations** (from 2026-06-02, never confirmed on device): cross-device-QR recovery fix (`f4593a3`); Passwords-app icon flips to the teal ring; a real burn → box registers → green padlock.
