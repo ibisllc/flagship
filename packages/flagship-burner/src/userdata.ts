@@ -1546,6 +1546,11 @@ echo "hosts: files dns" > "\${DESTDIR}/etc/nsswitch.conf"
 for _nss in /lib/x86_64-linux-gnu/libnss_dns.so.2 /lib/x86_64-linux-gnu/libnss_files.so.2 /lib/x86_64-linux-gnu/libresolv.so.2; do
   [ -e "$_nss" ] && copy_exec "$_nss" || true
 done
+# CA bundle for the HTTPS unlock curls — copy_exec stages the curl binary but
+# never the trust store data file; proven on metal once DNS resolved (curl(77)
+# error setting certificate file /etc/ssl/certs/ca-certificates.crt).
+mkdir -p "\${DESTDIR}/etc/ssl/certs"
+cp /etc/ssl/certs/ca-certificates.crt "\${DESTDIR}/etc/ssl/certs/ca-certificates.crt" 2>/dev/null || true
 ${lvmCopyExec}
 # Identity + boot facts the premount script signs/reads with.
 mkdir -p "\${DESTDIR}/boot"
