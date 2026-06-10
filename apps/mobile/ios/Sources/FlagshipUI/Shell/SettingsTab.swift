@@ -110,8 +110,21 @@ public struct SettingsTab: View {
                         // via passkey recovery restores the SAME IRK and
                         // re-pairs instantly. Deliberately NO pushRegistrar
                         // revoke — that's a server mutation reserved for the
-                        // danger-zone eviction below. The confirmation +
-                        // cloud-recovery gate live in SettingsScreen.
+                        // danger-zone eviction below.
+                        //
+                        // #52 — ACTION-LAYER gate (not just UI): without
+                        // cloud recovery this Keychain entry is the ONLY
+                        // copy of the identity key, so wiping it orphans
+                        // the account. The screen already replaces the
+                        // confirm with a route into recovery enrollment;
+                        // this guard makes the wipe structurally
+                        // unreachable even if some other path fires the
+                        // closure. Demo/mock sessions are exempt (they
+                        // never wrap a real UMK).
+                        guard SignOutPolicy.evaluate(
+                            hasCloudRecovery: app.hasCloudRecovery,
+                            isDemoAccount: !dev.useLiveClient
+                        ) == .allowed else { return }
                         Keystore.wipe()
                         app.signOut()
                     },
@@ -195,7 +208,11 @@ public struct SettingsTab: View {
                             wipeToast = nil
                         }
                     },
-                    hasCloudRecovery: app.hasCloudRecovery
+                    hasCloudRecovery: app.hasCloudRecovery,
+                    signOutPolicy: SignOutPolicy.evaluate(
+                        hasCloudRecovery: app.hasCloudRecovery,
+                        isDemoAccount: !dev.useLiveClient
+                    )
                 )
                 .alert(
                     "Replace device",

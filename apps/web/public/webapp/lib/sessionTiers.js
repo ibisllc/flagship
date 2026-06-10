@@ -65,6 +65,25 @@ export function lock(deps) {
 }
 
 /**
+ * #52 — the Tier-2 sign-out gate. A Tier-2 sign-out wipes this device's
+ * wrapped UMK/IRK record from IndexedDB; on an account with NO cloud
+ * recovery that record is the ONLY copy of the identity, so the wipe
+ * orphans the account (and a later sign-in re-pairs under a brand-new
+ * IRK). When recovery isn't enrolled the sign-out is BLOCKED outright —
+ * the UI replaces the destructive confirm with a route into recovery
+ * enrollment, and signOut() itself re-evaluates this policy (fail-closed)
+ * so no code path can wipe the only key.
+ *
+ * @param {boolean} hasCloudRecovery
+ * @param {boolean} [isDemoAccount]  demo sandboxes are exempt (no real key to lose)
+ * @returns {"allowed" | "blocked-no-recovery"}
+ */
+export function signOutPolicy(hasCloudRecovery, isDemoAccount = false) {
+  if (isDemoAccount) return "allowed";
+  return hasCloudRecovery ? "allowed" : "blocked-no-recovery";
+}
+
+/**
  * Tier 2 — SIGN OUT. Erase this device's local key material WITHOUT a
  * server-side revoke, then drop the in-memory session and route to the
  * first-run / sign-in screen. The account is untouched; coming back is a
@@ -73,7 +92,14 @@ export function lock(deps) {
  * The contract (pinned by tests): this calls resetDevice() (key wipe) and
  * lockSession() but NEVER a revoke endpoint — server state is not mutated.
  *
+ * #52 — ACTION-LAYER gate (not just UI): callers must pass
+ * `hasCloudRecovery`; when it's false (or omitted — fail-closed) and the
+ * session isn't a demo sandbox, the wipe is refused and `{ blocked: true }`
+ * is returned with NOTHING touched.
+ *
  * @param {object} deps
+ * @param {boolean} deps.hasCloudRecovery  recovery-enrollment status (fail-closed default: false)
+ * @param {boolean} [deps.isDemoAccount]   demo sandboxes are exempt from the gate
  * @param {() => Promise<void>} deps.resetDevice  keystore.resetDevice — deletes the wrapped UMK record
  * @param {() => void} deps.lockSession           clears the in-memory session
  * @param {(slot: string) => void} [deps.profileRemove]  profilesStore.remove — drop per-profile session slots
@@ -81,9 +107,12 @@ export function lock(deps) {
  * @param {(viewId: string) => void} deps.show    router.show — route to bootstrap/sign-in
  * @param {(text: string) => void} [deps.setSubtitle]
  * @param {string} [deps.bootstrapViewId]  the post-sign-out landing view (default "view-bootstrap")
+ * @returns {Promise<{ blocked: boolean }>}
  */
 export async function signOut(deps) {
   const {
+    hasCloudRecovery = false,
+    isDemoAccount = false,
     resetDevice,
     lockSession,
     profileRemove,
@@ -92,6 +121,10 @@ export async function signOut(deps) {
     setSubtitle,
     bootstrapViewId = "view-bootstrap",
   } = deps;
+  if (signOutPolicy(hasCloudRecovery, isDemoAccount) !== "allowed") {
+    // Blocked: the wrapped UMK is the only copy of the key. Touch NOTHING.
+    return { blocked: true };
+  }
   stopRenewals?.();
   // Local key-material wipe. NO revoke call — that's Tier 3.
   await resetDevice();
@@ -106,15 +139,18 @@ export async function signOut(deps) {
   lockSession();
   setSubtitle?.("signed out");
   show(bootstrapViewId);
+  return { blocked: false };
 }
 
 /**
  * Build the cloud-recovery-aware confirm copy for a Tier-2 sign-out. Mirrors
- * the iOS SettingsScreen confirmation: enrolled ⇒ routine; not enrolled ⇒
- * danger-grade warning that the key wipe is permanent.
+ * the iOS SettingsScreen confirmation: enrolled ⇒ routine destructive
+ * confirm; not enrolled ⇒ #52 BLOCK — no destructive proceed at all, the
+ * primary action routes into recovery enrollment instead (`blocked: true`;
+ * the caller sends an OK through enterRecovery, never through signOut).
  *
  * @param {boolean} hasCloudRecovery
- * @returns {{ title: string, message: string, okLabel: string, danger: boolean }}
+ * @returns {{ title: string, message: string, okLabel: string, danger: boolean, blocked: boolean }}
  */
 export function signOutConfirmCopy(hasCloudRecovery) {
   if (hasCloudRecovery) {
@@ -124,13 +160,15 @@ export function signOutConfirmCopy(hasCloudRecovery) {
         "This erases this device's account key so nothing sensitive is left at rest while you're signed out. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.",
       okLabel: "Sign out",
       danger: true,
+      blocked: false,
     };
   }
   return {
-    title: "Sign out without recovery?",
+    title: "Set up recovery first",
     message:
-      "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access on this device is lost for good. Set up recovery first if you might want to come back.",
-    okLabel: "Sign out anyway",
-    danger: true,
+      "Enroll cloud recovery first — signing out now would permanently lose access to this account. This device holds the only copy of your account key.",
+    okLabel: "Set up recovery",
+    danger: false,
+    blocked: true,
   };
 }

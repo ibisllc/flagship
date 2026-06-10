@@ -13,6 +13,7 @@ import { toast } from "../lib/toast.js";
 import { loadProviders, addProvider, removeProvider, setActive } from "../providers.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
+import { enterRecovery } from "./recovery.js";
 import { resetDevice } from "../keystore.js";
 import { setSubtitle } from "../lib/router.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
@@ -53,7 +54,7 @@ async function refreshSignOutNote() {
   }
   note.textContent = enrolled
     ? "Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-    : "Erases this device's account key. ⚠️ You have NO cloud recovery — signing out here would permanently lose access on this device.";
+    : "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access.";
 }
 
 export async function renderProviders() {
@@ -351,11 +352,15 @@ function handleLock() {
 /** Tier 2 — SIGN OUT. Erase this device's local key material WITHOUT a
  *  server-side revoke, gated on cloud-recovery enrollment. With recovery
  *  enrolled the same key comes back via passkey (instant re-pair); without
- *  it the wipe is permanent, so the confirm carries danger-grade copy. */
+ *  it the wipe would orphan the only copy of the key, so #52 BLOCKS it:
+ *  the confirm carries no destructive proceed — its primary action routes
+ *  into recovery enrollment instead, and signOutTier itself re-refuses
+ *  the wipe (fail-closed) even if this UI gate is bypassed. */
 async function handleSignOut() {
   const username = getSession().username;
   // Best-effort recovery probe (network). On any failure we fall back to
-  // the NOT-enrolled framing — the safe default is the stronger warning.
+  // NOT-enrolled — fail-closed: the sign-out is blocked rather than
+  // risking a wipe of the only key (Tier-1 Lock stays available offline).
   let enrolled = false;
   try {
     enrolled = await hasCloudRecovery(username);
@@ -371,7 +376,13 @@ async function handleSignOut() {
     danger: copy.danger,
   });
   if (!ok) return;
-  await signOutTier({
+  if (copy.blocked) {
+    // #52 — no recovery: the OK is "Set up recovery", never a wipe.
+    enterRecovery();
+    return;
+  }
+  const res = await signOutTier({
+    hasCloudRecovery: enrolled,
     resetDevice,
     lockSession,
     profileRemove,
@@ -379,6 +390,7 @@ async function handleSignOut() {
     show,
     setSubtitle,
   });
+  if (res?.blocked) return;
   toast("signed out");
 }
 

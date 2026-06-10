@@ -110,6 +110,11 @@ public struct SettingsScreen: View {
     /// not enrolled (no enrolment = removing this device permanently
     /// loses account access).
     var hasCloudRecovery: Bool = true
+    /// #52 — the Tier-2 sign-out gate, computed by the container
+    /// (SettingsTab) via SignOutPolicy.evaluate so the demo exemption
+    /// lives in ONE place. `.blockedNoRecovery` replaces the destructive
+    /// confirm with an explainer + a route into recovery enrollment.
+    var signOutPolicy: SignOutPolicy = .allowed
 
     public init(
         username: String,
@@ -142,7 +147,8 @@ public struct SettingsScreen: View {
         onRemoveFromAccount: @escaping () async -> Void = {},
         onReplaceDevice: @escaping () async -> Void = {},
         onWipeRestart: @escaping () async -> Void = {},
-        hasCloudRecovery: Bool = true
+        hasCloudRecovery: Bool = true,
+        signOutPolicy: SignOutPolicy = .allowed
     ) {
         self.username = username
         self.tier = tier
@@ -175,6 +181,7 @@ public struct SettingsScreen: View {
         self.onReplaceDevice = onReplaceDevice
         self.onWipeRestart = onWipeRestart
         self.hasCloudRecovery = hasCloudRecovery
+        self.signOutPolicy = signOutPolicy
     }
 
     public var body: some View {
@@ -277,27 +284,32 @@ public struct SettingsScreen: View {
             Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
         }
         .confirmationDialog(
-            hasCloudRecovery
-                ? "Sign out of this device?"
-                : "Sign out without recovery?",
+            signOutPolicy == .blockedNoRecovery
+                ? "Set up recovery first"
+                : "Sign out of this device?",
             isPresented: $signOutConfirm,
             titleVisibility: .visible
         ) {
-            // Without cloud recovery a key-wipe sign-out is permanent
-            // account loss on this device, so it carries the destructive
-            // role + the danger-grade copy. With recovery enrolled it's a
-            // routine confirm — the same IRK comes back via passkey.
-            Button(
-                hasCloudRecovery ? "Sign out" : "Sign out anyway",
-                role: .destructive
-            ) {
-                onSignOut()
+            // #52 — without cloud recovery a key-wipe sign-out is permanent
+            // account loss, so there is NO destructive proceed at all: the
+            // only forward action routes into recovery enrollment. With
+            // recovery enrolled (or in demo mode) it's a routine confirm —
+            // the same IRK comes back via passkey.
+            if signOutPolicy == .blockedNoRecovery {
+                Button("Set up recovery") {
+                    onOpenRecovery()
+                }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("Sign out", role: .destructive) {
+                    onSignOut()
+                }
+                Button("Cancel", role: .cancel) {}
             }
-            Button("Cancel", role: .cancel) {}
         } message: {
-            Text(hasCloudRecovery
-                ? "This erases this device's account key from the Keychain so nothing sensitive is left at rest while you're signed out. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair."
-                : "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good. Set up recovery first if you might want to come back.")
+            Text(signOutPolicy == .blockedNoRecovery
+                ? "Enroll cloud recovery first — signing out now would permanently lose access to this account. This device holds the only copy of your account key."
+                : "This erases this device's account key from the Keychain so nothing sensitive is left at rest while you're signed out. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.")
         }
     }
 
@@ -700,9 +712,11 @@ public struct SettingsScreen: View {
                     .accessibilityIdentifier("settings-lock-btn")
             }
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text(hasCloudRecovery
-                    ? "Erases this device's account key from the Keychain so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-                    : "Erases this device's account key. ⚠️ You have NO cloud recovery — this would permanently lose access.")
+                Text(signOutPolicy == .blockedNoRecovery
+                    ? "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access."
+                    : (hasCloudRecovery
+                        ? "Erases this device's account key from the Keychain so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
+                        : "Erases this device's account key. ⚠️ You have NO cloud recovery — this would permanently lose access."))
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Sign out", block: true, large: true) {
                     signOutConfirm = true

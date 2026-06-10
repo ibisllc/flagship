@@ -167,6 +167,7 @@ describe("three-tier session model — webapp (task #46)", () => {
       expect(await k.hasWrappedUmk()).toBe(true);
 
       await tiers.signOut({
+        hasCloudRecovery: true,
         resetDevice: () => k.resetDevice(),
         lockSession: () => {},
         show: () => {},
@@ -185,6 +186,7 @@ describe("three-tier session model — webapp (task #46)", () => {
 
       let revokeCalled = false;
       await tiers.signOut({
+        hasCloudRecovery: true,
         resetDevice: () => k.resetDevice(),
         lockSession: () => {},
         // A revoke would be an injected dep; sign-out is deliberately
@@ -206,6 +208,7 @@ describe("three-tier session model — webapp (task #46)", () => {
       const removedSlots: string[] = [];
       const shown: string[] = [];
       await tiers.signOut({
+        hasCloudRecovery: true,
         resetDevice: () => k.resetDevice(),
         lockSession: () => { lockSessionCalled = true; },
         profileRemove: (slot: string) => removedSlots.push(slot),
@@ -225,6 +228,7 @@ describe("three-tier session model — webapp (task #46)", () => {
       const tiers = await loadTiers();
       const order: string[] = [];
       await tiers.signOut({
+        hasCloudRecovery: true,
         resetDevice: async () => { order.push("resetDevice"); },
         lockSession: () => order.push("lockSession"),
         show: () => order.push("show"),
@@ -233,26 +237,108 @@ describe("three-tier session model — webapp (task #46)", () => {
     });
   });
 
-  // ---- Tier 2 gating: cloud-recovery copy ----
+  // ---- Tier 2 gating: the #52 cloud-recovery BLOCK ----
 
-  describe("Tier 2 — cloud-recovery gating (confirm copy)", () => {
-    it("enrolled ⇒ routine framing (no permanent-loss warning)", async () => {
+  describe("Tier 2 — cloud-recovery gate (#52: block, not warn)", () => {
+    it("signOutPolicy: enrolled ⇒ allowed; not enrolled ⇒ blocked", async () => {
+      const tiers = await loadTiers();
+      expect(tiers.signOutPolicy(true)).toBe("allowed");
+      expect(tiers.signOutPolicy(false)).toBe("blocked-no-recovery");
+    });
+
+    it("signOutPolicy: demo sandboxes are exempt (no real key to lose)", async () => {
+      const tiers = await loadTiers();
+      expect(tiers.signOutPolicy(false, true)).toBe("allowed");
+      expect(tiers.signOutPolicy(true, true)).toBe("allowed");
+    });
+
+    it("BLOCKED sign-out touches NOTHING — key survives, session survives, no routing", async () => {
+      const tiers = await loadTiers();
+      const k = await loadKeystore();
+      await k.bootstrapNewIdentity("correct-horse-battery-staple");
+      expect(await k.hasWrappedUmk()).toBe(true);
+
+      let lockSessionCalled = false;
+      const shown: string[] = [];
+      const res = await tiers.signOut({
+        hasCloudRecovery: false,
+        resetDevice: () => k.resetDevice(),
+        lockSession: () => { lockSessionCalled = true; },
+        show: (id: string) => shown.push(id),
+      });
+
+      expect(res).toEqual({ blocked: true });
+      // The load-bearing assertion: the ONLY copy of the key SURVIVES.
+      expect(await k.hasWrappedUmk()).toBe(true);
+      expect(lockSessionCalled).toBe(false);
+      expect(shown).toEqual([]);
+    });
+
+    it("omitting hasCloudRecovery fails CLOSED (treated as not enrolled ⇒ blocked)", async () => {
+      const tiers = await loadTiers();
+      const k = await loadKeystore();
+      await k.bootstrapNewIdentity("correct-horse-battery-staple");
+
+      const res = await tiers.signOut({
+        resetDevice: () => k.resetDevice(),
+        lockSession: () => {},
+        show: () => {},
+      });
+
+      expect(res).toEqual({ blocked: true });
+      expect(await k.hasWrappedUmk()).toBe(true);
+    });
+
+    it("demo exemption: blocked-by-recovery is bypassed for a demo sandbox", async () => {
+      const tiers = await loadTiers();
+      const k = await loadKeystore();
+      await k.bootstrapNewIdentity("correct-horse-battery-staple");
+
+      const res = await tiers.signOut({
+        hasCloudRecovery: false,
+        isDemoAccount: true,
+        resetDevice: () => k.resetDevice(),
+        lockSession: () => {},
+        show: () => {},
+      });
+
+      expect(res).toEqual({ blocked: false });
+      expect(await k.hasWrappedUmk()).toBe(false);
+    });
+
+    it("allowed sign-out reports blocked:false", async () => {
+      const tiers = await loadTiers();
+      const k = await loadKeystore();
+      await k.bootstrapNewIdentity("correct-horse-battery-staple");
+      const res = await tiers.signOut({
+        hasCloudRecovery: true,
+        resetDevice: () => k.resetDevice(),
+        lockSession: () => {},
+        show: () => {},
+      });
+      expect(res).toEqual({ blocked: false });
+    });
+
+    it("confirm copy: enrolled ⇒ routine destructive framing (not blocked)", async () => {
       const tiers = await loadTiers();
       const copy = tiers.signOutConfirmCopy(true);
       expect(copy.title).toMatch(/sign out of this device/i);
       expect(copy.message).toMatch(/recovery passkey/i);
       expect(copy.message).not.toMatch(/lost for good|permanently/i);
       expect(copy.okLabel).toBe("Sign out");
+      expect(copy.blocked).toBe(false);
     });
 
-    it("NOT enrolled ⇒ destructive warning that the key wipe is permanent", async () => {
+    it("confirm copy: NOT enrolled ⇒ NO destructive proceed — the OK routes to recovery enrollment", async () => {
       const tiers = await loadTiers();
       const copy = tiers.signOutConfirmCopy(false);
-      expect(copy.title).toMatch(/without recovery/i);
-      expect(copy.message).toMatch(/no cloud recovery/i);
-      expect(copy.message).toMatch(/lost for good|no way to sign back in/i);
-      expect(copy.danger).toBe(true);
-      expect(copy.okLabel).toMatch(/anyway/i);
+      expect(copy.blocked).toBe(true);
+      expect(copy.title).toMatch(/set up recovery first/i);
+      expect(copy.message).toMatch(/enroll cloud recovery first/i);
+      expect(copy.message).toMatch(/permanently lose access/i);
+      expect(copy.okLabel).toBe("Set up recovery");
+      expect(copy.okLabel).not.toMatch(/sign out/i);
+      expect(copy.danger).toBe(false);
     });
   });
 });

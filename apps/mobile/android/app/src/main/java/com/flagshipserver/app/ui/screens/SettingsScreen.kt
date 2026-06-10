@@ -44,6 +44,7 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.SignOutPolicy
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
@@ -71,6 +72,14 @@ fun SettingsScreen(nav: NavController) {
     var showCertDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val hasRecovery by app.hasCloudRecovery.collectAsState()
+    // #52 — the Tier-2 sign-out gate. Demo/mock sessions (the mock screens
+    // client, i.e. !useLiveClient) are exempt: they never wrap a real UMK.
+    // Absent DeveloperSettings ⇒ NOT demo (fail-closed: the gate applies).
+    val isDemoAccount = dev?.useLiveClient?.collectAsState()?.value?.let { !it } ?: false
+    val signOutPolicy = SignOutPolicy.evaluate(
+        hasCloudRecovery = hasRecovery,
+        isDemoAccount = isDemoAccount,
+    )
 
     val scroll = rememberScrollState()
     Column(
@@ -218,13 +227,19 @@ fun SettingsScreen(nav: NavController) {
         )
         Spacer(Modifier.height(FS.space.s4))
         Text(
-            if (hasRecovery)
-                "Erases this device's account key from the Keystore so nothing's " +
-                    "left at rest while you're signed out. Sign back in with your " +
-                    "recovery passkey to restore it — your account and servers stay put."
-            else
-                "Erases this device's account key. ⚠️ You have NO cloud recovery — " +
-                    "this would permanently lose access.",
+            when {
+                signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY ->
+                    "Sign out is disabled until you set up cloud recovery — this " +
+                        "device holds the only copy of your account key, and erasing " +
+                        "it would permanently lose access."
+                hasRecovery ->
+                    "Erases this device's account key from the Keystore so nothing's " +
+                        "left at rest while you're signed out. Sign back in with your " +
+                        "recovery passkey to restore it — your account and servers stay put."
+                else ->
+                    "Erases this device's account key. ⚠️ You have NO cloud recovery — " +
+                        "this would permanently lose access."
+            },
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -344,54 +359,82 @@ fun SettingsScreen(nav: NavController) {
         }
 
         if (showSignOutConfirm) {
-            AlertDialog(
-                onDismissRequest = { showSignOutConfirm = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showSignOutConfirm = false
-                        // Tier 2 — SIGN OUT. Erase this device's local key
-                        // material from the Keystore (snoop-hardening at
-                        // rest) but DO NOT revoke server-side: the device
-                        // stays a valid account member, so signing back in
-                        // via recovery restores the SAME IRK and re-pairs
-                        // instantly. Deliberately NO push-token revoke —
-                        // that's a server mutation reserved for the
-                        // danger-zone eviction below.
-                        Keystore.wipe()
-                        app.signOut()
-                    }) {
+            if (signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY) {
+                // #52 — without cloud recovery a key-wipe sign-out is
+                // permanent account loss, so there is NO destructive
+                // proceed at all: the only forward action routes into
+                // the existing recovery-enrollment screen.
+                AlertDialog(
+                    onDismissRequest = { showSignOutConfirm = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showSignOutConfirm = false
+                            nav.navigate("recovery")
+                        }) {
+                            Text("Set up recovery", color = FS.colors.primary)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSignOutConfirm = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                    title = { Text("Set up recovery first") },
+                    text = {
                         Text(
-                            if (hasRecovery) "Sign out" else "Sign out anyway",
-                            color = FS.colors.danger,
+                            "Enroll cloud recovery first — signing out now would " +
+                                "permanently lose access to this account. This device " +
+                                "holds the only copy of your account key.",
                         )
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSignOutConfirm = false }) {
-                        Text("Cancel")
-                    }
-                },
-                title = {
-                    Text(
-                        if (hasRecovery) "Sign out of this device?"
-                        else "Sign out without recovery?",
-                    )
-                },
-                text = {
-                    Text(
-                        if (hasRecovery)
+                    },
+                )
+            } else {
+                AlertDialog(
+                    onDismissRequest = { showSignOutConfirm = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showSignOutConfirm = false
+                            // Tier 2 — SIGN OUT. Erase this device's local key
+                            // material from the Keystore (snoop-hardening at
+                            // rest) but DO NOT revoke server-side: the device
+                            // stays a valid account member, so signing back in
+                            // via recovery restores the SAME IRK and re-pairs
+                            // instantly. Deliberately NO push-token revoke —
+                            // that's a server mutation reserved for the
+                            // danger-zone eviction below.
+                            //
+                            // #52 — ACTION-LAYER gate (not just UI): re-evaluate
+                            // the policy at wipe time so no code path can erase
+                            // the only copy of the identity key. Demo/mock
+                            // sessions are exempt (they never wrap a real UMK).
+                            if (SignOutPolicy.evaluate(
+                                    hasCloudRecovery = hasRecovery,
+                                    isDemoAccount = isDemoAccount,
+                                ) == SignOutPolicy.ALLOWED
+                            ) {
+                                Keystore.wipe()
+                                app.signOut()
+                            }
+                        }) {
+                            Text("Sign out", color = FS.colors.danger)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSignOutConfirm = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                    title = { Text("Sign out of this device?") },
+                    text = {
+                        Text(
                             "This erases this device's account key from the Keystore so " +
                                 "nothing sensitive is left at rest while you're signed out. " +
                                 "Your account and your servers are untouched — sign back in " +
-                                "with your recovery passkey and the same key is restored, no re-pair."
-                        else
-                            "⚠️ You have NO cloud recovery enrolled. Erasing this device's key " +
-                                "with no backup means there's no way to sign back in — your " +
-                                "account access is lost for good. Set up recovery first if you " +
-                                "might want to come back.",
-                    )
-                },
-            )
+                                "with your recovery passkey and the same key is restored, no re-pair.",
+                        )
+                    },
+                )
+            }
         }
 
         Spacer(Modifier.height(FS.space.s12))
