@@ -748,23 +748,24 @@ describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
     expect(b).toContain('wpa_supplicant -B -i "$IF" -c "$CONF"');
   });
 
-  it("the unit is NOT ordered on network-online.target (that would defeat the offline backstop)", () => {
+  it("the unit has NO network ordering at all (network.target can be delayed on a Wi-Fi-only box)", () => {
     const b = bootstrapWith({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
-    // It orders After=network.target (loose) and Before the register/daemon units.
-    expect(b).toContain("After=network.target");
+    // Only Before= the register/daemon units; the script's own grace wait
+    // replaces any After= on network targets (the chicken-and-egg fix for #27).
     expect(b).toContain("Before=flagship-first-boot-register.service flagship-daemon.service");
-    // The safety-net unit body must not wait for network-online.
     const unitStart = b.indexOf("flagship-wifi-safetynet.service <<");
     const unitEnd = b.indexOf("WIFIUNIT", unitStart + 1);
     const unit = b.slice(unitStart, unitEnd);
     expect(unit).not.toContain("network-online.target");
+    expect(unit).not.toContain("After=");
+    expect(unit).not.toContain("Wants=network");
   });
 
   it("the safety-net block is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
     // EngineTests.testWifiSafetyNetBlockIsByteIdenticalToTs pins this SAME sha256.
     const s = buildWifiSafetyNetBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "a269d668fe30c30226b7c9825247d6e63b3020e0a0e524d939e248d83b739656",
+      "8f23bc7ecbb197e51e187e9e8af91b992a06cd428e82bf84cb810840bf5300a3",
     );
   });
 });
@@ -830,24 +831,65 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
   it("is PRESENT on a Wi-Fi encrypted burn: build-time hook stages driver+firmware+wpa_supplicant", () => {
     const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
     expect(b).toContain("cat > /etc/initramfs-tools/hooks/flagship-wifi");
-    // Runtime driver detection inside the hook (build time, on real hardware).
-    expect(b).toContain("WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)");
-    expect(b).toContain('DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")');
-    expect(b).toContain('manual_add_modules "$DRV"'); // pulls cfg80211/mac80211 deps
-    // Driver-declared firmware + the cfg80211 regulatory db are copied.
-    expect(b).toContain('for fw in $(modinfo -F firmware "$DRV" 2>/dev/null)');
+    // Runtime driver detection inside the hook (build time, on real hardware),
+    // VALIDATED step by step (an empty WLIF must never silently no-op the hook).
+    expect(b).toContain("WLIF=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)");
+    expect(b).toContain('DRV=$(basename "$(readlink -f "/sys/class/net/$WLIF/device/driver" 2>/dev/null)" 2>/dev/null)');
+    expect(b).toContain('if [ -n "$WLIF" ]; then');
+    expect(b).toContain('if [ -n "$DRV" ]; then');
+    expect(b).toContain('manual_add_modules "$DRV"');
+    // Firmware staged for the driver AND its module dependencies, accepting the
+    // Debian 13 compressed variants (.xz/.zst) with the variant name preserved.
+    expect(b).toContain('modprobe --show-depends "$DRV"');
+    expect(b).toContain('for fw in $(modinfo -F firmware "$_m" 2>/dev/null); do stage_fw "$fw"; done');
+    expect(b).toContain('for _v in "" .xz .zst; do');
+    expect(b).toContain('cp -a "/lib/firmware/$1$_v" "$DESTDIR/lib/firmware/$1$_v"');
     expect(b).toContain("for r in regulatory.db regulatory.db.p7s");
-    // wpa_supplicant binary staged.
+    // cfg80211/mac80211 staged EXPLICITLY (not just as $DRV dependencies).
+    expect(b).toContain("manual_add_modules cfg80211");
+    expect(b).toContain("manual_add_modules mac80211");
+    // No-detection fallback: the whole wireless module class, bounded.
+    expect(b).toContain("copy_modules_dir kernel/drivers/net/wireless");
+    // Every premount tool staged: wpa_supplicant + wpa_cli + ip (both paths tried).
     expect(b).toMatch(/copy_exec\s+\/sbin\/wpa_supplicant/);
+    expect(b).toContain("copy_exec /usr/sbin/wpa_supplicant /sbin/wpa_supplicant");
+    expect(b).toContain("copy_exec /sbin/wpa_cli /sbin/wpa_cli");
+    expect(b).toContain("copy_exec /usr/sbin/wpa_cli /sbin/wpa_cli");
+    expect(b).toContain("copy_exec /sbin/ip /sbin/ip");
+    expect(b).toContain("copy_exec /bin/ip /sbin/ip");
     // wpasupplicant package ensured before the hook references the binary.
     expect(b).toMatch(/apt-get install .*wpasupplicant/);
+  });
+
+  it("the hook writes a stage-by-stage BUILD-TIME diagnostic log to /boot (best-effort)", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain("BLOG=/boot/flagship-wifi-build.log");
+    expect(b).toContain('blog() { echo "flagship-wifi-hook: $*" >> "$BLOG" 2>/dev/null || true; }');
+    // The decision points all log: detection, resolution, staging, the fallback.
+    expect(b).toContain('blog "interface detected: $WLIF"');
+    expect(b).toContain('blog "NO wl* interface visible at build time"');
+    expect(b).toContain('blog "driver resolved: $DRV"');
+    expect(b).toContain('blog "firmware staged: $1$_v"');
+    expect(b).toContain('blog "firmware MISSING: $1');
+    expect(b).toContain('blog "driver UNRESOLVED — falling back to the whole wireless module class"');
+    expect(b).toContain('blog "MISSING: wpa_supplicant"');
+    expect(b).toContain('blog "MISSING: wpa_cli"');
+    expect(b).toContain('blog "MISSING: ip"');
+    expect(b).toContain('blog "hook done"');
+    // The hook can never abort update-initramfs: explicit final exit 0.
+    const hookStart = b.indexOf("<<'WIFIHOOK'");
+    const hookEnd = b.indexOf("\nWIFIHOOK");
+    const hook = b.slice(hookStart, hookEnd);
+    expect(hook.trimEnd().endsWith("exit 0")).toBe(true);
   });
 
   it("boot-time premount brings Wi-Fi up: modprobe + wpa_supplicant + bounded DHCP", () => {
     const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
     expect(b).toContain("cat > /etc/initramfs-tools/scripts/init-premount/flagship-wifi");
-    // Re-detect the wl* iface at boot (name can differ from build time), bounded ~15s.
+    // Re-detect the wl* iface at boot (name can differ from build time), bounded ~30s.
     expect(b).toContain("grep -E '^wl' | head -1");
+    expect(b).toContain("+ 30 ))");
+    expect(b).toContain("no wl* interface in 30s — falling through");
     // The premount is written via an UNQUOTED `cat <<WIFIPREMOUNT` heredoc, so the
     // bootstrap text carries the shell vars escaped (`\$DRV`) — the cat un-escapes
     // them to `$DRV` in the on-disk premount.
@@ -877,6 +919,24 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(evil).toContain("WIFI_PSK='p'\\''w'");
   });
 
+  it("the premount logs FIRST (before any mount/iface work) so an empty log = never ran", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // "premount start" is logged before the boot-fs mount; the accumulator is
+    // seeded into the persistent log after the mount so the early lines survive.
+    const startLog = b.indexOf('log_stage "premount start (ssid baked)"');
+    const mountAt = b.indexOf("mount /dev/disk/by-label/FLAGSHIP_BOOT");
+    expect(startLog).toBeGreaterThan(0);
+    expect(mountAt).toBeGreaterThan(0);
+    expect(startLog).toBeLessThan(mountAt);
+    // Bounded wait for udev to settle the by-label symlink before mounting.
+    expect(b).toContain("while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do");
+    expect(b).toContain("+ 10 ))");
+    // The mount RESULT is logged either way, and the /run prefix is seeded in.
+    expect(b).toContain('log_stage "boot fs mounted (persistent log live)"');
+    expect(b).toContain('log_stage "boot fs mount FAILED — /run log only (lost on pivot)"');
+    expect(b).toContain("flagship-wifi.log");
+  });
+
   it("the Wi-Fi premount runs BEFORE the unlock relay (init-premount precedes local-top)", () => {
     // init-premount scripts run strictly before local-top in initramfs-tools, so
     // the radio is up before the unlock hook curls the boot relay. We also assert
@@ -901,7 +961,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // EngineTests.testInitramfsWifiBlockIsByteIdenticalToTs pins this SAME sha256.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "263df5c5188688c38a07f19f41aa80fe01e8d07ddbee0853e4224c43aec5089d",
+      "575dae67a3853c164fc1b24c3547b91565ae4b208b2acd265d5e49d0bbb3b1c5",
     );
   });
 });

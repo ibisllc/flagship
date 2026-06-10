@@ -193,6 +193,12 @@ public enum UserData {
         // so this is the most reliable "the box exists" ping — emitted BEFORE the
         // wipe so the phone hears from the box even if partitioning later fails).
         let partitionBeacon = debianBeaconCommand(phase: "partitioning", serial: beaconSerial)
+        // Beacon E — `installing`, fired by base-installer right after
+        // partitioning. d-i has no command-level preseed hook in the multi-minute
+        // debootstrap/apt window, so partman/early_command drops a tiny executable
+        // into /usr/lib/base-installer.d/ which base-installer runs as that
+        // window opens. Mirrors preseed.ts.
+        let installingDrop = debianBaseInstallerBeaconDrop(serial: beaconSerial)
         // Final SUCCESS beacon — emitted at the END of late_command, AFTER the
         // first-boot bootstrap succeeds, but BEFORE the box powers off (this
         // preseed sets debian-installer/exit/poweroff). NOT success: the install
@@ -202,7 +208,9 @@ public enum UserData {
         // failure branch posts the dev late-log + exits 1, never this).
         let installedBeacon = debianBeaconCommand(phase: "installed", serial: beaconSerial)
 
-        let storageBlock = encryptRoot ? debianCryptoStorageBlock(partitionBeacon) : debianPlainStorageBlock(partitionBeacon)
+        let storageBlock = encryptRoot
+            ? debianCryptoStorageBlock(partitionBeacon, installingDrop)
+            : debianPlainStorageBlock(partitionBeacon, installingDrop)
 
         let ssid = (wifiSSID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let hasWifi = !ssid.isEmpty
@@ -375,27 +383,48 @@ public enum UserData {
         + "blockdev --rereadpt \"$DISK\" 2>/dev/null || true"
 
     /// The partman/early_command line shared by both storage variants: resolve the
-    /// target disk, set it, phone home (network is up by partman), then wipe it.
-    /// The preseed `\`-continuation style is kept. Mirrors preseed.ts.
-    static func partmanEarlyCommand(_ partitionBeacon: String) -> String {
+    /// target disk, set it, phone home (network is up by partman), then wipe it,
+    /// then drop the Beacon E base-installer.d script. The preseed
+    /// `\`-continuation style is kept. Mirrors preseed.ts.
+    static func partmanEarlyCommand(_ partitionBeacon: String, _ installingDrop: String) -> String {
         "d-i partman/early_command string \\\n"
         + "  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk \"$DISK\"; \\\n"
         + "  \(partitionBeacon); \\\n"
-        + "  \(wipeTargetDisk)"
+        + "  \(wipeTargetDisk); \\\n"
+        + "  \(installingDrop)"
+    }
+
+    /// Beacon E dropper, appended to partman/early_command. Writes a tiny
+    /// executable into /usr/lib/base-installer.d/ (the d-i hook dir
+    /// base-installer runs right after partitioning) that POSTs the canonical
+    /// `installing` phase — filling the otherwise-silent multi-minute
+    /// debootstrap/apt window. The script body IS the shared debianBeaconCommand,
+    /// additionally BACKGROUNDED (`&`) + `exit 0` so it can NEVER block or fail
+    /// base-installer; the dropper itself is `( … ) || true`. The beacon's only
+    /// `"` are escaped for the double-quoted echo; it contains no
+    /// `$`/backslash/backtick (the serial is beaconSafe-sanitized).
+    /// Byte-identical to preseed.ts debianBaseInstallerBeaconDrop.
+    static func debianBaseInstallerBeaconDrop(serial: String) -> String {
+        let beacon = debianBeaconCommand(phase: "installing", serial: serial)
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "( mkdir -p /usr/lib/base-installer.d; "
+            + "{ echo '#!/bin/sh'; echo \"\(beacon) &\"; echo 'exit 0'; } "
+            + "> /usr/lib/base-installer.d/05flagship-beacon; "
+            + "chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true"
     }
 
     /// partman-crypto LVM-on-LUKS recipe (the locked encrypted default).
     /// EXPERIMENTAL — needs live validation. Byte-identical intent to preseed.ts
     /// debianCryptoStorageBlock (Swift needs no `$`-escaping; `$primary{}` etc.
     /// are plain literals here).
-    static func debianCryptoStorageBlock(_ partitionBeacon: String) -> String {
+    static func debianCryptoStorageBlock(_ partitionBeacon: String, _ installingDrop: String) -> String {
         return """
         ### Partitioning — EXPERIMENTAL LVM-on-LUKS (the locked encrypted default).
         # partman-crypto only reliably preseeds LVM-on-LUKS: unencrypted ESP + /boot,
         # then a LUKS container holding one VG (flagship) with a single root LV.
         d-i partman-auto/method string crypto
         d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-        \(partmanEarlyCommand(partitionBeacon))
+        \(partmanEarlyCommand(partitionBeacon, installingDrop))
         d-i partman-lvm/device_remove_lvm boolean true
         d-i partman-md/device_remove_md boolean true
         d-i partman-auto-lvm/new_vg_name string flagship
@@ -449,13 +478,13 @@ public enum UserData {
     /// Unencrypted debug-escape layout (encryptRoot:false). Not exposed in the
     /// GUI; reproduces a known-good non-LUKS baseline. Mirrors preseed.ts
     /// debianPlainStorageBlock.
-    static func debianPlainStorageBlock(_ partitionBeacon: String) -> String {
+    static func debianPlainStorageBlock(_ partitionBeacon: String, _ installingDrop: String) -> String {
         return """
         ### Partitioning — DEBUG ESCAPE: plain (unencrypted) ESP + /boot + ext4 root.
         # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
         d-i partman-auto/method string regular
         d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-        \(partmanEarlyCommand(partitionBeacon))
+        \(partmanEarlyCommand(partitionBeacon, installingDrop))
         d-i partman-lvm/device_remove_lvm boolean true
         d-i partman-md/device_remove_md boolean true
         d-i partman-auto/choose_recipe select flagship-plain
@@ -1146,11 +1175,11 @@ public enum UserData {
         cat > /etc/systemd/system/flagship-wifi-safetynet.service <<'WIFIUNIT'
         [Unit]
         Description=Flagship Wi-Fi safety-net (bring up the baked SSID if the box is offline)
-        # Deliberately NOT network-online.target (that waits for online, defeating the
-        # point). Order loosely after network.target so the radio device exists; the
-        # script does its own offline detection + grace wait.
-        After=network.target
-        Wants=network.target
+        # Deliberately NO network ordering at all: network-online.target waits for
+        # online (defeating the point), and on a Wi-Fi-only box even network.target can
+        # be delayed by a wedged network manager — the chicken-and-egg this unit exists
+        # to break. The script does its own offline detection + ~45s grace wait, by
+        # which time udev has long settled the radio device.
         Before=flagship-first-boot-register.service flagship-daemon.service
 
         [Service]
@@ -1207,31 +1236,93 @@ public enum UserData {
 
         cat > /etc/initramfs-tools/hooks/flagship-wifi <<'WIFIHOOK'
         #!/bin/sh
-        # Build-time: stage the box's actual wl* driver + firmware + wpa_supplicant into
-        # the initramfs. Detection runs HERE (build time, in-target on real hardware) so
-        # it reflects this box's radio. Guarded so a hiccup never aborts update-initramfs.
-        set -e
+        # Build-time: stage the box's actual wl* driver + firmware + the premount's
+        # tools (wpa_supplicant, wpa_cli, ip, wget) into the initramfs. Detection runs
+        # HERE (build time, in-target on real hardware) so it reflects this box's radio.
+        # Every stage is validated AND logged to /boot/flagship-wifi-build.log (best-
+        # effort) so an initrd missing the radio is diagnosable on-box; every stage is
+        # guarded so a hiccup never aborts update-initramfs. If the driver can't be
+        # resolved, fall back to staging the whole wireless module class (bounded:
+        # modules only — per-driver firmware can't be enumerated unprobed).
         PREREQ=""
         prereqs() { echo "$PREREQ"; }
         case "$1" in prereqs) prereqs; exit 0;; esac
         . /usr/share/initramfs-tools/hook-functions
-        {
-          WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)
-          DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")
-          manual_add_modules "$DRV"
-          for fw in $(modinfo -F firmware "$DRV" 2>/dev/null); do
-            [ -f "/lib/firmware/$fw" ] && { mkdir -p "$DESTDIR/lib/firmware/$(dirname "$fw")"; cp -a "/lib/firmware/$fw" "$DESTDIR/lib/firmware/$fw"; }
+        BLOG=/boot/flagship-wifi-build.log
+        blog() { echo "flagship-wifi-hook: $*" >> "$BLOG" 2>/dev/null || true; }
+        blog "hook start ($(date 2>/dev/null || echo -))"
+        stage_fw() {
+          for _v in "" .xz .zst; do
+            if [ -f "/lib/firmware/$1$_v" ]; then
+              mkdir -p "$DESTDIR/lib/firmware/$(dirname "$1")" 2>/dev/null || true
+              if cp -a "/lib/firmware/$1$_v" "$DESTDIR/lib/firmware/$1$_v" 2>/dev/null; then
+                blog "firmware staged: $1$_v"
+              else
+                blog "firmware COPY FAILED: $1$_v"
+              fi
+              return 0
+            fi
           done
-          for r in regulatory.db regulatory.db.p7s; do
-            [ -f "/lib/firmware/$r" ] && cp -a "/lib/firmware/$r" "$DESTDIR/lib/firmware/"
+          blog "firmware MISSING: $1 (no plain/.xz/.zst variant in /lib/firmware)"
+        }
+        WLIF=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)
+        DRV=""
+        if [ -n "$WLIF" ]; then
+          blog "interface detected: $WLIF"
+          DRV=$(basename "$(readlink -f "/sys/class/net/$WLIF/device/driver" 2>/dev/null)" 2>/dev/null)
+        else
+          blog "NO wl* interface visible at build time"
+        fi
+        if [ -n "$DRV" ]; then
+          blog "driver resolved: $DRV"
+          if manual_add_modules "$DRV" 2>/dev/null; then blog "module staged: $DRV"; else blog "module STAGING FAILED: $DRV"; fi
+          for _m in "$DRV" $(modprobe --show-depends "$DRV" 2>/dev/null | sed -n 's|^insmod .*/||p' | sed 's|\.ko.*||'); do
+            for fw in $(modinfo -F firmware "$_m" 2>/dev/null); do stage_fw "$fw"; done
           done
-          copy_exec /sbin/wpa_supplicant
-          # OBSERVABILITY: stage the serial (for the post-DHCP beacon) + the busybox wget
-          # the beacon uses, so the boot-time premount can phone its log home.
-          mkdir -p "$DESTDIR/boot"
-          cp /boot/flagship-beacon-serial "$DESTDIR/boot/flagship-beacon-serial" 2>/dev/null || true
-          copy_exec /bin/wget /bin/wget 2>/dev/null || copy_exec /usr/bin/wget /bin/wget 2>/dev/null || true
-        } || true
+        else
+          blog "driver UNRESOLVED — falling back to the whole wireless module class"
+          if copy_modules_dir kernel/drivers/net/wireless 2>/dev/null; then blog "fallback staged: kernel/drivers/net/wireless"; else blog "fallback STAGING FAILED: kernel/drivers/net/wireless"; fi
+        fi
+        manual_add_modules cfg80211 2>/dev/null || blog "module STAGING FAILED: cfg80211"
+        manual_add_modules mac80211 2>/dev/null || blog "module STAGING FAILED: mac80211"
+        mkdir -p "$DESTDIR/lib/firmware" 2>/dev/null || true
+        for r in regulatory.db regulatory.db.p7s; do
+          if [ -f "/lib/firmware/$r" ] && cp -a "/lib/firmware/$r" "$DESTDIR/lib/firmware/" 2>/dev/null; then
+            blog "staged: $r"
+          else
+            blog "MISSING: $r"
+          fi
+        done
+        if copy_exec /sbin/wpa_supplicant /sbin/wpa_supplicant 2>/dev/null || copy_exec /usr/sbin/wpa_supplicant /sbin/wpa_supplicant 2>/dev/null; then
+          blog "staged: wpa_supplicant"
+        else
+          blog "MISSING: wpa_supplicant"
+        fi
+        if copy_exec /sbin/wpa_cli /sbin/wpa_cli 2>/dev/null || copy_exec /usr/sbin/wpa_cli /sbin/wpa_cli 2>/dev/null; then
+          blog "staged: wpa_cli"
+        else
+          blog "MISSING: wpa_cli"
+        fi
+        if copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip 2>/dev/null; then
+          blog "staged: ip"
+        else
+          blog "MISSING: ip"
+        fi
+        # OBSERVABILITY: stage the serial (for the post-DHCP beacon) + the busybox wget
+        # the beacon uses, so the boot-time premount can phone its log home.
+        mkdir -p "$DESTDIR/boot" 2>/dev/null || true
+        if cp /boot/flagship-beacon-serial "$DESTDIR/boot/flagship-beacon-serial" 2>/dev/null; then
+          blog "staged: beacon serial"
+        else
+          blog "MISSING: /boot/flagship-beacon-serial"
+        fi
+        if copy_exec /bin/wget /bin/wget 2>/dev/null || copy_exec /usr/bin/wget /bin/wget 2>/dev/null; then
+          blog "staged: wget"
+        else
+          blog "MISSING: wget"
+        fi
+        blog "hook done"
+        exit 0
         WIFIHOOK
         chmod +x /etc/initramfs-tools/hooks/flagship-wifi
 
@@ -1266,7 +1357,6 @@ public enum UserData {
         FLAGSHIP_BOOTMNT=/run/flagship-bootmnt
         : > "\$FLAGSHIP_WIFI_LOG" 2>/dev/null || true
         mkdir -p "\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
-        mount /dev/disk/by-label/FLAGSHIP_BOOT "\$FLAGSHIP_BOOTMNT" 2>/dev/null || true
         log_stage() {
           _ts="\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
           _wall="\$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo -)"
@@ -1277,16 +1367,33 @@ public enum UserData {
         }
         log_stage "premount start (ssid baked)"
 
+        # The boot fs is found by label; at init-premount udev may not have settled the
+        # by-label symlink yet, so wait for it (bounded ~10s) before mounting. Lines
+        # logged before the mount accumulate in /run; the cat seeds them into the
+        # persistent log once mounted, so the first line is never lost — an EMPTY
+        # persistent log can only mean the premount never ran.
+        _bdeadline=\$(( \$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) + 10 ))
+        while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do
+          [ "\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999)" -ge "\$_bdeadline" ] && break
+          sleep 1
+        done
+        if mount /dev/disk/by-label/FLAGSHIP_BOOT "\$FLAGSHIP_BOOTMNT" 2>/dev/null; then
+          cat "\$FLAGSHIP_WIFI_LOG" >> "\$FLAGSHIP_BOOTMNT/flagship-wifi.log" 2>/dev/null || true
+          log_stage "boot fs mounted (persistent log live)"
+        else
+          log_stage "boot fs mount FAILED — /run log only (lost on pivot)"
+        fi
+
         # Re-detect the wl* interface at boot (the name can differ from build time).
         IF=""
-        _deadline=\$(( \$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) + 15 ))
+        _deadline=\$(( \$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) + 30 ))
         while [ -z "\$IF" ]; do
           IF=\$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)
           [ -n "\$IF" ] && break
           [ "\$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999)" -ge "\$_deadline" ] && break
           sleep 1
         done
-        [ -n "\$IF" ] || { log_stage "no wl* interface in 15s — falling through"; exit 0; }
+        [ -n "\$IF" ] || { log_stage "no wl* interface in 30s — falling through"; exit 0; }
         log_stage "wl interface detected: \$IF"
 
         # Load the driver (the hook staged it) and bring the link up.

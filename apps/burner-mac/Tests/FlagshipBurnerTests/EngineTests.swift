@@ -428,7 +428,7 @@ final class EngineTests: XCTestCase {
         let block = UserData.wifiSafetyNetBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
         let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "a269d668fe30c30226b7c9825247d6e63b3020e0a0e524d939e248d83b739656",
+            hash, "8f23bc7ecbb197e51e187e9e8af91b992a06cd428e82bf84cb810840bf5300a3",
             "Swift wifiSafetyNetBlock drifted from the TS twin. Block:\n\(block)")
     }
 
@@ -454,16 +454,20 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(wifi.contains("s3cret"))
         XCTAssertTrue(wifi.contains("wpasupplicant"))
         XCTAssertTrue(wifi.contains("has_route() { ip route show default 2>/dev/null | grep -q .; }"))
-        XCTAssertTrue(wifi.contains("After=network.target"))
+        XCTAssertTrue(wifi.contains("Before=flagship-first-boot-register.service flagship-daemon.service"))
         XCTAssertTrue(wifi.contains("systemctl restart systemd-networkd"))
         XCTAssertTrue(wifi.contains("dhclient -1"))
-        // The SAFETY-NET unit specifically must NOT wait on network-online (that
-        // would defeat the offline backstop). Scope the check to that unit body
-        // — the daemon/register units legitimately use network-online.target.
+        // The SAFETY-NET unit must carry NO network ordering at all: not
+        // network-online.target (defeats the offline backstop) and not
+        // network.target either (can be delayed on a Wi-Fi-only box — the
+        // chicken-and-egg this unit exists to break). Scope to the unit body —
+        // the daemon/register units legitimately use network-online.target.
         if let unitStart = wifi.range(of: "flagship-wifi-safetynet.service <<")?.upperBound,
            let unitEnd = wifi.range(of: "WIFIUNIT", range: unitStart..<wifi.endIndex)?.lowerBound {
             let unit = String(wifi[unitStart..<unitEnd])
             XCTAssertFalse(unit.contains("network-online.target"))
+            XCTAssertFalse(unit.contains("After="))
+            XCTAssertFalse(unit.contains("Wants=network"))
         } else {
             XCTFail("safety-net unit body not found")
         }
@@ -529,17 +533,41 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(UserData.initramfsWifiBlock(ssid: "   ", password: "x"), "")
     }
 
-    /// The build-time hook stages this box's driver + firmware + wpa_supplicant.
+    /// The build-time hook stages this box's driver + firmware + the premount's
+    /// tools, VALIDATED step by step with a build-time diagnostic log on /boot.
     func testInitramfsWifiHookStagesDriverFirmwareWpa() {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
                                          encryptRoot: true, wifiSSID: "HomeNet", wifiPassword: "s3cret")
         XCTAssertTrue(b.contains("cat > /etc/initramfs-tools/hooks/flagship-wifi"))
-        XCTAssertTrue(b.contains("WLIF=$(ls /sys/class/net | grep -E '^wl' | head -1)"))
-        XCTAssertTrue(b.contains(#"DRV=$(basename "$(readlink -f /sys/class/net/$WLIF/device/driver)")"#))
+        XCTAssertTrue(b.contains("WLIF=$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)"))
+        XCTAssertTrue(b.contains(#"DRV=$(basename "$(readlink -f "/sys/class/net/$WLIF/device/driver" 2>/dev/null)" 2>/dev/null)"#))
+        XCTAssertTrue(b.contains(#"if [ -n "$WLIF" ]; then"#))
+        XCTAssertTrue(b.contains(#"if [ -n "$DRV" ]; then"#))
         XCTAssertTrue(b.contains(#"manual_add_modules "$DRV""#))
-        XCTAssertTrue(b.contains(#"for fw in $(modinfo -F firmware "$DRV" 2>/dev/null)"#))
+        // Firmware for the driver AND its dependencies, accepting the Debian 13
+        // compressed variants (.xz/.zst) with the variant filename preserved.
+        XCTAssertTrue(b.contains(#"modprobe --show-depends "$DRV""#))
+        XCTAssertTrue(b.contains(#"for fw in $(modinfo -F firmware "$_m" 2>/dev/null); do stage_fw "$fw"; done"#))
+        XCTAssertTrue(b.contains(#"for _v in "" .xz .zst; do"#))
         XCTAssertTrue(b.contains("for r in regulatory.db regulatory.db.p7s"))
+        // cfg80211/mac80211 explicit; bounded no-detection fallback.
+        XCTAssertTrue(b.contains("manual_add_modules cfg80211"))
+        XCTAssertTrue(b.contains("manual_add_modules mac80211"))
+        XCTAssertTrue(b.contains("copy_modules_dir kernel/drivers/net/wireless"))
+        // Every premount tool staged: wpa_supplicant + wpa_cli + ip (both paths).
         XCTAssertTrue(b.contains("copy_exec /sbin/wpa_supplicant"))
+        XCTAssertTrue(b.contains("copy_exec /usr/sbin/wpa_supplicant /sbin/wpa_supplicant"))
+        XCTAssertTrue(b.contains("copy_exec /sbin/wpa_cli /sbin/wpa_cli"))
+        XCTAssertTrue(b.contains("copy_exec /usr/sbin/wpa_cli /sbin/wpa_cli"))
+        XCTAssertTrue(b.contains("copy_exec /sbin/ip /sbin/ip"))
+        XCTAssertTrue(b.contains("copy_exec /bin/ip /sbin/ip"))
+        // The stage-by-stage build log on /boot, best-effort, never aborts.
+        XCTAssertTrue(b.contains("BLOG=/boot/flagship-wifi-build.log"))
+        XCTAssertTrue(b.contains(#"blog() { echo "flagship-wifi-hook: $*" >> "$BLOG" 2>/dev/null || true; }"#))
+        XCTAssertTrue(b.contains(#"blog "interface detected: $WLIF""#))
+        XCTAssertTrue(b.contains(#"blog "NO wl* interface visible at build time""#))
+        XCTAssertTrue(b.contains(#"blog "driver UNRESOLVED — falling back to the whole wireless module class""#))
+        XCTAssertTrue(b.contains(#"blog "hook done""#))
         XCTAssertTrue(b.range(of: #"apt-get install .*wpasupplicant"#, options: .regularExpression) != nil)
     }
 
@@ -556,6 +584,17 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("/run/flagship-wpa.conf"))
         XCTAssertTrue(b.contains(#"ipconfig -t 20 "\$IF""#))
         XCTAssertTrue(b.contains(#"udhcpc -i "\$IF" -n -q -t 5"#))
+        // Interface wait raised to ~30s; "premount start" logs FIRST (before the
+        // boot-fs mount) and the mount result is logged either way, so an empty
+        // persistent log can only mean the premount never ran.
+        XCTAssertTrue(b.contains("no wl* interface in 30s — falling through"))
+        XCTAssertTrue(b.contains(#"log_stage "premount start (ssid baked)""#))
+        XCTAssertTrue(b.contains("while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do"))
+        XCTAssertTrue(b.contains(#"log_stage "boot fs mounted (persistent log live)""#))
+        XCTAssertTrue(b.contains(#"log_stage "boot fs mount FAILED — /run log only (lost on pivot)""#))
+        let startLog = b.range(of: #"log_stage "premount start (ssid baked)""#)!
+        let mountAt = b.range(of: "mount /dev/disk/by-label/FLAGSHIP_BOOT")!
+        XCTAssertTrue(startLog.lowerBound < mountAt.lowerBound)
         XCTAssertTrue(b.contains("falling through"))
         // Creds embedded single-quote-escaped (NOT base64; initramfs /bin/sh).
         XCTAssertTrue(b.contains("WIFI_SSID='HomeNet'"))
@@ -583,7 +622,7 @@ final class EngineTests: XCTestCase {
         let block = UserData.initramfsWifiBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
         let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "263df5c5188688c38a07f19f41aa80fe01e8d07ddbee0853e4224c43aec5089d",
+            hash, "575dae67a3853c164fc1b24c3547b91565ae4b208b2acd265d5e49d0bbb3b1c5",
             "Swift initramfsWifiBlock drifted from the TS twin. Block:\n\(block)")
     }
 
@@ -808,6 +847,33 @@ final class EngineTests: XCTestCase {
             let beacon = cfg.range(of: #""phase":"partitioning""#)!
             let wipe = cfg.range(of: "dmsetup remove_all")!
             XCTAssertTrue(beacon.lowerBound < wipe.lowerBound, "beacon must precede the wipe")
+        }
+    }
+
+    // Beacon E — the `installing` base-installer.d dropper, written by
+    // partman/early_command (base-installer runs it right after partitioning,
+    // filling the silent debootstrap/apt window). Byte-identical to preseed.test.ts.
+    private static let installingDrop =
+        "( mkdir -p /usr/lib/base-installer.d; "
+        + #"{ echo '#!/bin/sh'; echo "( echo '{\"phase\":\"installing\"}' > /tmp/flagship-beacon.json; "#
+        + "wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 "
+        + #"https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true &"; echo 'exit 0'; } "#
+        + "> /usr/lib/base-installer.d/05flagship-beacon; "
+        + "chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true"
+
+    func testDebianPreseedInstallingDropper() throws {
+        // Both storage variants drop it; ordering inside the early_command is
+        // partitioning beacon → wipe → dropper; the dropped script is
+        // backgrounded + exit 0 so it can never block or fail base-installer.
+        for encryptRoot in [true, false] {
+            let cfg = try UserData.debianPreseed(recipeJSON: beaconRecipe(), installerGitRef: "main", encryptRoot: encryptRoot)
+            XCTAssertTrue(cfg.contains(Self.installingDrop), "encryptRoot=\(encryptRoot)")
+            let part = cfg.range(of: #""phase":"partitioning""#)!
+            let wipe = cfg.range(of: "dmsetup remove_all")!
+            let drop = cfg.range(of: "/usr/lib/base-installer.d")!
+            XCTAssertTrue(part.lowerBound < wipe.lowerBound)
+            XCTAssertTrue(wipe.lowerBound < drop.lowerBound)
+            XCTAssertTrue(cfg.contains(#"|| true &"; echo 'exit 0';"#))
         }
     }
 

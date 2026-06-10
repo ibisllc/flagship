@@ -491,6 +491,36 @@ describe("buildDebianPreseed — phone-home beacons (earliest progress to the ph
     expect(c).toContain(`${PARTITION_BEACON}; \\`);
   });
 
+  // Beacon E — `installing`, fired by base-installer right after partitioning
+  // (filling the silent multi-minute debootstrap/apt window). partman/early_command
+  // drops this executable into /usr/lib/base-installer.d/; the script body is the
+  // shared beacon idiom, BACKGROUNDED + `exit 0` so it can never block or fail
+  // base-installer. Byte-identical to EngineTests.swift.
+  const INSTALLING_DROP =
+    `( mkdir -p /usr/lib/base-installer.d; ` +
+    `{ echo '#!/bin/sh'; echo "( echo '{\\"phase\\":\\"installing\\"}' > /tmp/flagship-beacon.json; ` +
+    `wget -q -O- --post-file=/tmp/flagship-beacon.json --timeout=15 ` +
+    `https://flagshipserver.com/api/order/01TESTABCDEF/status ) || true &"; echo 'exit 0'; } ` +
+    `> /usr/lib/base-installer.d/05flagship-beacon; ` +
+    `chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true`;
+
+  it("Beacon E — partman/early_command drops the base-installer.d 'installing' beacon script (both variants)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    for (const encryptRoot of [true, false]) {
+      const c = buildDebianPreseed({ blob, blobSignatureHex, encryptRoot });
+      expect(c, `encryptRoot=${encryptRoot}`).toContain(INSTALLING_DROP);
+      // Ordering inside the early_command: partitioning beacon → wipe → dropper.
+      const partAt = c.indexOf('"phase":"partitioning"');
+      const wipeAt = c.indexOf("dmsetup remove_all");
+      const dropAt = c.indexOf("/usr/lib/base-installer.d");
+      expect(partAt).toBeGreaterThan(0);
+      expect(wipeAt).toBeGreaterThan(partAt);
+      expect(dropAt).toBeGreaterThan(wipeAt);
+      // The dropped script is backgrounded + can never fail base-installer.
+      expect(c).toContain(`|| true &"; echo 'exit 0';`);
+    }
+  });
+
   it("Beacon D — late_command POSTs 'installed' on the bootstrap SUCCESS path only, before poweroff", () => {
     const c = cfg();
     // The success path: bootstrap `&&` the installed beacon, THEN `||` the

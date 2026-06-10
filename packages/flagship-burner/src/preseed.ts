@@ -86,6 +86,12 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // this is the most reliable "the box exists" ping — emitted BEFORE the wipe so
   // the phone hears from the box even if partitioning later fails).
   const partitionBeacon = debianBeaconCommand("partitioning", beaconSerial);
+  // Beacon E — `installing`, fired by base-installer right after partitioning.
+  // d-i has no command-level preseed hook in the multi-minute debootstrap/apt
+  // window (partman/early_command is before partitioning, late_command after the
+  // base install), so partman/early_command drops a tiny executable into
+  // /usr/lib/base-installer.d/ which base-installer runs as that window opens.
+  const installingDrop = debianBaseInstallerBeaconDrop(beaconSerial);
   // Final SUCCESS beacon — emitted at the END of late_command, AFTER the
   // first-boot bootstrap succeeds, but BEFORE the box powers off (this preseed
   // sets debian-installer/exit/poweroff). It is NOT success: the install
@@ -113,8 +119,8 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
   // escape hatch reproduces a plain regular install for bisecting a boot
   // failure (NOT exposed in CLI/GUI), mirroring userdata.ts encryptRoot:false.
   const storageBlock = encryptRoot
-    ? debianCryptoStorageBlock(partitionBeacon)
-    : debianPlainStorageBlock(partitionBeacon);
+    ? debianCryptoStorageBlock(partitionBeacon, installingDrop)
+    : debianPlainStorageBlock(partitionBeacon, installingDrop);
 
   // Wi-Fi (burn-time local input; never in the signed recipe). d-i's netcfg
   // takes WPA directly at install time (unlike networkd, netcfg keys wireless
@@ -302,15 +308,43 @@ const wipeTargetDisk =
 
 /**
  * The partman/early_command line shared by both storage variants: resolve the
- * target disk, set it, phone home (network is up by partman), then wipe it. The
- * preseed `\`-continuation style is kept (each logical step on its own line).
+ * target disk, set it, phone home (network is up by partman), then wipe it,
+ * then drop the Beacon E base-installer.d script. The preseed `\`-continuation
+ * style is kept (each logical step on its own line).
  */
-function partmanEarlyCommand(partitionBeacon: string): string {
+function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): string {
   return (
     `d-i partman/early_command string \\\n` +
     `  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"; \\\n` +
     `  ${partitionBeacon}; \\\n` +
-    `  ${wipeTargetDisk}`
+    `  ${wipeTargetDisk}; \\\n` +
+    `  ${installingDrop}`
+  );
+}
+
+/**
+ * Beacon E dropper, appended to partman/early_command. Writes a tiny executable
+ * into /usr/lib/base-installer.d/ (the d-i hook dir base-installer runs right
+ * after partitioning, e.g. hw-detect's 50install-firmware) that POSTs the
+ * canonical `installing` phase — filling the otherwise-silent multi-minute
+ * debootstrap/apt window on the phone's checklist. The script body IS the
+ * shared debianBeaconCommand (busybox wget --post-file, --timeout=15, wrapped
+ * `( … ) || true`), additionally BACKGROUNDED (`&`) + `exit 0` so it can NEVER
+ * block or fail base-installer. The dropper itself is `( … ) || true` so a
+ * read-only /usr/lib can't abort partman. The beacon's only `"` are escaped for
+ * the double-quoted echo; it contains no `$`/backslash/backtick (the serial is
+ * beaconSafe-sanitized), so no other escaping is needed.
+ *
+ * BYTE-IDENTICAL CONTRACT: mirrored by the Swift twin
+ * (UserData.debianBaseInstallerBeaconDrop). Keep both in lockstep.
+ */
+function debianBaseInstallerBeaconDrop(serial: string): string {
+  const beacon = debianBeaconCommand("installing", serial).replace(/"/g, '\\"');
+  return (
+    `( mkdir -p /usr/lib/base-installer.d; ` +
+    `{ echo '#!/bin/sh'; echo "${beacon} &"; echo 'exit 0'; } ` +
+    `> /usr/lib/base-installer.d/05flagship-beacon; ` +
+    `chmod +x /usr/lib/base-installer.d/05flagship-beacon ) || true`
   );
 }
 
@@ -337,13 +371,13 @@ function partmanEarlyCommand(partitionBeacon: string): string {
  * in a local QEMU d-i run (2026-05-24): plain recipe clears partman, builds the
  * LUKS volume, and proceeds to base install.
  */
-function debianCryptoStorageBlock(partitionBeacon: string): string {
+function debianCryptoStorageBlock(partitionBeacon: string, installingDrop: string): string {
   return `### Partitioning — EXPERIMENTAL LVM-on-LUKS (the locked encrypted default).
 # partman-crypto only reliably preseeds LVM-on-LUKS: unencrypted ESP + /boot,
 # then a LUKS container holding one VG (flagship) with a single root LV.
 d-i partman-auto/method string crypto
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon)}
+${partmanEarlyCommand(partitionBeacon, installingDrop)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto-lvm/new_vg_name string flagship
@@ -400,12 +434,12 @@ d-i partman-auto-crypto/erase_disks boolean false`;
  * userdata.ts's plain path. Still forces the removable-media GRUB so the NVRAM
  * fix is exercised independently of the LUKS work.
  */
-function debianPlainStorageBlock(partitionBeacon: string): string {
+function debianPlainStorageBlock(partitionBeacon: string, installingDrop: string): string {
   return `### Partitioning — DEBUG ESCAPE: plain (unencrypted) ESP + /boot + ext4 root.
 # Not exposed in the CLI/GUI; reproduces a known-good non-LUKS baseline.
 d-i partman-auto/method string regular
 d-i partman-auto/disk string /dev/sda /dev/vda /dev/nvme0n1
-${partmanEarlyCommand(partitionBeacon)}
+${partmanEarlyCommand(partitionBeacon, installingDrop)}
 d-i partman-lvm/device_remove_lvm boolean true
 d-i partman-md/device_remove_md boolean true
 d-i partman-auto/choose_recipe select flagship-plain
