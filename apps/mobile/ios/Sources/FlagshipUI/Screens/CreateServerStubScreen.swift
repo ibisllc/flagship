@@ -11,21 +11,32 @@ import FlagshipCore
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(DeveloperSettings.self) private var dev
+    @Environment(\.flagshipServerClient) private var server
     @Bindable var vm: CreateServerViewModel
     /// Which sub-step of the design phase is showing. The long single-scroll
     /// form is split into one decision per page: 0 identity, 1 boot unlock,
     /// 2 certificate, 3 backups.
     @State private var designStep = 0
     private let designStepCount = 4
+    /// Live install ladder on the delivered page, polling the per-order
+    /// status with the just-minted serial — the page used to show a
+    /// hardcoded "Status: pending" that never moved.
+    @State private var deliveredTimeline: ProvisionTimelineViewModel?
+    /// Fires the moment the delivered page APPEARS (vs `onDelivered`,
+    /// which waits for the "Done" tap) so the host can surface the new
+    /// pending pod on the Home list immediately.
+    var onDeliveredVisible: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onCancel: () -> Void = {}
 
     public init(
         vm: CreateServerViewModel,
+        onDeliveredVisible: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onCancel: @escaping () -> Void = {}
     ) {
         self.vm = vm
+        self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
     }
@@ -518,10 +529,20 @@ public struct CreateServerStubScreen: View {
                     }
                     labeled("Server", serverDomain, mono: true, c: c)
                     labeled("Serial", serial, mono: true, c: c)
-                    Text("Status: pending — the server hasn't phoned home yet.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
+                    ProvisionTimelineView(status: deliveredTimeline?.status)
+                        .padding(.top, FS.space.s1)
                 }
+            }
+            .onAppear {
+                onDeliveredVisible(serverDomain, vm.name, vm.description)
+                deliveredTimeline?.stop()
+                let timeline = ProvisionTimelineViewModel(serial: serial, server: server)
+                deliveredTimeline = timeline
+                timeline.start()
+            }
+            .onDisappear {
+                deliveredTimeline?.stop()
+                deliveredTimeline = nil
             }
             Link(destination: URL(string: "https://flagshipserver.com/docs/install")!) {
                 HStack {

@@ -225,10 +225,20 @@ public struct HomeTab: View {
             // In-app add-server only ever means "provision a new box."
             // Pairing an existing server is an onboarding-only path.
             CreateServerContainer(
+                onDeliveredVisible: { serverDomain, serial, name, description in
+                    // QR-relay delivered and the "boot disk is on the way"
+                    // page is up. Surface the pod on Home RIGHT NOW (no
+                    // navigation) — waiting for the "Done" tap left a
+                    // just-created server invisible until a pull-down
+                    // reconcile, which also stranded it serial-less.
+                    addPendingPod(
+                        name: name, description: description,
+                        fqdn: serverDomain, serial: serial,
+                        navigateHome: false
+                    )
+                },
                 onDelivered: { serverDomain, serial, name, description in
-                    // QR-relay delivered. Add the pod to AppState with
-                    // .pending status — Home now shows it as Pending,
-                    // tapping it opens PendingServerScreen.
+                    // "Done" tapped — idempotent re-upsert, then head home.
                     addPendingPod(name: name, description: description, fqdn: serverDomain, serial: serial)
                 },
                 onCancel: {
@@ -251,7 +261,8 @@ public struct HomeTab: View {
                     fqdn: "",
                     status: .pending,
                     pendingAuthCodeSerial: serial
-                )
+                ),
+                username: app.currentUser
             ) {
                 path.removeAll()
             }
@@ -259,31 +270,33 @@ public struct HomeTab: View {
     }
 
 
-    private func addPendingPod(name: String, description: String, fqdn: String, serial: String) {
+    private func addPendingPod(
+        name: String,
+        description: String,
+        fqdn: String,
+        serial: String,
+        navigateHome: Bool = true
+    ) {
         // Pod identity is unified on the fqdn so this freshly-delivered
         // pending pod and the registered `/pods` pod that arrives once the
         // box goes live collapse to ONE pod (the reconciler / watcher flip it
-        // online in place) — no stuck-pending duplicate. An empty fqdn (no
-        // predicted domain yet) has no stable identity, so we fall back to a
-        // random id for it.
-        let podId = fqdn.isEmpty
-            ? "pod-\(UUID().uuidString.prefix(6).lowercased())"
-            : PodInfo.podId(forFqdn: fqdn)
-        let pod = PodInfo(
-            podId: podId,
+        // online in place) — no stuck-pending duplicate. The UPSERT also makes
+        // this idempotent: it fires the moment the delivered page appears
+        // (so the new server is on the Home list immediately, no pull-down
+        // needed) and again on "Done", and it attaches the serial to a
+        // serial-less twin the reconciler may have surfaced first.
+        let podId = app.upsertPendingPod(
             name: name,
             description: description.isEmpty ? nil : description,
             fqdn: fqdn,
-            status: .pending,
-            pendingAuthCodeSerial: serial
+            serial: serial.isEmpty ? nil : serial
         )
-        app.addPod(pod)
         // Persist so the pending server survives an app restart — it isn't on
         // .com yet (the box hasn't registered), so without this it would vanish
         // from the list and the user couldn't see or cancel the in-flight install.
         if let user = app.currentUser, !user.isEmpty {
             PendingServerStore().add(username: user, .init(
-                podId: pod.podId,
+                podId: podId,
                 name: name,
                 description: description,
                 fqdn: fqdn,
@@ -291,7 +304,7 @@ public struct HomeTab: View {
                 createdAt: Date().timeIntervalSince1970
             ))
         }
-        path.removeAll()
+        if navigateHome { path.removeAll() }
     }
 
     /// #43 + #56 — reconcile the pod list against server truth from ONE
@@ -348,6 +361,7 @@ public struct HomeTab: View {
 }
 
 struct CreateServerContainer: View {
+    let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
@@ -356,9 +370,11 @@ struct CreateServerContainer: View {
     @State private var vm: CreateServerViewModel?
 
     init(
+        onDeliveredVisible: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void = { _, _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
+        self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
     }
@@ -369,6 +385,10 @@ struct CreateServerContainer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
+                    onDeliveredVisible: { serverDomain, name, description in
+                        let serial = vm.lastDeliveredSerial ?? ""
+                        onDeliveredVisible(serverDomain, serial, name, description)
+                    },
                     onDelivered: { serverDomain, name, description in
                         // The serial is recorded inside the VM after
                         // minting; pass it back so the new pod row
@@ -406,7 +426,7 @@ struct PendingPodContainer: View {
     @State private var cancelling: Bool = false
 
     var body: some View {
-        PendingServerScreen(pod: pod) {
+        PendingServerScreen(pod: pod, username: app.currentUser) {
             Task { await cancelOrder() }
         }
     }

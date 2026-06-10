@@ -200,6 +200,97 @@ final class ProvisionTimelineTests: XCTestCase {
         vm.stop()
     }
 
+    // MARK: - Directory fallback (serial-less pod)
+
+    func test_directoryMode_synthesizesPhaseFromPendingEntry() async throws {
+        // A pod surfaced from `/pods` carries no serial — the VM polls the
+        // directory and projects pending[].phase onto the ladder.
+        let directory = PodsDirectoryResponse(
+            username: "harry",
+            pods: [],
+            pending: [PendingPodEntry(
+                orderRef: String(repeating: "ab", count: 32),
+                serverName: "abc",
+                fqdn: "abc.harry.flagship.services",
+                phase: "installing",
+                createdAt: 1
+            )]
+        )
+        let vm = ProvisionTimelineViewModel(
+            username: "harry",
+            fqdn: "ABC.harry.flagship.services",
+            fetchDirectory: { _ in directory },
+            pollIntervalNanos: 1_000_000
+        )
+        vm.start()
+        try await waitUntil(timeout: 2.0) { vm.status?.phase == .installing }
+        XCTAssertFalse(vm.isDone)
+        XCTAssertEqual(vm.status?.serverDomain, "ABC.harry.flagship.services")
+        XCTAssertEqual(vm.status?.history, [])
+        vm.stop()
+    }
+
+    func test_directoryMode_flipsLiveWhenFqdnRegisters_andStops() async throws {
+        let directory = PodsDirectoryResponse(
+            username: "harry",
+            pods: [PodDirectoryEntry(
+                serverDomain: "abc.harry.flagship.services",
+                identityPubKey: String(repeating: "00", count: 32)
+            )],
+            pending: []
+        )
+        let vm = ProvisionTimelineViewModel(
+            username: "harry",
+            fqdn: "abc.harry.flagship.services",
+            fetchDirectory: { _ in directory },
+            pollIntervalNanos: 1_000_000
+        )
+        vm.start()
+        try await waitUntil(timeout: 2.0) { vm.isDone }
+        XCTAssertEqual(vm.status?.phase, .live)
+        vm.stop()
+    }
+
+    func test_directoryMode_revokedRegistrationDoesNotFlipLive() async throws {
+        // A revoked registration is NOT the live box; with the pending order
+        // also gone the ladder stays on the waiting state (the reconciler is
+        // what removes the pod itself).
+        let directory = PodsDirectoryResponse(
+            username: "harry",
+            pods: [PodDirectoryEntry(
+                serverDomain: "abc.harry.flagship.services",
+                identityPubKey: String(repeating: "00", count: 32),
+                revokedAt: 5
+            )],
+            pending: []
+        )
+        let vm = ProvisionTimelineViewModel(
+            username: "harry",
+            fqdn: "abc.harry.flagship.services",
+            fetchDirectory: { _ in directory },
+            pollIntervalNanos: 1_000_000
+        )
+        vm.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertNil(vm.status)
+        XCTAssertFalse(vm.isDone)
+        vm.stop()
+    }
+
+    func test_directoryMode_unreachableDirectoryKeepsWaiting() async throws {
+        let vm = ProvisionTimelineViewModel(
+            username: "harry",
+            fqdn: "abc.harry.flagship.services",
+            fetchDirectory: { _ in nil },
+            pollIntervalNanos: 1_000_000
+        )
+        vm.start()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertNil(vm.status)
+        XCTAssertFalse(vm.isDone)
+        vm.stop()
+    }
+
     // MARK: - Helpers
 
     /// Polls a condition until true or the deadline elapses. The view

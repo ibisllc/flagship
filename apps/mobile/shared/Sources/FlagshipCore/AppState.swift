@@ -305,6 +305,53 @@ public final class AppState {
         if currentPodId == nil { currentPodId = pod.podId }
     }
 
+    /// Idempotent insert of a pending pod, keyed on the fqdn (the same
+    /// identity rule as `upsertRegisteredPod`). The create flow fires this
+    /// the moment an order is DELIVERED — not when the user taps "Done" —
+    /// so the pod can already exist: surfaced serial-less by the `/pods`
+    /// reconciler (the unauthenticated directory never carries the raw
+    /// serial), or re-fired by the delivered page re-appearing. Merging
+    /// attaches this device's locally-known auth-code serial to a
+    /// serial-less twin, restoring the deep-progress/cancel capability the
+    /// order's creator owns; a known serial is never downgraded to nil and
+    /// an online pod always wins. Returns the resolved pod id.
+    @discardableResult
+    public func upsertPendingPod(
+        name: String,
+        description: String? = nil,
+        fqdn: String,
+        serial: String?
+    ) -> String {
+        let target = fqdn.lowercased()
+        let newSerial = (serial?.isEmpty == false) ? serial : nil
+        if !target.isEmpty,
+           let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
+            let old = pods[idx]
+            if old.status == .online { return old.podId }
+            pods[idx] = PodInfo(
+                podId: old.podId,
+                name: name.isEmpty ? old.name : name,
+                description: (description?.isEmpty == false) ? description : old.description,
+                fqdn: old.fqdn,
+                status: .pending,
+                pendingAuthCodeSerial: newSerial ?? old.pendingAuthCodeSerial
+            )
+            return old.podId
+        }
+        let podId = fqdn.isEmpty
+            ? "pod-\(UUID().uuidString.prefix(6).lowercased())"
+            : PodInfo.podId(forFqdn: fqdn)
+        addPod(PodInfo(
+            podId: podId,
+            name: name,
+            description: (description?.isEmpty == false) ? description : nil,
+            fqdn: fqdn,
+            status: .pending,
+            pendingAuthCodeSerial: newSerial
+        ))
+        return podId
+    }
+
     /// Registration is AUTHORITATIVE for online. A server present in the
     /// registered `/pods` inventory is rendered `.online` regardless of any
     /// heartbeat / cert side-channel — those aren't populated for a

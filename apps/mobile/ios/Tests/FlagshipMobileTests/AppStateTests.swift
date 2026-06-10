@@ -141,4 +141,73 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(id, "online-id")
         XCTAssertEqual(s.pods.first?.name, "Home")
     }
+
+    // MARK: - upsertPendingPod (delivered-page instant surface)
+
+    func test_upsertPendingPod_insertsFreshPodKeyedOnFqdn() {
+        let s = AppState()
+        let id = s.upsertPendingPod(
+            name: "abc", description: "box",
+            fqdn: "abc.harry.flagship.services", serial: "SER-1"
+        )
+        XCTAssertEqual(s.pods.count, 1)
+        XCTAssertEqual(id, PodInfo.podId(forFqdn: "abc.harry.flagship.services"))
+        XCTAssertEqual(s.pods.first?.status, .pending)
+        XCTAssertEqual(s.pods.first?.pendingAuthCodeSerial, "SER-1")
+    }
+
+    func test_upsertPendingPod_isIdempotent_noDuplicate() {
+        // Fires on delivered-page appear AND again on "Done".
+        let s = AppState()
+        let first = s.upsertPendingPod(
+            name: "abc", description: nil,
+            fqdn: "abc.harry.flagship.services", serial: "SER-1"
+        )
+        let second = s.upsertPendingPod(
+            name: "abc", description: nil,
+            fqdn: "ABC.harry.flagship.services", serial: "SER-1"
+        )
+        XCTAssertEqual(s.pods.count, 1)
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(s.pods.first?.pendingAuthCodeSerial, "SER-1")
+    }
+
+    func test_upsertPendingPod_attachesSerialToReconcilerSurfacedTwin() {
+        // The /pods reconciler can surface the order serial-less BEFORE the
+        // create flow upserts (the directory only carries opaque orderRefs).
+        // The creating device's upsert must attach its locally-known serial
+        // in place — restoring deep progress + cancel — not duplicate.
+        let s = AppState()
+        s.addPod(PodInfo(
+            podId: PodInfo.podId(forFqdn: "abc.harry.flagship.services"),
+            name: "abc", description: nil,
+            fqdn: "abc.harry.flagship.services",
+            status: .pending, pendingAuthCodeSerial: nil
+        ))
+        let id = s.upsertPendingPod(
+            name: "abc", description: "my box",
+            fqdn: "abc.harry.flagship.services", serial: "SER-9"
+        )
+        XCTAssertEqual(s.pods.count, 1)
+        XCTAssertEqual(id, PodInfo.podId(forFqdn: "abc.harry.flagship.services"))
+        XCTAssertEqual(s.pods.first?.pendingAuthCodeSerial, "SER-9")
+        XCTAssertEqual(s.pods.first?.description, "my box")
+    }
+
+    func test_upsertPendingPod_neverDowngradesKnownSerialOrOnlinePod() {
+        let fqdn = "abc.harry.flagship.services"
+        let s = AppState()
+        s.addPod(PodInfo(
+            podId: "p1", name: "abc", fqdn: fqdn,
+            status: .pending, pendingAuthCodeSerial: "SER-1"
+        ))
+        s.upsertPendingPod(name: "abc", description: nil, fqdn: fqdn, serial: nil)
+        XCTAssertEqual(s.pods.first?.pendingAuthCodeSerial, "SER-1", "nil never clobbers a known serial")
+
+        let online = AppState()
+        online.addPod(PodInfo(podId: "o1", name: "abc", fqdn: fqdn, status: .online))
+        let id = online.upsertPendingPod(name: "abc", description: nil, fqdn: fqdn, serial: "SER-2")
+        XCTAssertEqual(id, "o1")
+        XCTAssertEqual(online.pods.first?.status, .online, "online pod always wins")
+    }
 }

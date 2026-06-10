@@ -12,13 +12,20 @@ import FlagshipAPI
 public struct PendingServerScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.secretMailboxClient) private var mailbox
     let pod: PodInfo
+    /// Account username — required only for the serial-less directory
+    /// fallback (a pod surfaced from `/pods` on a non-creating device
+    /// carries no auth-code serial, so progress rides the unauthenticated
+    /// directory's `pending[].phase` instead of the per-order endpoint).
+    let username: String?
     var onCancelOrder: () -> Void = {}
 
     @State private var timeline: ProvisionTimelineViewModel?
 
-    public init(pod: PodInfo, onCancelOrder: @escaping () -> Void = {}) {
+    public init(pod: PodInfo, username: String? = nil, onCancelOrder: @escaping () -> Void = {}) {
         self.pod = pod
+        self.username = username
         self.onCancelOrder = onCancelOrder
     }
 
@@ -122,11 +129,24 @@ public struct PendingServerScreen: View {
 
     private func startTimeline() {
         timeline?.stop()
-        guard let serial = pod.pendingAuthCodeSerial, !serial.isEmpty else {
+        let vm: ProvisionTimelineViewModel
+        if let serial = pod.pendingAuthCodeSerial, !serial.isEmpty {
+            vm = ProvisionTimelineViewModel(serial: serial, server: server)
+        } else if let username, !username.isEmpty, !pod.fqdn.isEmpty {
+            // Serial-less pod (surfaced from the directory — this device
+            // didn't mint the order): list-level progress from the
+            // unauthenticated `/pods` `pending[].phase`, flipping live
+            // when the fqdn registers.
+            let mailbox = self.mailbox
+            vm = ProvisionTimelineViewModel(
+                username: username,
+                fqdn: pod.fqdn,
+                fetchDirectory: { user in try? await mailbox.fetchPods(username: user) }
+            )
+        } else {
             timeline = nil
             return
         }
-        let vm = ProvisionTimelineViewModel(serial: serial, server: server)
         // Mirror each canonical poll result onto the Watch timeline (the
         // App wires InstallProgressBridge.onStatus → WatchTimelinePublisher).
         let podName = pod.name
