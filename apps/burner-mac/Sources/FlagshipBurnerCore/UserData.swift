@@ -816,6 +816,9 @@ public enum UserData {
 
           This is a Flagship box — your personal cloud. You hold the keys.
 
+          !! DEBUG BUILD — console login 'debug' / password 'flagship' (sudo).
+          !! CHANGE OR REMOVE this user before production.
+
         FLAGSHIP_ISSUE
         # MOTD (post-login) names this specific box. Unquoted heredoc ⇒ vars expand.
         cat > /etc/motd <<FLAGSHIP_MOTD
@@ -825,6 +828,15 @@ public enum UserData {
           flagship.services is a blind pipe; it never sees your data.
 
         FLAGSHIP_MOTD
+
+        # ── DEBUG-ONLY console login. The 'flagship' user is SSH-key-only (no usable
+        #    password by design), which makes on-box debugging (read /boot/flagship-wifi.log,
+        #    journalctl, etc.) impossible at the console. 'debug' is a sudo user with a
+        #    KNOWN password so the owner can log in during bring-up. SECURITY: this is a
+        #    backdoor — the /etc/issue banner warns loudly; REMOVE before production
+        #    (tracked in CLAUDE.md open work).
+        useradd -m -s /bin/bash -G sudo debug 2>/dev/null || true
+        echo 'debug:flagship' | chpasswd 2>/dev/null || true
 
         # Provisioning-status → .com so the phone renders a live install timeline.
         # Best-effort: a failed report NEVER fails the install. (The Alpine live
