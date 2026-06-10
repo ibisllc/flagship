@@ -42,6 +42,18 @@ routes = [
 IDENTITY_PLANE_URL = "https://flagshipserver.com"
 FLAGSHIP_APEX = "flagship.services"
 
+# Service binding to the identity-plane worker. REQUIRED in the reference
+# (same-zone) deployment: boot.flagshipserver.com and flagshipserver.com are
+# both Workers on the flagshipserver.com zone, and a same-zone Worker→Worker
+# call over the PUBLIC hostname is NOT re-dispatched to the target worker — it
+# falls through to a Cloudflare error page (HTML), which is exactly what broke
+# the #27 directory lookup. The binding invokes flagship-com directly. A
+# cloneable deployment whose identity plane is a SEPARATE zone can omit this
+# and rely on IDENTITY_PLANE_URL over the global fetch instead.
+[[services]]
+binding = "IDENTITY_PLANE"
+service = "flagship-com"
+
 # Own D1 instance for the box-sealed leases + secret mailbox + nonce
 # store. Run `wrangler d1 create flagship-boot` and paste the id here.
 [[d1_databases]]

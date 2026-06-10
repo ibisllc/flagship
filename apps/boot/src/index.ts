@@ -44,6 +44,16 @@ export interface BootEnv {
    * (`<server>.<user>.<apex>`). Defaults to "flagship.services".
    */
   FLAGSHIP_APEX?: string;
+  /**
+   * Service binding to the identity-plane worker (flagship-com in the
+   * reference deployment). REQUIRED when the identity plane is a Worker on
+   * the SAME zone as this one — a same-zone Worker→Worker call over the
+   * public hostname is not re-dispatched to the target worker (it returns a
+   * CF error page), so the directory + notify HTTP reads must go through this
+   * binding instead. Absent ⇒ fall back to the global fetch + IDENTITY_PLANE_URL
+   * (correct only when the identity plane is on a different zone / origin).
+   */
+  IDENTITY_PLANE?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
 }
 
 export default {
@@ -65,9 +75,15 @@ export default {
     }
 
     const apex = env.FLAGSHIP_APEX ?? "flagship.services";
-    const directory = new HttpDirectoryClient({ identityPlaneUrl: env.IDENTITY_PLANE_URL, apex });
+    // Same-zone identity plane → call it through the service binding (the
+    // public-hostname fetch is not re-dispatched to the worker). Different-zone
+    // clones leave IDENTITY_PLANE unset and use the global fetch.
+    const planeFetch: typeof fetch | undefined = env.IDENTITY_PLANE
+      ? ((input: RequestInfo | URL, init?: RequestInit) => env.IDENTITY_PLANE!.fetch(input, init)) as typeof fetch
+      : undefined;
+    const directory = new HttpDirectoryClient({ identityPlaneUrl: env.IDENTITY_PLANE_URL, apex, fetchImpl: planeFetch });
     const notify: NotifyPipe = env.NOTIFY_SHARED_SECRET
-      ? new HttpNotifyPipe({ identityPlaneUrl: env.IDENTITY_PLANE_URL, sharedSecret: env.NOTIFY_SHARED_SECRET })
+      ? new HttpNotifyPipe({ identityPlaneUrl: env.IDENTITY_PLANE_URL, sharedSecret: env.NOTIFY_SHARED_SECRET, fetchImpl: planeFetch })
       : new NoopNotifyPipe();
     const nonces: NonceStore = env.DB ? new D1NonceStore(env.DB) : new InMemoryNonceStore();
 
