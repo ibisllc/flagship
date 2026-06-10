@@ -1580,7 +1580,7 @@ BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flags
 BOOT_HOST="\${BOOT_HOST%/}"
 IDENTITY_KEY=/boot/identity.pem
 UNSEAL_HELPER=/bin/flagship-unseal
-RELAY_WINDOW_SECS="\${FLAGSHIP_RELAY_WINDOW_SECS:-180}"
+RELAY_WINDOW_SECS="\${FLAGSHIP_RELAY_WINDOW_SECS:-1800}"
 OUT_UNLOCK=/run/unlock-key
 # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
 # Baked by the bootstrap; default "auto" if the file is absent.

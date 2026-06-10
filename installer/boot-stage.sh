@@ -92,7 +92,7 @@ BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto
 # How long (seconds) to wait for the phone via the relay. The phone is
 # push-woken on the POST, so a few minutes is the human-attention budget
 # for first boot.
-RELAY_WINDOW_SECS="${FLAGSHIP_RELAY_WINDOW_SECS:-180}"
+RELAY_WINDOW_SECS="${FLAGSHIP_RELAY_WINDOW_SECS:-1800}"
 
 if [ ! -f "$IDENTITY_KEY" ]; then
     echo "flagship: missing $IDENTITY_KEY (install must write a PKCS8 PEM)"
