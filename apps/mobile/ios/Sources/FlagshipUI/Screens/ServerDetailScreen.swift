@@ -49,6 +49,7 @@ public struct ServerDetailScreen: View {
                     cert(d: d, c: c)
                     CertAutonomyCard(serverDomain: d.serverFqdn)
                     deviceRow(d: d, c: c)
+                    BootUnlockApprovalCard(serverDomain: d.serverFqdn)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
                     DangerZoneCard(serverDomain: d.serverFqdn)
@@ -329,6 +330,173 @@ struct BootUnlockCard: View {
         } catch {
             toasts.error("Couldn't disable auto-unlock: \(error.localizedDescription)")
         }
+    }
+}
+
+/// Surfaces a box's pending boot-unlock request right on the server page so
+/// the owner can approve it WITHOUT a push. A headless box at boot posts its
+/// unlock request to the identity-plane mailbox; push normally wakes the
+/// phone to approve, but push is unreliable. This card auto-polls the
+/// mailbox, so push is just an accelerator: when a box is waiting, the owner
+/// sees it here and can approve in one tap (the biometric/IRK prompt fires
+/// inside `confirmAndRespond`). A box that's up & unlocked has no pending
+/// request — the card sits idle and renders nothing.
+///
+/// Self-contained like `BootUnlockCard`: builds its coordinator from the
+/// environment (mailbox + active account + Keystore-derived keys) exactly as
+/// `SecretRequestsContainer` does, so the parent screen stays dumb.
+struct BootUnlockApprovalCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var vm: BootUnlockApprovalViewModel?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        Group {
+            if let vm {
+                content(vm: vm, c: c)
+            }
+        }
+        .onAppear {
+            if vm == nil {
+                let m = BootUnlockApprovalViewModel(
+                    serverDomain: serverDomain,
+                    makeCoordinator: makeCoordinator
+                )
+                vm = m
+                m.start()
+            }
+        }
+        .onDisappear { vm?.stop() }
+    }
+
+    @ViewBuilder
+    private func content(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
+        switch vm.state {
+        case .idle:
+            EmptyView()
+        case .waiting(let req):
+            waitingCard(req: req, vm: vm, c: c)
+        case .approving:
+            statusCard(c: c) {
+                HStack(spacing: FS.space.s2) {
+                    ProgressView()
+                    Text("Sending approval…").foregroundColor(c.text)
+                }
+            }
+        case .approved:
+            statusCard(c: c) {
+                Label("Unlock approved — your box should come online shortly.", systemImage: "checkmark.seal.fill")
+                    .font(FS.font.body())
+                    .foregroundColor(c.text)
+            }
+        case .stoppedWaiting:
+            statusCard(c: c) {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Label("Your box stopped waiting", systemImage: "exclamationmark.triangle.fill")
+                        .font(FS.font.body())
+                        .foregroundColor(c.text)
+                    Text("Power-cycle it (unplug power, plug back in) and it'll ask for approval again.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+        case .failed(let msg):
+            statusCard(c: c) {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                    FSGhostButton("Retry", block: true) { Task { await vm.retry() } }
+                        .accessibilityIdentifier("sd-approve-unlock-retry")
+                }
+            }
+        }
+    }
+
+    private func waitingCard(
+        req: SecretRequestCoordinator.VerifiedRequest,
+        vm: BootUnlockApprovalViewModel,
+        c: FSColors
+    ) -> some View {
+        sectionWrap("BOX WAITING", c: c) {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Your box is waiting for your approval to unlock")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(c.text)
+                    if let info = req.deviceInfo {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let ip = info.ip { infoRow("IP", ip, c) }
+                            if let region = info.region { infoRow("Region", region, c) }
+                            if let os = info.os { infoRow("OS", os, c) }
+                            if let host = info.hostname { infoRow("Host", host, c) }
+                        }
+                        .padding(.top, FS.space.s1)
+                    }
+                    Text("Approve only if you recognise this machine. Your phone will ask for Face ID to release the key.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .padding(.top, FS.space.s1)
+                    FSPrimaryButton("Approve unlock", block: true, large: true) {
+                        Task { await vm.approve() }
+                    }
+                    .accessibilityIdentifier("sd-approve-unlock")
+                    .padding(.top, FS.space.s2)
+                }
+            }
+        }
+    }
+
+    private func statusCard<C: View>(c: FSColors, @ViewBuilder content: @escaping () -> C) -> some View {
+        sectionWrap("BOOT UNLOCK", c: c) {
+            FSCard { content() }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionWrap<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            content()
+        }
+    }
+
+    private func infoRow(_ label: String, _ value: String, _ c: FSColors) -> some View {
+        HStack(spacing: FS.space.s2) {
+            Text(label).font(FS.font.caption()).foregroundColor(c.textMuted).frame(width: 56, alignment: .leading)
+            Text(value).font(FS.font.mono()).foregroundColor(c.text)
+        }
+    }
+
+    private func makeCoordinator() -> ApprovalSource? {
+        guard let username = app.currentUser else { return nil }
+        return SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: {
+                try await Keystore.deriveIRK(reason: "Approve your box's boot unlock")
+            },
+            unsealSeedProvider: { serverDomain in
+                var seeds: [Data] = []
+                if let bak = try? await Keystore.deriveBAK(
+                    serverId: serverDomain,
+                    reason: "Unseal the disk key for \(serverDomain)"
+                ) {
+                    seeds.append(bak.rawRepresentation)
+                }
+                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
+                    seeds.append(irk.rawRepresentation)
+                }
+                return seeds
+            },
+            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+        )
     }
 }
 
