@@ -439,6 +439,10 @@ d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
 d-i partman/confirm boolean true
 d-i partman/confirm_nooverwrite boolean true
+# No swap partition in this recipe — auto-answer the "no swap space, return to
+# the partitioning menu?" prompt with No (proceed). The crypto recipe carries
+# the same line; the plain recipe was missing it (the no-LUKS box stopped here).
+d-i partman-basicfilesystems/no_swap boolean false
 # Authorize partman to steamroll a prior install's LVM/crypto instead of
 # stalling (the proven cloud preseed carries these; the burner was missing them).
 d-i partman-lvm/confirm boolean true
