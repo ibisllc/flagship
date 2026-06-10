@@ -22,6 +22,7 @@ import {
 } from "@flagship/protocol";
 import {
   buildAutoinstallUserData,
+  buildBootstrapScript,
   buildWifiSafetyNetBlock,
   buildInitramfsWifiBlock,
   wifiSetupScript,
@@ -765,7 +766,7 @@ describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
     // EngineTests.testWifiSafetyNetBlockIsByteIdenticalToTs pins this SAME sha256.
     const s = buildWifiSafetyNetBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "8f23bc7ecbb197e51e187e9e8af91b992a06cd428e82bf84cb810840bf5300a3",
+      "f7c3c21f0d6f669a887ac88fd906f0aa443790a6c408a9441c7e18402781141f",
     );
   });
 });
@@ -933,7 +934,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     expect(b).toContain("+ 10 ))");
     // The mount RESULT is logged either way, and the /run prefix is seeded in.
     expect(b).toContain('log_stage "boot fs mounted (persistent log live)"');
-    expect(b).toContain('log_stage "boot fs mount FAILED — /run log only (lost on pivot)"');
+    expect(b).toContain('log_stage "boot fs mount FAILED — log stays in /run (survives pivot)"');
     expect(b).toContain("flagship-wifi.log");
   });
 
@@ -961,7 +962,119 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // EngineTests.testInitramfsWifiBlockIsByteIdenticalToTs pins this SAME sha256.
     const s = buildInitramfsWifiBlock("Flagship Test AP", "test-only-not-real");
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "575dae67a3853c164fc1b24c3547b91565ae4b208b2acd265d5e49d0bbb3b1c5",
+      "5a0ad7e25ec0e8bd6b44082797d4dba6838ce025f11947b7cd2d5d69732cb444",
+    );
+  });
+});
+
+// The 2026-06-09 live #27 root-cause: four defects found on real hardware
+// (Intel AX211, Debian 13, encrypted Wi-Fi-only). These pin the four fixes.
+describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ensure, safety-net self-heal", () => {
+  function encBootstrap(opts: Record<string, unknown> = {}): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return extractBootstrap(
+      buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }),
+    );
+  }
+
+  it("FIX 1 — the build hook stages the driver's whole module dir (op-modes are reverse deps)", () => {
+    // manual_add_modules iwlwifi does NOT stage iwlmvm (request_module'd at
+    // runtime) — the initrd lacked it, iwlwifi loaded firmware but created no
+    // interface, and stayed wedged into the full OS too.
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain('d=$(modinfo -n "$DRV" 2>/dev/null)');
+    expect(b).toContain("*/kernel/*)");
+    expect(b).toContain('sub="kernel/${d#*/kernel/}"');
+    expect(b).toContain('sub=$(dirname "$sub")');
+    expect(b).toContain('if copy_modules_dir "$sub" 2>/dev/null; then blog "module dir staged: $sub"; else blog "module dir STAGING FAILED: $sub"; fi');
+    // The no-DRV wireless-class fallback is kept.
+    expect(b).toContain("copy_modules_dir kernel/drivers/net/wireless");
+  });
+
+  it("FIX 2 — the Wi-Fi premount belt-and-braces-loads the op-mode + writes /etc/resolv.conf", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // (a) op-mode load right after the driver modprobe (unquoted heredoc ⇒ \$).
+    expect(b).toContain('if [ "\\$DRV" = iwlwifi ]; then');
+    expect(b).toContain("for m in iwlmvm iwlmld iwldvm; do");
+    expect(b).toContain('modprobe "\\$m" 2>/dev/null && log_stage "op-mode loaded: \\$m" && break');
+    // (b) DNS: klibc ipconfig records DNS in /run/net-<if>.conf but nothing
+    // writes /etc/resolv.conf — tonight's actual failure (curl (6)).
+    expect(b).toContain('[ -f "/run/net-\\$IF.conf" ] && . "/run/net-\\$IF.conf"');
+    expect(b).toContain('[ -n "\\$_d" ] && [ "\\$_d" != "0.0.0.0" ] && _dns="\\$_dns \\$_d"');
+    expect(b).toContain('echo "nameserver \\$_d" >> /etc/resolv.conf');
+    expect(b).toContain('log_stage "dns configured:\\$_dns"');
+    expect(b).toContain("printf 'nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf");
+    expect(b).toContain('log_stage "dns fallback: public resolvers"');
+    // The misleading wording is gone: the /run log SURVIVES the pivot
+    // (initramfs-tools moves /run onto the root).
+    expect(b).not.toContain("lost on pivot)\"");
+    expect(b).toContain('log_stage "boot fs mount FAILED — log stays in /run (survives pivot)"');
+  });
+
+  it("FIX 3 — the unlock script self-ensures net (wired path) + DNS (both paths)", () => {
+    // The wired initramfs had NO networking bring-up at all (no ip=dhcp, no
+    // configure_networking) — present on EVERY LUKS burn, wired or Wi-Fi.
+    const b = encBootstrap();
+    // The hook stages `ip` so the route check always has its tool.
+    expect(b).toContain("copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip");
+    // net-ensure: route-check FIRST (Wi-Fi path skips instantly), then link-up
+    // + DHCP the first carrier interface, bounded + best-effort.
+    expect(b).toContain("if ! ip route 2>/dev/null | grep -q '^default'; then");
+    expect(b).toContain('echo "flagship: no default route — bringing up interfaces for DHCP"');
+    expect(b).toContain('if [ "$IFW" = "lo" ]; then continue; fi');
+    expect(b).toContain('if [ "$(cat "/sys/class/net/$IFW/carrier" 2>/dev/null || echo 0)" != "1" ]; then continue; fi');
+    expect(b).toContain('ipconfig -t 20 "$IFW" 2>/dev/null || true');
+    expect(b).toContain('udhcpc -i "$IFW" -n -q -t 5 2>/dev/null || true');
+    // resolv-ensure runs on BOTH paths, sourcing every /run/net-*.conf.
+    expect(b).toContain("if [ ! -s /etc/resolv.conf ]; then");
+    expect(b).toContain("for _nc in /run/net-*.conf; do");
+    expect(b).toContain('echo "flagship: dns configured:$_rdns"');
+    expect(b).toContain('echo "flagship: dns fallback: public resolvers"');
+    // Both run before the unlock dispatch.
+    expect(b.indexOf("net-ensure")).toBeLessThan(b.indexOf('echo "flagship: boot-unlock mode = $BOOT_UNLOCK_MODE"'));
+    // The Wi-Fi-only blocks stay ABSENT on a wired burn.
+    expect(b).not.toContain("init-premount/flagship-wifi");
+    expect(b).not.toContain("flagship-wifi-safetynet");
+  });
+
+  it("FIX 4 — the full-OS safety-net persists the initramfs log + reloads idle wireless modules", () => {
+    const b = encBootstrap({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // (a) the /run log survives the pivot — persist it under /var/log.
+    expect(b).toContain("cp /run/flagship-wifi.log /var/log/flagship-wifi-initramfs.log 2>/dev/null || true");
+    // (b) before giving up on "no wireless interface": reload every loaded
+    // wireless driver with refcount 0 (the loaded-but-interface-less case),
+    // re-scan, and only then give up.
+    expect(b).toContain('echo "[safety-net] no wireless interface — reloading idle wireless modules"');
+    expect(b).toContain('modinfo -n "$m" 2>/dev/null | grep -q /drivers/net/wireless/ || continue');
+    expect(b).toContain('[ "$(cat "/sys/module/$m/refcnt" 2>/dev/null || echo 1)" = "0" ] || continue');
+    expect(b).toContain('modprobe -r "$m" 2>/dev/null || true');
+    const reload = b.indexOf("reloading idle wireless modules");
+    const giveUp = b.indexOf("[safety-net] no wireless interface; giving up");
+    expect(reload).toBeGreaterThan(0);
+    expect(giveUp).toBeGreaterThan(reload);
+  });
+
+  it("the encrypted-off (no-LUKS) bootstrap is untouched — no unlock script at all", () => {
+    const b = encBootstrap({ encryptRoot: false });
+    expect(b).not.toContain("net-ensure");
+    expect(b).not.toContain("resolv.conf");
+    expect(b).not.toContain("local-top/flagship-unlock");
+    expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
+  });
+
+  it("the encrypted wired bootstrap is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
+    // EngineTests.testEncryptedWiredBootstrapIsByteIdenticalToTs pins this SAME
+    // sha256 — the unlock hook/premount (which fix 3 changed on every LUKS
+    // burn) had no cross-language pin before.
+    const s = buildBootstrapScript({
+      ref: "main",
+      repoUrl: "https://github.com/ibisllc/flagship.git",
+      encryptRoot: true,
+      bootUnlockMode: "auto",
+      bootHost: DEFAULT_BOOT_HOST,
+    });
+    expect(createHash("sha256").update(s).digest("hex")).toBe(
+      "3b2fa9f6507a4a5614878c0d97ce49b22341c8df06b8907f01b27dd7a10e92a9",
     );
   });
 });

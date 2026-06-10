@@ -1117,6 +1117,9 @@ public enum UserData {
         set -u
         exec >>/var/log/flagship-wifi-safetynet.log 2>&1
         date
+        # The initramfs premount's /run log survives the pivot (initramfs-tools moves
+        # /run onto the root) — persist a copy where logs belong.
+        cp /run/flagship-wifi.log /var/log/flagship-wifi-initramfs.log 2>/dev/null || true
         . /etc/flagship/wifi.env 2>/dev/null || exit 0
         SSID="$(printf '%s' "${FLAGSHIP_WIFI_SSID_B64:-}" | base64 -d 2>/dev/null)"
         PSK="$(printf '%s' "${FLAGSHIP_WIFI_PSK_B64:-}" | base64 -d 2>/dev/null)"
@@ -1134,6 +1137,25 @@ public enum UserData {
           IF="$(basename "$(dirname "$d")")"
           break
         done
+        if [ -z "$IF" ]; then
+          # A loaded wireless core with refcount 0 and no interface = its runtime-
+          # requested op-mode module (e.g. iwlmvm) never loaded; a reload re-requests it.
+          echo "[safety-net] no wireless interface — reloading idle wireless modules"
+          for m in /sys/module/*; do
+            m="${m##*/}"
+            modinfo -n "$m" 2>/dev/null | grep -q /drivers/net/wireless/ || continue
+            [ "$(cat "/sys/module/$m/refcnt" 2>/dev/null || echo 1)" = "0" ] || continue
+            echo "[safety-net] reloading $m"
+            modprobe -r "$m" 2>/dev/null || true
+            modprobe "$m" 2>/dev/null || true
+          done
+          sleep 5
+          for d in /sys/class/net/*/wireless; do
+            [ -e "$d" ] || continue
+            IF="$(basename "$(dirname "$d")")"
+            break
+          done
+        fi
         [ -n "$IF" ] || { echo "[safety-net] no wireless interface; giving up"; exit 0; }
         echo "[safety-net] interface=$IF ssid=$SSID"
         CONF=/run/flagship-wifi-safetynet.conf
@@ -1285,6 +1307,18 @@ public enum UserData {
         fi
         manual_add_modules cfg80211 2>/dev/null || blog "module STAGING FAILED: cfg80211"
         manual_add_modules mac80211 2>/dev/null || blog "module STAGING FAILED: mac80211"
+        # Op-mode modules (iwlmvm/iwlmld/iwldvm/...) are REVERSE deps of the core
+        # driver — request_module'd at runtime, invisible to manual_add_modules —
+        # without them the core loads firmware but never creates an interface. Stage
+        # the driver's whole module directory subtree so every op-mode + its deps land.
+        d=$(modinfo -n "$DRV" 2>/dev/null)
+        case "$d" in
+          */kernel/*)
+            sub="kernel/${d#*/kernel/}"
+            sub=$(dirname "$sub")
+            if copy_modules_dir "$sub" 2>/dev/null; then blog "module dir staged: $sub"; else blog "module dir STAGING FAILED: $sub"; fi
+            ;;
+        esac
         mkdir -p "$DESTDIR/lib/firmware" 2>/dev/null || true
         for r in regulatory.db regulatory.db.p7s; do
           if [ -f "/lib/firmware/$r" ] && cp -a "/lib/firmware/$r" "$DESTDIR/lib/firmware/" 2>/dev/null; then
@@ -1381,7 +1415,7 @@ public enum UserData {
           cat "\$FLAGSHIP_WIFI_LOG" >> "\$FLAGSHIP_BOOTMNT/flagship-wifi.log" 2>/dev/null || true
           log_stage "boot fs mounted (persistent log live)"
         else
-          log_stage "boot fs mount FAILED — /run log only (lost on pivot)"
+          log_stage "boot fs mount FAILED — log stays in /run (survives pivot)"
         fi
 
         # Re-detect the wl* interface at boot (the name can differ from build time).
@@ -1401,6 +1435,13 @@ public enum UserData {
         log_stage "driver resolved: \${DRV:-none}"
         [ -n "\$DRV" ] && modprobe "\$DRV" 2>/dev/null || true
         log_stage "modprobe done (driver=\${DRV:-none})"
+        # iwlwifi's op-mode (iwlmvm/iwlmld/iwldvm) is request_module'd at runtime; a
+        # miss leaves the core loaded with firmware but no interface. Belt-and-braces.
+        if [ "\$DRV" = iwlwifi ]; then
+          for m in iwlmvm iwlmld iwldvm; do
+            modprobe "\$m" 2>/dev/null && log_stage "op-mode loaded: \$m" && break
+          done
+        fi
         ip link set "\$IF" up 2>/dev/null || true
         log_stage "link up requested on \$IF (oper=\$(cat /sys/class/net/\$IF/operstate 2>/dev/null || echo unknown))"
 
@@ -1437,6 +1478,28 @@ public enum UserData {
           log_stage "DHCP result: assigned \$_ip on \$IF (route=\$(ip route show default 2>/dev/null | head -1))"
         else
           log_stage "DHCP result: FAILED — no IPv4 address on \$IF"
+        fi
+        # klibc ipconfig records DNS in /run/net-<if>.conf but NOTHING writes
+        # /etc/resolv.conf in the initramfs — the unlock curls would die on name
+        # resolution even with the route up.
+        if [ -n "\$_ip" ]; then
+          IPV4DNS0=""
+          IPV4DNS1=""
+          [ -f "/run/net-\$IF.conf" ] && . "/run/net-\$IF.conf" 2>/dev/null
+          _dns=""
+          for _d in "\$IPV4DNS0" "\$IPV4DNS1"; do
+            [ -n "\$_d" ] && [ "\$_d" != "0.0.0.0" ] && _dns="\$_dns \$_d"
+          done
+          : > /etc/resolv.conf 2>/dev/null || true
+          for _d in \$_dns; do
+            echo "nameserver \$_d" >> /etc/resolv.conf 2>/dev/null || true
+          done
+          if [ -s /etc/resolv.conf ]; then
+            log_stage "dns configured:\$_dns"
+          else
+            printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf 2>/dev/null || true
+            log_stage "dns fallback: public resolvers"
+          fi
         fi
         log_stage "bring-up attempt complete on \$IF"
 
@@ -1641,6 +1704,19 @@ public enum UserData {
         copy_exec /usr/bin/curl /bin/curl
         copy_exec /usr/bin/xxd /bin/xxd
         copy_exec /bin/sed /bin/sed 2>/dev/null || copy_exec /usr/bin/sed /bin/sed
+        # ip powers the premount's net-ensure (route check / link up / carrier read);
+        # a wired initrd does not stage it otherwise.
+        copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip
+        # Resolver plumbing for the glibc-linked curl: copy_exec's ldd walk never
+        # sees the dlopen'd NSS modules, and the initrd ships no nsswitch.conf —
+        # proven on metal: route + /etc/resolv.conf up yet curl(6) could-not-resolve.
+        # On glibc >= 2.34 dns/files are built into libc and the .so files are
+        # absent; the guards make that a no-op.
+        mkdir -p "${DESTDIR}/etc"
+        echo "hosts: files dns" > "${DESTDIR}/etc/nsswitch.conf"
+        for _nss in /lib/x86_64-linux-gnu/libnss_dns.so.2 /lib/x86_64-linux-gnu/libnss_files.so.2 /lib/x86_64-linux-gnu/libresolv.so.2; do
+          [ -e "$_nss" ] && copy_exec "$_nss" || true
+        done
         \(lvmCopyExec)
         # Identity + boot facts the premount script signs/reads with.
         mkdir -p "${DESTDIR}/boot"
@@ -1865,6 +1941,68 @@ public enum UserData {
             echo "flagship: relay window (${RELAY_WINDOW_SECS}s) elapsed with no phone reply"
             return 1
         }
+
+        # ── net-ensure (the wired path) ─────────────────────────────────────────────
+        # The initramfs brings up NO network for this script by itself (no ip=dhcp
+        # kernel param, no configure_networking) — the relay curls below would fail on
+        # every wired LUKS box. Bring up each non-lo interface and DHCP the first one
+        # with carrier. On Wi-Fi the init-premount already routed: the route check
+        # skips this instantly. Fully best-effort + wall-clock bounded (~45s worst
+        # case) — it can never fail or hang the boot.
+        if ! ip route 2>/dev/null | grep -q '^default'; then
+            echo "flagship: no default route — bringing up interfaces for DHCP"
+            for IFW in /sys/class/net/*; do
+                IFW="${IFW##*/}"
+                if [ "$IFW" = "lo" ]; then continue; fi
+                ip link set "$IFW" up 2>/dev/null || true
+            done
+            sleep 3
+            for IFW in /sys/class/net/*; do
+                IFW="${IFW##*/}"
+                if [ "$IFW" = "lo" ]; then continue; fi
+                if [ "$(cat "/sys/class/net/$IFW/carrier" 2>/dev/null || echo 0)" != "1" ]; then continue; fi
+                echo "flagship: carrier on $IFW — requesting DHCP"
+                if command -v ipconfig >/dev/null 2>&1; then
+                    ipconfig -t 20 "$IFW" 2>/dev/null || true
+                else
+                    udhcpc -i "$IFW" -n -q -t 5 2>/dev/null || true
+                fi
+                if ip route 2>/dev/null | grep -q '^default'; then
+                    echo "flagship: default route up via $IFW"
+                else
+                    echo "flagship: DHCP on $IFW finished without a default route"
+                fi
+                break
+            done
+        fi
+
+        # ── resolv-ensure (BOTH paths) ──────────────────────────────────────────────
+        # klibc ipconfig records DNS in /run/net-<if>.conf but NOTHING writes
+        # /etc/resolv.conf in the initramfs — the relay curls fail with "could not
+        # resolve host" even with the route up. Source every recorded lease; fall back
+        # to public resolvers.
+        if [ ! -s /etc/resolv.conf ]; then
+            _rdns=""
+            for _nc in /run/net-*.conf; do
+                if [ ! -f "$_nc" ]; then continue; fi
+                IPV4DNS0=""
+                IPV4DNS1=""
+                . "$_nc" 2>/dev/null || true
+                for _d in "$IPV4DNS0" "$IPV4DNS1"; do
+                    if [ -n "$_d" ] && [ "$_d" != "0.0.0.0" ]; then _rdns="$_rdns $_d"; fi
+                done
+            done
+            : > /etc/resolv.conf 2>/dev/null || true
+            for _d in $_rdns; do
+                echo "nameserver $_d" >> /etc/resolv.conf 2>/dev/null || true
+            done
+            if [ -s /etc/resolv.conf ]; then
+                echo "flagship: dns configured:$_rdns"
+            else
+                printf 'nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n' > /etc/resolv.conf 2>/dev/null || true
+                echo "flagship: dns fallback: public resolvers"
+            fi
+        fi
 
         # ── Two-tier dispatch (docs/security-phone-as-unlock-endpoint.md §7a.1) ────
         # The legacy plaintext-consume path is RETIRED — never a fallback here.

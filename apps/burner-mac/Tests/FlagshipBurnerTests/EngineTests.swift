@@ -428,7 +428,7 @@ final class EngineTests: XCTestCase {
         let block = UserData.wifiSafetyNetBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
         let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "8f23bc7ecbb197e51e187e9e8af91b992a06cd428e82bf84cb810840bf5300a3",
+            hash, "f7c3c21f0d6f669a887ac88fd906f0aa443790a6c408a9441c7e18402781141f",
             "Swift wifiSafetyNetBlock drifted from the TS twin. Block:\n\(block)")
     }
 
@@ -591,7 +591,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains(#"log_stage "premount start (ssid baked)""#))
         XCTAssertTrue(b.contains("while [ ! -e /dev/disk/by-label/FLAGSHIP_BOOT ]; do"))
         XCTAssertTrue(b.contains(#"log_stage "boot fs mounted (persistent log live)""#))
-        XCTAssertTrue(b.contains(#"log_stage "boot fs mount FAILED — /run log only (lost on pivot)""#))
+        XCTAssertTrue(b.contains(#"log_stage "boot fs mount FAILED — log stays in /run (survives pivot)""#))
         let startLog = b.range(of: #"log_stage "premount start (ssid baked)""#)!
         let mountAt = b.range(of: "mount /dev/disk/by-label/FLAGSHIP_BOOT")!
         XCTAssertTrue(startLog.lowerBound < mountAt.lowerBound)
@@ -622,8 +622,84 @@ final class EngineTests: XCTestCase {
         let block = UserData.initramfsWifiBlock(ssid: "Flagship Test AP", password: "test-only-not-real")
         let hash = SHA256.hash(data: Data(block.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "575dae67a3853c164fc1b24c3547b91565ae4b208b2acd265d5e49d0bbb3b1c5",
+            hash, "5a0ad7e25ec0e8bd6b44082797d4dba6838ce025f11947b7cd2d5d69732cb444",
             "Swift initramfsWifiBlock drifted from the TS twin. Block:\n\(block)")
+    }
+
+    // MARK: - #27 root-cause fixes (2026-06-09 live hardware session)
+
+    /// The encrypted WIRED bootstrap must be BYTE-IDENTICAL to the TS twin —
+    /// userdata.test.ts pins this SAME sha256. The unlock hook/premount (which
+    /// the net-ensure/resolv-ensure fix changed on every LUKS burn, wired or
+    /// Wi-Fi) had no cross-language pin before.
+    func testEncryptedWiredBootstrapIsByteIdenticalToTs() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(
+            hash, "3b2fa9f6507a4a5614878c0d97ce49b22341c8df06b8907f01b27dd7a10e92a9",
+            "Swift encrypted wired bootstrap drifted from the TS twin.")
+    }
+
+    /// FIX 1+2: the build hook stages the driver's whole module dir (op-modes
+    /// like iwlmvm are REVERSE deps, request_module'd at runtime, invisible to
+    /// manual_add_modules) and the boot premount belt-and-braces-loads the
+    /// op-mode + writes /etc/resolv.conf after DHCP (klibc ipconfig records DNS
+    /// in /run/net-<if>.conf but nothing writes resolv.conf in the initramfs).
+    func testInitramfsWifiOpModeAndDnsFixes() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: true, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        XCTAssertTrue(b.contains(#"d=$(modinfo -n "$DRV" 2>/dev/null)"#))
+        XCTAssertTrue(b.contains(#"sub="kernel/${d#*/kernel/}""#))
+        XCTAssertTrue(b.contains(#"if copy_modules_dir "$sub" 2>/dev/null; then blog "module dir staged: $sub"; else blog "module dir STAGING FAILED: $sub"; fi"#))
+        XCTAssertTrue(b.contains(#"if [ "\$DRV" = iwlwifi ]; then"#))
+        XCTAssertTrue(b.contains(#"modprobe "\$m" 2>/dev/null && log_stage "op-mode loaded: \$m" && break"#))
+        XCTAssertTrue(b.contains(#"[ -f "/run/net-\$IF.conf" ] && . "/run/net-\$IF.conf""#))
+        XCTAssertTrue(b.contains(#"echo "nameserver \$_d" >> /etc/resolv.conf"#))
+        XCTAssertTrue(b.contains(#"log_stage "dns configured:\$_dns""#))
+        XCTAssertTrue(b.contains(#"log_stage "dns fallback: public resolvers""#))
+    }
+
+    /// FIX 3: the unlock premount self-ensures net (wired path: link-up + DHCP
+    /// the first carrier interface, route-checked first so Wi-Fi skips) + DNS
+    /// (both paths), and the unlock hook stages `ip`. Present on every LUKS
+    /// burn; the Wi-Fi-only blocks stay absent on wired.
+    func testUnlockPremountNetAndResolvEnsure() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        XCTAssertTrue(b.contains("copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip"))
+        XCTAssertTrue(b.contains("if ! ip route 2>/dev/null | grep -q '^default'; then"))
+        XCTAssertTrue(b.contains("echo \"flagship: no default route — bringing up interfaces for DHCP\""))
+        XCTAssertTrue(b.contains(#"if [ "$(cat "/sys/class/net/$IFW/carrier" 2>/dev/null || echo 0)" != "1" ]; then continue; fi"#))
+        XCTAssertTrue(b.contains(#"ipconfig -t 20 "$IFW" 2>/dev/null || true"#))
+        XCTAssertTrue(b.contains(#"udhcpc -i "$IFW" -n -q -t 5 2>/dev/null || true"#))
+        XCTAssertTrue(b.contains("if [ ! -s /etc/resolv.conf ]; then"))
+        XCTAssertTrue(b.contains("for _nc in /run/net-*.conf; do"))
+        XCTAssertTrue(b.contains("echo \"flagship: dns fallback: public resolvers\""))
+        let ensureAt = b.range(of: "net-ensure")!.lowerBound
+        let dispatchAt = b.range(of: "echo \"flagship: boot-unlock mode = $BOOT_UNLOCK_MODE\"")!.lowerBound
+        XCTAssertTrue(ensureAt < dispatchAt)
+        XCTAssertFalse(b.contains("init-premount/flagship-wifi"))
+        XCTAssertFalse(b.contains("flagship-wifi-safetynet"))
+        // The no-LUKS path stays untouched — no unlock script at all.
+        let plain = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: false)
+        XCTAssertFalse(plain.contains("net-ensure"))
+        XCTAssertFalse(plain.contains("resolv.conf"))
+    }
+
+    /// FIX 4: the full-OS safety-net persists the initramfs /run log (it
+    /// survives the pivot) and, before giving up on "no wireless interface",
+    /// reloads every loaded refcount-0 wireless driver (the loaded-but-
+    /// interface-less case: the op-mode module never loaded).
+    func testSafetyNetPersistsLogAndSelfHeals() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: false, wifiSSID: "HomeNet", wifiPassword: "s3cret")
+        XCTAssertTrue(b.contains("cp /run/flagship-wifi.log /var/log/flagship-wifi-initramfs.log 2>/dev/null || true"))
+        XCTAssertTrue(b.contains("echo \"[safety-net] no wireless interface — reloading idle wireless modules\""))
+        XCTAssertTrue(b.contains(#"modinfo -n "$m" 2>/dev/null | grep -q /drivers/net/wireless/ || continue"#))
+        XCTAssertTrue(b.contains(#"[ "$(cat "/sys/module/$m/refcnt" 2>/dev/null || echo 1)" = "0" ] || continue"#))
+        XCTAssertTrue(b.contains(#"modprobe -r "$m" 2>/dev/null || true"#))
+        let reload = b.range(of: "reloading idle wireless modules")!.lowerBound
+        let giveUp = b.range(of: "[safety-net] no wireless interface; giving up")!.lowerBound
+        XCTAssertTrue(reload < giveUp)
     }
 
     // MARK: - Debian (debian-installer / d-i) preseed
