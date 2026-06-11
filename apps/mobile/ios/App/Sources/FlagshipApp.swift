@@ -35,12 +35,17 @@ struct FlagshipApp: App {
         // STK-signed fingerprint when a verified pin exists (A′ phase 4).
         // SSE + the browser-stream WebSocket share the same session, so
         // they're covered too. No pin ⇒ default validation stands.
+        let pinnedSession = BoxPinnedURLSession.make(
+            pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
+        )
         self.liveClient = LiveScreensClient(
-            urlSession: BoxPinnedURLSession.make(
-                pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
-            ),
+            urlSession: pinnedSession,
             store: store
         )
+        // The lock/power-off + dead-man routes are signature-authed daemon
+        // endpoints on the SAME box; share the box-pinned session so a rogue
+        // `.com` cert can't intercept a power-off / affirmation either.
+        self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -182,6 +187,11 @@ struct FlagshipApp: App {
     // SecretRequestsContainer can fetch + answer the box's boot-secret
     // requests; Mock (empty inbox) in dev/preview.
     private let mockMailbox = MockSecretMailboxClient()
+    // Lock/power-off + dead-man box-direct client. Live (box-pinned session)
+    // in production; the in-process Mock (records sends, never auto-affirms)
+    // in dev/preview/demo.
+    private let mockLockPower = MockLockPowerClient()
+    private let liveLockPower: any LockPowerClient
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -201,6 +211,9 @@ struct FlagshipApp: App {
     private var activeMailbox: any SecretMailboxClient {
         dev.useLiveClient ? liveMailbox : mockMailbox
     }
+    private var activeLockPower: any LockPowerClient {
+        dev.useLiveClient ? liveLockPower : mockLockPower
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -216,6 +229,7 @@ struct FlagshipApp: App {
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pairingRelayClient, pairingRelay)
                 .environment(\.secretMailboxClient, activeMailbox)
+                .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)

@@ -107,18 +107,21 @@ public final class CreateServerViewModel {
     private let relay: any QrRelayClient
     private let bootUnlock: BootUnlockStore
     private let draftStore: CreateServerDraftStore
+    private let diskEncryption: DiskEncryptionStore
 
     public init(
         username: String,
         server: any FlagshipServerClient,
         relay: any QrRelayClient,
         bootUnlock: BootUnlockStore = BootUnlockStore(),
-        draftStore: CreateServerDraftStore = CreateServerDraftStore()
+        draftStore: CreateServerDraftStore = CreateServerDraftStore(),
+        diskEncryption: DiskEncryptionStore = DiskEncryptionStore()
     ) {
         self.username = username
         self.server = server
         self.relay = relay
         self.bootUnlock = bootUnlock
+        self.diskEncryption = diskEncryption
         self.draftStore = draftStore
         // Restore the user's last-typed draft so flipping away from the
         // screen mid-fill doesn't wipe their inputs. Hydrate AFTER the
@@ -195,6 +198,10 @@ public final class CreateServerViewModel {
             // Remember the boot-unlock choice locally so the approval screen
             // (deposit-or-not) and server detail (kill switch) can act on it.
             bootUnlock.setMode(bootUnlockMode, for: blob.blob.serverDomain)
+            // Remember the disk-encryption choice so the server-detail
+            // lock/power buttons can pick the right labels ("Lock and turn
+            // off" for LUKS vs "Turn off" for a non-LUKS box).
+            diskEncryption.setLuks(encryptDisk, for: blob.blob.serverDomain)
             // Clear the draft-only metadata so a fresh "Add a server" starts
             // empty rather than ghost-restoring yesterday's text.
             draftStore.reset()

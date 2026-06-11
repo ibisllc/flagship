@@ -84,6 +84,8 @@ public struct ServerDetailScreen: View {
                     deviceRow(d: d, c: c)
                     BootUnlockApprovalCard(serverDomain: d.serverFqdn)
                     BootUnlockCard(serverDomain: d.serverFqdn)
+                    LockPowerCard(serverDomain: d.serverFqdn)
+                    DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     timeline(d: d, c: c)
                     if deadServer {
                         // Registered but never came online: offer the

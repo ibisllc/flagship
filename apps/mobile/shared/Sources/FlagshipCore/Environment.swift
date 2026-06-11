@@ -88,6 +88,21 @@ public extension EnvironmentValues {
     }
 }
 
+/// Box-direct delivery for the lock/power-off + dead-man envelopes. Dials
+/// the box's signature-authed daemon routes (`/api/power`,
+/// `/api/deadman/*`) over the box-pinned session. Defaults to the in-process
+/// Mock (records sends, never auto-affirms) so previews/tests are inert.
+private struct LockPowerClientKey: EnvironmentKey {
+    static let defaultValue: any LockPowerClient = MockLockPowerClient()
+}
+
+public extension EnvironmentValues {
+    var lockPowerClient: any LockPowerClient {
+        get { self[LockPowerClientKey.self] }
+        set { self[LockPowerClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed
