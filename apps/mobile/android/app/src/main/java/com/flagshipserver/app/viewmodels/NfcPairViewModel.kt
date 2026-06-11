@@ -4,14 +4,25 @@
 //
 //   Idle
 //     ─ startTap(activity) ─►  ReadingTag
-//                                ├─ ok ─► AskingForWifi(boxLabel)
-//                                └─ err ─► Failure(message)
+//                                ├─ ok ─► AskingForWifi(confirmation)
+//                                └─ err ─► Failure(message, fallback?)
 //
 //   AskingForWifi
 //     ─ sendSealedWifi() ─►  Sealing
 //                              ─► Depositing
 //                                   ├─ ok ─► Success(message)
 //                                   └─ err ─► Failure(message)
+//     ─ >30 s after the tap ─► Failure (session-lock expired; the box
+//                              has rolled its keys — re-tap required)
+//
+//   Failure(fallback available) ─ startLedSasFallback() ─► LedSasFallback
+//
+// LedSasFallback is the Q2-locked degrade seam: NFC read failed or is
+// unavailable, so pairing continues over LAN/cloud confirmed by the
+// box's LED-SAS blink pattern. The capture/decode UI is N-PHONE-6; this
+// phase is its mount point. Security failures (signature mismatch)
+// NEVER route here — fail-closed is for security, absent hardware is
+// just UX.
 //
 // The view model holds the freshly-minted X25519 ephemeral private key
 // alongside the verified payload between ReadingTag and Sealing so the
@@ -25,13 +36,19 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.api.NfcRendezvousClient
+import com.flagshipserver.app.core.NfcPairHex
 import com.flagshipserver.app.core.NfcPairReader
 import com.flagshipserver.app.core.NfcPairReaderError
 import com.flagshipserver.app.core.NfcPairReaderException
+import com.flagshipserver.app.core.PAIR_SESSION_LOCK_MS
 import com.flagshipserver.app.core.PairPayload
 import com.flagshipserver.app.core.WiFiConfig
+import com.flagshipserver.app.core.buildWifiDepositBlob
+import com.flagshipserver.app.core.deriveSAS
 import com.flagshipserver.app.core.deriveSessionKey
 import com.flagshipserver.app.core.deriveSharedSecret
+import com.flagshipserver.app.core.encodeLedSas
+import com.flagshipserver.app.core.encodeSasForDisplay
 import com.flagshipserver.app.core.sealWiFiConfig
 import com.google.crypto.tink.subtle.X25519
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,15 +56,40 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Everything the post-tap confirmation screen shows. `sasDisplay` +
+ * `sasLed` are the optional SAS glance (design refinement §10):
+ * proximity already authenticated the key, but in a noisy room (three
+ * boxes in pairing mode) the user can match the LED pattern. `suffix6`
+ * is the two-box disambiguation hint (refinement §9).
+ */
+data class PairConfirmation(
+    val boxLabel: String,
+    val suffix6: String,
+    /** First 6 hex chars of the SAS — on-screen glance. */
+    val sasDisplay: String,
+    /** 9-pulse RGBY sequence the box's LED blinks for the same SAS. */
+    val sasLed: String,
+    /** Wall-clock ms when the box's 30 s session lock expires. */
+    val sessionExpiresAtMs: Long,
+)
+
 /** UI-driving state machine. */
 sealed interface NfcPairPhase {
     data object Idle : NfcPairPhase
     data object ReadingTag : NfcPairPhase
-    data class AskingForWifi(val boxLabel: String) : NfcPairPhase
+    data class AskingForWifi(val confirmation: PairConfirmation) : NfcPairPhase
     data object Sealing : NfcPairPhase
     data object Depositing : NfcPairPhase
     data class Success(val message: String) : NfcPairPhase
-    data class Failure(val message: String) : NfcPairPhase
+    data class Failure(
+        val message: String,
+        /** Q2: offer the LED-SAS degrade path for hardware/read
+         *  problems; never for security verdicts or a user cancel. */
+        val ledSasFallbackAvailable: Boolean = false,
+    ) : NfcPairPhase
+    /** Q2 fallback seam — N-PHONE-6 mounts the LED capture flow here. */
+    data object LedSasFallback : NfcPairPhase
 }
 
 /**
@@ -78,6 +120,9 @@ class NfcPairViewModel(
     private var ephemeralPriv: ByteArray? = null
     private var ephemeralPub: ByteArray? = null
 
+    /** Wall-clock ms of the verified tap — anchors the session-lock window. */
+    private var tapAtMs: Long? = null
+
     // ── Form inputs (bound from the AskingForWifi composable). ────────
     var ssid: String = ""
     var psk: String = ""
@@ -102,30 +147,56 @@ class NfcPairViewModel(
         val outcome = reader.readPair(activity)
         outcome.fold(
             onSuccess = { result ->
-                val (priv, pub) = try {
-                    ephemeralKeyGen()
+                val confirmation = try {
+                    val (priv, pub) = ephemeralKeyGen()
+                    // Complete the ECDH right away so the SAS glance can
+                    // show alongside the Wi-Fi form.
+                    val ss = deriveSharedSecret(priv, result.payload.eBoxPub)
+                    val sas = deriveSAS(
+                        sharedSecret = ss,
+                        stkPub = result.payload.stkPub,
+                        eBoxPub = result.payload.eBoxPub,
+                        ePhonePub = pub,
+                        nonce = result.payload.nonce,
+                        sessionId = result.payload.sessionId,
+                        v = result.payload.v,
+                    )
+                    val tapped = now()
+                    verifiedPayload = result.payload
+                    ephemeralPriv = priv
+                    ephemeralPub = pub
+                    tapAtMs = tapped
+                    PairConfirmation(
+                        boxLabel = result.payload.hint.mdnsName,
+                        suffix6 = result.payload.hint.suffix6,
+                        sasDisplay = encodeSasForDisplay(sas),
+                        sasLed = runCatching { encodeLedSas(sas) }.getOrDefault(""),
+                        sessionExpiresAtMs = tapped + PAIR_SESSION_LOCK_MS,
+                    )
                 } catch (t: Throwable) {
+                    wipeCaptured()
                     _phase.value = NfcPairPhase.Failure(
                         "Couldn't generate the pairing key. Try again.",
                     )
                     return
                 }
-                verifiedPayload = result.payload
-                ephemeralPriv = priv
-                ephemeralPub = pub
-                _phase.value = NfcPairPhase.AskingForWifi(result.payload.hint.mdnsName)
+                _phase.value = NfcPairPhase.AskingForWifi(confirmation)
             },
             onFailure = { t ->
-                _phase.value = NfcPairPhase.Failure(humanize(t))
+                wipeCaptured()
+                _phase.value = NfcPairPhase.Failure(
+                    message = humanize(t),
+                    ledSasFallbackAvailable = ledSasFallbackAvailable(t),
+                )
             },
         )
     }
 
     /**
-     * Seal the captured WiFiConfig under K_session + deposit it at the
-     * box's cloud-rendezvous slot. Idempotent: the Worker overwrites
-     * any prior deposit at the same slot (so a typo-then-retry works
-     * without a separate clear step).
+     * Seal the captured WiFiConfig under K_session + deposit the
+     * ePhonePub-prefixed blob at the box's cloud-rendezvous slot.
+     * Idempotent: the Worker overwrites any prior deposit at the same
+     * slot (so a typo-then-retry works without a separate clear step).
      */
     fun sendSealedWifi() {
         val payload = verifiedPayload ?: run {
@@ -144,6 +215,18 @@ class NfcPairViewModel(
             _phase.value = NfcPairPhase.Failure("Wi-Fi name is required.")
             return
         }
+        // Session-lock window: the box latched this sessionId for 30 s
+        // at the tap and has rolled a fresh keypair since. Depositing
+        // against the dead session would silently never be consumed —
+        // fail with a re-tap prompt instead.
+        val tapped = tapAtMs
+        if (tapped == null || now() - tapped > PAIR_SESSION_LOCK_MS) {
+            wipeCaptured()
+            _phase.value = NfcPairPhase.Failure(
+                "The pairing session expired — tap your box again.",
+            )
+            return
+        }
         _phase.value = NfcPairPhase.Sealing
         viewModelScope.launch {
             doSeal(payload, priv, pub)
@@ -151,7 +234,9 @@ class NfcPairViewModel(
     }
 
     internal suspend fun doSeal(payload: PairPayload, priv: ByteArray, pub: ByteArray) {
-        val sealed = try {
+        val sealed: com.flagshipserver.app.core.SealedWiFiConfig
+        val depositBlob: ByteArray
+        try {
             val ss = deriveSharedSecret(priv, payload.eBoxPub)
             val kSession = deriveSessionKey(
                 sharedSecret = ss,
@@ -168,7 +253,11 @@ class NfcPairViewModel(
                 regulatoryRegion = regulatoryRegion,
                 issuedAt = now(),
             )
-            sealWiFiConfig(wifi, kSession)
+            sealed = sealWiFiConfig(wifi, kSession)
+            // The box can't derive K_session without our ephemeral pub —
+            // prefix it (protocol deposit-blob format; tamper-evident
+            // because ePhonePub is bound into the K_session transcript).
+            depositBlob = buildWifiDepositBlob(pub, sealed)
         } catch (t: Throwable) {
             // Don't surface the raw exception (could leak field shape);
             // map to a generic copy + clear any captured state so retry
@@ -179,7 +268,11 @@ class NfcPairViewModel(
         }
 
         _phase.value = NfcPairPhase.Depositing
-        val outcome = rendezvous.depositSealedWifi(payload.hint.cloudRendezvousId, sealed)
+        val outcome = rendezvous.depositSealedWifi(
+            rendezvousId = payload.hint.cloudRendezvousId,
+            sealedHex = NfcPairHex.encode(depositBlob),
+            nonceHex = NfcPairHex.encode(sealed.nonce),
+        )
         outcome.fold(
             onSuccess = {
                 wipeCaptured()
@@ -197,6 +290,16 @@ class NfcPairViewModel(
         )
     }
 
+    /** Q2 fallback entry — only reachable from a Failure that offered
+     *  it. N-PHONE-6 replaces the destination's stub body with the LED
+     *  capture + decode flow; the transition contract stays as-is. */
+    fun startLedSasFallback() {
+        val cur = _phase.value
+        if (cur is NfcPairPhase.Failure && cur.ledSasFallbackAvailable) {
+            _phase.value = NfcPairPhase.LedSasFallback
+        }
+    }
+
     /** Reset back to Idle. Clears any captured pairing material so a
      *  fresh tap starts a fresh handshake. */
     fun reset() {
@@ -212,6 +315,7 @@ class NfcPairViewModel(
         ephemeralPriv?.fill(0)
         ephemeralPriv = null
         ephemeralPub = null
+        tapAtMs = null
     }
 
     /** Pure helper exposed for tests — maps a thrown error into the
@@ -234,5 +338,23 @@ class NfcPairViewModel(
             }
         }
         return t.message ?: "Something went wrong. Try again."
+    }
+
+    /** Q2: a failed/unavailable NFC *read* degrades to the LED-SAS
+     *  path. Security verdicts do NOT — a tampered tag must dead-end
+     *  (fail-closed is security-only); a user cancel is benign and just
+     *  retries the tap. */
+    internal fun ledSasFallbackAvailable(t: Throwable): Boolean {
+        if (t !is NfcPairReaderException) return false
+        return when (t.error) {
+            NfcPairReaderError.NfcUnavailable,
+            NfcPairReaderError.TagFormatUnrecognized,
+            is NfcPairReaderError.MalformedPayload,
+            NfcPairReaderError.Timeout,
+            -> true
+            NfcPairReaderError.UserCanceled,
+            NfcPairReaderError.SignatureMismatch,
+            -> false
+        }
     }
 }
