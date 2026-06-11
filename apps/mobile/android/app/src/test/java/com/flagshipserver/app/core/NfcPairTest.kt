@@ -257,10 +257,14 @@ class NfcPairTest {
     // Cross-language golden vectors
 
     private fun loadVectorsJSON(): JSONObject {
-        // Repo absolute path — pinning to the canonical fixture ensures
-        // any TS-side regeneration of vectors fails the Android gate
-        // until the Kotlin canonical-bytes match again.
-        val file = File("/Users/harrywinner/flagship/test-vectors/canonical-bytes.json")
+        // Resolve the fixture relative to the module dir (unit tests run
+        // with user.dir = apps/mobile/android/app) so the gate reads the
+        // CURRENT checkout's vectors — a worktree or renamed clone must
+        // not silently validate against some other checkout's fixture.
+        // 4 parents: app → android → mobile → apps → repo root.
+        var root = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        repeat(4) { root = root.parentFile ?: root }
+        val file = File(root, "test-vectors/canonical-bytes.json")
         assertTrue("test-vectors fixture must exist at ${file.absolutePath}", file.exists())
         return JSONObject(file.readText(Charsets.UTF_8))
     }
@@ -384,5 +388,62 @@ class NfcPairTest {
         // Suppress unused-import warning across compilers; assertNotEquals
         // is used here as a deliberate "not the same" sanity check.
         assertNotEquals(0, wrongPub.size)
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Session-lock constant (design refinement §1)
+
+    @Test fun pairSessionLockMs_isThirtySeconds() {
+        // Mirrors PAIR_SESSION_LOCK_MS in @flagship/protocol — the box
+        // rolls keys 30 s after a tap with no claim.
+        assertEquals(30_000L, PAIR_SESSION_LOCK_MS)
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // WiFi deposit blob (ePhonePub || ciphertext)
+
+    @Test fun wifiDepositBlob_roundTrips() {
+        val phonePriv = X25519.generatePrivateKey()
+        val ePhonePub = X25519.publicFromPrivate(phonePriv)
+        val kSession = ByteArray(32) { 0x42.toByte() }
+        val sealed = sealWiFiConfig(
+            WiFiConfig(
+                ssid = "HomeNet",
+                psk = "hunter22",
+                regulatoryRegion = "US",
+                issuedAt = 1_718_000_000_000L,
+            ),
+            kSession,
+        )
+        val blob = buildWifiDepositBlob(ePhonePub, sealed)
+        assertEquals(32 + sealed.ciphertext.size, blob.size)
+
+        val parts = parseWifiDepositBlob(blob)
+        assertTrue(parts.ePhonePub.contentEquals(ePhonePub))
+        assertTrue(parts.ciphertext.contentEquals(sealed.ciphertext))
+
+        val opened = openWiFiConfig(
+            SealedWiFiConfig(ciphertext = parts.ciphertext, nonce = sealed.nonce),
+            kSession,
+        )
+        assertEquals("HomeNet", opened.ssid)
+    }
+
+    @Test fun wifiDepositBlob_rejectsWrongSizePub_andShortBlob() {
+        val sealed = sealWiFiConfig(
+            WiFiConfig(ssid = "x", psk = "", regulatoryRegion = "", issuedAt = 1L),
+            ByteArray(32),
+        )
+        assertThrows(WifiDepositBlobError.WrongSizeEphonePub::class.java) {
+            buildWifiDepositBlob(ByteArray(31), sealed)
+        }
+        // 47 bytes can't carry pub(32) + AEAD tag(16) — a foreign or
+        // truncated deposit dies before any key derivation runs.
+        assertThrows(WifiDepositBlobError.BlobTooShort::class.java) {
+            parseWifiDepositBlob(ByteArray(47))
+        }
+        assertThrows(WifiDepositBlobError.BlobTooShort::class.java) {
+            parseWifiDepositBlob(ByteArray(0))
+        }
     }
 }
