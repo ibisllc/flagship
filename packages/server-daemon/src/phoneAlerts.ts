@@ -47,7 +47,7 @@ export type BrowserAlert = {
  */
 export type ReissuanceAlert = {
   kind: "membership-reissued";
-  /** App composite id (`<creator>--<slug>`). */
+  /** App composite id (`<creator>-<slug>`). */
   serviceId: string;
   /** Display slug for the UI. */
   slug: string;

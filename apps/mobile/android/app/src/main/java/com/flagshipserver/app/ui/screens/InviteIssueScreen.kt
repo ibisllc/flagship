@@ -9,6 +9,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
@@ -32,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,8 +72,16 @@ fun InviteIssueScreen(nav: NavController, serviceId: String) {
     val client = LocalScreensClient.current
     val book = LocalInviteLabelBook.current
     val ctx = LocalContext.current
-    val appUrl = remember(serviceId) { defaultAppUrl(serviceId) }
-    val vm = remember(serviceId) {
+    val resolvedAppUrl by produceState<String?>(initialValue = null, serviceId) {
+        value = resolveAppShareUrl(serviceId, client)
+    }
+    val appUrl = resolvedAppUrl ?: run {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    val vm = remember(serviceId, appUrl) {
         InviteIssueViewModel(
             serviceId = serviceId,
             appUrl = appUrl,
@@ -271,16 +282,17 @@ private fun fmtExpires(ms: Long): String {
     return fmt.format(java.util.Date(ms))
 }
 
-/** serviceId = `<creator>-<slug>`; the canonical URL hits the slug
- *  subdomain. Production replaces this with the resolved app-detail
- *  url once that fan-out lands; the form-screen-only seed is fine for
- *  dev + the share-URL test asserts the shape, not the actual host. */
-private fun defaultAppUrl(serviceId: String): String {
-    val dash = serviceId.indexOf('-')
-    if (dash <= 0 || dash >= serviceId.length - 1) {
-        return "https://$serviceId.flagship.services"
-    }
-    val creator = serviceId.substring(0, dash)
-    val slug = serviceId.substring(dash + 1)
-    return "https://$slug.$creator.flagship.services"
-}
+/** Share-URL root for an installed app — the tier-1 canonical URL of THIS
+ *  box's instance (`https://<urlLabel>.<server>.<user>.flagship.services`),
+ *  the only form the box's per-box wildcard cert covers (model A′). The
+ *  daemon's app-detail response carries it as `app.url`; we never derive a
+ *  `<slug>.<creator>` (tier-2) form locally — that name has no valid cert
+ *  until the shared service-cert phase ships. Last-resort fallback (detail
+ *  fetch failed) keeps the URL syntactically valid for the share sheet.
+ *  Mirrors iOS ServicesTab.resolveAppShareUrl. */
+private suspend fun resolveAppShareUrl(
+    serviceId: String,
+    client: com.flagshipserver.app.api.ScreensClient,
+): String =
+    runCatching { client.appDetail(serviceId).app.url }
+        .getOrElse { "https://$serviceId.flagship.services" }

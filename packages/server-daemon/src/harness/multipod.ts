@@ -59,7 +59,7 @@ import {
 /**
  * Active grants for one (app + optional instance). Keyed by `appKey =
  * serviceCanonical[#instance]`. The harness queries by serviceId (the daemon's
- * internal "<creator>--<slug>" form) → the caller maps to appKey via
+ * internal "<creator>-<slug>" form) → the caller maps to appKey via
  * `AppGrantState.grantForApp(serviceId)`.
  */
 export interface AppGrantEntry {

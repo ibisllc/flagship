@@ -169,6 +169,12 @@ export class ServicePlatform {
    *
    * (For self-authored apps, this is also where THIS box lives, so
    * registering a pull state is generally a no-op.)
+   *
+   * NOTE (cert model A′): this is a TIER-2 name — leader-routed,
+   * hardware-agnostic — which no per-box wildcard covers. HTTPS to it
+   * only verifies once the shared per-service cert phase ships
+   * (docs/cert-model-A-prime-migration.md, Phase 5). Update pulls keep
+   * dialing it unchanged; TLS is the part that arrives with tier 2.
    */
   static canonicalUrl(creator: string, slug: string): string {
     return `${slug}.${creator}.flagship.services`;

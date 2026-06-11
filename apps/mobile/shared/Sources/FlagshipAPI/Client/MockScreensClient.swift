@@ -60,6 +60,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func appsList() async throws -> AppsListResponse {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
+        // url mirrors the live daemon's tier-1 form
+        // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
+        // box's per-box wildcard name — cert model A′).
+        let fqdn = "\(podContext).harry.flagship.services"
         return AppsListResponse(apps: [
             AppSummary(
                 serviceId: "harry-plants",
@@ -67,7 +71,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 slug: "plants",
                 urlLabel: "plants",
                 summary: "Houseplant watering tracker",
-                url: "https://plants.harry.flagship.services/",
+                url: "https://plants.\(fqdn)/",
                 status: "running",
                 version: "0.0.3",
                 installedAt: now - 60_000 * 30
@@ -78,7 +82,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 slug: "wiki",
                 urlLabel: "wiki",
                 summary: "Personal notes + recipes",
-                url: "https://wiki.harry.flagship.services/",
+                url: "https://wiki.\(fqdn)/",
                 status: "running",
                 version: "1.4.0",
                 installedAt: now - 60_000 * 60 * 26
@@ -89,7 +93,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 slug: "scratchpad",
                 urlLabel: "scratchpad-trent",
                 summary: "Markdown scratchpad",
-                url: "https://scratchpad-trent.harry.flagship.services/",
+                url: "https://scratchpad-trent.\(fqdn)/",
                 status: "stopped",
                 version: "0.7.1",
                 installedAt: now - 60_000 * 60 * 24 * 12
@@ -383,7 +387,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                         continuation.yield(.buildLog(line: log))
                         try? await Task.sleep(nanoseconds: 300_000_000)
                     }
-                    continuation.yield(.deploy(serviceId: "habits", url: "https://habits.harry.flagship.services/"))
+                    continuation.yield(.deploy(serviceId: "habits", url: "https://habits.\(podContext).harry.flagship.services/"))
                     continuation.yield(.done)
                 }
                 continuation.finish()

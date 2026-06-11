@@ -3,8 +3,9 @@
 // signAcmeAccountKeyGrant) and FlagshipCore/AcmeAccountKeyGrant.swift.
 //
 // #28 — SEAL-TO-BOX of the user's shared ACME account key. The ACME account
-// key is the authority to mint the user's `[<user>, *.<user>]` Let's Encrypt
-// cert. An admin device seals the raw PKCS#8 account key FOR a box's STK
+// key is the authority to mint Let's Encrypt certs in the user's namespace
+// (cert model A′: the box's per-box `[<server>.<user>, *.<server>.<user>]`
+// cert). An admin device seals the raw PKCS#8 account key FOR a box's STK
 // (SecretSeal.sealForEd25519Recipient), then IRK-signs THIS envelope binding
 // the sealed blob to the recipient STK + accountKeyId. The box later unseals
 // with its own STK seed and mints under the user's shared LE account; `.com`

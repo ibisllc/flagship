@@ -6,8 +6,10 @@ import FlagshipCore
 /// `packages/protocol/src/auth.ts` (`canonicalAcmeAccountKeyGrant` /
 /// `signAcmeAccountKeyGrant` / `verifyAcmeAccountKeyGrant`).
 ///
-/// The ACME account key is the authority to mint a user's `[<user>, *.<user>]`
-/// TLS cert. It is held ONLY by admin-scope devices (and, opt-in, an
+/// The ACME account key is the authority to mint TLS certs in the user's
+/// `flagship.services` namespace (cert model A′: each box's per-box
+/// `[<server>.<user>, *.<server>.<user>]` wildcard). It is held ONLY by
+/// admin-scope devices (and, opt-in, an
 /// autonomous box), sealed to each recipient with `SecretSeal` and NEVER
 /// UMK-derived, NEVER handed to `.com` in the clear. This envelope is the
 /// IRK-signed carrier: the account root attests "this (already-sealed)

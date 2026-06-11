@@ -56,7 +56,7 @@ If the user's request is ambiguous on something that materially changes the mani
 - \`data.stores.postgres\`: \`true\` for a single default DB, or \`["a", "b"]\` for named instances, or omit if not needed.
 - \`data.stores.objects\`: same shape — MinIO buckets.
 - \`data.stores.kv\`: same shape — Redis instances.
-- \`network.subdomain\`: same DNS label as \`name\` 99% of the time. The app will live at \`<subdomain>.<host>.flagship.services\`.
+- \`network.subdomain\`: same DNS label as \`name\` 99% of the time. The app will live at \`<subdomain>.<server>.<user>.flagship.services\` (one label under the box's own FQDN, covered by its per-box wildcard cert).
 - \`access.enabled\`: must be exactly \`true\`.
 - \`access.default_role\`: \`"owner" | "admin" | "member" | "viewer"\`. \`"member"\` is the right answer for shared apps; \`"viewer"\` for read-only-by-default.
 - \`access.public_routes\`: optional list of paths (e.g. \`["/", "/about"]\`) that are reachable without membership. Default empty.
@@ -356,8 +356,9 @@ latency is acceptable.
 
 ## Pattern 2: leader-only-writes ledger
 
-Treat the alias FQDN \`<slug>.<user>.flagship.services\` as the leader
-seat. On startup, poll /api/live_siblings/list — if no sibling holds the
+Treat the alias FQDN \`<slug>.<user>.flagship.services\` (the
+hardware-agnostic service alias — deliberately NOT any one pod's
+canonical \`<slug>.<server>.<user>\` name) as the leader seat. On startup, poll /api/live_siblings/list — if no sibling holds the
 alias, /api/url/claim it (capability allowing). Reads work everywhere;
 writes route to the holder via /api/live_siblings/send. If the holder goes
 offline, no automatic failover — surface a "needs intervention" alert

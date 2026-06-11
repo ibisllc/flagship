@@ -1,8 +1,9 @@
 /**
  * PHASE-1 CAA publishing for a user's `flagship.services` zone.
  *
- * Restricts certificate issuance for `<user>.flagship.services` and its
- * `*.<user>.flagship.services` wildcard to Let's Encrypt and nobody else — a
+ * Restricts certificate issuance for `<user>.flagship.services` and every
+ * name beneath it (CAA climbs, so it covers each box's A′ per-box
+ * `[<server>.<user>, *.<server>.<user>]` names) to Let's Encrypt and nobody else — a
  * defense-in-depth layer against EXTERNAL mis-issuance (another CA, or a CA
  * tricked into issuing for the user's names).
  *

@@ -569,7 +569,8 @@ struct BootUnlockApprovalCard: View {
 /// By default a box stays "managed": it asks the admin device for a fresh
 /// TLS cert each renewal. This card opts THIS box into autonomy — it seals
 /// the account key to the box's STK and IRK-signs the grant so the box can
-/// re-issue its own `[<user>, *.<user>]` cert offline indefinitely.
+/// re-issue its own per-box `[<server>.<user>, *.<server>.<user>]` cert
+/// offline indefinitely.
 ///
 /// Self-contained, mirroring `BootUnlockCard` / `DangerZoneCard`: reads its
 /// dependencies (the .com server client, the directory mailbox, the active

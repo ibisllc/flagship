@@ -540,14 +540,15 @@ struct InviteManageContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.inviteLabelBook) private var labelBook
     @State private var vm: InviteManageViewModel?
+    @State private var appUrl: String = ""
 
     var body: some View {
         Group {
-            if let vm {
+            if let vm, !appUrl.isEmpty {
                 InviteManageScreen(
                     vm: vm,
                     appLabel: appLabel(for: serviceId),
-                    appUrlForShare: appShareUrl(for: serviceId),
+                    appUrlForShare: appUrl,
                     onIssueTapped: { path.append(.inviteIssue(serviceId: serviceId)) }
                 )
             } else {
@@ -555,6 +556,9 @@ struct InviteManageContainer: View {
             }
         }
         .task {
+            if appUrl.isEmpty {
+                appUrl = await resolveAppShareUrl(serviceId: serviceId, client: client)
+            }
             if vm == nil {
                 vm = InviteManageViewModel(
                     serviceId: serviceId,
@@ -571,20 +575,20 @@ struct InviteManageContainer: View {
         }
         return serviceId
     }
+}
 
-    /// Best-effort share-URL root. The real value lands via app-detail
-    /// when wired; for the issuance screen we synthesize a canonical
-    /// "<slug>.<creator>.flagship.services" form so the share URL is
-    /// well-formed in dev — production replaces it via the app-detail
-    /// response.
-    private func appShareUrl(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            let creator = String(serviceId[..<dashIdx])
-            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
-            return "https://\(slug).\(creator).flagship.services"
-        }
-        return "https://\(serviceId).flagship.services"
+/// Share-URL root for an installed app — the tier-1 canonical URL of THIS
+/// box's instance (`https://<urlLabel>.<server>.<user>.flagship.services`),
+/// the only form the box's per-box wildcard cert covers (model A′). The
+/// daemon's app-detail response carries it as `app.url`; we never derive a
+/// `<slug>.<creator>` (tier-2) form locally — that name has no valid cert
+/// until the shared service-cert phase ships. Last-resort fallback (detail
+/// fetch failed) keeps the URL syntactically valid for the share sheet.
+private func resolveAppShareUrl(serviceId: String, client: any ScreensClient) async -> String {
+    if let url = try? await client.appDetail(serviceId: serviceId).app.url {
+        return url
     }
+    return "https://\(serviceId).flagship.services"
 }
 
 // P6 — Issue container. Owns the issue ViewModel; on success the
@@ -610,9 +614,10 @@ struct InviteIssueContainer: View {
         }
         .task {
             if vm == nil {
+                let appUrl = await resolveAppShareUrl(serviceId: serviceId, client: client)
                 vm = InviteIssueViewModel(
                     serviceId: serviceId,
-                    appUrl: appShareUrl(for: serviceId),
+                    appUrl: appUrl,
                     client: client,
                     labelBook: labelBook
                 )
@@ -625,14 +630,5 @@ struct InviteIssueContainer: View {
             return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
         }
         return serviceId
-    }
-
-    private func appShareUrl(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            let creator = String(serviceId[..<dashIdx])
-            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
-            return "https://\(slug).\(creator).flagship.services"
-        }
-        return "https://\(serviceId).flagship.services"
     }
 }

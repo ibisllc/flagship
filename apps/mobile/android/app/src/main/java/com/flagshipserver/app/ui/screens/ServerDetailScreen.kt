@@ -357,7 +357,8 @@ private fun humanBytes(bytes: Long): String {
 
 // #28 — "grant this box cert-minting autonomy". Seals the account's ACME
 // account key FOR this box's STK and delivers it to the domain-scoped
-// endpoint, so the box can renew its own [<user>, *.<user>] cert without the
+// endpoint, so the box can renew its own per-box
+// [<server>.<user>, *.<server>.<user>] cert without the
 // phone re-sealing each time. The box STK is resolved from the directory
 // (mailbox /api/users/:u/pods) — the screens detail model doesn't surface it.
 // Build+seal+sign+POST live in GrantCertAutonomyViewModel.

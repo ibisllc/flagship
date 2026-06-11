@@ -25,6 +25,10 @@ export interface LlmAppContextOptions {
   dataProvisioner?: DataProvisioner;
   /** Whether to include the actual connection URLs (sensitive) or just the env-var names. */
   revealCredentials: boolean;
+  /** This box's canonical FQDN (`<server>.<user>.flagship.services`).
+   *  Apps live one label beneath it (per-box wildcard cert, model A′);
+   *  when absent the markdown falls back to the placeholder form. */
+  serverFqdn?: string;
 }
 
 export interface LlmAppContext {
@@ -41,6 +45,7 @@ export async function buildLlmAppContext(
   const m = opts.manifest;
   const sisterApps = listVisibleSisterApps(m.name, opts.deployedApps);
   const envVars = enumerateEnvVars(m, opts.credentials, opts.revealCredentials);
+  const boxFqdn = opts.serverFqdn ?? "<server>.<user>.flagship.services";
 
   const tablesByDb = await collectTables(opts.credentials, opts.dataProvisioner);
 
@@ -60,8 +65,8 @@ export async function buildLlmAppContext(
   md.push(`**App:** ${m.name} (v${m.version})`);
   if (m.description) md.push(`**Description:** ${m.description}`);
   md.push(
-    `**URL:** \`<slug>-<creator>.<host>.flagship.services\` ` +
-      `(collapses to \`<slug>.<host>...\` when the creator hosts their own app). ` +
+    `**URL:** \`<slug>-<creator>.${boxFqdn}\` ` +
+      `(collapses to \`<slug>.${boxFqdn}\` when the creator hosts their own app). ` +
       `The leftmost label of the inbound SNI tells the daemon which app gets the request.`,
   );
   md.push(`**Container image:** \`${m.runtime.image}\` listening on ${m.runtime.port}`);
@@ -144,7 +149,7 @@ export async function buildLlmAppContext(
     );
   } else {
     for (const s of sisterApps) {
-      md.push(`- \`${s.serviceId}\` — query at \`${s.subdomain}.<user>.flagship.services\``);
+      md.push(`- \`${s.serviceId}\` — query at \`${s.subdomain}.${boxFqdn}\``);
     }
     md.push("");
     md.push(

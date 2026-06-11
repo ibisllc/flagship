@@ -776,6 +776,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       deployedApps: ctx.deployedApps,
       dataProvisioner: ctx.dataProvisioner,
       revealCredentials: reveal,
+      serverFqdn: ctx.serverId,
     });
     return out;
   });

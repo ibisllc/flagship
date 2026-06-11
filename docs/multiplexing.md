@@ -1,5 +1,16 @@
 # URL multiplexing — final design
 
+> **⚠️ CERT SHAPE SUPERSEDED (2026-06, cert model A′) — see
+> [[cert-model-A-prime-migration]].** Wherever this doc shows a per-pod
+> cert with user-zone SANs (`<user>`, `*.<user>`), read the A′ per-box
+> wildcard instead: `[<server>.<user>.flagship.services,
+> *.<server>.<user>.flagship.services]`, box-local key. The hierarchical
+> URL forms below are still the live ones (the `--` flattening that
+> briefly replaced them is retired); the user-zone alias tier
+> (`<slug>.<user>`) is KEPT but rides a shared per-service cert that
+> ships in a later phase. HELLO / controlledDomains / claim machinery
+> is unchanged.
+
 > **The shape.** Pods declare what they serve. The .services tunnel hub
 > uses that declaration as the only source of truth. Services own their own
 > consistency model. The harness is plumbing.

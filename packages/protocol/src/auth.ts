@@ -3703,7 +3703,8 @@ export function verifyMintReservation(c: MintReservationClaim, sig: Bytes, pub: 
 // Per-user-cert design §5.1–5.2: revocation is enforced at the ROUTING
 // layer (per-box STK / RCK), not the cert. Both envelopes are IRK-signed by
 // the account root — only the trust-root may decommission or hard-revoke a
-// box from the user's shared `[<user>, *.<user>]` cert.
+// box and retire its per-box `[<server>.<user>, *.<server>.<user>]` cert
+// (model C's shared `[<user>, *.<user>]` cert is gone — A′ migration).
 //
 //   soft  = Disconnect: eject the box from the cert-recipient set + drop its
 //           routing (STK/RCK), NO re-mint. Only genuinely soft if the box's

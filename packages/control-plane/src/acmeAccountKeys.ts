@@ -2,8 +2,10 @@
  * ACME account-key grants — distribute the (sealed) per-user-cert minting
  * authority to the account's admin-scope devices (per-user-cert design §4.2).
  *
- * The ACME ACCOUNT key is the authority to mint the user's `[<user>, *.<user>]`
- * TLS cert. It is held ONLY by admin devices (and, opt-in, an "autonomous"
+ * The ACME ACCOUNT key is the authority to mint TLS certs for the user's
+ * `flagship.services` namespace (under cert model A′: each box's per-box
+ * `[<server>.<user>, *.<server>.<user>]` wildcard, later the tier-2 shared
+ * per-service certs). It is held ONLY by admin devices (and, opt-in, an "autonomous"
  * box), sealed to each recipient — NEVER UMK-derived (that would hand it to
  * every device, breaking the admin boundary) and NEVER given to `.com`. This
  * module is the cloud half: mint / list / revoke the IRK-signed grants, plus

@@ -1,5 +1,15 @@
 # Per-user TLS cert + addressing — launch-architecture spec
 
+> **⚠️ SUPERSEDED (2026-06, cert model A′) — see
+> [[cert-model-A-prime-migration]].** The cert model moved off the
+> per-user wildcard this doc specs (model C, SANs `[<user>, *.<user>]`)
+> to **A′: a per-box wildcard** `[<server>.<user>.flagship.services,
+> *.<server>.<user>.flagship.services]`, box-local key, minted per box.
+> Service names are hierarchical (`<service>.<server>.<user>`); the `--`
+> flattening is retired. The per-user-wildcard SAN sections below are
+> HISTORICAL. Still live from this doc: the leftmost-label namespace
+> invariant (§3.4), CAA + CT defenses, and the revocation mapping.
+
 **Status:** spec / decided. Pending implementation. The user-facing
 *contract* (§2, §3, §4, §5) ships before public launch; the multi-box
 *machinery* (§7 "deferred") activates with the user's second box.

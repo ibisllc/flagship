@@ -53,7 +53,7 @@ export interface LabelEntry {
  *
  * `opaqueTag` is a 16-byte secret on the wire; we key the inner map on
  * the lowercase hex form. The outer key is the same composite serviceId the
- * server-daemon uses (`<creator>--<slug>`) so the user can keep parallel
+ * server-daemon uses (`<creator>-<slug>`) so the user can keep parallel
  * label books for different apps without collision.
  *
  * We use plain `Map` so the structure is JSON-serializable through the
@@ -274,8 +274,9 @@ function validateAppId(serviceId: string): void {
 
 function isValidAppId(serviceId: string): boolean {
   if (typeof serviceId !== "string" || serviceId.length === 0 || serviceId.length > 256) return false;
-  // Daemon-side serviceId is `<creator>--<slug>`; keep the validator lax to
-  // accommodate slugs with hyphens / digits but reject control chars.
+  // Daemon-side serviceId is `<creator>-<slug>` (single dash, see
+  // composeServiceId); keep the validator lax to accommodate slugs with
+  // hyphens / digits but reject control chars.
   for (let i = 0; i < serviceId.length; i++) {
     const c = serviceId.charCodeAt(i);
     if (c < 0x20 || c === 0x7f) return false;

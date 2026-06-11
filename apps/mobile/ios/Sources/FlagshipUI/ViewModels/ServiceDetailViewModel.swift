@@ -260,19 +260,6 @@ public final class ServiceDetailViewModel {
         }
     }
 
-    public func canonicalUrlPreview(for username: String?) -> String? {
-        guard let user = username,
-              case .loaded(let d) = detail else { return nil }
-        return "\(d.app.slug).\(user).flagship.services"
-    }
-
-    public func perPodUrlPreview(for username: String?, podName: String) -> String {
-        if case .loaded(let d) = detail, let user = username {
-            return "\(d.app.slug).\(SlugUtil.slugify(podName)).\(user).flagship.services"
-        }
-        return ""
-    }
-
     /// V2 — fetch the canonical / short / instances triplet from .com.
     /// Called lazily on ServiceDetailScreen first appearance; updated
     /// after each successful Replace.

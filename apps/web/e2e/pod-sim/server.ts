@@ -288,7 +288,7 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
       }
       const creator = r.creator as string;
       const slug = r.slug as string;
-      const serviceId = `${creator}--${slug}`;
+      const serviceId = `${creator}-${slug}`;
       apps.add({ serviceId, creator, slug, installedAt: Date.now() });
       orders.push({
         type: "install-app",

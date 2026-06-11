@@ -8,8 +8,9 @@ import FlagshipCore
 /// #28 seal-to-box — drives the "Grant cert-minting autonomy to this box"
 /// action on the server-detail screen.
 ///
-/// The ACME account key is the authority to mint a user's
-/// `[<user>, *.<user>]` TLS cert. By default it lives ONLY on the admin
+/// The ACME account key is the authority to mint TLS certs in the user's
+/// namespace (under A′, the box's per-box
+/// `[<server>.<user>, *.<server>.<user>]` cert). By default it lives ONLY on the admin
 /// device and the box stays "managed" (it asks for a fresh cert each
 /// renewal). This action opts a SPECIFIC box into autonomy: it seals the
 /// account key to that box's STK and IRK-signs the grant, so the box can

@@ -53,7 +53,7 @@ export async function renderServiceDetail(serviceId) {
     // V3 — fetch the per-service URL identity from .com in parallel with
     // the daemon's detail. Tolerated as null if .com is unreachable;
     // the WEB DOMAINS section falls back to the daemon-provided
-    // urlLabel in that case.
+    // tier-1 instance url in that case.
     const session = getSession();
     currentServiceLinks = session.username
       ? await fetchServiceLinks(session.username, serviceId).catch(() => null)
@@ -246,9 +246,12 @@ function renderWebDomainsSection(service, links) {
   // visible text carries the ZWSP. Mirrors iOS/Android wrapAtDots.
   const displayUrl = (s) =>
     escapeHtml(stripScheme(s)).replace(/\./g, ".&#8203;");
-  const fallbackCanonical = `https://${service.urlLabel}.${getSession().username || "you"}.flagship.services`;
+  // Fallback = the daemon-reported tier-1 instance URL (`https://<urlLabel>.
+  // <server>.<user>.flagship.services`) — the per-box wildcard cert covers it
+  // (model A′); a locally-derived `<label>.<user>` form would be a tier-2
+  // name with no valid cert until shared service certs ship.
   const shortUrl = links?.shortUrl ?? null;
-  const canonical = links?.canonicalUrl ?? fallbackCanonical;
+  const canonical = links?.canonicalUrl ?? service.url;
   const instances = links?.instances ?? [];
 
   const shortRow = shortUrl

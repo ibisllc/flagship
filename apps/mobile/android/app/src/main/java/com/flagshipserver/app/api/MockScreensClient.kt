@@ -56,14 +56,18 @@ class MockScreensClient(
 
     override suspend fun appsList(): AppsListResponse {
         tick()
+        // url mirrors the live daemon's tier-1 form
+        // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
+        // box's per-box wildcard name — cert model A′).
+        val fqdn = "$podContext.harry.flagship.services"
         return AppsListResponse(
             apps = listOf(
                 AppSummary("harry-plants", "harry", "plants", "plants",
-                    "Houseplant watering tracker", "https://plants.harry.flagship.services/", "running", "0.0.3", now() - 60_000 * 30),
+                    "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30),
                 AppSummary("harry-wiki", "harry", "wiki", "wiki",
-                    "Personal notes + recipes", "https://wiki.harry.flagship.services/", "running", "1.4.0", now() - 60_000 * 60 * 26),
+                    "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26),
                 AppSummary("trent-scratchpad", "trent", "scratchpad", "scratchpad-trent",
-                    "Markdown scratchpad", "https://scratchpad-trent.harry.flagship.services/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
+                    "Markdown scratchpad", "https://scratchpad-trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
             )
         )
     }
@@ -446,7 +450,7 @@ class MockScreensClient(
             emit(VibeCodeFrame.BuildLog(log))
             delay(300)
         }
-        emit(VibeCodeFrame.Deploy("habits", "https://habits.harry.flagship.services/"))
+        emit(VibeCodeFrame.Deploy("habits", "https://habits.$podContext.harry.flagship.services/"))
         emit(VibeCodeFrame.Done)
     }
 

@@ -71,7 +71,7 @@ export interface ReissuanceReport {
 }
 
 export interface JournalEntry {
-  /** App composite id `<creator>--<slug>`. */
+  /** App composite id `<creator>-<slug>`. */
   serviceId: string;
   /** Hex of the OLD IRK pubkey (32 bytes). */
   oldIrkPubHex: string;

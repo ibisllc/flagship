@@ -77,7 +77,7 @@ export interface AppPullState {
 export interface LineagePauseInfo {
   /** When the break was detected. */
   detectedAt: number;
-  /** `<creator>--<slug>` form. */
+  /** `<creator>-<slug>` form. */
   creator: string;
   slug: string;
   canonicalUrl: string;
