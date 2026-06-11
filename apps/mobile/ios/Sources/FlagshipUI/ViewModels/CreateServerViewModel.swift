@@ -247,9 +247,19 @@ public final class CreateServerViewModel {
         // username claimed at open-account time. We just derive the IRK
         // (UMK is present) for the auth-code + RCK signatures below; we
         // do NOT re-generate the UMK and do NOT re-claim the username.
-        let irk = try await Keystore.deriveIRK(reason: "Mint installer for \(name)")
         let serverNameSlug = SlugUtil.slugify(name)
         let serverDomain = "\(serverNameSlug).\(username).flagship.services"
+        // ONE biometric ceremony yields the IRK AND the new box's STK
+        // pubkey. The STK pub is cached in the pin registry so later
+        // (biometric-free) /pods refreshes can verify the box's STK-signed
+        // daemon-status report and pin its real cert fingerprint (A′
+        // phase 4) — the directory's identityPubKey echo is never trusted.
+        let mint = try await Keystore.deriveIRKAndBoxStkPub(
+            serverId: serverDomain,
+            reason: "Mint installer for \(name)"
+        )
+        let irk = mint.irk
+        CertPinRegistry.shared.registerBoxStk(domain: serverDomain, stkPub: mint.boxStkPub)
 
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)

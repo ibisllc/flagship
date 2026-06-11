@@ -148,6 +148,70 @@ public struct SealedLuksKeyResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// The box's STK-signed daemon-status report, relayed VERBATIM by `/pods`
+/// (cert-model A′ phase 4 — cert-fingerprint pinning). `.com` stores the
+/// exact signed tuple + signature the daemon POSTed and never re-derives it,
+/// so a phone that derived the box STK locally re-verifies the leaf-cert
+/// fingerprint end-to-end: a rogue `.com` can DROP this block but cannot
+/// FORGE one. Field set + canonical bytes mirror
+/// `packages/protocol/src/daemonStatus.ts` (pinned cross-platform vector in
+/// its test file); verification lives in `FlagshipCore.DaemonStatus`.
+public struct DaemonStatusReport: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    /// Leaf-cert SHA-256 fingerprint: lowercase hex, no colons. Nil when the
+    /// box has no cert yet (liveness-only report).
+    public let certSha256: String?
+    public let certValidUntil: Int64?
+    public let certIssuer: String?
+    public let appsServed: [String]
+    public let nonce: String
+    public let issuedAt: Int64
+
+    public init(
+        serverDomain: String,
+        certSha256: String?,
+        certValidUntil: Int64?,
+        certIssuer: String?,
+        appsServed: [String],
+        nonce: String,
+        issuedAt: Int64
+    ) {
+        self.serverDomain = serverDomain
+        self.certSha256 = certSha256
+        self.certValidUntil = certValidUntil
+        self.certIssuer = certIssuer
+        self.appsServed = appsServed
+        self.nonce = nonce
+        self.issuedAt = issuedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.serverDomain = try c.decode(String.self, forKey: .serverDomain)
+        self.certSha256 = try c.decodeIfPresent(String.self, forKey: .certSha256)
+        self.certValidUntil = try c.decodeIfPresent(Int64.self, forKey: .certValidUntil)
+        self.certIssuer = try c.decodeIfPresent(String.self, forKey: .certIssuer)
+        self.appsServed = try c.decodeIfPresent([String].self, forKey: .appsServed) ?? []
+        self.nonce = try c.decode(String.self, forKey: .nonce)
+        self.issuedAt = try c.decode(Int64.self, forKey: .issuedAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case serverDomain, certSha256, certValidUntil, certIssuer, appsServed, nonce, issuedAt
+    }
+}
+
+/// `signedStatus` on a `/pods` pod: the verbatim report + its Ed25519
+/// signature (hex) under the box STK.
+public struct SignedDaemonStatus: Codable, Equatable, Sendable {
+    public let report: DaemonStatusReport
+    public let signatureHex: String
+    public init(report: DaemonStatusReport, signatureHex: String) {
+        self.report = report
+        self.signatureHex = signatureHex
+    }
+}
+
 /// A directory entry from GET /api/users/:u/pods. `identityPubKey` is the
 /// box's registered STK — the trust anchor the phone re-verifies against.
 public struct PodDirectoryEntry: Codable, Equatable, Sendable {
@@ -172,17 +236,25 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// daemon reported a real cert). Decoded as a presence flag — the cert
     /// detail itself isn't needed to tell a dead box from a live one.
     public let hasCert: Bool
+    /// A′ pinning — the STK-signed daemon-status report relayed verbatim,
+    /// or nil when the daemon never reported (or `.com` dropped it).
+    /// Consumed by `FlagshipCore.CertPinRegistry`; decoded LENIENTLY so a
+    /// garbled relay yields nil (⇒ no pin) instead of failing the whole
+    /// pods-list decode.
+    public let signedStatus: SignedDaemonStatus?
     public init(
         serverDomain: String,
         identityPubKey: String,
         revokedAt: Int64? = nil,
         lastReported: Int64? = nil,
         registeredAt: Int64? = nil,
-        hasCert: Bool = false
+        hasCert: Bool = false,
+        signedStatus: SignedDaemonStatus? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
         self.registeredAt = registeredAt; self.hasCert = hasCert
+        self.signedStatus = signedStatus
     }
 
     public init(from decoder: Decoder) throws {
@@ -196,6 +268,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         // presence flag (we only need "is there a cert" here).
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
         self.hasCert = cert != nil
+        self.signedStatus = (try? c.decodeIfPresent(SignedDaemonStatus.self, forKey: .signedStatus)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -209,6 +282,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(lastReported, forKey: .lastReported)
         try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
+        try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -217,7 +291,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus
     }
 }
 
@@ -336,15 +410,23 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     private let urlSession: URLSession
     private let baseUrl: URL
     private let bootBaseUrl: URL
+    /// A′ pinning — observer invoked with every decoded `/pods` response so
+    /// the wiring layer can feed `FlagshipCore.CertPinRegistry`. LIVE-only
+    /// by construction (the Mock never calls it ⇒ demo/mock sessions can
+    /// never install pins). Pin maintenance must never break the directory
+    /// fetch or list rendering, so the registry side never throws.
+    private let onPods: (@Sendable (PodsDirectoryResponse) -> Void)?
 
     public init(
         urlSession: URLSession = .shared,
         baseUrl: URL = defaultBaseUrl,
-        bootBaseUrl: URL = defaultBootBaseUrl
+        bootBaseUrl: URL = defaultBootBaseUrl,
+        onPods: (@Sendable (PodsDirectoryResponse) -> Void)? = nil
     ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl
         self.bootBaseUrl = bootBaseUrl
+        self.onPods = onPods
     }
 
     public func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse {
@@ -368,7 +450,9 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        return try await getReturning("/api/users/\(encoded)/pods")
+        let response: PodsDirectoryResponse = try await getReturning("/api/users/\(encoded)/pods")
+        onPods?(response)
+        return response
     }
 
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {

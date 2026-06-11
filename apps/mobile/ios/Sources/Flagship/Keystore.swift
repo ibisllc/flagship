@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import LocalAuthentication
 import Security
+import FlagshipCore
 
 /// User Master Key (UMK) — root of identity for a Flagship account.
 ///
@@ -194,6 +195,29 @@ public struct Keystore {
         let umk = try await unwrappedUMK(reason: reason)
         let seed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
+    }
+
+    /// A′ cert pinning — the IRK plus the new box's STK PUBLIC key, both
+    /// derived in ONE biometric ceremony (a separate STK-pub call would
+    /// re-unwrap the UMK and double-prompt Face ID during server creation).
+    /// The STK pub mirrors the protocol path `deriveSTK(deriveSWK(UMK,
+    /// serverId))` via `ServerKeys` (FlagshipCore) and is what
+    /// `CertPinRegistry` verifies STK-signed daemon-status reports against —
+    /// `.com`'s `identityPubKey` echo is NOT a trust input.
+    public static func deriveIRKAndBoxStkPub(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
+        }
+        return (irk, stkPub)
     }
 
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
@@ -427,6 +451,9 @@ public struct Keystore {
             keychainDelete(account: account)
         }
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
+        // The cert-pin STK-pub cache derives from this UMK — a wiped
+        // account must not leave pins (or pub anchors) behind.
+        CertPinRegistry.shared.clear()
     }
 
     /// Full reset across EVERY profile + device-global keys. Currently
@@ -468,6 +495,7 @@ public struct Keystore {
         _activeProfileId = defaultProfileId
         _activeProfileHydrated = true
         activeProfileLock.unlock()
+        CertPinRegistry.shared.clear()
     }
 
     // MARK: - Internals

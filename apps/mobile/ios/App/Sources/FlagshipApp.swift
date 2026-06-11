@@ -28,7 +28,19 @@ struct FlagshipApp: App {
         // in Keychain with WhenUnlockedThisDeviceOnly access.
         let store = KeychainSessionStore()
         self.sessionStore = store
-        self.liveClient = LiveScreensClient(store: store)
+        // The screens client dials the BOX (`<server>.<user>.flagship.
+        // services` + service names under it), so it rides the pinned
+        // session: server-trust challenges run default validation first,
+        // then HARD-FAIL unless the served leaf matches the box's
+        // STK-signed fingerprint when a verified pin exists (A′ phase 4).
+        // SSE + the browser-stream WebSocket share the same session, so
+        // they're covered too. No pin ⇒ default validation stands.
+        self.liveClient = LiveScreensClient(
+            urlSession: BoxPinnedURLSession.make(
+                pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
+            ),
+            store: store
+        )
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -170,7 +182,13 @@ struct FlagshipApp: App {
     // SecretRequestsContainer can fetch + answer the box's boot-secret
     // requests; Mock (empty inbox) in dev/preview.
     private let mockMailbox = MockSecretMailboxClient()
-    private let liveMailbox: any SecretMailboxClient = LiveSecretMailboxClient()
+    // Every LIVE /pods response feeds the cert-pin registry (verify the
+    // STK-signed daemon-status per pod → install/clear that box's
+    // fingerprint pin). Live-only by construction: the Mock never invokes
+    // onPods, so demo/mock sessions can never install pins.
+    private let liveMailbox: any SecretMailboxClient = LiveSecretMailboxClient(
+        onPods: { response in CertPinRegistry.shared.update(pods: response.pods) }
+    )
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }
