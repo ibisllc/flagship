@@ -18,15 +18,22 @@ import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import com.flagshipserver.app.api.MockNfcRendezvousClient
 import com.flagshipserver.app.core.MockNfcPairReader
+import com.flagshipserver.app.core.NfcPairHex
 import com.flagshipserver.app.core.NfcPairReaderError
 import com.flagshipserver.app.core.NfcPairReaderException
 import com.flagshipserver.app.core.PAIR_PROTOCOL_VERSION
+import com.flagshipserver.app.core.PAIR_SESSION_LOCK_MS
 import com.flagshipserver.app.core.PairHint
 import com.flagshipserver.app.core.PairPayload
 import com.flagshipserver.app.core.ReadPairResult
+import com.flagshipserver.app.core.SealedWiFiConfig
+import com.flagshipserver.app.core.deriveSAS
 import com.flagshipserver.app.core.deriveSessionKey
 import com.flagshipserver.app.core.deriveSharedSecret
+import com.flagshipserver.app.core.encodeLedSas
+import com.flagshipserver.app.core.encodeSasForDisplay
 import com.flagshipserver.app.core.openWiFiConfig
+import com.flagshipserver.app.core.parseWifiDepositBlob
 import com.flagshipserver.app.core.signPair
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.X25519
@@ -123,8 +130,49 @@ class NfcPairViewModelTest {
 
         val phase = vm.phase.first()
         assertTrue("expected AskingForWifi, got $phase", phase is NfcPairPhase.AskingForWifi)
-        assertEquals("flagship-test.local", (phase as NfcPairPhase.AskingForWifi).boxLabel)
+        val c = (phase as NfcPairPhase.AskingForWifi).confirmation
+        assertEquals("flagship-test.local", c.boxLabel)
+        // Disambiguation hint (refinement §9) rides along.
+        assertEquals("abc123", c.suffix6)
         assertEquals("reader fired exactly once", 1, reader.callCount)
+    }
+
+    @Test fun startTap_happyPath_sasGlanceMatchesBoxSideDerivation() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (keys, gen) = stableKeyGen()
+        val reader = MockNfcPairReader(Result.success(ReadPairResult(fx.payload, fx.signature)))
+        val rdz = MockNfcRendezvousClient()
+        val fixedNow = 1_735_700_000_000L
+        val vm = NfcPairViewModel(
+            reader = reader, rendezvous = rdz, ephemeralKeyGen = gen, now = { fixedNow },
+        )
+
+        vm.startTap(activity())
+        advanceUntilIdle()
+
+        val phase = vm.phase.first()
+        assertTrue("expected AskingForWifi, got $phase", phase is NfcPairPhase.AskingForWifi)
+        val c = (phase as NfcPairPhase.AskingForWifi).confirmation
+
+        // Session-lock deadline anchors at the tap (refinement §1).
+        assertEquals(fixedNow + PAIR_SESSION_LOCK_MS, c.sessionExpiresAtMs)
+
+        // Optional SAS glance (refinement §10) matches an independent
+        // box-side derivation — both ends must show the same pattern.
+        val (_, ePhonePub) = keys
+        val ssBox = deriveSharedSecret(fx.eBoxPriv, ePhonePub)
+        val sasBox = deriveSAS(
+            sharedSecret = ssBox,
+            stkPub = fx.payload.stkPub,
+            eBoxPub = fx.payload.eBoxPub,
+            ePhonePub = ePhonePub,
+            nonce = fx.payload.nonce,
+            sessionId = fx.payload.sessionId,
+            v = fx.payload.v,
+        )
+        assertEquals(encodeSasForDisplay(sasBox), c.sasDisplay)
+        assertEquals(encodeLedSas(sasBox), c.sasLed)
+        assertEquals("3 glances × 3 pulses", 9, c.sasLed.length)
     }
 
     @Test fun startTap_userCanceled_failureMessageReflectsCancel() = runTest(dispatcher) {
@@ -203,25 +251,183 @@ class NfcPairViewModelTest {
         val dep = rdz.deposits.single()
         assertEquals("rndz-happy-0001", dep.rendezvousId)
 
-        // Round-trip the sealed blob through the BOX-side key — proves
-        // the VM derived K_session from the right transcript on the
-        // phone side, and that the seal is openable by the only party
-        // that holds eBoxPriv.
+        // Round-trip the deposit blob exactly as the daemon will: split
+        // ePhonePub || ciphertext, derive K_session from the box's
+        // private key + the RECEIVED pub, open. Proves the VM derived
+        // K_session from the right transcript on the phone side, and
+        // that only the holder of eBoxPriv can open the seal.
         val (_, ePhonePub) = keys
-        val ss = deriveSharedSecret(fx.eBoxPriv, ePhonePub)
+        val parts = parseWifiDepositBlob(NfcPairHex.decode(dep.sealedHex))
+        assertTrue(
+            "deposit must lead with the phone's ephemeral pub",
+            parts.ePhonePub.contentEquals(ePhonePub),
+        )
+        val ss = deriveSharedSecret(fx.eBoxPriv, parts.ePhonePub)
         val k = deriveSessionKey(
             sharedSecret = ss,
             stkPub = fx.payload.stkPub,
             eBoxPub = fx.payload.eBoxPub,
-            ePhonePub = ePhonePub,
+            ePhonePub = parts.ePhonePub,
             nonce = fx.payload.nonce,
             sessionId = fx.payload.sessionId,
             v = fx.payload.v,
         )
-        val opened = openWiFiConfig(dep.sealed, k)
+        val sealed = SealedWiFiConfig(
+            ciphertext = parts.ciphertext,
+            nonce = NfcPairHex.decode(dep.nonceHex),
+        )
+        val opened = openWiFiConfig(sealed, k)
         assertEquals("MyHomeNet", opened.ssid)
         assertEquals("correct horse battery staple", opened.psk)
         assertEquals("US", opened.regulatoryRegion)
+    }
+
+    // ── Session-lock window (design refinement §1) ────────────────────
+
+    @Test fun sendSealedWifi_within30s_deposits() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (_, gen) = stableKeyGen()
+        val reader = MockNfcPairReader(Result.success(ReadPairResult(fx.payload, fx.signature)))
+        val rdz = MockNfcRendezvousClient()
+        var nowMs = 1_735_700_000_000L
+        val vm = NfcPairViewModel(
+            reader = reader, rendezvous = rdz, ephemeralKeyGen = gen, now = { nowMs },
+        )
+
+        vm.startTap(activity())
+        advanceUntilIdle()
+        nowMs += PAIR_SESSION_LOCK_MS - 1_000 // 29 s later
+        vm.ssid = "Home"
+        vm.sendSealedWifi()
+        advanceUntilIdle()
+
+        val phase = vm.phase.first()
+        assertTrue("a deposit inside the lock window must succeed: $phase", phase is NfcPairPhase.Success)
+        assertEquals(1, rdz.deposits.size)
+    }
+
+    @Test fun sendSealedWifi_after30s_refusedWithRetapPrompt_noNetwork() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (_, gen) = stableKeyGen()
+        val reader = MockNfcPairReader(Result.success(ReadPairResult(fx.payload, fx.signature)))
+        val rdz = MockNfcRendezvousClient()
+        var nowMs = 1_735_700_000_000L
+        val vm = NfcPairViewModel(
+            reader = reader, rendezvous = rdz, ephemeralKeyGen = gen, now = { nowMs },
+        )
+
+        vm.startTap(activity())
+        advanceUntilIdle()
+        nowMs += PAIR_SESSION_LOCK_MS + 1_000 // 31 s later — box has rotated
+        vm.ssid = "Home"
+        vm.sendSealedWifi()
+        advanceUntilIdle()
+
+        val phase = vm.phase.first()
+        assertTrue("expected Failure, got $phase", phase is NfcPairPhase.Failure)
+        val f = phase as NfcPairPhase.Failure
+        assertTrue(
+            "expiry message must prompt a re-tap: ${f.message}",
+            f.message.lowercase().contains("expired") || f.message.lowercase().contains("tap"),
+        )
+        assertTrue(
+            "expiry isn't an NFC-hardware failure — no LED fallback",
+            !f.ledSasFallbackAvailable,
+        )
+        assertEquals("must not deposit against a rotated session", 0, rdz.deposits.size)
+
+        // The captured pairing is dead — a follow-up send must demand a
+        // fresh tap, not silently reuse stale material.
+        vm.sendSealedWifi()
+        advanceUntilIdle()
+        assertTrue(vm.phase.first() is NfcPairPhase.Failure)
+        assertEquals(0, rdz.deposits.size)
+    }
+
+    // ── LED-SAS fallback entry point (locked decision Q2) ─────────────
+
+    @Test fun readFailures_offerLedSasFallback_securityDoesNot() = runTest(dispatcher) {
+        val offered = listOf(
+            NfcPairReaderError.NfcUnavailable,
+            NfcPairReaderError.Timeout,
+            NfcPairReaderError.TagFormatUnrecognized,
+            NfcPairReaderError.MalformedPayload("truncated"),
+        )
+        for (err in offered) {
+            val vm = NfcPairViewModel(
+                MockNfcPairReader(Result.failure(NfcPairReaderException(err, "x"))),
+                MockNfcRendezvousClient(),
+            )
+            vm.startTap(activity())
+            advanceUntilIdle()
+            val phase = vm.phase.first()
+            assertTrue("expected Failure for $err, got $phase", phase is NfcPairPhase.Failure)
+            assertTrue(
+                "$err must offer the LED-SAS fallback",
+                (phase as NfcPairPhase.Failure).ledSasFallbackAvailable,
+            )
+        }
+        // A tampered tag must dead-end (fail-closed is security-only),
+        // and a user cancel just retries.
+        val notOffered = listOf(
+            NfcPairReaderError.SignatureMismatch,
+            NfcPairReaderError.UserCanceled,
+        )
+        for (err in notOffered) {
+            val vm = NfcPairViewModel(
+                MockNfcPairReader(Result.failure(NfcPairReaderException(err, "x"))),
+                MockNfcRendezvousClient(),
+            )
+            vm.startTap(activity())
+            advanceUntilIdle()
+            val phase = vm.phase.first()
+            assertTrue("expected Failure for $err, got $phase", phase is NfcPairPhase.Failure)
+            assertTrue(
+                "$err must NOT offer the LED-SAS fallback",
+                !(phase as NfcPairPhase.Failure).ledSasFallbackAvailable,
+            )
+        }
+    }
+
+    @Test fun startLedSasFallback_entersSeam_onlyWhenOffered() = runTest(dispatcher) {
+        // Offered → transition succeeds; reset leaves the seam.
+        val vm = NfcPairViewModel(
+            MockNfcPairReader(
+                Result.failure(NfcPairReaderException(NfcPairReaderError.Timeout, "x")),
+            ),
+            MockNfcRendezvousClient(),
+        )
+        vm.startTap(activity())
+        advanceUntilIdle()
+        vm.startLedSasFallback()
+        assertEquals(NfcPairPhase.LedSasFallback, vm.phase.first())
+        vm.reset()
+        assertEquals(NfcPairPhase.Idle, vm.phase.first())
+
+        // Not offered (security failure) → transition refused.
+        val vm2 = NfcPairViewModel(
+            MockNfcPairReader(
+                Result.failure(NfcPairReaderException(NfcPairReaderError.SignatureMismatch, "x")),
+            ),
+            MockNfcRendezvousClient(),
+        )
+        vm2.startTap(activity())
+        advanceUntilIdle()
+        vm2.startLedSasFallback()
+        assertTrue(
+            "security failure must stay a dead-end",
+            vm2.phase.first() is NfcPairPhase.Failure,
+        )
+
+        // Idle → no-op.
+        val vm3 = NfcPairViewModel(
+            MockNfcPairReader(
+                Result.failure(NfcPairReaderException(NfcPairReaderError.Timeout, "x")),
+            ),
+            MockNfcRendezvousClient(),
+        )
+        vm3.startLedSasFallback()
+        assertEquals(NfcPairPhase.Idle, vm3.phase.first())
     }
 
     @Test fun sendSealedWifi_cloudRejects_failureWithoutCachedSealedMaterial() = runTest(dispatcher) {
