@@ -64,19 +64,28 @@ final class NfcPairViewModelTests: XCTestCase {
         )
     }
 
+    /// Mutable injected clock — lets session-lock tests advance time
+    /// between the tap and the deposit.
+    private final class TestClock: @unchecked Sendable {
+        var ms: Int64
+        init(_ ms: Int64) { self.ms = ms }
+    }
+
     private func makeVM(
         reader: any NfcPairReaderProtocol,
         rendezvous: any NfcRendezvousClient,
         fixedEphemeral: Curve25519.KeyAgreement.PrivateKey? = nil,
+        clock: TestClock? = nil,
         fixedNow: Int64 = 1_735_689_600_000
     ) -> NfcPairViewModel {
+        let effectiveClock = clock ?? TestClock(fixedNow)
         return NfcPairViewModel(
             reader: reader,
             rendezvous: rendezvous,
             ephemeralKeyGen: {
                 fixedEphemeral ?? Curve25519.KeyAgreement.PrivateKey()
             },
-            now: { fixedNow }
+            now: { effectiveClock.ms }
         )
     }
 
@@ -88,13 +97,41 @@ final class NfcPairViewModelTests: XCTestCase {
             ReadPairResult(payload: fx.payload, signature: fx.signature)
         ))
         let rendezvous = MockNfcRendezvousClient()
-        let vm = makeVM(reader: reader, rendezvous: rendezvous)
+        let fixedNow: Int64 = 1_735_689_600_000
+        let vm = makeVM(
+            reader: reader,
+            rendezvous: rendezvous,
+            fixedEphemeral: fx.phoneEphemeralPriv,
+            fixedNow: fixedNow
+        )
 
         await vm.startTap()
 
         switch vm.phase {
-        case .askingForWifi(let label):
-            XCTAssertEqual(label, "flagship-CAFE12.local")
+        case .askingForWifi(let confirmation):
+            XCTAssertEqual(confirmation.boxLabel, "flagship-CAFE12.local")
+            // Disambiguation hint (refinement §9) rides along.
+            XCTAssertEqual(confirmation.suffix6, fx.payload.hint.suffix6)
+            // Session-lock deadline anchors at the tap (refinement §1).
+            XCTAssertEqual(confirmation.sessionExpiresAtMs, fixedNow + PAIR_SESSION_LOCK_MS)
+            // Optional SAS glance (refinement §10) matches an independent
+            // box-side derivation — both ends must show the same pattern.
+            let ssBox = try? deriveSharedSecret(
+                ePhonePriv: fx.boxKeys.eBoxPriv,
+                eBoxPub: fx.phoneEphemeralPriv.publicKey.rawRepresentation
+            )
+            let sasBox = deriveSAS(
+                sharedSecret: ssBox ?? Data(),
+                stkPub: fx.payload.stkPub,
+                eBoxPub: fx.payload.eBoxPub,
+                ePhonePub: fx.phoneEphemeralPriv.publicKey.rawRepresentation,
+                nonce: fx.payload.nonce,
+                sessionId: fx.payload.sessionId,
+                v: fx.payload.v
+            )
+            XCTAssertEqual(confirmation.sasDisplay, encodeSasForDisplay(sasBox))
+            XCTAssertEqual(confirmation.sasLed, try encodeLedSas(sasBox))
+            XCTAssertEqual(confirmation.sasLed.count, 9, "3 glances × 3 pulses")
         default:
             XCTFail("expected .askingForWifi, got \(vm.phase)")
         }
@@ -111,7 +148,7 @@ final class NfcPairViewModelTests: XCTestCase {
 
         await vm.startTap()
 
-        guard case .failure(let msg) = vm.phase else {
+        guard case .failure(let msg, _) = vm.phase else {
             return XCTFail("expected .failure, got \(vm.phase)")
         }
         XCTAssertTrue(msg.lowercased().contains("cancel"),
@@ -129,7 +166,7 @@ final class NfcPairViewModelTests: XCTestCase {
 
         await vm.startTap()
 
-        guard case .failure(let msg) = vm.phase else {
+        guard case .failure(let msg, _) = vm.phase else {
             return XCTFail("expected .failure, got \(vm.phase)")
         }
         // Don't show ECDH/HKDF/K_session internals in the user-facing
@@ -181,30 +218,34 @@ final class NfcPairViewModelTests: XCTestCase {
         let deposit = try XCTUnwrap(rendezvous.lastDeposit)
         XCTAssertEqual(deposit.rendezvousId, "rndz-test1234")
         XCTAssertEqual(deposit.nonceHex.count, 24, "AES-GCM nonce is 12 bytes = 24 hex chars")
-        XCTAssertTrue(deposit.sealedHex.count >= 32, "sealed blob is ct||tag, tag alone is 16 bytes = 32 hex")
+        XCTAssertTrue(deposit.sealedHex.count >= (32 + 16) * 2,
+                      "deposit blob is ePhonePub(32) || ct||tag(≥16)")
         XCTAssertTrue(deposit.sealedHex.allSatisfy { "0123456789abcdef".contains($0) },
                       "sealedHex must be lower-case hex, got: \(deposit.sealedHex)")
         XCTAssertEqual(rendezvous.callCount, 1)
 
-        // Box-side reconstruction: re-derive K_session from the box's
-        // private keys + the phone's ephemeral pub (which we hold
-        // because we drove the VM with `fixedEphemeral`). Then open
-        // the sealed blob and assert it matches what the user typed.
+        // Box-side reconstruction exactly as the daemon will do it:
+        // split the deposit blob into ePhonePub || ciphertext, derive
+        // K_session from the box's private keys + the RECEIVED pub,
+        // then open the sealed blob and match what the user typed.
+        let blob = try parseWifiDepositBlob(NfcPairHex.decode(deposit.sealedHex))
+        XCTAssertEqual(blob.ePhonePub, fx.phoneEphemeralPriv.publicKey.rawRepresentation,
+                       "deposit must lead with the phone's ephemeral pub")
         let ssBox = try deriveSharedSecret(
             ePhonePriv: fx.boxKeys.eBoxPriv,
-            eBoxPub: fx.phoneEphemeralPriv.publicKey.rawRepresentation
+            eBoxPub: blob.ePhonePub
         )
         let kSessionBox = deriveSessionKey(
             sharedSecret: ssBox,
             stkPub: fx.payload.stkPub,
             eBoxPub: fx.payload.eBoxPub,
-            ePhonePub: fx.phoneEphemeralPriv.publicKey.rawRepresentation,
+            ePhonePub: blob.ePhonePub,
             nonce: fx.payload.nonce,
             sessionId: fx.payload.sessionId,
             v: fx.payload.v
         )
         let sealed = SealedWiFiConfig(
-            ciphertext: NfcPairHex.decode(deposit.sealedHex),
+            ciphertext: blob.ciphertext,
             nonce: NfcPairHex.decode(deposit.nonceHex)
         )
         let opened = try openWiFiConfig(sealed, kSession: kSessionBox)
@@ -234,7 +275,7 @@ final class NfcPairViewModelTests: XCTestCase {
         vm.psk = "hunter2"
         await vm.sendSealedWifi()
 
-        guard case .failure(let msg) = vm.phase else {
+        guard case .failure(let msg, _) = vm.phase else {
             return XCTFail("expected .failure, got \(vm.phase)")
         }
         XCTAssertTrue(msg.contains("500") || msg.lowercased().contains("server"),
@@ -264,7 +305,7 @@ final class NfcPairViewModelTests: XCTestCase {
         vm.ssid = "Home Wi-Fi"
         await vm.sendSealedWifi()
 
-        guard case .failure(let msg) = vm.phase else {
+        guard case .failure(let msg, _) = vm.phase else {
             return XCTFail("expected .failure, got \(vm.phase)")
         }
         XCTAssertTrue(msg.lowercased().contains("many") || msg.lowercased().contains("wait"),
@@ -285,7 +326,7 @@ final class NfcPairViewModelTests: XCTestCase {
         vm.ssid = ""
         await vm.sendSealedWifi()
 
-        guard case .failure(let msg) = vm.phase else {
+        guard case .failure(let msg, _) = vm.phase else {
             return XCTFail("expected .failure, got \(vm.phase)")
         }
         XCTAssertTrue(msg.lowercased().contains("ssid") || msg.lowercased().contains("network"),
@@ -329,6 +370,128 @@ final class NfcPairViewModelTests: XCTestCase {
         else { XCTFail("setup: expected .failure before reset") }
         vm2.reset()
         XCTAssertEqual(vm2.phase, .idle)
+    }
+
+    // MARK: - 7. session-lock window (design refinement §1)
+
+    func test_sendSealedWifi_within30s_deposits() async throws {
+        let fx = try makeFixture()
+        let reader = MockNfcPairReader(result: .success(
+            ReadPairResult(payload: fx.payload, signature: fx.signature)
+        ))
+        let rendezvous = MockNfcRendezvousClient()
+        let clock = TestClock(1_735_700_000_000)
+        let vm = makeVM(reader: reader, rendezvous: rendezvous,
+                        fixedEphemeral: fx.phoneEphemeralPriv, clock: clock)
+
+        await vm.startTap()
+        clock.ms += PAIR_SESSION_LOCK_MS - 1_000  // 29 s later
+        vm.ssid = "Home"
+        await vm.sendSealedWifi()
+
+        guard case .success = vm.phase else {
+            return XCTFail("a deposit inside the lock window must succeed, got \(vm.phase)")
+        }
+        XCTAssertEqual(rendezvous.callCount, 1)
+    }
+
+    func test_sendSealedWifi_after30s_refusedWithRetapPrompt_noNetwork() async throws {
+        let fx = try makeFixture()
+        let reader = MockNfcPairReader(result: .success(
+            ReadPairResult(payload: fx.payload, signature: fx.signature)
+        ))
+        let rendezvous = MockNfcRendezvousClient()
+        let clock = TestClock(1_735_700_000_000)
+        let vm = makeVM(reader: reader, rendezvous: rendezvous,
+                        fixedEphemeral: fx.phoneEphemeralPriv, clock: clock)
+
+        await vm.startTap()
+        clock.ms += PAIR_SESSION_LOCK_MS + 1_000  // 31 s later — box has rotated
+        vm.ssid = "Home"
+        await vm.sendSealedWifi()
+
+        guard case .failure(let msg, let fallback) = vm.phase else {
+            return XCTFail("expected .failure, got \(vm.phase)")
+        }
+        XCTAssertTrue(msg.lowercased().contains("expired") || msg.lowercased().contains("tap"),
+                      "expiry message must prompt a re-tap, got: \(msg)")
+        XCTAssertFalse(fallback, "expiry isn't an NFC-hardware failure — no LED fallback")
+        XCTAssertEqual(rendezvous.callCount, 0,
+                       "must not deposit against a rotated session")
+
+        // The captured pairing is dead — a follow-up send must demand a
+        // fresh tap, not silently reuse stale material.
+        vm.ssid = "Home"
+        await vm.sendSealedWifi()
+        guard case .failure(let msg2, _) = vm.phase else {
+            return XCTFail("expected .failure, got \(vm.phase)")
+        }
+        XCTAssertTrue(msg2.lowercased().contains("tap"), "got: \(msg2)")
+        XCTAssertEqual(rendezvous.callCount, 0)
+    }
+
+    // MARK: - 8. LED-SAS fallback entry point (locked decision Q2)
+
+    func test_readFailures_offerLedSasFallback_securityDoesNot() async {
+        // Hardware/read problems degrade to LED-SAS…
+        for err: NfcPairReaderError in [.sessionUnavailable, .timeout, .tagFormatUnrecognized] {
+            let vm = makeVM(
+                reader: MockNfcPairReader(result: .failure(err)),
+                rendezvous: MockNfcRendezvousClient()
+            )
+            await vm.startTap()
+            guard case .failure(_, let available) = vm.phase else {
+                return XCTFail("expected .failure for \(err), got \(vm.phase)")
+            }
+            XCTAssertTrue(available, "\(err) must offer the LED-SAS fallback")
+        }
+        // …a tampered tag must dead-end (fail-closed is security-only),
+        // and a user cancel just retries.
+        for err: NfcPairReaderError in [.signatureMismatch, .userCanceled] {
+            let vm = makeVM(
+                reader: MockNfcPairReader(result: .failure(err)),
+                rendezvous: MockNfcRendezvousClient()
+            )
+            await vm.startTap()
+            guard case .failure(_, let available) = vm.phase else {
+                return XCTFail("expected .failure for \(err), got \(vm.phase)")
+            }
+            XCTAssertFalse(available, "\(err) must NOT offer the LED-SAS fallback")
+        }
+    }
+
+    func test_startLedSasFallback_entersSeam_onlyWhenOffered() async {
+        // Offered → transition succeeds.
+        let vm = makeVM(
+            reader: MockNfcPairReader(result: .failure(.timeout)),
+            rendezvous: MockNfcRendezvousClient()
+        )
+        await vm.startTap()
+        vm.startLedSasFallback()
+        XCTAssertEqual(vm.phase, .ledSasFallback)
+
+        // Reset leaves the seam.
+        vm.reset()
+        XCTAssertEqual(vm.phase, .idle)
+
+        // Not offered (security failure) → transition refused.
+        let vm2 = makeVM(
+            reader: MockNfcPairReader(result: .failure(.signatureMismatch)),
+            rendezvous: MockNfcRendezvousClient()
+        )
+        await vm2.startTap()
+        vm2.startLedSasFallback()
+        guard case .failure = vm2.phase else {
+            return XCTFail("security failure must stay a dead-end, got \(vm2.phase)")
+        }
+
+        // Idle → no-op.
+        let vm3 = makeVM(
+            reader: MockNfcPairReader(result: .failure(.timeout)),
+            rendezvous: MockNfcRendezvousClient()
+        )
+        vm3.startLedSasFallback()
+        XCTAssertEqual(vm3.phase, .idle)
     }
 
     // MARK: - bonus: wire-format parser
