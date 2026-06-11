@@ -6,6 +6,7 @@ import {
   type Dns01DeleteRequest,
   type Dns01PublishRequest,
   type Keypair,
+  type ServiceCertAuthority,
 } from "@flagship/protocol";
 import type { FetchLike } from "@flagship/llm-providers";
 import type { DnsChallengeWriter } from "./letsEncryptIssuer.js";
@@ -41,6 +42,16 @@ export interface RemoteDnsChallengeWriterOptions {
   stk: Keypair;
   fetchImpl?: FetchLike;
   now?: () => number;
+  /**
+   * Tier-2 shared-service-cert grant (cert model A′ Phase 5). When set,
+   * the IRK-signed authority is forwarded with EVERY publish AND delete
+   * so the control plane / broker accept a challenge name outside this
+   * box's own `_acme-challenge.<serverFqdn>` — the verifier checks the
+   * phone's signature, that we are `boxServerId`, and that the record
+   * matches `serviceFqdn`. Never set on the normal per-box writer; use
+   * {@link RemoteDnsChallengeWriter.withServiceCertAuthority}.
+   */
+  serviceCertAuthority?: { authority: ServiceCertAuthority; signature: Bytes };
 }
 
 function bytesToHex(b: Bytes): string {
@@ -51,6 +62,29 @@ function bytesToHex(b: Bytes): string {
 
 export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
   constructor(private readonly opts: RemoteDnsChallengeWriterOptions) {}
+
+  /**
+   * A copy of this writer that forwards the given phone-issued grant on
+   * every publish/delete — used for ONE tier-2 service-cert issuance,
+   * leaving the shared per-box writer untouched.
+   */
+  withServiceCertAuthority(grant: {
+    authority: ServiceCertAuthority;
+    signature: Bytes;
+  }): RemoteDnsChallengeWriter {
+    return new RemoteDnsChallengeWriter({ ...this.opts, serviceCertAuthority: grant });
+  }
+
+  private authorityWire(): { serviceCertAuthority: { authority: ServiceCertAuthority; signature: string } } | Record<string, never> {
+    const g = this.opts.serviceCertAuthority;
+    if (!g) return {};
+    return {
+      serviceCertAuthority: {
+        authority: g.authority,
+        signature: bytesToHex(g.signature),
+      },
+    };
+  }
 
   async publishTxt(host: string, value: string): Promise<() => Promise<void>> {
     const f = this.opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
@@ -77,6 +111,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
         },
         signature: bytesToHex(sig),
         recordValue: value,
+        ...this.authorityWire(),
       }),
     });
     if (!res.ok) {
@@ -102,6 +137,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
             issuedAt: dIssuedAt,
           },
           signature: bytesToHex(dSig),
+          ...this.authorityWire(),
         }),
       }).catch(() => {
         // best-effort cleanup; the control plane has its own GC for stale records

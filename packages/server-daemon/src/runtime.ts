@@ -23,6 +23,7 @@ import {
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import { fetchGrantedAccountKeyPem } from "./acme/grantedAccountKey.js";
+import { buildServiceCertHandlers, rehydrateServiceCerts } from "./serviceCertHttp.js";
 import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
@@ -750,6 +751,38 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       });
     }, renewalCheckIntervalMs);
     renewalTimer.unref?.();
+  }
+
+  // Tier-2 shared service certs (cert model A′ Phase 5). Rehydrate any
+  // persisted `<service>.<user>` cert into the custom-SNI tier so the
+  // leader-routed name serves straight after a restart; mount the
+  // phone→box mint/export/install surface when we know the host user's
+  // IRK (the verification authority for all three envelopes). The mint
+  // path reuses THIS issuer but swaps in a DNS-01 writer that forwards
+  // the phone's grant, so the per-box flow above is untouched.
+  if (store) {
+    const rehydrated = await rehydrateServiceCerts({
+      store,
+      certManager,
+      serverFqdn: opts.serverFqdn,
+    });
+    for (const fqdn of rehydrated) {
+      console.log(`[runtime] rehydrated tier-2 service cert for ${fqdn}`);
+    }
+  }
+  if (opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub) {
+    extras.push(
+      buildServiceCertHandlers({
+        serverFqdn: opts.serverFqdn,
+        username: opts.servicePlatform.hostUsername,
+        irkPub: opts.servicePlatform.hostIrkPub,
+        issuer,
+        certManager,
+        store,
+        dnsWriterWithAuthority: (grant) => dns.withServiceCertAuthority(grant),
+      }),
+    );
+    console.log(`[runtime] mounted /api/service-certs/* handlers`);
   }
 
   // App-platform construction. AppRunner is unconditional (apps that

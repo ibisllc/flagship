@@ -11,4 +11,5 @@ export * from "./erasure.js";
 export * from "./manifest.js";
 export * from "./devEntitlements.js";
 export * from "./daemonStatus.js";
+export * from "./serviceCert.js";
 export { ed } from "./edSync.js";

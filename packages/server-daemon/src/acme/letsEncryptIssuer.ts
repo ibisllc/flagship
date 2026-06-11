@@ -139,8 +139,17 @@ export class LetsEncryptIssuer implements AcmeIssuer {
 
   async issue(
     names: string[],
+    perIssue?: {
+      /**
+       * Override the DNS-01 writer for THIS order only — the tier-2
+       * service-cert path swaps in a writer that forwards the phone's
+       * ServiceCertAuthority, without touching the per-box default.
+       */
+      dns?: DnsChallengeWriter;
+    },
   ): Promise<{ certPem: string; privateKeyPem: string; notAfter: number }> {
     if (names.length === 0) throw new Error("issue() requires at least one name");
+    const dns = perIssue?.dns ?? this.opts.dns;
     const reportPhase = (p: AcmeIssuancePhase) => {
       try {
         this.opts.onPhase?.(p);
@@ -210,7 +219,7 @@ export class LetsEncryptIssuer implements AcmeIssuer {
         // only on the path that works. Wildcards have no TLS-ALPN-01
         // option, so they were always DNS-01. TLS-ALPN-01 remains the
         // fallback for non-wildcards only when no DNS writer is available.
-        const challenge = this.opts.dns
+        const challenge = dns
           ? authz.challenges.find((c) => c.type === "dns-01") ??
             (isWildcard ? undefined : authz.challenges.find((c) => c.type === "tls-alpn-01"))
           : isWildcard
@@ -229,10 +238,10 @@ export class LetsEncryptIssuer implements AcmeIssuer {
           cleanups.push(() => dispose());
           reportPhase("tlsalpn-served");
         } else if (challenge.type === "dns-01") {
-          if (!this.opts.dns) throw new Error("dns-01 challenge required but no DNS writer configured");
+          if (!dns) throw new Error("dns-01 challenge required but no DNS writer configured");
           const host = authz.identifier.value.replace(/^\*\./, "");
           reportPhase("dns01-publish-attempt");
-          const dispose = await this.opts.dns.publishTxt(`_acme-challenge.${host}`, keyAuth);
+          const dispose = await dns.publishTxt(`_acme-challenge.${host}`, keyAuth);
           cleanups.push(() => dispose());
           reportPhase("dns01-publish-ok");
           usedDns01 = true;

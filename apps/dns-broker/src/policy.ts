@@ -40,9 +40,13 @@ import {
   serviceGrantActiveAt,
   serviceGrantAuthorizesUrl,
   ed,
+  parseTier2ServiceFqdn,
+  serviceCertAuthorityValidAt,
   verifyServiceGrant,
   verifyDns01Delete,
   verifyDns01Publish,
+  verifyServiceCertAuthority,
+  type ServiceCertAuthority,
   type ServiceGrant,
   type ServiceGrantRoute,
   type Dns01DeleteRequest,
@@ -106,6 +110,7 @@ export interface PublishTxtChallengeBody {
    */
   authority:
     | PodAuthority
+    | ServiceCertPodAuthority
     | UserZoneIrkAuthority
     | UserZoneGrantAuthority;
 }
@@ -116,6 +121,33 @@ export interface PodAuthority {
   recordValueHashHex: string;
   issuedAt: number;
   signatureHex: string;
+}
+
+/** Wire form of `@flagship/protocol` ServiceCertAuthority. */
+export interface ServiceCertAuthorityWire {
+  username: string;
+  serviceFqdn: string;
+  boxServerId: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+/**
+ * Tier-2 shared-service-cert publish (cert model A′ Phase 5): the pod's
+ * standard daemon-identity signature over the Dns01PublishRequest, PLUS a
+ * forwarded phone-issued (IRK-signed) ServiceCertAuthority that names THIS
+ * pod and the ONE `<service>.<user>` FQDN whose challenge it may write.
+ * Both legs must verify; the challenge name must equal the authorized
+ * serviceFqdn.
+ */
+export interface ServiceCertPodAuthority {
+  type: "service-cert";
+  serverId: string;
+  recordValueHashHex: string;
+  issuedAt: number;
+  signatureHex: string;
+  authority: ServiceCertAuthorityWire;
+  authoritySignatureHex: string;
 }
 
 export interface UserZoneIrkAuthority {
@@ -165,6 +197,7 @@ export interface DeleteRecordBody {
   recordKind: "acme" | "a";
   authority:
     | PodDns01DeleteAuthority
+    | ServiceCertDeleteAuthority
     | PodADeleteAuthority
     | UserZoneIrkDeleteAuthority;
 }
@@ -174,6 +207,16 @@ export interface PodDns01DeleteAuthority {
   serverId: string;
   issuedAt: number;
   signatureHex: string;
+}
+
+/** Cleanup leg of {@link ServiceCertPodAuthority} — same two-signature gate. */
+export interface ServiceCertDeleteAuthority {
+  type: "service-cert-acme";
+  serverId: string;
+  issuedAt: number;
+  signatureHex: string;
+  authority: ServiceCertAuthorityWire;
+  authoritySignatureHex: string;
 }
 
 export interface PodADeleteAuthority {

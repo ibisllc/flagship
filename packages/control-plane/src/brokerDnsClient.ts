@@ -147,6 +147,57 @@ function serverIdFromName(name: string): string {
  * RPC shape and forward. Returns the broker's Response verbatim; the
  * caller wraps in its preferred response shape.
  */
+interface ServiceCertAuthorityEnvelope {
+  authority?: {
+    username?: unknown;
+    serviceFqdn?: unknown;
+    boxServerId?: unknown;
+    issuedAt?: unknown;
+    expiresAt?: unknown;
+  };
+  signature?: unknown;
+}
+
+/**
+ * Translate the daemon's optional forwarded ServiceCertAuthority into the
+ * broker wire shape (or null when absent/malformed — the broker then sees a
+ * plain pod authority and denies any out-of-namespace name itself).
+ */
+function serviceCertWire(env: ServiceCertAuthorityEnvelope | undefined): {
+  authority: {
+    username: string;
+    serviceFqdn: string;
+    boxServerId: string;
+    issuedAt: number;
+    expiresAt: number;
+  };
+  authoritySignatureHex: string;
+} | null {
+  const a = env?.authority;
+  if (
+    !env ||
+    !a ||
+    typeof a.username !== "string" ||
+    typeof a.serviceFqdn !== "string" ||
+    typeof a.boxServerId !== "string" ||
+    typeof a.issuedAt !== "number" ||
+    typeof a.expiresAt !== "number" ||
+    typeof env.signature !== "string"
+  ) {
+    return null;
+  }
+  return {
+    authority: {
+      username: a.username,
+      serviceFqdn: a.serviceFqdn,
+      boxServerId: a.boxServerId,
+      issuedAt: a.issuedAt,
+      expiresAt: a.expiresAt,
+    },
+    authoritySignatureHex: env.signature,
+  };
+}
+
 export async function proxyDns01PublishToBroker(args: {
   brokerUrl: string;
   body: {
@@ -158,6 +209,7 @@ export async function proxyDns01PublishToBroker(args: {
     };
     signature?: unknown;
     recordValue?: unknown;
+    serviceCertAuthority?: ServiceCertAuthorityEnvelope;
   };
   fetcher?: typeof fetch;
 }): Promise<{ status: number; body: unknown }> {
@@ -172,17 +224,27 @@ export async function proxyDns01PublishToBroker(args: {
   ) {
     return { status: 400, body: { error: "malformed body" } };
   }
+  const svc = serviceCertWire(args.body.serviceCertAuthority);
   const rpc = {
     kind: "publishTxtChallenge" as const,
     recordName: r.recordName,
     recordValue: args.body.recordValue,
-    authority: {
-      type: "pod" as const,
-      serverId: r.serverId,
-      recordValueHashHex: r.recordValueHash,
-      issuedAt: r.issuedAt,
-      signatureHex: args.body.signature,
-    },
+    authority: svc
+      ? {
+          type: "service-cert" as const,
+          serverId: r.serverId,
+          recordValueHashHex: r.recordValueHash,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+          ...svc,
+        }
+      : {
+          type: "pod" as const,
+          serverId: r.serverId,
+          recordValueHashHex: r.recordValueHash,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+        },
   };
   const fetcher = args.fetcher ?? fetch;
   const resp = await fetcher(`${args.brokerUrl.replace(/\/$/, "")}/rpc`, {
@@ -211,6 +273,7 @@ export async function proxyDns01DeleteToBroker(args: {
       issuedAt?: unknown;
     };
     signature?: unknown;
+    serviceCertAuthority?: ServiceCertAuthorityEnvelope;
   };
   fetcher?: typeof fetch;
 }): Promise<{ status: number; body: unknown }> {
@@ -223,16 +286,25 @@ export async function proxyDns01DeleteToBroker(args: {
   ) {
     return { status: 400, body: { error: "malformed body" } };
   }
+  const svc = serviceCertWire(args.body.serviceCertAuthority);
   const rpc = {
     kind: "deleteRecord" as const,
     recordId: r.recordId,
     recordKind: "acme" as const,
-    authority: {
-      type: "pod-acme" as const,
-      serverId: r.serverId,
-      issuedAt: r.issuedAt,
-      signatureHex: args.body.signature,
-    },
+    authority: svc
+      ? {
+          type: "service-cert-acme" as const,
+          serverId: r.serverId,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+          ...svc,
+        }
+      : {
+          type: "pod-acme" as const,
+          serverId: r.serverId,
+          issuedAt: r.issuedAt,
+          signatureHex: args.body.signature,
+        },
   };
   const fetcher = args.fetcher ?? fetch;
   const resp = await fetcher(`${args.brokerUrl.replace(/\/$/, "")}/rpc`, {

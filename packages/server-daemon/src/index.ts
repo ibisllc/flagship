@@ -1282,6 +1282,12 @@ export { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 export type { RemoteDnsChallengeWriterOptions } from "./acme/remoteDnsChallengeWriter.js";
 export { CertManager } from "./certManager.js";
 export type { CertMaterial } from "./certManager.js";
+export { buildServiceCertHandlers, rehydrateServiceCerts } from "./serviceCertHttp.js";
+export type {
+  ServiceCertHttpDeps,
+  ServiceCertIssuer,
+  ServiceCertPersistence,
+} from "./serviceCertHttp.js";
 export {
   CustomDomainCertStore,
   ensureLeadCustomDomainCert,

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, rename } from "node:fs/promises";
 import { join, dirname } from "node:path";
 
 /**
@@ -85,6 +85,30 @@ export class PersistentAcmeStore {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw e;
     }
+  }
+
+  /**
+   * Every persisted cert in the store. The on-disk basename is the
+   * sanitized FQDN — sanitization is idempotent, so feeding it back
+   * through loadCert resolves the same triplet. Used at startup to
+   * rehydrate tier-2 shared service certs (identified by their stored
+   * `names`) alongside the box's own cert.
+   */
+  async listCerts(): Promise<PersistedCert[]> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.certDir());
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+    const out: PersistedCert[] = [];
+    for (const f of entries) {
+      if (!f.endsWith(".meta.json")) continue;
+      const cert = await this.loadCert(f.slice(0, -".meta.json".length));
+      if (cert) out.push(cert);
+    }
+    return out;
   }
 
   async saveCert(
