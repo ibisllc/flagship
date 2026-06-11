@@ -1,6 +1,9 @@
-// Pin the cert-pinning policy: flagshipserver.com is pinned, per-user
-// pod hostnames are intentionally NOT pinned (their LE certs rotate
-// every ~60d so pinning would break failover + lineage breaks).
+// Pin the cert-pinning policy: flagshipserver.com gets STATIC SPKI pins;
+// box hostnames are intentionally NOT statically pinned (their LE certs
+// rotate every ~60d) — they get DYNAMIC whole-cert pins instead, via the
+// STK-signed daemon-status fingerprint (CertPinRegistry), enforced on both
+// seams: the hostname verifier (every TLS handshake, WebSockets included)
+// and the network interceptor (per request on pooled connections).
 //
 // CertificatePinner.findMatchingPins(hostname) returns the (possibly
 // empty) list of pins configured for that hostname. We use that to
@@ -27,10 +30,21 @@ class HttpClientFactoryTest {
         assertTrue(pins.all { it.toString().startsWith("sha256/") })
     }
 
-    @Test fun perUserPodHostnamesAreNotPinned() {
-        // The whole point of NOT pinning user pods is that their
-        // Let's Encrypt certs rotate every ~60 days and pinning would
-        // break the user's failover the moment a renewal happens.
+    @Test fun boxCertPinSeamsAreBothWired() {
+        // A′ phase 4 — the dynamic box pin must ride BOTH seams: the
+        // hostname verifier is the only one OkHttp runs for WebSocket
+        // upgrades; the interceptor is the only one that re-checks a
+        // pooled connection after a pin lands.
+        val client = HttpClientFactory.build()
+        assertTrue(client.hostnameVerifier is CertPinHostnameVerifier)
+        assertTrue(client.networkInterceptors.any { it is CertPinInterceptor })
+    }
+
+    @Test fun perUserPodHostnamesAreNotStaticallyPinned() {
+        // Box hostnames must stay out of the STATIC pinner: their LE
+        // certs rotate every ~60 days, so the static pin would break the
+        // box on renewal. They are pinned DYNAMICALLY via CertPinRegistry,
+        // which re-pins from each fresh STK-signed daemon-status report.
         val client = HttpClientFactory.build()
         assertTrue(client.certificatePinner.findMatchingPins("home.harry.flagship.services").isEmpty())
         assertTrue(client.certificatePinner.findMatchingPins("office.alice.flagship.services").isEmpty())

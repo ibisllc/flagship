@@ -1,9 +1,17 @@
 // Builds the shared OkHttp client used by Live{Screens,FlagshipServer,
-// QrRelay}Client. Adds certificate pinning for flagshipserver.com
-// only — the per-user pod hostnames (<server>.<user>.flagship.services)
-// use user-managed Let's Encrypt certs that rotate every ~60 days,
-// so we DELIBERATELY don't pin them (would break failover, lineage
-// breaks, and any healthy renewal cycle).
+// QrRelay,SecretMailbox}Client (and the browser-stream WebSocket, which
+// upgrades through the same chain).
+//
+// Two pinning layers:
+//  - STATIC SPKI pins for flagshipserver.com only (CertificatePinner below).
+//  - DYNAMIC whole-cert pins for box hostnames (<server>.<user>.
+//    flagship.services + anything under them), enforced by
+//    CertPinInterceptor against CertPinRegistry — the pin is the box's OWN
+//    STK-signed leaf-cert fingerprint relayed via /pods, so it tracks every
+//    healthy renewal (each fresh daemon-status report re-pins) yet HARD-FAILS
+//    a rogue cert minted by anyone else, .com included (cert-model A′,
+//    phase 4). A box with no verified report has no pin and keeps default
+//    Let's Encrypt validation.
 
 package com.flagshipserver.app.core
 
@@ -41,6 +49,13 @@ object HttpClientFactory {
     fun build(): OkHttpClient =
         OkHttpClient.Builder()
             .certificatePinner(pinner)
+            // Box cert-fingerprint pinning (A′ phase 4, hard-fail), two
+            // seams: the hostname verifier runs on every TLS handshake
+            // (WebSocket upgrades included — OkHttp skips network
+            // interceptors for those); the network interceptor re-checks
+            // per request on pooled connections.
+            .hostnameVerifier(CertPinHostnameVerifier(CertPinRegistry.shared::pinFor))
+            .addNetworkInterceptor(CertPinInterceptor(CertPinRegistry.shared::pinFor))
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)

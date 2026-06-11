@@ -146,6 +146,32 @@ data class PodCurrentCert(
     val sha256: String? = null,
 )
 
+/** A′ pinning — the box's STK-signed daemon-status report tuple, relayed
+ *  VERBATIM by `/pods`. Field names match the daemon's wire JSON (which is
+ *  what the signature commits to via the canonical bytes in
+ *  core.DaemonStatusReport). Every field is defaulted so a partial/garbled
+ *  relay still DECODES (and then fails VERIFICATION) instead of failing the
+ *  whole pods-list decode. */
+@Serializable
+data class DaemonStatusReportWire(
+    val serverDomain: String = "",
+    val certSha256: String? = null,
+    val certValidUntil: Long? = null,
+    val certIssuer: String? = null,
+    val appsServed: List<String> = emptyList(),
+    val nonce: String = "",
+    val issuedAt: Long = 0,
+)
+
+/** `signedStatus` on a `/pods` pod: the verbatim report + the box's STK
+ *  signature over its canonical bytes. `.com` can relay or drop this but
+ *  cannot forge it — the phone re-verifies under a LOCALLY derived STK. */
+@Serializable
+data class SignedDaemonStatus(
+    val report: DaemonStatusReportWire? = null,
+    val signatureHex: String = "",
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -165,6 +191,10 @@ data class PodDirectoryEntry(
     /** Present when the daemon has reported a real cert. Decoded as a presence
      *  signal for `cameOnline`. */
     val currentCert: PodCurrentCert? = null,
+    /** A′ pinning — the STK-signed daemon-status report relayed verbatim, or
+     *  null when the daemon never reported (or `.com` dropped it). Consumed by
+     *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
+    val signedStatus: SignedDaemonStatus? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */
@@ -221,6 +251,12 @@ class LiveSecretMailboxClient(
     private val transport: JsonHttpTransport,
     baseUrl: String = DEFAULT_BASE_URL,
     bootBaseUrl: String = DEFAULT_BOOT_BASE_URL,
+    /** A′ pinning — observer invoked with every decoded `/pods` response so
+     *  the wiring layer can feed core.CertPinRegistry. LIVE-only by
+     *  construction (the mock never calls it ⇒ demo/mock sessions can never
+     *  install pins). Failures are swallowed: pin maintenance must never
+     *  break the directory fetch or list rendering. */
+    private val onPods: ((PodsDirectoryResponse) -> Unit)? = null,
 ) : SecretMailboxClient {
     private val base = baseUrl.trimEnd('/')
     private val bootBase = bootBaseUrl.trimEnd('/')
@@ -265,10 +301,12 @@ class LiveSecretMailboxClient(
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse {
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
-        return transport.getJson(
+        val response = transport.getJson(
             "$base/api/users/$encoded/pods",
             responseSerializer = PodsDirectoryResponse.serializer(),
         )
+        onPods?.let { observe -> runCatching { observe(response) } }
+        return response
     }
 
     override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {

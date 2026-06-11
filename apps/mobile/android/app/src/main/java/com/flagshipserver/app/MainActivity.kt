@@ -116,7 +116,22 @@ class MainActivity : FragmentActivity() {
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
         val mockMailbox = MockSecretMailboxClient()
-        val liveMailbox = LiveSecretMailboxClient(OkHttpJsonTransport(okHttp))
+        // A′ pinning — every live /pods fetch reconciles the cert-pin
+        // registry under STKs derived from THIS device's UMK. Live-only by
+        // construction (the mock never invokes the observer), so demo/mock
+        // sessions can never install pins; without a UMK there is nothing
+        // to verify against, so no pins either.
+        val liveMailbox = LiveSecretMailboxClient(
+            OkHttpJsonTransport(okHttp),
+            onPods = { response ->
+                if (Keystore.hasUmkSeed()) {
+                    com.flagshipserver.app.core.CertPinRegistry.shared.update(
+                        response.pods,
+                        Keystore.currentUmkSeed(),
+                    )
+                }
+            },
+        )
 
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it
