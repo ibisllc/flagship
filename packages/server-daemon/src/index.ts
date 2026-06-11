@@ -29,7 +29,7 @@ import {
   type AutoUnlockSuppressor,
   type HostPowerRunner,
 } from "./deadMan.js";
-import { buildDeadManHttp } from "./deadManHttp.js";
+import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -306,8 +306,6 @@ async function main(): Promise<void> {
           phonePipe: browserBundle?.phonePipe ?? null,
           subscriberRegistry,
           pairedSessions,
-          autoUnlockSuppressor,
-          hostPowerRunner,
         }),
       }
     : undefined;
@@ -860,6 +858,14 @@ async function main(): Promise<void> {
     });
     await deadMan.start();
     runtime.addHandler(buildDeadManHttp(deadMan));
+    runtime.addHandler(
+      buildPowerHttp({
+        serverId: env.serverFqdn!,
+        ownerIrkPub: cfg.irkPublicKey,
+        suppressor: autoUnlockSuppressor,
+        runner: hostPowerRunner,
+      }),
+    );
     process.once("SIGTERM", () => deadMan.stop());
     process.once("SIGINT", () => deadMan.stop());
     console.log(
@@ -939,14 +945,6 @@ interface ExecutorDeps {
   subscriberRegistry?: FileSubscriberRegistry;
   /** Paired-session store for add/remove-paired-session phone orders. */
   pairedSessions?: FilePairedSessionStore;
-  /**
-   * Suppresses the silent auto-unlock before a host power action so a
-   * LUKS box lands at the phone-approval boot-unlock prompt. Shared with
-   * the dead-man enforcement timer.
-   */
-  autoUnlockSuppressor?: AutoUnlockSuppressor;
-  /** Runs the real host power action (poweroff/reboot). */
-  hostPowerRunner?: HostPowerRunner;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -969,19 +967,6 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       console.log(`[daemon] order: shut-down — exiting in 1s`);
       setTimeout(() => process.exit(0), 1000);
     },
-    powerOff:
-      deps.autoUnlockSuppressor && deps.hostPowerRunner
-        ? async ({ mode }) => {
-            console.log(
-              `[daemon] order: power-off mode=${mode} — suppressing auto-unlock, then ${mode === "off" ? "poweroff" : "reboot"}`,
-            );
-            await executeLockAndPower({
-              mode,
-              suppressor: deps.autoUnlockSuppressor!,
-              runner: deps.hostPowerRunner!,
-            });
-          }
-        : undefined,
     revokeSelf: async ({ reason }) => {
       console.log(`[daemon] order: revoke-self reason=${JSON.stringify(reason)}`);
       try {
@@ -1392,7 +1377,7 @@ export type {
   DeadManControllerOptions,
   DeadManPolicyState,
 } from "./deadMan.js";
-export { buildDeadManHttp } from "./deadManHttp.js";
+export { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,

@@ -1,6 +1,12 @@
+import { executeLockAndPower, type AutoUnlockSuppressor, type HostPowerRunner } from "./deadMan.js";
 import type { DeadManController } from "./deadMan.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import type { DeadManAffirmation, SetDeadManPolicy } from "@flagship/protocol";
+import {
+  verifyPhoneOrder,
+  type DeadManAffirmation,
+  type PhoneOrder,
+  type SetDeadManPolicy,
+} from "@flagship/protocol";
 
 /**
  * Dead-man delivery surface — rides the same daemon HTTP plane as the
@@ -66,6 +72,89 @@ export function buildDeadManHttp(controller: DeadManController) {
       body: JSON.stringify({ ok: true, leaseExpiry: controller.leaseExpiry() }),
     };
   };
+}
+
+/**
+ * Manual power surface — `POST /api/power`. Rides the same daemon HTTP
+ * plane as the dead-man endpoints and verifies against the SAME box
+ * config-pinned owner IRK (NOT the dead PSK/orders path: `psk.pub.hex` is
+ * never written on a real Debian box, so `/api/orders-from-user` is inert
+ * on metal). Body is an `{ request, signature }` envelope where `request`
+ * is the existing `power-off` PhoneOrder
+ * `{ type:"power-off", serverId, mode:"off"|"restart", issuedAt }`
+ * (UNCHANGED canonical bytes). On a valid IRK signature within the replay
+ * window it runs the SHARED `executeLockAndPower` primitive — suppress the
+ * silent auto-unlock, THEN power off/restart — the same primitive the
+ * dead-man timer fires.
+ *
+ * Returns null for any other path so it falls through the handler chain.
+ */
+export interface PowerHttpOptions {
+  serverId: string;
+  ownerIrkPub: Uint8Array;
+  suppressor: AutoUnlockSuppressor;
+  runner: HostPowerRunner;
+  now?: () => number;
+  /** Replay window for `issuedAt`. Default 5 min — mirrors the dead-man. */
+  maxAgeMs?: number;
+}
+
+export function buildPowerHttp(opts: PowerHttpOptions) {
+  const now = opts.now ?? (() => Date.now());
+  const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
+
+  return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
+    if (req.path !== "/api/power") return null;
+    if (req.method !== "POST") {
+      return { status: 405, headers: H, body: JSON.stringify({ error: "method not allowed" }) };
+    }
+    let env: { request?: Record<string, unknown>; signature?: unknown };
+    try {
+      env = JSON.parse(req.body.toString("utf8"));
+    } catch {
+      return { status: 400, headers: H, body: JSON.stringify({ error: "invalid json" }) };
+    }
+    const r = env.request;
+    if (!r || typeof r !== "object" || typeof env.signature !== "string") {
+      return { status: 400, headers: H, body: JSON.stringify({ error: "malformed body" }) };
+    }
+    if (typeof r.serverId !== "string" || r.serverId !== opts.serverId) {
+      return { status: 403, headers: H, body: JSON.stringify({ error: "serverId mismatch" }) };
+    }
+    if (typeof r.issuedAt !== "number") {
+      return { status: 400, headers: H, body: JSON.stringify({ error: "issuedAt must be a number" }) };
+    }
+    if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
+      return { status: 403, headers: H, body: JSON.stringify({ error: "stale request" }) };
+    }
+    const order = parsePowerOff(r);
+    if (!order) {
+      return { status: 400, headers: H, body: JSON.stringify({ error: "malformed power-off order" }) };
+    }
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(env.signature);
+    } catch {
+      return { status: 400, headers: H, body: JSON.stringify({ error: "invalid signature hex" }) };
+    }
+    if (!verifyPhoneOrder(order, sig, opts.ownerIrkPub)) {
+      return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
+    }
+    await executeLockAndPower({ mode: order.mode, suppressor: opts.suppressor, runner: opts.runner });
+    return { status: 200, headers: H, body: JSON.stringify({ ok: true, mode: order.mode }) };
+  };
+}
+
+function parsePowerOff(r: Record<string, unknown>): Extract<PhoneOrder, { type: "power-off" }> | null {
+  if (
+    r.type !== "power-off" ||
+    typeof r.serverId !== "string" ||
+    typeof r.issuedAt !== "number" ||
+    (r.mode !== "off" && r.mode !== "restart")
+  ) {
+    return null;
+  }
+  return { type: "power-off", serverId: r.serverId, mode: r.mode, issuedAt: r.issuedAt };
 }
 
 function parsePolicy(r: Record<string, unknown>): SetDeadManPolicy | null {

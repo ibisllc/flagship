@@ -16,7 +16,7 @@ import {
   type AutoUnlockSuppressor,
   type HostPowerRunner,
 } from "../src/deadMan.js";
-import { buildOrdersHandler, type OrderExecutor } from "../src/orders.js";
+import { buildOrdersHandler } from "../src/orders.js";
 import { readFile, mkdtemp, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,7 +74,7 @@ describe("executeLockAndPower", () => {
   });
 });
 
-describe("power-off PhoneOrder executor (suppress-before-power)", () => {
+describe("power-off no longer rides the PSK orders path", () => {
   function envelope(order: PhoneOrder, psk: Keypair) {
     return {
       request: { ...order },
@@ -90,30 +90,13 @@ describe("power-off PhoneOrder executor (suppress-before-power)", () => {
     };
   }
 
-  it("dispatches power-off and the executor suppresses before powering", async () => {
-    const { events, suppressor, runner } = recorder();
+  it("buildOrdersHandler does not dispatch a power-off (moved to /api/power)", async () => {
     const psk = makeKey(3);
-    const executor: OrderExecutor = {
-      powerOff: async ({ mode }) => {
-        await executeLockAndPower({ mode, suppressor, runner });
-      },
-    };
-    const handler = buildOrdersHandler({ serverFqdn: SERVER, pskPub: psk.publicKey, executor });
+    const handler = buildOrdersHandler({ serverFqdn: SERVER, pskPub: psk.publicKey, executor: {} });
     const order: PhoneOrder = { type: "power-off", serverId: SERVER, mode: "off", issuedAt: Date.now() };
     const res = await handler(req(envelope(order, psk)));
-    expect(res.status).toBe(200);
-    expect(events).toEqual(["suppress", "power:off"]);
-  });
-
-  it("rejects a tampered mode (signature fails)", async () => {
-    const psk = makeKey(4);
-    const executor: OrderExecutor = { powerOff: async () => {} };
-    const handler = buildOrdersHandler({ serverFqdn: SERVER, pskPub: psk.publicKey, executor });
-    const order: PhoneOrder = { type: "power-off", serverId: SERVER, mode: "off", issuedAt: Date.now() };
-    const env = envelope(order, psk);
-    (env.request as { mode: string }).mode = "restart";
-    const res = await handler(req(env));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
+    expect(JSON.parse(String(res.body)).error).toBe("unknown or malformed order");
   });
 });
 
