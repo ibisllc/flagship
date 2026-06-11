@@ -4,7 +4,8 @@
  * Routes:
  *   POST   /api/push/register   — IRK-signed; mint or re-register a token
  *   DELETE /api/push/<token-id> — IRK-signed; revoke
- *   POST   /api/push/relay      — phone or daemon submits encrypted payload
+ *   POST   /api/push/relay      — STK-signed by a registered box of the
+ *                                  target user; submits an encrypted payload
  *                                  + target user; Worker forwards to APNs/FCM
  *
  * Privacy invariant: the relay payload is opaque to .com. The phone
@@ -16,14 +17,19 @@
  */
 
 import {
+  isPushRelayCategory,
   verifyDeviceAdmit,
+  verifyPushRelayRequest,
   verifyPushTokenRegister,
   type DeviceAdmit,
+  type PushRelayCategory,
+  type PushRelayRequest,
   type PushTokenRegister,
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
   PushTokenStorage,
+  ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
@@ -43,6 +49,13 @@ export const QUARANTINE_MS = 14 * 86_400_000;
 export interface PushDeps {
   pushTokens: PushTokenStorage;
   usernames: UsernameStorage;
+  /**
+   * Registered servers, used by the relay to authenticate the sender:
+   * a legitimate relay is signed by one of the TARGET user's own boxes
+   * (the same STK identity it signs daemon-status with). Required by
+   * `handlePushRelay`; the register/admit paths don't read it.
+   */
+  servers?: ServerStorage;
   freshnessMs?: number;
   now?: () => number;
   /**
@@ -314,31 +327,102 @@ export async function handleVouchedDeviceAdmit(
 }
 
 interface RelayBody {
-  /** Username of the target. Worker fans out to all that user's registered tokens. */
-  targetUsername?: string;
-  /** Notification category in plaintext (e.g. "unlock-request"). */
-  category?: string;
-  /** Hex of the bytes sealed by the sender to the target's push X25519 pub. */
-  sealedPayloadHex?: string;
+  request?: {
+    /** Username of the target. Worker fans out to all that user's registered tokens. */
+    targetUsername?: string;
+    /** Notification category in plaintext (e.g. "unlock-request"); must be a known enum. */
+    category?: string;
+    /** Hex of the bytes sealed by the sender to the target's push X25519 pub. */
+    sealedPayloadHex?: string;
+    issuedAt?: number;
+  };
+  /** Ed25519 over the canonical push-relay bytes, signed by a registered box of the target. */
+  signature?: string;
 }
 
+const SIG_HEX_RE = /^[0-9a-f]{128}$/i;
+
+/**
+ * SEC-2 — the relay is now authenticated. The legitimate sender is one
+ * of the TARGET user's OWN boxes (a daemon asking its owner to approve
+ * an unlock), so we require an STK-signed `flagship/push-relay/v1`
+ * envelope and verify it against the target's registered servers — the
+ * same identity-key trust used by daemon-status / dns01. This kills both
+ * the push-spam vector (any username-knower could fan out an
+ * attacker-chosen category) and the device-registration oracle (404 vs
+ * 200 on token presence): an unauthenticated caller now never reaches
+ * the token lookup, and `category` is constrained to a known enum so it
+ * can't carry arbitrary plaintext into the OS-visible slot.
+ */
 export async function handlePushRelay(
   deps: PushDeps,
   body: RelayBody | undefined,
 ): Promise<HandlerResponse> {
+  const r = body?.request;
   if (
-    !body ||
-    typeof body.targetUsername !== "string" ||
-    typeof body.category !== "string" ||
-    typeof body.sealedPayloadHex !== "string"
+    !r ||
+    typeof r.targetUsername !== "string" ||
+    typeof r.category !== "string" ||
+    typeof r.sealedPayloadHex !== "string" ||
+    typeof r.issuedAt !== "number" ||
+    typeof body?.signature !== "string"
   ) {
     return malformed("malformed body");
   }
-  if (body.sealedPayloadHex.length > 8192) {
+  if (r.sealedPayloadHex.length > 8192) {
     return malformed("sealed payload too large");
   }
-  const tokens = await deps.pushTokens.listByUser(body.targetUsername);
-  if (tokens.length === 0) return notFound("no push tokens for user");
+  if (!isPushRelayCategory(r.category)) {
+    return malformed("unknown category");
+  }
+  if (!SIG_HEX_RE.test(body.signature)) {
+    return malformed("signature must be 64-byte hex");
+  }
+
+  const now = (deps.now ?? (() => Date.now()))();
+  const freshness = deps.freshnessMs ?? 5 * 60_000;
+  if (Math.abs(now - r.issuedAt) > freshness) return forbidden("stale request");
+
+  if (!deps.servers) return forbidden("relay unauthenticated");
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(body.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+
+  const claim: PushRelayRequest = {
+    targetUsername: r.targetUsername,
+    category: r.category as PushRelayCategory,
+    sealedPayloadHex: r.sealedPayloadHex,
+    issuedAt: r.issuedAt,
+  };
+
+  // The signer must be a CURRENTLY-registered, non-revoked server of the
+  // target user. We try each of the target's servers; the relay is
+  // authorized as soon as one identity key verifies. A caller that holds
+  // no such key (only a username) verifies against none → 403, BEFORE any
+  // token lookup, so the response is no longer a registration oracle.
+  const servers = await deps.servers.listForUser(r.targetUsername);
+  let authorized = false;
+  for (const s of servers) {
+    if (s.revokedAt) continue;
+    let stkPub: Uint8Array;
+    try {
+      stkPub = hexToBytes(s.identityPubKeyHex);
+    } catch {
+      continue;
+    }
+    if (verifyPushRelayRequest(claim, sig, stkPub)) {
+      authorized = true;
+      break;
+    }
+  }
+  if (!authorized) return forbidden("not a registered box of the target");
+
+  const tokens = await deps.pushTokens.listByUser(r.targetUsername);
+  if (tokens.length === 0) return ok({ ok: true, fanout: 0 });
 
   if (!deps.forwardToProviders) {
     // Without a real forwarder, return ok with `simulated: true` so
@@ -351,8 +435,8 @@ export async function handlePushRelay(
       platform: t.platform,
       providerToken: t.providerToken,
     })),
-    category: body.category,
-    sealedPayloadHex: body.sealedPayloadHex,
+    category: r.category,
+    sealedPayloadHex: r.sealedPayloadHex,
   });
   return ok({ ...result });
 }

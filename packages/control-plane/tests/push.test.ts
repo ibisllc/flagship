@@ -3,10 +3,17 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { ed, signPushTokenRegister, type Keypair } from "@flagship/protocol";
+import {
+  ed,
+  signPushRelayRequest,
+  signPushTokenRegister,
+  type Keypair,
+  type PushRelayRequest,
+} from "@flagship/protocol";
 import {
   InMemoryAuditEventStorage,
   InMemoryPushTokenStorage,
+  InMemoryStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
 import { handlePushRegister, handlePushRelay, handlePushRevoke, QUARANTINE_MS } from "../src/push.js";
@@ -389,81 +396,167 @@ describe("/api/push/register — Phase 3b vouched-admit quarantine", () => {
   });
 });
 
-describe("/api/push/relay", () => {
-  it("returns simulated:true when no forwarder is wired", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const pushTokens = new InMemoryPushTokenStorage();
-    const irk = makeIrk(); await seed(usernames, "alice", irk);
-    // Pre-register a token directly
-    await pushTokens.put({
-      tokenId: "abcd",
+describe("/api/push/relay (SEC-2 STK-signed)", () => {
+  const NOW = 1_700_000_000_000;
+
+  // A box of the target user: a registered server whose identity (STK) key
+  // signs the relay. This mirrors the daemon-status trust path.
+  function makeBox(): Keypair {
+    const priv = new Uint8Array(32);
+    crypto.getRandomValues(priv);
+    return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+  }
+
+  async function setup(opts: { withToken?: boolean } = {}) {
+    const storage = new InMemoryStorage();
+    const box = makeBox();
+    await storage.usernames.put({
       username: "alice",
-      platform: "apns",
-      providerToken: "apns-x",
-      pushX25519PubHex: "01".repeat(32),
-      registrationSignatureHex: "00".repeat(64),
-      label: "",
-      registeredAt: 0,
-      lastSeenAt: 0,
+      irkPubHex: bytesToHex(makeIrk().publicKey),
+      claimedAt: NOW,
     });
-    const r = await handlePushRelay(
-      { pushTokens, usernames },
-      { targetUsername: "alice", category: "unlock-request", sealedPayloadHex: "deadbeef" },
-    );
+    await storage.servers.put({
+      serverDomain: "home1.alice.flagship.services",
+      username: "alice",
+      identityPubKeyHex: bytesToHex(box.publicKey),
+      registeredAt: NOW - 50_000,
+    });
+    if (opts.withToken !== false) {
+      await storage.pushTokens.put({
+        tokenId: "abcd",
+        username: "alice",
+        platform: "apns",
+        providerToken: "apns-x",
+        pushX25519PubHex: "01".repeat(32),
+        registrationSignatureHex: "00".repeat(64),
+        label: "",
+        registeredAt: 0,
+        lastSeenAt: 0,
+      });
+    }
+    return { storage, box };
+  }
+
+  function signed(box: Keypair, over: Partial<PushRelayRequest> = {}) {
+    const req: PushRelayRequest = {
+      targetUsername: "alice",
+      category: "unlock-request",
+      sealedPayloadHex: "deadbeef",
+      issuedAt: NOW,
+      ...over,
+    };
+    return {
+      request: req,
+      signature: bytesToHex(signPushRelayRequest(req, box)),
+    };
+  }
+
+  function deps(storage: InMemoryStorage, extra: Record<string, unknown> = {}) {
+    return {
+      pushTokens: storage.pushTokens,
+      usernames: storage.usernames,
+      servers: storage.servers,
+      now: () => NOW,
+      ...extra,
+    };
+  }
+
+  it("returns simulated:true for a valid box-signed relay (no forwarder)", async () => {
+    const { storage, box } = await setup();
+    const r = await handlePushRelay(deps(storage), signed(box));
     expect(r.status).toBe(200);
     const body = r.body as { simulated: boolean; fanout: number };
     expect(body.simulated).toBe(true);
     expect(body.fanout).toBe(1);
   });
 
-  it("404 when target has no tokens", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const pushTokens = new InMemoryPushTokenStorage();
+  it("calls forwarder when wired and returns its result", async () => {
+    const { storage, box } = await setup();
+    const calls: number[] = [];
     const r = await handlePushRelay(
-      { pushTokens, usernames },
-      { targetUsername: "nobody", category: "x", sealedPayloadHex: "00" },
+      deps(storage, {
+        forwardToProviders: async (args: { targets: unknown[] }) => {
+          calls.push(args.targets.length);
+          return { ok: true, sent: args.targets.length, failed: 0 };
+        },
+      }),
+      signed(box),
     );
-    expect(r.status).toBe(404);
+    expect(r.status).toBe(200);
+    expect(calls).toEqual([1]);
+  });
+
+  it("403 when the signature is not from a registered box of the target", async () => {
+    const { storage } = await setup();
+    const stranger = makeBox();
+    const r = await handlePushRelay(deps(storage), signed(stranger));
+    expect(r.status).toBe(403);
+  });
+
+  it("403 (NOT 404) when the target has no tokens — no registration oracle", async () => {
+    const { storage, box } = await setup({ withToken: false });
+    // A valid box-signed relay to a user with zero tokens returns 200 fanout:0;
+    // an UN-authorized caller to the same user returns 403 — identical 403 to
+    // the has-tokens case, so token presence is not observable pre-auth.
+    const valid = await handlePushRelay(deps(storage), signed(box));
+    expect(valid.status).toBe(200);
+    expect((valid.body as { fanout: number }).fanout).toBe(0);
+
+    const stranger = makeBox();
+    const noauth = await handlePushRelay(deps(storage), signed(stranger));
+    expect(noauth.status).toBe(403);
+  });
+
+  it("rejects an unknown category", async () => {
+    const { storage, box } = await setup();
+    const req: PushRelayRequest = {
+      targetUsername: "alice",
+      category: "unlock-request",
+      sealedPayloadHex: "deadbeef",
+      issuedAt: NOW,
+    };
+    const sig = bytesToHex(signPushRelayRequest(req, box));
+    // Tamper the category AFTER signing — the handler rejects on the enum
+    // check (malformed) before it would even fail signature verification.
+    const r = await handlePushRelay(deps(storage), {
+      request: { ...req, category: "rm -rf /" },
+      signature: sig,
+    });
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects a stale request", async () => {
+    const { storage, box } = await setup();
+    const r = await handlePushRelay(
+      deps(storage),
+      signed(box, { issuedAt: NOW - 10 * 60_000 }),
+    );
+    expect(r.status).toBe(403);
   });
 
   it("rejects oversize payload", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const pushTokens = new InMemoryPushTokenStorage();
+    const { storage, box } = await setup();
     const r = await handlePushRelay(
-      { pushTokens, usernames },
-      { targetUsername: "x", category: "y", sealedPayloadHex: "a".repeat(10_000) },
+      deps(storage),
+      signed(box, { sealedPayloadHex: "a".repeat(10_000) }),
     );
     expect(r.status).toBe(400);
   });
 
-  it("calls forwarder when wired and returns its result", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const pushTokens = new InMemoryPushTokenStorage();
-    const irk = makeIrk(); await seed(usernames, "alice", irk);
-    await pushTokens.put({
-      tokenId: "abcd",
-      username: "alice",
-      platform: "apns",
-      providerToken: "apns-x",
-      pushX25519PubHex: "01".repeat(32),
-      registrationSignatureHex: "00".repeat(64),
-      label: "",
-      registeredAt: 0,
-      lastSeenAt: 0,
-    });
-    const calls: number[] = [];
+  it("403 when a revoked box signs", async () => {
+    const { storage, box } = await setup();
+    await storage.servers.revoke("home1.alice.flagship.services", "test", NOW);
+    const r = await handlePushRelay(deps(storage), signed(box));
+    expect(r.status).toBe(403);
+  });
+
+  it("403 when no servers storage is wired", async () => {
+    const { storage, box } = await setup();
     const r = await handlePushRelay(
-      {
-        pushTokens, usernames,
-        forwardToProviders: async (args) => {
-          calls.push(args.targets.length);
-          return { ok: true, sent: args.targets.length, failed: 0 };
-        },
-      },
-      { targetUsername: "alice", category: "unlock-request", sealedPayloadHex: "ab" },
+      { pushTokens: storage.pushTokens, usernames: storage.usernames, now: () => NOW },
+      signed(box),
     );
-    expect(r.status).toBe(200);
-    expect(calls).toEqual([1]);
+    expect(r.status).toBe(403);
   });
 });
 

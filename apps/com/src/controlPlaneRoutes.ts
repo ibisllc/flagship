@@ -1764,6 +1764,7 @@ export async function tryControlPlane(
         {
           pushTokens: storage.pushTokens,
           usernames: storage.usernames,
+          servers: storage.servers,
           ...(forwarder ? { forwardToProviders: forwarder } : {}),
         },
         await readJson(request),
