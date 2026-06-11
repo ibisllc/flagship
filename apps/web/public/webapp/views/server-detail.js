@@ -14,6 +14,16 @@ import {
   revokeServer,
   REVOCATION_REASONS,
 } from "../lib/revokeServer.js";
+import {
+  sendPowerOff,
+  setDeadManPolicy,
+  affirmDeadMan,
+  DEADMAN_WINDOW_PRESETS,
+  DEADMAN_TIGHTEN_PRESET,
+  DEADMAN_DEFAULT_PRESET,
+  fmtRemaining,
+} from "../lib/lockAndPower.js";
+import { getPodBaseUrl } from "../lib/api.js";
 import { signWithIrk } from "../keystore.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -96,6 +106,60 @@ export async function renderServerDetail() {
             </div>
           </div>
         `).join("")}
+      <h2 class="mt-4">${escapeHtml(isLuksBox(body) ? "Lock & power" : "Power")}</h2>
+      <div class="card" id="lock-power-card">
+        <p class="note">
+          ${escapeHtml(isLuksBox(body)
+            ? "Power the box down or restart it. Either drops the in-memory disk key, so the next boot waits for your approval to unlock."
+            : "Power the box down or restart it.")}
+        </p>
+        <div class="row-2 mt-2">
+          <button id="power-off-btn" class="danger" data-power-mode="off">${escapeHtml(powerLabel("off", body))}</button>
+          <button id="power-restart-btn" class="danger" data-power-mode="restart">${escapeHtml(powerLabel("restart", body))}</button>
+        </div>
+        <p class="note small hidden" id="power-status"></p>
+      </div>
+      <h2 class="mt-4">Dead-man heartbeat-lock</h2>
+      <div class="card" id="deadman-card">
+        <p class="note">
+          Off by default. When on, you must periodically affirm — an explicit
+          tap that signs "keep this server unlocked?". If the window lapses with
+          no affirmation, the box locks itself (${escapeHtml(isLuksBox(body) ? "turns off / restarts and waits for your approval to unlock" : "powers off / restarts")}).
+          The phone apps own the real background reminders — this webapp can only
+          show the countdown while it's open.
+        </p>
+        <div class="row mt-2">
+          <span class="label">Status</span>
+          <span class="pill" id="deadman-pill">off</span>
+        </div>
+        <label class="caption mt-2">Window</label>
+        <select id="deadman-window" class="full-width">
+          ${DEADMAN_WINDOW_PRESETS.map(
+            (p) => `<option value="${escapeHtml(p.id)}"${p.id === DEADMAN_DEFAULT_PRESET.id ? " selected" : ""}>${escapeHtml(p.label)}</option>`,
+          ).join("")}
+        </select>
+        <label class="caption mt-2">Lockout action</label>
+        <select id="deadman-lockout" class="full-width">
+          <option value="off" selected>Turn off (default)</option>
+          <option value="restart">Restart</option>
+        </select>
+        <div class="row-2 mt-2">
+          <button id="deadman-enable-btn" class="full-width">Enable</button>
+          <button id="deadman-disable-btn" class="secondary full-width hidden">Disable</button>
+        </div>
+        <button id="deadman-tighten-btn" class="secondary full-width mt-2">Tighten now (${escapeHtml(DEADMAN_TIGHTEN_PRESET.label.replace(/\s*\(.*\)/, ""))})</button>
+        <div id="deadman-affirm-block" class="mt-3 hidden">
+          <div class="row">
+            <span class="label">Time remaining</span>
+            <span class="value" id="deadman-remaining">—</span>
+          </div>
+          <button id="deadman-affirm-btn" class="full-width mt-2">Keep ${escapeHtml(body.serverFqdn.split(".")[0] || "server")} unlocked</button>
+          <p class="note small mt-1">
+            Reminders fire on the phone apps, not here — keep an eye on the
+            countdown above while this tab is open.
+          </p>
+        </div>
+      </div>
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -107,6 +171,8 @@ export async function renderServerDetail() {
       </div>
     `;
     wireAutoUnlock(body.serverFqdn);
+    wireLockPower(body);
+    wireDeadMan(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -233,6 +299,290 @@ function startMetricsPolling(serverFqdn) {
   };
   void tick();
   metricsTimer = setInterval(tick, 15_000);
+}
+
+// ---- Lock & power -----------------------------------------------------
+
+// The server-detail BFF (ServerDetailResponse) does NOT surface
+// diskEncryption today, so the webapp can't reliably know whether a box is
+// LUKS-from-phone. Default to the LUKS-assumed labels ("Lock and …") and the
+// lock copy, and honor `body.diskEncryption === "none"` IF the model ever
+// starts carrying it. GAP: wire a real diskEncryption flag through the BFF to
+// drop the "Lock and " prefix on genuinely non-LUKS boxes.
+function isLuksBox(body) {
+  return body?.diskEncryption !== "none";
+}
+
+function powerLabel(mode, body) {
+  const verb = mode === "restart" ? "restart" : "turn off";
+  const cap = verb.charAt(0).toUpperCase() + verb.slice(1);
+  return isLuksBox(body) ? `Lock and ${verb}` : cap;
+}
+
+function wireLockPower(body) {
+  const status = $("power-status");
+  const buttons = ["power-off-btn", "power-restart-btn"]
+    .map((id) => $(id))
+    .filter(Boolean);
+
+  for (const btn of buttons) {
+    btn.addEventListener("click", () => {
+      const mode = btn.getAttribute("data-power-mode");
+      runPowerAction(body, mode, btn, buttons, status).catch((e) => {
+        if (e?.code !== "cancelled") toast(humanError(e), "err");
+      });
+    });
+  }
+}
+
+async function runPowerAction(body, mode, btn, allButtons, status) {
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const baseUrl = getPodBaseUrl();
+  if (!baseUrl) {
+    toast("Not paired with this server", "err");
+    return;
+  }
+  const actionLabel = powerLabel(mode, body);
+  // Reuse the most-destructive existing gate: the revoke ceremony's
+  // confirm dialog + 3-second AbortSignal countdown (countdownConfirm).
+  await openPowerConfirmDialog(body, mode, actionLabel, async (signal) => {
+    for (const b of allButtons) b.disabled = true;
+    const origLabel = btn.textContent;
+    try {
+      await countdownConfirm({
+        signal,
+        onTick: (s) => {
+          btn.textContent = s > 0 ? `${actionLabel} in ${s}…` : `${actionLabel}…`;
+        },
+      });
+      await sendPowerOff({
+        baseUrl,
+        mode,
+        umk: session.umk,
+        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+      });
+      if (status) {
+        status.classList.remove("hidden");
+        status.textContent =
+          mode === "restart" ? "Restarting — the server will go offline briefly." : "Powering off — the server is going offline.";
+      }
+      toast(`${actionLabel} sent`, "ok");
+    } finally {
+      btn.textContent = origLabel;
+      for (const b of allButtons) b.disabled = false;
+    }
+  });
+}
+
+// Minimal "Are you sure?" confirm dialog around the power action. Mirrors the
+// revoke dialog's structure (dialog element, Escape/Cancel abort) but with the
+// short copy the spec asks for. The actual destructive gate (countdown) runs
+// inside `onConfirm(signal)`.
+function openPowerConfirmDialog(body, mode, actionLabel, onConfirm) {
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", actionLabel);
+  dlg.innerHTML = `
+    <h3 class="modal-title">${escapeHtml(actionLabel)}?</h3>
+    <p class="modal-message">${escapeHtml(body.serverFqdn)} will go offline.</p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-power-cancel>Cancel</button>
+      <button class="danger" data-power-go>${escapeHtml(actionLabel)}</button>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const goBtn = dlg.querySelector("[data-power-go]");
+  const cancelBtn = dlg.querySelector("[data-power-cancel]");
+  let abort = null;
+  const cleanup = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => {
+      if (abort) abort.abort();
+      cleanup();
+      reject({ code: "cancelled" });
+    };
+    const onEscape = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); onCancel(); }
+    };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onEscape);
+
+    goBtn.addEventListener("click", async () => {
+      abort = new AbortController();
+      try {
+        await onConfirm(abort.signal);
+        document.removeEventListener("keydown", onEscape);
+        dlg.removeEventListener("close", onCancel);
+        cleanup();
+        resolve();
+      } catch (e) {
+        if (e?.code === "cancelled") {
+          // Bounce back to the picker so the user can re-confirm.
+          abort = null;
+          return;
+        }
+        document.removeEventListener("keydown", onEscape);
+        dlg.removeEventListener("close", onCancel);
+        cleanup();
+        reject(e);
+      }
+    });
+  });
+}
+
+// ---- Dead-man heartbeat-lock ------------------------------------------
+
+let deadManCountdownTimer = null;
+
+function selectedWindowPreset() {
+  const id = $("deadman-window")?.value;
+  return DEADMAN_WINDOW_PRESETS.find((p) => p.id === id) || DEADMAN_DEFAULT_PRESET;
+}
+
+function setDeadManEnabledUi(enabled, leaseExpiry) {
+  const pill = $("deadman-pill");
+  const disableBtn = $("deadman-disable-btn");
+  const enableBtn = $("deadman-enable-btn");
+  const affirmBlock = $("deadman-affirm-block");
+  if (pill) pill.textContent = enabled ? "on" : "off";
+  if (enableBtn) enableBtn.textContent = enabled ? "Update window" : "Enable";
+  disableBtn?.classList.toggle("hidden", !enabled);
+  affirmBlock?.classList.toggle("hidden", !enabled);
+  if (enabled) startDeadManCountdown(leaseExpiry);
+  else stopDeadManCountdown();
+}
+
+function startDeadManCountdown(leaseExpiry) {
+  stopDeadManCountdown();
+  const el = $("deadman-remaining");
+  if (!el) return;
+  const render = () => {
+    if ($("view-server-detail")?.classList.contains("hidden")) {
+      stopDeadManCountdown();
+      return;
+    }
+    el.textContent =
+      typeof leaseExpiry === "number"
+        ? fmtRemaining(leaseExpiry, Date.now())
+        : "affirm to start the lease";
+  };
+  render();
+  if (typeof leaseExpiry === "number") {
+    deadManCountdownTimer = setInterval(render, 1000);
+  }
+}
+
+function stopDeadManCountdown() {
+  if (deadManCountdownTimer) {
+    clearInterval(deadManCountdownTimer);
+    deadManCountdownTimer = null;
+  }
+}
+
+async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
+  const session = getSession();
+  if (!session.umk) throw Object.assign(new Error("Unlock the webapp first"), { code: "400" });
+  const baseUrl = getPodBaseUrl();
+  if (!baseUrl) throw Object.assign(new Error("Not paired with this server"), { code: "400" });
+  return setDeadManPolicy({
+    baseUrl,
+    enabled,
+    windowMs: preset.windowMs,
+    graceMs: preset.graceMs,
+    lockoutMode,
+    umk: session.umk,
+    signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+  });
+}
+
+function wireDeadMan(body) {
+  const enableBtn = $("deadman-enable-btn");
+  const disableBtn = $("deadman-disable-btn");
+  const tightenBtn = $("deadman-tighten-btn");
+  const affirmBtn = $("deadman-affirm-btn");
+
+  enableBtn?.addEventListener("click", async () => {
+    const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
+    enableBtn.disabled = true;
+    enableBtn.textContent = "Signing…";
+    try {
+      await applyDeadManPolicy(body, { enabled: true, preset: selectedWindowPreset(), lockoutMode });
+      setDeadManEnabledUi(true, null);
+      toast("Dead-man lock enabled — affirm to start the lease", "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    } finally {
+      enableBtn.disabled = false;
+      if ($("deadman-pill")?.textContent !== "on") enableBtn.textContent = "Enable";
+    }
+  });
+
+  disableBtn?.addEventListener("click", async () => {
+    disableBtn.disabled = true;
+    try {
+      await applyDeadManPolicy(body, {
+        enabled: false,
+        preset: selectedWindowPreset(),
+        lockoutMode: $("deadman-lockout")?.value === "restart" ? "restart" : "off",
+      });
+      setDeadManEnabledUi(false, null);
+      toast("Dead-man lock disabled", "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    } finally {
+      disableBtn.disabled = false;
+    }
+  });
+
+  tightenBtn?.addEventListener("click", async () => {
+    tightenBtn.disabled = true;
+    const lockoutMode = $("deadman-lockout")?.value === "restart" ? "restart" : "off";
+    try {
+      await applyDeadManPolicy(body, { enabled: true, preset: DEADMAN_TIGHTEN_PRESET, lockoutMode });
+      const sel = $("deadman-window");
+      if (sel) sel.value = DEADMAN_TIGHTEN_PRESET.id;
+      setDeadManEnabledUi(true, null);
+      toast(`Tightened to ${DEADMAN_TIGHTEN_PRESET.label}`, "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    } finally {
+      tightenBtn.disabled = false;
+    }
+  });
+
+  affirmBtn?.addEventListener("click", async () => {
+    const session = getSession();
+    if (!session.umk) return toast("Unlock the webapp first", "err");
+    const baseUrl = getPodBaseUrl();
+    if (!baseUrl) return toast("Not paired with this server", "err");
+    affirmBtn.disabled = true;
+    affirmBtn.textContent = "Affirming…";
+    try {
+      const r = await affirmDeadMan({
+        baseUrl,
+        umk: session.umk,
+        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+      });
+      setDeadManEnabledUi(true, r.leaseExpiry);
+      toast("Affirmed — lease renewed", "ok");
+    } catch (e) {
+      toast(humanError(e), "err");
+    } finally {
+      affirmBtn.disabled = false;
+      affirmBtn.textContent = `Keep ${body.serverFqdn.split(".")[0] || "server"} unlocked`;
+    }
+  });
 }
 
 function wireDangerZone(serverFqdn, username) {
