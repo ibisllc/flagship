@@ -16,10 +16,13 @@
 // incoming claim attempts; it returns transition verdicts that the
 // daemon then acts on (rotate keys, mark PAIRED, persist STK).
 
+import { PAIR_SESSION_LOCK_MS } from "@flagship/protocol";
+
 export type BoxPairState = "UNPAIRED" | "SESSION_LOCKED" | "PAIRED";
 
-/** Window during which a session-locked box accepts ONE matching claim. */
-export const SESSION_LOCK_MS = 30_000;
+/** Window during which a session-locked box accepts ONE matching claim.
+ *  Sourced from the protocol so phones + box share one value. */
+export const SESSION_LOCK_MS = PAIR_SESSION_LOCK_MS;
 
 export interface PairStateSnapshot {
   state: BoxPairState;

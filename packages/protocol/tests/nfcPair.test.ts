@@ -3,6 +3,9 @@ import { gcm } from "@noble/ciphers/aes";
 import { ed25519, x25519 } from "@noble/curves/ed25519.js";
 import {
   PAIR_PROTOCOL_VERSION,
+  PAIR_SESSION_LOCK_MS,
+  buildWifiDepositBlob,
+  parseWifiDepositBlob,
   LED_SAS_ALPHABET,
   LED_SAS_GLANCES_REQUIRED,
   LED_SAS_PULSE_MS,
@@ -325,5 +328,65 @@ describe("N-PROTO-4: SAS + LED-SAS encoding", () => {
     pub[30] = 0xab;
     pub[31] = 0xcd;
     expect(stkPubToSuffix6(pub)).toBe("00abcd");
+  });
+});
+
+describe("wifi deposit blob (ePhonePub || ciphertext)", () => {
+  it("round-trips ePhonePub + sealed ciphertext through the relay shape", () => {
+    const phone = x25519Pair(7);
+    const kSession = new Uint8Array(32).fill(0x42);
+    const sealed = sealWiFiConfig(
+      { ssid: "HomeNet", psk: "hunter22", regulatoryRegion: "US", issuedAt: 1718000000000 },
+      kSession,
+    );
+    const blob = buildWifiDepositBlob(phone.pub, sealed);
+    const parsed = parseWifiDepositBlob(blob);
+    expect(Array.from(parsed.ePhonePub)).toEqual(Array.from(phone.pub));
+    expect(Array.from(parsed.ciphertext)).toEqual(Array.from(sealed.ciphertext));
+    const opened = openWiFiConfig({ ciphertext: parsed.ciphertext, nonce: sealed.nonce }, kSession);
+    expect(opened.ssid).toBe("HomeNet");
+  });
+
+  it("rejects a wrong-size ePhonePub at build time", () => {
+    const sealed = sealWiFiConfig(
+      { ssid: "x", psk: "", regulatoryRegion: "", issuedAt: 1 },
+      new Uint8Array(32),
+    );
+    expect(() => buildWifiDepositBlob(new Uint8Array(31), sealed)).toThrow();
+  });
+
+  it("rejects a blob too short to carry pub + AEAD tag (foreign deposit)", () => {
+    expect(() => parseWifiDepositBlob(new Uint8Array(47))).toThrow();
+    expect(() => parseWifiDepositBlob(new Uint8Array(0))).toThrow();
+  });
+
+  it("tampered ePhonePub prefix fails the AEAD open downstream", () => {
+    const box = x25519Pair(9);
+    const phone = x25519Pair(10);
+    const stk = ed25519Keypair(11);
+    const nonce16 = new Uint8Array(16).fill(1);
+    const sessionId = new Uint8Array(16).fill(2);
+    const args = {
+      stkPub: stk.publicKey, eBoxPub: box.pub, nonce: nonce16, sessionId,
+    };
+    const ssPhone = deriveSharedSecret(phone.priv, box.pub);
+    const kPhone = deriveSessionKey({ sharedSecret: ssPhone, ePhonePub: phone.pub, ...args });
+    const sealed = sealWiFiConfig(
+      { ssid: "n", psk: "p", regulatoryRegion: "US", issuedAt: 5 },
+      kPhone,
+    );
+    const blob = buildWifiDepositBlob(phone.pub, sealed);
+    blob[3] ^= 0xff; // MitM flips a prefix byte in transit
+    const parsed = parseWifiDepositBlob(blob);
+    // Box derives K_session from the (tampered) prefix it received.
+    const ssBox = deriveSharedSecret(box.priv, parsed.ePhonePub);
+    const kBox = deriveSessionKey({ sharedSecret: ssBox, ePhonePub: parsed.ePhonePub, ...args });
+    expect(() =>
+      openWiFiConfig({ ciphertext: parsed.ciphertext, nonce: sealed.nonce }, kBox),
+    ).toThrow();
+  });
+
+  it("PAIR_SESSION_LOCK_MS is the locked 30 s window", () => {
+    expect(PAIR_SESSION_LOCK_MS).toBe(30_000);
   });
 });
