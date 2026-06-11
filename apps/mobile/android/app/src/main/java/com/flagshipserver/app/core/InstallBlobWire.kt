@@ -31,22 +31,12 @@ data class WireBlob(
     // Json has encodeDefaults=false) for the "auto" default, mirroring the
     // webapp's onWireBlob. The box reads blob.bootUnlockMode; absent ⇒ "auto".
     val bootUnlockMode: String? = null,
-    // Per-server cert-autonomy. { mode, offlineWindowDays? } — mirrors the
-    // webapp onWireBlob.certAutonomy + iOS OnWireCertAutonomy. trailer.ts
-    // reconstructs it so the daemon's canonical bytes match the signature.
-    val certAutonomy: WireCertAutonomy? = null,
     // Disk-encryption policy: "luks" | "none". Only present when the user
     // opted out of encryption ("none") — null (omitted, encodeDefaults=false)
     // for the "luks" default, mirroring the webapp's onWireBlob. The box reads
     // blob.diskEncryption; absent ⇒ "luks". trailer.ts reconstructs it so the
     // daemon's canonical bytes match the signature.
     val diskEncryption: String? = null,
-)
-
-@Serializable
-data class WireCertAutonomy(
-    val mode: String,                    // "managed" | "autonomous"
-    val offlineWindowDays: Int? = null,  // managed-mode only; omitted otherwise
 )
 
 @Serializable

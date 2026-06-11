@@ -25,11 +25,6 @@ data class InstallBlob(
     // self-unlock, default) or "approve" (phone-gated every boot). Optional +
     // conditionally appended below — null ⇒ legacy bytes (absence == "auto").
     var bootUnlockMode: String? = null,
-    // Per-server cert-autonomy policy (per-user-cert design). "managed"
-    // (default) ⇒ an admin device renews the cert; "autonomous" ⇒ the box
-    // holds a sealed account key and renews itself indefinitely. Optional +
-    // conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
-    var certAutonomy: CertAutonomy? = null,
     // Disk-encryption policy from server creation: "luks" (default — LUKS
     // full-disk encryption with a phone-/box-managed unlock key) or "none"
     // (plaintext disk, for boxes that can't keep network at boot). Optional +
@@ -43,14 +38,6 @@ data class InstallBlob(
         // canonicalInstallBlob byte-for-byte.
         const val CANONICAL_TAG = "flagship/install-blob/v1"
     }
-
-    // Mirrors the TS InstallBlob.certAutonomy shape + the Swift
-    // InstallBlob.CertAutonomy. `offlineWindowDays` is managed-mode only;
-    // null ⇒ 0 on the wire (matches TS `offlineWindowDays ?? 0`).
-    data class CertAutonomy(
-        var mode: String,              // "managed" | "autonomous"
-        var offlineWindowDays: Int? = null,
-    )
 
     fun canonicalBytes(): ByteArray {
         val parts = mutableListOf(
@@ -70,12 +57,8 @@ data class InstallBlob(
         // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
         // last so the signer commits to it. MUST match TS canonicalInstallBlob.
         bootUnlockMode?.let { parts.add(it) }
-        // certAutonomy appended AFTER bootUnlockMode with a `ca=` prefix that
-        // can't collide with a bootUnlockMode value. MUST match TS exactly
-        // (`ca=${mode}:${offlineWindowDays ?? 0}`).
-        certAutonomy?.let { parts.add("ca=${it.mode}:${it.offlineWindowDays ?: 0}") }
-        // diskEncryption appended LAST (after certAutonomy) with a `de=` prefix
-        // that can't collide with bootUnlockMode ("auto"/"approve") or `ca=`.
+        // diskEncryption appended LAST (after bootUnlockMode) with a `de=` prefix
+        // that can't collide with bootUnlockMode ("auto"/"approve").
         // The signer commits to it, so a relay can't strip it (sig fails) nor
         // flip "luks"→"none" to downgrade an encrypted box to plaintext. MUST
         // match TS canonicalInstallBlob (`de=${diskEncryption}`).

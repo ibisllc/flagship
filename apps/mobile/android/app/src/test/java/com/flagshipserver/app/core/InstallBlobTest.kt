@@ -83,45 +83,6 @@ class InstallBlobTest {
         assertTrue(String(blob("auto").canonicalBytes()).endsWith("|auto"))
     }
 
-    // Mirrors the Swift test_installBlobCanonicalBytes_certAutonomyMatchesTSBytes
-    // + the TS canonicalInstallBlob `ca=${mode}:${days}` append. certAutonomy
-    // composes AFTER bootUnlockMode; absent ⇒ exact legacy bytes.
-    @Test fun installBlobCanonicalBytes_certAutonomyMatchesTSBytes() {
-        val auth = AuthCode(
-            serial = "01ABCD",
-            username = "harry",
-            serverName = "home",
-            serverDomain = "home.harry.flagship.services",
-            delegatedPubKey = ByteArray(32) { 0x11 },
-            userPubKey = ByteArray(32) { 0x22 },
-            issuedAt = 1L, expiresAt = 2L,
-        )
-        fun blob(ca: InstallBlob.CertAutonomy?, boot: String? = null) = InstallBlob(
-            serverDomain = "home.harry.flagship.services",
-            username = "harry",
-            serverName = "home",
-            phoneDelegatedPubKey = ByteArray(32) { 0x33 },
-            authCode = auth,
-            authCodeUserSignature = ByteArray(64) { 0x44 },
-            rckPubKey = ByteArray(32) { 0x55 },
-            bootUnlockMode = boot,
-            certAutonomy = ca,
-        )
-        fun canon(b: InstallBlob) = String(b.canonicalBytes())
-        val rck = "55".repeat(32)
-        // Absent ⇒ exact legacy bytes (no ca= token).
-        assertTrue(canon(blob(null)).endsWith("|$rck"))
-        // managed with a window ⇒ `ca=managed:<days>` — MUST match TS `ca=${mode}:${days}`.
-        assertTrue(canon(blob(InstallBlob.CertAutonomy("managed", 7))).endsWith("|ca=managed:7"))
-        // autonomous ⇒ days default to 0 on the wire.
-        assertTrue(canon(blob(InstallBlob.CertAutonomy("autonomous"))).endsWith("|ca=autonomous:0"))
-        // Composes AFTER bootUnlockMode (both committed independently).
-        assertTrue(
-            canon(blob(InstallBlob.CertAutonomy("managed", 15), boot = "approve"))
-                .endsWith("|approve|ca=managed:15")
-        )
-    }
-
     // The on-wire blob the box reads. Mirrors the webapp's onWireBlob: with
     // the DEFAULT Json (encodeDefaults=false, as used at CreateServerScreen's
     // deliver step), bootUnlockMode is OMITTED for the "auto" default and
@@ -155,44 +116,7 @@ class InstallBlobTest {
         assertTrue(approve.contains("\"bootUnlockMode\":\"approve\""))
     }
 
-    // The on-wire certAutonomy: managed emits mode + offlineWindowDays;
-    // autonomous omits offlineWindowDays (null + encodeDefaults=false), matching
-    // the webapp onWireBlob + iOS OnWireCertAutonomy so trailer.ts round-trips.
-    @Test fun wireBlob_certAutonomy_emittedWithModeAndDays() {
-        fun bundle(ca: WireCertAutonomy?) = InstallBlobBundle(
-            blob = WireBlob(
-                serverDomain = "home.harry.flagship.services",
-                username = "harry",
-                serverName = "home",
-                phoneDelegatedPubKey = "33".repeat(32),
-                authCode = WireAuthCode(
-                    serial = "01ABCD",
-                    username = "harry",
-                    serverName = "home",
-                    serverDomain = "home.harry.flagship.services",
-                    delegatedPubKey = "33".repeat(32),
-                    userPubKey = "22".repeat(32),
-                    issuedAt = 1L,
-                    expiresAt = 2L,
-                ),
-                authCodeUserSignature = "44".repeat(64),
-                rckPubKey = "55".repeat(32),
-                certAutonomy = ca,
-            ),
-            blobSignature = "ab",
-        )
-        val managed = kotlinx.serialization.json.Json.encodeToString(
-            InstallBlobBundle.serializer(), bundle(WireCertAutonomy("managed", 30)))
-        assertTrue(managed.contains("\"certAutonomy\""))
-        assertTrue(managed.contains("\"mode\":\"managed\""))
-        assertTrue(managed.contains("\"offlineWindowDays\":30"))
-        val autonomous = kotlinx.serialization.json.Json.encodeToString(
-            InstallBlobBundle.serializer(), bundle(WireCertAutonomy("autonomous")))
-        assertTrue(autonomous.contains("\"mode\":\"autonomous\""))
-        assertFalse(autonomous.contains("offlineWindowDays"))
-    }
-
-    // diskEncryption composes AFTER certAutonomy with a `de=` prefix. Absent ⇒
+    // diskEncryption composes AFTER bootUnlockMode with a `de=` prefix. Absent ⇒
     // exact legacy bytes (a "luks" box omits it); present ⇒ `de=<mode>`. MUST
     // match the TS canonicalInstallBlob `de=${diskEncryption}` append.
     @Test fun installBlobCanonicalBytes_diskEncryptionMatchesTSBytes() {
@@ -205,7 +129,7 @@ class InstallBlobTest {
             userPubKey = ByteArray(32) { 0x22 },
             issuedAt = 1L, expiresAt = 2L,
         )
-        fun blob(de: String?, ca: InstallBlob.CertAutonomy? = null, boot: String? = null) = InstallBlob(
+        fun blob(de: String?, boot: String? = null) = InstallBlob(
             serverDomain = "home.harry.flagship.services",
             username = "harry",
             serverName = "home",
@@ -214,7 +138,6 @@ class InstallBlobTest {
             authCodeUserSignature = ByteArray(64) { 0x44 },
             rckPubKey = ByteArray(32) { 0x55 },
             bootUnlockMode = boot,
-            certAutonomy = ca,
             diskEncryption = de,
         )
         fun canon(b: InstallBlob) = String(b.canonicalBytes())
@@ -224,10 +147,10 @@ class InstallBlobTest {
         // "none" ⇒ `de=none` as the FINAL field.
         assertTrue(canon(blob("none")).endsWith("|de=none"))
         assertTrue(canon(blob("luks")).endsWith("|de=luks"))
-        // Composes AFTER certAutonomy + bootUnlockMode (each committed).
+        // Composes AFTER bootUnlockMode (each committed).
         assertTrue(
-            canon(blob("none", ca = InstallBlob.CertAutonomy("managed", 30), boot = "approve"))
-                .endsWith("|approve|ca=managed:30|de=none")
+            canon(blob("none", boot = "approve"))
+                .endsWith("|approve|de=none")
         )
     }
 
