@@ -508,6 +508,91 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(body.issuer).toBe("flagship-ca-dev");
     expect(body.pubKey).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  // ── OPS-2 / OPS-3 admin visibility endpoints ──────────────────
+  // A D1 stub whose prepared statements answer both the bound and
+  // unbound call shapes (schemaVersion.list() uses prepare().all()
+  // with no bind; record() binds then runs).
+  function opsD1() {
+    const stmt = {
+      bind: () => stmt,
+      first: async () => null,
+      all: async () => ({ results: [], success: true, meta: {} }),
+      run: async () => ({ success: true, meta: { changes: 1 } }),
+    };
+    return {
+      prepare: () => stmt,
+      batch: async () => [],
+    } as unknown as import("@flagship/storage").D1Database;
+  }
+
+  it("/api/admin/schema-status is 503 when FLAGSHIP_ADMIN_SECRET is unset", async () => {
+    const env = makeEnv({ DB: opsD1() });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/admin/schema-status"),
+      env,
+    );
+    expect(r.status).toBe(503);
+  });
+
+  it("/api/admin/schema-status is 403 with a wrong secret", async () => {
+    const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "right" });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/admin/schema-status", {
+        headers: { "x-admin-secret": "wrong" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(403);
+  });
+
+  it("/api/admin/schema-status returns the known/missing diff when authed", async () => {
+    const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "s3cret" });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/admin/schema-status", {
+        headers: { "x-admin-secret": "s3cret" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    // Empty ledger ⇒ every known migration is "missing", nothing in sync.
+    expect(body.known).toContain("0049");
+    expect(body.missing).toContain("0049");
+    expect(body.inSync).toBe(false);
+  });
+
+  it("/api/admin/schema-version/:v stamps a version when authed", async () => {
+    const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "s3cret" });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/admin/schema-version/0049", {
+        method: "POST",
+        headers: { "x-admin-secret": "s3cret" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.version).toBe("0049");
+    expect(body.recorded).toBe(true);
+  });
+
+  it("/api/admin/ca-lease-status reports 'none' when no endorsement lease is active", async () => {
+    const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "s3cret" });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/admin/ca-lease-status", {
+        headers: { "x-admin-secret": "s3cret" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    // The committed bundle's only endorsement lapsed 2026-06-02, so at the
+    // real `now` there is no active lease ⇒ severity "none".
+    expect(body.severity).toBe("none");
+    expect(body.hasActiveLease).toBe(false);
+    expect(body.soonestNotAfterIso).toBeNull();
+  });
 });
 
 describe("/og — OG-poster generator (P3.6)", () => {

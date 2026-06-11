@@ -90,3 +90,35 @@ export function caEnforceFromEnv(
 ): boolean {
   return env.CA_ENDORSEMENT_ENFORCE === "true";
 }
+
+/**
+ * OPS-3 — the `notAfter` (ms) of every committed CA endorsement whose
+ * authority resolves at `now` (i.e. the leases `authorizedCaKeys` would
+ * return a key for). Drives the CA-lease lapse warning + the
+ * `/api/admin/ca-lease-status` endpoint. Reuses the SAME committed bundle
+ * + verified chain the gate consults, so it can never disagree with the
+ * authority the signing path enforces.
+ */
+export function activeCaLeaseNotAfterMs(now: number): number[] {
+  const verifiedChain = verifyMandateChainFromPin(
+    MAINTAINER_PINNED_MANDATE_HASH,
+    CA_TRACK_MANDATES,
+  );
+  // An endorsement contributes authority iff its caPubkey is among the
+  // keys authorizedCaKeys resolves at `now` AND it is itself live
+  // (notBefore <= now < notAfter). We filter the committed endorsements
+  // by the resolved key set, then surface their notAfter timestamps.
+  const liveKeys = new Set(
+    authorizedCaKeys(CA_ENDORSEMENTS, verifiedChain, new Date(now)),
+  );
+  const out: number[] = [];
+  for (const e of CA_ENDORSEMENTS) {
+    if (!liveKeys.has(e.caPubkey)) continue;
+    const notAfter = Date.parse(e.notAfter);
+    const notBefore = Date.parse(e.notBefore);
+    if (Number.isNaN(notAfter)) continue;
+    if (!Number.isNaN(notBefore) && now < notBefore) continue;
+    out.push(notAfter);
+  }
+  return out;
+}

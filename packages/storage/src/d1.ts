@@ -59,6 +59,8 @@ import type {
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
+  SchemaVersionRecord,
+  SchemaVersionStorage,
   CtAlertStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
@@ -2577,6 +2579,7 @@ export class D1DeviceCapabilityGrantStorage
 
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
+  schemaVersion: SchemaVersionStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -2611,6 +2614,7 @@ export class D1Storage implements Storage {
   namespace: NamespaceStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
+    this.schemaVersion = new D1SchemaVersionStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -2643,6 +2647,46 @@ export class D1Storage implements Storage {
     this.acmeAccountKeyDelivery = new D1AcmeAccountKeyDeliveryStorage(db);
     this.ctAlerts = new D1CtAlertStorage(db);
     this.namespace = new D1NamespaceStorage(db);
+  }
+}
+
+/** D1 SchemaVersionStorage (OPS-2) — the migration ledger (migration
+ *  0049). `record` INSERTs and treats a PRIMARY-KEY collision as
+ *  "already recorded" (returns false, original appliedAt preserved). */
+export class D1SchemaVersionStorage implements SchemaVersionStorage {
+  constructor(private readonly db: D1Database) {}
+  async record(version: string, at: number): Promise<boolean> {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)`,
+        )
+        .bind(version, at)
+        .run();
+      return true;
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY|constraint/i.test(msg)) return false;
+      throw e;
+    }
+  }
+  async list(): Promise<SchemaVersionRecord[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT version, applied_at FROM schema_version ORDER BY version ASC`,
+      )
+      .all<{ version: string; applied_at: number }>();
+    return (r.results ?? []).map((row) => ({
+      version: row.version,
+      appliedAt: row.applied_at,
+    }));
+  }
+  async has(version: string): Promise<boolean> {
+    const r = await this.db
+      .prepare(`SELECT 1 FROM schema_version WHERE version = ?1 LIMIT 1`)
+      .bind(version)
+      .first();
+    return !!r;
   }
 }
 

@@ -890,8 +890,41 @@ export interface VoiciLinkStorage {
   deleteExpired(before: number): Promise<number>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Migration ledger (OPS-2 — schema_version, migration 0049)
+//
+// A lightweight visibility tool for the manual `.com` migration path.
+// The operator records the version id (a migration filename's leading
+// token, e.g. "0049") as each file is applied; `GET /api/admin/
+// schema-status` reads the recorded set back and diffs it against the
+// repo's known migration set to surface prod D1 drift. NOT an
+// auto-migrator — recording is out-of-band.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface SchemaVersionRecord {
+  /** Migration version id — the filename's leading token, e.g. "0049". */
+  version: string;
+  /** ms since epoch — when this version was recorded as applied. */
+  appliedAt: number;
+}
+
+export interface SchemaVersionStorage {
+  /**
+   * Record `version` as applied at `at`. Idempotent: re-recording an
+   * already-present version is a no-op (the original `appliedAt` is
+   * preserved — the first stamp wins). Returns whether a NEW row was
+   * inserted (true) vs. the version already being present (false).
+   */
+  record(version: string, at: number): Promise<boolean>;
+  /** Every recorded version, ascending by version id. */
+  list(): Promise<SchemaVersionRecord[]>;
+  /** Has this version been recorded as applied? */
+  has(version: string): Promise<boolean>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
+  schemaVersion: SchemaVersionStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;

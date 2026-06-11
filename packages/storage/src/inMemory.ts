@@ -1,4 +1,6 @@
 import type {
+  SchemaVersionRecord,
+  SchemaVersionStorage,
   CtAlertRecord,
   CtAlertStorage,
   WatchDelegateRecord,
@@ -1106,6 +1108,7 @@ export class InMemoryDeviceCapabilityGrantStorage
 
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
+  schemaVersion = new InMemorySchemaVersionStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -1242,6 +1245,28 @@ export class InMemoryWatchDelegateStorage implements WatchDelegateStorage {
     const r = this.byId.get(grantId);
     if (!r) throw new Error("unknown grantId");
     r.revokedAt = revokedAt;
+  }
+}
+
+/**
+ * In-memory SchemaVersionStorage (OPS-2) — the migration ledger. The
+ * first `record` for a version wins; re-recording preserves the original
+ * appliedAt.
+ */
+export class InMemorySchemaVersionStorage implements SchemaVersionStorage {
+  private byVersion = new Map<string, SchemaVersionRecord>();
+  async record(version: string, at: number): Promise<boolean> {
+    if (this.byVersion.has(version)) return false;
+    this.byVersion.set(version, { version, appliedAt: at });
+    return true;
+  }
+  async list(): Promise<SchemaVersionRecord[]> {
+    return [...this.byVersion.values()]
+      .sort((a, b) => a.version.localeCompare(b.version))
+      .map((r) => ({ ...r }));
+  }
+  async has(version: string): Promise<boolean> {
+    return this.byVersion.has(version);
   }
 }
 

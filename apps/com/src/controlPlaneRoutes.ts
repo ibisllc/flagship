@@ -10,6 +10,9 @@
 
 import {
   authorizeAdmin,
+  handleSchemaStatus,
+  handleStampSchemaVersion,
+  handleCaLeaseStatus,
   BrokerDnsClient,
   caKeypairFromEnv,
   CloudflareDnsClient,
@@ -134,7 +137,11 @@ import {
   type IsoManifest,
 } from "@flagship/control-plane";
 import { D1Storage, D1DemoUsersStorage, type D1Database } from "@flagship/storage";
-import { workerCaTrustChain, caEnforceFromEnv } from "./caTrustChainLoader.js";
+import {
+  workerCaTrustChain,
+  caEnforceFromEnv,
+  activeCaLeaseNotAfterMs,
+} from "./caTrustChainLoader.js";
 import { createHetznerClient } from "./hetzner.js";
 
 export interface ControlPlaneEnv {
@@ -452,6 +459,9 @@ const ROUTE_RE = {
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
+  ADMIN_SCHEMA_STATUS: /^\/api\/admin\/schema-status$/,
+  ADMIN_SCHEMA_STAMP: /^\/api\/admin\/schema-version\/([^/]+)$/,
+  ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -1644,6 +1654,52 @@ export async function tryControlPlane(
     }
     return finishPlain(
       await handleCleanupApex({ dns, apex: "flagship.services" }),
+    );
+  }
+
+  // ── Admin: migration-ledger visibility (OPS-2) ────────────────
+  // GET /api/admin/schema-status — diff the recorded ledger against the
+  // repo's known migration set so prod D1 drift is visible at a glance.
+  if (method === "GET" && ROUTE_RE.ADMIN_SCHEMA_STATUS.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleSchemaStatus({ schemaVersion: storage.schemaVersion }),
+    );
+  }
+  // POST /api/admin/schema-version/:version — admin-gated ledger backfill
+  // (stamp a version as applied; idempotent).
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_SCHEMA_STAMP))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleStampSchemaVersion(
+        { schemaVersion: storage.schemaVersion, now: () => Date.now() },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // ── Admin: CA-endorsement lease health (OPS-3) ────────────────
+  // GET /api/admin/ca-lease-status — queryable lapse warning so the
+  // 14-day YubiKey ceremony happens BEFORE the lease lapses (a hard
+  // pubkey-cert outage under ENFORCE).
+  if (method === "GET" && ROUTE_RE.ADMIN_CA_LEASE_STATUS.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleCaLeaseStatus({
+        activeLeaseNotAfterMs: activeCaLeaseNotAfterMs,
+        now: () => Date.now(),
+      }),
     );
   }
 

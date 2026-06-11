@@ -50,8 +50,10 @@ import {
   scheduleQuarantineAlerts,
   runCtScan,
   createCrtShSource,
+  runCaLeaseWarningCheck,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
+import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -343,6 +345,16 @@ export async function scheduled(
         console.error("[ct-monitor] cron pass failed", e);
       }),
     );
+    // OPS-3 — CA-endorsement lease lapse warning. Under ENFORCE a lapsed
+    // lease 410s every pubkey-cert; this emits a high-severity audit event
+    // (+ loud log) when the soonest active lease is within 7 days of its
+    // notAfter, so the 14-day YubiKey ceremony happens BEFORE the outage.
+    // Independently guarded so a failure here never breaks the other tasks.
+    ctx.waitUntil(
+      runCaLeaseWarning(env, now).catch((e) => {
+        console.error("[ca-lease] cron pass failed", e);
+      }),
+    );
     return;
   }
   if (controller.cron === "*/10 * * * *") {
@@ -574,6 +586,31 @@ export async function runCtMonitor(
     alerted: result.alerted,
     audited: result.audited,
   };
+}
+
+/**
+ * OPS-3 — CA-endorsement lease lapse warning cron pass. Resolves the
+ * active endorsement leases' notAfter from the SAME committed bundle the
+ * #30 gate consults, and emits a high-severity audit event when the
+ * soonest is within (or past) the 7-day warn threshold. No-ops without
+ * the DB binding (the audit write needs it).
+ *
+ * NOTIFY GAP: `.com` has no operator-facing pager; the durable signal is
+ * the audit event + the loud console.error + the queryable
+ * /api/admin/ca-lease-status endpoint. See caLeaseWarning.ts.
+ */
+export async function runCaLeaseWarning(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<{ severity: string; alerted: boolean } | null> {
+  if (!env.DB) return null;
+  const storage = new D1Storage(env.DB);
+  const result = await runCaLeaseWarningCheck({
+    activeLeaseNotAfterMs: activeCaLeaseNotAfterMs,
+    auditEvents: storage.auditEvents,
+    now: () => now.getTime(),
+  });
+  return { severity: result.status.severity, alerted: result.alerted };
 }
 
 /**
