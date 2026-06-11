@@ -32,15 +32,24 @@
  * the DER. BOTH are normalized to lowercase hex, no colons, before
  * comparison (see normalizeSha256).
  *
+ * SAN SHAPE (cert model A′): the only legitimate cert shape for a user
+ * is the PER-BOX wildcard pair
+ *   [`<server>.<user>.flagship.services`, `*.<server>.<user>.flagship.services`]
+ * for one of the user's registered boxes. Any other SAN set — including
+ * an old-style model-C per-user wildcard `[<user>, *.<user>]` — can
+ * never be a cert a box legitimately minted, so it skips the
+ * predates-baseline exemption below and is flagged outright.
+ *
  * For a user we ALERT (push the owner + audit) iff ALL of:
  *   1. there IS a baseline — at least one box reported a certSha256
  *      (avoids a false alarm on the legit cert before any box has
  *      reported during bring-up), AND
  *   2. a CT-observed cert sha256 is NOT in the baseline set, AND
- *   3. that CT cert's notBefore is NEWER than the user's EARLIEST
- *      baseline report (so we don't alarm on a cert that predates the
- *      box ever reporting — e.g. the legit cert minted before the
- *      heartbeat existed).
+ *   3. EITHER the cert's SAN set is not a registered box's A′ pair
+ *      (never legit — see SAN SHAPE above), OR its notBefore is NEWER
+ *      than the user's EARLIEST baseline report (an expected-shape cert
+ *      that predates the box ever reporting is assumed to be the legit
+ *      cert minted before the heartbeat existed).
  * When there is NO baseline yet, we AUDIT-LOG the observed certs (for the
  * timeline) but do NOT push — no false alarm on the legit cert before any
  * box has reported.
@@ -264,17 +273,17 @@ export async function runCtScan(deps: CtScanDeps): Promise<CtScanResult> {
     return result;
   }
 
-  // Distinct non-revoked usernames, deterministic order.
-  const usernames: string[] = [];
-  const seen = new Set<string>();
+  // Distinct non-revoked usernames (deterministic order), each with its
+  // registered box FQDNs — the per-box A′ SAN shapes the scan accepts.
+  const serverDomainsByUser = new Map<string, string[]>();
   for (const s of servers) {
     if (s.revokedAt != null) continue;
     const u = s.username.toLowerCase();
-    if (seen.has(u)) continue;
-    seen.add(u);
-    usernames.push(u);
+    const domains = serverDomainsByUser.get(u) ?? [];
+    domains.push(s.serverDomain.toLowerCase());
+    serverDomainsByUser.set(u, domains);
   }
-  usernames.sort();
+  const usernames = [...serverDomainsByUser.keys()].sort();
 
   let usersToScan = usernames;
   if (usernames.length > maxUsers) {
@@ -298,7 +307,14 @@ export async function runCtScan(deps: CtScanDeps): Promise<CtScanResult> {
       break;
     }
     try {
-      await scanUser(deps, username, now(), result, log);
+      await scanUser(
+        deps,
+        username,
+        serverDomainsByUser.get(username) ?? [],
+        now(),
+        result,
+        log,
+      );
       result.usersScanned++;
     } catch (e) {
       // Per-user isolation — one bad user can't sink the whole run.
@@ -312,6 +328,7 @@ export async function runCtScan(deps: CtScanDeps): Promise<CtScanResult> {
 async function scanUser(
   deps: CtScanDeps,
   username: string,
+  serverDomains: string[],
   nowMs: number,
   result: CtScanResult,
   log: (msg: string) => void,
@@ -330,7 +347,12 @@ async function scanUser(
   }
   const hasBaseline = baseline.size > 0;
 
-  // Query CT for both the apex identity and the wildcard.
+  // Query CT per USER even though certs are per-box (A′): the wildcard
+  // pattern `%.<user>.flagship.services` matches any depth, so it captures
+  // every per-box cert (`<server>.<user>` + `*.<server>.<user>`) in two
+  // queries per user instead of two per box. The bare-apex identity no
+  // longer matches any legit cert — it exists to catch an old-style
+  // model-C `[<user>, *.<user>]` cert, which is itself alarm-worthy now.
   const apex = `${username}.flagship.services`;
   const wildcard = `%.${username}.flagship.services`;
   const observed: CtObservedCert[] = [];
@@ -356,6 +378,8 @@ async function scanUser(
   for (const [sha, cert] of bySha) {
     if (baseline.has(sha)) continue; // accounted for — the box minted it.
 
+    const expectedShape = matchesRegisteredBoxSans(cert.sanNames, serverDomains);
+
     if (!hasBaseline) {
       // No baseline yet: audit-log (timeline) but DO NOT push. Avoids a
       // false alarm on the legit cert before any box has reported.
@@ -363,11 +387,13 @@ async function scanUser(
       continue;
     }
 
-    // Baseline present + cert not in it. Only alarm if the cert is NEWER
-    // than the earliest baseline report — a cert predating reporting is
-    // assumed legit (the cert the box was already serving before the
-    // heartbeat existed).
-    if (cert.notBefore <= earliestReport) {
+    // Baseline present + cert not in it. An EXPECTED-SHAPE cert that
+    // predates the earliest baseline report is assumed legit (the cert the
+    // box was already serving before the heartbeat existed). A cert whose
+    // SAN set is NOT a registered box's A′ pair — e.g. an old-style
+    // per-user wildcard `[<user>, *.<user>]` — can never be legit, so it
+    // gets no such exemption.
+    if (expectedShape && cert.notBefore <= earliestReport) {
       log(
         `user ${username}: unaccounted CT cert ${sha.slice(0, 12)}… predates earliest baseline report — not alerting`,
       );
@@ -383,6 +409,27 @@ async function scanUser(
     await pushOwner(deps, username, sha, cert);
     result.alerted++;
   }
+}
+
+/**
+ * Cert model A′ SAN-shape check: true iff every SAN on the cert belongs to
+ * a SINGLE registered box's pair `{<server>.<user>.<apex>, *.<server>.<user>.<apex>}`.
+ * (A subset — e.g. apex-only — still scopes to one box, so it passes.)
+ * An old-style per-user wildcard `[<user>, *.<user>]`, a cert mixing two
+ * boxes' names, or any foreign name fails. Inputs are lowercase: sanNames
+ * are folded on ingest (rowToObserved), serverDomains by the scan.
+ */
+function matchesRegisteredBoxSans(
+  sanNames: string[],
+  serverDomains: string[],
+): boolean {
+  if (sanNames.length === 0) return false;
+  for (const domain of serverDomains) {
+    if (sanNames.every((san) => san === domain || san === `*.${domain}`)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function auditOnce(

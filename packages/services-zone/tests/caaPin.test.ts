@@ -130,22 +130,22 @@ describe("caaRecordRdata", () => {
   });
 });
 
-describe("expectedCertSans", () => {
-  it("is exactly [<user>.<apex>, *.<user>.<apex>] — the only legit SAN set", () => {
-    expect(expectedCertSans("alice", "flagship.services")).toEqual([
-      "alice.flagship.services",
-      "*.alice.flagship.services",
+describe("expectedCertSans (cert model A′ — per-box wildcard)", () => {
+  it("is exactly [<server>.<user>.<apex>, *.<server>.<user>.<apex>] — the only legit SAN set for a box", () => {
+    expect(expectedCertSans("home.alice.flagship.services")).toEqual([
+      "home.alice.flagship.services",
+      "*.home.alice.flagship.services",
     ]);
   });
 
-  it("never includes a deeper (two-label) SAN — that shape is alarm-worthy in CT", () => {
-    const sans = expectedCertSans("alice", "flagship.services");
+  it("never includes the old-style user-zone SAN pair — that shape is alarm-worthy in CT", () => {
+    const sans = expectedCertSans("home.alice.flagship.services");
     expect(sans).toHaveLength(2);
-    expect(sans.some((s) => s.includes(".alice.flagship.services") && s.startsWith("*.") === false)).toBe(false);
-    // No `<app>.<box>.<user>` two-label-deep form ever appears.
+    expect(sans).not.toContain("alice.flagship.services");
+    expect(sans).not.toContain("*.alice.flagship.services");
+    // Both SANs are scoped to the box's own subdomain.
     for (const s of sans) {
-      const beforeApex = s.replace(".flagship.services", "");
-      expect(beforeApex === "alice" || beforeApex === "*.alice").toBe(true);
+      expect(s.endsWith("home.alice.flagship.services")).toBe(true);
     }
   });
 });

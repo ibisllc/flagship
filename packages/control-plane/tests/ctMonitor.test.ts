@@ -9,8 +9,11 @@
  *   (c) no baseline yet                               → audit-only, no push
  *   (d) crt.sh failure                                → no throw, no alert
  *
- * Plus: the newer-than-earliest-report guard (a cert that predates the
- * first baseline report is not alarmed), normalization (colons/case),
+ * Plus: the newer-than-earliest-report guard (an A′-shaped cert that
+ * predates the first baseline report is not alarmed), the A′ SAN-shape
+ * rule (a cert that is not a registered box's `[apex, *.apex]` pair —
+ * e.g. an old-style model-C `[<user>, *.<user>]` wildcard — is flagged
+ * with NO predates-baseline exemption), normalization (colons/case),
  * and the per-run domain/query caps.
  */
 
@@ -69,12 +72,21 @@ function pushToken(): PushTokenRecord {
   };
 }
 
+/** A′-shaped cert: the registered box's `[apex, *.apex]` SAN pair. */
 function observed(sha256: string, notBefore: number): CtObservedCert {
+  return observedWithSans(sha256, notBefore, [SERVER_FQDN, `*.${SERVER_FQDN}`]);
+}
+
+function observedWithSans(
+  sha256: string,
+  notBefore: number,
+  sanNames: string[],
+): CtObservedCert {
   return {
     sha256,
     notBefore,
     issuer: "Let's Encrypt",
-    sanNames: [`${USER}.flagship.services`, `home.${USER}.flagship.services`],
+    sanNames,
   };
 }
 
@@ -210,7 +222,7 @@ describe("runCtScan — (b) unexpected cert (baseline present) → push + audit 
     expect(await auditRows(storage)).toHaveLength(1);
   });
 
-  it("does NOT alarm a cert that predates the earliest baseline report", async () => {
+  it("does NOT alarm an A′-shaped cert that predates the earliest baseline report", async () => {
     const baselineSha = "aa".repeat(32);
     const oldLegitSha = "cc".repeat(32);
     const { storage, pushes, pushFanout, ctSource } = harness({
@@ -235,6 +247,75 @@ describe("runCtScan — (b) unexpected cert (baseline present) → push + audit 
     expect(res.alerted).toBe(0);
     expect(pushes).toHaveLength(0);
     expect(await auditRows(storage)).toHaveLength(0);
+  });
+});
+
+describe("runCtScan — A′ SAN shape: a non-per-box cert is always flagged", () => {
+  it("flags an old-style per-user wildcard cert even when it predates the baseline", async () => {
+    const baselineSha = "aa".repeat(32);
+    const oldStyleSha = "ee".repeat(32);
+    const { storage, pushes, pushFanout, ctSource } = harness({
+      // Model-C shape `[<user>, *.<user>]`, notBefore long BEFORE the
+      // earliest daemon report. Under A′ this shape can never be legit, so
+      // the predates-baseline exemption must NOT apply.
+      ctCerts: [
+        observedWithSans(oldStyleSha, FIXED_NOW - 10 * 86_400_000, [
+          `${USER}.flagship.services`,
+          `*.${USER}.flagship.services`,
+        ]),
+      ],
+    });
+    await storage.servers.put(server());
+    await storage.daemonStatus.put(daemon(baselineSha, FIXED_NOW - 3_600_000));
+    await storage.pushTokens.put(pushToken());
+
+    const res = await runCtScan({
+      servers: storage.servers,
+      daemonStatus: storage.daemonStatus,
+      auditEvents: storage.auditEvents,
+      ctAlerts: storage.ctAlerts,
+      ctSource,
+      pushTokens: storage.pushTokens,
+      pushFanout,
+      now: () => FIXED_NOW,
+    });
+
+    expect(res.alerted).toBe(1);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0]?.category).toBe("ct-unexpected-cert");
+    const audits = await auditRows(storage);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.detail).toContain(oldStyleSha);
+  });
+
+  it("flags a cert that pairs a box SAN with a foreign name, even predating the baseline", async () => {
+    const baselineSha = "aa".repeat(32);
+    const mixedSha = "ab".repeat(32);
+    const { storage, pushes, pushFanout, ctSource } = harness({
+      ctCerts: [
+        observedWithSans(mixedSha, FIXED_NOW - 10 * 86_400_000, [
+          SERVER_FQDN,
+          "attacker.example",
+        ]),
+      ],
+    });
+    await storage.servers.put(server());
+    await storage.daemonStatus.put(daemon(baselineSha, FIXED_NOW - 3_600_000));
+    await storage.pushTokens.put(pushToken());
+
+    const res = await runCtScan({
+      servers: storage.servers,
+      daemonStatus: storage.daemonStatus,
+      auditEvents: storage.auditEvents,
+      ctAlerts: storage.ctAlerts,
+      ctSource,
+      pushTokens: storage.pushTokens,
+      pushFanout,
+      now: () => FIXED_NOW,
+    });
+
+    expect(res.alerted).toBe(1);
+    expect(pushes).toHaveLength(1);
   });
 });
 

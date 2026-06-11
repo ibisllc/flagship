@@ -3,17 +3,18 @@ import { expectedCertSans } from "../src/caaPin.js";
 import {
   checkCtEntry,
   findUnexpectedCerts,
-  monitorUserZone,
+  monitorUserBoxes,
   type CtLogEntry,
 } from "../src/ctMonitor.js";
 
-const APEX = "flagship.services";
-const EXPECTED = expectedCertSans("alice", APEX); // [alice.flagship.services, *.alice.flagship.services]
+const HOME = "home.alice.flagship.services";
+const OFFICE = "office.alice.flagship.services";
+const EXPECTED = expectedCertSans(HOME); // [home.alice.<apex>, *.home.alice.<apex>]
 
 describe("checkCtEntry", () => {
   it("passes a legit cert whose SANs are exactly the expected set", () => {
     const entry: CtLogEntry = {
-      sans: ["alice.flagship.services", "*.alice.flagship.services"],
+      sans: ["home.alice.flagship.services", "*.home.alice.flagship.services"],
       notAfter: 1_900_000_000_000,
       issuer: "Let's Encrypt",
     };
@@ -21,9 +22,11 @@ describe("checkCtEntry", () => {
   });
 
   it("passes a cert covering only a subset of the expected SANs", () => {
-    // A cert for just the apex (no wildcard) is still wholly within the
+    // A cert for just the box apex (no wildcard) is still wholly within the
     // expected namespace — nothing unaccounted-for, so no alarm.
-    expect(checkCtEntry({ sans: ["alice.flagship.services"] }, EXPECTED)).toEqual({ ok: true });
+    expect(checkCtEntry({ sans: ["home.alice.flagship.services"] }, EXPECTED)).toEqual({
+      ok: true,
+    });
   });
 
   it("passes an entry with no SANs (covers nothing → nothing to alarm)", () => {
@@ -42,7 +45,7 @@ describe("checkCtEntry", () => {
     // The attacker bundles a real SAN to look benign; the foreign SAN must
     // still trip the alarm — we report only the offending name.
     const entry: CtLogEntry = {
-      sans: ["*.alice.flagship.services", "evil.example"],
+      sans: ["*.home.alice.flagship.services", "evil.example"],
     };
     expect(checkCtEntry(entry, EXPECTED)).toEqual({
       ok: false,
@@ -50,36 +53,29 @@ describe("checkCtEntry", () => {
     });
   });
 
-  it("alarms on a two-label-deep SAN inside the user's own zone", () => {
-    // `*.box.alice.flagship.services` is NOT covered by `*.alice.flagship.services`
-    // (a wildcard matches one label only) and is not in the expected set —
-    // this is the deprecated topology-in-URL shape and must alarm.
-    const entry: CtLogEntry = { sans: ["*.box.alice.flagship.services"] };
+  it("alarms on the retired per-user wildcard shape (model C)", () => {
+    // `[<user>, *.<user>]` is what every box minted under model C. No box
+    // mints it under A′, so seeing it in CT means stale or rogue issuance.
+    const entry: CtLogEntry = {
+      sans: ["alice.flagship.services", "*.alice.flagship.services"],
+    };
     expect(checkCtEntry(entry, EXPECTED)).toEqual({
       ok: false,
-      unexpectedSans: ["*.box.alice.flagship.services"],
-    });
-  });
-
-  it("alarms on a bare two-label-deep host (e.g. app.box.alice.<apex>)", () => {
-    const entry: CtLogEntry = { sans: ["app.box.alice.flagship.services"] };
-    expect(checkCtEntry(entry, EXPECTED)).toEqual({
-      ok: false,
-      unexpectedSans: ["app.box.alice.flagship.services"],
+      unexpectedSans: ["alice.flagship.services", "*.alice.flagship.services"],
     });
   });
 
   it("is case-insensitive: mixed-case expected SANs do NOT alarm (RFC 4343)", () => {
     const entry: CtLogEntry = {
-      sans: ["Alice.Flagship.Services", "*.ALICE.flagship.SERVICES"],
+      sans: ["Home.Alice.Flagship.Services", "*.HOME.alice.flagship.SERVICES"],
     };
     expect(checkCtEntry(entry, EXPECTED)).toEqual({ ok: true });
   });
 
   it("is case-insensitive against a mixed-case expected set too", () => {
-    const entry: CtLogEntry = { sans: ["alice.flagship.services"] };
+    const entry: CtLogEntry = { sans: ["home.alice.flagship.services"] };
     expect(
-      checkCtEntry(entry, ["ALICE.FLAGSHIP.SERVICES", "*.ALICE.FLAGSHIP.SERVICES"]),
+      checkCtEntry(entry, ["HOME.ALICE.FLAGSHIP.SERVICES", "*.HOME.ALICE.FLAGSHIP.SERVICES"]),
     ).toEqual({ ok: true });
   });
 
@@ -99,14 +95,17 @@ describe("checkCtEntry", () => {
     });
   });
 
-  it("does not flag a different user's legit-looking namespace as ours", () => {
-    // bob's cert is foreign to alice's monitor — both SANs are unexpected.
+  it("does not flag a different box's legit-looking namespace as ours", () => {
+    // office's cert is foreign to home's expected set — both SANs unexpected.
     const entry: CtLogEntry = {
-      sans: ["bob.flagship.services", "*.bob.flagship.services"],
+      sans: ["office.alice.flagship.services", "*.office.alice.flagship.services"],
     };
     expect(checkCtEntry(entry, EXPECTED)).toEqual({
       ok: false,
-      unexpectedSans: ["bob.flagship.services", "*.bob.flagship.services"],
+      unexpectedSans: [
+        "office.alice.flagship.services",
+        "*.office.alice.flagship.services",
+      ],
     });
   });
 });
@@ -114,25 +113,25 @@ describe("checkCtEntry", () => {
 describe("findUnexpectedCerts", () => {
   it("returns only the alarming entries, each with its unexpected SANs", () => {
     const legit: CtLogEntry = {
-      sans: ["alice.flagship.services", "*.alice.flagship.services"],
+      sans: ["home.alice.flagship.services", "*.home.alice.flagship.services"],
     };
-    const apexOnly: CtLogEntry = { sans: ["alice.flagship.services"] };
+    const apexOnly: CtLogEntry = { sans: ["home.alice.flagship.services"] };
     const foreign: CtLogEntry = { sans: ["attacker.example"] };
-    const deep: CtLogEntry = { sans: ["*.box.alice.flagship.services"] };
+    const userShape: CtLogEntry = { sans: ["*.alice.flagship.services"] };
 
-    const alarms = findUnexpectedCerts([legit, apexOnly, foreign, deep], EXPECTED);
+    const alarms = findUnexpectedCerts([legit, apexOnly, foreign, userShape], EXPECTED);
 
     expect(alarms).toEqual([
       { entry: foreign, unexpectedSans: ["attacker.example"] },
-      { entry: deep, unexpectedSans: ["*.box.alice.flagship.services"] },
+      { entry: userShape, unexpectedSans: ["*.alice.flagship.services"] },
     ]);
   });
 
   it("returns an empty list when every entry is legit", () => {
     const entries: CtLogEntry[] = [
-      { sans: ["alice.flagship.services", "*.alice.flagship.services"] },
-      { sans: ["alice.flagship.services"] },
-      { sans: ["*.ALICE.flagship.services"] },
+      { sans: ["home.alice.flagship.services", "*.home.alice.flagship.services"] },
+      { sans: ["home.alice.flagship.services"] },
+      { sans: ["*.HOME.alice.flagship.services"] },
     ];
     expect(findUnexpectedCerts(entries, EXPECTED)).toEqual([]);
   });
@@ -145,43 +144,61 @@ describe("findUnexpectedCerts", () => {
   });
 });
 
-describe("monitorUserZone", () => {
-  it("wires expectedCertSans into findUnexpectedCerts (legit passes, foreign alarms)", () => {
-    const legit: CtLogEntry = {
-      sans: ["alice.flagship.services", "*.alice.flagship.services"],
+describe("monitorUserBoxes", () => {
+  it("passes a per-box cert for any registered box, alarms on foreign names", () => {
+    const homeCert: CtLogEntry = {
+      sans: ["home.alice.flagship.services", "*.home.alice.flagship.services"],
+    };
+    const officeCert: CtLogEntry = {
+      sans: ["office.alice.flagship.services", "*.office.alice.flagship.services"],
     };
     const foreign: CtLogEntry = { sans: ["phish.alice.flagship.services.evil.example"] };
 
-    const alarms = monitorUserZone("alice", APEX, [legit, foreign]);
+    const alarms = monitorUserBoxes([HOME, OFFICE], [homeCert, officeCert, foreign]);
 
     expect(alarms).toEqual([
       { entry: foreign, unexpectedSans: ["phish.alice.flagship.services.evil.example"] },
     ]);
   });
 
-  it("uses the right user's namespace (alice's monitor alarms on bob's cert)", () => {
-    const bobCert: CtLogEntry = {
-      sans: ["bob.flagship.services", "*.bob.flagship.services"],
+  it("alarms on a cert mixing two boxes' SANs (no single box mints that set)", () => {
+    const mixed: CtLogEntry = {
+      sans: ["home.alice.flagship.services", "*.office.alice.flagship.services"],
     };
-    expect(monitorUserZone("alice", APEX, [bobCert])).toEqual([
+    expect(monitorUserBoxes([HOME, OFFICE], [mixed])).toEqual([
       {
-        entry: bobCert,
-        unexpectedSans: ["bob.flagship.services", "*.bob.flagship.services"],
+        entry: mixed,
+        unexpectedSans: [
+          "home.alice.flagship.services",
+          "*.office.alice.flagship.services",
+        ],
       },
     ]);
   });
 
-  it("alarms on a two-label-deep SAN for the monitored user", () => {
-    const deep: CtLogEntry = { sans: ["app.box.alice.flagship.services"] };
-    expect(monitorUserZone("alice", APEX, [deep])).toEqual([
-      { entry: deep, unexpectedSans: ["app.box.alice.flagship.services"] },
+  it("alarms on the retired per-user wildcard shape", () => {
+    const userShape: CtLogEntry = {
+      sans: ["alice.flagship.services", "*.alice.flagship.services"],
+    };
+    expect(monitorUserBoxes([HOME], [userShape])).toEqual([
+      {
+        entry: userShape,
+        unexpectedSans: ["alice.flagship.services", "*.alice.flagship.services"],
+      },
+    ]);
+  });
+
+  it("alarms on everything when the user has no registered boxes", () => {
+    const entry: CtLogEntry = { sans: ["home.alice.flagship.services"] };
+    expect(monitorUserBoxes([], [entry])).toEqual([
+      { entry, unexpectedSans: ["home.alice.flagship.services"] },
     ]);
   });
 
   it("treats a mixed-case legit cert as legit (no alarm)", () => {
     const entry: CtLogEntry = {
-      sans: ["Alice.Flagship.Services", "*.Alice.Flagship.Services"],
+      sans: ["Home.Alice.Flagship.Services", "*.Home.Alice.Flagship.Services"],
     };
-    expect(monitorUserZone("alice", APEX, [entry])).toEqual([]);
+    expect(monitorUserBoxes([HOME], [entry])).toEqual([]);
   });
 });

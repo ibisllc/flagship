@@ -1,22 +1,26 @@
 /**
- * CAA issuance-pinning records for the per-user cert (RFC 8657).
+ * CAA issuance-pinning records for the user's `flagship.services` zone
+ * (RFC 8657 / RFC 8659).
  *
- * Per-user-cert design §4.3: the cert is minted by the user's trust-root
- * (admin-scope) devices, NEVER by `.com` or the serving boxes. A CAA record
- * with the RFC 8657 `accounturi` parameter binds Let's Encrypt issuance for
- * the user's zone to the phone-held ACME account — so even a malicious `.com`
- * (which controls the authoritative DNS for `<user>.flagship.services`) cannot
- * make LE issue a cert under a *different* ACME account it controls. The
- * `validationmethods` parameter further restricts which ACME challenge type LE
- * will honour (we use `dns-01`, matching the wildcard issuance path).
+ * Under cert model A′ each BOX mints its own wildcard cert
+ * `[<server>.<user>, *.<server>.<user>]` (box-local key, never shared), but
+ * CAA stays anchored at the USER zone: RFC 8659 §3 tree-climbing means a
+ * record at `<user>.flagship.services` covers every per-box and service name
+ * below it, so one user-zone record set restricts issuance for all of them.
+ * A CAA record with the RFC 8657 `accounturi` parameter binds Let's Encrypt
+ * issuance for the user's zone to a pinned ACME account — so even a malicious
+ * `.com` (which controls the authoritative DNS for `<user>.flagship.services`)
+ * cannot make LE issue a cert under a *different* ACME account it controls.
+ * The `validationmethods` parameter further restricts which ACME challenge
+ * type LE will honour (we use `dns-01`, matching the wildcard issuance path).
  *
  * This is the Let's Encrypt TLS layer, NOT the Flagship maintainer/identity CA.
  *
- * CT monitoring (the other half of §4.3) lives on the trust-root device: it
- * watches Certificate Transparency logs for any cert covering `*.<user>` whose
- * SAN set is not the one this module's owner minted. `expectedCertSans` is the
- * single source of truth for "what a legitimate cert for this user looks like";
- * anything else observed in CT is an alarm.
+ * CT monitoring (the detection half) watches Certificate Transparency logs
+ * for any cert covering the user's namespace whose SAN set is not a
+ * registered box's per-box pair. `expectedCertSans` is the single source of
+ * truth for "what a legitimate cert for one box looks like"; anything else
+ * observed in CT is an alarm.
  */
 
 /** Default CA domain that CAA records are written for. */
@@ -113,18 +117,22 @@ export function buildUserZoneCaaRecords(
 }
 
 /**
- * The ONLY SAN set a CT monitor should ever see for this user:
+ * The ONLY SAN set a CT monitor should ever accept for one of the user's
+ * boxes (cert model A′ — per-box wildcard):
  *
- *   [`<user>.<apex>`, `*.<user>.<apex>`]
+ *   [`<server>.<user>.<apex>`, `*.<server>.<user>.<apex>`]
  *
- * This mirrors `userWildcardSans` (the issuance side) so the monitor and the
- * minter agree byte-for-byte on what a legitimate cert looks like. Any cert in
- * a Certificate Transparency log covering `*.<user>.<apex>` whose SAN set is
- * not exactly this is unaccounted-for issuance → alarm. Returned sorted-stable
- * (apex before wildcard) for deterministic comparison.
+ * `serverFqdn` is the box's full registered FQDN (`<server>.<user>.<apex>`).
+ * Legitimacy is judged PER BOX — the box mints exactly this pair on its own
+ * metal, so the monitor and the minter agree byte-for-byte on what a
+ * legitimate cert looks like. Any cert in a Certificate Transparency log
+ * covering the user's namespace whose SAN set is not a registered box's pair
+ * — including an old-style model-C per-user wildcard `[<user>, *.<user>]` —
+ * is unaccounted-for issuance → alarm. Returned sorted-stable (apex before
+ * wildcard) for deterministic comparison.
  */
-export function expectedCertSans(username: string, apex: string): string[] {
-  return [`${username}.${apex}`, `*.${username}.${apex}`];
+export function expectedCertSans(serverFqdn: string): string[] {
+  return [serverFqdn, `*.${serverFqdn}`];
 }
 
 // ---------------------------------------------------------------------------

@@ -1,15 +1,17 @@
 /**
- * Certificate-Transparency monitor for the per-user cert (per-user-cert §4.3).
+ * Certificate-Transparency monitor for the per-box cert (cert model A′).
  *
- * The CAA `accounturi` pin (see `caaPin.ts`) stops Let's Encrypt from issuing a
- * `*.<user>` cert under any ACME account other than the trust-root's. CT
- * monitoring is the *detection* half: it watches the public CT logs for any
- * cert covering the user's `*.<user>.<apex>` namespace whose SAN set is not the
- * one the user's admin devices minted — i.e. issuance that bypassed the pin (a
- * mis-issuing CA, a CAA-ignoring path, a compromised admin device, or a `.com`
- * that forged DNS to mint under a CA we did not pin). `expectedCertSans` is the
- * single source of truth for "what a legitimate cert looks like"; *anything*
- * observed in CT outside that set is unaccounted-for issuance → alarm.
+ * The user-zone CAA pin (see `caaPin.ts`) restricts which CA may issue under
+ * the user's namespace. CT monitoring is the *detection* half: it watches the
+ * public CT logs for any cert covering the user's namespace whose SAN set is
+ * not one a registered box would legitimately mint — i.e. issuance that
+ * bypassed the pin (a mis-issuing CA, a CAA-ignoring path, a compromised admin
+ * device, or a `.com` that forged DNS to mint under a CA we did not pin).
+ * Under A′ a legitimate cert is per-box: its SAN set must fit ONE registered
+ * box's `[<server>.<user>.<apex>, *.<server>.<user>.<apex>]` pair
+ * (`expectedCertSans`). A cert mixing two boxes' names, or carrying the
+ * retired per-user shape `[<user>, *.<user>]`, is unaccounted-for issuance →
+ * alarm.
  *
  * This runs on the trust-root device, NOT on `.com` or the serving boxes (they
  * are precisely the parties the monitor is meant to catch).
@@ -106,15 +108,29 @@ export function findUnexpectedCerts(
 }
 
 /**
- * Monitor one user's zone: derive the only legitimate SAN set for
- * `<username>.<apex>` via `expectedCertSans`, then return every CT entry that
- * should alarm. This is the entry point the trust-root device calls with a
- * fresh page of CT-log observations for the user.
+ * Monitor one user's namespace under A′: a CT entry is legitimate iff its
+ * entire SAN set fits ONE registered box's `expectedCertSans` pair. Checking
+ * per box (not against the union of all boxes' SANs) is what catches a mixed
+ * cert like `[home.alice…, *.office.alice…]` — each SAN exists somewhere, but
+ * no single box would ever mint that set. This is the entry point the
+ * trust-root device calls with the user's registered box FQDNs and a fresh
+ * page of CT-log observations.
  */
-export function monitorUserZone(
-  username: string,
-  apex: string,
+export function monitorUserBoxes(
+  boxFqdns: string[],
   entries: CtLogEntry[],
 ): UnexpectedCert[] {
-  return findUnexpectedCerts(entries, expectedCertSans(username, apex));
+  const expectedPerBox = boxFqdns.map((fqdn) => expectedCertSans(fqdn));
+  const alarms: UnexpectedCert[] = [];
+  for (const entry of entries) {
+    const fitsOneBox = expectedPerBox.some((expected) => checkCtEntry(entry, expected).ok);
+    if (fitsOneBox) continue;
+    const union = expectedPerBox.flat();
+    const result = checkCtEntry(entry, union);
+    alarms.push({
+      entry,
+      unexpectedSans: result.ok ? entry.sans.slice() : result.unexpectedSans,
+    });
+  }
+  return alarms;
 }
