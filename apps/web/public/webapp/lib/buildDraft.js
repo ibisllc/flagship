@@ -75,9 +75,6 @@ export async function saveDraft(draft) {
     updatedAt: Date.now(),
     deliveredAt: draft.deliveredAt,
     code: draft.code,
-    // Per-user-cert offline-autonomy window chosen for this draft, so a
-    // resumed draft restores the picker. { mode, offlineWindowDays? }.
-    certAutonomy: draft.certAutonomy,
     // Disk-encryption choice ("luks" | "none") so a resumed draft restores
     // the "Encrypt disk" toggle. Absent ⇒ encrypted ("luks").
     diskEncryption: draft.diskEncryption,
@@ -152,17 +149,8 @@ export function canonicalInstallBlob(b) {
   // the value. MUST stay byte-identical to the TS or the QR→burner→register
   // signature chain breaks.
   if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
-  // Same backward-compatible append, AFTER bootUnlockMode. The `ca=` prefix
-  // keeps the token from colliding with a bootUnlockMode value
-  // ("auto"/"approve") if a blob carries certAutonomy but not bootUnlockMode.
-  // `<days>` is offlineWindowDays ?? 0 (0 for "autonomous"). MUST stay
-  // byte-identical to packages/protocol/src/auth.ts canonicalInstallBlob and
-  // the Swift InstallBlob.canonicalBytes() or the recipe fails box verification.
-  if (b.certAutonomy !== undefined) {
-    parts.push(`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`);
-  }
-  // Same backward-compatible append, AFTER certAutonomy. The `de=` prefix
-  // can't collide with a bootUnlockMode ("auto"/"approve") or `ca=` token.
+  // Same backward-compatible append, AFTER bootUnlockMode. The `de=` prefix
+  // can't collide with a bootUnlockMode ("auto"/"approve") token.
   // A blob WITHOUT diskEncryption (absent ⇒ "luks") canonicalizes byte-for-
   // byte as before, so existing recipes keep verifying; when present the
   // signer commits to it so a relay can't flip "luks"→"none" to downgrade an

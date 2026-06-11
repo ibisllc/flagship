@@ -32,7 +32,6 @@ import {
   saveDraft,
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
-import { getCertValidityDays } from "../lib/certValidity.js";
 
 registerView("view-create-server");
 
@@ -339,7 +338,6 @@ async function resumeDraft(id) {
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
-  restoreCertAutonomy(d.certAutonomy);
   restoreDiskEncryption(d.diskEncryption);
   toast(`resumed ${d.serverName}`);
 }
@@ -362,15 +360,11 @@ function readInputs() {
   // A two-option choice carried in the SIGNED InstallBlob so a relay can't
   // downgrade an `approve` server to `auto`. Default `auto`.
   const bootUnlockMode = readBootUnlockMode();
-  // Cert-autonomy / offline-autonomy window (per-user-cert design,
-  // docs/per-user-cert-worklist.md). Carried in the SIGNED InstallBlob so a
-  // relay can't silently weaken "managed" → "autonomous".
-  const certAutonomy = readCertAutonomy();
   // Disk-encryption choice (auth.ts `de=` field). Carried in the SIGNED
   // InstallBlob so a relay can't downgrade an encrypted box to plaintext.
   // Default "luks" (encrypted); the user opts OUT explicitly.
   const diskEncryption = readDiskEncryption();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, certAutonomy, diskEncryption };
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption };
 }
 
 // Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
@@ -388,30 +382,6 @@ export function readDiskEncryption() {
 function readBootUnlockMode() {
   const checked = document.querySelector('input[name="cs-boot-unlock"]:checked');
   return checked && checked.value === "approve" ? "approve" : "auto";
-}
-
-// Cert autonomy is a BINARY choice: "managed" (the default — an admin device
-// renews) vs "autonomous" (the box holds a sealed, revocable key and renews
-// itself forever). The renewal *window* for managed boxes is the account-wide
-// validity setting (lib/certValidity.js), stamped in here — it isn't a
-// per-server pick.
-
-// Read the selected cert-autonomy mode from the <select>. Returns the
-// certAutonomy object to thread onto the blob. "autonomous" ⇒ self-minting (no
-// window); anything else ⇒ managed with the account-wide validity window.
-export function readCertAutonomy() {
-  const el = $("cs-cert-autonomy");
-  const mode = el && String(el.value) === "autonomous" ? "autonomous" : "managed";
-  if (mode === "autonomous") return { mode: "autonomous" };
-  return { mode: "managed", offlineWindowDays: getCertValidityDays() };
-}
-
-// Restore the cert-autonomy <select> from a saved draft's certAutonomy
-// object. "autonomous" stays autonomous; everything else (or absent) ⇒ managed.
-function restoreCertAutonomy(certAutonomy) {
-  const el = $("cs-cert-autonomy");
-  if (!el) return;
-  el.value = certAutonomy?.mode === "autonomous" ? "autonomous" : "managed";
 }
 
 // Restore the "Encrypt disk" checkbox from a saved draft's diskEncryption
@@ -658,10 +628,6 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // default, so an auto recipe signs/serialises byte-identically to a legacy
   // pre-bootUnlockMode recipe (and old verifiers keep accepting it).
   if (bootUnlockMode === "approve") blob.bootUnlockMode = "approve";
-  // Per-user-cert: carry the chosen offline-autonomy window in the SIGNED
-  // blob. Appended AFTER bootUnlockMode in canonicalInstallBlob as
-  // `ca=<mode>:<days>`; the signer commits to it so a relay can't weaken it.
-  if (inputs.certAutonomy !== undefined) blob.certAutonomy = inputs.certAutonomy;
   // Disk-encryption: carry the field ONLY for "none". "luks" is the
   // absent-field default, so an encrypted recipe signs/serialises
   // byte-identically to a legacy pre-diskEncryption recipe (old verifiers
@@ -691,10 +657,6 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // Mirror the conditional from the canonical blob: present iff "approve",
   // so the downloaded recipe JSON carries exactly what was signed.
   if (blob.bootUnlockMode !== undefined) onWireBlob.bootUnlockMode = blob.bootUnlockMode;
-  // Carry certAutonomy through to the recipe JSON exactly as signed — the
-  // burner round-trips it (installBlobFromJson) and re-derives the same
-  // canonical bytes for box verification (iso-personalizer InstallBlobJson).
-  if (blob.certAutonomy !== undefined) onWireBlob.certAutonomy = blob.certAutonomy;
   // Mirror the conditional from the canonical blob: present iff "none", so the
   // downloaded recipe JSON carries exactly what was signed (the burner round-
   // trips it and re-derives the same `de=none` token for box verification).
@@ -842,7 +804,6 @@ export function initCreateServerView() {
     $("cs-llm-pref").value = "";
     $("cs-relay-session").value = "";
     $("cs-match-code").textContent = "— — —";
-    restoreCertAutonomy(null);
     restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });

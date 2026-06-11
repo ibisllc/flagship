@@ -54,7 +54,6 @@ describe("create-server view — static structure (#24)", () => {
   it("provides the inputs the user fills in", () => {
     expect(VIEW_SRC).toMatch(/cs-server-name/);
     expect(VIEW_SRC).toMatch(/cs-backup-policy/);
-    expect(VIEW_SRC).toMatch(/cs-cert-autonomy/);
     expect(VIEW_SRC).toMatch(/cs-relay-session/);
   });
 
@@ -129,9 +128,13 @@ describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
 
   it("defaults to auto: only the auto radio is pre-checked", () => {
     // exactly one `checked` attribute in the boot-unlock group, on `auto`.
+    // Scope strictly to the group's own block (it ends at the first
+    // `</div>` after the radios) so an unrelated `checked` control further
+    // down the form can't leak into the count.
+    const start = INDEX_HTML.indexOf('id="cs-boot-unlock"');
     const group = INDEX_HTML.slice(
-      INDEX_HTML.indexOf('id="cs-boot-unlock"'),
-      INDEX_HTML.indexOf('id="cs-boot-unlock"') + 1200,
+      start,
+      INDEX_HTML.indexOf("</div>", start) + "</div>".length,
     );
     const checks = group.match(/checked/g) || [];
     expect(checks.length).toBe(1);
@@ -381,103 +384,6 @@ describe("canonicalInstallBlob — byte-parity with @flagship/protocol", () => {
   });
 });
 
-describe("canonicalInstallBlob — certAutonomy byte-parity (per-user-cert)", () => {
-  // Same deterministic-Ed25519 trick as above: identical signatures ⟺
-  // identical signed bytes. We additionally pin the exact `ca=<mode>:<days>`
-  // suffix the webapp must emit, since the box re-derives these bytes when it
-  // verifies the recipe — any drift fails box verification.
-  const irk = deriveIRK({ seed: new Uint8Array(32).fill(7) });
-
-  type CertAutonomy = { mode: "managed" | "autonomous"; offlineWindowDays?: number };
-
-  function makeBlob(opts: {
-    bootUnlockMode?: "auto" | "approve";
-    certAutonomy?: CertAutonomy;
-  }): InstallBlob {
-    const blob: InstallBlob = {
-      version: 2,
-      serverDomain: "home.alice.flagship.services",
-      username: "alice",
-      serverName: "home",
-      phoneDelegatedPubKey: new Uint8Array(32).fill(0xaa),
-      registrationUrl: "https://flagship.services/api/server/register",
-      authCode: {
-        version: 1,
-        serial: "01ABCDEF0123456789ABCDEF01",
-        username: "alice",
-        serverName: "home",
-        serverDomain: "home.alice.flagship.services",
-        delegatedPubKey: new Uint8Array(32).fill(0xee),
-        userPubKey: new Uint8Array(32).fill(0xbb),
-        issuedAt: 1_700_000_000_000,
-        expiresAt: 1_700_000_360_000,
-      },
-      authCodeUserSignature: new Uint8Array(64).fill(0xcc),
-      installerGitRef: "main",
-      rckPubKey: new Uint8Array(32).fill(0xdd),
-    };
-    if (opts.bootUnlockMode !== undefined) blob.bootUnlockMode = opts.bootUnlockMode;
-    if (opts.certAutonomy !== undefined) blob.certAutonomy = opts.certAutonomy;
-    return blob;
-  }
-
-  // The picker's finite options + the Indefinite escape hatch, mapped to the
-  // exact certAutonomy object the view threads onto the blob.
-  const cases: { label: string; ca: CertAutonomy; suffix: string }[] = [
-    { label: "managed:3", ca: { mode: "managed", offlineWindowDays: 3 }, suffix: "ca=managed:3" },
-    { label: "managed:7", ca: { mode: "managed", offlineWindowDays: 7 }, suffix: "ca=managed:7" },
-    { label: "managed:15", ca: { mode: "managed", offlineWindowDays: 15 }, suffix: "ca=managed:15" },
-    { label: "managed:30", ca: { mode: "managed", offlineWindowDays: 30 }, suffix: "ca=managed:30" },
-    { label: "managed:90", ca: { mode: "managed", offlineWindowDays: 90 }, suffix: "ca=managed:90" },
-    // Indefinite ⇒ { mode: "autonomous" } ⇒ days default to 0 on the wire.
-    { label: "autonomous", ca: { mode: "autonomous" }, suffix: "ca=autonomous:0" },
-  ];
-
-  for (const c of cases) {
-    it(`emits the '${c.suffix}' token and matches the TS canonical bytes (${c.label})`, () => {
-      const blob = makeBlob({ certAutonomy: c.ca });
-      const jsBytes = jsCanonicalInstallBlob(blob);
-      const text = new TextDecoder().decode(jsBytes);
-      // The canonical string ENDS with the expected ca= token (no
-      // bootUnlockMode here, so ca= is the final '|'-joined field).
-      expect(text.endsWith(`|${c.suffix}`)).toBe(true);
-      // Deterministic-Ed25519 byte-parity against @flagship/protocol.
-      const tsSig = signInstallBlob(blob, irk);
-      const jsSig = ed.sign(jsBytes, irk.privateKey);
-      expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
-    });
-  }
-
-  it("appends ca= AFTER bootUnlockMode (order: …|<rck>|approve|ca=managed:7)", () => {
-    const withApprove = makeBlob({
-      bootUnlockMode: "approve",
-      certAutonomy: { mode: "managed", offlineWindowDays: 7 },
-    });
-    const text = new TextDecoder().decode(jsCanonicalInstallBlob(withApprove));
-    // bootUnlockMode precedes the ca= token; ca= is last.
-    expect(text.endsWith("|approve|ca=managed:7")).toBe(true);
-    // And it is byte-identical to the TS canonical form.
-    const tsSig = signInstallBlob(withApprove, irk);
-    const jsSig = ed.sign(jsCanonicalInstallBlob(withApprove), irk.privateKey);
-    expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
-  });
-
-  it("certAutonomy absent ⇒ legacy bytes (no ca= token appended)", () => {
-    const text = new TextDecoder().decode(jsCanonicalInstallBlob(makeBlob({})));
-    expect(text).not.toContain("ca=");
-  });
-
-  it("ordering matches: managed:7 token is exactly the rck-hex field + '|ca=managed:7'", () => {
-    const base = makeBlob({});
-    const baseText = new TextDecoder().decode(jsCanonicalInstallBlob(base));
-    const withCa = new TextDecoder().decode(
-      jsCanonicalInstallBlob(makeBlob({ certAutonomy: { mode: "managed", offlineWindowDays: 7 } })),
-    );
-    // The ca= form is exactly the legacy bytes + the appended token.
-    expect(withCa).toBe(baseText + "|ca=managed:7");
-  });
-});
-
 describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`)", () => {
   // Same deterministic-Ed25519 trick: identical signatures ⟺ identical signed
   // bytes. The box re-derives these bytes when it verifies the recipe, so any
@@ -487,7 +393,6 @@ describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`
 
   function makeBlob(opts: {
     bootUnlockMode?: "auto" | "approve";
-    certAutonomy?: { mode: "managed" | "autonomous"; offlineWindowDays?: number };
     diskEncryption?: "luks" | "none";
   }): InstallBlob {
     const blob: InstallBlob = {
@@ -513,7 +418,6 @@ describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`
       rckPubKey: new Uint8Array(32).fill(0xdd),
     };
     if (opts.bootUnlockMode !== undefined) blob.bootUnlockMode = opts.bootUnlockMode;
-    if (opts.certAutonomy !== undefined) blob.certAutonomy = opts.certAutonomy;
     if (opts.diskEncryption !== undefined) blob.diskEncryption = opts.diskEncryption;
     return blob;
   }
@@ -541,15 +445,14 @@ describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`
     expect(ed.verify(sig, jsCanonicalInstallBlob(blob), irk.publicKey)).toBe(true);
   });
 
-  it("appends de= LAST, after bootUnlockMode AND certAutonomy", () => {
+  it("appends de= LAST, after bootUnlockMode", () => {
     const blob = makeBlob({
       bootUnlockMode: "approve",
-      certAutonomy: { mode: "managed", offlineWindowDays: 7 },
       diskEncryption: "none",
     });
     const text = new TextDecoder().decode(jsCanonicalInstallBlob(blob));
-    expect(text.endsWith("|approve|ca=managed:7|de=none")).toBe(true);
-    // Byte-identical to the TS canonical form with all three appends.
+    expect(text.endsWith("|approve|de=none")).toBe(true);
+    // Byte-identical to the TS canonical form with both appends.
     const tsSig = signInstallBlob(blob, irk);
     const jsSig = ed.sign(jsCanonicalInstallBlob(blob), irk.privateKey);
     expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
@@ -563,11 +466,11 @@ describe("canonicalInstallBlob — diskEncryption byte-parity (FEATURE B / `de=`
     expect(withDe).toBe(baseText + "|de=none");
   });
 
-  it("buildDraft.canonicalInstallBlob appends de= after certAutonomy", () => {
-    const caIdx = LIB_SRC.indexOf("b.certAutonomy !== undefined");
+  it("buildDraft.canonicalInstallBlob appends de= after bootUnlockMode", () => {
+    const bootIdx = LIB_SRC.indexOf("b.bootUnlockMode !== undefined");
     const deIdx = LIB_SRC.indexOf("b.diskEncryption !== undefined");
-    expect(caIdx).toBeGreaterThan(-1);
-    expect(deIdx).toBeGreaterThan(caIdx);
+    expect(bootIdx).toBeGreaterThan(-1);
+    expect(deIdx).toBeGreaterThan(bootIdx);
     expect(LIB_SRC).toContain("`de=${b.diskEncryption}`");
   });
 });
@@ -596,56 +499,6 @@ describe("create-server view — encrypt-disk toggle (FEATURE B)", () => {
     );
     // The downloaded recipe carries whatever the blob carried.
     expect(VIEW_SRC).toMatch(/onWireBlob\.diskEncryption = blob\.diskEncryption/);
-  });
-});
-
-describe("create-server view — cert-autonomy picker (per-user-cert)", () => {
-  it("renders the who-renews question prompt", () => {
-    expect(INDEX_HTML).toContain("Who renews this server's certificate?");
-  });
-
-  it("offers a binary managed/autonomous choice, defaulting to managed", () => {
-    const sel = INDEX_HTML.slice(
-      INDEX_HTML.indexOf('id="cs-cert-autonomy"'),
-      INDEX_HTML.indexOf('id="cs-cert-autonomy"') + 400,
-    );
-    expect(sel).toMatch(/<option value="managed" selected>/);
-    expect(sel).toMatch(/<option value="autonomous">/);
-    // The old per-server days picker is gone.
-    expect(sel).not.toMatch(/value="indefinite"/);
-    expect(sel).not.toMatch(/value="90"/);
-    // Exactly one option is preselected, and it's managed.
-    const selected = sel.match(/selected/g) || [];
-    expect(selected.length).toBe(1);
-  });
-
-  it("reads the picker and threads certAutonomy into the signed blob", () => {
-    // The reader maps autonomous→self-mint, managed→account-wide window.
-    expect(VIEW_SRC).toContain("cs-cert-autonomy");
-    expect(VIEW_SRC).toMatch(/export function readCertAutonomy\(/);
-    expect(VIEW_SRC).toMatch(/mode: "autonomous"/);
-    expect(VIEW_SRC).toMatch(/mode: "managed", offlineWindowDays: getCertValidityDays\(\)/);
-    // The blob carries it (mirror of the bootUnlockMode threading).
-    expect(VIEW_SRC).toMatch(/blob\.certAutonomy = inputs\.certAutonomy/);
-    // The downloaded recipe carries whatever the blob carried.
-    expect(VIEW_SRC).toMatch(/onWireBlob\.certAutonomy = blob\.certAutonomy/);
-  });
-
-  it("buildDraft.canonicalInstallBlob appends ca= after bootUnlockMode", () => {
-    // The lib mirrors the TS append order: bootUnlockMode, then ca=.
-    const bootIdx = LIB_SRC.indexOf("b.bootUnlockMode !== undefined");
-    const caIdx = LIB_SRC.indexOf("b.certAutonomy !== undefined");
-    expect(bootIdx).toBeGreaterThan(-1);
-    expect(caIdx).toBeGreaterThan(bootIdx);
-    expect(LIB_SRC).toContain("`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`");
-  });
-
-  it("exposes the account-wide validity options + default as module exports", async () => {
-    const { CERT_VALIDITY_OPTIONS, DEFAULT_CERT_VALIDITY_DAYS } = await import(
-      "../public/webapp/lib/certValidity.js"
-    );
-    expect(CERT_VALIDITY_OPTIONS).toEqual([7, 30, 90]);
-    expect(DEFAULT_CERT_VALIDITY_DAYS).toBe(30);
   });
 });
 
