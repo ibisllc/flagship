@@ -1794,3 +1794,45 @@ describe("/api/iso-manifest — desktop-burner base-ISO manifest", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("boot.flagshipserver.com — boot operations served by flagship-com", () => {
+  // The consolidation: the box/phone-facing /api/boot/* contract now runs on
+  // THIS worker, host-dispatched. These cases lock the host wiring (route.ts
+  // → tryBootHost); the full unlock flow is in bootHost.integration.test.ts.
+  it("/api/health on the boot host reports the boot surface", async () => {
+    const r = await route(
+      new Request("https://boot.flagshipserver.com/api/health"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    const body = (await r.json()) as { ok: boolean; surface: string };
+    expect(body.ok).toBe(true);
+    expect(body.surface).toBe("boot");
+  });
+
+  it("a /api/boot/* path 503s when no DB is bound (reaches tryBootHost, not the proxy)", async () => {
+    const r = await route(
+      new Request("https://boot.flagshipserver.com/api/boot/lease/kitchen.alice.flagship.services"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(503);
+  });
+
+  it("a non-boot path on the boot host 404s (tiny single-purpose surface)", async () => {
+    const r = await route(
+      new Request("https://boot.flagshipserver.com/faq.html"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it("the boot host never falls through to the coming-soon marketing gate", async () => {
+    // A bare GET / on the boot host must not serve the marketing coming-soon
+    // page — boot is API-only. 404 (not 200 coming-soon).
+    const r = await route(
+      new Request("https://boot.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(404);
+  });
+});
