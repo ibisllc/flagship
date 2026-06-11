@@ -51,9 +51,11 @@
         </div>
       </section>
 
-      <!-- View 3a: Home tab — identity + servers + AI provider chip -->
+      <!-- View 3a: Home tab — identity + servers + AI provider chip.
+           The "Servers" heading + search + filter chips are rendered INTO
+           #servers-list by views/home.js (the WhatsApp-style large
+           collapsing title); the empty-state path renders its own card. -->
       <section id="view-home" class="hidden" data-tab="home">
-        <h2>Servers</h2>
         <div id="servers-list"></div>
 
         <h2 class="mt-5">Session</h2>
@@ -153,42 +155,61 @@
       <!-- View 3c: Settings tab — providers, push, recovery, tier, identity, danger zone -->
       <!-- Detail panel (view-settings) below renders the actual content; the Settings
            tab itself is the entry strip linking to its sub-sections. -->
+      <!-- Settings tab — profile hero + grouped rounded sections (WhatsApp
+           look). The hero card is populated by enterSettingsTab() with the
+           account monogram + username + tier. The rows keep their stable ids
+           so app.js's wireSettingsTabEntries() handlers still resolve; the
+           leading icon squares are stamped in by enterSettingsTab(). -->
       <section id="view-settings-tab" class="hidden" data-tab="settings">
-        <h2>Account</h2>
-        <div class="card stack-md">
-          <button class="secondary full-width" id="settings-tab-providers">AI providers</button>
-          <button class="secondary full-width" id="settings-tab-account-security">Account security</button>
-          <button class="secondary full-width" id="settings-tab-push">Browser notifications</button>
-          <button class="secondary full-width" id="settings-tab-recovery">Recovery</button>
-          <button class="secondary full-width" id="settings-tab-tier">Tier &amp; usage</button>
-          <button class="secondary full-width" id="settings-tab-trusted-devices">Trusted devices</button>
-          <button class="secondary full-width" id="settings-tab-sessions">Browser sessions</button>
-          <button class="secondary full-width" id="settings-tab-peer-backup">Peer-backup</button>
-          <button class="secondary full-width" id="settings-tab-companion-dock">Dock a browser</button>
-          <button class="secondary full-width" id="settings-tab-companion-requests">
-            Companion requests
-            <span id="companion-requests-badge" class="pill hidden" aria-label="pending companion requests">0</span>
-          </button>
-          <button class="secondary full-width" id="settings-tab-profiles">Profiles</button>
-        </div>
+        <div class="fs-hero-compact" data-settings-compact aria-hidden="true">Settings</div>
+        <h2 class="fs-hero-title" data-settings-title style="margin: 4px 0 16px;">Settings</h2>
 
-        <h2 class="mt-5">Advanced</h2>
-        <div class="card stack-md">
-          <label class="inline-check">
-            <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
-          </label>
-          <p class="faint-sm" id="settings-debug-hint">
-            Enables the "Send order" debug panel and other developer surfaces.
-          </p>
-          <div id="settings-developer-row" class="hidden">
-            <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
-            <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server (draft composer)</button>
+        <div id="settings-profile-hero"></div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">ACCOUNT</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI providers</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Browser notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-tier"><span class="fs-row-icon icon" data-row-icon="tier"></span><span class="fs-row-body"><span class="fs-row-title">Tier &amp; usage</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
-        <h2 class="mt-5">Danger zone</h2>
-        <div class="card danger-zone">
-          <button class="secondary full-width" id="settings-tab-reset">Reset device</button>
+        <div class="fs-group-section">
+          <div class="fs-group-header">RECOVERY &amp; DEVICES</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">ADVANCED</div>
+          <div class="card stack-md">
+            <label class="inline-check">
+              <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
+            </label>
+            <p class="faint-sm" id="settings-debug-hint">
+              Enables the "Send order" debug panel and other developer surfaces.
+            </p>
+            <div id="settings-developer-row" class="hidden">
+              <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
+              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server (draft composer)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">DANGER ZONE</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Reset device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
         </div>
       </section>
 
@@ -219,9 +240,10 @@
         </div>
       </section>
 
-      <!-- View 8: Services list (P2.2) — also acts as the "Services" tab landing. -->
+      <!-- View 8: Services list (P2.2) — also acts as the "Services" tab landing.
+           The "Services" heading + search + All/Yours/Shared chips are rendered
+           INTO #services-list-content by views/services-list.js. -->
       <section id="view-services-list" class="hidden" data-tab="apps">
-        <h2>Installed</h2>
         <div id="services-list-content"></div>
         <div class="card mt-3">
           <p class="note">

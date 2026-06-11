@@ -33,7 +33,12 @@
   --surface-sunken:  #EFEDE7;
 
   /* ── Ink ─────────────────────────────────────────────────────── */
-  --ink:             #000000;
+  /* Warm near-black, NOT pure #000 (design-system §2: pure #000/#FFF are
+   * banned — they look cheap on OLED + paper-white). This is the §2.1
+   * light-theme `--text` value, kept on the warm-neutral axis. The teal
+   * accent (--teal / --accent / --primary, below) is the ONLY saturated
+   * hue used for CTAs / links / focus — never --ink. */
+  --ink:             #14140F;
   --ink-soft:        #1F1E1A;
   --ink-muted:       #555149;
   --ink-faint:       #8A8478;

@@ -60,6 +60,15 @@ export const activityIcon = `<svg ${COMMON}><polyline points="22 12 18 12 15 21 
 
 export const unlockIcon = `<svg ${COMMON}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
 
+// Search / chevron-right / x — used by the WhatsApp-inspired uikit
+// primitives (search field magnifier, list/settings-row chevron, the
+// announcement-card + search-field dismiss control).
+export const searchIcon = `<svg ${COMMON}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+
+export const chevronRightIcon = `<svg ${COMMON}><polyline points="9 18 15 12 9 6"/></svg>`;
+
+export const xIcon = `<svg ${COMMON}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
 /**
  * Map of home-grid button id → icon. Centralised so the wiring below
  * is data-driven; the icon for each surface is chosen to mirror its

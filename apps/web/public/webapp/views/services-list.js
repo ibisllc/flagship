@@ -10,10 +10,50 @@ import { screensFetch, ScreensError } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { chipRow, searchField, listRow } from "../lib/uikit.js";
+import { packageIcon } from "../lib/icons.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
 registerView("view-services-list");
+
+/**
+ * Apps filter chips — mirror the iOS Services tab bucket set + labels:
+ * All / Yours / Shared. "Yours" = an app whose creator is the signed-in
+ * user; "Shared" = installed from another creator. Pure presentation.
+ */
+export const APPS_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "yours", label: "Yours" },
+  { value: "shared", label: "Shared" },
+];
+
+/** Which bucket an app belongs to, given the signed-in username. */
+export function appBucket(app, username) {
+  const creator = String(app?.creator ?? "").toLowerCase();
+  const me = String(username ?? "").toLowerCase();
+  return creator && me && creator === me ? "yours" : "shared";
+}
+
+export function appsFilterMatches(filter, bucket) {
+  return filter === "all" || filter === bucket;
+}
+
+/** Case-insensitive search over an app's slug / summary / serviceId. */
+export function appsSearchMatches(query, app) {
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) return true;
+  const hay = [app?.slug ?? "", app?.summary ?? "", app?.serviceId ?? ""]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+// In-memory app model + active filter/search. Re-paints locally on
+// chip/search change — never re-fetches.
+let appEntries = [];
+let appsFilter = "all";
+let appsQuery = "";
 
 function stripScheme(s) {
   return s.replace(/^https?:\/\//, "");
@@ -49,34 +89,110 @@ function urlRowHtml(service, links) {
   `;
 }
 
+/** Render one app as a clean list-row-style card: a teal package glyph, the
+ *  slug + version pill, the summary, the running/stopped status pill, the
+ *  voi.ci/canonical URL slot, and an Open button. Preserves every existing
+ *  data hook (data-service-id, data-url-slot, data-action=open). */
+function appCardHtml(s) {
+  return `
+    <div class="card fs-app-card" data-service-id="${escapeHtml(s.serviceId)}">
+      <div class="fs-app-card-head">
+        <span class="fs-listrow-icon icon" aria-hidden="true">${packageIcon}</span>
+        <div class="fs-app-card-body">
+          <div class="weight-600">${escapeHtml(s.slug)} <span class="pill">${escapeHtml(s.version || "")}</span></div>
+          <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
+          <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
+            <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
+          </div>
+          <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
+        </div>
+        <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}">open</button>
+      </div>
+    </div>
+  `;
+}
+
+/** Paint the hero (large title + search + All/Yours/Shared chips) followed by
+ *  the filtered + searched app cards. Re-runnable on every chip/search change;
+ *  reads the in-memory `appEntries` — never re-fetches. */
+function renderAppCards() {
+  const root = $("services-list-content");
+  if (!root) return;
+  const username = getSession().username;
+  const counts = { all: appEntries.length, yours: 0, shared: 0 };
+  for (const e of appEntries) counts[e.bucket] = (counts[e.bucket] ?? 0) + 1;
+  const chips = APPS_FILTERS.map((f) => ({ value: f.value, label: f.label, count: counts[f.value] ?? 0 }));
+
+  const visible = appEntries.filter(
+    (e) => appsFilterMatches(appsFilter, e.bucket) && appsSearchMatches(appsQuery, e.app),
+  );
+  const cardsHtml = visible.length
+    ? visible.map((e) => appCardHtml(e.app)).join("")
+    : `<div class="card placeholder">${
+        appsQuery || appsFilter !== "all" ? "No apps match this filter." : "No services installed yet."
+      }</div>`;
+
+  root.innerHTML = `
+    <div class="fs-hero-compact" data-apps-compact aria-hidden="true">Services</div>
+    <div class="fs-hero">
+      <h2 class="fs-hero-title" data-apps-title>Services</h2>
+      ${searchField({ value: appsQuery, placeholder: "Search services", id: "apps-search" })}
+      ${chipRow({ items: chips, selected: appsFilter, ariaLabel: "Filter services" })}
+    </div>
+    <div data-app-cards>${cardsHtml}</div>
+  `;
+
+  bindServicesListHandlers();
+  wireAppsListControls(root);
+  // Hydrate URL slots for the currently-visible apps (a re-paint re-creates
+  // the slots, so re-fetch links for the visible set).
+  void hydrateServiceLinks(visible.map((e) => e.app));
+  void username;
+}
+
+/** Delegate chip / search / clear interactions on the freshly painted list. */
+function wireAppsListControls(root) {
+  root.querySelectorAll("[data-chip]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      appsFilter = btn.getAttribute("data-chip-value") || "all";
+      renderAppCards();
+    });
+  });
+  const search = root.querySelector("[data-search]");
+  if (search) {
+    search.addEventListener("input", () => {
+      appsQuery = search.value;
+      renderAppCards();
+      const next = $("apps-search");
+      if (next) {
+        next.focus();
+        const v = next.value;
+        next.setSelectionRange(v.length, v.length);
+      }
+    });
+  }
+  root.querySelector("[data-search-clear]")?.addEventListener("click", () => {
+    appsQuery = "";
+    renderAppCards();
+    $("apps-search")?.focus();
+  });
+}
+
 export async function renderServicesList() {
   const root = $("services-list-content");
   root.innerHTML = skeletonCards(3);
+  appsFilter = "all";
+  appsQuery = "";
   try {
     const body = await screensFetch("/api/screens/apps-list");
     if (!body.apps?.length) {
-      root.innerHTML = '<div class="card placeholder">no services installed yet</div>';
+      appEntries = [];
+      renderAppCards();
       return;
     }
-    root.innerHTML = body.apps.map((s) => `
-      <div class="card" data-service-id="${escapeHtml(s.serviceId)}">
-        <div class="row row-top">
-          <div style="flex:1; min-width:0;">
-            <div class="weight-600">${escapeHtml(s.slug)} <span class="pill">${escapeHtml(s.version || "")}</span></div>
-            <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
-            <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
-              <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
-            </div>
-            <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
-          </div>
-          <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}">open</button>
-        </div>
-      </div>
-    `).join("");
-    bindServicesListHandlers();
-    // Fan out the per-service /links fetch in the background — patches
-    // each row's URL slot as the response lands.
-    void hydrateServiceLinks(body.apps);
+    const username = getSession().username;
+    appEntries = body.apps.map((app) => ({ app, bucket: appBucket(app, username) }));
+    renderAppCards();
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;

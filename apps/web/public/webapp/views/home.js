@@ -1,5 +1,11 @@
 import { bytesToHex, signWithIrk } from "../keystore.js";
-import { decorateHomeGrid } from "../lib/icons.js";
+import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
+import {
+  chipRow,
+  searchField,
+  announcementCard,
+  listRow,
+} from "../lib/uikit.js";
 import { tickRenewals } from "../lib/leases.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
@@ -118,21 +124,19 @@ export function pendingWithoutRegisteredTwin(servers, pending) {
  *  so it's unit-testable alongside the registered-card renderer.
  *  @param {{fqdn:string,serverName?:string,phase?:string|null}} order */
 export function renderPendingCard(order) {
-  const dot = `<span class="server-dot server-dot--provisioning" aria-hidden="true"></span>`;
   const label = order.serverName || order.fqdn;
   const bar = renderListProgressBar({ phase: order.phase ?? null, status: "provisioning" });
+  // Clean list row: a warning-tinted server glyph, the reserved name, the
+  // fqdn subtitle + "installing" detail, and a "pending" pill trailing.
+  const row = listRow({
+    leading: { kind: "icon", svg: serverIcon, tone: "warning" },
+    title: String(label),
+    subtitle: "installing",
+    detail: String(order.fqdn),
+    trailing: `<span class="pill warn">pending</span>`,
+  });
   return `
-    <div class="row row-top">
-      <div class="server-card-head">
-        ${dot}
-        <span class="value server-fqdn">${escapeHtml(String(label))}</span>
-      </div>
-      <span class="pill warn">pending</span>
-    </div>
-    <div class="server-card-meta mt-2">
-      <span class="server-meta-chip">installing</span>
-      <span class="server-meta-chip">${escapeHtml(String(order.fqdn))}</span>
-    </div>
+    ${row}
     ${bar}
     <div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(String(order.fqdn))}">Delete server (free name)</button></div>
   `;
@@ -203,6 +207,65 @@ function formatDays(ms) {
 }
 
 /**
+ * Home filter chips — mirror the iOS `HomeStatusFilter` bucket set + labels
+ * (HomeScreen.swift): All / Online / Pending / Offline. Pure presentation —
+ * the underlying servers + every action on them are untouched; this only
+ * narrows which cards render.
+ */
+export const HOME_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "online", label: "Online" },
+  { value: "pending", label: "Pending" },
+  { value: "offline", label: "Offline" },
+];
+
+/**
+ * Map a `classifyServer` kind onto one of the three iOS status buckets
+ * (online / pending / offline), matching `HomeStatusFilter.matches`:
+ *   - Pending buckets provisioning / waiting-for-approval / coming-online
+ *     (a box on its way up);
+ *   - Offline buckets a genuinely-dead / offline / revoked / cert-expired
+ *     box;
+ *   - Online is strictly a live, checked-in box.
+ * A pending ORDER (no registered twin) is always in the "pending" bucket.
+ * @param {string} kind
+ * @returns {"online"|"pending"|"offline"}
+ */
+export function statusBucketForKind(kind) {
+  switch (kind) {
+    case "online":
+    case "cert-expiring-soon":
+      return "online";
+    case "waiting-for-approval":
+    case "coming-online":
+      return "pending";
+    default:
+      // never-seen, offline, revoked, cert-expired → offline bucket.
+      return "offline";
+  }
+}
+
+/** Whether an entry passes the active filter chip. `entry` is the bucket the
+ *  card resolved to; `filter` is the active chip value ("all" never filters). */
+export function homeFilterMatches(filter, bucket) {
+  return filter === "all" || filter === bucket;
+}
+
+/**
+ * Free-text search predicate over a server/pending card's display fields —
+ * mirrors the iOS Home `.searchable` (name / fqdn). Case-insensitive
+ * substring; an empty query matches everything. Pure so it's unit-testable.
+ * @param {string} query
+ * @param {{ name?:string, fqdn?:string }} fields
+ */
+export function homeSearchMatches(query, fields) {
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) return true;
+  const hay = [fields?.name ?? "", fields?.fqdn ?? ""].join(" ").toLowerCase();
+  return hay.includes(q);
+}
+
+/**
  * Build the inner HTML of one server card. The header row shows the
  * server label + live dot; the meta row lists app count, cert expiry
  * countdown (if <30d), and the auto-unlock state.
@@ -215,11 +278,14 @@ function formatDays(ms) {
  */
 export function renderServerCard(server, pod, opts = {}) {
   const c = classifyServer(server, pod, opts);
-  const dot = `<span class="server-dot server-dot--${c.kind}" aria-hidden="true"></span>`;
   const pillClass = c.kind === "online" ? "pill ok"
     : c.kind === "revoked" || c.kind === "cert-expired" ? "pill err"
     : c.kind === "cert-expiring-soon" || c.kind === "waiting-for-approval" ? "pill warn"
     : "pill";
+  // Leading status-tinted icon — same semantic colour the dot used to carry.
+  const bucket = statusBucketForKind(c.kind);
+  const tone = bucket === "online" ? "success" : bucket === "pending" ? "warning"
+    : c.kind === "revoked" || c.kind === "cert-expired" ? "danger" : "muted";
   const apps = pod?.appsServed ?? [];
   const serviceCount = Array.isArray(apps) ? apps.length : 0;
   const certCountdown = pod?.currentCert?.validUntil
@@ -227,6 +293,9 @@ export function renderServerCard(server, pod, opts = {}) {
   const autoUnlock = pod?.routingTarget
     ? "auto-unlock on"
     : "phone-tap only";
+  // Subtitle folds the app count + auto-unlock state into one muted line; the
+  // cert countdown (when <30d) rides the mono detail line.
+  const subtitle = `${serviceCount} app${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
   // A box that registered during install but whose daemon never checked in
   // (`never-seen`) is a dead install — offer the decommission / free-the-name
   // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
@@ -234,19 +303,15 @@ export function renderServerCard(server, pod, opts = {}) {
   const deadDelete = c.kind === "never-seen"
     ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server (free name)</button></div>`
     : "";
+  const row = listRow({
+    leading: { kind: "icon", svg: serverIcon, tone },
+    title: String(server.serverId),
+    subtitle,
+    detail: certCountdown ? String(certCountdown) : "",
+    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
+  });
   return `
-    <div class="row row-top">
-      <div class="server-card-head">
-        ${dot}
-        <span class="value server-fqdn">${escapeHtml(server.serverId)}</span>
-      </div>
-      <span class="${pillClass}">${escapeHtml(c.label)}</span>
-    </div>
-    <div class="server-card-meta mt-2">
-      <span class="server-meta-chip">${serviceCount} app${serviceCount === 1 ? "" : "s"}</span>
-      ${certCountdown ? `<span class="server-meta-chip">${escapeHtml(certCountdown)}</span>` : ""}
-      <span class="server-meta-chip">${escapeHtml(autoUnlock)}</span>
-    </div>
+    ${row}
     ${deadDelete}
   `;
 }
@@ -383,32 +448,31 @@ function renderRecoveryBanner() {
   }
   if (existing) return;
 
+  // One clean teal announcement card (mirrors iOS FSAnnouncementCard) in
+  // place of the old left-rule banner. CTA → recovery enrollment; the "x"
+  // dismiss writes the per-device flag so it stays hidden.
   const host = document.createElement("div");
   host.id = RECOVERY_BANNER_ID;
-  host.className = "card";
-  host.style.borderLeft = "3px solid var(--warn, #d28a00)";
-  host.innerHTML = `
-    <div class="weight-600">Your account isn't backed up yet</div>
-    <p class="note small">
-      If you lose this device, there's no way back in. Set up recovery now
-      (one minute) so you can restore your account from a fresh browser.
-    </p>
-    <div class="row-2">
-      <button class="primary" id="${RECOVERY_BANNER_ID}-secure">Secure my account</button>
-      <button class="secondary" id="${RECOVERY_BANNER_ID}-dismiss">Not now</button>
-    </div>
-  `;
+  host.innerHTML = announcementCard({
+    icon: keyIcon,
+    title: "Your account isn't backed up yet",
+    message:
+      "If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account from a fresh browser.",
+    ctaLabel: "Secure my account",
+    dismissible: true,
+    tone: "teal",
+  });
   const list = document.getElementById("servers-list");
   list?.parentNode?.insertBefore(host, list);
 
-  document
-    .getElementById(`${RECOVERY_BANNER_ID}-secure`)
+  host
+    .querySelector("[data-ann-cta]")
     ?.addEventListener("click", async () => {
       const { enterRecovery } = await import("./recovery.js");
       if (typeof enterRecovery === "function") enterRecovery();
     });
-  document
-    .getElementById(`${RECOVERY_BANNER_ID}-dismiss`)
+  host
+    .querySelector("[data-ann-dismiss]")
     ?.addEventListener("click", () => {
       try {
         // P12 — write to the active profile's slot (the store also mirrors
@@ -463,22 +527,23 @@ async function detectAccountReset(username) {
   // Insert the banner immediately above #servers-list. Replacing
   // rather than appending so we don't stack copies across renders.
   banner?.remove();
+  // Danger-variant announcement card (mirrors iOS FSAnnouncementCard tint:
+  // .danger) — not dismissible (the user must act), CTA → re-sign-in.
   const host = document.createElement("div");
   host.id = ACCOUNT_RESET_BANNER_ID;
-  host.className = "card";
-  host.style.borderLeft = "3px solid var(--danger, #d33)";
-  host.innerHTML = `
-    <div class="weight-600">This device was removed from your account</div>
-    <p class="note small">
-      Another device on this account ran Disconnect, Replace, or Wipe.
-      Sign in again with your recovery passkey to get back in.
-    </p>
-    <button class="danger" id="${ACCOUNT_RESET_BANNER_ID}-signin">Sign in again</button>
-  `;
+  host.innerHTML = announcementCard({
+    icon: alertCircleIcon,
+    title: "This device was removed from your account",
+    message:
+      "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.",
+    ctaLabel: "Sign in again",
+    dismissible: false,
+    tone: "danger",
+  });
   const list = document.getElementById("servers-list");
   list?.parentNode?.insertBefore(host, list);
-  document
-    .getElementById(`${ACCOUNT_RESET_BANNER_ID}-signin`)
+  host
+    .querySelector("[data-ann-cta]")
     ?.addEventListener("click", () => {
       // Clear the per-device tokens + session so a reload drops the
       // user into recovery. We deliberately keep the wrappedUmk so
@@ -529,7 +594,138 @@ function renderDeviceCapabilityChip(cap) {
   `;
 }
 
+// In-memory model for the server list, plus the active filter chip + search
+// query. Chip taps + typing re-paint from this model WITHOUT re-fetching —
+// pure presentation, exactly like the iOS Home `.searchable` + chip filter.
+let homeServerEntries = [];
+let homeFilter = "all";
+let homeQuery = "";
+
+/**
+ * Paint the home server list: the large collapsing title, the search field,
+ * the All/Online/Pending/Offline filter chips (each with a live count), then
+ * the filtered + searched cards. Re-runnable on every chip/search change.
+ * Reads its model from `homeServerEntries`; never re-fetches.
+ */
+function renderServerCards() {
+  const list = $("servers-list");
+  if (!list) return;
+
+  // Per-bucket counts for the chip badges (computed off the FULL set, not the
+  // currently-filtered view, so the chips read as a stable summary).
+  const counts = { all: homeServerEntries.length, online: 0, pending: 0, offline: 0 };
+  for (const e of homeServerEntries) counts[e.bucket] = (counts[e.bucket] ?? 0) + 1;
+  const chips = HOME_FILTERS.map((f) => ({
+    value: f.value,
+    label: f.label,
+    count: counts[f.value] ?? 0,
+  }));
+
+  const visible = homeServerEntries.filter(
+    (e) => homeFilterMatches(homeFilter, e.bucket) && homeSearchMatches(homeQuery, e.fields),
+  );
+
+  const cardsHtml = visible.length
+    ? visible
+        .map((e) => `<div class="card ${e.cardClass}">${e.html}</div>`)
+        .join("")
+    : `<div class="card placeholder">${
+        homeQuery || homeFilter !== "all"
+          ? "No servers match this filter."
+          : "No servers yet."
+      }</div>`;
+
+  list.innerHTML = `
+    <div class="fs-hero-compact" data-home-compact aria-hidden="true">Servers</div>
+    <div class="fs-hero">
+      <h2 class="fs-hero-title" data-home-title>Servers</h2>
+      ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
+      ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
+    </div>
+    <div data-server-cards>${cardsHtml}</div>
+  `;
+
+  wireHomeListControls(list);
+}
+
+/**
+ * Delegate the chip / search / clear / delete interactions on the freshly
+ * painted list. Idempotent per render (the innerHTML reset above drops the
+ * old nodes + their listeners, so re-binding can't stack handlers).
+ */
+function wireHomeListControls(list) {
+  // Filter chips — narrow the visible set, no re-fetch.
+  list.querySelectorAll("[data-chip]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      homeFilter = btn.getAttribute("data-chip-value") || "all";
+      renderServerCards();
+    });
+  });
+  // Search — live substring filter as the user types.
+  const search = list.querySelector("[data-search]");
+  if (search) {
+    search.addEventListener("input", () => {
+      homeQuery = search.value;
+      // Re-paint, then restore focus + caret to the (recreated) field so
+      // typing isn't interrupted by the innerHTML swap.
+      renderServerCards();
+      const next = $("home-search");
+      if (next) {
+        next.focus();
+        const v = next.value;
+        next.setSelectionRange(v.length, v.length);
+      }
+    });
+  }
+  const clear = list.querySelector("[data-search-clear]");
+  if (clear) {
+    clear.addEventListener("click", () => {
+      homeQuery = "";
+      renderServerCards();
+      $("home-search")?.focus();
+    });
+  }
+  // "Delete server (free name)" — same release flow as before.
+  list.querySelectorAll(".js-delete-dead-server").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const fqdn = btn.getAttribute("data-fqdn") || "";
+      void deleteDeadServer(fqdn, btn);
+    });
+  });
+  // Collapsing-header reveal: show the compact sticky title once the large
+  // one scrolls out of view. Progressive — absent IntersectionObserver the
+  // compact title simply stays hidden and the large title scrolls normally.
+  wireHeroCollapse(list);
+}
+
+/**
+ * Reveal the compact sticky title when the large hero title scrolls past the
+ * app header (WhatsApp large-title collapse). Uses IntersectionObserver so
+ * it's cheap + passive; a missing observer leaves the compact title hidden.
+ */
+function wireHeroCollapse(root) {
+  const title = root.querySelector("[data-home-title]");
+  const compact = root.querySelector("[data-home-compact]");
+  if (!title || !compact || typeof IntersectionObserver === "undefined") return;
+  const io = new IntersectionObserver(
+    (ents) => {
+      for (const ent of ents) {
+        compact.classList.toggle("is-revealed", !ent.isIntersecting);
+      }
+    },
+    // Account for the ~54px app header so the swap happens as the title
+    // tucks under the chrome, not when it fully leaves the viewport.
+    { rootMargin: "-60px 0px 0px 0px", threshold: 0 },
+  );
+  io.observe(title);
+}
+
 export async function renderHome() {
+  // A fresh render rebuilds the model; reset the transient filter/search view
+  // so a re-entered Home doesn't inherit a stale "Offline"-only filter.
+  homeFilter = "all";
+  homeQuery = "";
   const session = getSession();
   setSubtitle(session.username ? `signed in as ${session.username}` : "signed in");
   $("home-username").textContent = session.username || "(not set)";
@@ -607,35 +803,37 @@ export async function renderHome() {
     // age-based grace classification.
     const awaitingApproval = await fetchAwaitingApprovalSet();
 
-    // Registered servers first (authoritative), pending orders below.
+    // Build the card model (registered first, pending below). Each entry
+    // carries its rendered HTML, its status bucket (for the filter chips) and
+    // its searchable fields (name / fqdn) so chip + search are pure local
+    // re-renders that never re-fetch and never touch any server action.
+    const entries = [];
     for (const s of body.servers) {
-      const card = document.createElement("div");
-      card.className = "card server-card";
       const hasLiveUnlockRequest = awaitingApproval.has(
         String(s.serverId ?? "").toLowerCase(),
       );
-      card.innerHTML = renderServerCard(
-        s,
-        podStatusByDomain.get(s.serverId.toLowerCase()),
-        { hasLiveUnlockRequest },
-      );
-      list.appendChild(card);
+      const pod = podStatusByDomain.get(s.serverId.toLowerCase());
+      const cls = classifyServer(s, pod, { hasLiveUnlockRequest });
+      entries.push({
+        html: renderServerCard(s, pod, { hasLiveUnlockRequest }),
+        bucket: statusBucketForKind(cls.kind),
+        fields: { name: String(s.serverId ?? ""), fqdn: String(s.serverId ?? "") },
+        cardClass: "server-card",
+      });
     }
     for (const order of pendingOrders) {
-      const card = document.createElement("div");
-      card.className = "card server-card server-card--pending";
-      card.innerHTML = renderPendingCard(order);
-      list.appendChild(card);
-    }
-    // Delegate the "Delete server (free name)" taps on dead/pending cards to
-    // the release flow. One listener on the list survives card re-renders.
-    list.querySelectorAll(".js-delete-dead-server").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const fqdn = btn.getAttribute("data-fqdn") || "";
-        void deleteDeadServer(fqdn, btn);
+      entries.push({
+        html: renderPendingCard(order),
+        bucket: "pending",
+        fields: {
+          name: String(order.serverName ?? order.fqdn ?? ""),
+          fqdn: String(order.fqdn ?? ""),
+        },
+        cardClass: "server-card server-card--pending",
       });
-    });
+    }
+    homeServerEntries = entries;
+    renderServerCards();
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user

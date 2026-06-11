@@ -17,7 +17,18 @@ import {
   packageIcon,
   serverIcon,
   settingsIcon,
+  sparklesIcon,
+  shieldIcon,
+  keyIcon,
+  usersIcon,
+  monitorIcon,
+  userIcon,
+  hardDriveIcon,
+  unlockIcon,
+  chevronRightIcon,
 } from "./lib/icons.js";
+import { profileCard } from "./lib/uikit.js";
+import { getSession } from "./lib/state.js";
 import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
 import { initHomeView, enterHome } from "./views/home.js";
@@ -107,8 +118,56 @@ async function enterActivityTab() {
   show("view-activity");
 }
 
+// Settings-tab row icon map (data-row-icon → SVG body). Stamped once on
+// first entry so the grouped rows carry their teal icon squares + chevrons.
+const SETTINGS_ROW_ICONS = {
+  providers: sparklesIcon,
+  security: shieldIcon,
+  push: activityIcon,
+  tier: activityIcon,
+  recovery: keyIcon,
+  devices: usersIcon,
+  sessions: monitorIcon,
+  backup: hardDriveIcon,
+  dock: monitorIcon,
+  requests: usersIcon,
+  profiles: userIcon,
+  reset: unlockIcon,
+  chevron: chevronRightIcon,
+};
+
+/** Populate the Settings profile hero + stamp the row icon squares. */
+function decorateSettingsTab() {
+  // Profile hero — teal monogram + username + account status. Tapping it
+  // opens AI providers (the primary account surface), matching the iOS
+  // profile card's drill-down into account.
+  const hero = $("settings-profile-hero");
+  if (hero) {
+    let username = "";
+    try { username = getSession().username || ""; } catch { /* locked */ }
+    hero.innerHTML = profileCard({
+      name: username,
+      subtitle: username ? "Your Flagship account" : "Signed in",
+    });
+    hero.querySelector("[data-profile-card]")?.addEventListener("click", async () => {
+      show("view-settings");
+      await renderProviders();
+    });
+  }
+  // Stamp the row icon squares + chevrons once.
+  for (const span of document.querySelectorAll("#view-settings-tab [data-row-icon]")) {
+    if (span.dataset.iconWired === "1") continue;
+    const k = span.getAttribute("data-row-icon");
+    if (k && SETTINGS_ROW_ICONS[k]) {
+      span.innerHTML = SETTINGS_ROW_ICONS[k];
+      span.dataset.iconWired = "1";
+    }
+  }
+}
+
 async function enterSettingsTab() {
   show("view-settings-tab");
+  decorateSettingsTab();
   // Reflect the debug toggle's current state every time the tab is opened.
   const toggle = $("settings-debug-toggle");
   const row = $("settings-developer-row");
