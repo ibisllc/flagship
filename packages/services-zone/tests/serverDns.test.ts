@@ -55,16 +55,33 @@ describe("ServerDnsPublisher", () => {
       serverName: "home-box",
       mode: "tunnel",
     });
-    // PER-USER DNS (task #23): two user-zone records, NOT per-server. The box
-    // apex `home-box.harry` resolves via the `*.harry` wildcard.
-    expect(out.apex).toBe("harry.flagship.services");
-    expect(out.wildcard).toBe("*.harry.flagship.services");
+    // PER-BOX DNS (model A′): two box-zone records. The wildcard makes every
+    // canonical service name `<service>.home-box.harry` resolve.
+    expect(out.apex).toBe("home-box.harry.flagship.services");
+    expect(out.wildcard).toBe("*.home-box.harry.flagship.services");
     expect(out.target).toBe("203.0.113.1");
     expect(zone.a.map((r) => r.name).sort()).toEqual([
-      "*.harry.flagship.services",
-      "harry.flagship.services",
+      "*.home-box.harry.flagship.services",
+      "home-box.harry.flagship.services",
     ]);
     for (const r of zone.a) expect(r.value).toBe("203.0.113.1");
+  });
+
+  it("two boxes under one user get DISTINCT record pairs", async () => {
+    const zone = new FakeZoneApi();
+    const publisher = new ServerDnsPublisher({
+      zone,
+      registry: new InMemoryServerDnsRegistry(),
+      tunnelIngressIp: "203.0.113.1",
+    });
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    await publisher.publish({ username: "harry", serverName: "chillout", mode: "tunnel" });
+    expect(zone.a.map((r) => r.name).sort()).toEqual([
+      "*.chillout.harry.flagship.services",
+      "*.home-box.harry.flagship.services",
+      "chillout.harry.flagship.services",
+      "home-box.harry.flagship.services",
+    ]);
   });
 
   it("publishes A records pointing at the user-supplied IP for mode=direct", async () => {
@@ -153,5 +170,21 @@ describe("ServerDnsPublisher", () => {
     expect(zone.a).toHaveLength(2);
     await publisher.unpublish({ username: "harry", serverName: "home-box" });
     expect(zone.a).toHaveLength(0);
+  });
+
+  it("unpublishing one box leaves a sibling box's records intact (per-box A′)", async () => {
+    const zone = new FakeZoneApi();
+    const publisher = new ServerDnsPublisher({
+      zone,
+      registry: new InMemoryServerDnsRegistry(),
+      tunnelIngressIp: "203.0.113.1",
+    });
+    await publisher.publish({ username: "harry", serverName: "home-box", mode: "tunnel" });
+    await publisher.publish({ username: "harry", serverName: "chillout", mode: "tunnel" });
+    await publisher.unpublish({ username: "harry", serverName: "home-box" });
+    expect(zone.a.map((r) => r.name).sort()).toEqual([
+      "*.chillout.harry.flagship.services",
+      "chillout.harry.flagship.services",
+    ]);
   });
 });

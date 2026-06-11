@@ -134,68 +134,20 @@ export function parseAppLabel(label: string): { slug: string; creator: string } 
 }
 
 /**
- * The `--` pin operator (per-user-cert design §3.3). A leftmost label of
- * the form `<label>--<server>` pins an app to a specific box — a rare
- * power-user / debug escape hatch, NOT the primary public form. Split on
- * the FIRST `--`: left = app label, right = box name.
+ * The class a leftmost label resolves to under the ONE per-user resolver.
+ * App labels, box-coordination names, and device labels all share the same
+ * `*.<user>` leftmost-label space and MUST be mutually unique within a user
+ * (the storage invariant); this resolver applies the deterministic
+ * PRECEDENCE so the class is well-defined even if that invariant is ever
+ * momentarily violated.
  *
- * Returns the parsed halves, or `{ ok: false }` if `L` is not a pin label
- * or violates the dash rules. A plain label (no `--`) returns
- * `{ ok: false, reason: "not a pin label" }` — callers use `isPinLabel`
- * first, or treat that reason as "fall through to the normal resolver".
- *
- * Rules (§3.3):
- *   - The app part and the box part are each ordinary slugs, so neither may
- *     contain `--` (SLUG_RE already forbids doubled dashes) or a
- *     leading/trailing dash.
- *   - The segment before `--` must NOT be exactly 2 characters, and the
- *     whole label must NOT begin `xn--` — both collide with the IDN /
- *     punycode R-LDH reservation (RFC 5890: hyphens at character positions
- *     3–4 are reserved for A-labels).
+ * The `--` pin operator (`<label>--<server>`) is RETIRED (A′ migration):
+ * box-pinned access is simply the hierarchical canonical name
+ * `<service>.<server>.<user>.flagship.services`, which lives under the BOX
+ * zone and is routed by its `<server>.<user>` suffix — it never reaches
+ * this user-zone resolver.
  */
-export function parsePinLabel(
-  leftmostLabel: string,
-): { ok: true; label: string; server: string } | { ok: false; reason: string } {
-  const norm = String(leftmostLabel).toLowerCase();
-  const idx = norm.indexOf("--");
-  if (idx < 0) return { ok: false, reason: "not a pin label (no `--` operator)" };
-  // R-LDH guard: a label beginning `xn--` is a reserved punycode A-label.
-  if (norm.startsWith("xn--")) {
-    return { ok: false, reason: "label must not begin `xn--` (RFC 5890 reservation)" };
-  }
-  const labelPart = norm.slice(0, idx);
-  const serverPart = norm.slice(idx + 2);
-  // R-LDH guard: a 2-char app part puts `--` at character positions 3–4.
-  if (labelPart.length === 2) {
-    return { ok: false, reason: "app part before `--` must not be exactly 2 characters" };
-  }
-  const app = validateAppSlug(labelPart);
-  if (!app.ok) return { ok: false, reason: `bad app part: ${app.reason}` };
-  // The box part must itself be a clean slug — this rejects a box name that
-  // smuggles a second `--` (`app--box--extra` → serverPart `box--extra`).
-  const box = validateAppSlug(serverPart);
-  if (!box.ok) return { ok: false, reason: `bad box part: ${box.reason}` };
-  return { ok: true, label: app.label, server: box.label };
-}
-
-/**
- * Cheap predicate: does this leftmost label use the `--` pin operator?
- * The §3.4 resolver checks this FIRST (step 1) before box-name / device /
- * install-table lookup.
- */
-export function isPinLabel(leftmostLabel: string): boolean {
-  return String(leftmostLabel).includes("--");
-}
-
-/**
- * The class a leftmost label resolves to under the §3.4 ONE per-user
- * resolver. App labels, box-coordination names, pin targets, and device
- * labels all share the same `*.<user>` leftmost-label space and MUST be
- * mutually unique within a user (the storage invariant); this resolver
- * applies the deterministic PRECEDENCE so the class is well-defined even
- * if that invariant is ever momentarily violated.
- */
-export type LabelClass = "pin" | "box-apex" | "device" | "app" | "none";
+export type LabelClass = "box-apex" | "device" | "app" | "none";
 
 export interface ResolverLookups {
   /** Is `label` a registered box (server) name for this user? */
@@ -208,30 +160,28 @@ export interface ResolverLookups {
 
 export interface ResolvedLabel {
   cls: LabelClass;
-  /** For "pin": the app label; otherwise the input label (lowercased). */
+  /** The input label (lowercased). */
   label: string;
-  /** For "pin": the target box name. Absent otherwise. */
-  server?: string;
 }
 
 /**
- * The §3.4 per-user leftmost-label resolver. Resolution PRECEDENCE:
- *   1. contains `--` → pin (`label--server`), route to that box.
- *   2. registered box name → box-coordination apex (`/.flagship/*`).
- *   3. registered device label → device view (capability scopes apply).
- *   4. in the install table → leader-route to that service.
- *   5. else → the disambiguation / "not an app" page.
+ * The per-user leftmost-label resolver (names directly under the USER zone,
+ * i.e. tier 2 `<label>.<user>.flagship.services`). Resolution PRECEDENCE:
+ *   1. registered box name → box-coordination apex (`/.flagship/*`).
+ *   2. registered device label → device view (capability scopes apply).
+ *   3. in the install table → leader-route to that service (tier 2,
+ *      hardware-agnostic).
+ *   4. else → the disambiguation / "not an app" page.
  *
- * Returns `(cls, label, server?)`, NOT just a route, so each caller applies
- * the correct security/capability context for the class (red-team C3).
+ * Box-pinned access is NOT a tier here: it is the hierarchical canonical
+ * name `<service>.<server>.<user>` under the box zone, routed by suffix
+ * before any leftmost-label resolution happens.
+ *
+ * Returns `(cls, label)`, NOT just a route, so each caller applies the
+ * correct security/capability context for the class (red-team C3).
  */
 export function resolveLeftmostLabel(leftmostLabel: string, lookups: ResolverLookups): ResolvedLabel {
   const norm = String(leftmostLabel).toLowerCase();
-  if (isPinLabel(norm)) {
-    const p = parsePinLabel(norm);
-    if (!p.ok) return { cls: "none", label: norm };
-    return { cls: "pin", label: p.label, server: p.server };
-  }
   if (lookups.isBoxName(norm)) return { cls: "box-apex", label: norm };
   if (lookups.isDeviceLabel(norm)) return { cls: "device", label: norm };
   if (lookups.isAppLabel(norm)) return { cls: "app", label: norm };
@@ -255,22 +205,16 @@ export function validateAppLabel(input: string): LabelValidation {
 }
 
 /**
- * Per-user wildcard SAN list — the CANONICAL cert shape (task #23). ONE cert
- * per user covers the user's apex `<user>.<apex>` plus a single layer of
- * subdomains `*.<user>.<apex>`. Every public name (the box apex
- * `<server>.<user>`, app labels `<label>.<user>`, device labels) lives one
- * label deep under `<user>`, so the wildcard covers them all. Mirrors
- * `expectedCertSans` (the CT-monitor side) byte-for-byte.
- */
-export function userWildcardSans(username: string, apex: string): string[] {
-  return [`${username}.${apex}`, `*.${username}.${apex}`];
-}
-
-/**
- * DEPRECATED (task #23): per-server SAN list — `<server>.<user>.<apex>` plus
- * `*.<server>.<user>.<apex>`. The two-label-deep wildcard is gone; one cert
- * now covers the whole user zone (`userWildcardSans`). No live callers; kept
- * only so any straggler import still type-checks.
+ * Per-box wildcard SAN list — the CANONICAL cert shape under model A′. Each
+ * box mints its OWN cert (box-local key, never shared) covering the box apex
+ * `<server>.<user>.<apex>` plus everything one label under it
+ * (`*.<server>.<user>.<apex>`), i.e. every canonical service name
+ * `<service>.<server>.<user>.<apex>`. The names are distinct per box, so
+ * issuance never trips Let's Encrypt's duplicate-certificate limit.
+ *
+ * Tier-2 names (`<service>.<user>.<apex>`, hardware-agnostic, leader-routed)
+ * are NOT covered here — they get a shared per-service cert delivered over
+ * the box's canonical pinned pipe (A′ Phase 5).
  */
 export function serverWildcardSans(
   serverName: string,
@@ -284,9 +228,9 @@ export function serverWildcardSans(
 }
 
 /**
- * Build the FQDN for one app (task #23): apps live one label deep under the
- * user zone — `<label>.<user>.<apex>` — not `<app>.<server>.<user>.<apex>`.
- * This is the canonical URL construction the whole stack should call.
+ * Tier-2 service FQDN: `<label>.<user>.<apex>` — the hardware-AGNOSTIC name.
+ * The leader-selection harness picks which box answers; the cert is a shared
+ * per-service cert, not the per-box wildcard.
  */
 export function appFqdn(
   appSubdomain: string,
@@ -294,6 +238,22 @@ export function appFqdn(
   apex: string,
 ): string {
   return `${appSubdomain}.${username}.${apex}`;
+}
+
+/**
+ * Tier-1 canonical service FQDN: `<service>.<server>.<user>.<apex>` — the
+ * hierarchical, box-PINNED name (security + hardware assurance). Covered by
+ * the box's own wildcard cert (`serverWildcardSans`); routed by its
+ * `<server>.<user>` suffix, so it never reaches the user-zone
+ * leftmost-label resolver. Replaces the retired `--` pin operator.
+ */
+export function canonicalServiceFqdn(
+  serviceLabel: string,
+  serverName: string,
+  username: string,
+  apex: string,
+): string {
+  return `${serviceLabel}.${serverName}.${username}.${apex}`;
 }
 
 export const _internal = { LABEL_RE, USERNAME_RE, SLUG_RE, SLUG_MAX, RESERVED_USER_LABELS };

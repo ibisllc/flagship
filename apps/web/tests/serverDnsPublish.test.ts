@@ -101,11 +101,11 @@ describe("/api/services-zone/publish-server", () => {
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
     expect(body.target).toBe("203.0.113.1");
-    // PER-USER DNS (task #23): two user-zone records, NOT per-server. The box
-    // apex `home-box.harry` resolves via the `*.harry` wildcard.
+    // Cert model A′: two per-box records; `*.home-box.harry` resolves every
+    // service name under the box.
     expect(zone.a.map((x) => x.name).sort()).toEqual([
-      "*.harry.flagship.services",
-      "harry.flagship.services",
+      "*.home-box.harry.flagship.services",
+      "home-box.harry.flagship.services",
     ]);
   });
 

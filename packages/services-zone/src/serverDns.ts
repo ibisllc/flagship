@@ -1,10 +1,11 @@
 import type { ZoneApi } from "./types.js";
 
 /**
- * Publishes the DNS record set that makes `<server>.<user>.flagship.services`
- * resolvable.
+ * Publishes the PER-BOX DNS record set (model A′) that makes
+ * `<server>.<user>.flagship.services` — and every canonical service name
+ * `<service>.<server>.<user>` under it — resolvable.
  *
- *   mode = "tunnel": the apex of `<server>.<user>` resolves to the tunnel
+ *   mode = "tunnel": the box apex `<server>.<user>` resolves to the tunnel
  *                    ingress anycast IP. Wildcard `*.<server>.<user>` resolves
  *                    to the same. The SNI router peeks the ClientHello and
  *                    forwards over the user's outbound WebSocket.
@@ -15,6 +16,11 @@ import type { ZoneApi } from "./types.js";
  *
  * Each call is idempotent — existing records for the same name are removed
  * before the new set is written, so a tunnel→direct flip leaves a clean zone.
+ *
+ * NOTE: the LIVE register-time DNS path is control-plane
+ * `handleServerRegister`; this publisher backs the Fly app's
+ * `/server-dns` route. It is kept on the per-box A′ shape so no caller can
+ * silently regress to user-zone records.
  */
 
 export type ServerDnsMode = "tunnel" | "direct";
@@ -82,14 +88,13 @@ export class ServerDnsPublisher {
     if (!isLabel(args.username) || !isLabel(args.serverName)) {
       throw new Error("username and serverName must be RFC 1035 labels");
     }
-    // PER-USER DNS (task #23): publish the TWO user-zone records — the apex
-    // `<user>.<apex>` and the wildcard `*.<user>.<apex>` — instead of the old
-    // per-server pair. The box apex `<server>.<user>` and every app label
-    // `<label>.<user>` both resolve via the single `*.<user>` wildcard. Records
-    // are per-USER, so multiple boxes share them (published idempotently); the
-    // tunnel hub routes each SNI to the right box.
-    const apexFqdn = `${args.username}.${apex}`;
-    const wildcardFqdn = `*.${args.username}.${apex}`;
+    // PER-BOX DNS (model A′): publish the TWO box-zone records — the box apex
+    // `<server>.<user>.<apex>` and the wildcard `*.<server>.<user>.<apex>`.
+    // The wildcard makes every canonical service name
+    // `<service>.<server>.<user>` resolve to the passthrough; the names are
+    // distinct per box, matching the per-box wildcard cert.
+    const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
+    const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
     const target = args.mode === "direct" ? requireIp(args.directIp) : this.opts.tunnelIngressIp;
 
     // Delete any prior records for this exact name so a flip leaves a clean zone.
@@ -126,11 +131,10 @@ export class ServerDnsPublisher {
    */
   async unpublish(args: { username: string; serverName: string }): Promise<void> {
     const apex = this.opts.apex ?? "flagship.services";
-    // PER-USER DNS (task #23): records are per-user, shared by every box under
-    // `<user>`. Only call this when the LAST server under the user is torn
-    // down — per-box routing revocation (#27) lives at the tunnel hub, not here.
-    const apexFqdn = `${args.username}.${apex}`;
-    const wildcardFqdn = `*.${args.username}.${apex}`;
+    // PER-BOX DNS (model A′): each box owns its own record pair, so tearing
+    // one box down never disturbs a sibling box under the same user.
+    const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
+    const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
     await this.purge(apexFqdn);
     await this.purge(wildcardFqdn);
     this.opts.registry.delete(apexFqdn);

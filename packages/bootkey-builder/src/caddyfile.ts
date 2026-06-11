@@ -24,29 +24,38 @@ export interface CaddyContext {
 }
 
 /**
- * Build the FQDN for one app on this server. PER-USER addressing (task #23):
- * apps live one label deep under the user zone — `<label>.<user>` — not
- * `<app>.<server>.<user>`. The leftmost label (the app's subdomain) is unique
- * within the user's merged namespace.
+ * The box's own FQDN — `<server>.<user>.flagship.services`, the apex SAN of
+ * the per-box cert (model A′) and the zone every canonical service name
+ * lives under.
  */
-export function appFqdn(ctx: CaddyContext, subdomain: string): string {
-  return `${subdomain}.${ctx.username}.flagship.services`;
+export function serverFqdn(ctx: CaddyContext): string {
+  return `${ctx.serverName}.${ctx.username}.flagship.services`;
 }
 
 /**
- * Build the wildcard Caddy site selector for this user's zone —
- * e.g. `*.harry.flagship.services`. Every one-label-deep public name (app
- * labels, the box apex, device labels) is matched here; the box only ever
- * receives the labels the tunnel hub routes to it.
+ * Build the canonical FQDN for one app on this server (model A′):
+ * `<app>.<server>.<user>.flagship.services`, covered by the box's own
+ * wildcard cert. Hierarchy replaces the retired `--` pin flattening.
+ */
+export function appFqdn(ctx: CaddyContext, subdomain: string): string {
+  return `${subdomain}.${serverFqdn(ctx)}`;
+}
+
+/**
+ * Build the wildcard Caddy site selector for THIS BOX's zone —
+ * e.g. `*.home-box.harry.flagship.services` (model A′). It matches every
+ * canonical service name on this box and nothing on a sibling box; the box
+ * only ever receives the names the tunnel hub routes to it.
  */
 export function serverWildcardSelector(ctx: CaddyContext): string {
-  return `*.${ctx.username}.flagship.services`;
+  return `*.${serverFqdn(ctx)}`;
 }
 
 /**
  * Emit a Caddyfile that:
- * 1. Terminates per-app TLS using the user-zone wildcard cert provisioned for
- *    `*.<user>.flagship.services` (issued by the server's ACME flow).
+ * 1. Terminates per-app TLS using the box's own wildcard cert (model A′:
+ *    `[<server>.<user>, *.<server>.<user>].flagship.services`, minted by the
+ *    box's ACME flow with a box-local key).
  * 2. STRIPS any client-supplied X-Flagship-* headers (defense against header
  *    injection — the platform's identity guarantees rest on this strip).
  * 3. Calls the local daemon's POST /apps/:id/identity/decide to authorize the
@@ -104,9 +113,10 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
     lines.push("");
   }
 
-  // Catch-all for unknown labels under THIS USER's zone. The box only ever
-  // receives the labels the tunnel hub routes to it, so this stays local.
-  lines.push(`${serverWildcardSelector(ctx)} {${tlsBlock}`);
+  // Catch-all for the box apex + unknown names under THIS BOX's zone (both
+  // covered by the per-box cert). The box only ever receives the names the
+  // tunnel hub routes to it, so this stays local.
+  lines.push(`${serverFqdn(ctx)}, ${serverWildcardSelector(ctx)} {${tlsBlock}`);
   lines.push("  respond \"app not found\" 404");
   lines.push("}");
 

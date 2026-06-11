@@ -3,6 +3,7 @@ import {
   appFqdn,
   caddyfileConfigFile,
   renderCaddyfile,
+  serverFqdn,
   serverWildcardSelector,
   type CaddyAppEntry,
   type CaddyContext,
@@ -35,24 +36,27 @@ function entry(over: Partial<CaddyAppEntry> = {}): CaddyAppEntry {
 
 const ctx: CaddyContext = { username: "harry", serverName: "home-box" };
 
-describe("appFqdn / serverWildcardSelector", () => {
-  it("composes <app>.<user>.flagship.services (per-user, task #23)", () => {
-    expect(appFqdn(ctx, "habits")).toBe("habits.harry.flagship.services");
+describe("serverFqdn / appFqdn / serverWildcardSelector", () => {
+  it("serverFqdn composes <server>.<user>.flagship.services (the per-box cert apex)", () => {
+    expect(serverFqdn(ctx)).toBe("home-box.harry.flagship.services");
   });
 
-  it("the wildcard selector is the USER zone — serverName does not affect it", () => {
-    expect(serverWildcardSelector(ctx)).toBe("*.harry.flagship.services");
-    // Two boxes under one user share the same user-zone wildcard; the tunnel
-    // hub (not the Caddyfile selector) arbitrates which box serves a label.
+  it("composes the canonical <app>.<server>.<user>.flagship.services (model A′)", () => {
+    expect(appFqdn(ctx, "habits")).toBe("habits.home-box.harry.flagship.services");
+  });
+
+  it("the wildcard selector is THIS BOX's zone — a sibling box gets a different one", () => {
+    expect(serverWildcardSelector(ctx)).toBe("*.home-box.harry.flagship.services");
+    // Per-box wildcard cert (A′): each box terminates only its own zone.
     const sibling = serverWildcardSelector({ ...ctx, serverName: "chillout" });
-    expect(sibling).toBe("*.harry.flagship.services");
+    expect(sibling).toBe("*.chillout.harry.flagship.services");
   });
 });
 
 describe("renderCaddyfile", () => {
-  it("emits a per-app site block at <subdomain>.<user>.flagship.services", () => {
+  it("emits a per-app site block at <subdomain>.<server>.<user>.flagship.services", () => {
     const out = renderCaddyfile(ctx, [entry()]);
-    expect(out).toContain("habits.harry.flagship.services {");
+    expect(out).toContain("habits.home-box.harry.flagship.services {");
   });
 
   it("strips client-supplied X-Flagship-* headers (defense against header injection)", () => {
@@ -84,12 +88,15 @@ describe("renderCaddyfile", () => {
     expect(out).toContain('reverse_proxy "app-x.local:1234"');
   });
 
-  it("catch-all 404 covers the user zone `*.<user>` (task #23)", () => {
+  it("catch-all 404 covers the box apex + the box zone `*.<server>.<user>` (model A′)", () => {
     const out = renderCaddyfile(ctx, []);
-    expect(out).toContain("*.harry.flagship.services {");
+    expect(out).toContain(
+      "home-box.harry.flagship.services, *.home-box.harry.flagship.services {",
+    );
     expect(out).toContain('respond "app not found" 404');
-    // The deprecated two-label-deep per-server wildcard must be gone.
-    expect(out).not.toContain("*.home-box.harry.flagship.services");
+    // The retired user-zone wildcard must be gone — it would claim names the
+    // per-box cert can't cover.
+    expect(out).not.toContain("*.harry.flagship.services");
   });
 
   it("uses `tls internal` when no cert paths are supplied (dev mode)", () => {
@@ -106,7 +113,7 @@ describe("renderCaddyfile", () => {
     expect(out).not.toContain("tls internal");
   });
 
-  it("renders multiple apps as independent site blocks under the user zone", () => {
+  it("renders multiple apps as independent site blocks under the box zone", () => {
     const out = renderCaddyfile(ctx, [
       entry({ serviceId: "habits", manifest: manifest({ network: { subdomain: "habits" } }) }),
       entry({
@@ -115,8 +122,8 @@ describe("renderCaddyfile", () => {
         containerHost: "app-blog.local",
       }),
     ]);
-    expect(out).toContain("habits.harry.flagship.services {");
-    expect(out).toContain("blog.harry.flagship.services {");
+    expect(out).toContain("habits.home-box.harry.flagship.services {");
+    expect(out).toContain("blog.home-box.harry.flagship.services {");
   });
 
   it("turns off Caddy's auto-HTTPS so the SNI passthrough is the only termination point", () => {
@@ -126,10 +133,10 @@ describe("renderCaddyfile", () => {
 });
 
 describe("caddyfileConfigFile", () => {
-  it("emits to /etc/caddy/Caddyfile with mode 0644 and the user-zone FQDN inside", () => {
+  it("emits to /etc/caddy/Caddyfile with mode 0644 and the box-zone FQDN inside", () => {
     const cf = caddyfileConfigFile(ctx, []);
     expect(cf.path).toBe("/etc/caddy/Caddyfile");
     expect(cf.mode).toBe(0o644);
-    expect(cf.content).toContain("harry.flagship.services");
+    expect(cf.content).toContain("home-box.harry.flagship.services");
   });
 });

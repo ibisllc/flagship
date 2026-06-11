@@ -4,13 +4,11 @@ import {
   validateAppLabel,
   validateAppSlug,
   parseAppLabel,
-  parsePinLabel,
-  isPinLabel,
   resolveLeftmostLabel,
   type ResolverLookups,
-  userWildcardSans,
   serverWildcardSans,
   appFqdn,
+  canonicalServiceFqdn,
   _internal,
 } from "../src/validation.js";
 
@@ -65,74 +63,54 @@ describe("validateAppLabel", () => {
   });
 });
 
-describe("userWildcardSans (canonical per-user shape, task #23)", () => {
-  it("issues ONE cert covering the user apex + one label of subdomains", () => {
-    expect(userWildcardSans("harry", "flagship.services")).toEqual([
-      "harry.flagship.services",
-      "*.harry.flagship.services",
-    ]);
-  });
-});
-
-describe("serverWildcardSans (DEPRECATED — task #23)", () => {
-  it("still returns the old per-server shape for any straggler import", () => {
+describe("serverWildcardSans (canonical per-box shape, model A′)", () => {
+  it("issues one cert per box: apex + one label of subdomains under the box", () => {
     expect(serverWildcardSans("homebox", "harry", "flagship.services")).toEqual([
       "homebox.harry.flagship.services",
       "*.homebox.harry.flagship.services",
     ]);
   });
+
+  it("two boxes under one user get DISTINCT SAN sets (no duplicate-cert collision)", () => {
+    const a = serverWildcardSans("homebox", "harry", "flagship.services");
+    const b = serverWildcardSans("chillout", "harry", "flagship.services");
+    expect(a).not.toEqual(b);
+  });
 });
 
-describe("appFqdn", () => {
-  it("composes <app>.<user>.<apex> (per-user, task #23)", () => {
+describe("appFqdn (tier 2 — hardware-agnostic)", () => {
+  it("composes <app>.<user>.<apex>", () => {
     expect(appFqdn("habits", "harry", "flagship.services")).toBe(
       "habits.harry.flagship.services",
     );
   });
 });
 
-describe("parsePinLabel (-- pin operator, §3.3)", () => {
-  it("splits <label>--<server> on the first --", () => {
-    const r = parsePinLabel("photo-album--home");
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.label).toBe("photo-album");
-      expect(r.server).toBe("home");
-    }
+describe("canonicalServiceFqdn (tier 1 — box-pinned, model A′)", () => {
+  it("composes the hierarchical <service>.<server>.<user>.<apex>", () => {
+    expect(canonicalServiceFqdn("habits", "homebox", "harry", "flagship.services")).toBe(
+      "habits.homebox.harry.flagship.services",
+    );
   });
 
-  it("returns not-a-pin-label for a plain label (no --)", () => {
-    const r = parsePinLabel("photo-album");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toMatch(/not a pin label/);
+  it("the canonical name sits inside the box's wildcard SAN coverage", () => {
+    const [, wildcard] = serverWildcardSans("homebox", "harry", "flagship.services");
+    const fqdn = canonicalServiceFqdn("habits", "homebox", "harry", "flagship.services");
+    expect(fqdn.endsWith(wildcard!.slice(1))).toBe(true);
+    expect(fqdn.split(".").length).toBe(wildcard!.split(".").length);
   });
 
-  it("rejects an xn-- prefixed label (R-LDH)", () => {
-    expect(parsePinLabel("xn--home").ok).toBe(false);
-  });
-
-  it("rejects a 2-char app part before -- (R-LDH positions 3–4)", () => {
-    expect(parsePinLabel("ab--home").ok).toBe(false);
-  });
-
-  it("rejects a box part that smuggles a second -- ", () => {
-    // first -- splits to label="app", server="box--extra" → bad slug.
-    expect(parsePinLabel("app--box--extra").ok).toBe(false);
-  });
-
-  it("rejects empty app or box parts", () => {
-    expect(parsePinLabel("--home").ok).toBe(false);
-    expect(parsePinLabel("photo--").ok).toBe(false);
-  });
-
-  it("isPinLabel detects the operator", () => {
-    expect(isPinLabel("photo--home")).toBe(true);
-    expect(isPinLabel("photo-album")).toBe(false);
-    expect(isPinLabel("plain")).toBe(false);
+  it("composes from labels that pass the existing label validators", () => {
+    expect(validateAppSlug("habit-tracker").ok).toBe(true);
+    expect(validateAppLabel("homebox").ok).toBe(true);
+    expect(validateUserLabel("harry").ok).toBe(true);
+    expect(
+      canonicalServiceFqdn("habit-tracker", "homebox", "harry", "flagship.services"),
+    ).toBe("habit-tracker.homebox.harry.flagship.services");
   });
 });
 
-describe("resolveLeftmostLabel (§3.4 precedence)", () => {
+describe("resolveLeftmostLabel (user-zone precedence)", () => {
   function lookups(over: Partial<{ boxes: string[]; devices: string[]; apps: string[] }> = {}): ResolverLookups {
     const boxes = new Set(over.boxes ?? []);
     const devices = new Set(over.devices ?? []);
@@ -144,25 +122,20 @@ describe("resolveLeftmostLabel (§3.4 precedence)", () => {
     };
   }
 
-  it("1. a -- label resolves to a pin (highest precedence)", () => {
-    const r = resolveLeftmostLabel("photo-album--home", lookups({ boxes: ["home"] }));
-    expect(r).toEqual({ cls: "pin", label: "photo-album", server: "home" });
-  });
-
-  it("2. a registered box name → box-apex", () => {
+  it("1. a registered box name → box-apex", () => {
     expect(resolveLeftmostLabel("home", lookups({ boxes: ["home"] }))).toEqual({ cls: "box-apex", label: "home" });
   });
 
-  it("3. a device label → device (before app)", () => {
+  it("2. a device label → device (before app)", () => {
     expect(resolveLeftmostLabel("reviewer", lookups({ devices: ["reviewer"], apps: ["reviewer"] })))
       .toEqual({ cls: "device", label: "reviewer" });
   });
 
-  it("4. an install-table app → app", () => {
+  it("3. an install-table app → app", () => {
     expect(resolveLeftmostLabel("game", lookups({ apps: ["game"] }))).toEqual({ cls: "app", label: "game" });
   });
 
-  it("5. unknown label → none (disambiguation)", () => {
+  it("4. unknown label → none (disambiguation)", () => {
     expect(resolveLeftmostLabel("nope", lookups())).toEqual({ cls: "none", label: "nope" });
   });
 
@@ -170,8 +143,9 @@ describe("resolveLeftmostLabel (§3.4 precedence)", () => {
     expect(resolveLeftmostLabel("home", lookups({ boxes: ["home"], apps: ["home"] })).cls).toBe("box-apex");
   });
 
-  it("a malformed pin (xn-- / 2-char) falls through to none, not app", () => {
-    expect(resolveLeftmostLabel("ab--home", lookups({ apps: ["ab--home"] })).cls).toBe("none");
+  it("the retired -- pin operator is just an ordinary (unregistered) label now", () => {
+    expect(resolveLeftmostLabel("photo-album--home", lookups({ boxes: ["home"] })))
+      .toEqual({ cls: "none", label: "photo-album--home" });
   });
 
   it("is case-insensitive on the input label", () => {
