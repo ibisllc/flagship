@@ -9,6 +9,7 @@ import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 const COM_BASE = "https://flagshipserver.com";
@@ -309,9 +310,11 @@ function renderWebDomainsSection(service, links) {
     <div class="card">
       ${customDomainBlock}
       <div class="label-tiny">SHORT REDIRECT</div>
+      <div class="muted-sm text-xs">Convenient to share — redirects to your box. Stays the same until you rename the service.</div>
       ${shortRow}
       <div class="mt-3">
         <div class="label-tiny">CANONICAL (SHARED BY ALL INSTANCES)</div>
+        <div class="muted-sm text-xs">Permanent, verifiable address — share this when the exact name matters.</div>
         ${canonicalRow}
       </div>
       ${instancesBlock}
@@ -544,13 +547,17 @@ async function bindCustomDomain(fqdn) {
       // never a CNAME verdict (that's async). Show .com's reason
       // verbatim; for 429 it is the byte-identical "Too soon — try
       // again in Ns." string the iOS Mock uses.
-      let msg = `Couldn't request custom domain (${r.status}).`;
+      // Prefer .com's own reason string (e.g. the byte-identical 429
+      // "Too soon — try again in Ns." the iOS Mock uses); only fall back
+      // to generic human copy when there's no usable server message.
+      let msg = humanError(r.status);
       try {
         const body = await r.json();
         if (body && typeof body.error === "string") msg = body.error;
       } catch {
-        /* keep the status fallback */
+        /* keep the human fallback */
       }
+      console.error("custom-domain request failed", r.status);
       toast(msg, "err");
       return;
     }
@@ -653,12 +660,13 @@ async function runRename(service, newLabel) {
     );
     if (!r.ok) {
       const text = await r.text();
+      console.error("service rename failed", r.status, text);
       if (r.status === 409) {
         toast("Another service already uses that name.", "err");
       } else if (r.status === 400) {
         toast("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).", "err");
       } else {
-        toast(`Couldn't rename: ${text}`, "err");
+        toast(humanError(r.status), "err");
       }
       return;
     }

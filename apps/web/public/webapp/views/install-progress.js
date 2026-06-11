@@ -11,6 +11,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import {
   PROVISION_PHASE_TITLES,
   renderProgressDetail,
@@ -59,6 +60,37 @@ function render() {
     renderProgressDetail(block);
 }
 
+/** UX-F — a wedged/failed status read shouldn't trap the user on a spinner
+ *  or a raw error. Render the human reason plus a way out: retry the poll,
+ *  or head Home (where the pending pod keeps rendering — the install is
+ *  still progressing on the box regardless of our read failing). */
+function renderEscape(reason) {
+  const root = $("install-progress-content");
+  if (!root) return;
+  root.innerHTML = `
+    <div class="card">
+      <p class="err-text">${escapeText(reason)}</p>
+      <p class="note mt-2">Your box may still be installing — this only means we couldn't read its status just now. It keeps going on its own, and you'll see it on Home when it comes online.</p>
+      <div class="row-2 mt-3">
+        <button id="ip-escape-retry" class="secondary">Try again</button>
+        <button id="ip-escape-home" class="secondary">Go to Home</button>
+      </div>
+    </div>`;
+  $("ip-escape-retry")?.addEventListener("click", () => {
+    if (!activeSerial) return;
+    latest = null;
+    render();
+    poll().catch((e) => {
+      console.error("install retry failed", e);
+      toast(humanError(e), "err");
+    });
+  });
+  $("ip-escape-home")?.addEventListener("click", () => {
+    clearPoll();
+    show("view-home");
+  });
+}
+
 /** Local minimal escape (the shared renderer escapes its own interpolations;
  *  this is only for the title + domain we render here). */
 function escapeText(s) {
@@ -86,15 +118,19 @@ async function poll() {
         return;
       }
     } else {
-      const root = $("install-progress-content");
-      if (root) {
-        root.innerHTML = `<div class="card"><p class="err-text">status check failed: HTTP ${resp.status}</p></div>`;
-      }
+      // A non-404 error status from the control plane. Don't strand the
+      // user on a raw `HTTP 5xx` — translate it, keep the box's state
+      // honest (it may still be installing; this is OUR status read that
+      // failed), and offer a way out (retry the poll, or go Home where the
+      // pending pod is still rendered).
+      console.error("install status poll failed", resp.status);
+      renderEscape(humanError(resp.status));
       clearPoll();
       return;
     }
-  } catch (_e) {
-    // transient (network blip) — keep polling
+  } catch (e) {
+    // transient (network blip) — keep polling, but record it.
+    console.error("install status poll error (will retry)", e);
   }
   pollTimer = setTimeout(() => poll().catch(() => {}), POLL_INTERVAL_MS);
 }
@@ -106,7 +142,10 @@ function start() {
   activeSerial = serial;
   latest = null;
   render();
-  poll().catch((e) => toast(String(e), "err"));
+  poll().catch((e) => {
+    console.error("install poll failed", e);
+    toast(humanError(e), "err");
+  });
 }
 
 function reset() {

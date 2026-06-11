@@ -13,7 +13,7 @@
   <body>
     <header>
       <h1>Flagship recovery</h1>
-      <p class="subtitle">A dedicated origin, isolated from the rest of the site.</p>
+      <p class="subtitle">This is your account's recovery page. It runs on its own separate address (recovery.flagshipserver.com), walled off from the rest of the site, so your recovery passkey can never be touched by anything else.</p>
     </header>
 
     <main>
@@ -23,7 +23,7 @@
 
       <section id="view-enroll" class="card hidden">
         <h2>Set up cloud recovery</h2>
-        <p class="note">Pick a recovery passphrase. We use it to derive a fetch token (so flagshipserver.com won't hand out your wrapped key without it) and a per-user PRF salt (so a stolen passkey alone can't unwrap your UMK either).</p>
+        <p class="note">Pick a recovery passphrase (8+ characters) — treat it like a password and write it down somewhere safe (a password manager, or paper in a drawer). You'll need this <strong>and</strong> your phone to recover on a new device. We cannot reset it if it's lost.</p>
         <label for="enroll-passphrase">Passphrase</label>
         <input id="enroll-passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <label for="enroll-passphrase-2">Confirm</label>
@@ -35,7 +35,7 @@
 
       <section id="view-recover" class="card hidden">
         <h2>Recover from passkey</h2>
-        <p class="note">Enter the username and the passphrase you set during enrolment. We re-derive the fetch token + PRF salt locally, fetch the wrapped UMK, then unlock it with your passkey.</p>
+        <p class="note">Enter your username and the recovery passphrase you chose when you set this up. We use them to retrieve your account key and unlock it with your passkey — all on this device. The passphrase never leaves your browser.</p>
         <label for="recover-username">Username</label>
         <input id="recover-username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <label for="recover-passphrase">Passphrase</label>
@@ -44,7 +44,7 @@
         <p id="recover-status" class="status" aria-live="polite"></p>
       </section>
 
-      <p class="footnote">rpId: <code>recovery.flagshipserver.com</code> &middot; passkey isolated by sub-origin</p>
+      <p class="footnote">You're on <code>recovery.flagshipserver.com</code> — a separate address used only for recovery, so your passkey is kept apart from the main app. (Technical: rpId <code>recovery.flagshipserver.com</code>, passkey isolated by sub-origin.)</p>
     </main>
 
     <script type="module" src="/recovery.js"></script>

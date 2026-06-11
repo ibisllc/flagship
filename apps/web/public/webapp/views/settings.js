@@ -10,6 +10,7 @@ import { getCertValidityDays, setCertValidityDays } from "../lib/certValidity.js
 import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import { loadProviders, addProvider, removeProvider, setActive } from "../providers.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
@@ -38,6 +39,12 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
+/** Attach an HTTP status to an Error so humanError() can branch on it. */
+function withStatusLocal(err, status) {
+  err.status = status;
+  return err;
+}
+
 export { refreshPushStatus };
 
 /** Reflect the cloud-recovery gate in the static sign-out note so the
@@ -52,9 +59,17 @@ async function refreshSignOutNote() {
   } catch {
     enrolled = false;
   }
+  // UX-C — don't strand the user behind a disabled control. When recovery
+  // isn't set up, swap the Sign-out button for a one-tap "Set up cloud
+  // recovery" CTA that routes straight into enrollment; keep the
+  // explanation so the severity is still clear.
+  const signOutBtn = $("settings-signout");
+  const recoveryCta = $("settings-signout-recovery");
   note.textContent = enrolled
     ? "Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-    : "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access.";
+    : "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access. Set up recovery and you'll be able to sign out safely.";
+  if (signOutBtn) signOutBtn.classList.toggle("hidden", !enrolled);
+  if (recoveryCta) recoveryCta.classList.toggle("hidden", enrolled);
 }
 
 export async function renderProviders() {
@@ -180,7 +195,8 @@ async function startPromoIssuance() {
     });
     if (!r.ok) {
       const body = await r.text();
-      throw new Error(`status ${r.status}: ${body}`);
+      console.error("promo issue/start failed", r.status, body);
+      throw withStatusLocal(new Error(`promo issue/start ${r.status}`), r.status);
     }
     const body = await r.json();
     promoIssuanceCtx = { ticket: body.ticket, username };
@@ -188,7 +204,8 @@ async function startPromoIssuance() {
     $("promo-step-otp")?.classList.remove("hidden");
     toast("we sent you a code");
   } catch (e) {
-    toast(`could not start: ${e.message}`, "err");
+    console.error("promo issue/start error", e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -220,7 +237,8 @@ async function completePromoIssuance() {
     });
     if (!r.ok) {
       const body = await r.text();
-      throw new Error(`status ${r.status}: ${body}`);
+      console.error("promo issue/complete failed", r.status, body);
+      throw withStatusLocal(new Error(`promo issue/complete ${r.status}`), r.status);
     }
     const { key } = await r.json();
     await addProvider(session.umk, {
@@ -238,7 +256,8 @@ async function completePromoIssuance() {
     await renderActiveProviderChip();
     toast("free credits ready — selected as active provider");
   } catch (e) {
-    toast(`could not complete: ${e.message}`, "err");
+    console.error("promo issue/complete error", e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -401,8 +420,14 @@ export function initSettingsView() {
   });
   $("settings-lock")?.addEventListener("click", handleLock);
   $("settings-signout")?.addEventListener("click", () =>
-    handleSignOut().catch((e) => toast(String(e?.message ?? e), "err")),
+    handleSignOut().catch((e) => {
+      console.error("sign-out failed", e);
+      toast(humanError(e), "err");
+    }),
   );
+  // UX-C — the direct route into recovery enrollment, shown in place of
+  // Sign out whenever cloud recovery isn't set up yet.
+  $("settings-signout-recovery")?.addEventListener("click", () => enterRecovery());
   // Tier 3 — REMOVE THIS DEVICE (danger zone). Unchanged local-reset path.
   $("settings-reset")?.addEventListener("click", handleReset);
   // Account-wide certificate-validity window — reflect the stored value and

@@ -17,6 +17,7 @@ import {
 import { signWithIrk } from "../keystore.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-server-detail");
@@ -179,7 +180,8 @@ async function refreshLeases(serverFqdn) {
         toast(`revoked lease ${id.slice(0, 8)}…`, "ok");
         await refreshLeases(serverFqdn);
       } catch (e) {
-        toast(`revoke failed: ${e.message ?? e}`, "err");
+        console.error("lease revoke failed", e);
+        toast(humanError(e), "err");
         btn.disabled = false;
       }
     });
@@ -236,7 +238,10 @@ function startMetricsPolling(serverFqdn) {
 function wireDangerZone(serverFqdn, username) {
   $("revoke-server-btn")?.addEventListener("click", () => {
     openRevokeDialog(serverFqdn, username).catch((e) => {
-      if (e?.code !== "cancelled") toast(`revoke failed: ${e.message ?? e}`, "err");
+      if (e?.code !== "cancelled") {
+        console.error("server revoke failed", e);
+        toast(humanError(e), "err");
+      }
     });
   });
 }

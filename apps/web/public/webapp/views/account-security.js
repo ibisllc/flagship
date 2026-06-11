@@ -21,6 +21,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import {
   fetchAccountType as totpFetchAccountType,
   totpEnrollBegin,
@@ -242,9 +243,10 @@ function bindHandlers() {
       });
       state.staged = staged;
     } catch (e) {
+      console.error("totp enroll-begin failed", e);
       state.failureMessage = e?.status === 503
         ? "Two-factor isn't enabled on this server yet. Try again later."
-        : `Couldn't start enrollment: ${e?.message ?? "unknown error"}`;
+        : humanError(e);
     } finally {
       state.busy = false;
       await renderAccountSecurity();
@@ -285,11 +287,12 @@ function bindHandlers() {
       state.totpEnrolledAt = null;
       toast("Two-factor disabled.");
     } catch (e) {
+      console.error("totp disable failed", e);
       state.failureMessage = e?.status === 401
         ? "That code didn't match. Try a fresh code from your authenticator."
         : e?.status === 409
           ? "Disable refused — other devices are still trusted on this account. Disconnect them first."
-          : `Couldn't disable: ${e?.message ?? "unknown error"}`;
+          : humanError(e);
     } finally {
       state.busy = false;
       await renderAccountSecurity();
@@ -323,9 +326,10 @@ function bindHandlers() {
       state.recoveryCodes = result.recoveryCodes;
       state.staged = null;
     } catch (e) {
+      console.error("totp enroll-confirm failed", e);
       state.failureMessage = e?.status === 401
         ? "That code didn't match. Try again with a fresh code from your authenticator."
-        : `Couldn't confirm: ${e?.message ?? "unknown error"}`;
+        : humanError(e);
     } finally {
       state.busy = false;
       await renderAccountSecurity();
