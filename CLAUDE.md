@@ -123,6 +123,58 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-11 (later) — cert model simplified + lock/dead-man feature
+
+**Cert model simplified to one system-wide policy.** Removed the creation-time
+managed-vs-autonomous / offline-window choice and the account-wide
+certificate-validity setting (all clients). Every box now self-renews its own
+per-box A′ cert with its own ACME account key on a single policy: standard
+~90-day cert, renew at ≤30 days remaining (one issuance per ~60 days) with a
+per-box random hold-off + backoff-jitter so the fleet never bursts Let's
+Encrypt. The shared account-key + mint-reservation machinery is untouched
+(tier-2 service certs + recovery still use it). `certAutonomy` removed from the
+InstallBlob + canonical bytes (byte-identical when absent → no signature break)
+across protocol, daemon, iso-personalizer, both burners, and all 3 clients.
+Follow-up: the post-creation "grant a box cert autonomy" ceremony
+(CertAutonomyGrant* on iOS/Android) is now vestigial — retire separately.
+
+**Lock & power-off + dead-man heartbeat-lock shipped** (`docs/lock-and-poweroff.md`;
+ungated/all-users for now — paid gating is a later pass). One shared daemon
+primitive (`executeLockAndPower` = suppress auto-unlock → `systemctl
+poweroff|reboot`), exposed two ways:
+- **Manual buttons** on server-detail (iOS/Android/webapp): "Lock and turn off" /
+  "Lock and restart" (drop "Lock and" on a non-LUKS box) → confirm + biometric →
+  IRK-signed power-off envelope to **`POST /api/power`**.
+- **Dead-man**: opt-in per box (default off). A MANUAL biometric affirmation
+  (never the silent renewer — a stolen phone can't keep it alive) renews a lease;
+  on lapse past grace the daemon suppresses auto-unlock then powers off/restarts
+  per policy. Window default 24h, user-shortenable with a one-tap "tighten now"
+  (border-control case). Lockout default = turn off (rubber-hose posture),
+  selectable to restart (fast resume).
+- A **one-shot** `/boot/flagship-lock-once` marker forces approve-mode on the
+  next boot only (consumed after a successful luksOpen), honored at the actual
+  LUKS-unlock layer — the initramfs premount for encrypted boxes (TS+Swift
+  byte-identical, sha re-pinned), boot-stage.sh for the unencrypted path,
+  mutually exclusive. A single Lock&restart does NOT permanently flip the box to
+  approve-mode. Needs a live reburn to validate the kernel/luksOpen path.
+
+**⚠️ PRE-EXISTING BUG surfaced (track to GA): the phone→box PhoneOrder path is
+DEAD on real Debian boxes.** The daemon verifies orders against `pskPub` read
+from `/var/flagship/psk.pub.hex`, but that file is NEVER written — the installer
+writes `/var/flagship/phone-delegated.pub` instead, and the phone generates the
+per-server "delegated" keypair at create-time then DISCARDS the private half. So
+`/api/orders-from-user` is disabled on metal, and **`shut-down` +
+`add-paired-session`/`remove-paired-session` cannot be invoked on a real box.**
+The lock feature sidestepped this (power-off now verifies against the owner IRK
+at `/api/power`, like the dead-man, which works because the box persists
+`cfg.irkPublicKey`). Fix the rest of the orders surface before GA: either
+persist the delegated private key on the phone + reconcile the
+psk.pub.hex/phone-delegated.pub filename + sign orders with it, OR cut the
+remaining orders over to the owner-IRK path like power-off did.
+
+Gates (2026-06-11 later): `npx vitest run` 4868 (369 files) · iOS 896 · Android
+718 · burner-mac swift 107 · `npx tsc -b` clean. All pushed.
+
 ### 2026-06-11 (late) — full-repo security/UX/ops audit + remediation
 
 Ran a six-dimension read-only audit (protocol/crypto, cloud API, daemon/boot,
