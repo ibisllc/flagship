@@ -1,6 +1,9 @@
 /**
  * Mint-reservation lease — the dead-lead-safe CAS lock that serializes who
- * re-mints a user's per-user cert this cycle (per-user-cert design).
+ * re-mints a SHARED cert this cycle. (Under cert model A′ each box mints its
+ * own distinct `[<server>.<user>, *.<server>.<user>]` cert with no
+ * contention — the lease matters for certs more than one minter could race
+ * on, i.e. the tier-2 shared `<service>.<user>` cert.)
  *
  * A minter (an admin-scope device, or an "autonomous" box holding a renewal
  * delegation) that sees the cert nearing expiry signs a `MintReservationClaim`

@@ -284,8 +284,8 @@ export async function handleRevokeAcmeAccountKeyGrant(
 // ──────────────────────────────────────────────────────────────────────
 
 /**
- * Authoritative "may this signer mint/renew the per-user cert for username
- * U, right now?" check. Consumed by the mint-coordination path (the
+ * Authoritative "may this signer mint/renew a cert for username U's names,
+ * right now?" check. Consumed by the mint-coordination path (the
  * reservation lease) before a holder is allowed to lead a mint cycle.
  *
  * Two branches:

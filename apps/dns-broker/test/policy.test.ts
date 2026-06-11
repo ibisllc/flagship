@@ -200,7 +200,7 @@ describe("publishTxtChallenge — pod namespace", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("accepts a pod-signed user-zone ACME challenge (pod publishes for its user zone)", async () => {
+  it("refuses a pod-signed user-zone ACME challenge (retired model-C shape)", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
     const userZoneRecordName = `_acme-challenge.harry.${APEX}`;
@@ -225,7 +225,7 @@ describe("publishTxtChallenge — pod namespace", () => {
       },
     };
     const r = await verifyRpc(body, makeEnv(state));
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -449,19 +449,26 @@ describe("publishARecord", () => {
     }
   });
 
-  it("accepts the four legitimate name variants", async () => {
+  it("accepts the two per-box name variants (A′)", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
     const variants: Array<[PublishARecordBody["recordName"], string]> = [
       ["pod-apex", serverId],
       ["pod-wildcard", `*.${serverId}`],
-      ["user-zone-apex", `dave.${APEX}`],
-      ["user-zone-wildcard", `*.dave.${APEX}`],
     ];
     for (const [v, expected] of variants) {
       const r = await verifyRpc(body(IPV4, "A", v), makeEnv(state));
       expect(r.ok).toBe(true);
       if (r.ok && r.effect.kind === "createA") expect(r.effect.recordName).toBe(expected);
+    }
+  });
+
+  it("refuses the retired model-C user-zone variants", async () => {
+    const state = freshState();
+    state.pods[serverId] = podKey.publicKey;
+    for (const v of ["user-zone-apex", "user-zone-wildcard"]) {
+      const r = await verifyRpc(body(IPV4, "A", v as PublishARecordBody["recordName"]), makeEnv(state));
+      expect(r.ok).toBe(false);
     }
   });
 
@@ -533,8 +540,7 @@ describe("deleteRecord", () => {
     expect(r.ok).toBe(true);
     if (r.ok && r.effect.kind === "deleteById") {
       expect(r.effect.expectedType).toBe("TXT");
-      expect(r.effect.expectedNameOneOf).toContain(`_acme-challenge.${serverId}`);
-      expect(r.effect.expectedNameOneOf).toContain(`_acme-challenge.eve.${APEX}`);
+      expect(r.effect.expectedNameOneOf).toEqual([`_acme-challenge.${serverId}`]);
     }
   });
 

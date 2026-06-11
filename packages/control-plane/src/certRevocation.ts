@@ -1,8 +1,10 @@
 /**
  * Per-box cert routing revocation (per-user-cert design §5.1–5.2, task #27).
  *
- * Revocation of a box from the user's shared `[<user>, *.<user>]` cert is
- * enforced at the ROUTING layer (per-box STK / RCK), never the cert itself.
+ * Revocation of a box is enforced at the ROUTING layer (per-box STK / RCK),
+ * never the cert itself. (Under cert model A′ each box holds its own
+ * `[<server>.<user>, *.<server>.<user>]` cert; routing authority — not the
+ * cert — is the access-control primitive.)
  * Two IRK-signed paths, both authorized by the account root (the trust-root
  * device that mints the cert):
  *
@@ -17,11 +19,12 @@
  * the caller is told to hard-revoke instead (§5.1/§5.3 sharpening).
  *
  * HARD (compromise / key-intact departure) — the ORDERED sequence in
- * `hardRevokeSteps()`. Because every hard re-mint shares the same SAN set, a
- * flapping or attacked box could weaponize repeated hard-revokes into a
- * Let's Encrypt duplicate-cert DoS (5-dup / 7-day per identical SAN set,
- * §5.4). We DEBOUNCE per user: a second hard revoke inside `debounceMs`
- * (default 60s) is refused with 429 rather than driving another re-mint.
+ * `hardRevokeSteps()`. Per-box A′ certs have distinct SAN sets, so the
+ * model-C duplicate-cert exposure (5-dup / 7-day per identical SAN set,
+ * §5.4) no longer compounds across boxes — but a flapping or attacked box
+ * re-minting ITS OWN name repeatedly is still issuance churn, so we keep
+ * the per-user DEBOUNCE: a second hard revoke inside `debounceMs` (default
+ * 60s) is refused with 429 rather than driving another re-mint.
  *
  * STORAGE-FREE by design. The only storage-interface dep is `usernames`,
  * used solely to fetch the account's current IRK pubkey to verify the

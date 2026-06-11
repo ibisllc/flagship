@@ -146,10 +146,9 @@ export interface PublishARecordBody {
    * Which of the four registered names this call targets:
    *   "pod-apex"          → <serverId>
    *   "pod-wildcard"      → *.<serverId>
-   *   "user-zone-apex"    → <user>.<apex>
-   *   "user-zone-wildcard"→ *.<user>.<apex>
+   * (Model C's user-zone variants are gone — A′ publishes per-box only.)
    */
-  recordName: "pod-apex" | "pod-wildcard" | "user-zone-apex" | "user-zone-wildcard";
+  recordName: "pod-apex" | "pod-wildcard";
   recordType: "A" | "AAAA";
   targetIp: string;
 }
@@ -325,15 +324,12 @@ async function verifyPodAcmePublish(
   if (!ageOk(env.now, auth.issuedAt, env.replayWindowMs)) return deny("stale");
   if (!auth.serverId.endsWith(`.${env.apex}`)) return deny("serverId outside apex");
 
-  // Per the existing dns01.ts contract: the daemon may publish for either
-  // its own pod apex (`<server>.<user>.flagship.services`) or the
-  // surrounding user-zone (`<user>.flagship.services`). Cross-pod or
-  // cross-user names are flatly refused.
-  const podUsername = extractUserLabel(auth.serverId, env.apex);
-  const userZone = podUsername ? `${podUsername}.${env.apex}` : null;
-  const acceptedHosts = new Set<string>([auth.serverId]);
-  if (userZone) acceptedHosts.add(userZone);
-  if (!acceptedHosts.has(host)) return deny("recordName not in pod namespace");
+  // Cert model A′: a pod may publish challenges ONLY for its own apex
+  // (`_acme-challenge.<server>.<user>.flagship.services` — covers both A′
+  // SANs after RFC 8555 `*.`-stripping). The model-C user-zone form is gone;
+  // accepting it here would let a box mint the retired `[<user>, *.<user>]`
+  // shape and bypass the dns01.ts hardening in broker-first mode.
+  if (host !== auth.serverId) return deny("recordName not in pod namespace");
 
   // Verify value hash + signature.
   const valueHash = decodeHex(auth.recordValueHashHex);
@@ -488,7 +484,9 @@ async function verifyPublishA(b: PublishARecordBody, env: PolicyEnv): Promise<Ve
   const podPub = await env.resolvePodIdentity(b.serverId);
   if (!podPub) return deny("unknown pod");
 
-  // Compute the concrete name from the variant.
+  // Compute the concrete name from the variant. Cert model A′ publishes
+  // per-box records only; the model-C user-zone variants are refused so a
+  // pod cannot re-assert the retired user-zone A records.
   const userLabel = extractUserLabel(b.serverId, env.apex);
   if (!userLabel) return deny("bad serverId shape");
   let name: string;
@@ -498,12 +496,6 @@ async function verifyPublishA(b: PublishARecordBody, env: PolicyEnv): Promise<Ve
       break;
     case "pod-wildcard":
       name = `*.${b.serverId}`;
-      break;
-    case "user-zone-apex":
-      name = `${userLabel}.${env.apex}`;
-      break;
-    case "user-zone-wildcard":
-      name = `*.${userLabel}.${env.apex}`;
       break;
     default:
       return deny("malformed");
@@ -536,15 +528,11 @@ async function verifyDelete(b: DeleteRecordBody, env: PolicyEnv): Promise<Verify
       issuedAt: auth.issuedAt,
     };
     if (!verifyDns01Delete(claim, sig, podPub)) return deny("bad signature");
-    const podUsername = extractUserLabel(auth.serverId, env.apex);
-    const userZone = podUsername ? `${podUsername}.${env.apex}` : null;
-    const expectedNames = [`_acme-challenge.${auth.serverId}`];
-    if (userZone) expectedNames.push(`_acme-challenge.${userZone}`);
     return ok({
       kind: "deleteById",
       recordId: b.recordId,
       expectedType: "TXT",
-      expectedNameOneOf: expectedNames,
+      expectedNameOneOf: [`_acme-challenge.${auth.serverId}`],
     });
   }
 
@@ -561,15 +549,11 @@ async function verifyDelete(b: DeleteRecordBody, env: PolicyEnv): Promise<Verify
       issuedAt: auth.issuedAt,
     });
     if (!edVerify(sig, msg, podPub)) return deny("bad signature");
-    const podUsername = extractUserLabel(auth.serverId, env.apex);
-    const userZone = podUsername ? `${podUsername}.${env.apex}` : null;
-    const names = [auth.serverId, `*.${auth.serverId}`];
-    if (userZone) names.push(userZone, `*.${userZone}`);
     return ok({
       kind: "deleteById",
       recordId: b.recordId,
       expectedType: "A",
-      expectedNameOneOf: names,
+      expectedNameOneOf: [auth.serverId, `*.${auth.serverId}`],
     });
   }
 

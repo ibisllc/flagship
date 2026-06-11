@@ -249,18 +249,16 @@ export async function handleServerRegister(
     );
   }
 
-  // Publish A/AAAA so the user's URLs resolve to the .services SNI
-  // passthrough. PER-USER DNS (task #23): TWO names per registration — the
-  // user zone only (idempotent — DNS upsert is a no-op when the record
-  // already exists with the right content):
-  //   - <user>.flagship.services             (apex of the user zone)
-  //   - *.<user>.flagship.services           (every one-label-deep public
-  //                                           name: the pod label
-  //                                           <server>.<user>, app labels
-  //                                           <label>.<user>, device labels)
-  // The deprecated per-server pair (<server>.<user> + *.<server>.<user>) is
-  // dropped — the pod apex resolves via the `*.<user>` wildcard. Degenerate
-  // FQDNs that don't parse as <server>.<user> fall back to the pod apex.
+  // Publish A/AAAA so the box's URLs resolve to the .services SNI
+  // passthrough. PER-BOX DNS (cert model A′): TWO names per registration,
+  // both scoped to THIS box (idempotent — DNS upsert is a no-op when the
+  // record already exists with the right content):
+  //   - <server>.<user>.flagship.services    (box apex — the canonical name)
+  //   - *.<server>.<user>.flagship.services  (every service under the box:
+  //                                           <service>.<server>.<user>)
+  // These are exactly the SANs of the box's per-box wildcard cert, so each
+  // registration publishes a distinct pair — no shared user-zone records
+  // (the model-C user-zone pair is gone with the per-user wildcard cert).
   // Best-effort: a DNS failure shouldn't fail registration.
   let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
@@ -269,7 +267,7 @@ export async function handleServerRegister(
   if (deps.dns) {
     const podApex = authCode.serverDomain;
     const userZone = userZoneOf(podApex);
-    const names = userZone ? [userZone, `*.${userZone}`] : [podApex, `*.${podApex}`];
+    const names = [podApex, `*.${podApex}`];
     try {
       for (const name of names) {
         const a = await deps.dns.client.upsert({
@@ -292,12 +290,17 @@ export async function handleServerRegister(
     }
 
     // CAA CA-restriction (defense-in-depth against EXTERNAL mis-issuance):
-    // restrict cert issuance for `<user>.flagship.services` + its wildcard to
-    // Let's Encrypt. Published once per user, keyed on the user zone (NOT the
-    // pod). Each record is idempotent (keyed by its exact rdata), so a
-    // re-register / a second pod under the user is a no-op. PHASE-1 only — no
-    // accounturi pinning yet (see caaPublish.ts / caaPin.ts TODO). Best-effort:
-    // a CAA failure must never fail registration.
+    // restrict cert issuance for the user's names to Let's Encrypt. Certs are
+    // PER-BOX (A′), but CAA stays at the USER zone — locked decision: RFC 8659
+    // §3 tree-climbing means a CAA record at `<user>.flagship.services` covers
+    // every name below it (`<server>.<user>` box apexes, `*.<server>.<user>`
+    // wildcards, `<service>.<user>` shared-service names), so one user-zone
+    // record set restricts issuance for ALL per-box and service certs and
+    // per-box CAA would be redundant churn. Published once per user; each
+    // record is idempotent (keyed by its exact rdata), so a re-register / a
+    // second pod under the user is a no-op. PHASE-1 only — no accounturi
+    // pinning yet (see caaPublish.ts / caaPin.ts TODO). Best-effort: a CAA
+    // failure must never fail registration.
     //
     // Requires a CAA-capable client. The production `BrokerDnsClient` exposes
     // A/AAAA + ACME-TXT only and does NOT carry CAA — so the Worker wires its
@@ -333,8 +336,8 @@ export async function handleServerRegister(
 
 /**
  * For a podApex of the form `<server>.<user>.flagship.services`, return
- * the user zone `<user>.flagship.services`. Returns null on shape
- * mismatch.
+ * the user zone `<user>.flagship.services` (the CAA record-set anchor —
+ * A/AAAA publishing is per-box). Returns null on shape mismatch.
  */
 function userZoneOf(podApex: string): string | null {
   const lower = podApex.toLowerCase();

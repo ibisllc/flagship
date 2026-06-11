@@ -127,8 +127,8 @@ async function buildRegister(username: string, serverName: string) {
   };
 }
 
-describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
-  it("publishes ONLY the two user-zone A records (pod apex resolves via the wildcard)", async () => {
+describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
+  it("publishes ONLY the box apex + box wildcard A records", async () => {
     const usernames = new InMemoryUsernameStorage();
     const irk = makeKey();
     await usernames.put({
@@ -206,13 +206,16 @@ describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
       },
     );
     expect(r.status).toBe(200);
-    // PER-USER DNS (task #23): TWO records, the user zone only. The pod apex
-    // `home.alice` and every app label resolve via the `*.alice` wildcard, so
-    // the deprecated per-server pair is no longer published.
+    // PER-BOX DNS (cert model A′): TWO records, both scoped to this box —
+    // the apex `home.alice` and the wildcard `*.home.alice` (which resolves
+    // every `<service>.home.alice` name). The model-C user-zone pair is gone.
     const names = fakeDns.upserted.map((u) => u.name).sort();
-    expect(names).toEqual(["*.alice.flagship.services", "alice.flagship.services"]);
-    expect(names).not.toContain("home.alice.flagship.services");
-    expect(names).not.toContain("*.home.alice.flagship.services");
+    expect(names).toEqual([
+      "*.home.alice.flagship.services",
+      "home.alice.flagship.services",
+    ]);
+    expect(names).not.toContain("alice.flagship.services");
+    expect(names).not.toContain("*.alice.flagship.services");
     for (const u of fakeDns.upserted) {
       expect(u.type).toBe("A");
       expect(u.content).toBe("203.0.113.42");
@@ -237,7 +240,9 @@ describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
       body,
     );
     expect(r.status).toBe(200);
-    // CAA published at the user-zone apex + wildcard, restricting to LE.
+    // CAA stays at the USER zone even though A/AAAA + certs are per-box (A′):
+    // RFC 8659 tree-climbing makes the user-zone records cover every per-box
+    // and service name below them.
     const caaSet = [...caaDns.caa.values()].map((v) => `${v.name} :: ${v.content}`).sort();
     expect(caaSet).toEqual(
       [

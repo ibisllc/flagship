@@ -100,30 +100,22 @@ export class BrokerDnsClient {
  *
  *   <server>.<user>.<apex>     → "pod-apex"
  *   *.<server>.<user>.<apex>   → "pod-wildcard"
- *   <user>.<apex>              → "user-zone-apex"
- *   *.<user>.<apex>            → "user-zone-wildcard"
+ *
+ * Cert model A′ publishes per-box records only; the model-C user-zone
+ * variants were removed here AND in the broker policy, so a user-zone
+ * name fails fast on the client instead of round-tripping to a deny.
  *
  * The broker re-derives the concrete name from the variant + serverId
  * — we send the variant so the broker can independently confirm we
  * aren't smuggling a different name through the policy gate.
  */
-function classifyARecordName(name: string):
-  | "pod-apex"
-  | "pod-wildcard"
-  | "user-zone-apex"
-  | "user-zone-wildcard"
-  | null {
+function classifyARecordName(name: string): "pod-apex" | "pod-wildcard" | null {
   const lower = name.toLowerCase();
   const isWildcard = lower.startsWith("*.");
   const bare = isWildcard ? lower.slice(2) : lower;
-  // Heuristic: a pod-apex has 4+ labels under flagship.services
-  // (e.g. home.harry.flagship.services); user-zone has 3.
   if (!bare.endsWith(".flagship.services")) return null;
   const head = bare.slice(0, -".flagship.services".length);
   const labels = head.split(".");
-  if (labels.length === 1) {
-    return isWildcard ? "user-zone-wildcard" : "user-zone-apex";
-  }
   if (labels.length === 2) {
     return isWildcard ? "pod-wildcard" : "pod-apex";
   }

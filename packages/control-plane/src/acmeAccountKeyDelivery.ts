@@ -2,8 +2,9 @@
  * Seal-to-box delivery of the shared ACME account key (#28 Option B;
  * per-user-cert design §4). The cloud half of deposit-and-release.
  *
- * An autonomous box that mints/renews the user's `[<user>, *.<user>]` TLS cert
- * needs the ACME ACCOUNT key. Unlike an admin device (which receives its sealed
+ * An autonomous box that mints/renews its per-box TLS cert
+ * (`[<server>.<user>, *.<server>.<user>]`, cert model A′) against the shared
+ * ACME account needs the ACME ACCOUNT key. Unlike an admin device (which receives its sealed
  * copy via `acmeAccountKeys.ts` and unseals interactively), the box has no
  * session at boot — so the key is delivered by DEPOSIT-AND-RELEASE, mirroring
  * the box-sealed LUKS lease (secretMailbox.ts §5):

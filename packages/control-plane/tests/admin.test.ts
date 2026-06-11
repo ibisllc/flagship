@@ -88,22 +88,20 @@ describe("handleRepublishServerDns", () => {
     expect(r.body.ok).toBe(2);
     expect(r.body.failed).toBe(0);
 
-    // PER-USER DNS (task #23): each distinct user gets ONE zone pair.
-    // 2 users × (<user> + *.<user>) × (A + AAAA) = 8 upserts. The box apex
-    // (home.alice / media.bob) is NO LONGER published — it resolves via the
-    // user-zone wildcard.
+    // PER-BOX DNS (cert model A′): each box gets its own pair.
+    // 2 boxes × (<server>.<user> + *.<server>.<user>) × (A + AAAA) = 8 upserts.
     expect(dns.upserts.length).toBe(8);
     const names = dns.upserts.map((u) => `${u.type} ${u.name} ${u.content}`).sort();
-    expect(names).toContain("A alice.flagship.services 1.2.3.4");
-    expect(names).toContain("A *.alice.flagship.services 1.2.3.4");
-    expect(names).toContain("AAAA bob.flagship.services ::1");
-    expect(names).toContain("AAAA *.bob.flagship.services ::1");
-    // The deprecated per-server names must be gone.
-    expect(names).not.toContain("A home.alice.flagship.services 1.2.3.4");
-    expect(names).not.toContain("A *.home.alice.flagship.services 1.2.3.4");
+    expect(names).toContain("A home.alice.flagship.services 1.2.3.4");
+    expect(names).toContain("A *.home.alice.flagship.services 1.2.3.4");
+    expect(names).toContain("AAAA media.bob.flagship.services ::1");
+    expect(names).toContain("AAAA *.media.bob.flagship.services ::1");
+    // The model-C user-zone names must be gone.
+    expect(names).not.toContain("A alice.flagship.services 1.2.3.4");
+    expect(names).not.toContain("A *.alice.flagship.services 1.2.3.4");
   });
 
-  it("dedups the user zone across multiple servers under one user (task #23)", async () => {
+  it("publishes a distinct pair per box for multiple servers under one user (A′)", async () => {
     const storage = new InMemoryStorage();
     await storage.servers.put({
       serverDomain: "home.alice.flagship.services",
@@ -126,10 +124,15 @@ describe("handleRepublishServerDns", () => {
     expect(r.status).toBe(200);
     expect(r.body.total).toBe(2); // both servers reported
     expect(r.body.ok).toBe(2);
-    // ...but the single shared zone is published exactly once: <alice> + *.<alice>, A only.
-    expect(dns.upserts.length).toBe(2);
+    // Each box publishes its own apex + wildcard, A only.
+    expect(dns.upserts.length).toBe(4);
     const names = dns.upserts.map((u) => `${u.type} ${u.name}`).sort();
-    expect(names).toEqual(["A *.alice.flagship.services", "A alice.flagship.services"]);
+    expect(names).toEqual([
+      "A *.home.alice.flagship.services",
+      "A *.media.alice.flagship.services",
+      "A home.alice.flagship.services",
+      "A media.alice.flagship.services",
+    ]);
   });
 
   it("skips revoked servers", async () => {

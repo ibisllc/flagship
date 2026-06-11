@@ -62,19 +62,12 @@ export async function handleRepublishServerDns(
   const all = await deps.servers.listAll();
   const active = all.filter((s) => !s.revokedAt);
   const outcomes: RepublishOutcome[] = [];
-  // PER-USER DNS (task #23): publish the user-zone records `<user>` + `*.<user>`.
-  // Records are per-user, so dedup across a user's servers — publish each
-  // user's pair exactly once. The box apex `<server>.<user>` resolves via the
-  // `*.<user>` wildcard. Degenerate domains fall back to the per-server pair.
-  const seenZones = new Set<string>();
+  // PER-BOX DNS (cert model A′): each box gets its own pair —
+  // `<server>.<user>` + `*.<server>.<user>` — matching the SANs of the
+  // box's per-box wildcard cert. No shared user-zone records, so nothing
+  // to dedup across a user's servers.
   for (const rec of active) {
-    const userZone = userZoneOfDomain(rec.serverDomain);
-    const apex = userZone ?? rec.serverDomain;
-    if (seenZones.has(apex)) {
-      outcomes.push({ serverDomain: rec.serverDomain, ok: true });
-      continue;
-    }
-    seenZones.add(apex);
+    const apex = rec.serverDomain;
     const wildcard = `*.${apex}`;
     try {
       for (const name of [apex, wildcard]) {
@@ -101,22 +94,6 @@ export async function handleRepublishServerDns(
       outcomes,
     },
   };
-}
-
-/**
- * For a serverDomain `<server>.<user>.flagship.services`, return the user
- * zone `<user>.flagship.services` (task #23). Null on shape mismatch — the
- * caller then falls back to the literal domain.
- */
-function userZoneOfDomain(serverDomain: string): string | null {
-  const lower = serverDomain.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
-  const parts = head.split(".");
-  if (parts.length < 2) return null;
-  const user = parts[parts.length - 1]!;
-  if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
-  return `${user}.flagship.services`;
 }
 
 /**
