@@ -213,10 +213,17 @@ fun HomeTab() {
                         onAfterCancel = { nav.popBackStack() },
                     )
                 } else {
-                    PendingServerScreen(pod = pod, onCancel = {
-                        app.removePod(pod.podId)
-                        nav.popBackStack()
-                    })
+                    PendingServerScreen(
+                        pod = pod,
+                        // Needed only for the serial-less directory fallback
+                        // (a pod surfaced from `/pods` on a non-creating
+                        // device polls pending[].phase by username + fqdn).
+                        username = app.currentUser.collectAsState().value,
+                        onCancel = {
+                            app.removePod(pod.podId)
+                            nav.popBackStack()
+                        },
+                    )
                 }
             } else {
                 ServerDetailScreen(podId = podId, onBack = { nav.popBackStack() })
@@ -240,6 +247,20 @@ fun HomeTab() {
         composable("create-server") {
             CreateServerScreen(
                 onDelivered = { serverDomain, serial, name, description ->
+                    // QR-relay delivered. Surface the pod on Home RIGHT NOW
+                    // (pending, keyed on the fqdn, carrying this device's
+                    // serial) — waiting for the progress screen to finish
+                    // left a just-created server invisible until a
+                    // pull-down reconcile, which also stranded it
+                    // serial-less. The upsert also re-attaches the serial
+                    // to a serial-less twin the reconciler may have
+                    // surfaced first.
+                    app.upsertPendingPod(
+                        name = name,
+                        description = description,
+                        fqdn = serverDomain,
+                        serial = serial,
+                    )
                     val encoded = URLEncoder.encode(name, "UTF-8")
                     nav.navigate("install-progress/$serial?name=$encoded&fqdn=${URLEncoder.encode(serverDomain, "UTF-8")}")
                 },
@@ -252,16 +273,21 @@ fun HomeTab() {
             val fqdn = URLDecoder.decode(entry.arguments?.getString("fqdn") ?: "", "UTF-8")
             InstallProgressScreen(
                 serial = serial,
-                onFinish = { resolvedFqdn ->
-                    val final = resolvedFqdn ?: fqdn
-                    val slug = com.flagshipserver.app.core.SlugUtil.slugify(name)
-                    val pod = com.flagshipserver.app.core.PodInfo(
-                        podId = "pod-" + java.util.UUID.randomUUID().toString().take(6),
-                        name = name,
-                        fqdn = final.ifEmpty { "$slug.flagship.services" },
-                        status = com.flagshipserver.app.core.PodInfo.Status.ONLINE,
-                    )
-                    app.addPod(pod)
+                onFinish = { resolvedFqdn, live ->
+                    // The pod is already on Home (upserted at delivery).
+                    // Leaving the screen just re-upserts idempotently —
+                    // registration is authoritative for online, so only a
+                    // canonical `live` flips it; "Run in background" keeps
+                    // it pending (no more fake-ONLINE random-id pod) and
+                    // the reconciler flips it when the box registers.
+                    val final = (resolvedFqdn ?: fqdn).ifEmpty {
+                        com.flagshipserver.app.core.SlugUtil.slugify(name) + ".flagship.services"
+                    }
+                    if (live) {
+                        app.upsertRegisteredPod(fqdn = final, name = name)
+                    } else {
+                        app.upsertPendingPod(name = name, fqdn = final, serial = serial)
+                    }
                     nav.popBackStack(route = "home-root", inclusive = false)
                 },
             )

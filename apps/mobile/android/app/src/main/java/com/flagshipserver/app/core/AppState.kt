@@ -369,6 +369,62 @@ class AppState(
         return id
     }
 
+    /** Idempotent insert of a pending pod, keyed on the fqdn (the same
+     *  identity rule as [upsertRegisteredPod]). The create flow fires this
+     *  the moment an order is DELIVERED — not when the install-progress
+     *  screen finishes — so the pod can already exist: surfaced serial-less
+     *  by the `/pods` reconciler (the unauthenticated directory never
+     *  carries the raw serial), or re-fired when the progress screen is
+     *  left. Merging attaches this device's locally-known auth-code serial
+     *  to a serial-less twin, restoring the deep-progress/cancel capability
+     *  the order's creator owns; a known serial is never downgraded to null
+     *  and an online pod always wins. Returns the resolved pod id.
+     *  Mirror of iOS AppState.upsertPendingPod. */
+    fun upsertPendingPod(
+        name: String,
+        description: String? = null,
+        fqdn: String,
+        serial: String?,
+    ): String {
+        val target = fqdn.lowercase()
+        val newSerial = serial?.takeIf { it.isNotEmpty() }
+        val existing = _pods.value
+        if (target.isNotEmpty()) {
+            val idx = existing.indexOfFirst { it.fqdn.lowercase() == target }
+            if (idx >= 0) {
+                val old = existing[idx]
+                if (old.status == PodInfo.Status.ONLINE) return old.podId
+                _pods.value = existing.toMutableList().also {
+                    it[idx] = old.copy(
+                        name = name.ifEmpty { old.name },
+                        description = description?.takeIf { d -> d.isNotEmpty() } ?: old.description,
+                        status = PodInfo.Status.PENDING,
+                        pendingAuthCodeSerial = newSerial ?: old.pendingAuthCodeSerial,
+                    )
+                }
+                return old.podId
+            }
+        }
+        // An empty fqdn (no predicted domain yet) has no stable identity —
+        // fall back to a random id for it.
+        val podId = if (fqdn.isEmpty()) {
+            "pod-" + java.util.UUID.randomUUID().toString().take(6).lowercase()
+        } else {
+            PodInfo.podId(fqdn)
+        }
+        addPod(
+            PodInfo(
+                podId = podId,
+                name = name,
+                description = description?.takeIf { it.isNotEmpty() },
+                fqdn = fqdn,
+                status = PodInfo.Status.PENDING,
+                pendingAuthCodeSerial = newSerial,
+            ),
+        )
+        return podId
+    }
+
     fun setLeader(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId

@@ -1,10 +1,20 @@
-// Pending server placeholder. Shown while a box that just received its
-// signed install blob hasn't phoned home yet. The Cancel-order button
-// hands back to the caller to revoke the auth-code on .com (the
-// container in HomeTab handles the network call + AppState mutation).
+// Pending server detail. Shown while a box that just received its signed
+// install blob hasn't gone live yet — renders the LIVE canonical install
+// ladder (no more static "hasn't phoned home" placeholder):
+//   - With the locally-held auth-code serial (this device minted the
+//     order): deep per-order progress from GET /api/order/<serial>/status.
+//   - Serial-less (the pod was surfaced from the unauthenticated `/pods`
+//     directory, which ships opaque orderRefs only): list-level progress
+//     riding the directory's `pending[].phase`, flipping live when the
+//     fqdn registers. Without this fallback the ladder sat forever on the
+//     empty "Booting up" state.
+// The Cancel-order button hands back to the caller to revoke the
+// auth-code on .com (the container in HomeTab handles the network call +
+// AppState mutation).
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -22,8 +35,10 @@ import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.PodInfo
+import com.flagshipserver.app.core.ProvisionProgress
 import com.flagshipserver.app.core.AuthCodeRevoke as AuthCodeRevokeBytes
 import com.flagshipserver.app.core.ReleaseServerName as ReleaseServerNameBytes
 import com.flagshipserver.app.api.AuthCodeRevokeRequest
@@ -34,14 +49,32 @@ import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.ProvisionTimelineViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun PendingServerScreen(pod: PodInfo, onCancel: () -> Unit) {
+fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> Unit) {
     val flagshipServer = LocalFlagshipServerClient.current
+    val mailbox = LocalSecretMailboxClient.current
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+
+    // Live install ladder — order mode with the locally-held serial;
+    // directory fallback for a serial-less pod surfaced from `/pods`.
+    val timeline = remember(pod.podId, pod.pendingAuthCodeSerial, username) {
+        val serial = pod.pendingAuthCodeSerial
+        when {
+            !serial.isNullOrEmpty() ->
+                ProvisionTimelineViewModel(serial, flagshipServer)
+            !username.isNullOrEmpty() && pod.fqdn.isNotEmpty() ->
+                ProvisionTimelineViewModel(username, pod.fqdn) { u ->
+                    runCatching { mailbox.fetchPods(u) }.getOrNull()
+                }
+            else -> null
+        }
+    }
+    LaunchedEffect(timeline) { timeline?.runUntilTerminal() }
 
     Column(
         Modifier
@@ -59,7 +92,7 @@ fun PendingServerScreen(pod: PodInfo, onCancel: () -> Unit) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column {
                 Text(
-                    "We've delivered the signed install blob to the browser, but the new box hasn't phoned home yet. Plug in the USB, power on, and watch this screen flip to Online.",
+                    "Plug in the USB and power on — this screen tracks the install live and flips to Online at the end.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 )
@@ -75,6 +108,24 @@ fun PendingServerScreen(pod: PodInfo, onCancel: () -> Unit) {
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 12.sp),
                     )
+                }
+            }
+        }
+        Spacer(Modifier.height(FS.space.s4))
+        // The canonical provisioning ladder — same projection the
+        // InstallProgressScreen renders, fed by the timeline poller above.
+        if (timeline != null) {
+            val status by timeline.status.collectAsState()
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    if (status == null) {
+                        Text("Waiting for the box to phone home…", color = FS.colors.textMuted)
+                    }
+                    val prevPhase = status?.history?.dropLast(1)?.lastOrNull()?.phase
+                    val steps = ProvisionProgress.stepStates(status?.phase, status?.detail, prevPhase)
+                    for (step in steps) {
+                        InstallStepRow(step)
+                    }
                 }
             }
         }

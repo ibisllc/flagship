@@ -42,7 +42,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun InstallProgressScreen(
     serial: String,
-    onFinish: (resolvedFqdn: String?) -> Unit,
+    onFinish: (resolvedFqdn: String?, live: Boolean) -> Unit,
 ) {
     val flagshipServer = LocalFlagshipServerClient.current
     // Raw canonical phase wire string (null until the box reports), the
@@ -108,14 +108,15 @@ fun InstallProgressScreen(
         val isLive = phase == "live"
         FSGhostButton(
             label = if (isLive) "Continue" else "Run in background",
-            onClick = { onFinish(resolvedFqdn) },
+            onClick = { onFinish(resolvedFqdn, isLive) },
             block = true,
         )
     }
 }
 
+// Shared with PendingServerScreen — both render the same canonical ladder.
 @Composable
-private fun InstallStepRow(step: ProvisionProgress.StepView) {
+internal fun InstallStepRow(step: ProvisionProgress.StepView) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
         verticalAlignment = Alignment.Top,
