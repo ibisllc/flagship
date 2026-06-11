@@ -95,13 +95,20 @@ export class TunnelRegistry {
 
   /**
    * Resolve an inbound SNI to the tunnel that should serve it. Tries
-   * exact match (canonical or held shortened); falls back to one-label
-   * wildcard (`*.<host>.<user>.flagship.services`-style) lookups
-   * against the per-tunnel canonical set so app-subdomain-of-canonical
-   * traffic still routes.
+   * exact match (canonical or held shortened); falls back to a single
+   * leftmost-label strip so `<service>.<podCanonical>` routes to the
+   * pod. The strip IS the routing for the A′ per-box wildcard claim
+   * `*.<server>.<user>.flagship.services` (the hub admits only the
+   * pod's own wildcard and consumes it before register) — one label
+   * deep, matching the box's wildcard-cert scope. Tier-2
+   * `<service>.<user>` names never need the fallback: they resolve as
+   * allocator slots (FCFS + failover queue).
    */
   findBySni(sni: string): RegisteredTunnel | undefined {
     const lower = sni.toLowerCase();
+    // A real SNI is a hostname; a literal `*` (e.g. someone replaying
+    // a wildcard claim as an SNI) must never strip-match into a pod.
+    if (lower.includes("*")) return undefined;
     const direct = this.allocator.findHolderByFqdn(lower);
     if (direct) return this.tunnels.get(direct);
     // Wildcard fallback: strip the leftmost label and try again.

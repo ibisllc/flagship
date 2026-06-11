@@ -45,6 +45,12 @@ describe("parseSetKey", () => {
     expect(parseSetKey("messenger.john.flagship.com")).toBeNull();
     expect(parseSetKey("messenger.example.com")).toBeNull();
   });
+
+  it("rejects wildcard labels anywhere (A′ claims never index as literals)", () => {
+    expect(parseSetKey("*.john.flagship.services")).toBeNull();
+    expect(parseSetKey("*.kitchen.john.flagship.services")).toBeNull();
+    expect(parseSetKey("messenger.*.john.flagship.services")).toBeNull();
+  });
 });
 
 describe("derivableShorteneds", () => {
@@ -65,6 +71,37 @@ describe("derivableShorteneds", () => {
 
   it("pod-root canonical yields no shortened (only 2 labels before apex)", () => {
     expect(derivableShorteneds(KITCHEN)).toEqual([]);
+  });
+
+  it("wildcard claims derive nothing", () => {
+    expect(derivableShorteneds("*.kitchen.john.flagship.services")).toEqual([]);
+    expect(derivableShorteneds("*.john.flagship.services")).toEqual([]);
+  });
+});
+
+describe("AppUserAllocator — A′ wildcard claims stay inert", () => {
+  it("a literal wildcard canonical never becomes a member, slot, or holder", () => {
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    const r = a.addPod({
+      podCanonical: KITCHEN,
+      canonicals: [KITCHEN, "*.kitchen.john.flagship.services"],
+    });
+    expect(r.shortenedsHeld).toEqual([]);
+    expect(a.findHolderByFqdn("*.kitchen.john.flagship.services")).toBeUndefined();
+  });
+
+  it("a hostile user-zone wildcard cannot capture another pod's slot or canonical", () => {
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    a.addPod({
+      podCanonical: KITCHEN,
+      canonicals: ["messenger.kitchen.john.flagship.services"],
+    });
+    a.addPod({
+      podCanonical: WOODSHED,
+      canonicals: [WOODSHED, "*.john.flagship.services"],
+    });
+    expect(a.findHolderByFqdn("messenger.john.flagship.services")).toBe(KITCHEN);
+    expect(a.findHolderByFqdn(KITCHEN)).toBe(KITCHEN);
   });
 });
 

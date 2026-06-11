@@ -210,17 +210,17 @@ function attachTunnel(
         ws.close(auth.closeCode, "auth failed");
         return;
       }
-      // Build the canonical list from the validated entitlements +
-      // the validated AppGrants' route hosts (#6). The hub's SNI
-      // allowlist is the UNION of every authorized source. We use the
-      // VALIDATED grants (auth.validatedGrants) rather than the
-      // raw helloOk.appGrants so an unverified grant can never
-      // contribute a host to the allowlist.
-      const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
-      if (helloOk.serviceEntitlement) {
-        for (const c of helloOk.serviceEntitlement.canonicals) canonicals.push(c);
+      const built = buildClaimedCanonicals(
+        helloOk.rootEntitlement.podCanonical,
+        helloOk.serviceEntitlement,
+        auth.validatedGrants,
+      );
+      if (!built.ok) {
+        send(helloAckFrame(false, built.reason));
+        ws.close(1008, "claim rejected");
+        return;
       }
-      for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
+      const canonicals = built.canonicals;
       const tunnel: RegisteredTunnel = {
         podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
         send,
@@ -265,11 +265,16 @@ function attachTunnel(
         send(helloAckFrame(false, auth.reason));
         return;
       }
-      const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
-      if (helloOk.serviceEntitlement) {
-        for (const c of helloOk.serviceEntitlement.canonicals) canonicals.push(c);
+      const built = buildClaimedCanonicals(
+        helloOk.rootEntitlement.podCanonical,
+        helloOk.serviceEntitlement,
+        auth.validatedGrants,
+      );
+      if (!built.ok) {
+        send(helloAckFrame(false, built.reason));
+        return;
       }
-      for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
+      const canonicals = built.canonicals;
       const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
       send(helloAckFrame(true));
@@ -554,6 +559,18 @@ async function authenticateHello(
   if (hello.serverId.toLowerCase() !== hello.rootEntitlement.podCanonical) {
     return { ok: false, reason: "serverId must equal rootEntitlement.podCanonical", closeCode: 1002 };
   }
+  // Shape gate: podCanonical must be a real `<server>.<user>` pod name
+  // made of plain DNS labels — in particular no `*`. The A′ per-box
+  // wildcard is a CLAIM (`*.<podCanonical>`, see buildClaimedCanonicals),
+  // never an identity; a wildcard podCanonical would otherwise sail
+  // through the middle-label check below.
+  if (!podCanonicalShapeOk(hello.rootEntitlement.podCanonical)) {
+    return {
+      ok: false,
+      reason: "rootEntitlement.podCanonical is not a valid flagship.services pod name",
+      closeCode: 1008,
+    };
+  }
   // Pod-zone identity check: rootEntitlement.podCanonical's middle
   // label must equal rootEntitlement.username (the user-zone owner).
   const podUser = extractMiddleLabel(hello.rootEntitlement.podCanonical);
@@ -721,6 +738,59 @@ function broadcastSnapshot(registry: TunnelRegistry, key: import("./allocator.js
 }
 
 /**
+ * Build the registry-bound canonical list from a validated HELLO. The
+ * hub's SNI allowlist is the UNION of every authorized source: the
+ * root entitlement's podCanonical, the service entitlement's
+ * canonicals, and the validated AppGrants' route hosts (#6) — callers
+ * MUST pass `auth.validatedGrants`, never the raw HELLO grants, so an
+ * unverified grant can never contribute a host.
+ *
+ * A′ per-box wildcard claims: a pod may claim `*.<its own
+ * podCanonical>` (the scope of its per-box wildcard cert
+ * `*.<server>.<user>.flagship.services`) and ONLY that. A matching
+ * claim is CONSUMED here rather than forwarded as a literal — the
+ * registry's one-label-strip fallback already routes
+ * `<service>.<podCanonical>` to the pod, which is exactly the
+ * wildcard's one-label scope. Any other wildcard (the retired
+ * user-zone `*.<user>`, another box's `*.<server>.<user>`, deeper or
+ * embedded `*`) rejects the HELLO outright: the wildcard's base must
+ * BE the IRK+STK-verified pod identity, mirroring the rigor applied
+ * to podCanonical itself, so a box can never widen its routing past
+ * its own name.
+ */
+export function buildClaimedCanonicals(
+  podCanonical: string,
+  serviceEntitlement: ServiceEntitlement | null,
+  validatedGrants: ServiceGrant[],
+): { ok: true; canonicals: string[] } | { ok: false; reason: string } {
+  const pc = podCanonical.toLowerCase();
+  const claims: string[] = [];
+  if (serviceEntitlement) claims.push(...serviceEntitlement.canonicals);
+  claims.push(...appGrantHosts(validatedGrants));
+  const canonicals: string[] = [pc];
+  for (const claim of claims) {
+    const c = claim.toLowerCase();
+    if (c.startsWith("*.")) {
+      if (c.slice(2) !== pc) {
+        return {
+          ok: false,
+          reason: `wildcard claim ${c} rejected — a pod may only claim its own per-box wildcard *.${pc}`,
+        };
+      }
+      continue;
+    }
+    if (c.includes("*")) {
+      return {
+        ok: false,
+        reason: `claim ${c} rejected — '*' is only valid as the leading label of *.${pc}`,
+      };
+    }
+    canonicals.push(c);
+  }
+  return { ok: true, canonicals };
+}
+
+/**
  * Extract the unique host portion of every route URL across a set of
  * validated AppGrants. `subpath`-scoped routes encode their path after
  * the first '/', which we strip for SNI-allowlist purposes (TLS doesn't
@@ -739,6 +809,14 @@ export function appGrantHosts(grants: ServiceGrant[]): string[] {
     }
   }
   return Array.from(hosts);
+}
+
+function podCanonicalShapeOk(podCanonical: string): boolean {
+  if (!podCanonical.endsWith(".flagship.services")) return false;
+  const head = podCanonical.slice(0, -".flagship.services".length);
+  const parts = head.split(".");
+  if (parts.length < 2) return false;
+  return parts.every((p) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(p));
 }
 
 function extractMiddleLabel(serverId: string): string | null {

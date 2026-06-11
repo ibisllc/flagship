@@ -89,6 +89,74 @@ describe("TunnelRegistry — allocator-backed (N12b)", () => {
   });
 });
 
+describe("TunnelRegistry — A′ per-box wildcard routing", () => {
+  it("a box claiming [<canonical>, *.<canonical>] receives service SNI one label under it", () => {
+    const reg = new TunnelRegistry();
+    const t = fakeTunnel("home.harry.flagship.services");
+    reg.register({
+      tunnel: t,
+      canonicals: [
+        "home.harry.flagship.services",
+        "*.home.harry.flagship.services",
+      ],
+    });
+    // Apex — also the SNI an ACME TLS-ALPN-01 validation arrives on.
+    expect(reg.findBySni("home.harry.flagship.services")).toBe(t);
+    // Hierarchical canonical service name = wildcard scope.
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBe(t);
+    // Two labels deep is OUTSIDE the wildcard cert — must not route.
+    expect(reg.findBySni("a.notes.home.harry.flagship.services")).toBeUndefined();
+  });
+
+  it("tier-2 <service>.<user> resolves via the slot allocator, independent of any wildcard", () => {
+    const reg = new TunnelRegistry();
+    const t = fakeTunnel("home.harry.flagship.services");
+    reg.register({
+      tunnel: t,
+      canonicals: [
+        "notes.home.harry.flagship.services",
+        "*.home.harry.flagship.services",
+      ],
+    });
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(t);
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBe(t);
+  });
+
+  it("a user-zone wildcard claim is inert — it cannot hijack a sibling box's traffic", () => {
+    const reg = new TunnelRegistry();
+    const home = fakeTunnel("home.harry.flagship.services");
+    const attic = fakeTunnel("attic.harry.flagship.services");
+    reg.register({
+      tunnel: home,
+      canonicals: ["notes.home.harry.flagship.services"],
+    });
+    reg.register({
+      tunnel: attic,
+      canonicals: ["attic.harry.flagship.services", "*.harry.flagship.services"],
+    });
+    expect(reg.findBySni("home.harry.flagship.services")).toBe(home);
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBe(home);
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(home);
+    // The wildcard bought attic nothing beyond its own name.
+    expect(reg.findBySni("attic.harry.flagship.services")).toBe(attic);
+  });
+
+  it("another box's per-box wildcard claim is equally inert (even with the victim offline)", () => {
+    const reg = new TunnelRegistry();
+    const home = fakeTunnel("home.harry.flagship.services");
+    const attic = fakeTunnel("attic.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["home.harry.flagship.services"] });
+    reg.register({
+      tunnel: attic,
+      canonicals: ["attic.harry.flagship.services", "*.home.harry.flagship.services"],
+    });
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBe(home);
+    reg.unregister(home.podCanonical);
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBeUndefined();
+    expect(reg.findBySni("home.harry.flagship.services")).toBeUndefined();
+  });
+});
+
 describe("TunnelRegistry — custom-domain redirections (#86)", () => {
   it("resolves a custom fqdn to the pod's tunnel; removeRedirection clears it", () => {
     const reg = new TunnelRegistry();

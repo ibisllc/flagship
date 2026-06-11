@@ -140,7 +140,16 @@ export class AppUserAllocator {
     canonicals: string[];
   }): AddPodResult {
     const podCanonical = args.podCanonical.toLowerCase();
-    const canonicals = new Set(args.canonicals.map((c) => c.toLowerCase()));
+    // Defense-in-depth for A′ wildcard claims: the hub validates +
+    // consumes `*.<podCanonical>` before register (routing rides the
+    // registry's one-label-strip fallback), so a literal `*` reaching
+    // here is either redundant or hostile — never index it.
+    const canonicals = new Set<string>();
+    for (const c of args.canonicals) {
+      const lower = c.toLowerCase();
+      if (lower.includes("*")) continue;
+      canonicals.add(lower);
+    }
     canonicals.add(podCanonical); // root canonical always implicit
 
     const existing = this.pods.get(podCanonical);
@@ -509,6 +518,10 @@ export function parseSetKey(fqdn: string): AppUserSetKey | null {
   if (head.length === 0) return null;
   const parts = head.split(".");
   if (parts.length < 2) return null;
+  // Every label must be a plain DNS label — wildcard claims (`*.…`)
+  // are validated + consumed by the hub (A′: only `*.<podCanonical>`)
+  // and must never index into sets as literals.
+  if (parts.some((p) => !labelOk(p))) return null;
   const user = parts[parts.length - 1]!;
   if (!userOk(user)) return null;
   // Leftmost label may be `<slug>` or `<slug>-<author>`. The author
@@ -547,6 +560,7 @@ export function derivableShorteneds(canonical: string): string[] {
   const lower = canonical.toLowerCase();
   if (!lower.endsWith(APEX_SUFFIX)) return [];
   const head = lower.slice(0, -APEX_SUFFIX.length);
+  if (head.includes("*")) return []; // wildcard claims derive nothing (A′)
   const parts = head.split(".");
   // Need at least 3 labels (slug.host.user) to have any shortened.
   if (parts.length < 3) return [];
