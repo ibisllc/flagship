@@ -78,6 +78,18 @@ describe("rateLimit — endpoint detection", () => {
     );
   });
 
+  it("rate-limits the SEC-2 push relay + SEC-3 voici/llm-promo endpoints per-IP", () => {
+    expect(endpointFor("POST", "/api/push/relay")).toBe("push-relay");
+    expect(endpointFor("POST", "/api/voici/shorten")).toBe("voici-shorten");
+    expect(endpointFor("POST", "/api/llm-promo/issue")).toBe("llm-promo-issue");
+    // All three are per-IP only at the edge (no signer pub on the wire).
+    expect(LIMITS["push-relay"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["voici-shorten"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["llm-promo-issue"]?.every((a) => a.axis === "ip")).toBe(true);
+    // llm-promo is the tightest (token-farming concern).
+    expect(LIMITS["llm-promo-issue"]?.[0]?.limit).toBe(5);
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("GET", "/api/username/harry")).toBeNull();

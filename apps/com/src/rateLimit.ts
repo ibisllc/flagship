@@ -119,7 +119,21 @@ export type RateLimitEndpoint =
   // throttle per-IP only; the handler does the full DeviceAdmit
   // signature check under the registered IRK. Mirrors auth-code-issue's
   // posture (a credential-bearing mutating POST).
-  | "device-admit";
+  | "device-admit"
+  // SEC-2 — STK-signed push relay. The body carries `request.targetUsername`,
+  // not an IRK/STK pub at the edge, so we throttle per-IP only; the handler
+  // does the full STK signature check against the target's registered boxes.
+  // A real box relays an unlock-request a handful of times during a boot, so a
+  // tight 10/min cap (with a 100/h ceiling) fences a spam loop while leaving
+  // legitimate traffic headroom.
+  | "push-relay"
+  // SEC-3 — voi.ci short-code mint. Session-authenticated (IRK-signed body
+  // keyed by `request.username`), so per-IP at the edge; conservative enough
+  // that a valid session can't farm short codes into D1 in a loop.
+  | "voici-shorten"
+  // SEC-3 — LLM promo / BYOK-credit issuance. Tighter than voici (each issue
+  // mints a scoped provider key + bumps the ledger), per-IP at the edge.
+  | "llm-promo-issue";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -255,6 +269,24 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 100, windowSec: 3600 },
   ],
+  // SEC-2 — STK-signed push relay. Per-IP only (no signer pub at the edge).
+  // 10/min covers a box re-asking for an unlock approval across a boot; the
+  // 100/h ceiling fences a sustained spam loop.
+  "push-relay": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  // SEC-3 — voi.ci short-code mint. Per-IP (the IRK pub isn't on the wire at
+  // edge speed; the body carries `request.username`). 10/min + 100/h matches
+  // the conservative budget in the finding — enough for a human sharing a few
+  // links, tight enough to stop D1-bloat farming.
+  "voici-shorten": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  // SEC-3 — LLM promo / BYOK-credit issuance. Tighter: 5/h per-IP (token
+  // farming is the concern, and a legitimate client issues rarely).
+  "llm-promo-issue": [{ axis: "ip", limit: 5, windowSec: 3600 }],
 };
 
 export interface RateLimitInput {
@@ -470,6 +502,17 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
     /^\/api\/users\/[^/]+\/outstanding-orders$/.test(pathname)
   ) {
     return "outstanding-orders";
+  }
+  // SEC-2 — STK-signed push relay.
+  if (m === "POST" && pathname === "/api/push/relay") {
+    return "push-relay";
+  }
+  // SEC-3 — voi.ci short-code mint + LLM-promo issuance.
+  if (m === "POST" && pathname === "/api/voici/shorten") {
+    return "voici-shorten";
+  }
+  if (m === "POST" && pathname === "/api/llm-promo/issue") {
+    return "llm-promo-issue";
   }
   return null;
 }
