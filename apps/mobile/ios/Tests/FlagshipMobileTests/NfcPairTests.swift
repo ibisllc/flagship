@@ -342,4 +342,50 @@ final class NfcPairTests: XCTestCase {
         XCTAssertEqual(canonHex, recordedHex,
                        "Swift canonicalWiFiConfig must byte-match recorded canonicalHex")
     }
+
+    // MARK: - Session-lock constant (design refinement §1)
+
+    func test_pairSessionLockMs_isThirtySeconds() {
+        // Mirrors PAIR_SESSION_LOCK_MS in @flagship/protocol — the box
+        // rolls keys 30 s after a tap with no claim.
+        XCTAssertEqual(PAIR_SESSION_LOCK_MS, 30_000)
+    }
+
+    // MARK: - WiFi deposit blob (ePhonePub || ciphertext)
+
+    func test_wifiDepositBlob_roundTrips() throws {
+        let phone = Curve25519.KeyAgreement.PrivateKey()
+        let ePhonePub = phone.publicKey.rawRepresentation
+        let kSession = Data(repeating: 0x42, count: 32)
+        let sealed = try sealWiFiConfig(
+            WiFiConfig(ssid: "HomeNet", psk: "hunter22", regulatoryRegion: "US", issuedAt: 1_718_000_000_000),
+            kSession: kSession
+        )
+        let blob = try buildWifiDepositBlob(ePhonePub: ePhonePub, sealed: sealed)
+        XCTAssertEqual(blob.count, 32 + sealed.ciphertext.count)
+
+        let parsed = try parseWifiDepositBlob(blob)
+        XCTAssertEqual(parsed.ePhonePub, ePhonePub)
+        XCTAssertEqual(parsed.ciphertext, sealed.ciphertext)
+
+        let opened = try openWiFiConfig(
+            SealedWiFiConfig(ciphertext: parsed.ciphertext, nonce: sealed.nonce),
+            kSession: kSession
+        )
+        XCTAssertEqual(opened.ssid, "HomeNet")
+    }
+
+    func test_wifiDepositBlob_rejectsWrongSizePub_andShortBlob() throws {
+        let sealed = try sealWiFiConfig(
+            WiFiConfig(ssid: "x", psk: "", regulatoryRegion: "", issuedAt: 1),
+            kSession: Data(repeating: 0, count: 32)
+        )
+        XCTAssertThrowsError(
+            try buildWifiDepositBlob(ePhonePub: Data(repeating: 1, count: 31), sealed: sealed)
+        )
+        // 47 bytes can't carry pub(32) + AEAD tag(16) — a foreign or
+        // truncated deposit dies before any key derivation runs.
+        XCTAssertThrowsError(try parseWifiDepositBlob(Data(repeating: 0, count: 47)))
+        XCTAssertThrowsError(try parseWifiDepositBlob(Data()))
+    }
 }
