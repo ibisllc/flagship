@@ -15,6 +15,9 @@ import FlagshipCore
 /// too was redundant.
 public struct SettingsScreen: View {
     @Environment(\.colorScheme) private var scheme
+    /// iPad/regular: sidebar already names the destination → inline title.
+    /// iPhone keeps the large collapsing title.
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var disconnectTarget: TrustedDevice?
     @State private var disconnectMessage: String?
     /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
@@ -225,6 +228,7 @@ public struct SettingsScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
             // Hard-pin the scroll content to the ScrollView's own width. A
             // vertical ScrollView rubber-bands sideways the moment ANY
             // descendant reports a width past the viewport (an over-wide row,
@@ -237,7 +241,7 @@ public struct SettingsScreen: View {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .refreshable { await onRefresh() }
         .confirmationDialog(
             disconnectTarget.map { "Disconnect \($0.label)?" } ?? "Disconnect device?",

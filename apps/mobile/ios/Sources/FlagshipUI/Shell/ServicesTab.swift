@@ -10,6 +10,9 @@ public struct ServicesTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
+    /// iPad/regular: the sidebar already names the destination, so collapse
+    /// the in-content large title to inline. iPhone keeps the large title.
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
 
@@ -67,9 +70,10 @@ public struct ServicesTab: View {
                     }
                     .padding(.horizontal, FS.space.s6)
                     .padding(.top, FS.space.s2)
+                    .fsReadingColumn()
                 }
                 .navigationTitle("Apps")
-                .navigationBarTitleDisplayMode(.large)
+                .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
                 .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search apps")
                 .toolbar {
                     // V8 — server filter stays as the top-right PodSwitcher.

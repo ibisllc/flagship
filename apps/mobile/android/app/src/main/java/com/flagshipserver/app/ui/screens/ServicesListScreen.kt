@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -44,6 +45,7 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSearchField
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.ServicesListViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 
@@ -119,8 +121,16 @@ fun ServicesListScreen(nav: NavController) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      Column(
+        modifier = Modifier
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = FS.space.s6),
+      ) {
         Spacer(Modifier.height(FS.space.s10))
         Text(
             text = "Apps",
@@ -183,6 +193,7 @@ fun ServicesListScreen(nav: NavController) {
                 BuildAnotherAppRow(onClick = { nav.navigate("vibe/describe") })
             }
         }
+      }
     }
 }
 

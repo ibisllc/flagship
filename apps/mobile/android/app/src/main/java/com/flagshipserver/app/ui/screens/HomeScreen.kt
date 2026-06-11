@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -61,6 +62,7 @@ import com.flagshipserver.app.ui.components.FSSearchField
 import com.flagshipserver.app.ui.components.HomeStatusFilter
 import com.flagshipserver.app.ui.components.PodStatusStyle
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.LoadingState
 
 @Composable
@@ -142,9 +144,17 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+            .verticalScroll(scroll),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      // Reading column — on an expanded (tablet) pane the rows/cards/chip row
+      // are clamped to a comfortable measure and centered; a no-op on phones.
+      Column(
+        modifier = Modifier
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = FS.space.s6),
+      ) {
         Spacer(Modifier.height(FS.space.s12))
         // Large title + greeting subheader.
         Text(
@@ -230,6 +240,7 @@ fun HomeScreen(
             else -> ServerCardSkeleton()
         }
         Spacer(Modifier.height(FS.space.s12))
+      }
     }
 }
 

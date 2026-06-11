@@ -96,6 +96,27 @@ public enum FSRadius {
     public static let pill: CGFloat = 999
 }
 
+public enum FSLayout {
+    /// Max width of the hero-screen reading column. On a full-width iPad
+    /// content pane (or a wide regular-width window) the WhatsApp-style list
+    /// rows / cards / chip row would stretch edge-to-edge and read absurdly
+    /// wide; clamping to this and centering keeps a comfortable measure. On
+    /// iPhone (compact) the pane is already narrower than this, so the clamp
+    /// is a no-op and the layout is byte-identical to before.
+    public static let readingMaxWidth: CGFloat = 640
+}
+
+public extension View {
+    /// Constrain a scroll-content column to the reading measure and center it.
+    /// A no-op on narrow (iPhone) panes; only bites on wide (iPad / regular)
+    /// content. Apply to the inner VStack of a hero screen — the rows, cards,
+    /// chip row, and announcements then never stretch past `readingMaxWidth`.
+    func fsReadingColumn() -> some View {
+        frame(maxWidth: FSLayout.readingMaxWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
 public enum FSFont {
     public static func display() -> Font { .system(size: 56, weight: .medium, design: .default) }
     public static func h1() -> Font { .system(size: 40, weight: .medium) }

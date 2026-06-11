@@ -7,6 +7,11 @@ import FlagshipCore
 /// activity timeline. Per-server detail lives behind ServerDetail.
 public struct HomeScreen: View {
     @Environment(\.colorScheme) private var scheme
+    /// iPad/regular panes already carry the destination name in the sidebar,
+    /// so the giant in-content large title is redundant there — degrade it to
+    /// an inline title. iPhone (compact) keeps the WhatsApp-style collapsing
+    /// large title.
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let state: LoadingState<ServerDetailResponse>
     let username: String
     let pods: [PodInfo]
@@ -144,10 +149,11 @@ public struct HomeScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s2)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Home")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search servers")
         .refreshable { await onRefresh() }
     }

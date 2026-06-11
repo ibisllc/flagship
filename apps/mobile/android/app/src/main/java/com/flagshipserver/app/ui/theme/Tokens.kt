@@ -103,6 +103,18 @@ object FSRadius {
     val pill = 999.dp
 }
 
+// ── Layout ─────────────────────────────────────────────────────
+
+object FSLayout {
+    /** Max width of a hero-screen reading column. On an expanded (tablet /
+     *  foldable) pane the WhatsApp-style list rows / cards / chip row would
+     *  stretch edge-to-edge and read absurdly wide; clamping to this and
+     *  centering keeps a comfortable measure. On a phone (compact) the pane is
+     *  already narrower, so the clamp is a no-op. Mirrors iOS
+     *  `FSLayout.readingMaxWidth`. */
+    val readingMaxWidth = 640.dp
+}
+
 // ── Typography ─────────────────────────────────────────────────
 
 private val provider = GoogleFont.Provider(
