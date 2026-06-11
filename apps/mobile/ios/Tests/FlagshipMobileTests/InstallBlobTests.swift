@@ -67,34 +67,6 @@ final class InstallBlobTests: XCTestCase {
         XCTAssertTrue(String(data: blob("auto").canonicalBytes(), encoding: .utf8)!.hasSuffix("|auto"))
     }
 
-    func test_installBlobCanonicalBytes_certAutonomyMatchesTSBytes() {
-        let auth = AuthCode(
-            serial: "01ABCD", username: "harry", serverName: "home",
-            serverDomain: "home.harry.flagship.services",
-            delegatedPubKey: Data(repeating: 0x11, count: 32),
-            userPubKey: Data(repeating: 0x22, count: 32), issuedAt: 1, expiresAt: 2
-        )
-        func blob(_ ca: InstallBlob.CertAutonomy?, boot: String? = nil) -> InstallBlob {
-            InstallBlob(
-                serverDomain: "home.harry.flagship.services", username: "harry", serverName: "home",
-                phoneDelegatedPubKey: Data(repeating: 0x33, count: 32), authCode: auth,
-                authCodeUserSignature: Data(repeating: 0x44, count: 64),
-                rckPubKey: Data(repeating: 0x55, count: 32), bootUnlockMode: boot, certAutonomy: ca
-            )
-        }
-        func canon(_ b: InstallBlob) -> String { String(data: b.canonicalBytes(), encoding: .utf8)! }
-        let rck = String(repeating: "55", count: 32)
-        // Absent ⇒ exact legacy bytes (no ca= token).
-        XCTAssertTrue(canon(blob(nil)).hasSuffix("|\(rck)"))
-        // managed with a window ⇒ `ca=managed:<days>` — MUST match TS `ca=${mode}:${days}`.
-        XCTAssertTrue(canon(blob(.init(mode: "managed", offlineWindowDays: 7))).hasSuffix("|ca=managed:7"))
-        // autonomous ⇒ days default to 0 on the wire.
-        XCTAssertTrue(canon(blob(.init(mode: "autonomous"))).hasSuffix("|ca=autonomous:0"))
-        // Composes AFTER bootUnlockMode (both committed independently).
-        XCTAssertTrue(canon(blob(.init(mode: "managed", offlineWindowDays: 15), boot: "approve"))
-            .hasSuffix("|approve|ca=managed:15"))
-    }
-
     func test_installBlobCanonicalBytes_diskEncryptionAppendedLastOnlyWhenPresent() {
         let auth = AuthCode(
             serial: "01ABCD", username: "harry", serverName: "home",
@@ -104,7 +76,6 @@ final class InstallBlobTests: XCTestCase {
         )
         func blob(
             _ de: String?,
-            ca: InstallBlob.CertAutonomy? = nil,
             boot: String? = nil
         ) -> InstallBlob {
             InstallBlob(
@@ -112,7 +83,7 @@ final class InstallBlobTests: XCTestCase {
                 phoneDelegatedPubKey: Data(repeating: 0x33, count: 32), authCode: auth,
                 authCodeUserSignature: Data(repeating: 0x44, count: 64),
                 rckPubKey: Data(repeating: 0x55, count: 32),
-                bootUnlockMode: boot, certAutonomy: ca, diskEncryption: de
+                bootUnlockMode: boot, diskEncryption: de
             )
         }
         func canon(_ b: InstallBlob) -> String { String(data: b.canonicalBytes(), encoding: .utf8)! }
@@ -122,10 +93,10 @@ final class InstallBlobTests: XCTestCase {
         // Present ⇒ `de=<mode>` — MUST match TS `de=${b.diskEncryption}`.
         XCTAssertTrue(canon(blob("none")).hasSuffix("|de=none"))
         XCTAssertTrue(canon(blob("luks")).hasSuffix("|de=luks"))
-        // Appended LAST — after both bootUnlockMode and certAutonomy.
+        // Appended LAST — after bootUnlockMode.
         XCTAssertTrue(
-            canon(blob("none", ca: .init(mode: "managed", offlineWindowDays: 30), boot: "approve"))
-                .hasSuffix("|approve|ca=managed:30|de=none")
+            canon(blob("none", boot: "approve"))
+                .hasSuffix("|approve|de=none")
         )
     }
 

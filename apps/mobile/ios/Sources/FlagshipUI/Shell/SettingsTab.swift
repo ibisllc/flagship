@@ -131,7 +131,6 @@ public struct SettingsTab: View {
                     onOpenProviders: { path.append(.providers) },
                     onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
-                    onOpenCertValidity: { path.append(.certValidity) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
@@ -277,8 +276,6 @@ public struct SettingsTab: View {
             TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
-        case .certValidity:
-            CertValidityScreen()
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")

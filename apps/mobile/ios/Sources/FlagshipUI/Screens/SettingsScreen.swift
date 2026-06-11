@@ -69,8 +69,6 @@ public struct SettingsScreen: View {
     /// P7 — open the dedicated tier-status / subscription screen.
     var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
-    /// Open the account-wide certificate-validity setting.
-    var onOpenCertValidity: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
     /// v1.2 Phase 4 — open the Account-security drill-down. The
@@ -132,7 +130,6 @@ public struct SettingsScreen: View {
         onOpenProviders: @escaping () -> Void = {},
         onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
-        onOpenCertValidity: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
@@ -165,7 +162,6 @@ public struct SettingsScreen: View {
         self.onOpenProviders = onOpenProviders
         self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
-        self.onOpenCertValidity = onOpenCertValidity
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
@@ -199,7 +195,6 @@ public struct SettingsScreen: View {
                 // "Multi-device + 2FA" state is one of the first
                 // things the user sees.
                 accountSecuritySection(c: c)
-                certificatesSection(c: c)
                 subscription(c: c)
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
@@ -318,38 +313,6 @@ public struct SettingsScreen: View {
             FSCard {
                 row(label: "Username", value: username, c: c)
             }
-        }
-    }
-
-    /// P7 — compact nav row into the dedicated tier-status screen. The
-    /// full breakdown (credits, dispatcher usage, custom domains,
-    /// reserved names) now lives on TierStatusScreen; this row just
-    /// surfaces the current tier + a chevron.
-    /// Account-wide certificate-validity entry. The renewal window applies to
-    /// every server your devices manage; only admin devices actually mint.
-    private func certificatesSection(c: FSColors) -> some View {
-        section("CERTIFICATES", c: c) {
-            Button(action: onOpenCertValidity) {
-                FSCard {
-                    HStack(alignment: .top, spacing: FS.space.s3) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundColor(c.primary)
-                            .imageScale(.large)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Certificate validity")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(c.text)
-                            Text("Renewal window for servers your devices manage")
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settings-open-cert-validity")
         }
     }
 

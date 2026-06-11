@@ -54,8 +54,6 @@ public enum SettingsRoute: Hashable, Sendable {
     /// the Settings "Subscription" nav row.
     case tierStatus
     case recovery
-    /// Account-wide certificate-validity window (7/30/90 days).
-    case certValidity
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.

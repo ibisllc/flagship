@@ -34,11 +34,6 @@ public struct InstallBlob: Equatable, Sendable {
     /// Optional + conditionally appended to canonicalBytes for backward
     /// compatibility — nil ⇒ legacy bytes (consumers treat absence as "auto").
     public var bootUnlockMode: String?
-    /// Per-server cert-autonomy policy (per-user-cert design). "managed"
-    /// (default) ⇒ an admin device renews the cert; "autonomous" ⇒ the box
-    /// holds a sealed account key and renews itself indefinitely. Optional +
-    /// conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
-    public var certAutonomy: CertAutonomy?
     /// Disk-encryption policy chosen at server creation: "luks" (the default —
     /// LUKS-encrypt the data disk) or "none" (plaintext, for boxes that can't
     /// keep network at boot, e.g. Wi-Fi-only). Optional + conditionally
@@ -59,7 +54,6 @@ public struct InstallBlob: Equatable, Sendable {
         installerGitRef: String = "main",
         rckPubKey: Data,
         bootUnlockMode: String? = nil,
-        certAutonomy: CertAutonomy? = nil,
         diskEncryption: String? = nil
     ) {
         self.version = version
@@ -73,18 +67,7 @@ public struct InstallBlob: Equatable, Sendable {
         self.installerGitRef = installerGitRef
         self.rckPubKey = rckPubKey
         self.bootUnlockMode = bootUnlockMode
-        self.certAutonomy = certAutonomy
         self.diskEncryption = diskEncryption
-    }
-
-    /// Mirrors the TS InstallBlob.certAutonomy shape.
-    public struct CertAutonomy: Equatable, Sendable {
-        public var mode: String              // "managed" | "autonomous"
-        public var offlineWindowDays: Int?   // managed-mode target; nil ⇒ 0 on the wire
-        public init(mode: String, offlineWindowDays: Int? = nil) {
-            self.mode = mode
-            self.offlineWindowDays = offlineWindowDays
-        }
     }
 
     /// Canonical bytes — pipe-separated, tag prefix kept at v1 for the
@@ -109,14 +92,9 @@ public struct InstallBlob: Equatable, Sendable {
         // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
         // last so the signer commits to it. MUST match TS canonicalInstallBlob.
         if let mode = bootUnlockMode { parts.append(mode) }
-        // certAutonomy appended after bootUnlockMode with a `ca=` prefix that
-        // can't collide with a bootUnlockMode value. MUST match TS exactly.
-        if let ca = certAutonomy {
-            parts.append("ca=\(ca.mode):\(ca.offlineWindowDays ?? 0)")
-        }
-        // diskEncryption appended LAST, after certAutonomy, with a `de=` prefix
-        // that can't collide with a bootUnlockMode ("auto"/"approve") or `ca=`
-        // token. Absent ⇒ omitted (legacy bytes verify unchanged). The signer
+        // diskEncryption appended LAST, after bootUnlockMode, with a `de=` prefix
+        // that can't collide with a bootUnlockMode ("auto"/"approve") token.
+        // Absent ⇒ omitted (legacy bytes verify unchanged). The signer
         // commits to it, so a relay can neither strip it (sig fails) nor flip
         // "luks"→"none" to downgrade an encrypted box to plaintext. MUST match
         // the TS canonicalInstallBlob `de=${mode}` append byte-for-byte.

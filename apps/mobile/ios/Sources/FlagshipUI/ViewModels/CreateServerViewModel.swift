@@ -79,16 +79,6 @@ public final class CreateServerViewModel {
     /// carried on the wire — "auto" is the absent/legacy default (mirrors the
     /// webapp's create-server.js and keeps the recipe bytes identical).
     public var bootUnlockMode: BootUnlockStore.Mode = .auto
-    /// Whether THIS server may renew its own TLS certificate. Off (default) =
-    /// "managed": the box holds no minting key; an admin device (phone or
-    /// trusted server) re-mints before the account-wide validity window lapses.
-    /// On = "autonomous": the box holds a sealed, revocable minting key and
-    /// renews itself forever — only for a physically-secure, always-on machine.
-    /// The renewal *interval* is the account-wide `CertValidityStore` value,
-    /// stamped into the managed blob at mint time; it doesn't apply to
-    /// autonomous boxes. Carried in the SIGNED InstallBlob (trailer.ts
-    /// reconstructs `certAutonomy` so the daemon's canonical bytes match).
-    public var certCanMint: Bool = false
     /// Whether this server LUKS-encrypts its data disk. On (default) = "luks":
     /// the box encrypts and unlocks at boot via the cloud-held key. Off =
     /// "none": the disk is plaintext — less safe, but for boxes that can't keep
@@ -98,9 +88,6 @@ public final class CreateServerViewModel {
     /// default + a pre-diskEncryption verifier still accepts it (absence ⇒
     /// "luks"), mirroring how bootUnlockMode "auto" stays off the wire.
     public var encryptDisk: Bool = true
-    /// Account-wide cert validity window (days), read at mint time so the
-    /// managed blob's `offlineWindowDays` matches the user's Settings choice.
-    private let certValidity: CertValidityStore
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -126,15 +113,13 @@ public final class CreateServerViewModel {
         server: any FlagshipServerClient,
         relay: any QrRelayClient,
         bootUnlock: BootUnlockStore = BootUnlockStore(),
-        draftStore: CreateServerDraftStore = CreateServerDraftStore(),
-        certValidity: CertValidityStore = CertValidityStore()
+        draftStore: CreateServerDraftStore = CreateServerDraftStore()
     ) {
         self.username = username
         self.server = server
         self.relay = relay
         self.bootUnlock = bootUnlock
         self.draftStore = draftStore
-        self.certValidity = certValidity
         // Restore the user's last-typed draft so flipping away from the
         // screen mid-fill doesn't wipe their inputs. Hydrate AFTER the
         // stored properties are assigned so the didSet observers don't
@@ -323,13 +308,6 @@ public final class CreateServerViewModel {
             // recipe bytes match the webapp + a pre-bootUnlockMode verifier
             // still accepts it. The box treats absence as "auto".
             bootUnlockMode: bootUnlockMode == .approve ? "approve" : nil,
-            // certAutonomy ALWAYS rides the wire (signature-safe — trailer.ts
-            // reconstructs it). Autonomous ⇒ the box self-mints (no window);
-            // managed ⇒ the account-wide validity window is stamped in so an
-            // admin device knows the renewal deadline.
-            certAutonomy: certCanMint
-                ? InstallBlob.CertAutonomy(mode: "autonomous")
-                : InstallBlob.CertAutonomy(mode: "managed", offlineWindowDays: certValidity.days),
             // Only "none" rides the wire; "luks" (the encrypted default) stays
             // absent so the recipe bytes match a pre-diskEncryption verifier.
             // The box treats absence as "luks".
@@ -363,24 +341,11 @@ public struct SignedInstallBlob: Sendable {
         /// "auto" default, mirroring the webapp's onWireBlob. The box reads
         /// `blob.bootUnlockMode` from this JSON; absent ⇒ "auto".
         public let bootUnlockMode: String?
-        /// Per-server cert-autonomy policy. JSON key MUST be `certAutonomy` with
-        /// `mode` + `offlineWindowDays`, matching trailer.ts `InstallBlobJson`
-        /// so the daemon reconstructs identical canonical bytes. Optional only
-        /// for legacy/absent recipes — the phone always emits it.
-        public let certAutonomy: OnWireCertAutonomy?
         /// Disk-encryption policy. Only present for "none" servers — nil
         /// (omitted from JSON) for the "luks" encrypted default, mirroring the
         /// burner's RecipeDTO + trailer.ts. The box reads `blob.diskEncryption`
         /// from this JSON; absent ⇒ "luks".
         public let diskEncryption: String?
-    }
-    /// Mirrors trailer.ts `InstallBlobJson.certAutonomy`
-    /// (`{ mode, offlineWindowDays? }`). `offlineWindowDays` is omitted from the
-    /// JSON when nil (autonomous mode) so the round-trip matches the optional TS
-    /// field rather than emitting an explicit `null`.
-    public struct OnWireCertAutonomy: Codable, Sendable {
-        public let mode: String
-        public let offlineWindowDays: Int?
     }
     public struct OnWireAuthCode: Codable, Sendable {
         public let version: Int
@@ -418,9 +383,6 @@ public struct SignedInstallBlob: Sendable {
                 installerGitRef: blob.installerGitRef,
                 rckPubKey: HexUtil.encode(blob.rckPubKey),
                 bootUnlockMode: blob.bootUnlockMode,
-                certAutonomy: blob.certAutonomy.map {
-                    OnWireCertAutonomy(mode: $0.mode, offlineWindowDays: $0.offlineWindowDays)
-                },
                 diskEncryption: blob.diskEncryption
             ),
             blobSignature: signatureHex

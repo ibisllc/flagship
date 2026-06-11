@@ -15,9 +15,9 @@ public struct CreateServerStubScreen: View {
     @Bindable var vm: CreateServerViewModel
     /// Which sub-step of the design phase is showing. The long single-scroll
     /// form is split into one decision per page: 0 identity, 1 boot unlock,
-    /// 2 certificate, 3 backups.
+    /// 2 backups.
     @State private var designStep = 0
-    private let designStepCount = 4
+    private let designStepCount = 3
     /// Live install ladder on the delivered page, polling the per-order
     /// status with the just-minted serial — the page used to show a
     /// hardcoded "Status: pending" that never moved.
@@ -101,8 +101,6 @@ public struct CreateServerStubScreen: View {
                         bootUnlockPicker(c: c)
                         Divider().background(c.border)
                         diskEncryptionToggle(c: c)
-                    case 2:
-                        certAutonomyPicker(c: c)
                     default:
                         backupPolicyPicker(c: c)
                     }
@@ -118,7 +116,6 @@ public struct CreateServerStubScreen: View {
         switch step {
         case 0:  return ("Name your server", "A short name + one-line description. You'll see this everywhere the FQDN used to live.")
         case 1:  return ("Boot unlock", "How this box comes back online after a reboot.")
-        case 2:  return ("Certificate", "Who renews this server's TLS certificate.")
         default: return ("Backups", "How this server's data is protected.")
         }
     }
@@ -274,63 +271,6 @@ public struct CreateServerStubScreen: View {
                 .font(.caption)
                 .foregroundColor(c.textMuted)
         }
-    }
-
-    // MARK: - Cert-autonomy picker
-    //
-    // A binary: does THIS box mint its own TLS certificate ("autonomous" — it
-    // holds a sealed, revocable key) or does an admin device mint it for the
-    // box ("managed", the default)? Carried in the SIGNED InstallBlob. The
-    // renewal *interval* for managed boxes is the account-wide setting in
-    // Settings, stamped in at mint time — it isn't asked here.
-    private func certAutonomyPicker(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Who renews the certificate")
-                .font(.subheadline)
-                .foregroundStyle(c.text)
-            certAutonomyOption(
-                canMint: false,
-                title: "My devices renew it",
-                subtitle: "The default. This box holds no key — your phone or a trusted server mints its certificate. If every admin device stays offline past your certificate-validity window (set in Settings), the certificate lapses and the box stops serving.",
-                c: c
-            )
-            certAutonomyOption(
-                canMint: true,
-                title: "This server renews its own",
-                subtitle: "Give this box a sealed, revocable minting key so it renews its own certificate indefinitely. Only for a physically-secure, always-on machine.",
-                c: c
-            )
-        }
-    }
-
-    private func certAutonomyOption(
-        canMint: Bool,
-        title: String,
-        subtitle: String,
-        c: FSColors
-    ) -> some View {
-        let selected = vm.certCanMint == canMint
-        return Button {
-            vm.certCanMint = canMint
-        } label: {
-            HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(selected ? c.primary : c.textMuted)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.subheadline.weight(.medium)).foregroundColor(c.text)
-                    Text(subtitle).font(.caption).foregroundColor(c.textMuted)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(FS.space.s3)
-            .background(
-                RoundedRectangle(cornerRadius: FS.radius.md)
-                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("cs-cert-autonomy-\(canMint ? "autonomous" : "managed")")
     }
 
     // MARK: - Backup policy picker (draft-only metadata)
