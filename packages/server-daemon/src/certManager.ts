@@ -31,7 +31,7 @@ export class CertManager implements AlpnChallengeServer {
   private notAfterMs = 0;
   /**
    * Per-SNI certs for custom (external) domains (#79B / C4.1c). Kept
-   * separate from `real` (the user's flagship.services wildcard): a
+   * separate from `real` (the box's flagship.services wildcard): a
    * custom FQDN is not covered by that wildcard, so it needs its own
    * cert keyed by exact SNI. Populated either by the lead pod's ACME
    * run or by a sibling-sync replicated bundle — never peerBackup.

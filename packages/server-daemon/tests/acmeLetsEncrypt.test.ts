@@ -300,8 +300,8 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
   // ---- Regression: DNS-01-first selection + the two-pass walk ----
   //
   // Build a fake client that offers tls-alpn-01 + dns-01 for non-wildcard
-  // names and dns-01 only for wildcards, with the SAN order prod uses:
-  //   [user-zone (alpn|dns), *.user-zone (dns), *.server (dns)]
+  // names and dns-01 only for wildcards, with the SAN order prod uses
+  // (model A′): [<server>.<user> (alpn|dns), *.<server>.<user> (dns)].
   // With a DNS writer configured the issuer now routes EVERY name through
   // dns-01, so the non-wildcard apex no longer depends on TLS-ALPN-01
   // (which fails over the Fly SNI-passthrough on the demo path). The fake
@@ -403,8 +403,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
   }
 
   const PROD_SANS = [
-    "demoent1.flagship.services",
-    "*.demoent1.flagship.services",
+    "home.demoent1.flagship.services",
     "*.home.demoent1.flagship.services",
   ];
 
@@ -417,15 +416,15 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
     await expect(issuer.issue(PROD_SANS)).resolves.toMatchObject({
       certPem: expect.stringMatching(/BEGIN CERTIFICATE/),
     });
-    // TLS-ALPN-01 is never completed; all three names use DNS-01.
+    // TLS-ALPN-01 is never completed; both names use DNS-01.
     expect(calls).not.toContain("completeChallenge:tls-alpn-01");
-    expect(calls.filter((c) => c === "completeChallenge:dns-01")).toHaveLength(3);
-    // Every name (apex + both wildcards) published a DNS-01 TXT. The apex
-    // and *.demoent1 share the same record name with distinct values.
+    expect(calls.filter((c) => c === "completeChallenge:dns-01")).toHaveLength(2);
+    // The TXT name derives as `_acme-challenge.<server>.<user>` for BOTH
+    // the box apex and its wildcard (the `*.` is stripped) — the per-box
+    // SAN set shares one record name with distinct values.
     const hosts = publishedTxt.map((p) => p.host).sort();
     expect(hosts).toEqual([
-      "_acme-challenge.demoent1.flagship.services",
-      "_acme-challenge.demoent1.flagship.services",
+      "_acme-challenge.home.demoent1.flagship.services",
       "_acme-challenge.home.demoent1.flagship.services",
     ]);
   });
@@ -524,11 +523,12 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
   });
 
   it("publishes BOTH TXT values at the same _acme-challenge name (apex + its wildcard) and cleans up both", async () => {
-    // The exact prod shape that broke demoent3: the user-zone apex
-    // `<user>.flagship.services` (non-wildcard) and its wildcard
-    // `*.<user>.flagship.services` both resolve their DNS-01 challenge to
-    // the SAME record name `_acme-challenge.<user>.flagship.services` but
-    // with DIFFERENT keyAuthorization values. Both authorizations must
+    // The prod shape (model A′): the box apex
+    // `<server>.<user>.flagship.services` (non-wildcard) and its wildcard
+    // `*.<server>.<user>.flagship.services` both resolve their DNS-01
+    // challenge to the SAME record name
+    // `_acme-challenge.<server>.<user>.flagship.services` but with
+    // DIFFERENT keyAuthorization values. Both authorizations must
     // publish their own TXT (CF appends — POST create, not upsert) and
     // both must be cleaned up afterwards.
     const calls: string[] = [];
@@ -583,10 +583,10 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       clientFactory: () => client,
       dns01PropagationDelayMs: 0,
     });
-    await issuer.issue(["demoent3.flagship.services", "*.demoent3.flagship.services"]);
+    await issuer.issue(["home.demoent3.flagship.services", "*.home.demoent3.flagship.services"]);
 
     // Both authorizations resolve to the SAME record name...
-    const sameName = "_acme-challenge.demoent3.flagship.services";
+    const sameName = "_acme-challenge.home.demoent3.flagship.services";
     const atName = publishedTxt.filter((p) => p.host === sameName);
     expect(atName).toHaveLength(2);
     // ...with DISTINCT values (apex keyAuth ≠ wildcard keyAuth).
@@ -652,7 +652,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       },
     });
     await issuer.issue(PROD_SANS);
-    // Two wildcard DNS-01 challenges, but exactly ONE shared wait.
+    // Two DNS-01 challenges (apex + wildcard), but exactly ONE shared wait.
     expect(waited).toBe(1);
     expect(seq.indexOf("dns01-propagation-wait")).toBeGreaterThan(
       seq.lastIndexOf("dns01-publish-ok"),

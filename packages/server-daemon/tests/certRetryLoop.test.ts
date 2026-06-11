@@ -3,8 +3,7 @@ import { startCertRetryLoop } from "../src/runtime.js";
 import { CertManager } from "../src/certManager.js";
 
 const SANS = [
-  "demoent1.flagship.services",
-  "*.demoent1.flagship.services",
+  "home.demoent1.flagship.services",
   "*.home.demoent1.flagship.services",
 ];
 const DAY = 24 * 60 * 60_000;

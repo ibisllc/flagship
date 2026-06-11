@@ -349,12 +349,11 @@ export interface DaemonRuntime {
    * the correct reason when a box is stolen and its cert private key is
    * exposed. Throws if no live cert is installed.
    *
-   * ORDERING for the multi-box case: a stolen box may have served a SHARED
-   * cert (`*.<user>`); revoking it kills TLS for every surviving box too.
-   * The cross-box flow must RE-MINT a fresh cert for the survivors and let
-   * them cut over BEFORE calling this on the old cert. This is the
-   * single-daemon capability; the orchestration above it (re-mint survivors
-   * → confirm cutover → revoke) needs a live 2-box exercise.
+   * BLAST RADIUS (cert model A′): the box's own cert is per-box
+   * (`[<server>.<user>, *.<server>.<user>]`, box-local key), so revoking it
+   * affects only this box. The re-mint-survivors-before-revoke ordering
+   * applies only to a SHARED tier-2 service cert (`<service>.<user>`), whose
+   * key lives on every box serving that service.
    */
   revokeCurrentCert(reason?: number): Promise<void>;
 }
@@ -463,14 +462,15 @@ function defaultHelloPage(): string {
  */
 export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<DaemonRuntime> {
   const wantWildcard = opts.wildcard ?? true;
-  // SAN list — PER-USER cert (per-user-cert design §2, task #23). ONE cert per
-  // user, SANs `[<user>, *.<user>]`. The user-zone wildcard `*.<user>` covers
-  // every one-label-deep public name: the box apex `<server>.<user>`, app
-  // labels `<label>.<user>`, device labels, and `--`-pinned `<label>--<server>.<user>`.
-  // The deprecated two-label-deep `*.<server>.<user>` SAN is DROPPED (apps are
-  // now `<label>.<user>`, not `<app>.<server>.<user>`). The apex is included so
-  // the bare `<user>` name is covered too.
-  const sans = userCertSans(opts.serverFqdn, wantWildcard);
+  // SAN list — PER-BOX wildcard cert (cert model A′). Each box mints
+  // `[<server>.<user>, *.<server>.<user>]` with its own box-local key:
+  // distinct names per box (no LE duplicate-cert collisions) and the
+  // box-scoped wildcard covers every `<label>.<server>.<user>` service/
+  // device name natively, so the canonical hierarchical
+  // `<service>.<server>.<user>` is the served form (the `--` name-pin
+  // hack is retired). The per-user wildcard `*.<user>` is GONE; tier-2
+  // `<service>.<user>` names ride a separate shared per-service cert.
+  const sans = boxCertSans(opts.serverFqdn, wantWildcard);
   const certManager = new CertManager();
   // The default handler needs to refer to ServicePlatform, but ServicePlatform
   // is constructed below (after the cert + tunnel). The ref-cell lets
@@ -533,17 +533,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     }
     // SNI doesn't match an installed app. If the SNI is the pod's
     // canonical address, fall through to the daemon's own HTTP
-    // surface. Otherwise the SNI is an unclaimed FQDN under our
-    // user-zone wildcard cert (per N0c) — serve the disambiguation
-    // fallback page (N0f) UNLESS the request is a sibling-handshake
-    // upgrade (N0e-2): peers reach us via the FQDN they're trying to
-    // talk to, so the WS path needs to work on every SNI we serve.
+    // surface. Otherwise the SNI is an unclaimed name under the box's
+    // own wildcard `*.<serverFqdn>` (cert model A′) — serve the
+    // disambiguation fallback page (N0f) UNLESS the request is a
+    // sibling-handshake upgrade (N0e-2): peers reach us via the FQDN
+    // they're trying to talk to, so the WS path needs to work on every
+    // SNI we serve.
     handleHttpConnection(socket, async (req) => {
       // Default fallback when not handled by upgrade or extras.
-      const userZone = userZoneOf(opts.serverFqdn);
-      const isOwnHost = sni === opts.serverFqdn || sni === `*.${opts.serverFqdn}`;
-      const inUserZone = userZone && (sni === userZone || sni.endsWith(`.${userZone}`));
-      if (!isOwnHost && inUserZone) return disambiguationResponse(sni);
+      const ownFqdn = opts.serverFqdn.toLowerCase();
+      const isOwnHost = sni === ownFqdn;
+      const inBoxZone = sni.endsWith(`.${ownFqdn}`);
+      if (!isOwnHost && inBoxZone) return disambiguationResponse(sni);
       return handleHttp(req);
     }, {
       onUpgrade: (args) => {
@@ -601,12 +602,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
-  // PER-USER addressing (task #23): the box claims its apex `<server>.<user>`
-  // PLUS the user-zone wildcard `*.<user>` — that's the leftmost-label space
-  // where app labels (`<label>.<user>`), device labels, and `--`-pins all
-  // live. The hub arbitrates which box serves each label via RCK / last-HELLO
-  // (single box ⇒ it serves all of `*.<user>`). The old per-server wildcard
-  // `*.<server>.<user>` is dropped (no two-label-deep public names anymore).
+  // PER-BOX addressing (cert model A′): the box claims its apex
+  // `<server>.<user>` PLUS its own wildcard `*.<server>.<user>` — the
+  // space where `<service>.<server>.<user>` and device names live. The
+  // claim is box-scoped, so there's nothing for the hub to arbitrate
+  // between sibling boxes; tier-2 `<service>.<user>` leader routing is a
+  // separate claim.
   const tunnelInitialDomains = tunnelDomainsFor(opts.serverFqdn, wantWildcard);
   // In-pod live-siblings router. Receives the hub's domain-granted
   // broadcast (and, once N0e-2 lands the WS layer, inbound
@@ -1411,9 +1412,9 @@ function listLiveSiblings(
 }
 
 /**
- * Disambiguation HTTP response served when the SNI is under our
- * user-zone wildcard cert but no app has claimed it. The .services
- * fallback per N0f. Exported for test reachability.
+ * Disambiguation HTTP response served when the SNI is under the box's
+ * own wildcard cert (`*.<server>.<user>`) but no app has claimed it.
+ * The .services fallback per N0f. Exported for test reachability.
  */
 export function disambiguationResponse(sni: string): HttpResponse {
   const safe = sni.replace(/[<>"&]/g, (c) =>
@@ -1452,9 +1453,8 @@ export function disambiguationResponse(sni: string): HttpResponse {
 /**
  * For a serverFqdn `<server>.<user>.flagship.services`, return the user
  * zone `<user>.flagship.services`. Returns null if the shape doesn't
- * match (degenerate; the runtime then falls back to the per-pod wildcard
- * SAN set without the user-zone leg). Exported so test code can invoke
- * the same parser the cert/SAN logic uses.
+ * match. No longer on the cert/claim path (model A′ is box-scoped) —
+ * kept as the canonical parser for user-zone (tier-2) name handling.
  */
 export function userZoneOf(serverFqdn: string): string | null {
   const lower = serverFqdn.toLowerCase();
@@ -1468,31 +1468,24 @@ export function userZoneOf(serverFqdn: string): string | null {
 }
 
 /**
- * PER-USER cert SANs (task #23). ONE cert per user covers the user zone:
- * `[<user>, *.<user>]`. The box apex `<server>.<user>`, every app label
- * `<label>.<user>`, and device labels are all one label deep, so the
- * wildcard covers them. The deprecated two-label-deep `*.<server>.<user>`
- * SAN is gone. Falls back to the per-pod wildcard for degenerate FQDNs that
- * don't parse as `<server>.<user>.flagship.services`. `wantWildcard=false`
- * (e.g. ACME unavailable) yields just the apex. Mirrors `userWildcardSans`
- * / `expectedCertSans` byte-for-byte so minter and CT-monitor agree.
+ * PER-BOX cert SANs (cert model A′): `[<server>.<user>, *.<server>.<user>]`.
+ * The key is box-local and the names are distinct per box, so issuance never
+ * hits LE's duplicate-cert limit; the box-scoped wildcard covers every
+ * `<label>.<server>.<user>` service/device name. `wantWildcard=false`
+ * (e.g. ACME unavailable) yields just the apex.
  */
-export function userCertSans(serverFqdn: string, wantWildcard: boolean): string[] {
-  if (!wantWildcard) return [serverFqdn];
-  const userZone = userZoneOf(serverFqdn);
-  return userZone ? [userZone, `*.${userZone}`] : [serverFqdn, `*.${serverFqdn}`];
+export function boxCertSans(serverFqdn: string, wantWildcard: boolean): string[] {
+  return wantWildcard ? [serverFqdn, `*.${serverFqdn}`] : [serverFqdn];
 }
 
 /**
- * PER-USER tunnel claim (task #23). The box claims its own apex
- * `<server>.<user>` PLUS the user-zone wildcard `*.<user>` — the leftmost
- * label space where app/device labels and `--`-pins live. The hub arbitrates
- * which box serves each label (single box ⇒ it serves all of `*.<user>`).
+ * PER-BOX tunnel claim (cert model A′). The box claims its own apex
+ * `<server>.<user>` PLUS its own wildcard `*.<server>.<user>` — exactly the
+ * name space its cert covers. Tier-2 `<service>.<user>` leader routing is a
+ * separate claim.
  */
 export function tunnelDomainsFor(serverFqdn: string, wantWildcard: boolean): string[] {
-  if (!wantWildcard) return [serverFqdn];
-  const userZone = userZoneOf(serverFqdn);
-  return userZone ? [serverFqdn, `*.${userZone}`] : [serverFqdn, `*.${serverFqdn}`];
+  return wantWildcard ? [serverFqdn, `*.${serverFqdn}`] : [serverFqdn];
 }
 
 function leftmostLabel(sni: string, serverFqdn: string): string | null {

@@ -1,8 +1,8 @@
 /**
- * Mint-reservation client (per-user-cert design, box half).
+ * Mint-reservation client (cert design, box half).
  *
  * A minter (an admin-scope device, or an "autonomous" box that holds a renewal
- * delegation) that sees the per-user cert nearing expiry signs a
+ * delegation) that sees the box's cert nearing expiry signs a
  * `MintReservationClaim` with its OWN minting key and acquires a CAS lease at
  * `.com` BEFORE running the ACME order. Other minters back off while a live
  * reservation exists; if the holder dies, the lease TTL lapses (δ ≈ one ACME
@@ -14,7 +14,8 @@
  * deterministic local decision (`shouldMintNow`) so cert RENEWAL never
  * hard-depends on `.com`. A network partition can therefore never strand the
  * cert — the deterministic lead mints anyway, accepting an occasional duplicate
- * (bounded by LE's 5-duplicate/7-day limit; the SAN set is per-user).
+ * (bounded by LE's 5-duplicate/7-day limit; under model A′ the SAN set is
+ * per-box, so duplicates only arise from re-mints of the SAME box's cert).
  *
  * Wire contract (mirrors `@flagship/control-plane` `mintReservations.ts`):
  *   POST <baseUrl>/api/users/<username>/mint-reservation          → acquire

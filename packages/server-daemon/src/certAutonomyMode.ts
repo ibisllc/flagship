@@ -10,7 +10,7 @@
  *     authority; an admin device renews. `offlineWindowDays` is the target
  *     before an admin must surface, and it drives the cert profile: a window of
  *     ≤6 days asks for LE's short-lived (~6-day) profile (tightest blast-radius
- *     bound for the shared `*.<user>` key), otherwise a standard ≤90-day cert.
+ *     bound for the box's cert key), otherwise a standard ≤90-day cert.
  *   - "autonomous": the box holds a sealed, revocable ACME account key and
  *     renews itself. `offlineWindowDays` is not meaningful here.
  *

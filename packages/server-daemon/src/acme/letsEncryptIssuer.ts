@@ -180,7 +180,7 @@ export class LetsEncryptIssuer implements AcmeIssuer {
       // DNS-01 TXT, presents every TLS-ALPN-01 cert) BEFORE asking LE to
       // validate any of them. This is the critical ordering fix: the old
       // single-pass loop did setup→complete→wait per authz, so when the
-      // FIRST authz (the apex/user-zone name, validated via TLS-ALPN-01)
+      // FIRST authz (the apex name, validated via TLS-ALPN-01)
       // failed validation, the loop threw and the order aborted BEFORE
       // the later wildcard authorizations ever published their DNS-01
       // TXT records. The TXT therefore never landed. Publishing all
@@ -199,8 +199,8 @@ export class LetsEncryptIssuer implements AcmeIssuer {
         // Prefer DNS-01 for EVERY name (wildcard and non-wildcard alike)
         // whenever a DNS writer is configured — which it always is on the
         // production demo path via the control-plane bridge. The
-        // non-wildcard SANs (the user-zone apex `<user>.flagship.services`
-        // and the server FQDN) used to take TLS-ALPN-01, which requires
+        // non-wildcard SAN (the box apex `<server>.<user>.flagship.services`)
+        // used to take TLS-ALPN-01, which requires
         // Let's Encrypt to reach the daemon over the Fly SNI-passthrough
         // chain. That leg fails on the demo path ("Error getting
         // validation data"), so the whole order never validated. DNS-01
@@ -280,16 +280,15 @@ export class LetsEncryptIssuer implements AcmeIssuer {
    * (keyCompromise), the correct reason for a STOLEN server whose cert
    * private key is now exposed.
    *
-   * THEFT-RESPONSE ORDERING (important): a stolen box may have shared its
-   * Let's Encrypt-issued leaf cert with sibling boxes (one shared cert
-   * across `*.<user>`). Revoking that cert kills TLS for EVERY box that
-   * served under it, not just the stolen one. So the multi-box theft flow
-   * MUST re-mint a fresh cert for the SURVIVING boxes FIRST, let them cut
-   * over, and only THEN revoke the old shared cert. Revoke-before-re-mint
-   * would black-hole the survivors until their next renewal. This method is
-   * the single-daemon capability; the cross-box orchestration (re-mint
-   * survivors → confirm cutover → revoke) lives above it and needs a live
-   * 2-box exercise to validate.
+   * BLAST RADIUS (cert model A′): the box's own cert is per-box
+   * (`[<server>.<user>, *.<server>.<user>]`, box-local key), so revoking it
+   * affects only the stolen box. A stolen box may ALSO have held a shared
+   * tier-2 service cert (`<service>.<user>`); for that one the multi-box flow
+   * MUST re-mint for the SURVIVING boxes FIRST, let them cut over, and only
+   * THEN revoke — revoke-before-re-mint would black-hole the survivors until
+   * their next renewal. This method is the single-daemon capability; the
+   * cross-box orchestration lives above it and needs a live 2-box exercise
+   * to validate.
    */
   async revokeCertificate(certPem: string, reason = 1): Promise<void> {
     // Build/reuse the account-key-authorized client. Mirrors issue(): the
