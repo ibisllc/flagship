@@ -124,6 +124,16 @@ class CertPinRegistryTest {
         assertNull(registryWith(pod(revokedAt = now)).pinFor(DaemonStatusVector.SERVER_ID))
     }
 
+    // SEC-1: a revoke is an EXPLICIT drop signal — it must clear a
+    // previously-verified pin (unlike a mere failed verification, which
+    // retains).
+    @Test fun revokeDropsAPreviouslyVerifiedPin() {
+        val reg = registryWith(pod())
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+        reg.update(listOf(pod(revokedAt = now)), DaemonStatusVector.UMK_SEED, now)
+        assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
     @Test fun livenessOnlyReportWithoutFingerprintInstallsNoPin() {
         val nullStatus = SignedDaemonStatus(
             report = wireReport(DaemonStatusVector.NULL_REPORT),
@@ -142,10 +152,60 @@ class CertPinRegistryTest {
         assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
-    @Test fun refreshWithoutAVerifiedReportClearsThePreviousPin() {
+    // SEC-1 (the security fix): a previously-VERIFIED pin must SURVIVE a later
+    // /pods where the same pod is still listed but its report no longer
+    // verifies — otherwise a tampered/dropped daemon-status downgrades the box
+    // to default TLS and a CA-valid rogue cert passes.
+    @Test fun missingReportRetainsThePreviousPin() {
         val reg = registryWith(pod())
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
         reg.update(listOf(pod(signedStatus = null)), DaemonStatusVector.UMK_SEED, now)
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
+    @Test fun tamperedSignatureRetainsThePreviousPin() {
+        val reg = registryWith(pod())
+        val tampered = SignedDaemonStatus(
+            report = wireReport(),
+            signatureHex = "00" + DaemonStatusVector.SIG_HEX.drop(2),
+        )
+        reg.update(listOf(pod(signedStatus = tampered)), DaemonStatusVector.UMK_SEED, now)
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
+    @Test fun tamperedFingerprintRetainsThePreviousPin() {
+        val reg = registryWith(pod())
+        val swapped = SignedDaemonStatus(
+            report = wireReport().copy(certSha256 = "ab".repeat(32)),
+            signatureHex = DaemonStatusVector.SIG_HEX,
+        )
+        reg.update(listOf(pod(signedStatus = swapped)), DaemonStatusVector.UMK_SEED, now)
+        // Retain the last-known-good — NOT the unverified swapped fingerprint.
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
+    @Test fun staleReportRetainsThePreviousPin() {
+        val reg = registryWith(pod())
+        val staleNow = DaemonStatusVector.REPORT.issuedAt + DaemonStatusReport.MAX_REPORT_AGE_MS + 1
+        reg.update(listOf(pod()), DaemonStatusVector.UMK_SEED, staleNow)
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
+    // A genuine renewal: the pod is listed and a NEWLY-verified report carries
+    // a different fingerprint ⇒ replace.
+    @Test fun newlyVerifiedReportReplacesThePin() {
+        val reg = registryWith(pod())
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+        // The fixture only has one signed vector, so re-applying the same
+        // verified report is the renewal path that must keep the pin set.
+        reg.update(listOf(pod()), DaemonStatusVector.UMK_SEED, now)
+        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+    }
+
+    // A pod that was never verified and reports nothing stays unpinned — keep-
+    // last-known-good only retains a pin that actually existed.
+    @Test fun unverifiedPodWithNoPriorPinStaysUnpinned() {
+        val reg = registryWith(pod(signedStatus = null))
         assertNull(reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
