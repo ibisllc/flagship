@@ -56,6 +56,11 @@ function makeDirectory(): DirectoryClient {
       if (d.toLowerCase() === SERVER_B) return [];
       return null;
     },
+    async usernameForDomain(d) {
+      if (d.toLowerCase() === SERVER_A) return "alice";
+      if (d.toLowerCase() === SERVER_B) return "bob";
+      return null;
+    },
   };
 }
 

@@ -9,6 +9,7 @@
     { "path": "./packages/bootkey-builder" },
     { "path": "./packages/iso-personalizer" },
     { "path": "./packages/storage" },
+    { "path": "./packages/boot-core" },
     { "path": "./packages/control-plane" },
     { "path": "./packages/hello-daemon" },
     { "path": "./packages/flagship-burner" },

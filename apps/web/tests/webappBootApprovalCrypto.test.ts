@@ -4,9 +4,11 @@ import {
   openSealedFromEd25519Recipient,
   openSealedSecretResponse,
 } from "@flagship/protocol";
-// The boot worker's own request signer — the source of truth for the
-// Flagship-Boot-v1 canonical bytes the webapp must reproduce.
-import { signBootRequest } from "../../boot/src/gate.js";
+// The boot router's own request signer — the source of truth for the
+// Flagship-Boot-v1 canonical bytes the webapp must reproduce. Lives in
+// @flagship/boot-core (shared by apps/com's in-process boot host AND the
+// optional standalone apps/boot worker).
+import { signBootRequest } from "@flagship/boot-core";
 // The browser-shipping boot-approval module's crypto internals. Importing
 // the SAME file we serve to clients means the test guards the exact bytes
 // the webapp produces.

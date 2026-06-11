@@ -53,6 +53,11 @@ function makeDirectory(): DirectoryClient {
       if (d.toLowerCase() === SERVER_B) return []; // server exists, no delegates
       return null; // unknown server
     },
+    async usernameForDomain(d) {
+      if (d.toLowerCase() === SERVER_A) return "alice";
+      if (d.toLowerCase() === SERVER_B) return "bob";
+      return null;
+    },
   };
 }
 

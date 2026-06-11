@@ -19,6 +19,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@flagship/boot-core": "*",
     "@flagship/server-daemon": "*",
     "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.13"

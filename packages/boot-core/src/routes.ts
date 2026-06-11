@@ -365,19 +365,19 @@ async function handlePostRequest(
     deviceInfoJson = JSON.stringify(b.deviceInfo);
   }
 
-  // Derive the owning username from the directory (so the phone-side
-  // mailbox listing is scoped to the account). usernameFromServerDomain
-  // already ran inside the directory binding; we re-resolve here cheaply
-  // via the directory abstraction's username helper through ownerIrk —
-  // but the row only needs the username for the phone listing, which the
-  // identity-plane notify pipe drives. We store the SecretRequest verbatim.
+  // Scope the parked row to the OWNING account so the phone's per-account
+  // `/api/secret-requests` listing surfaces it. In the CONSOLIDATED (apps/com)
+  // deployment this row IS the row the phone reads, so the real username is
+  // load-bearing. The standalone worker also benefits (its row is then
+  // self-describing), and the directory is the authority for the mapping.
+  // Falls back to the serverDomain only if the directory can't resolve a
+  // username (it just resolved the box STK in the gate, so this is rare).
   const nonceHex = r.nonce.toLowerCase();
+  const owningUsername =
+    (await deps.directory.usernameForDomain(r.serverDomain)) ?? usernameOrDomain(r.serverDomain);
   const put = await deps.secretMailbox.putRequest({
     serverDomain: r.serverDomain,
-    // The mailbox row's username is informational here (the notify pipe
-    // resolves the real account on the identity plane). We park the
-    // serverDomain as the routing key; the box re-derives the nonce.
-    username: usernameOrDomain(r.serverDomain),
+    username: owningUsername,
     requestNonceHex: nonceHex,
     stkPubHex: r.stkPub.toLowerCase(),
     purpose: r.purpose as SecretMailboxPurpose,

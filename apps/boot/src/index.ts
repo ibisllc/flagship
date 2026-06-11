@@ -16,11 +16,18 @@
  */
 
 import { D1BoxSealedLeaseStorage, D1SecretMailboxStorage, type D1Database } from "@flagship/storage";
-import { HttpDirectoryClient } from "./directory.js";
-import { HttpNotifyPipe, NoopNotifyPipe, type NotifyPipe } from "./notify.js";
-import { D1NonceStore, InMemoryNonceStore, type NonceStore } from "./nonceStore.js";
-import { routeBoot, type BootRouteDeps } from "./routes.js";
-import { AUTH_HEADER } from "./gate.js";
+import {
+  HttpDirectoryClient,
+  HttpNotifyPipe,
+  NoopNotifyPipe,
+  D1NonceStore,
+  InMemoryNonceStore,
+  routeBoot,
+  AUTH_HEADER,
+  type NotifyPipe,
+  type NonceStore,
+  type BootRouteDeps,
+} from "@flagship/boot-core";
 
 export interface BootEnv {
   /** D1 binding for the box-sealed leases + secret mailbox + nonce store. */

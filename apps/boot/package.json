@@ -10,6 +10,7 @@
     "test": "vitest run --dir test"
   },
   "dependencies": {
+    "@flagship/boot-core": "*",
     "@flagship/protocol": "*",
     "@flagship/storage": "*"
   },

@@ -49,6 +49,20 @@ export interface DirectoryClient {
   activeBootDelegatesForDomain(
     serverDomain: string,
   ): Promise<Array<{ pubKeyHex: string; expiresAt: number }> | null>;
+  /**
+   * The account username that owns `serverDomain`, used to scope the parked
+   * mailbox row so the phone's per-account `/api/secret-requests` listing
+   * surfaces it. Null when the domain doesn't resolve to a known account.
+   *
+   * Why this matters for the CONSOLIDATED (apps/com) deployment: there is
+   * now ONE mailbox. The boot router's parked row IS the row the phone
+   * reads, so it must carry the real username — not the serverDomain
+   * placeholder the standalone worker used (its phone-readable row was a
+   * SEPARATE one created by the identity plane's notify-owner handler).
+   * The standalone `HttpDirectoryClient` derives it from the FQDN; the
+   * in-process client resolves it from storage.
+   */
+  usernameForDomain(serverDomain: string): Promise<string | null>;
 }
 
 export interface HttpDirectoryClientOpts {
@@ -78,6 +92,19 @@ export function usernameFromServerDomain(serverDomain: string, apex: string): st
   return user;
 }
 
+/**
+ * Directory reads must never be served from a cached response — a stale
+ * STK/IRK binding would mis-authorize. `cache` is a Cloudflare/browser
+ * fetch directive that isn't in the base `RequestInit` type (no DOM lib),
+ * so it's attached via a cast; on the clone runtime (Cloudflare Workers /
+ * a real browser fetch) it takes effect, and on a fetch that ignores it
+ * the `accept` header is harmless.
+ */
+const NO_STORE_INIT = {
+  headers: { accept: "application/json" },
+  cache: "no-store",
+} as RequestInit;
+
 export class HttpDirectoryClient implements DirectoryClient {
   private readonly base: string;
   private readonly apex: string;
@@ -98,7 +125,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (!user) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/pods`,
-      { headers: { accept: "application/json" }, cache: "no-store" },
+      NO_STORE_INIT,
     );
     if (!res.ok) return null;
     let body: unknown;
@@ -137,7 +164,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (stk === null) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/pubkey-cert`,
-      { headers: { accept: "application/json" }, cache: "no-store" },
+      NO_STORE_INIT,
     );
     if (!res.ok) return null;
     let body: unknown;
@@ -169,7 +196,7 @@ export class HttpDirectoryClient implements DirectoryClient {
     if (stk === null) return null;
     const res = await this.fetchImpl(
       `${this.base}/api/users/${encodeURIComponent(user)}/watch-delegates`,
-      { headers: { accept: "application/json" }, cache: "no-store" },
+      NO_STORE_INIT,
     );
     if (!res.ok) return [];
     let body: unknown;
@@ -196,5 +223,9 @@ export class HttpDirectoryClient implements DirectoryClient {
       }
     }
     return out;
+  }
+
+  async usernameForDomain(serverDomain: string): Promise<string | null> {
+    return usernameFromServerDomain(serverDomain, this.apex);
   }
 }
