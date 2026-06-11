@@ -13,6 +13,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,7 +59,7 @@ class PeerBackupViewModel(
     }
 
     private fun failureMessage(t: Throwable): String = when (t) {
-        is ScreensError.Http -> t.message ?: "HTTP ${t.status}"
+        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
         else -> t.message ?: "couldn't load peer-backup status"
     }
 }

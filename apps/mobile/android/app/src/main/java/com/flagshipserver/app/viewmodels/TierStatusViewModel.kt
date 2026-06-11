@@ -12,6 +12,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.TierStatusResponse
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +37,7 @@ class TierStatusViewModel(
                 onSuccess = { _state.value = LoadingState.Loaded(it) },
                 onFailure = { t ->
                     val msg = when (t) {
-                        is ScreensError.Http -> t.message ?: "HTTP ${t.status}"
+                        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
                         else -> t.message ?: "couldn't load tier status"
                     }
                     _state.value = LoadingState.Failed(msg)

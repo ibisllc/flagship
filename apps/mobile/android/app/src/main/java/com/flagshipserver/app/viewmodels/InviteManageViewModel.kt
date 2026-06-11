@@ -10,6 +10,7 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.core.InviteLabel
 import com.flagshipserver.app.core.InviteLabelBook
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,7 +91,7 @@ class InviteManageViewModel(
     }
 
     private fun failureMessage(t: Throwable): String = when (t) {
-        is ScreensError.Http -> t.message ?: "HTTP ${t.status}"
+        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
         else -> t.message ?: "couldn't load invites"
     }
 }

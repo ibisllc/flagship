@@ -19,6 +19,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -130,7 +131,9 @@ class TierStatusViewModelTest {
         val s = vm.state.first()
         assertTrue("expected Failed, was $s", s is LoadingState.Failed)
         val msg = (s as LoadingState.Failed).message
-        // ScreensError.Http renders as "HTTP $status: $body".
-        assertTrue(msg, msg.contains("503") || msg.contains("transport down"))
+        // UX-B: ScreensError.Http no longer leaks the raw status / body — it's
+        // humanized to plain language.
+        assertFalse(msg, msg.contains("503") || msg.contains("transport down"))
+        assertTrue(msg, msg.contains("try again", ignoreCase = true))
     }
 }

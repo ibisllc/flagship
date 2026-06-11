@@ -112,7 +112,11 @@ interface ScreensClient {
 sealed class ScreensError(message: String) : Throwable(message) {
     object NotPaired : ScreensError("Not paired to a server yet.")
     object NoSessionToken : ScreensError("No session token; re-pair.")
-    data class Http(val status: Int, val body: String) : ScreensError("HTTP $status: $body")
+    data class Http(val status: Int, val body: String) :
+        ScreensError("HTTP $status: $body"),
+        com.flagshipserver.app.core.HasHttpStatus {
+        override val httpStatus: Int get() = status
+    }
     data class Decoding(val reason: String) : ScreensError("Could not parse response: $reason")
     data class NotImplemented(val feature: String) : ScreensError("Not implemented yet: $feature")
 }

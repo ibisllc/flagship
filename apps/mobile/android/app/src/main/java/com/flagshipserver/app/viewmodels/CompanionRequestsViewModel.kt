@@ -15,6 +15,7 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServerRevocationRequest
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.ReleaseServerName
 import com.flagshipserver.app.core.ServerRevocationClaim
 import com.flagshipserver.app.keystore.Keystore
@@ -193,7 +194,7 @@ class CompanionRequestsViewModel(
     }
 
     private fun failureMessage(t: Throwable): String = when (t) {
-        is ScreensError.Http -> t.message ?: "HTTP ${t.status}"
+        is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
         is CompanionRequestsError -> t.message ?: "Companion intent is malformed."
         else -> t.message ?: "couldn't complete the request"
     }

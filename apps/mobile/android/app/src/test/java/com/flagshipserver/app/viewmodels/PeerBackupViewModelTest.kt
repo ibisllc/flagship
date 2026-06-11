@@ -158,7 +158,9 @@ class PeerBackupViewModelTest {
         val s = vm.state.first()
         assertTrue("expected Failed, was $s", s is LoadingState.Failed)
         val msg = (s as LoadingState.Failed).message
-        assertTrue(msg, msg.contains("503") || msg.contains("transport down"))
+        // UX-B: the raw status / body is humanized away.
+        assertFalse(msg, msg.contains("503") || msg.contains("transport down"))
+        assertTrue(msg, msg.contains("try again", ignoreCase = true))
     }
 
     @Test fun toggle_transportError_landsInFailed() = runTest {

@@ -45,6 +45,7 @@ import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
@@ -530,7 +531,13 @@ class LoginViewModel(
             m.contains("no credential") || m.contains("no recovery") ||
                 m.contains("nomatchingcredential") ->
                 "We couldn't find a recovery passkey for this account."
-            else -> t.message ?: "Recovery cancelled or unavailable."
+            m.contains("cancel") -> "Recovery cancelled."
+            // UX-B: never surface a raw status code / transport message —
+            // fold network-class failures into plain language via the shared
+            // humanizer (offline / temporary server problem / cert mismatch).
+            NetworkErrorHumanizer.classify(t).kind != NetworkErrorHumanizer.Kind.UNKNOWN ->
+                NetworkErrorHumanizer.humanize(t)
+            else -> "Recovery couldn't be completed. Please try again."
         }
     }
 }

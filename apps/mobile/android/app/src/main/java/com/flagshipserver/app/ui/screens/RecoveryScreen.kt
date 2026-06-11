@@ -301,9 +301,12 @@ private fun SetupCard(
             Text("Set up passkey recovery", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(
-                "Choose a recovery passphrase, then confirm the passkey prompt. The passphrase hardens your backup so that even a leak of the cloud copy can't be cracked without it. You'll need BOTH the passphrase and your passkey to recover.",
+                "Pick a recovery passphrase and write it down somewhere safe — " +
+                    "treat it like a password. If you ever lose this phone, you'll " +
+                    "need this passphrase together with your phone's passkey to get " +
+                    "back in. We can't reset it for you, so don't lose it.",
                 color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
             FSField(
                 value = passphrase,

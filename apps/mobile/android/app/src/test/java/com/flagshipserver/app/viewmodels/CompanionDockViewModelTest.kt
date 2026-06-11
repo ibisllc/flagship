@@ -110,7 +110,9 @@ class CompanionDockViewModelTest {
         vm.mint("anything").join()
         val err = vm.mintError.first()
         assertNotNull(err)
-        assertTrue(err!!, err.contains("503") || err.contains("no can do"))
+        // UX-B: the raw status / body is humanized away.
+        assertFalse(err!!, err.contains("503") || err.contains("no can do"))
+        assertTrue(err, err.contains("try again", ignoreCase = true))
         assertNull(vm.mintedTicket.first())
     }
 
@@ -151,7 +153,8 @@ class CompanionDockViewModelTest {
         val s = vm.state.first()
         assertTrue("expected Failed, was $s", s is LoadingState.Failed)
         val msg = (s as LoadingState.Failed).message
-        assertTrue(msg, msg.contains("503") || msg.contains("list down"))
+        assertFalse(msg, msg.contains("503") || msg.contains("list down"))
+        assertTrue(msg, msg.contains("try again", ignoreCase = true))
     }
 
     @Test fun revoke_transportError_landsInFailed() = runTest {

@@ -35,6 +35,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.api.BrowserTab
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.BrowserTabsViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
@@ -48,6 +49,7 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
         },
     )
     val state by vm.state.collectAsState()
+    val certMismatch by vm.certMismatch.collectAsState()
 
     LaunchedEffect(serviceId) { vm.load() }
 
@@ -75,7 +77,12 @@ fun BrowserTabsScreen(nav: NavController, serviceId: String) {
             is LoadingState.Loaded -> TabsBody(s.value) { tab ->
                 nav.navigate("browser-viewer/$serviceId/${tab.tabId}")
             }
-            is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
+            is LoadingState.Failed ->
+                if (certMismatch) {
+                    CertMismatchWarningCard(s.message, onRetry = { vm.load() })
+                } else {
+                    ErrorCard(s.message, onRetry = { vm.load() })
+                }
             else -> ServerCardSkeleton()
         }
     }
@@ -118,6 +125,28 @@ private fun TabsBody(tabs: List<BrowserTab>, onPick: (BrowserTab) -> Unit) {
                     Text("▶", color = FS.colors.primary, style = TextStyle(fontSize = 18.sp))
                 }
             }
+        }
+    }
+}
+
+/** UX-A — the box served a cert that didn't match its STK-signed fingerprint.
+ *  Distinct from a plain network error: this is a security warning, not a
+ *  retry hint. */
+@Composable
+private fun CertMismatchWarningCard(message: String, onRetry: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Connection couldn't be verified",
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                message,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+            )
+            FSGhostButton(label = "Try again", onClick = onRetry)
         }
     }
 }

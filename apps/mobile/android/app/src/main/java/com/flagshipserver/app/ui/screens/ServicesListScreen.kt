@@ -192,7 +192,21 @@ private fun AppRow(app: AppSummary, onClick: () -> Unit) {
                     }
                     Spacer(Modifier.weight(1f))
                 }
+                // UX-E — one-liner distinguishing the two addresses: the short
+                // link is an easy-to-share redirect; the canonical one is the
+                // box's permanent, verifiable address.
+                Text(
+                    text = "Short link — easy to share, redirects here",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 10.sp),
+                )
                 if (!app.canonicalUrl.isNullOrEmpty()) {
+                    Spacer(Modifier.height(FS.space.s1))
+                    Text(
+                        text = "Permanent address — verifiable, never changes",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 10.sp),
+                    )
                     Text(
                         text = stripScheme(app.canonicalUrl),
                         color = FS.colors.textMuted,
