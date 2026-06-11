@@ -14,9 +14,12 @@ import FlagshipAPI
 ///   - the report's `serverDomain` matches the pod's domain,
 ///   - the report is fresh (`issuedAt` within `DaemonStatus.maxReportAgeMs`),
 ///   - the report carries a well-formed `certSha256` (64 hex).
-/// Any failure ⇒ NO pin for that box (default TLS validation stands) and the
-/// list rendering is never affected. With a pin, enforcement is HARD-FAIL
-/// (locked decision): see `BoxCertPinningDelegate` (FlagshipAPI).
+/// A first-time failure ⇒ NO pin for that box (default TLS validation stands)
+/// and the list rendering is never affected. Once a box HAS a pin, though, a
+/// later `/pods` that fails to re-verify it does NOT clear it — see
+/// `update(pods:)` for the keep-last-known-good reconcile (SEC-1). With a pin,
+/// enforcement is HARD-FAIL (locked decision): see `BoxCertPinningDelegate`
+/// (FlagshipAPI).
 ///
 /// A service host `x.<server>.<user>.flagship.services` pins to the box's
 /// fingerprint — the per-box wildcard `*.<server>.<user>` is the same cert.
@@ -76,22 +79,57 @@ public final class CertPinRegistry: @unchecked Sendable {
     // MARK: - /pods reconciliation
 
     /// Reconcile the registry against a fresh `/pods` response using the
-    /// CACHED STK pubs (no UMK access ⇒ no biometric). Every pod either
-    /// installs its verified pin or CLEARS any previously recorded one (so a
-    /// renewal whose new report hasn't verified yet falls back to default
-    /// validation rather than hard-failing on the old pin). Never throws —
-    /// a malformed entry simply yields no pin.
+    /// CACHED STK pubs (no UMK access ⇒ no biometric). KEEP-LAST-KNOWN-GOOD
+    /// (SEC-1): a pin is the phone's only defense against a `.com`-minted
+    /// rogue cert, so it is dropped ONLY on an explicit signal, never on the
+    /// mere ABSENCE of a fresh verified report. Three cases per the user's
+    /// `/pods` directory (the full registered-server list):
+    ///   1. pod ABSENT from the response entirely (released / decommissioned)
+    ///      ⇒ the box is gone, so its pin is pruned (a stale pin can't strand
+    ///      a hard-fail on a name the user no longer owns).
+    ///   2. pod PRESENT + a NEW report VERIFIES ⇒ replace the pin (handles a
+    ///      legitimate cert renewal — the new fingerprint supersedes).
+    ///   3. pod PRESENT but the report is missing / stale / fails verification
+    ///      (incl. a relay that DROPPED `signedStatus`, or a MITM on the
+    ///      `.com` path that tampered it) ⇒ RETAIN the existing pin. A
+    ///      transiently-unverifiable still-listed box must NOT silently
+    ///      downgrade to default TLS validation, which a CA-valid rogue cert
+    ///      (exactly what the pin defends against) would pass.
+    ///
+    /// A revoked pod (`revokedAt != nil`) is an EXPLICIT owner/server signal
+    /// that the box's identity is retired — that pin is dropped (case 1-like).
+    /// Never throws — a malformed entry simply yields no fresh pin (case 3).
     public func update(
         pods: [PodDirectoryEntry],
         nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) {
+        // Domains still present and not explicitly retired — the survivors of
+        // the absent-prune. A revoked pod is treated as absent (its identity
+        // is retired), so it is NOT a survivor and its pin is pruned.
+        var listed = Set<String>()
         for pod in pods {
             let domain = Self.normalize(pod.serverDomain)
             guard !domain.isEmpty else { continue }
-            let pin = verifiedPin(for: pod, domain: domain, nowMs: nowMs)
-            lock.lock()
-            if let pin { pins[domain] = pin } else { pins.removeValue(forKey: domain) }
-            lock.unlock()
+            if pod.revokedAt == nil { listed.insert(domain) }
+        }
+
+        lock.lock()
+        // Case 1 — prune pins for domains the directory no longer vouches for.
+        for domain in pins.keys where !listed.contains(domain) {
+            pins.removeValue(forKey: domain)
+        }
+        lock.unlock()
+
+        for pod in pods {
+            let domain = Self.normalize(pod.serverDomain)
+            guard !domain.isEmpty else { continue }
+            // Case 2 — a fresh verified report replaces the pin. Case 3 — no
+            // fresh pin ⇒ LEAVE the existing pin untouched (keep-last-good).
+            if let pin = verifiedPin(for: pod, domain: domain, nowMs: nowMs) {
+                lock.lock()
+                pins[domain] = pin
+                lock.unlock()
+            }
         }
     }
 

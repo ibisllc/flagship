@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 import FlagshipAPI
 @testable import FlagshipCore
 
@@ -136,15 +137,132 @@ final class CertPinRegistryTests: XCTestCase {
 
     // MARK: - Reconciliation semantics
 
-    func testPodWithoutSignedStatusClearsItsPreviousPin() {
+    // SEC-1 — keep-last-known-good. A still-listed box whose new report does
+    // not verify (dropped / tampered by a MITM on the `.com` path / stale /
+    // missing) must RETAIN its pin. Otherwise the pin silently downgrades to
+    // default TLS validation, which a CA-valid rogue cert (exactly the
+    // adversary pinning defends against) passes.
+
+    func testMissingSignedStatusRetainsPreviousPin() {
         let reg = CertPinRegistry(persistingIn: nil)
         reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
         XCTAssertEqual(reg.pinFor(host: domain), pinHex)
-        // Next refresh: the relay dropped (or the box renewed and the new
-        // report hasn't landed) — fall back to default validation, never
-        // hard-fail on the old pin.
+        // The relay dropped `signedStatus` (or the box renewed and the new
+        // report hasn't landed) — the pod is STILL LISTED, so keep the pin.
         reg.update(pods: [makePod(signedStatus: false)], nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+    }
+
+    func testTamperedSignatureRetainsPreviousPin() {
+        let reg = CertPinRegistry(persistingIn: nil)
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        // A MITM on the `.com` path flips the cert fingerprint and re-signs
+        // with a key we don't trust → the report no longer verifies under the
+        // cached STK pub. The old, genuinely-verified pin must survive.
+        let badSig = String(repeating: "ab", count: 64)
+        reg.update(pods: [makePod(signatureHex: badSig)], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+    }
+
+    func testStaleReportRetainsPreviousPin() {
+        let reg = CertPinRegistry(persistingIn: nil)
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        // A replayed-but-stale report on a still-listed box keeps the pin.
+        let justStale = DaemonStatusVerifierTests.report.issuedAt
+            + DaemonStatus.maxReportAgeMs + 1
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: justStale)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+    }
+
+    /// A genuine renewal report for `domain`, signed under the SAME STK the
+    /// pinned vector uses (derived from the test UMK seed) but carrying a NEW
+    /// fingerprint + a fresh `issuedAt`. Self-signed so the vector stays
+    /// honest without a precomputed constant.
+    private func renewedSignedPod(newPin: String, issuedAt: Int64)
+        -> (pod: PodDirectoryEntry, report: DaemonStatusReport)
+    {
+        let report = DaemonStatusReport(
+            serverDomain: domain,
+            certSha256: newPin,
+            certValidUntil: 1_900_000_000_000,
+            certIssuer: "C=US, O=Let's Encrypt, CN=YR1",
+            appsServed: DaemonStatusVerifierTests.report.appsServed,
+            nonce: "ffeeddccbbaa99887766554433221100",
+            issuedAt: issuedAt
+        )
+        let stkSeed = ServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: domain)!
+        let priv = try! Curve25519.Signing.PrivateKey(rawRepresentation: stkSeed)
+        let sig = try! priv.signature(for: DaemonStatus.canonicalBytes(report))
+        let pod = makePod(report: report, signatureHex: HexUtil.encode(sig))
+        return (pod, report)
+    }
+
+    func testNewVerifiedReportReplacesThePin() {
+        // Case 2 — a legit cert renewal: the box re-mints, its daemon signs a
+        // fresh report carrying the NEW fingerprint, and that supersedes.
+        let reg = CertPinRegistry(persistingIn: nil)
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+
+        let newPin = String(repeating: "5c", count: 32)
+        XCTAssertNotEqual(newPin, pinHex)
+        let renewed = renewedSignedPod(newPin: newPin, issuedAt: now)
+        reg.update(pods: [renewed.pod], umkSeed: umkSeed, nowMs: renewed.report.issuedAt + 1_000)
+        XCTAssertEqual(reg.pinFor(host: domain), newPin)
+    }
+
+    func testAbsentPodIsUnpinned() {
+        // Case 1 — a box released / decommissioned drops off `/pods`. Its pin
+        // is pruned so a stale pin can't strand a hard-fail on a freed name.
+        let reg = CertPinRegistry(persistingIn: nil)
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        reg.update(pods: [], nowMs: now)
         XCTAssertNil(reg.pinFor(host: domain))
+    }
+
+    func testRevokedPodDropsAnExistingPin() {
+        // A revoked pod is an EXPLICIT identity-retirement signal — drop the
+        // pin (unlike a transient verify failure, which is retained).
+        let reg = CertPinRegistry(persistingIn: nil)
+        reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        reg.update(pods: [makePod(revokedAt: 1)], umkSeed: umkSeed, nowMs: now)
+        XCTAssertNil(reg.pinFor(host: domain))
+    }
+
+    func testKeepLastGoodIsScopedToTheStillListedBox() {
+        // A second box absent from the refresh is pruned even while the first
+        // box (present, now unverifiable) keeps its pin — case 1 and case 3
+        // applied independently in one reconcile.
+        let reg = CertPinRegistry(persistingIn: nil)
+        let other = "other.harry1.flagship.services"
+
+        // Genuinely pin both boxes from verified reports: `domain` via the
+        // pinned vector, `other` via a self-signed report under its own STK.
+        let otherPin = String(repeating: "a3", count: 32)
+        let otherReport = DaemonStatusReport(
+            serverDomain: other, certSha256: otherPin,
+            certValidUntil: 1_900_000_000_000, certIssuer: "C=US, O=Let's Encrypt, CN=YR1",
+            appsServed: [other], nonce: "00ff00ff00ff00ff00ff00ff00ff00ff", issuedAt: now
+        )
+        let otherSeed = ServerKeys.deriveStkSeed(umkSeed: umkSeed, serverId: other)!
+        let otherSig = try! Curve25519.Signing.PrivateKey(rawRepresentation: otherSeed)
+            .signature(for: DaemonStatus.canonicalBytes(otherReport))
+        let otherPod = makePod(
+            serverDomain: other, report: otherReport, signatureHex: HexUtil.encode(otherSig)
+        )
+        reg.update(pods: [makePod(), otherPod], umkSeed: umkSeed, nowMs: now + 1_000)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        XCTAssertEqual(reg.pinFor(host: other), otherPin)
+
+        // Refresh lists ONLY the first box, now with a dropped report → it
+        // keeps its pin (case 3); `other` (absent) is pruned (case 1).
+        reg.update(pods: [makePod(signedStatus: false)], nowMs: now)
+        XCTAssertEqual(reg.pinFor(host: domain), pinHex)
+        XCTAssertNil(reg.pinFor(host: other))
     }
 
     func testClearDropsPinsAndStkPubs() {
