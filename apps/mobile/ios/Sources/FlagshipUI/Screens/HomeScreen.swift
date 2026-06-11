@@ -54,6 +54,14 @@ public struct HomeScreen: View {
     var onDismissRecoveryBackupBanner: () -> Void = {}
     var onSignInAgain: () -> Void = {}
 
+    /// Search text over the server list (name / description / fqdn). Bound to
+    /// the native `.searchable` field so the large title collapses on scroll.
+    @State private var search: String = ""
+    /// Active status filter chip. `.all` shows every server; the others narrow
+    /// the list by derived liveness. Pure presentation — the underlying pods
+    /// (and every action on them) are untouched.
+    @State private var statusFilter: HomeStatusFilter = .all
+
     public init(
         state: LoadingState<ServerDetailResponse>,
         username: String,
@@ -113,16 +121,11 @@ public struct HomeScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                header(c: c)
-                if accountWasReset {
-                    accountResetBanner(c: c)
-                }
-                if showRecoveryBackupBanner && !accountWasReset {
-                    recoveryBackupBanner(c: c)
-                }
-                if showRecoveryNudge && !accountWasReset {
-                    recoveryNudge(c: c)
-                }
+                subheader(c: c)
+                // One announcement at a time, highest priority first: an
+                // account-reset (danger) suppresses everything; otherwise the
+                // backup banner, then the recovery nudge.
+                topAnnouncement(c: c)
                 quickActions(c: c)
                 serversSection(c: c)
                 switch state {
@@ -140,107 +143,93 @@ public struct HomeScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s2)
         }
         .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Home")
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search servers")
         .refreshable { await onRefresh() }
     }
 
-    /// E7 — "your account was reset on another device" danger banner.
-    /// Renders above everything else (including the recovery nudge,
-    /// which is suppressed while accountWasReset is true). Tapping
-    /// Sign-in-again drops the user back to Welcome via app.signOut.
-    private func accountResetBanner(c: FSColors) -> some View {
-        FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s3) {
-                HStack(alignment: .top, spacing: FS.space.s3) {
-                    Image(systemName: "exclamationmark.shield.fill")
-                        .imageScale(.large)
-                        .foregroundColor(c.danger)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("This device was removed from your account")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(c.text)
-                        Text("Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.")
-                            .font(FS.font.bodySm())
-                            .foregroundColor(c.textMuted)
-                    }
-                }
-                FSPrimaryButton("Sign in again", block: true, action: onSignInAgain)
-            }
+    /// The single highest-priority announcement card. Folds the three stacked
+    /// banners (account-reset / backup / recovery-nudge) into one `FSAnnouncementCard`.
+    @ViewBuilder
+    private func topAnnouncement(c: FSColors) -> some View {
+        if accountWasReset {
+            FSAnnouncementCard(
+                icon: "exclamationmark.shield.fill",
+                title: "This device was removed from your account",
+                message: "Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.",
+                ctaLabel: "Sign in again",
+                tint: c.danger,
+                onCta: onSignInAgain
+            )
+            .accessibilityIdentifier("account-reset-banner")
+        } else if showRecoveryBackupBanner {
+            FSAnnouncementCard(
+                icon: "key.horizontal.fill",
+                title: "Your account isn't backed up yet",
+                message: "If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account.",
+                ctaLabel: "Secure my account",
+                onCta: onSetUpRecovery,
+                onDismiss: onDismissRecoveryBackupBanner
+            )
+            .accessibilityIdentifier("recovery-backup-banner")
+        } else if showRecoveryNudge {
+            FSAnnouncementCard(
+                icon: "key.horizontal.fill",
+                title: "Set up recovery",
+                message: "Right now this device is the only way back into your account. Bank a passkey with Apple so you can recover if you lose it.",
+                ctaLabel: "Set it up",
+                onCta: onSetUpRecovery,
+                onDismiss: onDismissRecoveryNudge
+            )
+            .accessibilityIdentifier("recovery-nudge-card")
         }
-        .accessibilityIdentifier("account-reset-banner")
     }
 
-    /// Persistent post-creation backup-reminder banner. Mirrors the
-    /// webapp banner in apps/web/public/webapp/views/home.js — surfaces
-    /// the moment the user lands on Home without a cloud-recovery
-    /// envelope (no online-pod gate), and stays hidden across launches
-    /// once "Not now" is tapped. Tapping "Secure my account" routes
-    /// into the existing recovery flow on the Settings tab.
-    private func recoveryBackupBanner(c: FSColors) -> some View {
-        FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s3) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Your account isn't backed up yet")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(c.text)
-                    Text("If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account.")
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.textMuted)
-                }
-                HStack(spacing: FS.space.s2) {
-                    FSPrimaryButton("Secure my account", block: false, action: onSetUpRecovery)
-                    FSGhostButton("Not now", block: false, action: onDismissRecoveryBackupBanner)
-                }
-            }
+    /// Pods filtered by the active status chip AND the search query. Pure
+    /// presentation — never mutates `pods`.
+    private var visiblePods: [PodInfo] {
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return pods.filter { pod in
+            let liveness = pod.livenessState(
+                hasLiveUnlockRequest: awaitingApproval.contains(pod.fqdn.lowercased())
+            )
+            let matchesFilter = statusFilter.matches(pod: pod, liveness: liveness)
+            let matchesSearch = q.isEmpty
+                || pod.name.lowercased().contains(q)
+                || pod.fqdn.lowercased().contains(q)
+                || (pod.description?.lowercased().contains(q) ?? false)
+            return matchesFilter && matchesSearch
         }
-        .accessibilityIdentifier("recovery-backup-banner")
     }
 
-    /// "Your phone is the only key" warning. Surfaces after the user
-    /// has at least one online pod (so they're past day-0 and have
-    /// real state worth losing). Tap "Set it up" routes to the
-    /// RecoveryScreen on the Settings tab. The Not-now button toggles
-    /// session-scoped dismissal — banner re-appears next launch
-    /// because recovery is important enough to re-nudge.
-    private func recoveryNudge(c: FSColors) -> some View {
-        FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s3) {
-                HStack(alignment: .top, spacing: FS.space.s3) {
-                    Image(systemName: "key.horizontal.fill")
-                        .imageScale(.large)
-                        .foregroundColor(c.primary)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Set up recovery")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(c.text)
-                        Text("Right now this device is the only way back into your account. Bank a passkey with Apple so you can recover if you lose it.")
-                            .font(FS.font.bodySm())
-                            .foregroundColor(c.textMuted)
-                    }
-                }
-                HStack(spacing: FS.space.s2) {
-                    FSPrimaryButton("Set it up", block: false, action: onSetUpRecovery)
-                    FSGhostButton("Not now", block: false, action: onDismissRecoveryNudge)
-                }
-            }
-        }
-        .accessibilityIdentifier("recovery-nudge-card")
+    /// Per-filter counts off the full pod set (search-independent) so the chip
+    /// badges read the account-wide totals.
+    private func filterCount(_ f: HomeStatusFilter) -> Int {
+        pods.filter { pod in
+            let liveness = pod.livenessState(
+                hasLiveUnlockRequest: awaitingApproval.contains(pod.fqdn.lowercased())
+            )
+            return f.matches(pod: pod, liveness: liveness)
+        }.count
     }
 
-    private func header(c: FSColors) -> some View {
+    /// Greeting line under the native large title + the optional restricted-
+    /// device chip. The big "Home" lives in the navigation bar now (it
+    /// collapses on scroll, WhatsApp-style); this keeps the personal
+    /// "Welcome back, <user>." beat without a competing 34pt header.
+    private func subheader(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Welcome back,")
+            Text(username.isEmpty ? "Welcome back." : "Welcome back, \(username).")
                 .font(.system(size: 17))
                 .foregroundColor(c.textMuted)
-            Text(username + ".")
-                .font(.system(size: 34, weight: .medium))
-                .foregroundColor(c.text)
             if let cap = deviceCapability, !cap.isFullyScoped {
                 deviceChip(cap, c: c)
             }
         }
-        .padding(.top, FS.space.s10)
     }
 
     /// v2 device-addressing — "Device: <label> · browse-only" chip
@@ -368,51 +357,25 @@ public struct HomeScreen: View {
                 }
                 .accessibilityIdentifier("home-empty-state")
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
-                    ForEach(pods) { pod in
-                        let liveness = pod.livenessState(
-                            hasLiveUnlockRequest: awaitingApproval.contains(pod.fqdn.lowercased())
-                        )
-                        Button(action: { onOpenPod(pod) }) {
-                            PodCard(pod: pod, isLeader: pod.podId == leaderPodId, liveness: liveness)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            // Leader = the daemon the screens point at; only a
-                            // server that came online can be one.
-                            if pod.status != .pending && pod.cameOnline && pod.podId != leaderPodId {
-                                Button {
-                                    onSetLeader(pod)
-                                } label: {
-                                    Label("Make leader", systemImage: "crown.fill")
-                                }
-                            }
-                            Button {
-                                onOpenPod(pod)
-                            } label: {
-                                Label("Open", systemImage: "arrow.up.right.square")
-                            }
-                            // A pending (in-flight) server can be cancelled
-                            // straight from the list — frees the name + revokes
-                            // the install code.
-                            if pod.status == .pending {
-                                Button(role: .destructive) {
-                                    onCancelServer(pod)
-                                } label: {
-                                    Label("Cancel server", systemImage: "xmark.circle")
-                                }
-                            } else if liveness == .dead {
-                                // GENUINELY dead: registered, no live unlock
-                                // request, no check-in, and past the grace
-                                // window. Decommission via the release flow
-                                // (frees the name) — NOT offered for a box that's
-                                // waiting for approval or still coming online.
-                                Button(role: .destructive) {
-                                    onDeleteDeadServer(pod)
-                                } label: {
-                                    Label("Delete server (free name)", systemImage: "trash")
-                                }
-                            }
+                // Filter chips (All / Online / Pending / Offline) over the
+                // derived liveness — purely narrows what's rendered.
+                FSChipRow(
+                    items: HomeStatusFilter.allCases.map {
+                        .init(value: $0, label: $0.label, count: filterCount($0))
+                    },
+                    selection: $statusFilter
+                )
+                let rows = visiblePods
+                if rows.isEmpty {
+                    FSCard {
+                        Text("No servers match “\(search.isEmpty ? statusFilter.label.lowercased() : search)”.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                    }
+                } else {
+                    LazyVStack(spacing: FS.space.s3) {
+                        ForEach(rows) { pod in
+                            serverRow(pod: pod, c: c)
                         }
                     }
                 }
@@ -439,6 +402,80 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-add-server")
             }
         }
+    }
+
+    /// A single server list row (FSListRow) with the leading status-tinted
+    /// icon, a status/cert subtitle, a trailing status pill + optional Leader
+    /// badge, and the full long-press context menu preserved verbatim.
+    private func serverRow(pod: PodInfo, c: FSColors) -> some View {
+        let liveness = pod.livenessState(
+            hasLiveUnlockRequest: awaitingApproval.contains(pod.fqdn.lowercased())
+        )
+        let isLeader = pod.podId == leaderPodId
+        return Button(action: { onOpenPod(pod) }) {
+            FSListRow(
+                leading: .icon("server.rack", color: PodStatusStyle.iconColor(liveness: liveness, status: pod.status, c: c)),
+                title: pod.name,
+                subtitle: serverSubtitle(pod: pod, liveness: liveness)
+            ) {
+                HStack(spacing: FS.space.s2) {
+                    if isLeader && pod.cameOnline { LeaderBadge() }
+                    FSPill(
+                        PodStatusStyle.label(liveness: liveness, status: pod.status),
+                        kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
+                    )
+                    .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            // Leader = the daemon the screens point at; only a
+            // server that came online can be one.
+            if pod.status != .pending && pod.cameOnline && pod.podId != leaderPodId {
+                Button {
+                    onSetLeader(pod)
+                } label: {
+                    Label("Make leader", systemImage: "crown.fill")
+                }
+            }
+            Button {
+                onOpenPod(pod)
+            } label: {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+            // A pending (in-flight) server can be cancelled
+            // straight from the list — frees the name + revokes
+            // the install code.
+            if pod.status == .pending {
+                Button(role: .destructive) {
+                    onCancelServer(pod)
+                } label: {
+                    Label("Cancel server", systemImage: "xmark.circle")
+                }
+            } else if liveness == .dead {
+                // GENUINELY dead: registered, no live unlock
+                // request, no check-in, and past the grace
+                // window. Decommission via the release flow
+                // (frees the name) — NOT offered for a box that's
+                // waiting for approval or still coming online.
+                Button(role: .destructive) {
+                    onDeleteDeadServer(pod)
+                } label: {
+                    Label("Delete server (free name)", systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    /// Status / cert subtitle line for a server row. Prefers the user-set
+    /// description when present (that's what the user named it for), else a
+    /// short technical hint (the fqdn).
+    private func serverSubtitle(pod: PodInfo, liveness: PodInfo.LivenessState) -> String {
+        if let d = pod.description, !d.isEmpty { return d }
+        if !pod.fqdn.isEmpty { return pod.fqdn }
+        return PodStatusStyle.label(liveness: liveness, status: pod.status)
     }
 
     private func recentActivity(events: [RecentInstallEvent], c: FSColors) -> some View {
@@ -589,23 +626,30 @@ public struct PodCard: View {
         }
     }
     private var pillAccessibilityId: String {
-        switch liveness {
-        case .dead:               return "pod-card-never-online"
-        case .waitingForApproval: return "pod-card-waiting-approval"
-        case .comingOnline where pod.status != .pending: return "pod-card-coming-online"
-        default:                  return "pod-card-status"
-        }
+        PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status)
     }
     private var statusLabel: String {
+        PodStatusStyle.label(liveness: liveness, status: pod.status)
+    }
+    private var statusKind: FSPillKind {
+        PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
+    }
+}
+
+/// Single source of truth for how a pod's derived liveness + raw status maps
+/// to a user-facing label, an `FSPillKind`, a leading-icon color, and the
+/// pill accessibility id. Shared by `PodCard` (legacy grid card, still used in
+/// previews / detail) and the Home `FSListRow` server rows so the two never
+/// drift.
+public enum PodStatusStyle {
+    public static func label(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
         case .dead:               return "Never came online"
         case .waitingForApproval: return "Waiting for approval"
         case .comingOnline:
-            // A pre-registration pending pod keeps its install-flow "Pending"
-            // wording; a registered-but-not-yet-online box reads "Coming online".
-            return pod.status == .pending ? "Pending" : "Coming online…"
+            return status == .pending ? "Pending" : "Coming online…"
         case .online:
-            switch pod.status {
+            switch status {
             case .online:  return "Online"
             case .offline: return "Offline"
             case .unknown: return "Checking"
@@ -613,18 +657,74 @@ public struct PodCard: View {
             }
         }
     }
-    private var statusKind: FSPillKind {
+
+    public static func pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> FSPillKind {
         switch liveness {
         case .dead:               return .offline
         case .waitingForApproval: return .provisioning
         case .comingOnline:       return .provisioning
         case .online:
-            switch pod.status {
+            switch status {
             case .online:  return .online
             case .offline: return .offline
             case .unknown: return .idle
             case .pending: return .provisioning
             }
+        }
+    }
+
+    static func iconColor(liveness: PodInfo.LivenessState, status: PodInfo.Status, c: FSColors) -> Color {
+        switch pillKind(liveness: liveness, status: status) {
+        case .online:       return c.success
+        case .renewing:     return c.warning
+        case .offline:      return c.danger
+        case .provisioning: return c.primary
+        case .idle:         return c.textMuted
+        }
+    }
+
+    static func pillAccessibilityId(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
+        switch liveness {
+        case .dead:               return "pod-card-never-online"
+        case .waitingForApproval: return "pod-card-waiting-approval"
+        case .comingOnline where status != .pending: return "pod-card-coming-online"
+        default:                  return "pod-card-status"
+        }
+    }
+}
+
+/// Home server-list status filter (the chip row). `.all` shows everything;
+/// the others narrow by derived liveness. Pure presentation.
+public enum HomeStatusFilter: CaseIterable, Hashable {
+    case all, online, pending, offline
+
+    var label: String {
+        switch self {
+        case .all:     return "All"
+        case .online:  return "Online"
+        case .pending: return "Pending"
+        case .offline: return "Offline"
+        }
+    }
+
+    /// Whether a pod (given its derived liveness) belongs in this filter.
+    /// "Pending" buckets anything provisioning/waiting/coming-online; "Offline"
+    /// buckets a genuinely-dead or offline box; "Online" is strictly live.
+    func matches(pod: PodInfo, liveness: PodInfo.LivenessState) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .online:
+            return liveness == .online && pod.status == .online
+        case .pending:
+            switch liveness {
+            case .waitingForApproval, .comingOnline: return true
+            case .online: return pod.status == .pending || pod.status == .unknown
+            default: return false
+            }
+        case .offline:
+            if liveness == .dead { return true }
+            return liveness == .online && pod.status == .offline
         }
     }
 }

@@ -180,16 +180,35 @@ public struct SettingsScreen: View {
         self.signOutPolicy = signOutPolicy
     }
 
+    /// Optional promo announcement at the top of Settings. Wired but empty by
+    /// default — the container can flip it on for a campaign without touching
+    /// the screen. Kept as state so a future "dismiss" is a one-liner.
+    @State private var showPromo: Bool = false
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Settings")
-                    .font(.system(size: 32, weight: .medium))
-                    .foregroundColor(c.text)
-                    .padding(.top, FS.space.s4)
+                // Account hero — teal monogram + username + account-type
+                // subtitle. Drills into Account security (the most relevant
+                // account-level destination).
+                FSProfileCard(
+                    name: username,
+                    subtitle: profileSubtitle,
+                    action: onOpenAccountSecurity
+                )
+                .padding(.top, FS.space.s2)
 
-                account(c: c)
+                // Optional promo slot (empty unless flipped on).
+                if showPromo {
+                    FSAnnouncementCard(
+                        icon: "sparkles",
+                        title: "Welcome to Flagship",
+                        message: "Your stuff, on your hardware, with a real green padlock.",
+                        onDismiss: { showPromo = false }
+                    )
+                }
+
                 // v1.2 Phase 4 — account-security badge + entry. Placed
                 // immediately after Account so the "Single-device" /
                 // "Multi-device + 2FA" state is one of the first
@@ -217,6 +236,8 @@ public struct SettingsScreen: View {
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.large)
         .refreshable { await onRefresh() }
         .confirmationDialog(
             disconnectTarget.map { "Disconnect \($0.label)?" } ?? "Disconnect device?",
@@ -308,38 +329,25 @@ public struct SettingsScreen: View {
         }
     }
 
-    private func account(c: FSColors) -> some View {
-        section("ACCOUNT", c: c) {
-            FSCard {
-                row(label: "Username", value: username, c: c)
-            }
+    /// Account-type one-liner under the username on the profile hero.
+    private var profileSubtitle: String {
+        switch accountType {
+        case "multi":  return "Multi-device + 2FA"
+        case "single": return "Single-device account"
+        default:       return "Tap to manage account security"
         }
     }
 
     private func subscription(c: FSColors) -> some View {
-        section("SUBSCRIPTION", c: c) {
-            Button(action: onOpenSubscription) {
-                FSCard {
-                    HStack(alignment: .top, spacing: FS.space.s3) {
-                        Image(systemName: "creditcard.fill")
-                            .foregroundColor(c.primary)
-                            .imageScale(.large)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Tier & usage")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(c.text)
-                            Text(subscriptionSubtitle)
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settings-open-subscription")
-        }
+        FSSettingsGroup("SUBSCRIPTION", rows: [
+            FSSettingsRow(
+                icon: "creditcard.fill",
+                title: "Tier & usage",
+                subtitle: subscriptionSubtitle,
+                action: onOpenSubscription
+            )
+        ])
+        .accessibilityIdentifier("settings-open-subscription")
     }
 
     private var subscriptionSubtitle: String {
@@ -361,32 +369,18 @@ public struct SettingsScreen: View {
     /// current account type ("Single-device" / "Multi-device + 2FA");
     /// the row drills into AccountSecurityScreen for enroll / disable.
     private func accountSecuritySection(c: FSColors) -> some View {
-        section("ACCOUNT SECURITY", c: c) {
-            Button(action: onOpenAccountSecurity) {
-                FSCard {
-                    HStack(alignment: .top, spacing: FS.space.s3) {
-                        Image(systemName: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                            .foregroundColor(accountType == "multi" ? c.success : c.primary)
-                            .imageScale(.large)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(accountType == "multi" ? "Multi-device + 2FA" : "Single-device account")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(c.text)
-                                .accessibilityIdentifier("settings-account-type-badge")
-                            Text(accountType == "multi"
-                                 ? "Recovery requires a 6-digit code + 24-hour grace."
-                                 : "Recovery is a 7-day waiting period.")
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settings-open-account-security")
-        }
+        FSSettingsGroup("ACCOUNT SECURITY", rows: [
+            FSSettingsRow(
+                icon: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled",
+                iconTint: accountType == "multi" ? c.success : c.primary,
+                title: accountType == "multi" ? "Multi-device + 2FA" : "Single-device account",
+                subtitle: accountType == "multi"
+                    ? "Recovery requires a 6-digit code + 24-hour grace."
+                    : "Recovery is a 7-day waiting period.",
+                action: onOpenAccountSecurity
+            )
+        ])
+        .accessibilityIdentifier("settings-open-account-security")
     }
 
     private func trustedDevicesSection(c: FSColors) -> some View {
@@ -629,28 +623,26 @@ public struct SettingsScreen: View {
     }
 
     private func links(c: FSColors) -> some View {
-        section("RECOVERY", c: c) {
-            VStack(spacing: FS.space.s3) {
-                linkRow("Recovery setup", subtitle: "Recover on a new device", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
-                linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
-                linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
-                linkRow("Dock a browser", subtitle: "Read-only desktop companion (4h)", icon: "laptopcomputer", c: c, action: onOpenCompanionDock)
-                linkRow(
-                    "Companion requests",
-                    subtitle: companionRequestsSubtitle,
-                    icon: "tray.full",
-                    c: c,
-                    badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
-                    action: onOpenCompanionRequests
-                )
-                linkRow("Peer-backup", subtitle: "Shard health across peers", icon: "externaldrive.connected.to.line.below.fill", c: c, action: onOpenPeerBackup)
-                linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
-                linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
-                if showDeveloper {
-                    linkRow("Developer", subtitle: "Mock/live toggle, latency knob", icon: "hammer.fill", c: c, action: onOpenDeveloper)
-                }
-            }
+        var rows: [FSSettingsRow] = [
+            FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery setup", subtitle: "Recover on a new device", action: onOpenRecovery),
+            FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
+            FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
+            FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
+            FSSettingsRow(
+                icon: "tray.full",
+                title: "Companion requests",
+                subtitle: companionRequestsSubtitle,
+                badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
+                action: onOpenCompanionRequests
+            ),
+            FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer-backup", subtitle: "Shard health across peers", action: onOpenPeerBackup),
+            FSSettingsRow(icon: "lock.shield.fill", title: "Privacy", subtitle: "Face ID lock, app-level gating", action: onOpenPrivacy),
+            FSSettingsRow(icon: "info.circle.fill", title: "About Flagship", subtitle: "Version, license, source", action: onOpenAbout),
+        ]
+        if showDeveloper {
+            rows.append(FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper))
         }
+        return FSSettingsGroup("RECOVERY", rows: rows)
     }
 
     /// The three-tier "leave the app" cluster, ordered by increasing
@@ -734,33 +726,6 @@ public struct SettingsScreen: View {
             .padding(.top, FS.space.s4)
     }
 
-    private func linkRow(_ title: String, subtitle: String, icon: String, c: FSColors, badge: Int? = nil, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            FSCard {
-                HStack {
-                    Image(systemName: icon).foregroundColor(c.primary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).foregroundColor(c.text)
-                        Text(subtitle).font(FS.font.caption()).foregroundColor(c.textMuted)
-                    }
-                    Spacer()
-                    if let badge, badge > 0 {
-                        Text("\(badge)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(c.danger)
-                            .clipShape(Capsule())
-                            .accessibilityIdentifier("settings-link-badge-\(title)")
-                    }
-                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
     private var companionRequestsSubtitle: String {
         if pendingCompanionWritesCount == 0 { return "Approve writes from docked browsers" }
         if pendingCompanionWritesCount == 1 { return "1 pending write from a docked browser" }
@@ -772,22 +737,6 @@ public struct SettingsScreen: View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(label).font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
             content()
-        }
-    }
-
-    private func row(label: String, value: String, mono: Bool = false, c: FSColors) -> some View {
-        HStack {
-            Text(label).foregroundColor(c.textMuted)
-            Spacer(minLength: FS.space.s4)
-            // An unbreakable value (username, key hex, FQDN) has no wrap
-            // opportunity, so without a line limit it reports an ideal width
-            // wider than the screen — that horizontal overflow is what lets the
-            // vertical ScrollView rubber-band sideways. Truncate instead.
-            Text(value)
-                .font(mono ? FS.font.mono() : FS.font.body())
-                .foregroundColor(c.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
     }
 
