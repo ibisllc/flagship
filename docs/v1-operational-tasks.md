@@ -278,10 +278,10 @@ _Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-v
 
 ### N-PHONE — Phone apps
 - **N-PHONE-1** iOS Core NFC capability + entitlement + usage strings. _owner (Xcode/ASC)._
-- **N-PHONE-2** iOS `NFCTagReaderSession` read flow + pairing UI ("tap your box"). _agent._
+- **N-PHONE-2** iOS `NFCTagReaderSession` read flow + pairing UI ("tap your box"). _agent._ ✅ DONE (feat/retail `3a628fd`, 2026-06-11)
 - **N-PHONE-3** iOS read+write tap with LAN+LED-SAS fallback (per Q2). _agent._
-- **N-PHONE-4** Android NFC read/write + pairing UI. _agent._
-- **N-PHONE-5** ECDH + K_session derivation + claim submit (both platforms). _agent._
+- **N-PHONE-4** Android NFC read/write + pairing UI. _agent._ ✅ DONE read-only half (feat/retail `a5b4c77`; write tap = N-PHONE-3)
+- **N-PHONE-5** ECDH + K_session derivation + claim submit (both platforms). _agent._ ✅ DONE (feat/retail `837c179`+`3a628fd`+`a5b4c77`, both platforms incl. deposit-blob ePhonePub fix + 30s session-lock + SAS glance + LED-SAS fallback seam)
 - **N-PHONE-6** LED-SAS fallback UI (camera capture + decode of the LED pulse pattern). _agent._
 
 ### N-CLOUD — Cloud / Worker

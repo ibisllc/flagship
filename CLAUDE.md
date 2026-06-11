@@ -123,6 +123,66 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-11 — machine-doable backlog closed (cert A′ + #52 + parity + NFC C3)
+
+Everything agent-doable from the open-work list landed this session; `main` and
+`feat/retail` are both green and pushed. Beyond the cert migration (block below):
+- **#52 re-pair hardening (`b95f9ad`):** the same-day-rotation mystery is
+  ROOT-CAUSED in code — `/re-pair/complete` is signature-less and accepted any
+  row with `completesAt <= now` with NO upper bound, so a stale pending row from
+  earlier testing was completable forever, by anyone (this is almost certainly
+  how the live rotation "beat" the 3d grace). Fixed: completion only inside
+  `[completesAt, +7d)`, else 410 + sweep + audit; initiate's lock keeps a row
+  alive through that window (a rival initiate could previously evict a legit
+  recovery at grace-elapse). And single-device initiate now requires TOTP or a
+  recovery code when enrolled (neither enrolled → grace-only + audited);
+  iOS/Android/webapp reuse the multi-device second-factor UX on the 401.
+- **Android install-progress parity (`c57a350`):** live ladder on
+  the pending-pod detail (order mode w/ serial, else /pods `pending[].phase`
+  directory fallback), instant Home upsert at delivery, and the fake-ONLINE
+  random-podId pod on leaving the progress screen is gone. Follow-up noted:
+  Android has no PendingServerStore — pending pods don't survive process death
+  with their serial (iOS persists them).
+- **NFC C3 shipped on `feat/retail`** (`837c179`+`3a628fd`+`a5b4c77`, pushed):
+  iOS+Android read-only tap flow per the locked Q2 decision — incl. a REAL
+  protocol bug fix (the Wi-Fi rendezvous deposit never carried the phone's
+  ephemeral pub, so the box could never have decrypted it; new blob format
+  `ePhonePub||ciphertext`), 30s session-lock shared constant, SAS glance,
+  LED-SAS fallback seam. `main` stays retail-free; § N updated. Open: N-PHONE-3
+  write tap, N-PHONE-6 LED capture UI, N-BOX-8 daemon rendezvous consumer.
+
+**OWNER CHECKLIST (in order — everything machine-side is done and pushed):**
+1. **Deploy `.com`**: apply D1 migrations `0047_ct_alerts.sql` AND
+   `0048_daemon_status_signed.sql` to prod FIRST (0048 before the Worker — the
+   new write path needs the columns), wire `CloudflareDnsClient` as the CAA
+   client, then `npx tsc -b && cd apps/com && npx wrangler deploy`.
+2. `flyctl deploy` the `.services` app (hub wildcard-claim hardening + per-box
+   DNS route changes).
+3. **One prod read I was permission-blocked from** (then optionally wipe):
+   `cd apps/com && npx wrangler d1 execute flagship-state --remote --command
+   "SELECT username, initiated_at, completes_at, objected_at FROM
+   pending_re_pairs"` — if a stale row predating the live rotation is (still)
+   there, that confirms the #52 root cause empirically; the code fix closes the
+   hole either way. Then `bash scripts/wipe-all-users.sh` for the clean slate.
+4. **Rebuild + re-sign the Mac burner** (A′ daemon changes ship in the recipe).
+5. **Rebuild the iOS app in Xcode** (pinning + tier-1 URLs + re-pair second
+   factor + push token).
+6. **Hardware e2e** — the full post-cert-rebuild test list at the bottom of
+   `docs/cert-model-A-prime-migration.md`: fresh encrypted burn → per-box cert
+   green on `<server>.<user>` AND `x.<server>.<user>`, phone-approval unlock
+   (notify pipe is fixed), pin enforcement on a real box, CAA/CT checks,
+   decommission, voi.ci.
+7. Recovery Phase B on-device validation + iOS owner-device confirmations
+   (carry-overs, unchanged).
+
+**New follow-ups surfaced this session (agent-doable next time):** tier-2
+mint/install client orchestration UX (daemon endpoints + envelopes are live);
+phone reminder before a shared service cert expires; custom-domain CNAME target
+`<user>.flagship.services` no longer has an A record under per-box DNS (weigh
+with tier-2 work); mobile in-app Replace-device lacks the TOTP prompt (webapp
+ceremony has it); Android PendingServerStore persistence; webapp pending
+re-pair banner could surface the completion deadline on GET.
+
 ### 2026-06-10 (late) — CERT-MODEL MIGRATION C → A′ EXECUTED IN CODE
 
 **⭐ The entire cert-model migration is implemented on `main` and gated** (15
