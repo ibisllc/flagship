@@ -37,6 +37,13 @@ import CryptoKit
 
 public let PAIR_PROTOCOL_VERSION: Int = 1
 
+/// Session-lock window (design refinement §1) — mirrors
+/// `PAIR_SESSION_LOCK_MS` in `@flagship/protocol/nfcPair.ts`. The box
+/// latches the tapped sessionId for this long; the phone must land its
+/// claim/deposit within the window or re-tap (the box rolls a fresh
+/// keypair + sessionId after expiry).
+public let PAIR_SESSION_LOCK_MS: Int64 = 30_000
+
 private let TAG_PAIR = "flagship/pair/v1"
 private let TAG_PAIR_SAS = "flagship/pair-sas/v1"
 private let TAG_BOX_UNPAIR = "flagship/box-unpair/v1"
@@ -459,6 +466,46 @@ public func encodeSasForDisplay(_ sas: Data, chars: Int = 6) -> String {
     let h = hex(sas)
     if h.count <= chars { return h }
     return String(h.prefix(chars))
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Rendezvous deposit blob — ePhonePub || ciphertext
+//
+// Mirrors `buildWifiDepositBlob` / `parseWifiDepositBlob` in
+// `@flagship/protocol/nfcPair.ts`. The cloud drop-box relays one
+// opaque blob; the box needs the phone's ephemeral public key to
+// derive K_session, so the deposit carries it as a fixed 32-byte
+// prefix. Tampering the prefix shifts the box onto a different
+// K_session, so the AEAD open fails — no separate MAC needed.
+
+private let EPHONE_PUB_LEN = 32
+private let MIN_CIPHERTEXT_LEN = 16  // AES-GCM tag alone
+
+public enum WifiDepositBlobError: Error, Equatable {
+    case wrongSizeEphonePub
+    case blobTooShort
+}
+
+public func buildWifiDepositBlob(ePhonePub: Data, sealed: SealedWiFiConfig) throws -> Data {
+    if ePhonePub.count != EPHONE_PUB_LEN {
+        throw WifiDepositBlobError.wrongSizeEphonePub
+    }
+    var out = Data(capacity: EPHONE_PUB_LEN + sealed.ciphertext.count)
+    out.append(ePhonePub)
+    out.append(sealed.ciphertext)
+    return out
+}
+
+public func parseWifiDepositBlob(_ blob: Data) throws -> (ePhonePub: Data, ciphertext: Data) {
+    if blob.count < EPHONE_PUB_LEN + MIN_CIPHERTEXT_LEN {
+        throw WifiDepositBlobError.blobTooShort
+    }
+    // Re-wrap as fresh Data — slices keep the parent's indices, which
+    // bites any consumer that assumes zero-based subscripting.
+    return (
+        ePhonePub: Data(blob.prefix(EPHONE_PUB_LEN)),
+        ciphertext: Data(blob.dropFirst(EPHONE_PUB_LEN))
+    )
 }
 
 // ────────────────────────────────────────────────────────────────────────
