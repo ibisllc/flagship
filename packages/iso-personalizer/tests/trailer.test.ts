@@ -62,33 +62,20 @@ function buildBlob(overrides: Partial<InstallBlob> = {}): InstallBlob {
 }
 
 describe("installBlobToJson/FromJson preserves signed optional fields", () => {
-  it("round-trips certAutonomy + bootUnlockMode so the signature still verifies", () => {
-    const blob = buildBlob({
-      bootUnlockMode: "approve",
-      certAutonomy: { mode: "managed", offlineWindowDays: 7 },
-    });
+  it("round-trips bootUnlockMode so the signature still verifies", () => {
+    const blob = buildBlob({ bootUnlockMode: "approve" });
     const sig = signInstallBlob(blob, harryIrk);
     // The phone-signed blob → recipe JSON → back to a blob (what the box does).
     const restored = installBlobFromJson(installBlobToJson(blob));
     expect(restored.bootUnlockMode).toBe("approve");
-    expect(restored.certAutonomy).toEqual({ mode: "managed", offlineWindowDays: 7 });
     // The restored blob's canonical bytes MUST match — verify must still pass.
     expect(verifyInstallBlob(restored, sig, harryIrk.publicKey)).toBe(true);
   });
 
-  it("an autonomous blob round-trips (days default to 0 on the wire) + verifies", () => {
-    const blob = buildBlob({ certAutonomy: { mode: "autonomous" } });
-    const sig = signInstallBlob(blob, harryIrk);
-    const restored = installBlobFromJson(installBlobToJson(blob));
-    expect(restored.certAutonomy?.mode).toBe("autonomous");
-    expect(verifyInstallBlob(restored, sig, harryIrk.publicKey)).toBe(true);
-  });
-
-  it("a legacy blob with neither field round-trips unchanged", () => {
+  it("a blob with no optional fields round-trips unchanged", () => {
     const blob = buildBlob();
     const restored = installBlobFromJson(installBlobToJson(blob));
     expect(restored.bootUnlockMode).toBeUndefined();
-    expect(restored.certAutonomy).toBeUndefined();
     expect(verifyInstallBlob(restored, signInstallBlob(blob, harryIrk), harryIrk.publicKey)).toBe(true);
   });
 });

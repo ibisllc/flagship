@@ -388,29 +388,6 @@ export interface InstallBlob {
    */
   bootUnlockMode?: "auto" | "approve";
   /**
-   * Per-server cert-autonomy policy (per-user-cert design): how long this box
-   * may keep serving TLS without an admin device surfacing to renew. The
-   * phone signs over it so a compromised .com can't silently weaken it.
-   *
-   *   - "managed" (DEFAULT): the box NEVER holds minting authority; an admin
-   *     device renews its cert (standard ≤90-day LE cert). `offlineWindowDays`
-   *     is the target before an admin must surface — it drives the renewal-
-   *     reminder cadence + the cert profile (≤6 → short-lived, else standard).
-   *   - "autonomous": the box holds a sealed, revocable ACME account key and
-   *     renews itself indefinitely. This is the opt-in power-user weakening —
-   *     that box becomes a cert-MINTING authority for the whole `*.<user>`
-   *     namespace (per-box-revocable). Choose only for a physically-secure,
-   *     always-on box.
-   *
-   * OPTIONAL + backward-compatible: a blob WITHOUT this field canonicalizes
-   * exactly as before; absence is treated as "managed" (30-day window).
-   */
-  certAutonomy?: {
-    mode: "managed" | "autonomous";
-    /** managed-mode only; ignored for "autonomous". */
-    offlineWindowDays?: number;
-  };
-  /**
    * Disk-encryption policy chosen at server creation. The phone signs over it
    * so a compromised network/.com can't DOWNGRADE an encrypted box to plaintext
    * by tampering with the recipe in transit (the burner verifies the blob
@@ -1027,17 +1004,10 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
   // When present it is appended, so the signer commits to it — a relay
   // cannot strip the field (signature would fail) nor downgrade the value.
   if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
-  // Same backward-compatible append. The `ca=` prefix keeps the token from
-  // ever colliding with a bootUnlockMode value ("auto"/"approve") if a blob
-  // carries certAutonomy but not bootUnlockMode. The signer commits to it, so
-  // a relay can neither strip it (sig fails) nor flip "managed"→"autonomous".
-  if (b.certAutonomy !== undefined) {
-    parts.push(`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`);
-  }
-  // Same backward-compatible append, after certAutonomy. The `de=` prefix can't
-  // collide with a bootUnlockMode ("auto"/"approve") or `ca=` token. The signer
-  // commits to it, so a relay can neither strip it (sig fails) nor flip
-  // "luks"→"none" to downgrade an encrypted box to plaintext.
+  // Same backward-compatible append. The `de=` prefix can't collide with a
+  // bootUnlockMode ("auto"/"approve") token. The signer commits to it, so a
+  // relay can neither strip it (sig fails) nor flip "luks"→"none" to downgrade
+  // an encrypted box to plaintext.
   if (b.diskEncryption !== undefined) {
     parts.push(`de=${b.diskEncryption}`);
   }

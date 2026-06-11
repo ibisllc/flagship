@@ -22,7 +22,6 @@ import {
 } from "./acme/letsEncryptIssuer.js";
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
-import { fetchGrantedAccountKeyPem } from "./acme/grantedAccountKey.js";
 import { buildServiceCertHandlers, rehydrateServiceCerts } from "./serviceCertHttp.js";
 import {
   superviseTunnelClient,
@@ -70,10 +69,12 @@ export interface DaemonRuntimeOptions {
    * Renewal window in ms. The runtime re-issues the cert when the live
    * one has less than this remaining. Same value gates the startup
    * "reuse-disk-cert" decision and the periodic renewal scheduler.
-   * Default: 60 days. LE issues 90-day certs, so 60d-remaining means the
-   * cert is ~30 days old; the wide safety margin tolerates daemons that
-   * sleep, travel, or sit behind flaky residential ISPs for weeks at a
-   * time and still recover before expiry.
+   * Default: 30 days (LE's published recommendation). LE issues 90-day
+   * certs, so 30d-remaining means the cert is ~60 days old — that's
+   * roughly one issuance per 60 days, keeping the fleet well under LE's
+   * duplicate/rate limits while still leaving a 30-day margin for a box
+   * that sleeps, travels, or sits behind a flaky residential ISP. A pure
+   * system constant: no per-box / blob / account-wide setting feeds it.
    */
   renewalWindowMs?: number;
   /**
@@ -653,34 +654,33 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // demo: a fresh LE account on every restart and no renewal continuity.
   const store: PersistentAcmeStore | null =
     opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
-  // LE issues 90-day certs; we renew when ≤60 days remain (i.e. once the
-  // cert is ~30 days old). The wide safety margin means the daemon can be
-  // offline for weeks and still recover before expiry — important for
-  // boxes that travel, sleep, or sit behind flaky residential ISPs.
-  // Operators who specifically want LE's published 30-day-recommendation
-  // can override via `renewalWindowMs`.
-  const renewalWindowMs = opts.renewalWindowMs ?? 60 * 24 * 60 * 60 * 1000;
+  // Every box self-renews its own per-box A′ cert on one system-wide policy:
+  // LE issues 90-day certs; we renew when ≤30 days remain (cert ~60 days old),
+  // so ~one issuance per 60 days. A pure system constant — no per-box autonomy
+  // selection, no account-wide validity setting. The renewal itself is jittered
+  // (see renewIfNeeded) so the fleet desyncs and never bursts against LE.
+  const renewalWindowMs = opts.renewalWindowMs ?? DEFAULT_RENEWAL_WINDOW_MS;
   const renewalCheckIntervalMs = opts.renewalCheckIntervalMs ?? 6 * 60 * 60 * 1000;
+  // Per-cert renewal backoff state, owned by the periodic loop so a failed
+  // renewal backs off (with jitter) across 6-hour ticks instead of re-hammering
+  // LE every tick. Reset to a clean slate on each successful renewal.
+  const renewalBackoff: RenewalBackoffState = { failures: 0, nextAttemptAt: 0 };
 
-  // Resolve the ACME account key once: env-supplied → on-disk → fresh.
-  // We need it for both initial issuance AND periodic renewal, so do it
-  // up front rather than only on the issuance path.
+  // Resolve the ACME account key for THIS box's own per-box A′ cert
+  // (`[<server>.<user>, *.<server>.<user>]`): env-supplied → on-disk → fresh.
+  // Under cert model A′ every box self-renews on its OWN, disk-persisted,
+  // self-generated account key — the per-box cert path NEVER depends on a
+  // delivered/sealed grant. (The #28 granted-account-key machinery —
+  // `fetchGrantedAccountKeyPem` + `resolveAccountKey`'s `resolveGrantedPem`
+  // seam — is retained for the tier-2 shared-service cert + recovery callers,
+  // which mint under the user's ONE shared account; it just no longer gates a
+  // box's own cert.) Resolved up front since both initial issuance AND periodic
+  // renewal need it.
   const accountKeyPem = await resolveAccountKey({
     explicitPem: opts.accountKeyPem,
     store,
     createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
     onGenerated: opts.onAccountKeyGenerated,
-    // #28 seal-to-box: if an admin has granted this box the user's SHARED ACME
-    // account key (sealed to its STK = the identity Ed25519 seed), adopt it so
-    // every box under the user mints certs under ONE Let's Encrypt account.
-    // Returns null when there's no grant / .com is unreachable / the blob isn't
-    // for us, in which case resolveAccountKey falls back to disk → self-gen.
-    resolveGrantedPem: () =>
-      fetchGrantedAccountKeyPem({
-        baseUrl: opts.controlPlaneBaseUrl,
-        serverFqdn: opts.serverFqdn,
-        stkSeed: identity.privateKey,
-      }),
   });
 
   const dns = new RemoteDnsChallengeWriter({
@@ -732,7 +732,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     });
   }
 
-  // Periodic renewal. With the default 60-day window + 6-hour cadence,
+  // Periodic renewal. With the default 30-day window + 6-hour cadence,
   // a daemon that's online any reasonable fraction of the time renews
   // with weeks to spare. setInterval timers don't keep Node alive on
   // their own once `unref`'d, so the tunnel and TLS server are still
@@ -747,6 +747,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         serverFqdn: opts.serverFqdn,
         sans,
         renewalWindowMs,
+        backoff: renewalBackoff,
         onCertIssued: opts.onCertIssued,
       });
     }, renewalCheckIntervalMs);
@@ -1273,30 +1274,129 @@ export async function resolveAccountKey(deps: {
 }
 
 /**
- * Periodic renewal check. Exported (via `_internal` below) so tests can
- * trigger it with a fake issuer + clock without spinning up a real
- * daemon. Failures log and bail; the next tick will retry.
+ * System-wide renewal window: renew when ≤30 days remain on the 90-day LE
+ * cert (~one issuance per 60 days). A pure constant — no per-box / blob /
+ * account-wide setting feeds it. Overridable via `opts.renewalWindowMs` for
+ * tests only.
+ */
+export const DEFAULT_RENEWAL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Fleet-desync jitter bound. When a cert first becomes due, each box delays its
+ * renewal by a uniform 0..this offset so a fleet that all crossed the 30-day
+ * mark together does NOT burst against Let's Encrypt at the same instant. Set
+ * well inside the 30-day safety margin so even a maximally-jittered box still
+ * renews with ~27 days to spare.
+ */
+export const RENEWAL_JITTER_BOUND_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Base unit for exponential failure backoff (with jitter). A failed renewal
+ * waits ~BASE * 2^failures + jitter before the next attempt, capped so the
+ * box always retries within whatever margin remains before expiry.
+ */
+export const RENEWAL_BACKOFF_BASE_MS = 6 * 60 * 60 * 1000;
+
+/** Mutable per-cert backoff schedule, owned by the periodic loop. */
+export interface RenewalBackoffState {
+  failures: number;
+  /** Epoch-ms before which the loop must not re-attempt issuance. */
+  nextAttemptAt: number;
+}
+
+/**
+ * Periodic renewal check. Exported so tests can trigger it with a fake issuer
+ * + injected clock/RNG without spinning up a real daemon.
+ *
+ * Jitter: the effective renewal threshold is `renewalWindowMs − jitter`, where
+ * `jitter = random() · RENEWAL_JITTER_BOUND_MS`. So a box renews when ≤ ~27..30
+ * days remain — desyncing the fleet so it never bursts against LE. `random`/
+ * `now` are injectable seams; production passes the real clock + `Math.random`,
+ * tests pass deterministic stand-ins (we never call `Math.random` where a test
+ * can't pin it).
+ *
+ * Backoff: on failure the (caller-owned) `backoff` state records an exponential
+ * delay WITH jitter, bounded to the remaining pre-expiry margin, so a flaky LE
+ * path retries on a desynced schedule across 6-hour ticks rather than hammering
+ * every tick — yet always retries while the cert can still be saved. A success
+ * resets the schedule.
  */
 export async function renewIfNeeded(
-  deps: IssueDeps & { renewalWindowMs: number; now?: () => number },
+  deps: IssueDeps & {
+    renewalWindowMs: number;
+    now?: () => number;
+    random?: () => number;
+    backoff?: RenewalBackoffState;
+  },
 ): Promise<{ renewed: boolean; reason?: string; error?: string }> {
   const now = deps.now ?? (() => Date.now());
-  if (!deps.certManager.needsRenewal(deps.renewalWindowMs, now())) {
+  const random = deps.random ?? Math.random;
+  const t = now();
+  const msLeft = deps.certManager.msUntilExpiry(t);
+
+  // Fleet-desync jitter: pull the renewal threshold IN by a per-box random
+  // offset so boxes that crossed 30 days together don't fire together.
+  const jitterMs = clampUnit(random()) * RENEWAL_JITTER_BOUND_MS;
+  const effectiveWindowMs = deps.renewalWindowMs - jitterMs;
+  if (msLeft >= effectiveWindowMs) {
     return { renewed: false, reason: "not in renewal window" };
   }
-  const daysLeft = Math.floor(deps.certManager.msUntilExpiry(now()) / 86_400_000);
+
+  // Honor any active backoff schedule before re-attempting a failed renewal.
+  if (deps.backoff && t < deps.backoff.nextAttemptAt) {
+    return { renewed: false, reason: "backing off" };
+  }
+
+  const daysLeft = Math.floor(msLeft / 86_400_000);
   console.log(
     `[runtime] cert for ${deps.serverFqdn} has ${daysLeft}d left — renewing`,
   );
   try {
     await issueAndInstall(deps);
+    if (deps.backoff) {
+      deps.backoff.failures = 0;
+      deps.backoff.nextAttemptAt = 0;
+    }
     console.log(`[runtime] cert renewed for ${deps.serverFqdn}`);
     return { renewed: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`[runtime] renewal failed for ${deps.serverFqdn}: ${msg}`);
+    if (deps.backoff) {
+      deps.backoff.failures += 1;
+      const wait = renewalBackoffDelayMs(deps.backoff.failures, msLeft, random);
+      deps.backoff.nextAttemptAt = t + wait;
+      console.error(
+        `[runtime] renewal failed for ${deps.serverFqdn}: ${msg} — retrying in ~${Math.round(wait / 3_600_000)}h`,
+      );
+    } else {
+      console.error(`[runtime] renewal failed for ${deps.serverFqdn}: ${msg}`);
+    }
     return { renewed: false, error: msg };
   }
+}
+
+/** Clamp an injected RNG draw to [0,1) so a misbehaving seam can't push the
+ *  jitter outside its bound. */
+function clampUnit(r: number): number {
+  if (!Number.isFinite(r) || r < 0) return 0;
+  return r < 1 ? r : 0.999_999;
+}
+
+/**
+ * Exponential-backoff-with-jitter delay for a failed renewal: ~BASE·2^(n−1)
+ * plus a 0..BASE jitter, hard-capped at half the remaining pre-expiry margin
+ * so we ALWAYS get at least one more attempt before the cert dies (and never
+ * schedule a retry past expiry). `marginMs` is the ms left on the live cert.
+ */
+export function renewalBackoffDelayMs(
+  failures: number,
+  marginMs: number,
+  random: () => number = Math.random,
+): number {
+  const exp = RENEWAL_BACKOFF_BASE_MS * 2 ** Math.max(0, failures - 1);
+  const jitter = clampUnit(random()) * RENEWAL_BACKOFF_BASE_MS;
+  const cap = Math.max(0, Math.floor(marginMs / 2));
+  return Math.max(0, Math.min(exp + jitter, cap));
 }
 
 

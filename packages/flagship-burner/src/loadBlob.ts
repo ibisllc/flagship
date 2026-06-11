@@ -164,32 +164,13 @@ export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null
     rckPubKey: rckPub,
     // Carry the signed optional fields so the reconstructed canonical bytes
     // match the phone's signature. Dropping them here would fail verify for
-    // any "approve" / non-default-cert-autonomy server.
+    // any "approve" / no-disk-encryption server.
     ...(o.bootUnlockMode === "approve" || o.bootUnlockMode === "auto"
       ? { bootUnlockMode: o.bootUnlockMode as "approve" | "auto" }
       : {}),
-    ...(parseCertAutonomy(o.certAutonomy) ?? {}),
     ...(o.diskEncryption === "luks" || o.diskEncryption === "none"
       ? { diskEncryption: o.diskEncryption as "luks" | "none" }
       : {}),
-  };
-}
-
-/** Reconstruct InstallBlob.certAutonomy from the recipe JSON, validating the
- *  shape so a garbage value can't silently change the canonical bytes.
- *  Returns `{ certAutonomy }` (spread-ready) or null when absent/invalid. */
-function parseCertAutonomy(
-  v: unknown,
-): { certAutonomy: { mode: "managed" | "autonomous"; offlineWindowDays?: number } } | null {
-  if (!v || typeof v !== "object") return null;
-  const o = v as Record<string, unknown>;
-  if (o.mode !== "managed" && o.mode !== "autonomous") return null;
-  const days = o.offlineWindowDays;
-  return {
-    certAutonomy: {
-      mode: o.mode,
-      ...(typeof days === "number" ? { offlineWindowDays: days } : {}),
-    },
   };
 }
 
