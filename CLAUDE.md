@@ -123,6 +123,32 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-11 (latest) — vestigial UI removed + WhatsApp-inspired redesign
+
+- **Removed the vestigial "grant a box cert autonomy" ceremony** (iOS + Android;
+  webapp never had it). Cert simplification made every box self-renew, so sealing
+  the shared ACME account key to a box for "autonomous minting" is meaningless.
+  Kept the AcmeAccountKeyGrant machinery (tier-2 + recovery still use it).
+- **UI redesign (WhatsApp-inspired), trickled to all platforms.** Found + fixed a
+  brand split: mobile was still on the legacy blue `#3B5BFF` while web was on the
+  brand teal — **unified mobile on teal `#14B8A6`/`#2DD4BF`**. New shared component
+  language (filter chip row, search field, account monogram, profile hero card,
+  single dismissible announcement card, grouped icon-square settings rows, clean
+  list rows), applied to the three hero screens (Home/Servers, Apps, Settings) on
+  iOS (reference), Android (Compose mirror), and webapp (vanilla JS mirror): large
+  collapsing title + search + filter chips (All/Online/Pending/Offline on Home;
+  All/Yours/Shared on Apps) + list rows + announcement card; Settings gets a
+  profile hero + grouped rows. A shared status classifier (PodStatusStyle /
+  HomeStatusFilter) keeps the bucket rules identical across platforms. Large-screen
+  pass: a 640pt centered reading column + inline titles on iPad/expanded. Pure
+  presentation restyle — every callback/flow + the sign-out gating preserved.
+  Note: the webapp already had a bottom tab bar (an earlier note was stale).
+- Analysis confirmed iOS/Android were already at near-parity on flows; the
+  redesign + teal unification closed the main visual/brand gaps.
+
+Gates: `npx vitest run` 4914 (371 files) · iOS 906 · Android 724 · webapp 1125 ·
+`npx tsc -b` clean. All pushed.
+
 ### 2026-06-11 (later) — cert model simplified + lock/dead-man feature
 
 **Cert model simplified to one system-wide policy.** Removed the creation-time
