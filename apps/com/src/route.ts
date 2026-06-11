@@ -17,7 +17,7 @@
  *   9. Anything else — static assets.
  */
 
-import { tryControlPlane } from "./controlPlaneRoutes.js";
+import { tryControlPlane, tryBootHost } from "./controlPlaneRoutes.js";
 import {
   recordRateLimited,
   recordUpgrade,
@@ -74,6 +74,21 @@ const VOICI_WWW_HOST = "www.voi.ci";
  */
 const RECOVERY_HOST = "recovery.flagshipserver.com";
 const RECOVERY_ORIGIN = `https://${RECOVERY_HOST}`;
+
+/**
+ * boot.flagshipserver.com — the box/phone-facing BOOT operations
+ * (auto-unlock lease release + the phone-gated approval relay). Historically
+ * a SEPARATE worker (apps/boot) with its own D1 + a shared-secret notify
+ * bridge back to this identity plane; that bridge silently 401'd in prod when
+ * the secret drifted, hanging the LUKS unlock with no visible error. The boot
+ * operations now run HERE, host-dispatched, backed by `flagship-state`, with
+ * the directory + owner push resolved in-process — no second worker, no second
+ * mailbox, no shared secret. The hostname + the `/api/boot/*` contract are
+ * unchanged, so the box, burner, and phone need no change. apps/boot stays as
+ * an optional cloneable target for an enterprise running its own identity
+ * plane. See docs/boot-worker-consolidation.md.
+ */
+const BOOT_HOST = "boot.flagshipserver.com";
 
 /**
  * CSP applied to every response served from `recovery.flagshipserver.com`.
@@ -306,6 +321,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
     if (lowered === WEBAPP_HOST ||
         lowered === RECOVERY_HOST ||
+        lowered === BOOT_HOST ||
         lowered === "www.flagshipserver.com" ||
         lowered === "flagshipserver.com") {
       url = new URL(
@@ -358,6 +374,18 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // ignore frame-ancestors. Disk path: apps/web/public/recovery/*.
   if (url.hostname === RECOVERY_HOST) {
     return serveRecovery(request, url, env);
+  }
+
+  // ---- boot.flagshipserver.com ----
+  // The box/phone-facing BOOT operations (`/api/boot/*`). Served here now
+  // instead of by a separate worker; backed by `flagship-state`, with the
+  // directory + owner push resolved in-process. The hostname + every path/
+  // shape are byte-identical to the old standalone worker, so clients are
+  // wire-transparent. A non-boot path on this host 404s (boot is a tiny,
+  // single-purpose surface — never the marketing/webapp/proxy fallthrough).
+  if (url.hostname === BOOT_HOST) {
+    const res = await tryBootHost(request, env as unknown as Parameters<typeof tryBootHost>[1]);
+    return res ?? jsonResponse({ error: "not found" }, 404);
   }
 
   // ---- voi.ci ----

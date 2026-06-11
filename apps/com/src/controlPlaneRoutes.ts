@@ -138,6 +138,13 @@ import {
 } from "@flagship/control-plane";
 import { D1Storage, D1DemoUsersStorage, type D1Database } from "@flagship/storage";
 import {
+  routeBoot,
+  AUTH_HEADER,
+  D1NonceStore,
+  type BootRouteDeps,
+} from "@flagship/boot-core";
+import { InProcessDirectoryClient, InProcessNotifyPipe } from "./bootInProcess.js";
+import {
   workerCaTrustChain,
   caEnforceFromEnv,
   activeCaLeaseNotAfterMs,
@@ -541,6 +548,80 @@ const ROUTE_RE = {
   // "wrangler PUT → R2 → dev-url" sync gap.
   DEV_UPLOAD_ISO: /^\/api\/dev\/upload-iso\/([A-Za-z0-9._-]+)$/,
 };
+
+/**
+ * Serve the `/api/boot/*` contract on the identity plane itself
+ * (boot.flagshipserver.com collapsed onto flagship-com — see
+ * docs/boot-worker-consolidation.md). The hostname + every path/shape is
+ * byte-identical to the standalone `apps/boot` worker, so the box, the
+ * burner, and the phone are wire-transparent; only the backing changes:
+ *
+ *   - storage → `flagship-state` (the `secret_mailbox` / `box_sealed_leases`
+ *     / `boot_nonces` tables — the SAME D1 the rest of `.com` uses).
+ *   - directory → resolved IN-PROCESS from that storage (no self-fetch).
+ *   - notify → the owner push fires IN-PROCESS via the local forwarder (no
+ *     cross-worker `/api/internal/notify-owner` call, no shared secret).
+ *
+ * The box's request is self-authenticating: the gate re-verifies its
+ * Ed25519 STK signature against the directory-bound STK before the router
+ * parks it, so dropping the shared secret removes no real security — it
+ * only removes the fragile two-mailbox sync that silently 401'd in prod.
+ *
+ * Returns null for any non-boot path on this host (the caller 404s).
+ */
+export async function tryBootHost(
+  request: Request,
+  env: ControlPlaneEnv,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  if (path === "/api/health") {
+    return bootJson({ ok: true, service: "flagship-com", surface: "boot" }, 200);
+  }
+  if (!path.startsWith("/api/boot/")) {
+    return bootJson({ error: "not found" }, 404);
+  }
+  if (!env.DB) {
+    return bootJson({ error: "boot operations not configured (DB)" }, 503);
+  }
+
+  const storage = new D1Storage(env.DB);
+  const forwarder = buildOptionalPushForwarder(env);
+  const directory = new InProcessDirectoryClient({
+    servers: storage.servers,
+    usernames: storage.usernames,
+    watchDelegates: storage.watchDelegates,
+  });
+  const notify = new InProcessNotifyPipe({
+    servers: storage.servers,
+    ...(forwarder
+      ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+      : {}),
+  });
+
+  const deps: BootRouteDeps = {
+    boxSealedLeases: storage.boxSealedLeases,
+    secretMailbox: storage.secretMailbox,
+    directory,
+    notify,
+    gate: { directory, nonces: new D1NonceStore(env.DB) },
+  };
+
+  const authHeader = request.headers.get(AUTH_HEADER);
+  const body = await readJson(request);
+  const result = await routeBoot(deps, request.method, path, authHeader, body);
+  if (!result) return bootJson({ error: "not found" }, 404);
+  return bootJson(result.body, result.status);
+}
+
+/** Boot responses are single-use + account-scoped — never cache (rule 5). */
+function bootJson(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
 
 export async function tryControlPlane(
   request: Request,

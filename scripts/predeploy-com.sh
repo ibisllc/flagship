@@ -84,7 +84,8 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 
 # Packages whose dist/ the Worker bundles (apps/com/package.json deps).
-BUNDLED_PKGS="control-plane storage protocol"
+# boot-core ships the /api/boot/* router now mounted on flagship-com.
+BUNDLED_PKGS="control-plane storage protocol boot-core"
 
 # Echo the newest mtime (epoch seconds) of any regular file under $1,
 # or empty when the dir is absent / has no files. POSIX-portable: uses

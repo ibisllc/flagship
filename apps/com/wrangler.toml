@@ -35,6 +35,18 @@ routes = [
   # credential. The page is intentionally tiny and ships under a strict
   # CSP; runbook lives at docs/runbooks/recovery-subdomain.md.
   { pattern = "recovery.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+  # boot.flagshipserver.com — the box/phone-facing BOOT operations
+  # (`/api/boot/*`: auto-unlock lease release + the phone-gated approval
+  # relay). Previously a SEPARATE worker (apps/boot) with its own D1 + a
+  # shared-secret notify bridge back here; that bridge silently 401'd in
+  # prod when the secret drifted, hanging the LUKS unlock with no error.
+  # The boot operations now run on THIS worker, backed by `flagship-state`,
+  # with the directory + owner push resolved in-process. The hostname +
+  # contract are unchanged so the box/burner/phone need no change. This
+  # route must point at flagship-com (and NOT at the old flagship-boot
+  # worker) for the consolidation to take effect — apps/boot stays only as
+  # an optional cloneable target. See docs/boot-worker-consolidation.md.
+  { pattern = "boot.flagshipserver.com/*",     zone_name = "flagshipserver.com" },
 ]
 
 # Static assets — marketing pages, the webapp source under /webapp/
