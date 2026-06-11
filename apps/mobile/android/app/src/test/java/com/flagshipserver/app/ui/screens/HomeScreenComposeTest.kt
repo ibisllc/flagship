@@ -6,6 +6,8 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ServerDetailResponse
@@ -39,7 +41,7 @@ class HomeScreenComposeTest {
             }
         }
         composeRule.onNodeWithText("Add your first server").assertIsDisplayed()
-        composeRule.onNodeWithText("Hi, harry.").assertIsDisplayed()
+        composeRule.onNodeWithText("Welcome back, harry.").assertIsDisplayed()
     }
 
     @Test fun loadedPods_rendersServerOverviewCard() {
@@ -72,9 +74,12 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("Home").assertIsDisplayed()
-        composeRule.onNodeWithText("Everything is online.").assertIsDisplayed()
-        composeRule.onNodeWithText("home.harry.flagship.services").assertIsDisplayed()
+        // The server renders as an FSListRow (name title + fqdn subtitle) and
+        // the state-driven overview card repeats the fqdn — assert the
+        // unambiguous greeting + that the fqdn appears at least once.
+        composeRule.onNodeWithText("Welcome back, harry.").assertIsDisplayed()
+        composeRule.onAllNodesWithText("home.harry.flagship.services")
+            .onFirst().assertIsDisplayed()
     }
 
     @Test fun failedState_rendersErrorCardWithMessage() {

@@ -53,8 +53,9 @@ val LightColors = FlagshipColors(
     border          = Color(0xFFE6E4DD),
     text            = Color(0xFF14140F),
     textMuted       = Color(0xFF6B6A63),
-    primary         = Color(0xFF3B5BFF),
-    primaryHover    = Color(0xFF2C46E0),
+    // Brand teal (web --teal #14B8A6); pressed/aux = --teal-deep #0F8B7E.
+    primary         = Color(0xFF14B8A6),
+    primaryHover    = Color(0xFF0F8B7E),
     success         = Color(0xFF1F8A4C),
     warning         = Color(0xFFB8651A),
     danger          = Color(0xFFC83A3A),
@@ -67,8 +68,10 @@ val DarkColors = FlagshipColors(
     border          = Color(0xFF2A2D33),
     text            = Color(0xFFF2F1EC),
     textMuted       = Color(0xFF9A9A93),
-    primary         = Color(0xFF7E96FF),
-    primaryHover    = Color(0xFFA8B8FF),
+    // Brand teal lifted for dark legibility (web --teal-bright #2DD4BF);
+    // pressed/aux = --teal #14B8A6.
+    primary         = Color(0xFF2DD4BF),
+    primaryHover    = Color(0xFF14B8A6),
     success         = Color(0xFF4FBE7A),
     warning         = Color(0xFFE5A050),
     danger          = Color(0xFFE86464),
@@ -143,15 +146,23 @@ fun FlagshipTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkColors else LightColors
+    // Bottom NavigationBar / NavigationRail read MaterialTheme's
+    // secondaryContainer (the selected-item pill) + onSecondaryContainer
+    // (the selected icon/label). Pin both to the teal axis so the selected
+    // tab reads brand-teal instead of the Material default purple. The soft
+    // teal pill matches the §8.6 status-pill background weight.
     val materialColors = if (darkTheme) {
         darkColorScheme(
             background = colors.bg,
             surface = colors.surface,
             surfaceVariant = colors.surfaceSunken,
             primary = colors.primary,
-            onPrimary = Color.White,
+            onPrimary = Color.Black,
+            secondaryContainer = colors.primary.copy(alpha = 0.20f),
+            onSecondaryContainer = colors.primary,
             onBackground = colors.text,
             onSurface = colors.text,
+            onSurfaceVariant = colors.textMuted,
             outline = colors.border,
             error = colors.danger,
         )
@@ -162,8 +173,11 @@ fun FlagshipTheme(
             surfaceVariant = colors.surfaceSunken,
             primary = colors.primary,
             onPrimary = Color.White,
+            secondaryContainer = colors.primary.copy(alpha = 0.14f),
+            onSecondaryContainer = colors.primaryHover,
             onBackground = colors.text,
             onSurface = colors.text,
+            onSurfaceVariant = colors.textMuted,
             outline = colors.border,
             error = colors.danger,
         )
@@ -182,4 +196,24 @@ object FS {
         @Composable get() = LocalFlagshipColors.current
     val space = FSSpace
     val radius = FSRadius
+}
+
+/**
+ * The standard "icon in a soft-teal rounded square" tint — the accent at the
+ * alpha §8.6 uses for a status-pill background. Mirrors the web `--teal-soft`
+ * token + iOS `FSColors.softTint`. Pass a semantic color to tint other leading
+ * glyphs (status icons in a list row) at the same weight.
+ */
+fun FlagshipColors.softTint(color: Color? = null): Color =
+    (color ?: primary).copy(alpha = 0.12f)
+
+/**
+ * Initials for a monogram avatar. First two alphanumeric characters of the
+ * name, uppercased; falls back to "?" for an empty/symbol-only string. Shared
+ * by FSProfileCard + any list-row monogram so the derivation is identical
+ * everywhere. Byte-for-byte mirror of iOS `fsInitials`.
+ */
+fun fsInitials(name: String): String {
+    val prefix = name.filter { it.isLetterOrDigit() }.take(2)
+    return if (prefix.isEmpty()) "?" else prefix.uppercase()
 }

@@ -4,7 +4,10 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,11 +47,19 @@ import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.ProvisionProgress
+import com.flagshipserver.app.ui.components.FSAnnouncementCard
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSChipItem
+import com.flagshipserver.app.ui.components.FSChipRow
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSListLeading
+import com.flagshipserver.app.ui.components.FSListRow
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSSearchField
+import com.flagshipserver.app.ui.components.HomeStatusFilter
+import com.flagshipserver.app.ui.components.PodStatusStyle
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 
@@ -98,6 +112,33 @@ fun HomeScreen(
     awaitingApproval: Set<String> = emptySet(),
 ) {
     val scroll = rememberScrollState()
+    // Search text over the server list (name / fqdn / description). Pure
+    // presentation — never mutates `pods`. Empty ⇒ no filtering.
+    var search by remember { mutableStateOf("") }
+    // Active status filter chip. ALL shows every server; the others narrow the
+    // list by derived liveness. Pure presentation; every action is untouched.
+    var statusFilter by remember { mutableStateOf(HomeStatusFilter.ALL) }
+
+    // Derived liveness per pod (folds in the account-level waiting signal).
+    fun livenessOf(pod: PodInfo): PodInfo.LivenessState =
+        pod.livenessState(hasLiveUnlockRequest = awaitingApproval.contains(pod.fqdn.lowercase()))
+
+    // Per-filter counts off the full pod set (search-independent) so the chip
+    // badges read the account-wide totals.
+    fun filterCount(f: HomeStatusFilter): Int =
+        pods.count { f.matches(livenessOf(it), it.status) }
+
+    // Pods narrowed by the active chip AND the search query.
+    val q = search.trim().lowercase()
+    val visiblePods = pods.filter { pod ->
+        val matchesFilter = statusFilter.matches(livenessOf(pod), pod.status)
+        val matchesSearch = q.isEmpty() ||
+            pod.name.lowercase().contains(q) ||
+            pod.fqdn.lowercase().contains(q) ||
+            (pod.description?.lowercase()?.contains(q) ?: false)
+        matchesFilter && matchesSearch
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -105,17 +146,14 @@ fun HomeScreen(
             .padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s12))
+        // Large title + greeting subheader.
         Text(
-            text = "Hi${if (username.isNotEmpty()) ", $username." else "."}",
+            text = "Home",
             color = FS.colors.text,
-            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold),
         )
         Text(
-            text = when {
-                pods.isEmpty() -> "No servers yet."
-                pods.any { it.status == PodInfo.Status.OFFLINE } -> "One server is offline."
-                else -> "Everything is online."
-            },
+            text = if (username.isEmpty()) "Welcome back." else "Welcome back, $username.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
@@ -125,26 +163,18 @@ fun HomeScreen(
             DeviceCapabilityChip(cap = deviceCapability)
         }
 
-        if (accountWasReset) {
-            Spacer(Modifier.height(FS.space.s4))
-            AccountResetBanner(onSignInAgain = onSignInAgain)
-        }
-
-        if (showRecoveryBackupBanner && !accountWasReset) {
-            Spacer(Modifier.height(FS.space.s4))
-            RecoveryBackupBanner(
-                onSecure = onSetUpRecovery,
-                onDismiss = onDismissRecoveryBackupBanner,
-            )
-        }
-
-        if (showRecoveryNudge && !accountWasReset) {
-            Spacer(Modifier.height(FS.space.s4))
-            RecoveryNudgeCard(
-                onSetUp = onSetUpRecovery,
-                onDismiss = onDismissRecoveryNudge,
-            )
-        }
+        // One announcement at a time, highest priority first: an account-reset
+        // (danger) suppresses everything; otherwise the backup banner, then the
+        // recovery nudge. All three fold into one FSAnnouncementCard.
+        TopAnnouncement(
+            accountWasReset = accountWasReset,
+            showRecoveryBackupBanner = showRecoveryBackupBanner,
+            showRecoveryNudge = showRecoveryNudge,
+            onSignInAgain = onSignInAgain,
+            onSetUpRecovery = onSetUpRecovery,
+            onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner,
+            onDismissRecoveryNudge = onDismissRecoveryNudge,
+        )
 
         Spacer(Modifier.height(FS.space.s8))
 
@@ -152,17 +182,37 @@ fun HomeScreen(
             EmptyServerCard(onAddServer = onAddServer)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                pods.forEach { pod ->
-                    PodCard(
-                        pod = pod,
-                        isLeader = pod.podId == leaderPodId,
-                        liveness = pod.livenessState(
-                            hasLiveUnlockRequest = awaitingApproval.contains(pod.fqdn.lowercase()),
-                        ),
-                        onTap = { onOpenPod(pod) },
-                        onSetLeader = { onSetLeader(pod) },
-                        onDelete = { onDeleteServer(pod) },
-                    )
+                FSSearchField(
+                    value = search,
+                    onValueChange = { search = it },
+                    placeholder = "Search servers",
+                )
+                FSChipRow(
+                    items = HomeStatusFilter.allCases().map {
+                        FSChipItem(value = it, label = it.label, count = filterCount(it))
+                    },
+                    selection = statusFilter,
+                    onSelect = { statusFilter = it },
+                )
+                if (visiblePods.isEmpty()) {
+                    FSCard {
+                        Text(
+                            "No servers match “${if (search.isEmpty()) statusFilter.label.lowercase() else search}”.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp),
+                        )
+                    }
+                } else {
+                    visiblePods.forEach { pod ->
+                        ServerRow(
+                            pod = pod,
+                            isLeader = pod.podId == leaderPodId,
+                            liveness = livenessOf(pod),
+                            onTap = { onOpenPod(pod) },
+                            onSetLeader = { onSetLeader(pod) },
+                            onDelete = { onDeleteServer(pod) },
+                        )
+                    }
                 }
                 FSGhostButton(
                     label = "Add a server",
@@ -180,6 +230,63 @@ fun HomeScreen(
             else -> ServerCardSkeleton()
         }
         Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+/// The single highest-priority announcement card. Folds the three stacked
+/// banners (account-reset / backup / recovery-nudge) into one
+/// FSAnnouncementCard, danger-tinted for the account-reset case. Each path
+/// keeps its own CTA + dismiss callbacks verbatim.
+@Composable
+private fun TopAnnouncement(
+    accountWasReset: Boolean,
+    showRecoveryBackupBanner: Boolean,
+    showRecoveryNudge: Boolean,
+    onSignInAgain: () -> Unit,
+    onSetUpRecovery: () -> Unit,
+    onDismissRecoveryBackupBanner: () -> Unit,
+    onDismissRecoveryNudge: () -> Unit,
+) {
+    when {
+        accountWasReset -> {
+            Spacer(Modifier.height(FS.space.s4))
+            FSAnnouncementCard(
+                icon = "!",
+                title = "This device was removed from your account",
+                message = "Another device on this account ran Disconnect, Replace, or " +
+                    "Wipe. Sign in again with your recovery passkey to get back in.",
+                ctaLabel = "Sign in again",
+                tint = FS.colors.danger,
+                onCta = onSignInAgain,
+                modifier = Modifier.testTag("account-reset-banner"),
+            )
+        }
+        showRecoveryBackupBanner -> {
+            Spacer(Modifier.height(FS.space.s4))
+            FSAnnouncementCard(
+                icon = "🔑",
+                title = "Your account isn't backed up yet",
+                message = "If you lose this device, there's no way back in. Set up " +
+                    "recovery now (one minute) so you can restore your account.",
+                ctaLabel = "Secure my account",
+                onCta = onSetUpRecovery,
+                onDismiss = onDismissRecoveryBackupBanner,
+                modifier = Modifier.testTag("recovery-backup-banner"),
+            )
+        }
+        showRecoveryNudge -> {
+            Spacer(Modifier.height(FS.space.s4))
+            FSAnnouncementCard(
+                icon = "🔑",
+                title = "Set up recovery",
+                message = "Right now this phone is the only way back into your account. " +
+                    "Bank a passkey so you can recover if you lose this device.",
+                ctaLabel = "Set it up",
+                onCta = onSetUpRecovery,
+                onDismiss = onDismissRecoveryNudge,
+                modifier = Modifier.testTag("recovery-nudge-card"),
+            )
+        }
     }
 }
 
@@ -234,6 +341,147 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
     }
 }
 
+/// Leading-icon tint for a server row, mirroring iOS
+/// `PodStatusStyle.iconColor` — derived off the same pill kind so the row's
+/// status icon, the pill, and the label never drift.
+@Composable
+private fun statusIconColor(liveness: PodInfo.LivenessState, status: PodInfo.Status): Color =
+    when (PodStatusStyle.pillKind(liveness, status)) {
+        FSPillKind.Online -> FS.colors.success
+        FSPillKind.Renewing -> FS.colors.warning
+        FSPillKind.Offline -> FS.colors.danger
+        FSPillKind.Provisioning -> FS.colors.primary
+        FSPillKind.Idle -> FS.colors.textMuted
+    }
+
+/// Status / fqdn subtitle line for a server row. Prefers the user-set
+/// description when present (that's what the user named it for), else the
+/// fqdn, else the status label.
+private fun serverSubtitle(pod: PodInfo, liveness: PodInfo.LivenessState): String {
+    if (!pod.description.isNullOrEmpty()) return pod.description!!
+    if (pod.fqdn.isNotEmpty()) return pod.fqdn
+    return PodStatusStyle.label(liveness, pod.status)
+}
+
+/// A single server list row (FSListRow): a leading status-tinted icon, the
+/// name as title, the description/fqdn subtitle, a trailing Leader badge +
+/// status pill + chevron, and a demo install-progress bar when applicable.
+/// Tap opens the server; long-press surfaces the full context menu
+/// (make-leader / open / cancel-pending / delete-dead) preserved verbatim.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ServerRow(
+    pod: PodInfo,
+    isLeader: Boolean,
+    liveness: PodInfo.LivenessState,
+    onTap: () -> Unit,
+    onSetLeader: () -> Unit,
+    onDelete: () -> Unit = {},
+) {
+    // A pending order, or a GENUINELY dead box (registered, no live unlock
+    // request, no check-in, past the grace window), is deletable straight from
+    // the list via the release flow. A live, checked-in server — OR one that's
+    // waiting for approval / still coming online — is NOT.
+    val deletable = pod.status == PodInfo.Status.PENDING || liveness == PodInfo.LivenessState.DEAD
+    val canMakeLeader = !isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline
+
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+
+    val pillTag: String? = when (liveness) {
+        PodInfo.LivenessState.DEAD -> "pod-card-never-online"
+        PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "pod-card-waiting-approval"
+        PodInfo.LivenessState.COMING_ONLINE ->
+            if (pod.status == PodInfo.Status.PENDING) null else "pod-card-coming-online"
+        PodInfo.LivenessState.ONLINE -> null
+    }
+
+    Box {
+        FSListRow(
+            leading = FSListLeading.Icon("🖥", statusIconColor(liveness, pod.status)),
+            title = pod.name,
+            subtitle = serverSubtitle(pod, liveness),
+            modifier = Modifier.combinedClickable(
+                onClick = onTap,
+                onLongClick = { menuOpen = true },
+            ),
+            trailing = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                ) {
+                    // Leader = the daemon the screens point at; only badge a
+                    // server that actually came online.
+                    if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    FSPill(
+                        label = PodStatusStyle.label(liveness, pod.status),
+                        kind = PodStatusStyle.pillKind(liveness, pod.status),
+                        modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
+                    )
+                    Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
+                }
+            },
+        )
+
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (canMakeLeader) {
+                DropdownMenuItem(
+                    text = { Text("Make leader") },
+                    onClick = { menuOpen = false; onSetLeader() },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Open") },
+                onClick = { menuOpen = false; onTap() },
+            )
+            if (deletable) {
+                DropdownMenuItem(
+                    text = { Text("Delete server (free name)") },
+                    modifier = Modifier.testTag("pod-card-delete"),
+                    onClick = { menuOpen = false; confirming = true },
+                )
+            }
+        }
+
+        // "Your server is being installed" — a thin determinate bar on a demo
+        // server still pre-`ready`, overlaid at the row's bottom edge.
+        val demo = pod.demoServer
+        if (demo != null && ProvisionProgress.shouldShowProgressBar(demo.phase, demo.status)) {
+            DemoProgressBar(
+                fraction = ProvisionProgress.fraction(demo.phase),
+                failed = demo.phase == "failed",
+                modifier = Modifier
+                    .testTag("pod-card-install-progress")
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = FS.space.s4, vertical = FS.space.s3),
+            )
+        }
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Delete ${pod.name}?") },
+            text = {
+                Text(
+                    "This frees the name for reuse and the box can no longer come online. " +
+                        if (pod.status == PodInfo.Status.PENDING) "This install hasn't completed." else "This server never checked in.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirming = false; onDelete() }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/// Reusable compact server card — retained for previews / any non-Home caller.
+/// The Home list now renders each server as an [ServerRow]; this dense card is
+/// the legacy presentation and is no longer used by HomeScreen itself.
 @Composable
 fun PodCard(
     pod: PodInfo,
@@ -249,10 +497,6 @@ fun PodCard(
      *  their behaviour; the Home list supplies the account-level signal. */
     liveness: PodInfo.LivenessState = pod.livenessState(hasLiveUnlockRequest = false),
 ) {
-    // A pending order, or a GENUINELY dead box (registered, no live unlock
-    // request, no check-in, past the grace window), is deletable straight from
-    // the list via the release flow. A live, checked-in server — OR one that's
-    // waiting for approval / still coming online — is NOT.
     val deletable = pod.status == PodInfo.Status.PENDING || liveness == PodInfo.LivenessState.DEAD
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,8 +510,6 @@ fun PodCard(
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    // Leader = the daemon the screens point at; only badge a
-                    // server that actually came online.
                     if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
                 }
                 if (!pod.description.isNullOrEmpty()) {
@@ -280,56 +522,10 @@ fun PodCard(
                     )
                 }
                 Spacer(Modifier.height(FS.space.s1))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Liveness-driven pill: a box waiting for unlock approval
-                    // reads "Waiting for approval", a recently-registered box
-                    // "Coming online…", and only a genuinely-stale box "Never
-                    // came online" (with the deletable framing).
-                    val pillLabel: String
-                    val pillKind: FSPillKind
-                    val pillTag: String?
-                    when (liveness) {
-                        PodInfo.LivenessState.DEAD -> {
-                            pillLabel = "Never came online"; pillKind = FSPillKind.Offline
-                            pillTag = "pod-card-never-online"
-                        }
-                        PodInfo.LivenessState.WAITING_FOR_APPROVAL -> {
-                            pillLabel = "Waiting for approval"; pillKind = FSPillKind.Provisioning
-                            pillTag = "pod-card-waiting-approval"
-                        }
-                        PodInfo.LivenessState.COMING_ONLINE -> {
-                            // A pre-registration pending pod keeps its install-flow
-                            // "Pending" wording; a registered-but-not-yet-online box
-                            // reads "Coming online".
-                            if (pod.status == PodInfo.Status.PENDING) {
-                                pillLabel = "Pending"; pillTag = null
-                            } else {
-                                pillLabel = "Coming online…"; pillTag = "pod-card-coming-online"
-                            }
-                            pillKind = FSPillKind.Provisioning
-                        }
-                        PodInfo.LivenessState.ONLINE -> {
-                            pillLabel = pod.status.name.lowercase().replaceFirstChar { it.uppercase() }
-                            pillKind = when (pod.status) {
-                                PodInfo.Status.ONLINE -> FSPillKind.Online
-                                PodInfo.Status.PENDING -> FSPillKind.Provisioning
-                                PodInfo.Status.OFFLINE -> FSPillKind.Offline
-                                PodInfo.Status.UNKNOWN -> FSPillKind.Offline
-                            }
-                            pillTag = null
-                        }
-                    }
-                    FSPill(
-                        label = pillLabel,
-                        kind = pillKind,
-                        modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
-                    )
-                }
-                // "Your server is being installed" — a thin determinate
-                // bar on a demo server still pre-`ready`.
+                FSPill(
+                    label = PodStatusStyle.label(liveness, pod.status),
+                    kind = PodStatusStyle.pillKind(liveness, pod.status),
+                )
                 val demo = pod.demoServer
                 if (demo != null &&
                     ProvisionProgress.shouldShowProgressBar(demo.phase, demo.status)
@@ -414,93 +610,6 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
             Text("Couldn't load", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
             if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
-        }
-    }
-}
-
-/** E7 — "your account was reset on another device" danger banner.
- *  Renders above everything else (including the recovery nudge,
- *  which is suppressed while shown). Tapping Sign-in-again drops
- *  the user back to Welcome via app.signOut(). */
-@Composable
-private fun AccountResetBanner(onSignInAgain: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text(
-                "This device was removed from your account",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Another device on this account ran Disconnect, Replace, or " +
-                    "Wipe. Sign in again with your recovery passkey to get back in.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            )
-            FSPrimaryButton(label = "Sign in again", onClick = onSignInAgain, block = true)
-        }
-    }
-}
-
-/** Persistent post-creation backup-reminder banner. Mirrors the
- *  webapp banner in apps/web/public/webapp/views/home.js — surfaces
- *  the moment the user lands on Home without a cloud-recovery
- *  envelope (no online-pod gate), and stays hidden across launches
- *  once "Not now" is tapped. Tapping "Secure my account" routes into
- *  the existing recovery flow on the Settings tab. */
-@Composable
-private fun RecoveryBackupBanner(onSecure: () -> Unit, onDismiss: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
-            modifier = Modifier.testTag("recovery-backup-banner"),
-        ) {
-            Text(
-                "Your account isn't backed up yet",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "If you lose this device, there's no way back in. Set up " +
-                    "recovery now (one minute) so you can restore your account.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSPrimaryButton(label = "Secure my account", onClick = onSecure)
-                FSGhostButton(label = "Not now", onClick = onDismiss)
-            }
-        }
-    }
-}
-
-/** Home recovery-setup nudge — mirrors iOS HomeScreen.recoveryNudge.
- *  Visible when the user has at least one online pod and hasn't yet
- *  uploaded a cloud-recovery envelope. "Set it up" routes to the
- *  RecoveryScreen on the Settings tab; "Not now" dismisses for this
- *  session only (banner re-appears next launch by design — recovery
- *  is important enough to keep nudging). */
-@Composable
-private fun RecoveryNudgeCard(onSetUp: () -> Unit, onDismiss: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Text(
-                "Set up recovery",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Right now this phone is the only way back into your account. " +
-                    "Bank a passkey so you can recover if you lose this device.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-            ) {
-                FSPrimaryButton(label = "Set it up", onClick = onSetUp)
-                FSGhostButton(label = "Not now", onClick = onDismiss)
-            }
         }
     }
 }
