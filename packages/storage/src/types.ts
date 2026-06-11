@@ -371,6 +371,14 @@ export type AuditEventKind =
   | "recovery-code-consumed"
   | "quarantine-blocked-revoke"
   | "totp-failed-rate"
+  // #52 follow-up — single-device re-pair hardening. The first marks
+  // a grace-only recovery initiate on an account with NO enrolled
+  // second factor (allowed, but must stay visible in the feed); the
+  // second marks a stale pending re-pair swept because its completion
+  // window (RE_PAIR_COMPLETE_WINDOW_MS past completes_at) elapsed
+  // without a /complete.
+  | "re-pair-initiated-no-credential"
+  | "re-pair-expired"
   // P13 — IRK-signed user-initiated server revocation
   // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
   // decommissioned}. Cascades through every active boot-unlock lease

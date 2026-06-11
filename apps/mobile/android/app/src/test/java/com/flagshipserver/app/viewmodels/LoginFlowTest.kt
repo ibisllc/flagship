@@ -462,6 +462,97 @@ class LoginFlowTest {
         assertNotNull("pending rotation staged for completion", Keystore.pendingIrkRotationVersion())
     }
 
+    // ─── 2c. #52 — credential on the SINGLE-device initiate ───────────
+
+    /** #52 — a single-device account WITH a second factor enrolled: the
+     *  cloud 401s the bare Phase-B initiate, the VM routes into the
+     *  existing AwaitingSecondFactor state (same UX as multi), and the
+     *  post-factor retry carries the proof BESIDE the signed envelope. */
+    @Test fun single_credentialEnrolled_gatesOnSecondFactor_thenRetriesWithProof() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        // The Mock mirrors the Worker: TOTP enrolled ⇒ proof required
+        // even on a single account.
+        server.totpEnrolledAtByUser["harry"] = 1L
+        val app = AppState()
+        val rotatedPub = "ab".repeat(32)
+        val m = vm(
+            resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = rotatedPub),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+
+        assertEquals(
+            "the cloud-demanded factor routes into AwaitingSecondFactor",
+            LoginPhase.AwaitingSecondFactor, m.phase.first(),
+        )
+        assertFalse("not paired while the factor is missing", app.isPaired.first())
+        assertNull("the bare attempt rode no proof", server.lastRePairInitiate!!.second.totpProof)
+
+        m.submitSecondFactor("123456", isRecoveryCode = false)
+        assertEquals(
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            m.phase.first(),
+        )
+        m.confirmTakeover()
+
+        assertTrue("the proof-carrying retry lands in grace", m.phase.first() is LoginPhase.Grace)
+        val (_, body, _) = server.lastRePairInitiate!!
+        assertEquals("123456", body.totpProof?.code)
+        assertEquals("totp", body.totpProof?.method)
+        assertEquals(
+            "the retry still displaces the REGISTERED (rotated) key",
+            rotatedPub.lowercase(), body.request.oldIrkPub.lowercase(),
+        )
+        assertTrue(verifyRePair(body))
+    }
+
+    /** #52 — a recovery code (non-TOTP) clears the single-device gate
+     *  with method 'recovery'. */
+    @Test fun single_credentialEnrolled_recoveryCode_tagsRecoveryMethod() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        server.recoveryCodesByUser["harry"] = listOf("AAAA-BBBB")
+        val app = AppState()
+        val m = vm(
+            resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = "ab".repeat(32)),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+        assertEquals(LoginPhase.AwaitingSecondFactor, m.phase.first())
+
+        m.submitSecondFactor("AAAA-BBBB", isRecoveryCode = true)
+        m.confirmTakeover()
+
+        assertTrue(m.phase.first() is LoginPhase.Grace)
+        val (_, body, _) = server.lastRePairInitiate!!
+        assertEquals("AAAA-BBBB", body.totpProof?.code)
+        assertEquals("recovery", body.totpProof?.method)
+    }
+
+    /** #52 boundary — a single account with NOTHING enrolled keeps the
+     *  grace-only path (no second-factor detour). Pinned explicitly so
+     *  the gate stays opt-in-by-enrollment (no lockout regression). */
+    @Test fun single_noCredentialEnrolled_keepsGraceOnlyPath() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val m = vm(
+            resolution("harry", "single", recoveryPresent = true, registeredIrkPubHex = "ab".repeat(32)),
+            server, app,
+        )
+
+        m.begin()
+        m.confirmTakeover()
+
+        assertTrue("no enrollment ⇒ straight to grace", m.phase.first() is LoginPhase.Grace)
+        assertNull(server.lastRePairInitiate!!.second.totpProof)
+    }
+
     // ─── 3. multi takeover requires the second factor ─────────────────
 
     @Test fun multi_unwrap_gatesOnSecondFactor_beforeRePair() = runTest {

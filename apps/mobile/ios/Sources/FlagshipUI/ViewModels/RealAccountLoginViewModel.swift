@@ -65,6 +65,14 @@ public final class RealAccountLoginViewModel {
         /// The takeover ceremony is running (PRF unwrap → install →
         /// re-pair). Drives a spinner; the user can't re-tap.
         case working
+        /// #52 — the cloud 401'd the single-device Phase-B initiate
+        /// because the account has a second factor enrolled (TOTP /
+        /// recovery code). The host shows the second-factor field
+        /// (same UX as multi) and calls
+        /// `submitSingleDeviceSecondFactor()`. `error` carries the
+        /// rejection copy after a bad code so the user can retry in
+        /// place.
+        case needsSecondFactor(error: String?)
         /// Re-pair INITIATED — the grace clock is running server-side.
         /// Carries the deadline so the Phase-4 screen renders a countdown
         /// + "Take over now". (Phase 3 paired here; Phase 4 pairs on
@@ -260,6 +268,51 @@ public final class RealAccountLoginViewModel {
                 oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch ScreensClientError.http(let status, _) where status == 401 {
+            // #52 — we sent NO proof, so a 401 here is the cloud saying
+            // "this account has a second factor enrolled; prove it".
+            // Stash the initiate inputs and surface the second-factor
+            // field (same UX the multi branch uses); the retry runs in
+            // submitSingleDeviceSecondFactor().
+            pendingRotatedRePair = (username: username,
+                                    oldIrkPubHex: recoveryVM.registeredIrkPubHex ?? recoveredIrkPubHex)
+            phase = .needsSecondFactor(error: nil)
+        } catch {
+            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
+        }
+    }
+
+    /// #52 — stashed inputs for the single-device Phase-B initiate so
+    /// the second-factor retry doesn't have to re-run the recovery
+    /// unwrap (the UMK is already installed at this point).
+    private var pendingRotatedRePair: (username: String, oldIrkPubHex: String)?
+
+    /// #52 — retry the single-device Phase-B initiate with the typed
+    /// second factor (TOTP or recovery code) riding the body. Driven by
+    /// the host once `.needsSecondFactor` is showing and
+    /// `secondFactorInput` is non-empty. A rejected code lands back on
+    /// `.needsSecondFactor(error:)` so the user can correct in place.
+    public func submitSingleDeviceSecondFactor() async {
+        guard let pending = pendingRotatedRePair else { return }
+        let code = secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else {
+            phase = .needsSecondFactor(error: "Enter your recovery code or the 6-digit code from your authenticator app.")
+            return
+        }
+        phase = .working
+        do {
+            let resp = try await initiateRotatedRePair(
+                username: pending.username,
+                oldIrkPubHex: pending.oldIrkPubHex,
+                proof: RePairInitiateRequest.TotpProof(
+                    code: code,
+                    method: Self.proofMethod(for: code)
+                )
+            )
+            pendingRotatedRePair = nil
+            phase = .completed(username: pending.username, completesAt: resp.completesAt)
+        } catch ScreensClientError.http(let status, _) where status == 401 {
+            phase = .needsSecondFactor(error: "That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
             phase = .failed("Couldn't restore access: \(error.localizedDescription)")
         }
@@ -268,11 +321,13 @@ public final class RealAccountLoginViewModel {
     /// Phase B re-pair initiate for the single-device rotated case. Signs
     /// with the recovered (new) IRK over the canonical bytes, but carries
     /// the account's registered (displaced) IRK as `oldIrkPub` so the
-    /// Worker keys the takeover on the key it currently knows. No second
-    /// factor — single-device accounts have none.
+    /// Worker keys the takeover on the key it currently knows. `proof`
+    /// (#52) rides BESIDE the signed envelope when the cloud demanded a
+    /// second factor; nil on the first, bare attempt.
     private func initiateRotatedRePair(
         username: String,
-        oldIrkPubHex: String
+        oldIrkPubHex: String,
+        proof: RePairInitiateRequest.TotpProof? = nil
     ) async throws -> RePairInitiateResponse {
         let newKey = try await Keystore.deriveIRK(reason: "Authorize takeover")
         let newPubHex = HexUtil.encode(newKey.publicKey.rawRepresentation)
@@ -294,7 +349,7 @@ public final class RealAccountLoginViewModel {
                     issuedAt: issuedAt
                 ),
                 signature: HexUtil.encode(signature),
-                totpProof: nil
+                totpProof: proof
             ),
             ifMatch: nil
         )
@@ -369,6 +424,11 @@ public final class RealAccountLoginViewModel {
             phase = .completed(username: username, completesAt: completesAt)
         } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
             phase = .failed("This was cancelled from another device on your account. If it's still you, start again.")
+        } catch ScreensClientError.http(let status, _) where status == 410 {
+            // #52 — the completion window (7d past the grace deadline)
+            // elapsed; the cloud swept the stale row. Unlike 404 this
+            // is NOT "already done" — the recovery must be restarted.
+            phase = .failed("This recovery expired before it was completed. Start again.")
         } catch {
             phase = .failed("Couldn't finalize the takeover: \(error.localizedDescription)")
         }

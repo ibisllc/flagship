@@ -21,6 +21,7 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.Keyfile
 import com.flagshipserver.app.keystore.Keystore
@@ -130,7 +131,14 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Grace(username = username, completesAt = resp.completesAt)
         } catch (t: Throwable) {
             _phase.value = KeyfileImportPhase.Failed(
-                "Couldn't start bringing this device in: ${t.message}",
+                if (t is HttpException && t.status == 401 && t.body.contains("totpProof"))
+                    // #52 — the account has a second factor enrolled, which
+                    // the Worker now requires at initiate even for single-
+                    // device accounts. The keyfile sheet has no second-
+                    // factor field (yet); route via the sign-in flow.
+                    "This account has a second factor enrolled. Use \"I already have an account\" to sign in — it will ask for your authenticator or recovery code."
+                else
+                    "Couldn't start bringing this device in: ${t.message}",
             )
         }
     }
@@ -157,7 +165,11 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Opened(grace.username)
         } catch (t: Throwable) {
             _phase.value = KeyfileImportPhase.Failed(
-                "Couldn't finish bringing this device in: ${t.message}",
+                if (t is HttpException && t.status == 410)
+                    // #52 — completion window elapsed; the cloud swept the row.
+                    "This expired before it was completed. Start again."
+                else
+                    "Couldn't finish bringing this device in: ${t.message}",
             )
         }
     }

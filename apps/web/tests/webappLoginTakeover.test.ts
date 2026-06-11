@@ -411,3 +411,198 @@ describe("loginTakeover loginRealAccount — full branch orchestration", () => {
     expect(body.totpProof).toEqual({ code: "RECOV-CODE-001", method: "recovery" });
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// #52 follow-up — credential on SINGLE-device initiate. The Worker now
+// 401s a bare single-device initiate when the account has a second
+// factor enrolled, carrying `credentialRequired`; the webapp prompts
+// (same collector as multi) and retries once with the proof riding
+// the body.
+// ───────────────────────────────────────────────────────────────────
+
+function credential401() {
+  return jsonResponse(401, {
+    error:
+      "totpProof required for single-device recovery (a second factor is enrolled)",
+    accountType: "single",
+    credentialRequired: ["totp", "recovery-code"],
+  });
+}
+
+describe("#52 — single-device credential-required initiate", () => {
+  it("runTakeover: 401 credentialRequired → prompts requestSecondFactor → retries with the proof in the body", async () => {
+    const { runTakeover } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock
+      .mockReset()
+      .mockResolvedValueOnce(credential401())
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          ok: true,
+          completesAt: 1000,
+          graceMs: 500,
+          accountType: "single",
+          totpRequired: false,
+        }),
+      );
+    const requestSecondFactor = vi.fn(async (methods: string[]) => {
+      expect(methods).toEqual(["totp", "recovery-code"]);
+      return { code: "123456", method: "totp" };
+    });
+    const out = await runTakeover(singleResolution("harry"), {
+      ...deps,
+      requestSecondFactor,
+    });
+    expect(requestSecondFactor).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // First POST had no proof; the retry rides it BESIDE the envelope.
+    const first = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(first.totpProof).toBeUndefined();
+    const retry = JSON.parse(fetchMock.mock.calls[1]![1].body);
+    expect(retry.totpProof).toEqual({ code: "123456", method: "totp" });
+    // Same signed envelope on both attempts (the proof is NOT in the
+    // canonical bytes, so no re-sign is needed).
+    expect(retry.request).toEqual(first.request);
+    expect(retry.signature).toBe(first.signature);
+    expect(out.deviceLabel).toBe("admin");
+  });
+
+  it("runTakeover: cancelling the on-demand prompt throws the tagged cancel (no retry POST)", async () => {
+    const { runTakeover } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock.mockReset().mockResolvedValueOnce(credential401());
+    const requestSecondFactor = vi.fn(async () => null);
+    await expect(
+      runTakeover(singleResolution("harry"), { ...deps, requestSecondFactor }),
+    ).rejects.toMatchObject({ code: "second-factor-cancelled" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("runTakeover: no collector injected → the 401 rethrows unchanged (back-compat)", async () => {
+    const { runTakeover } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock.mockReset().mockResolvedValueOnce(credential401());
+    await expect(runTakeover(singleResolution("harry"), deps)).rejects.toThrow(
+      /re-pair initiate failed \(401\)/,
+    );
+  });
+
+  it("runTakeover: a bad proof on the retry surfaces the second 401 (no infinite loop)", async () => {
+    const { runTakeover } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock
+      .mockReset()
+      .mockResolvedValueOnce(credential401())
+      .mockResolvedValueOnce(
+        jsonResponse(401, { error: "invalid TOTP proof", remainingAttempts: 4 }),
+      );
+    const requestSecondFactor = vi.fn(async () => ({
+      code: "000000",
+      method: "totp" as const,
+    }));
+    await expect(
+      runTakeover(singleResolution("harry"), { ...deps, requestSecondFactor }),
+    ).rejects.toThrow(/invalid TOTP proof/);
+    expect(requestSecondFactor).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("loginRealAccount single: the cloud-required factor is collected via deps.prompt and retried", async () => {
+    const { loginRealAccount } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock
+      .mockReset()
+      .mockResolvedValueOnce(credential401())
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          ok: true,
+          completesAt: 1000,
+          graceMs: 500,
+          accountType: "single",
+          totpRequired: false,
+        }),
+      );
+    const prompt = vi.fn(async () => "ABCD-EFGH-IJ");
+    const out = await loginRealAccount(singleResolution("harry"), {
+      showState: vi.fn(),
+      confirm: vi.fn(async () => true),
+      prompt,
+      takeoverDeps: deps,
+    });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(out.outcome).toBe("takeover");
+    const retry = JSON.parse(fetchMock.mock.calls[1]![1].body);
+    expect(retry.totpProof).toEqual({ code: "ABCD-EFGH-IJ", method: "recovery" });
+  });
+
+  it("loginRealAccount single: cancelling the on-demand factor → outcome 'cancelled'", async () => {
+    const { loginRealAccount } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    fetchMock.mockReset().mockResolvedValueOnce(credential401());
+    const out = await loginRealAccount(singleResolution("harry"), {
+      showState: vi.fn(),
+      confirm: vi.fn(async () => true),
+      prompt: vi.fn(async () => null),
+      takeoverDeps: deps,
+    });
+    expect(out).toEqual({ outcome: "cancelled" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("isCredentialRequiredError: detects 401+credentialRequired and 401+'totpProof' substring; rejects others", async () => {
+    const { isCredentialRequiredError } = await loadLib();
+    expect(
+      isCredentialRequiredError({
+        status: 401,
+        body: { credentialRequired: ["totp"] },
+      }),
+    ).toBe(true);
+    expect(
+      isCredentialRequiredError({
+        status: 401,
+        body: { error: "totpProof required for multi-device recovery" },
+      }),
+    ).toBe(true);
+    expect(
+      isCredentialRequiredError({ status: 401, body: { error: "invalid TOTP proof" } }),
+    ).toBe(false);
+    expect(
+      isCredentialRequiredError({ status: 403, body: { credentialRequired: ["totp"] } }),
+    ).toBe(false);
+    expect(isCredentialRequiredError(undefined)).toBe(false);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// #52 follow-up — completion-window expiry surfaces as a clean state.
+// ───────────────────────────────────────────────────────────────────
+
+describe("#52 — completeRePair 410 (completion window expired)", () => {
+  it("410 → outcome 'expired' with the server message", async () => {
+    const { completeRePair } = await loadLib();
+    const f = vi.fn(async () =>
+      jsonResponse(410, {
+        error: "re-pair completion window has expired; start a new recovery",
+        completesAt: 1,
+        completionDeadline: 2,
+      }),
+    );
+    const out = await completeRePair({ username: "harry", fetch: f as any });
+    expect(out.outcome).toBe("expired");
+    expect(out.message).toMatch(/completion window has expired/);
+  });
+
+  it("finishTakeover on a 410 does NOT finalize or open the account", async () => {
+    const { finishTakeover } = await loadLib();
+    const f = vi.fn(async () => jsonResponse(410, { error: "expired" }));
+    const finalizeV2Irk = vi.fn();
+    const openAccount = vi.fn();
+    const out = await finishTakeover(
+      { username: "harry", rePair: { completesAt: 100 } },
+      { fetch: f as any, now: () => 200, finalizeV2Irk, openAccount },
+    );
+    expect(out.outcome).toBe("expired");
+    expect(finalizeV2Irk).not.toHaveBeenCalled();
+    expect(openAccount).not.toHaveBeenCalled();
+  });
+});

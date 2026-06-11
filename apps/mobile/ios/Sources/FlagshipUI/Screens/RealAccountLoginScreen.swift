@@ -144,6 +144,11 @@ public struct RealAccountLoginScreen: View {
             workingView(c: c)
         } else if case .finalized = vm.phase {
             workingView(c: c)
+        } else if case .needsSecondFactor(let error) = vm.phase {
+            // #52 — the cloud requires the account's enrolled second
+            // factor before the Phase-B grace can start. Same field +
+            // copy as the multi branch.
+            secondFactorEntry(vm: vm, error: error, c: c)
         } else if case .completed(_, let completesAt) = vm.phase {
             // Phase B — the registered key rotated since the recovery
             // envelope was written, so the instant path doesn't apply;
@@ -188,6 +193,50 @@ public struct RealAccountLoginScreen: View {
 
             FSGhostButton("Back", block: true, action: onBack)
         }
+    }
+
+    // MARK: - #52 — single-device second factor (cloud-required)
+
+    /// The cloud 401'd the single-device Phase-B initiate because the
+    /// account has a second factor enrolled. Reuses the multi branch's
+    /// field + copy; submission retries the initiate with the proof.
+    @ViewBuilder
+    private func secondFactorEntry(vm: RealAccountLoginViewModel, error: String?, c: FSColors) -> some View {
+        @Bindable var vm = vm
+
+        Text("One more step")
+            .font(FS.font.h2()).foregroundColor(c.text)
+        Text("This account has a second factor enrolled. Enter the 6-digit code from your authenticator app, or one of your recovery codes, to continue restoring access.")
+            .font(FS.font.body())
+            .foregroundColor(c.textMuted)
+
+        FSField(
+            value: $vm.secondFactorInput,
+            label: "Recovery code or authenticator code",
+            placeholder: "123456 or ABCD-EFGH-IJ",
+            helper: "6-digit code from your authenticator app, or one of your recovery codes.",
+            keyboard: .asciiCapable
+        )
+        .accessibilityIdentifier("login-second-factor")
+
+        if let error {
+            Text(error)
+                .font(FS.font.bodySm())
+                .foregroundColor(c.danger)
+                .accessibilityIdentifier("login-takeover-error")
+        }
+
+        FSPrimaryButton(
+            "Continue",
+            enabled: !vm.secondFactorInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            block: true,
+            large: true
+        ) {
+            Task { await vm.submitSingleDeviceSecondFactor() }
+        }
+        .accessibilityIdentifier("login-second-factor-continue")
+
+        FSGhostButton("Back", block: true, action: onBack)
     }
 
     // MARK: - No-recovery STATE (never a 404)

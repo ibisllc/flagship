@@ -44,6 +44,7 @@ import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
@@ -427,8 +428,12 @@ class LoginViewModel(
                     ),
                     signature = signature,
                     // MULTI: the Worker REQUIRES the second factor here.
-                    // SINGLE: omitted (single-device grace is the brake).
-                    totpProof = if (isMulti) secondFactor else null,
+                    // SINGLE (#52): also required when the account has a
+                    // second factor enrolled — the Worker's 401 routes us
+                    // through AwaitingSecondFactor below, so by the retry
+                    // `secondFactor` is set. Grace-only single accounts
+                    // leave it null.
+                    totpProof = secondFactor,
                 ),
                 ifMatch = null,
             )
@@ -442,9 +447,24 @@ class LoginViewModel(
                 graceModel = resolution.grace,
             )
         } catch (t: Throwable) {
+            // #52 — the cloud 401s a bare single-device initiate when the
+            // account has a second factor enrolled. We sent NO proof, so
+            // route into the existing second-factor state (the same UX
+            // multi uses); submitSecondFactor() → TakeoverReady →
+            // confirmTakeover() retries with the proof riding the body.
+            if (secondFactor == null && isCredentialRequired(t)) {
+                _phase.value = LoginPhase.AwaitingSecondFactor
+                return
+            }
             _phase.value = LoginPhase.Failed(humanizedError(t))
         }
     }
+
+    /** #52 — true when the failure is the Worker's "second factor
+     *  enrolled; prove it" 401 (the load-bearing "totpProof" substring,
+     *  same detector the webapp uses). */
+    private fun isCredentialRequired(t: Throwable): Boolean =
+        t is HttpException && t.status == 401 && t.body.contains("totpProof")
 
     /**
      * Phase 4 — finalize the takeover once its grace has elapsed. The
@@ -500,6 +520,11 @@ class LoginViewModel(
     private fun humanizedError(t: Throwable): String {
         val m = t.message?.lowercase().orEmpty()
         return when {
+            // #52 — the completion window (7d past the grace deadline)
+            // elapsed and the cloud swept the pending row (410 Gone).
+            // Unlike 404 this is NOT "already done" — start over.
+            t is HttpException && t.status == 410 ->
+                "This recovery expired before it was completed. Start again."
             m.contains("totpproof") || m.contains("invalid totp") || m.contains("401") ->
                 "That recovery code didn't check out. Try the current 6-digit code or a recovery code."
             m.contains("no credential") || m.contains("no recovery") ||

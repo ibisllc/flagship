@@ -1673,3 +1673,410 @@ describe("v2.1 (W6) — recovery-wipe policy", () => {
     expect(after?.revokedAt).toBeNull();
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// #52 follow-up — completion window. A pending row is completable
+// only inside [completesAt, completesAt + RE_PAIR_COMPLETE_WINDOW_MS);
+// past the deadline it's DEAD (410 + sweep + audit) and a fresh
+// initiate sweeps it instead of 409ing. Inside the window it's a LIVE
+// recovery that keeps the recovery lock (initiate still 409s).
+// ───────────────────────────────────────────────────────────────────
+
+import { RE_PAIR_COMPLETE_WINDOW_MS } from "../src/rePair.js";
+
+describe("#52 — re-pair completion window (stale-row hole)", () => {
+  const T0 = 1_700_000_000_000;
+
+  /** Initiate a single-device row at T0; returns deps + the row's
+   *  completesAt. No credential enrolled → grace-only initiate. */
+  async function initiateSingleAt(t0 = T0) {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      now: () => t0,
+    };
+    const res = await handleInitiateRePair(
+      deps,
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: t0, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+    const completesAt = t0 + RE_PAIR_SINGLE_GRACE_MS;
+    return { storage, oldIrk, newIrk, completesAt };
+  }
+
+  it("exports a 7-day completion window", () => {
+    expect(RE_PAIR_COMPLETE_WINDOW_MS).toBe(7 * 24 * 60 * 60_000);
+  });
+
+  it("completes at exactly completesAt (window-open boundary)", async () => {
+    const { storage, completesAt } = await initiateSingleAt();
+    const res = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => completesAt,
+      },
+      USERNAME,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("completes at the last tick inside the window (deadline - 1)", async () => {
+    const { storage, completesAt } = await initiateSingleAt();
+    const res = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => completesAt + RE_PAIR_COMPLETE_WINDOW_MS - 1,
+      },
+      USERNAME,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("410s at the deadline, sweeps the row, and audits the expiry", async () => {
+    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const res = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        auditEvents: storage.auditEvents,
+        now: () => completesAt + RE_PAIR_COMPLETE_WINDOW_MS,
+      },
+      USERNAME,
+    );
+    expect(res.status).toBe(410);
+    const body = res.body as { completesAt: number; completionDeadline: number };
+    expect(body.completesAt).toBe(completesAt);
+    expect(body.completionDeadline).toBe(completesAt + RE_PAIR_COMPLETE_WINDOW_MS);
+    // Row swept — the IRK never moved.
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+    const rec = await storage.usernames.get(USERNAME);
+    expect(rec?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+    // Audit row landed.
+    const events = await storage.auditEvents.list(USERNAME, 0, 50);
+    expect(events.some((e) => e.eventKind === "re-pair-expired")).toBe(true);
+  });
+
+  it("a stale row from old testing is NOT completable months later (the same-day-takeover hole)", async () => {
+    const { storage } = await initiateSingleAt();
+    const monthsLater = T0 + 90 * 24 * 60 * 60_000;
+    const res = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => monthsLater,
+      },
+      USERNAME,
+    );
+    expect(res.status).toBe(410);
+  });
+
+  it("initiate stays BLOCKED (409) while the row is past grace but inside the completion window", async () => {
+    // The legitimate flow is initiate → wait grace → complete: a row
+    // between completesAt and the deadline is a live recovery awaiting
+    // its /complete call. A second initiate must NOT evict it.
+    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const rival = makeKey();
+    const insideWindow = completesAt + 1_000;
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => insideWindow,
+      },
+      USERNAME,
+      initBody({ newIrk: rival, oldIrk, issuedAt: insideWindow, totpProof: null }),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("initiate sweeps a row past the completion window and succeeds", async () => {
+    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const rival = makeKey();
+    const pastDeadline = completesAt + RE_PAIR_COMPLETE_WINDOW_MS;
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => pastDeadline,
+      },
+      USERNAME,
+      initBody({ newIrk: rival, oldIrk, issuedAt: pastDeadline, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.newIrkPubHex).toBe(bytesToHex(rival.publicKey));
+  });
+
+  it("the 410 sweep releases the recovery lock — the next initiate succeeds", async () => {
+    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const late = completesAt + RE_PAIR_COMPLETE_WINDOW_MS + 1;
+    const gone = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => late,
+      },
+      USERNAME,
+    );
+    expect(gone.status).toBe(410);
+    const rival = makeKey();
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        now: () => late,
+      },
+      USERNAME,
+      initBody({ newIrk: rival, oldIrk, issuedAt: late, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("honors the completeWindowMs test override", async () => {
+    const { storage, oldIrk, completesAt } = await initiateSingleAt();
+    const shortWindow = 60_000;
+    // Inside the shortened window: completable (the swap lands).
+    const okRes = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        completeWindowMs: shortWindow,
+        now: () => completesAt + shortWindow - 1,
+      },
+      USERNAME,
+    );
+    expect(okRes.status).toBe(200);
+    const rec = await storage.usernames.get(USERNAME);
+    expect(rec!.irkPubHex).not.toBe(bytesToHex(oldIrk.publicKey));
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// #52 follow-up — credential on single-device initiate. A single-
+// device account with an enrolled second factor (TOTP secret and/or
+// unspent recovery codes) must prove it before the grace starts;
+// accounts with NEITHER keep the grace-only path but the initiate is
+// audit-logged. Multi-device is unchanged.
+// ───────────────────────────────────────────────────────────────────
+
+describe("#52 — credential required on single-device initiate", () => {
+  const T0 = 1_700_000_000_000;
+
+  /** Enroll TOTP + recovery codes via the real Phase-3 handlers (they
+   *  flip the account to 'multi'), then flip the account-type back to
+   *  'single' — landing exactly the hardening target: a single-device
+   *  account with enrolled credentials. */
+  async function setupSingleEnrolled(): Promise<{
+    storage: InMemoryStorage;
+    oldIrk: Keypair;
+    secretBase32: string;
+    recoveryCodes: string[];
+  }> {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const enrolled = await enrollMultiDevice(storage, oldIrk, T0);
+    const rec = await storage.usernames.get(USERNAME);
+    await storage.usernames.put({ ...rec!, accountType: "single" });
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.accountType).toBe("single");
+    expect(after?.totpSecretEncrypted).toBeTruthy();
+    return { storage, oldIrk, ...enrolled };
+  }
+
+  function deps(storage: InMemoryStorage) {
+    return {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      auditEvents: storage.auditEvents,
+      totpKekHex: TEST_KEK_HEX,
+      now: () => T0,
+    };
+  }
+
+  it("single + TOTP enrolled: bare initiate → 401 with credentialRequired", async () => {
+    const { storage, oldIrk } = await setupSingleEnrolled();
+    const newIrk = makeKey();
+    const res = await handleInitiateRePair(
+      deps(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+    );
+    expect(res.status).toBe(401);
+    const body = res.body as {
+      error: string;
+      accountType: string;
+      credentialRequired: string[];
+    };
+    // "totpProof" substring is load-bearing: the webapp's existing
+    // prompt-and-retry keys off it.
+    expect(body.error).toContain("totpProof");
+    expect(body.accountType).toBe("single");
+    expect(body.credentialRequired).toContain("totp");
+    expect(body.credentialRequired).toContain("recovery-code");
+    // No grace started.
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+  });
+
+  it("single + TOTP enrolled: valid TOTP proof → 200 with the 3-day single grace", async () => {
+    const { storage, oldIrk, secretBase32 } = await setupSingleEnrolled();
+    const newIrk = makeKey();
+    const res = await handleInitiateRePair(
+      deps(storage),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: T0,
+        totpProof: { code: codeAt(secretBase32, T0), method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { accountType: string }).accountType).toBe("single");
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.graceSeconds).toBe(RE_PAIR_SINGLE_GRACE_MS / 1000);
+    expect(row?.totpRequired).toBe(false); // stays the multi marker
+    expect(row?.totpProofConsumed).toBe(true);
+  });
+
+  it("single + enrolled: BAD proof → 401 invalid (same wire as multi)", async () => {
+    const { storage, oldIrk } = await setupSingleEnrolled();
+    const newIrk = makeKey();
+    const res = await handleInitiateRePair(
+      deps(storage),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: T0,
+        totpProof: { code: "000000", method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { error: string }).error).toContain("invalid TOTP proof");
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+  });
+
+  it("single + recovery codes only (no TOTP secret): 401 advertises recovery-code only", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const { recoveryCodes } = await enrollMultiDevice(storage, oldIrk, T0);
+    const rec = await storage.usernames.get(USERNAME);
+    // Simulate a codes-only account: keep the hashed codes, drop the
+    // TOTP secret. (InMemory put coalesces absent fields, so write the
+    // record through a fresh storage row instead.)
+    const codesOnly = new InMemoryStorage();
+    await codesOnly.usernames.put({
+      username: USERNAME,
+      irkPubHex: rec!.irkPubHex,
+      claimedAt: 1,
+      accountType: "single",
+      recoveryCodesHashesJson: rec!.recoveryCodesHashesJson,
+    });
+    const newIrk = makeKey();
+    const missing = await handleInitiateRePair(
+      deps(codesOnly),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+    );
+    expect(missing.status).toBe(401);
+    expect(
+      (missing.body as { credentialRequired: string[] }).credentialRequired,
+    ).toEqual(["recovery-code"]);
+    // A valid recovery code clears the gate AND is consumed + audited.
+    const target = recoveryCodes[0] as string;
+    const ok = await handleInitiateRePair(
+      deps(codesOnly),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: T0,
+        totpProof: { code: target, method: "recovery" },
+      }),
+    );
+    expect(ok.status).toBe(200);
+    const after = await codesOnly.usernames.get(USERNAME);
+    expect(JSON.parse(after!.recoveryCodesHashesJson!)).toHaveLength(9);
+    const events = await codesOnly.auditEvents.list(USERNAME, 0, 50);
+    const consumed = events.find((e) => e.eventKind === "recovery-code-consumed");
+    expect(consumed?.accountTypeAtEvent).toBe("single");
+  });
+
+  it("single + NEITHER enrolled: grace-only initiate still works and is audit-logged", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const res = await handleInitiateRePair(
+      deps(storage),
+      USERNAME,
+      initBody({ newIrk, oldIrk, issuedAt: T0, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.totpProofConsumed).toBe(false);
+    const events = await storage.auditEvents.list(USERNAME, 0, 50);
+    const audit = events.find(
+      (e) => e.eventKind === "re-pair-initiated-no-credential",
+    );
+    expect(audit).toBeTruthy();
+    expect(audit?.recoveryMethod).toBe("none");
+    expect(audit?.accountTypeAtEvent).toBe("single");
+  });
+
+  it("multi-device 401 now also carries credentialRequired (additive, same status/error)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: null }),
+    );
+    expect(res.status).toBe(401);
+    const body = res.body as {
+      error: string;
+      accountType: string;
+      credentialRequired: string[];
+    };
+    expect(body.error).toBe("totpProof required for multi-device recovery");
+    expect(body.accountType).toBe("multi");
+    expect(body.credentialRequired).toEqual(["totp", "recovery-code"]);
+  });
+
+  it("complete after a single TOTP-proven recovery audits recoveryMethod='totp'", async () => {
+    const { storage, oldIrk, secretBase32 } = await setupSingleEnrolled();
+    const newIrk = makeKey();
+    const init = await handleInitiateRePair(
+      deps(storage),
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: T0,
+        totpProof: { code: codeAt(secretBase32, T0), method: "totp" },
+      }),
+    );
+    expect(init.status).toBe(200);
+    const done = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        auditEvents: storage.auditEvents,
+        now: () => T0 + RE_PAIR_SINGLE_GRACE_MS + 1,
+      },
+      USERNAME,
+    );
+    expect(done.status).toBe(200);
+    const events = await storage.auditEvents.list(USERNAME, 0, 50);
+    const replaced = events.find((e) => e.eventKind === "device-replaced");
+    expect(replaced?.recoveryMethod).toBe("totp");
+  });
+});

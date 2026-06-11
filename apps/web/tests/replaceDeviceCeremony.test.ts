@@ -329,6 +329,20 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
       completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "404" });
   });
+
+  it("#52 — maps 410 to 'expired; start again' (completion window passed)", async () => {
+    const fakeFetch = vi.fn(async () => ({
+      ok: false,
+      status: 410,
+      json: async () => ({
+        error: "re-pair completion window has expired; start a new recovery",
+      }),
+      text: async () => "{}",
+    }));
+    await expect(
+      completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
+    ).rejects.toMatchObject({ code: "410" });
+  });
 });
 
 describe("P10 — multi-device TOTP retry", () => {
@@ -471,6 +485,39 @@ describe("P10 — multi-device TOTP retry", () => {
       ),
     ).rejects.toMatchObject({ code: "401" });
     expect(fakeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("#52 — a SINGLE-device credential-required 401 (credentialRequired, no accountType:'multi') also prompts and retries", async () => {
+    const fakeFetch = mockFetchSequence([
+      {
+        status: 401,
+        body: {
+          error:
+            "totpProof required for single-device recovery (a second factor is enrolled)",
+          accountType: "single",
+          credentialRequired: ["totp", "recovery-code"],
+        },
+      },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          completesAt: 1,
+          graceMs: 1,
+          accountType: "single",
+          totpRequired: false,
+        },
+      },
+    ]);
+    const requestTotpProof = vi.fn(async () => ({ code: "123456", method: "totp" as const }));
+    const result = await runReplaceDeviceCeremony(
+      { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+      { fetch: fakeFetch as any, requestTotpProof },
+    );
+    expect(result.ok).toBe(true);
+    expect(requestTotpProof).toHaveBeenCalledTimes(1);
+    const retryBody = JSON.parse((fakeFetch.mock.calls[1] as any)[1].body);
+    expect(retryBody.totpProof).toEqual({ code: "123456", method: "totp" });
   });
 });
 

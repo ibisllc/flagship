@@ -407,12 +407,14 @@ public struct RePairInitiateRequest: Encodable, Sendable {
     }
 
     /// v1.2 — the out-of-Apple second factor the Worker REQUIRES when
-    /// `account_type === 'multi'`. Carries a live 6-digit TOTP or a
+    /// `account_type === 'multi'` — and (#52) for SINGLE-device
+    /// accounts with a second factor enrolled (the 401 carries
+    /// `credentialRequired`). Carries a live 6-digit TOTP or a
     /// 10-char recovery code beside (NOT inside) the signed envelope —
     /// codes are ephemeral so they don't belong in canonical bytes
     /// (see RePairInitiate.totpProof in packages/protocol/src/auth.ts).
-    /// Omitted for single-device re-pairs. `method` is one of the two
-    /// allowed literals the Worker validates structurally.
+    /// Omitted only when nothing is enrolled. `method` is one of the
+    /// two allowed literals the Worker validates structurally.
     public struct TotpProof: Encodable, Equatable, Sendable {
         public let code: String
         public let method: String   // "totp" | "recovery"
@@ -423,8 +425,10 @@ public struct RePairInitiateRequest: Encodable, Sendable {
 
     public let request: Inner
     public let signature: String      // hex; Ed25519 over canonical-bytes by NEW IRK
-    /// Present only for multi-device takeovers. The Worker rejects a
-    /// multi re-pair that omits it (401) and ignores it on single.
+    /// Present for multi-device takeovers AND (#52) for single-device
+    /// accounts with an enrolled second factor. The Worker rejects an
+    /// initiate that needs-but-omits it (401 + `credentialRequired`)
+    /// and ignores it when nothing is enrolled.
     public let totpProof: TotpProof?
     public init(request: Inner, signature: String, totpProof: TotpProof? = nil) {
         self.request = request; self.signature = signature
@@ -2200,18 +2204,29 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> RePairInitiateResponse {
         try await tick()
         lastRePairInitiate = (username, body, ifMatch)
-        // v1.2 — mirror the Worker's multi-device gate: a re-pair on a
-        // `multi` account is rejected (401) unless it carries a
-        // structurally-valid totpProof (non-empty code + an allowed
-        // method). Single-device accounts don't require one. Lets the
-        // login state machine + its tests exercise the second-factor
-        // requirement against the Mock.
-        if accountTypeByUser[username.lowercased()] == "multi" {
+        // v1.2 — mirror the Worker's gate: a re-pair on a `multi`
+        // account is rejected (401) unless it carries a structurally-
+        // valid totpProof (non-empty code + an allowed method). #52 —
+        // a SINGLE-device account with an enrolled second factor
+        // (TOTP enrolled and/or unspent recovery codes) is gated the
+        // same way; single accounts with NEITHER stay grace-only.
+        // Lets the login state machine + its tests exercise the
+        // second-factor requirement against the Mock.
+        let u = username.lowercased()
+        let isMulti = accountTypeByUser[u] == "multi"
+        let singleCredentialEnrolled = !isMulti
+            && (totpEnrolledAtByUser[u] != nil || !(recoveryCodesByUser[u] ?? []).isEmpty)
+        if isMulti || singleCredentialEnrolled {
             let proof = body.totpProof
             let methodOk = proof?.method == "totp" || proof?.method == "recovery"
             let codeOk = !(proof?.code.isEmpty ?? true)
             guard let proof, methodOk, codeOk else {
-                throw ScreensClientError.http(status: 401, message: "totpProof required for multi-device re-pair")
+                throw ScreensClientError.http(
+                    status: 401,
+                    message: isMulti
+                        ? "totpProof required for multi-device re-pair"
+                        : "totpProof required for single-device recovery (a second factor is enrolled)"
+                )
             }
             _ = proof
         }

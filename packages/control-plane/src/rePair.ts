@@ -40,7 +40,7 @@ import { ALERT_BIT_T0 } from "./rePairAlerts.js";
  *      Marks the row objected; no swap will happen.
  *   3. POST /api/users/:username/re-pair/complete (NEW IRK signed)
  *      Atomically swaps the username's IRK pubkey iff:
- *        - completes_at <= now
+ *        - completes_at <= now < completes_at + RE_PAIR_COMPLETE_WINDOW_MS
  *        - objected_at IS NULL
  *
  * The 24h grace lets a user whose old device is still online cancel
@@ -82,6 +82,23 @@ export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;
  * See docs/session-handoff-2026-06-02.md §4 + docs/v1.2-security-cascade.md
  * §"Re-pair J.3 grace extension". */
 export const RE_PAIR_SINGLE_GRACE_MS = 3 * 24 * 60 * 60_000;
+
+/** #52 follow-up — upper bound on HOW LONG a pending row stays
+ * completable after its grace elapses. `handleCompleteRePair` used to
+ * accept `completesAt <= now` with NO ceiling, so a forgotten row from
+ * old testing was completable FOREVER — which is exactly how a takeover
+ * could appear to land "same-day": nothing had to wait out the grace,
+ * something only had to find a months-old row whose grace had long
+ * passed. A pending row is now completable only inside
+ * `[completesAt, completesAt + RE_PAIR_COMPLETE_WINDOW_MS)`.
+ *
+ * 7 days: long enough that a legitimately-recovering owner who
+ * initiated and then walked away (vacation, lost charger) can still
+ * come back and finish, bounded so an abandoned dispute can't be
+ * resurrected months later by whoever stumbles on the row. Outside the
+ * window the row is DEAD: /complete 410s + sweeps it (audited), and a
+ * fresh initiate sweeps it instead of 409ing. */
+export const RE_PAIR_COMPLETE_WINDOW_MS = 7 * 24 * 60 * 60_000;
 
 /** v1.2 — 14-day quarantine on a freshly-admitted device's revoke-
  *  others power. The legitimate owner's existing devices remain at
@@ -138,6 +155,12 @@ export interface RePairDeps {
    */
   singleDeviceGraceMs?: number;
   quarantineMs?: number;
+  /**
+   * #52 follow-up — test override for RE_PAIR_COMPLETE_WINDOW_MS so
+   * the stale-row assertions don't have to fabricate week-spanning
+   * clocks. Production callers leave this unset.
+   */
+  completeWindowMs?: number;
   maxAgeMs?: number;
   now?: () => number;
   /**
@@ -310,12 +333,47 @@ export async function handleInitiateRePair(
   const graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
   const totpRequired = isMultiDevice;
 
-  // v1.2 — when multi-device, the body MUST carry a totpProof beside
-  // the signed envelope. Phase 3 swapped the Phase 2 structural-only
-  // check for real verification: TOTP codes are validated against the
-  // decrypted stored secret with a ±1 period window; recovery codes
-  // are argon2id-verified against the stored hash array AND atomically
-  // CAS-consumed so a single code can never be replayed.
+  // #52 follow-up — a single-device account whose row carries an
+  // enrolled credential (a TOTP secret and/or unspent recovery codes)
+  // must ALSO prove it at initiate. Before this, single-device
+  // recovery started its grace on a bare signature from a brand-new
+  // self-signed IRK — no credential at all — so the grace window was
+  // the ONLY brake. Accounts with NEITHER enrolled keep the grace-only
+  // path (no lockout regression for pre-launch accounts), but that
+  // credential-less initiate is audit-logged so it stays visible.
+  const hasTotpSecret = !!userRec.totpSecretEncrypted;
+  // Mirrors totp.ts parseRecoveryCodesJson (which stays module-
+  // internal): an unparsable / empty column means "nothing enrolled".
+  let hasRecoveryCodes = false;
+  if (userRec.recoveryCodesHashesJson) {
+    try {
+      const rows = JSON.parse(userRec.recoveryCodesHashesJson) as unknown;
+      hasRecoveryCodes = Array.isArray(rows) && rows.length > 0;
+    } catch {
+      hasRecoveryCodes = false;
+    }
+  }
+  const enrolledMethods: Array<"totp" | "recovery-code"> = [
+    ...(hasTotpSecret ? (["totp"] as const) : []),
+    ...(hasRecoveryCodes ? (["recovery-code"] as const) : []),
+  ];
+  const proofRequired = isMultiDevice || enrolledMethods.length > 0;
+  // What the 401 advertises back to the client so it can prompt for
+  // the right thing. Multi always advertises both (the multi flow has
+  // historically accepted either); single advertises exactly what's
+  // enrolled.
+  const credentialRequired: Array<"totp" | "recovery-code"> = isMultiDevice
+    ? ["totp", "recovery-code"]
+    : enrolledMethods;
+
+  // v1.2 — when a proof is required (multi-device, or single-device
+  // with an enrolled credential), the body MUST carry a totpProof
+  // beside the signed envelope. Phase 3 swapped the Phase 2
+  // structural-only check for real verification: TOTP codes are
+  // validated against the decrypted stored secret with a ±1 period
+  // window; recovery codes are argon2id-verified against the stored
+  // hash array AND atomically CAS-consumed so a single code can never
+  // be replayed.
   //
   // The KEK is the production switch: when `totpKekHex` is wired we
   // run the real path; when absent (early-deploy / dev) we fall back
@@ -324,7 +382,7 @@ export async function handleInitiateRePair(
   // `FLAGSHIP_TOTP_KEK` is set in production, the structural fallback
   // never fires.
   let totpProofConsumed = false;
-  if (totpRequired) {
+  if (proofRequired) {
     const proof = b?.totpProof as { code?: unknown; method?: unknown } | undefined;
     if (
       !proof ||
@@ -332,11 +390,18 @@ export async function handleInitiateRePair(
       proof.code.length === 0 ||
       (proof.method !== "totp" && proof.method !== "recovery")
     ) {
+      // Same wire shape for both account types (the multi-device
+      // clients already key their prompt-and-retry off this 401; the
+      // "totpProof" substring + `credentialRequired` let single reuse
+      // that handling verbatim).
       return {
         status: 401,
         body: {
-          error: "totpProof required for multi-device recovery",
-          accountType: "multi",
+          error: isMultiDevice
+            ? "totpProof required for multi-device recovery"
+            : "totpProof required for single-device recovery (a second factor is enrolled)",
+          accountType,
+          credentialRequired,
         },
       };
     }
@@ -405,7 +470,7 @@ export async function handleInitiateRePair(
               detail: "Recovery code used during re-pair",
               devicePrefix: "",
               postedAt: now(),
-              accountTypeAtEvent: "multi",
+              accountTypeAtEvent: accountType,
               recoveryMethod: "recovery-code",
             },
           );
@@ -457,22 +522,30 @@ export async function handleInitiateRePair(
   // when a dispute resolves but stays armed during a live one.
   //
   // A row is "dead" if either: (a) it was vetoed (objectedAt != null),
-  // OR (b) its grace window passed without a successful complete
-  // (completesAt <= now AND objectedAt == null). A live row is one
-  // whose grace window is still open AND that hasn't been vetoed —
-  // exactly the dispute state we want to keep locked.
+  // OR (b) its COMPLETION window passed without a successful complete
+  // (completesAt + RE_PAIR_COMPLETE_WINDOW_MS <= now). Note the
+  // predicate is the completion deadline, NOT completesAt: the
+  // legitimate flow is initiate → wait out the grace → complete, so a
+  // row between completesAt and the completion deadline is exactly a
+  // LIVE recovery awaiting its /complete call — sweeping it here would
+  // let a second initiate evict a recovery that's about to land. This
+  // matches handleCompleteRePair's acceptance window exactly: a row is
+  // either completable (lock held, 409 on initiate) or dead (swept).
+  const completeWindowMs = deps.completeWindowMs ?? RE_PAIR_COMPLETE_WINDOW_MS;
   const existing = await deps.pendingRePairs.get(r.username);
   if (existing) {
     // objectedAt is `number | undefined` (PendingRePairRecord), NOT
     // `number | null`. A vetoed row has a numeric objectedAt; a live
     // row has it unset. Treat unset as "no veto."
     const vetoed = typeof existing.objectedAt === "number";
-    const expired = existing.completesAt <= now() && !vetoed;
-    if (vetoed || expired) {
+    const pastCompletionWindow =
+      existing.completesAt + completeWindowMs <= now() && !vetoed;
+    if (vetoed || pastCompletionWindow) {
       await deps.pendingRePairs.delete(r.username);
     }
-    // else: live dispute → fall through; the storage layer's PK
-    // collision below returns the proper 409 "re-pair already pending".
+    // else: live dispute / live completable recovery → fall through;
+    // the storage layer's PK collision below returns the proper 409
+    // "re-pair already pending".
   }
 
   const insert = await deps.pendingRePairs.initiate({
@@ -491,6 +564,27 @@ export async function handleInitiateRePair(
     alertsFiredBitmap: ALERT_BIT_T0,
   });
   if (!insert.ok) return { status: 409, body: { error: insert.reason } };
+
+  // #52 follow-up — a single-device account with NO enrolled credential
+  // just started a grace-only recovery on a bare new-IRK signature.
+  // That's deliberately still allowed (no lockout regression for
+  // accounts that pre-date credential enrollment), but it must be
+  // VISIBLE: audit it so the Activity feed shows that this takeover
+  // had nothing but the grace window as its brake.
+  if (deps.auditEvents && !proofRequired) {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "re-pair-initiated-no-credential",
+        detail: "Recovery started with no second factor enrolled (grace window is the only brake)",
+        devicePrefix: r.newIrkPub.slice(0, 8),
+        postedAt: now(),
+        accountTypeAtEvent: accountType,
+        recoveryMethod: "none",
+      },
+    );
+  }
 
   // v1.2 Phase 5 — fire the T+0 alert push immediately. If the
   // pushFanout dep isn't wired, the cron scheduler picks up rows
@@ -827,6 +921,38 @@ export async function handleCompleteRePair(
       },
     };
   }
+  // #52 follow-up — upper bound on completability. Without this, a row
+  // whose grace elapsed was completable FOREVER (the stale-row hole:
+  // an abandoned pending row from old testing could be "completed"
+  // months later, making a takeover look like it skipped the grace).
+  // A pending row is completable only inside
+  // [completesAt, completesAt + RE_PAIR_COMPLETE_WINDOW_MS); past the
+  // deadline it's dead — 410 Gone, sweep, audit.
+  const completeWindowMs = deps.completeWindowMs ?? RE_PAIR_COMPLETE_WINDOW_MS;
+  const completionDeadline = pending.completesAt + completeWindowMs;
+  if (now() >= completionDeadline) {
+    await deps.pendingRePairs.delete(username);
+    if (deps.auditEvents) {
+      await recordAuditEvent(
+        { auditEvents: deps.auditEvents },
+        {
+          username: username.toLowerCase(),
+          eventKind: "re-pair-expired",
+          detail: "Stale recovery expired uncompleted — completion window passed; row swept",
+          devicePrefix: pending.newIrkPubHex.slice(0, 8),
+          postedAt: now(),
+        },
+      );
+    }
+    return {
+      status: 410, // Gone
+      body: {
+        error: "re-pair completion window has expired; start a new recovery",
+        completesAt: pending.completesAt,
+        completionDeadline,
+      },
+    };
+  }
 
   // v2.1 (W6) — read the cloud's wipe policy BEFORE the swap so we
   // can pre-validate refreshedGrants under the incoming new IRK pub.
@@ -963,8 +1089,10 @@ export async function handleCompleteRePair(
   // v1.2 Phase 5 — audit on completion. We capture both the
   // `device-replaced` (IRK rotation) and the `device-added` (the
   // new device's quarantine clock starts) rows. recoveryMethod
-  // mirrors what the row stipulated: TOTP was the proof iff
-  // `totpRequired && totpProofConsumed`; recovery-code consumption
+  // mirrors what the row stipulated: a verified proof at initiate
+  // stamps `totpProofConsumed` (the #52 single-device credential gate
+  // sets it too, so it's no longer conditioned on `totpRequired` —
+  // that flag only marks multi accounts); recovery-code consumption
   // already emitted its own row at initiate time. accountTypeAtEvent
   // reads through to the post-swap usernames record so the snapshot
   // reflects the account's mode AT THE COMPLETE moment.
@@ -972,7 +1100,7 @@ export async function handleCompleteRePair(
     const userRec = await deps.usernames.get(username);
     const accountType = userRec?.accountType ?? "single";
     const recoveryMethod: "totp" | "recovery-code" | "none" =
-      pending.totpRequired && pending.totpProofConsumed ? "totp" : "none";
+      pending.totpProofConsumed ? "totp" : "none";
     await recordAuditEvent(
       { auditEvents: deps.auditEvents },
       {

@@ -98,6 +98,13 @@ public final class KeyfileImportViewModel {
         do {
             let resp = try await initiateTakeoverRePair(username: username)
             phase = .completed(username: username, completesAt: resp.completesAt)
+        } catch ScreensClientError.http(let status, let message) where status == 401 && (message ?? "").contains("totpProof") {
+            // #52 — the account has a second factor enrolled, which the
+            // cloud now requires at initiate even for single-device
+            // accounts. The keyfile sheet has no second-factor field
+            // (yet); route the user to the sign-in flow, which prompts
+            // for it.
+            phase = .failed("This account has a second factor enrolled. Use \"I already have an account\" to sign in — it will ask for your authenticator or recovery code.")
         } catch {
             phase = .failed("Couldn't start bringing this device in: \(error.localizedDescription)")
         }
@@ -119,6 +126,9 @@ public final class KeyfileImportViewModel {
             phase = .completed(username: username, completesAt: completesAt)
         } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
             phase = .failed("This was cancelled. If it's still you, try again.")
+        } catch ScreensClientError.http(let status, _) where status == 410 {
+            // #52 — completion window elapsed; the cloud swept the row.
+            phase = .failed("This expired before it was completed. Start again.")
         } catch {
             phase = .failed("Couldn't finish bringing this device in: \(error.localizedDescription)")
         }

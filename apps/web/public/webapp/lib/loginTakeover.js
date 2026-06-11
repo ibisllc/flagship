@@ -132,7 +132,8 @@ export async function collectRecoveryFactor(inlinePrompt) {
  *  bytes over (username, newIrkPub, oldIrkPub, issuedAt). `totpProof`
  *  rides BESIDE the signed envelope (it is NOT in the canonical bytes —
  *  codes are ephemeral) and is REQUIRED by the Worker when the account
- *  is multi-device.
+ *  is multi-device — or (#52) single-device with a second factor
+ *  enrolled (the 401 carries `credentialRequired: ["totp"|"recovery-code"]`).
  *
  *  Returns the parsed body (`{ ok, completesAt, graceMs, accountType,
  *  totpRequired, quarantineMs }`). Throws on any non-2xx so the caller
@@ -174,9 +175,31 @@ export async function initiateRePair(args) {
   );
   if (!resp.ok) {
     const txt = await safeText(resp);
-    throw new Error(`re-pair initiate failed (${resp.status}): ${txt}`.trim());
+    // #52 — surface the status + parsed body on the error so callers
+    // (runTakeover) can detect the credential-required 401 and prompt
+    // for the second factor instead of dead-ending. Message format is
+    // unchanged for existing callers/tests.
+    const err = new Error(`re-pair initiate failed (${resp.status}): ${txt}`.trim());
+    err.status = resp.status;
+    try {
+      err.body = JSON.parse(txt);
+    } catch {
+      err.body = undefined;
+    }
+    throw err;
   }
   return resp.json();
+}
+
+/** #52 — true when an initiate failure is the Worker saying "this
+ *  account has a second factor enrolled; prove it". Mirrors the
+ *  replaceDeviceCeremony detector: 401 + (`credentialRequired` in the
+ *  body OR the load-bearing "totpProof" substring in the error). */
+export function isCredentialRequiredError(err) {
+  if (!err || err.status !== 401) return false;
+  const body = err.body;
+  if (Array.isArray(body?.credentialRequired)) return true;
+  return typeof body?.error === "string" && body.error.includes("totpProof");
 }
 
 /** Run a credentialed TAKEOVER for a real account.
@@ -212,6 +235,7 @@ export async function initiateRePair(args) {
  *    deriveIrkVersioned: (seed: Uint8Array, version: number) => Promise<{publicKey: Uint8Array}>,
  *    signWithIrkVersioned: (seed: Uint8Array, version: number, bytes: Uint8Array) => Promise<Uint8Array>,
  *    totpProof?: {code: string, method: "totp"|"recovery"},
+ *    requestSecondFactor?: (methods: string[]) => Promise<{code: string, method: "totp"|"recovery"}|null>,
  *    bytesToHex?: (b: Uint8Array) => string,
  *    makePassphrase?: () => string,
  *    setUsername?: (username: string) => void,
@@ -270,17 +294,47 @@ export async function runTakeover(resolution, deps) {
     canonical([TAG_RE_PAIR_INITIATE, username, newIrkPubHex, oldIrkPubHex, issuedAt]),
   );
 
-  // 4 — INITIATE the re-pair (grace clock starts server-side).
-  const rePair = await initiateRePair({
+  // 4 — INITIATE the re-pair (grace clock starts server-side). The
+  // proof rides whenever the caller collected one — #52 made the
+  // Worker require it on SINGLE accounts too when a second factor is
+  // enrolled, so the proof is no longer multi-only.
+  const initiateArgs = {
     username,
     newIrkPubHex,
     oldIrkPubHex,
     signHex: toHex(sig),
-    totpProof: isMulti ? deps.totpProof : undefined,
+    totpProof: deps.totpProof,
     issuedAt,
     fetch: deps.fetch,
     baseUrl: deps.baseUrl,
-  });
+  };
+  let rePair;
+  try {
+    rePair = await initiateRePair(initiateArgs);
+  } catch (err) {
+    // #52 — the Worker says a second factor is enrolled on this
+    // (single-device) account. If the host injected a collector,
+    // prompt + retry ONCE with the proof riding the body, exactly
+    // like the multi path / replaceDeviceCeremony. No collector (old
+    // host) → rethrow unchanged.
+    if (
+      !isCredentialRequiredError(err) ||
+      deps.totpProof ||
+      typeof deps.requestSecondFactor !== "function"
+    ) {
+      throw err;
+    }
+    const methods = Array.isArray(err.body?.credentialRequired)
+      ? err.body.credentialRequired
+      : ["totp", "recovery-code"];
+    const proof = await deps.requestSecondFactor(methods);
+    if (!proof) {
+      const cancelled = new Error("runTakeover: second factor entry was cancelled");
+      cancelled.code = "second-factor-cancelled";
+      throw cancelled;
+    }
+    rePair = await initiateRePair({ ...initiateArgs, totpProof: proof });
+  }
 
   // 5 — record the device as `admin` on the local profile.
   if (typeof deps.addProfile === "function") {
@@ -351,10 +405,21 @@ export async function loginRealAccount(resolution, deps) {
     if (!totpProof) return { outcome: "cancelled" };
   }
 
-  const takeover = await runTakeover(resolution, {
-    ...deps.takeoverDeps,
-    totpProof,
-  });
+  // #52 — SINGLE accounts with an enrolled second factor are told so
+  // by the Worker's 401 at initiate; wire the same collector in as the
+  // on-demand prompt so runTakeover can retry with the proof. (Multi
+  // pre-collects above; the on-demand path never fires for it.)
+  let takeover;
+  try {
+    takeover = await runTakeover(resolution, {
+      ...deps.takeoverDeps,
+      totpProof,
+      requestSecondFactor: async () => collectRecoveryFactor(deps.prompt),
+    });
+  } catch (err) {
+    if (err?.code === "second-factor-cancelled") return { outcome: "cancelled" };
+    throw err;
+  }
   return { outcome: "takeover", takeover };
 }
 
@@ -448,6 +513,8 @@ export function formatRemaining(ms) {
  *    { outcome: "already-completed" }          404 (swapped earlier / swept)
  *    { outcome: "objected", status, message }  403 / 409
  *    { outcome: "too-early", completesAt, secondsRemaining } 425
+ *    { outcome: "expired", message }           410 (#52 completion
+ *        window passed — the row was swept; re-initiate, don't finalize)
  *  Any OTHER status throws (genuine transport / server fault).
  *
  *  @param {{
@@ -499,6 +566,19 @@ export async function completeRePair(args) {
       completesAt: typeof body?.completesAt === "number" ? body.completesAt : undefined,
       secondsRemaining:
         typeof body?.secondsRemaining === "number" ? body.secondsRemaining : undefined,
+    };
+  }
+  if (resp.status === 410) {
+    // #52 — the completion window (7d past completesAt) elapsed; the
+    // Worker swept the stale row. The recovery must be RE-initiated —
+    // unlike 404 this is NOT "already done", so don't finalize.
+    const body = await resp.json().catch(() => ({}));
+    return {
+      outcome: "expired",
+      message:
+        typeof body?.error === "string"
+          ? body.error
+          : "This recovery expired before it was completed. Start again.",
     };
   }
   const txt = await safeText(resp);

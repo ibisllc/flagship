@@ -1309,6 +1309,28 @@ class MockFlagshipServerClient(
     ): RePairInitiateResponse {
         tick()
         lastRePairInitiate = Triple(username, body, ifMatch)
+        // Mirror the Worker's proof gate (byte-matching error strings):
+        // multi ALWAYS requires a structurally-valid totpProof; #52 — a
+        // SINGLE account with a second factor enrolled (TOTP and/or
+        // unspent recovery codes) requires one too. Single with NEITHER
+        // stays grace-only.
+        val u = username.lowercase()
+        val isMulti = accountTypeByUser[u] == "multi"
+        val singleCredentialEnrolled = !isMulti &&
+            (totpEnrolledAtByUser[u] != null || !recoveryCodesByUser[u].isNullOrEmpty())
+        if (isMulti || singleCredentialEnrolled) {
+            val proof = body.totpProof
+            val structurallyValid = proof != null &&
+                proof.code.isNotEmpty() &&
+                (proof.method == "totp" || proof.method == "recovery")
+            if (!structurallyValid) {
+                throw HttpException(
+                    401,
+                    if (isMulti) "totpProof required for multi-device recovery"
+                    else "totpProof required for single-device recovery (a second factor is enrolled)",
+                )
+            }
+        }
         return when (val b = rePairBehavior) {
             is RePairBehavior.StaleEtag ->
                 throw IllegalStateException("412 currentEtag=${b.currentEtag}")

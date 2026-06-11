@@ -147,11 +147,14 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
     const text = await resp.text().catch(() => "");
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = null; }
-    // Multi-device path: Worker says totpProof is required. Open the
-    // prompt (if wired) and retry once with the proof.
+    // The Worker says totpProof is required — multi-device, or (#52) a
+    // single-device account with a second factor enrolled (both carry
+    // the load-bearing "totpProof" substring + `credentialRequired`).
+    // Open the prompt (if wired) and retry once with the proof.
     const needsTotp =
       parsed && (
         parsed.accountType === "multi" ||
+        Array.isArray(parsed.credentialRequired) ||
         (typeof parsed.error === "string" && parsed.error.includes("totpProof"))
       );
     if (needsTotp && typeof deps.requestTotpProof === "function") {
@@ -251,6 +254,12 @@ export async function completeReplaceDeviceCeremony(args, deps = {}) {
   }
   if (resp.status === 404) {
     throw makeError("No pending rotation found on the server.", "404");
+  }
+  if (resp.status === 410) {
+    // #52 — the completion window (7d past the grace deadline) elapsed
+    // and the server swept the stale row. Unlike 404 this is a dead
+    // recovery, not an already-done one — start a new ceremony.
+    throw makeError("This rotation expired before it was completed. Start again.", "410");
   }
   throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
 }

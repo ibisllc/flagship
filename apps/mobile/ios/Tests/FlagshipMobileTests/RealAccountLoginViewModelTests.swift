@@ -262,6 +262,146 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             "the re-pair must displace the REGISTERED (rotated) key")
     }
 
+    // MARK: - #52 — single-device credential-required initiate
+
+    /// Shared setup for the #52 tests: a single-device account whose
+    /// registered IRK rotated (Phase B) AND that has a second factor
+    /// enrolled — the cloud 401s the bare initiate, so the VM must land
+    /// on `.needsSecondFactor` instead of failing.
+    private func makeRotatedEnrolledSingle() async throws -> (vm: RealAccountLoginViewModel, server: MockFlagshipServerClient, rotatedPubHex: String) {
+        Keystore.wipe()
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = makeServer()
+        let rotatedPubHex = String(repeating: "ab", count: 32)
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: rotatedPubHex, issuedAt: 1),
+            signature: "s"
+        ))
+        // #52 — the single account has a second factor enrolled, so the
+        // Mock (mirroring the Worker) rejects a proof-less initiate.
+        server.totpEnrolledAtByUser["harry"] = 1
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else {
+            throw XCTSkip("enrol failed: \(enrol.phase)")
+        }
+
+        Keystore.wipe()
+        let spy = InstallSpy()
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
+        return (vm, server, rotatedPubHex)
+    }
+
+    /// The cloud's 401 on the bare single-device initiate lands on
+    /// `.needsSecondFactor`; submitting the factor retries the initiate
+    /// with the proof riding the body and reaches `.completed`.
+    func test_singleRecovery_credentialEnrolled_promptsThenInitiatesWithProof() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, rotatedPubHex) = try await makeRotatedEnrolledSingle()
+
+        await vm.startTakeover()
+        guard case .needsSecondFactor(let error) = vm.phase else {
+            return XCTFail("expected .needsSecondFactor after the cloud's 401, got \(vm.phase)")
+        }
+        XCTAssertNil(error)
+        // The bare attempt rode no proof.
+        XCTAssertNil(server.lastRePairInitiate?.body.totpProof)
+
+        vm.secondFactorInput = "123456"
+        await vm.submitSingleDeviceSecondFactor()
+
+        guard case .completed(let user, _) = vm.phase else {
+            return XCTFail("expected .completed after the proof-carrying retry, got \(vm.phase)")
+        }
+        XCTAssertEqual(user, "harry")
+        let retry = try XCTUnwrap(server.lastRePairInitiate)
+        XCTAssertEqual(retry.body.totpProof, RePairInitiateRequest.TotpProof(code: "123456", method: "totp"),
+            "the proof must ride BESIDE the signed envelope on the retry")
+        XCTAssertEqual(retry.body.request.oldIrkPub.lowercased(), rotatedPubHex,
+            "the retry still displaces the REGISTERED (rotated) key")
+    }
+
+    /// A non-6-digit second factor is forwarded as method 'recovery'.
+    func test_singleRecovery_secondFactor_recoveryCodeMethod() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, _) = try await makeRotatedEnrolledSingle()
+
+        await vm.startTakeover()
+        guard case .needsSecondFactor = vm.phase else {
+            return XCTFail("expected .needsSecondFactor, got \(vm.phase)")
+        }
+        vm.secondFactorInput = "ABCD-EFGH-IJ"
+        await vm.submitSingleDeviceSecondFactor()
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed, got \(vm.phase)")
+        }
+        XCTAssertEqual(server.lastRePairInitiate?.body.totpProof,
+                       RePairInitiateRequest.TotpProof(code: "ABCD-EFGH-IJ", method: "recovery"))
+    }
+
+    /// Submitting with an empty field stays on the entry state with an
+    /// inline error (no network call).
+    func test_singleRecovery_secondFactor_empty_staysWithError() async throws {
+        defer { Keystore.wipe() }
+        let (vm, server, _) = try await makeRotatedEnrolledSingle()
+
+        await vm.startTakeover()
+        guard case .needsSecondFactor = vm.phase else {
+            return XCTFail("expected .needsSecondFactor, got \(vm.phase)")
+        }
+        let attemptsBefore = server.lastRePairInitiate
+        vm.secondFactorInput = "   "
+        await vm.submitSingleDeviceSecondFactor()
+        guard case .needsSecondFactor(let error) = vm.phase else {
+            return XCTFail("expected to stay on .needsSecondFactor, got \(vm.phase)")
+        }
+        XCTAssertNotNil(error)
+        XCTAssertEqual(server.lastRePairInitiate?.body.signature, attemptsBefore?.body.signature,
+            "no new initiate may fire on an empty submission")
+    }
+
+    /// An account with NO second factor enrolled keeps the grace-only
+    /// path: the bare Phase-B initiate succeeds directly (.completed),
+    /// never passing through `.needsSecondFactor`. (This is the
+    /// pre-#52 behavior, pinned so the gate stays opt-in-by-enrollment.)
+    func test_singleRecovery_noCredentialEnrolled_keepsGraceOnlyPath() async throws {
+        // test_singleRecovery_recoveredKeyRotated_rePairsWithGrace
+        // already pins this end-to-end; this assertion documents the
+        // #52 boundary explicitly.
+        Keystore.wipe()
+        defer { Keystore.wipe() }
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+        let server = makeServer()
+        let rotatedPubHex = String(repeating: "ab", count: 32)
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: rotatedPubHex, issuedAt: 1),
+            signature: "s"
+        ))
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else { return XCTFail("enrol failed: \(enrol.phase)") }
+
+        Keystore.wipe()
+        let spy = InstallSpy()
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
+        await vm.startTakeover()
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed straight away (no credential enrolled), got \(vm.phase)")
+        }
+        XCTAssertNil(server.lastRePairInitiate?.body.totpProof)
+    }
+
     /// No passphrase typed → the single path stops before any unwrap/install.
     func test_singleRecovery_emptyPassphrase_failsBeforeUnwrap() async {
         let server = makeServer()
