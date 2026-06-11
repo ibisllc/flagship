@@ -10,11 +10,15 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +45,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.LiveNfcRendezvousClient
@@ -56,6 +62,7 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.NfcPairPhase
 import com.flagshipserver.app.viewmodels.NfcPairViewModel
+import com.flagshipserver.app.viewmodels.PairConfirmation
 
 /**
  * Dev-mode NFC pair screen. The live reader uses the host
@@ -113,7 +120,7 @@ fun NfcPairScreen(
 
             NfcPairPhase.ReadingTag -> ReadingCard()
 
-            is NfcPairPhase.AskingForWifi -> AskingForWifiCard(vm = vm, boxLabel = p.boxLabel)
+            is NfcPairPhase.AskingForWifi -> AskingForWifiCard(vm = vm, confirmation = p.confirmation)
 
             NfcPairPhase.Sealing -> SpinnerCard(label = "Sealing Wi-Fi credentials…")
 
@@ -121,7 +128,14 @@ fun NfcPairScreen(
 
             is NfcPairPhase.Success -> SuccessCard(message = p.message, onDone = { vm.reset() })
 
-            is NfcPairPhase.Failure -> FailureCard(message = p.message, onRetry = { vm.reset() })
+            is NfcPairPhase.Failure -> FailureCard(
+                message = p.message,
+                fallbackAvailable = p.ledSasFallbackAvailable,
+                onRetry = { vm.reset() },
+                onLedSasFallback = { vm.startLedSasFallback() },
+            )
+
+            NfcPairPhase.LedSasFallback -> LedSasFallbackCard(onRetry = { vm.reset() })
         }
     }
 }
@@ -164,8 +178,16 @@ private fun ReadingCard() {
     }
 }
 
+/** Maps a LED-SAS symbol to its display color (RGBY alphabet, N-PROTO-4). */
+private fun ledSymbolColor(symbol: Char): Color = when (symbol) {
+    'R' -> Color(0xFFE53935)
+    'G' -> Color(0xFF43A047)
+    'B' -> Color(0xFF1E88E5)
+    else -> Color(0xFFFDD835)
+}
+
 @Composable
-private fun AskingForWifiCard(vm: NfcPairViewModel, boxLabel: String) {
+private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmation) {
     // FSField is uncontrolled (the VM holds the strings) so wrap each in
     // a local saver mirror that pushes back into vm.ssid / vm.psk / vm.regulatoryRegion.
     var ssid by rememberSaveable { mutableStateOf(vm.ssid) }
@@ -175,10 +197,34 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, boxLabel: String) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Paired with $boxLabel",
+                "Paired with ${confirmation.boxLabel}",
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
             )
+            Text(
+                "Box ID ${confirmation.suffix6} · send your Wi-Fi within " +
+                    "30 seconds of the tap — after that the box rolls a " +
+                    "fresh pairing session.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+            )
+            if (confirmation.sasLed.isNotEmpty()) {
+                Text(
+                    "Optional check: the box's LED blinks this pattern " +
+                        "(${confirmation.sasDisplay})",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    confirmation.sasLed.forEach { symbol ->
+                        Box(
+                            Modifier
+                                .size(14.dp)
+                                .background(ledSymbolColor(symbol), CircleShape),
+                        )
+                    }
+                }
+            }
             Text(
                 "Tell the box how to reach your network. These credentials " +
                     "are encrypted on this phone before they leave — we " +
@@ -245,7 +291,12 @@ private fun SuccessCard(message: String, onDone: () -> Unit) {
 }
 
 @Composable
-private fun FailureCard(message: String, onRetry: () -> Unit) {
+private fun FailureCard(
+    message: String,
+    fallbackAvailable: Boolean,
+    onRetry: () -> Unit,
+    onLedSasFallback: () -> Unit,
+) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
@@ -255,6 +306,42 @@ private fun FailureCard(message: String, onRetry: () -> Unit) {
             )
             Text(message, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
             FSPrimaryButton(label = "Try again", onClick = onRetry)
+            if (fallbackAvailable) {
+                FSGhostButton(
+                    label = "Pair using the box's LED instead",
+                    onClick = onLedSasFallback,
+                )
+            }
+        }
+    }
+}
+
+/** Q2 fallback seam — the LED capture + decode flow (N-PHONE-6) mounts
+ *  here. Until it lands this card explains the degrade path and routes
+ *  back to the tap or the DIY monitor+QR path. */
+@Composable
+private fun LedSasFallbackCard(onRetry: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "Pair with the box's LED",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium),
+            )
+            Text(
+                "Your phone finishes pairing over Wi-Fi and confirms the " +
+                    "box by its status-LED blink pattern.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp),
+            )
+            Text(
+                "LED pairing isn't available in this build yet. You can " +
+                    "retry the tap, or plug a monitor into the box and pair " +
+                    "with the on-screen QR code.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp),
+            )
+            FSPrimaryButton(label = "Try the tap again", onClick = onRetry)
         }
     }
 }
