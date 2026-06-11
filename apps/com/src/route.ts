@@ -1242,6 +1242,7 @@ function matchedPreviewPrefix(pathname: string): string | null {
 
 const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   COMING_SOON_PATH,
+  "/favicon.ico",
   "/favicon.svg",
   "/apple-touch-icon.svg",
   "/apple-touch-icon.png",
