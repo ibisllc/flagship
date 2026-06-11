@@ -29,6 +29,13 @@ export interface OrderExecutor {
   noop?(): Promise<void> | void;
   setBackupPolicy?(args: { enabled: boolean }): Promise<void> | void;
   shutDown?(): Promise<void> | void;
+  /**
+   * Real host power action — poweroff (mode "off") or reboot (mode
+   * "restart"). The implementer suppresses the silent auto-unlock first
+   * (so a LUKS box lands at the approve prompt), then runs the host
+   * action. Distinct from `shutDown`, which only exits the process.
+   */
+  powerOff?(args: { mode: "off" | "restart" }): Promise<void> | void;
   revokeSelf?(args: { reason: string }): Promise<void> | void;
   rotateServerIdentity?(args: { newIdentityPubKey: Uint8Array }): Promise<void> | void;
   deliverBak?(args: { bakPubKey: Uint8Array }): Promise<void> | void;
@@ -159,6 +166,9 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
       };
     case "shut-down":
       return { type: "shut-down", serverId: r.serverId, issuedAt: r.issuedAt };
+    case "power-off":
+      if (r.mode !== "off" && r.mode !== "restart") return null;
+      return { type: "power-off", serverId: r.serverId, mode: r.mode, issuedAt: r.issuedAt };
     case "revoke-self":
       if (typeof r.reason !== "string") return null;
       return { type: "revoke-self", serverId: r.serverId, reason: r.reason, issuedAt: r.issuedAt };
@@ -275,6 +285,10 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
     case "shut-down":
       if (!ex.shutDown) throw new Error("shutDown not implemented");
       await ex.shutDown();
+      return;
+    case "power-off":
+      if (!ex.powerOff) throw new Error("powerOff not implemented");
+      await ex.powerOff({ mode: order.mode });
       return;
     case "revoke-self":
       if (!ex.revokeSelf) throw new Error("revokeSelf not implemented");

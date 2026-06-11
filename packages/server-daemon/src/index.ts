@@ -21,6 +21,15 @@ import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRe
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
+import {
+  DeadManController,
+  BootUnlockModeSuppressor,
+  SystemctlPowerRunner,
+  executeLockAndPower,
+  type AutoUnlockSuppressor,
+  type HostPowerRunner,
+} from "./deadMan.js";
+import { buildDeadManHttp } from "./deadManHttp.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -280,6 +289,12 @@ async function main(): Promise<void> {
     }
   }
 
+  // Lock & power-off + dead-man: one suppressor + one host-power runner,
+  // shared by the manual `power-off` order and the dead-man timer so the
+  // suppress-before-power ordering lives in one place.
+  const autoUnlockSuppressor: AutoUnlockSuppressor = new BootUnlockModeSuppressor();
+  const hostPowerRunner: HostPowerRunner = new SystemctlPowerRunner();
+
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
@@ -291,6 +306,8 @@ async function main(): Promise<void> {
           phonePipe: browserBundle?.phonePipe ?? null,
           subscriberRegistry,
           pairedSessions,
+          autoUnlockSuppressor,
+          hostPowerRunner,
         }),
       }
     : undefined;
@@ -829,6 +846,27 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // ---- Dead-man heartbeat-lock (default OFF) ----
+  // No enabled policy ⇒ no timer, no behavior change. The controller
+  // loads any persisted policy at start and (re)arms the enforcement
+  // timer only when a policy is enabled; the delivery endpoints let the
+  // phone enable/disable the policy and renew the lease.
+  if (cfg) {
+    const deadMan = new DeadManController({
+      serverId: env.serverFqdn!,
+      irkPub: cfg.irkPublicKey,
+      suppressor: autoUnlockSuppressor,
+      runner: hostPowerRunner,
+    });
+    await deadMan.start();
+    runtime.addHandler(buildDeadManHttp(deadMan));
+    process.once("SIGTERM", () => deadMan.stop());
+    process.once("SIGINT", () => deadMan.stop());
+    console.log(
+      `[daemon] dead-man heartbeat-lock ${deadMan.policy().enabled ? "ARMED" : "idle (no policy)"}`,
+    );
+  }
+
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
   if (cfg) {
     const apps = new Map<string, AppMembership>();
@@ -901,6 +939,14 @@ interface ExecutorDeps {
   subscriberRegistry?: FileSubscriberRegistry;
   /** Paired-session store for add/remove-paired-session phone orders. */
   pairedSessions?: FilePairedSessionStore;
+  /**
+   * Suppresses the silent auto-unlock before a host power action so a
+   * LUKS box lands at the phone-approval boot-unlock prompt. Shared with
+   * the dead-man enforcement timer.
+   */
+  autoUnlockSuppressor?: AutoUnlockSuppressor;
+  /** Runs the real host power action (poweroff/reboot). */
+  hostPowerRunner?: HostPowerRunner;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -923,6 +969,19 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       console.log(`[daemon] order: shut-down — exiting in 1s`);
       setTimeout(() => process.exit(0), 1000);
     },
+    powerOff:
+      deps.autoUnlockSuppressor && deps.hostPowerRunner
+        ? async ({ mode }) => {
+            console.log(
+              `[daemon] order: power-off mode=${mode} — suppressing auto-unlock, then ${mode === "off" ? "poweroff" : "reboot"}`,
+            );
+            await executeLockAndPower({
+              mode,
+              suppressor: deps.autoUnlockSuppressor!,
+              runner: deps.hostPowerRunner!,
+            });
+          }
+        : undefined,
     revokeSelf: async ({ reason }) => {
       console.log(`[daemon] order: revoke-self reason=${JSON.stringify(reason)}`);
       try {
@@ -1321,6 +1380,19 @@ export {
 } from "./acme/persistentStore.js";
 export type { PersistedCert } from "./acme/persistentStore.js";
 export { buildOrdersHandler } from "./orders.js";
+export {
+  DeadManController,
+  BootUnlockModeSuppressor,
+  SystemctlPowerRunner,
+  executeLockAndPower,
+} from "./deadMan.js";
+export type {
+  AutoUnlockSuppressor,
+  HostPowerRunner,
+  DeadManControllerOptions,
+  DeadManPolicyState,
+} from "./deadMan.js";
+export { buildDeadManHttp } from "./deadManHttp.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,

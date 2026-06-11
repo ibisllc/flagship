@@ -167,6 +167,45 @@ describe("orders-from-user handler", () => {
     expect(body.message).toBe("nope");
   });
 
+  it("dispatches power-off (off + restart) to the executor", async () => {
+    const psk = makeKey();
+    for (const mode of ["off", "restart"] as const) {
+      const seen: string[] = [];
+      const ex: OrderExecutor = { powerOff: ({ mode: m }) => void seen.push(m) };
+      const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+      const order: PhoneOrder = { type: "power-off", serverId: SERVER_FQDN, mode, issuedAt: Date.now() };
+      const r = await h(makeReq(envelope(order, psk)));
+      expect(r.status).toBe(200);
+      expect(seen).toEqual([mode]);
+    }
+  });
+
+  it("rejects a power-off whose mode was tampered after signing", async () => {
+    const psk = makeKey();
+    const ex: OrderExecutor = { powerOff: () => {} };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = { type: "power-off", serverId: SERVER_FQDN, mode: "off", issuedAt: Date.now() };
+    const env = envelope(order, psk);
+    const tampered = {
+      request: { ...(env.request as Record<string, unknown>), mode: "restart" },
+      signature: env.signature,
+    };
+    const r = await h(makeReq(tampered));
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a power-off with an unknown mode (parse fails → 400)", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: { powerOff: () => {} } });
+    const r = await h(
+      makeReq({
+        request: { type: "power-off", serverId: SERVER_FQDN, mode: "halt", issuedAt: Date.now() },
+        signature: "00",
+      }),
+    );
+    expect(r.status).toBe(400);
+  });
+
   it("405 for non-POST requests", async () => {
     const psk = makeKey();
     const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: {} });

@@ -482,6 +482,33 @@ function hex(b: Bytes): string {
   return s;
 }
 
+/**
+ * Enum-style guard for the power action mode. The canonical bytes only
+ * ever commit to a known literal; an unknown value throws at sign- AND
+ * verify-time so a tampered mode can never canonicalize ambiguously
+ * (and the Ed25519 verify on a tampered mode fails regardless).
+ */
+export type PowerOffMode = "off" | "restart";
+function powerOffModeToken(mode: PowerOffMode): string {
+  if (mode !== "off" && mode !== "restart") {
+    throw new Error(`invalid power-off mode: ${String(mode)}`);
+  }
+  return mode;
+}
+
+/**
+ * Enum-style guard for the dead-man lockout action — same poweroff
+ * vocabulary as `PowerOffMode`, named distinctly so the policy field
+ * reads at its call site.
+ */
+export type DeadManLockoutMode = "off" | "restart";
+function deadManLockoutToken(mode: DeadManLockoutMode): string {
+  if (mode !== "off" && mode !== "restart") {
+    throw new Error(`invalid dead-man lockout mode: ${String(mode)}`);
+  }
+  return mode;
+}
+
 function canonicalRebuild(r: ImageRebuildRequest): Bytes {
   return new TextEncoder().encode(
     `${TAG_REBUILD}|${r.userId}|${r.newServerId}|${r.wifiSsid}|${hex(r.wifiPskHash)}|${r.shareRatio}|${r.issuedAt}`,
@@ -1233,6 +1260,21 @@ export type PhoneOrder =
   | { type: "noop"; serverId: ServerId; issuedAt: number }
   | { type: "set-backup-policy"; serverId: ServerId; enabled: boolean; issuedAt: number }
   | { type: "shut-down"; serverId: ServerId; issuedAt: number }
+  | {
+      /**
+       * Real host power action — `systemctl poweroff` (mode "off") or
+       * `systemctl reboot` (mode "restart"). Distinct from `shut-down`,
+       * which only exits the daemon PROCESS. On a LUKS-from-phone box a
+       * power-off drops the in-memory disk key, so the next boot lands at
+       * the phone-approval unlock prompt ("lock"). The daemon suppresses
+       * the silent auto-unlock before the host action so the box does not
+       * quietly re-unlock on the way back up.
+       */
+      type: "power-off";
+      serverId: ServerId;
+      mode: "off" | "restart";
+      issuedAt: number;
+    }
   | { type: "revoke-self"; serverId: ServerId; reason: string; issuedAt: number }
   | { type: "rotate-server-identity"; serverId: ServerId; newIdentityPubKey: Bytes; issuedAt: number }
   | { type: "deliver-bak"; serverId: ServerId; bakPubKey: Bytes; issuedAt: number }
@@ -1328,6 +1370,7 @@ export type PhoneOrder =
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
 const TAG_ORDER_SET_BACKUP_POLICY = "flagship/order/set-backup-policy/v1";
 const TAG_ORDER_SHUT_DOWN = "flagship/order/shut-down/v1";
+const TAG_ORDER_POWER_OFF = "flagship/order/power-off/v1";
 const TAG_ORDER_REVOKE_SELF = "flagship/order/revoke-self/v1";
 const TAG_ORDER_ROTATE_IDENTITY = "flagship/order/rotate-server-identity/v1";
 const TAG_ORDER_DELIVER_BAK = "flagship/order/deliver-bak/v1";
@@ -1349,6 +1392,10 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
       );
     case "shut-down":
       return enc.encode([TAG_ORDER_SHUT_DOWN, o.serverId, o.issuedAt].join("|"));
+    case "power-off":
+      return enc.encode(
+        [TAG_ORDER_POWER_OFF, o.serverId, powerOffModeToken(o.mode), o.issuedAt].join("|"),
+      );
     case "revoke-self":
       legacyFieldGuard("reason", o.reason);
       return enc.encode([TAG_ORDER_REVOKE_SELF, o.serverId, o.reason, o.issuedAt].join("|"));
@@ -1512,6 +1559,8 @@ const TAG_PUT_SEALED_LUKS_KEY = "flagship/put-sealed-luks-key/v1";
 const TAG_CONSUME_UNLOCK_KEY = "flagship/consume-unlock-key/v1";
 const TAG_AUTO_UNLOCK_LEASE = "flagship/auto-unlock-lease/v1";
 const TAG_REVOKE_AUTO_UNLOCK_LEASE = "flagship/revoke-auto-unlock-lease/v1";
+const TAG_SET_DEADMAN_POLICY = "flagship/set-deadman-policy/v1";
+const TAG_DEADMAN_AFFIRM = "flagship/deadman-affirm/v1";
 const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
@@ -2040,6 +2089,92 @@ export function verifyRevokeAutoUnlockLease(
 ): boolean {
   try {
     return ed.verify(sig, canonicalRevokeAutoUnlockLease(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dead-man heartbeat-lock policy (lock-and-poweroff spec §"Dead-man
+ * heartbeat-lock"). An opt-in, per-server, IRK-signed policy persisted
+ * on the box. Signed so neither `.com` nor a relay can weaken it (e.g.
+ * silently disable the lock or stretch the window) — the box verifies
+ * against its config-pinned owner IRK pubkey before persisting.
+ *
+ * When enabled, the daemon enforces a dead-man lease: the owner must
+ * periodically affirm (biometric/IRK-signed `DeadManAffirmation`) within
+ * `windowMs`; on lapse past `graceMs` with no affirmation, the daemon
+ * suppresses the silent auto-unlock and runs the host power action per
+ * `lockoutMode`. `enabled=false` stops enforcement.
+ */
+export interface SetDeadManPolicy {
+  serverId: ServerId;
+  enabled: boolean;
+  /** Affirmation window in ms — each affirmation sets expiry = now + windowMs. */
+  windowMs: number;
+  /** Extra grace past the window before the lockout fires. */
+  graceMs: number;
+  /** Host action on lapse: poweroff ("off", default rubber-hose posture) or reboot ("restart"). */
+  lockoutMode: DeadManLockoutMode;
+  issuedAt: number;
+}
+
+/**
+ * Manual keep-unlocked affirmation — a biometric/IRK-signed renewal that
+ * extends the dead-man lease. Modeled as a DISTINCT renewal from the
+ * silent auto-unlock renewer (which the box must never use to renew the
+ * dead-man lease): only this owner-IRK-signed, replay-windowed envelope
+ * resets `deadManLeaseExpiry = now + windowMs`. Because signing requires
+ * the owner IRK (biometric on the phone), a stolen/unattended phone
+ * cannot renew it.
+ *
+ * `nonce` is fresh per affirmation; the daemon refuses a replayed nonce
+ * and an `issuedAt` outside its replay window.
+ */
+export interface DeadManAffirmation {
+  serverId: ServerId;
+  /** Fresh 16+ byte nonce; the daemon rejects a replayed value. */
+  nonce: Bytes;
+  issuedAt: number;
+}
+
+function canonicalSetDeadManPolicy(r: SetDeadManPolicy): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_SET_DEADMAN_POLICY,
+      r.serverId,
+      r.enabled ? "1" : "0",
+      r.windowMs,
+      r.graceMs,
+      deadManLockoutToken(r.lockoutMode),
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalDeadManAffirmation(r: DeadManAffirmation): Bytes {
+  return new TextEncoder().encode(
+    [TAG_DEADMAN_AFFIRM, r.serverId, hex(r.nonce), r.issuedAt].join("|"),
+  );
+}
+
+export function signSetDeadManPolicy(r: SetDeadManPolicy, irk: Keypair): Bytes {
+  return ed.sign(canonicalSetDeadManPolicy(r), irk.privateKey);
+}
+export function verifySetDeadManPolicy(r: SetDeadManPolicy, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalSetDeadManPolicy(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signDeadManAffirmation(r: DeadManAffirmation, irk: Keypair): Bytes {
+  return ed.sign(canonicalDeadManAffirmation(r), irk.privateKey);
+}
+export function verifyDeadManAffirmation(r: DeadManAffirmation, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalDeadManAffirmation(r), irkPub);
   } catch {
     return false;
   }
