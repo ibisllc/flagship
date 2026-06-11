@@ -25,16 +25,18 @@ public struct NfcPairScreen: View {
                     idleView(c: c)
                 case .readingTag:
                     busyView(c: c, message: "Hold your phone to the box…")
-                case .askingForWifi(let label):
-                    wifiFormView(c: c, boxLabel: label)
+                case .askingForWifi(let confirmation):
+                    wifiFormView(c: c, confirmation: confirmation)
                 case .sealing:
                     busyView(c: c, message: "Sealing your Wi-Fi for the box…")
                 case .depositing:
                     busyView(c: c, message: "Sending it to the box…")
                 case .success(let message):
                     successView(c: c, message: message)
-                case .failure(let message):
-                    failureView(c: c, message: message)
+                case .failure(let message, let fallbackAvailable):
+                    failureView(c: c, message: message, fallbackAvailable: fallbackAvailable)
+                case .ledSasFallback:
+                    ledSasFallbackView(c: c)
                 }
             }
             .padding(FS.space.s6)
@@ -69,12 +71,43 @@ public struct NfcPairScreen: View {
         }
     }
 
+    private func ledColor(_ symbol: Character) -> Color {
+        switch symbol {
+        case "R": return .red
+        case "G": return .green
+        case "B": return .blue
+        default:  return .yellow
+        }
+    }
+
     @ViewBuilder
-    private func wifiFormView(c: FSColors, boxLabel: String) -> some View {
+    private func wifiFormView(c: FSColors, confirmation: NfcPairViewModel.PairConfirmation) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text("Paired with").font(FS.font.caption()).foregroundColor(c.textMuted)
-                Text(boxLabel).font(FS.font.mono()).foregroundColor(c.text)
+                Text(confirmation.boxLabel).font(FS.font.mono()).foregroundColor(c.text)
+                Text("Box ID \(confirmation.suffix6)")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text("Send your Wi-Fi within 30 seconds of the tap — after that the box rolls a fresh pairing session.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+            }
+        }
+        if !confirmation.sasLed.isEmpty {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Optional check: the box's LED blinks this pattern")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    HStack(spacing: FS.space.s2) {
+                        ForEach(Array(confirmation.sasLed.enumerated()), id: \.offset) { _, symbol in
+                            Circle()
+                                .fill(ledColor(symbol))
+                                .frame(width: 14, height: 14)
+                        }
+                        Spacer()
+                        Text(confirmation.sasDisplay)
+                            .font(FS.font.mono()).foregroundColor(c.textMuted)
+                    }
+                }
             }
         }
         FSField(
@@ -133,7 +166,7 @@ public struct NfcPairScreen: View {
     }
 
     @ViewBuilder
-    private func failureView(c: FSColors, message: String) -> some View {
+    private func failureView(c: FSColors, message: String, fallbackAvailable: Bool) -> some View {
         FSCard {
             HStack(spacing: FS.space.s3) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -143,6 +176,30 @@ public struct NfcPairScreen: View {
             }
         }
         FSPrimaryButton("Try again", block: true, large: true) {
+            vm.reset()
+        }
+        if fallbackAvailable {
+            FSSecondaryButton("Pair using the box's LED instead", block: true) {
+                vm.startLedSasFallback()
+            }
+        }
+    }
+
+    /// Q2 fallback seam — the LED capture + decode flow (N-PHONE-6)
+    /// mounts here. Until it lands this view explains the degrade path
+    /// and routes back to the tap or the DIY monitor+QR path.
+    @ViewBuilder
+    private func ledSasFallbackView(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text("Pair with the box's LED").font(FS.font.h3()).foregroundColor(c.text)
+                Text("Your phone finishes pairing over Wi-Fi and confirms the box by its status-LED blink pattern.")
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Text("LED pairing isn't available in this build yet. You can retry the tap, or plug a monitor into the box and pair with the on-screen QR code.")
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            }
+        }
+        FSPrimaryButton("Try the tap again", block: true, large: true) {
             vm.reset()
         }
     }

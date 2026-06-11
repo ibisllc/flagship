@@ -10,8 +10,11 @@ import Foundation
 ///     → 400 malformed
 ///     → 429 rate limited
 ///
-/// The blob is AES-GCM AEAD-sealed under K_session (derived from the
-/// NFC tap's ECDH). The cloud is a pure opaque relay — anyone who
+/// `sealedHex` is the protocol deposit blob: the phone's ephemeral
+/// X25519 public key (32 bytes) followed by the AES-GCM ciphertext
+/// sealed under K_session (`buildWifiDepositBlob` in FlagshipCore —
+/// the box needs the pub to derive the same key; tampering it in
+/// transit fails the AEAD open). The cloud is a pure opaque relay — anyone who
 /// guesses both a live `rendezvousId` AND the blob format can deposit
 /// garbage, but the box will reject non-genuine deposits when it tries
 /// to open them with its independently-derived K_session.
