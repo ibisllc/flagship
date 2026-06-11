@@ -123,6 +123,58 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-11 (late) — full-repo security/UX/ops audit + remediation
+
+Ran a six-dimension read-only audit (protocol/crypto, cloud API, daemon/boot,
+client, UX, architecture/ops), **personally verified every critical/high claim**
+(four agent-flagged "CRITICALs" were false — see below), then fixed the verified
+set. 13 focused commits, all gated (vitest **4817**/365 files · iOS 877 · Android
+702 · `npx tsc -b` clean). On `main`, pushed.
+
+**Verified-and-fixed:**
+- **cert-pin keep-last-known-good (iOS+Android, the top security fix):** `update(pods)`
+  used to DROP a verified pin when a still-listed pod's daemon-status didn't
+  re-verify → a MITM on the `.com` path could strip `signedStatus` and downgrade to
+  default TLS (rogue-cert passes). Now: present+verifies replaces, present+unverified
+  RETAINS, absent/revoked prunes. `d6c61ab`/`b145481`.
+- **push/relay auth** `19097ce` — was unauthenticated (push spam + registration
+  oracle); now an STK-signed `flagship/push-relay/v1` envelope from a registered box,
+  category constrained to an enum, no-token target returns `200 {fanout:0}` (oracle
+  closed).
+- **rate limits** `c96f521` — added buckets for push-relay, voici/shorten,
+  llm-promo/issue (were unthrottled at the edge).
+- **app-container isolation** `33d2760` — `--cap-drop=ALL`, dedicated bridge (apps can
+  no longer reach the daemon API/siblings over host loopback; data path preserved via
+  host-gateway alias), `--memory/--cpus/--pids-limit`, read-only rootfs.
+- **BYOK SSRF guard** `809bae9` — `assertSafeProviderBaseUrl` blocks loopback/
+  link-local/metadata-IP/RFC1918 (override for LAN Ollama); DNS-rebinding documented
+  as residual.
+- **canonical field-guard uniformity** `424af57` — `legacyFieldGuard` now on every
+  free-text canonical field (defense-in-depth; JSON blobs exempt).
+- **D1↔InMemory parity harness** `b65d2a3` — real D1-over-`node:sqlite`, all 48
+  migrations; **caught a real bug** (D1 `voiciLinks.insert` masked every storage error
+  as a collision — now rethrows).
+- **ops guardrails:** predeploy staleness gate `5620219`; migration ledger +
+  `/api/admin/schema-status` + CA-lease lapse warning (`/api/admin/ca-lease-status`,
+  7-day audit alert) `2371e88`.
+- **UX pass (all surfaces)** `f2d428a`/`4b1d971`/`2f4d2ca` — cert-pin hard-fail now a
+  visible "someone may be intercepting" alert (was a silent network error); raw `HTTP
+  <code>` strings → plain language; sign-out→recovery CTA; wedged-install escape;
+  de-jargoned recovery copy; short-vs-canonical link labels.
+
+**Audit claims that did NOT survive verification (don't re-chase):** cert-pin
+"label-boundary bypass" (the leading `.` defeats it), "SQL injection" (it's an
+authenticated owner-only SQL console over the owner's own DB), "preseed shell
+injection" (debconf scalar, not shell; newline already stripped), "root-helper
+arbitrary write" (write target is `/dev/disk*`, caller is code-sign-pinned), "TOTP
+brute-force" (handler self-throttles 5/15min). Residual real-but-deferred: tier-2
+mint/install client UX; cert-pin can't run in-browser (webapp relies on CAA+CT);
+DNS-rebinding on BYOK baseUrl.
+
+**Deploy note for this batch:** apply migration `0049_schema_version.sql` with the
+rest; the new admin endpoints + CA-lease cron ride the normal Worker deploy; the
+predeploy gate now runs automatically before `wrangler deploy`.
+
 ### 2026-06-11 — machine-doable backlog closed (cert A′ + #52 + parity + NFC C3)
 
 Everything agent-doable from the open-work list landed this session; `main` and
