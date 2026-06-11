@@ -916,9 +916,17 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // D1 surfaces UNIQUE constraint failures as "SQLITE_CONSTRAINT_PRIMARYKEY"
-      // / "constraint failed". Treat any insert failure as a collision —
-      // the handler retries with a fresh code.
-      return { ok: false as const, reason: msg };
+      // / "UNIQUE constraint failed: voici_links.code". A `code` collision is
+      // the only expected failure (the only UNIQUE/PK constraint on this
+      // table); normalize it to the SAME contract reason the InMemory adapter
+      // returns ("code already taken") so the two adapters are observably
+      // identical and the raw SQLite error never leaks to a caller. Any OTHER
+      // failure rethrows — it's a genuine storage fault, not a retryable
+      // collision the handler should swallow by minting a fresh code.
+      if (/unique constraint|constraint failed/i.test(msg)) {
+        return { ok: false as const, reason: "code already taken" };
+      }
+      throw e;
     }
   }
   async get(code: string): Promise<VoiciLinkRecord | undefined> {
