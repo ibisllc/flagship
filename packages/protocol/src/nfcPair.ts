@@ -40,6 +40,18 @@ import type { Bytes, Keypair, UserId } from "./types.js";
 
 export const PAIR_PROTOCOL_VERSION = 1 as const;
 
+/**
+ * Session-lock window (design refinement §1): when a phone reads PAIR,
+ * the box latches the sessionId for this long; only a claim matching
+ * that sessionId can win the first-valid-claim race, and after the
+ * window expires with no claim the box rolls a fresh keypair +
+ * sessionId. Phones MUST treat a tap older than this as dead and
+ * require a re-tap rather than depositing against a rotated session.
+ * Single source of truth — the daemon state machine and both mobile
+ * cores mirror this value.
+ */
+export const PAIR_SESSION_LOCK_MS = 30_000;
+
 const TAG_PAIR = "flagship/pair/v1";
 const TAG_PAIR_SAS = "flagship/pair-sas/v1";
 const TAG_BOX_UNPAIR = "flagship/box-unpair/v1";
@@ -328,6 +340,46 @@ export function openWiFiConfig(blob: SealedWiFiConfig, kSession: Bytes): WiFiCon
     throw new Error("malformed wifi-config issuedAt");
   }
   return { ssid, psk, regulatoryRegion, issuedAt };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Rendezvous deposit blob — ePhonePub || ciphertext
+//
+// The cloud drop-box (`POST /api/nfc/rendezvous/:id/wifi`) relays one
+// opaque hex blob from phone to box. The box cannot derive K_session
+// without the phone's ephemeral public key, so the deposit carries it
+// as a fixed 32-byte prefix ahead of the AEAD ciphertext. The prefix
+// needs no separate authentication: ePhonePub is bound into the
+// K_session transcript, so tampering it yields a key under which the
+// AEAD open fails. The cloud stays format-blind.
+
+const EPHONE_PUB_LEN = 32;
+/** AES-GCM tag = 16 bytes; an empty plaintext still produces 16. */
+const MIN_CIPHERTEXT_LEN = 16;
+
+export function buildWifiDepositBlob(ePhonePub: Bytes, sealed: SealedWiFiConfig): Bytes {
+  if (ePhonePub.length !== EPHONE_PUB_LEN) {
+    throw new Error(`ePhonePub must be ${EPHONE_PUB_LEN} bytes`);
+  }
+  const out = new Uint8Array(EPHONE_PUB_LEN + sealed.ciphertext.length);
+  out.set(ePhonePub, 0);
+  out.set(sealed.ciphertext, EPHONE_PUB_LEN);
+  return out;
+}
+
+/**
+ * Box-side: split a deposit blob back into ePhonePub + ciphertext.
+ * Throws on anything too short to contain both — a foreign/garbage
+ * deposit fails here before any key derivation runs.
+ */
+export function parseWifiDepositBlob(blob: Bytes): { ePhonePub: Bytes; ciphertext: Bytes } {
+  if (blob.length < EPHONE_PUB_LEN + MIN_CIPHERTEXT_LEN) {
+    throw new Error("wifi deposit blob too short");
+  }
+  return {
+    ePhonePub: blob.slice(0, EPHONE_PUB_LEN),
+    ciphertext: blob.slice(EPHONE_PUB_LEN),
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────

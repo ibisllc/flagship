@@ -10,8 +10,10 @@
  *
  *   POST /api/nfc/rendezvous/:rendezvousId/wifi
  *     Body: { sealedHex: string; nonceHex: string }
- *     Phone deposits a sealed WiFi-config blob. Idempotent overwrite
- *     on retry (e.g. typo'd password + re-tap).
+ *     Phone deposits the protocol deposit blob (ePhonePub(32) ||
+ *     AEAD ciphertext — see buildWifiDepositBlob in
+ *     @flagship/protocol/nfcPair.ts; opaque at this layer). Idempotent
+ *     overwrite on retry (e.g. typo'd password + re-tap).
  *
  *   GET  /api/nfc/rendezvous/:rendezvousId/wifi
  *     Box polls the slot. One-shot: a successful read deletes the
