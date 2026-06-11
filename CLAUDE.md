@@ -123,6 +123,60 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-10 (late) — CERT-MODEL MIGRATION C → A′ EXECUTED IN CODE
+
+**⭐ The entire cert-model migration is implemented on `main` and gated** (15
+commits; vitest 4608 · iOS full suite green · Android 669 · burner-mac 109 ·
+`npx tsc -b` clean). `docs/cert-model-A-prime-migration.md` header lists what
+remains. What landed:
+- **Phase 1 (per-box wildcard):** the daemon mints `[<server>.<user>, *.<server>.<user>]`
+  (`boxCertSans`, SANs re-derived at startup ⇒ model-C certs auto-discard +
+  re-mint on first boot); `.com` registration publishes the per-box A/AAAA pair;
+  DNS-01 (`dns01.ts` AND the dns-broker policy) accept a box's challenges ONLY at
+  its own subdomain; CAA stays at the user zone (RFC 8659 tree-climb covers
+  everything below); CT monitoring (both monitors) flags any cert whose SAN set
+  doesn't fit exactly ONE registered box's pair — incl. the retired per-user shape.
+- **Phase 2 (`--` revert):** pin operator deleted (hierarchy replaces it);
+  tier-1 canonical `https://<label>.<server>.<user>` is the share/copy/open URL on
+  iOS + Android + webapp (clients use the daemon-provided AppSummary.url, not
+  local derivation); mocks mirror the live shape. Tier-2 `<label>.<user>` kept
+  ONLY where genuinely leader-routed. Bonus bug fix: app-backup `resolveSource`
+  composed `<creator>--<slug>` and never matched (8a00e3b).
+- **Phase 3 (voi.ci):** no change needed — targets already mint from the tier-1
+  canonical.
+- **Phase 4 (pinning):** `/pods` relays the VERBATIM STK-signed daemon-status
+  (`signedStatus`, migration **0048**); `verifyDaemonStatusReport` in
+  @flagship/protocol + byte-identical Swift/Kotlin mirrors (pinned cross-platform
+  vector). iOS (URLSession delegate) + Android (hostname-verifier + interceptor —
+  the verifier stage covers WebSockets, which OkHttp interceptors skip) HARD-FAIL
+  when a verified pin mismatches; fail-open only when no pin exists. STK pubs
+  derive LOCALLY (.com's echo is not a trust input); demo/mock can't install pins.
+- **Phase 5 (tier-2 shared service certs):** ServiceCertAuthority (IRK, ≤1h) +
+  mint/export/install envelopes; the authorized box mints `[<service>.<user>]`
+  via its own ACME with the authority forwarded on DNS-01; key distribution is
+  phone-driven over each box's pinned canonical pipe (`POST /api/service-certs/
+  {mint,export,install}` on the daemon); certManager serves it on exact SNI;
+  rehydrates on restart. Renewal = phone re-mints (deliberate v1).
+- **Hub hardening (came out of the routing audit):** routing never used wildcard
+  claims (the one-label SNI strip IS the per-box wildcard, and the old `*.<user>`
+  claim was inert) — but nothing REFUSED foreign wildcards; now the hub nacks any
+  wildcard claim except a box's own `*.<podCanonical>`, the allocator drops `*`
+  canonicals, findBySni refuses `*` SNIs.
+
+**Deploy set for this migration (owner, do together):** `npx tsc -b && cd apps/com
+&& npx wrangler deploy` · apply migrations **0047_ct_alerts.sql + 0048_daemon_
+status_signed.sql** to prod D1 (0048 BEFORE the Worker deploy — the new D1 write
+path needs the columns) · wire `CloudflareDnsClient` as the CAA client · rebuild
++ re-sign the Mac burner · rebuild the iOS app · wipe + fresh burn → the full
+post-cert-rebuild hardware test list in the migration doc.
+
+**Open follow-ups from the migration:** tier-2 mint/install client UX (phone
+orchestration of the new daemon endpoints — protocol + endpoints are done);
+phone-side reminder before a shared service cert expires; custom-domain CNAME
+target says `<user>.flagship.services` whose A record per-box DNS no longer
+publishes (weigh with tier-2/custom-domain work); webapp cannot pin (browser
+constraint — CAA + CT are its backstop).
+
 ### 2026-06-10 session — ENCRYPTED BOX e2e PROVEN ON METAL + cert-model plan
 
 **⭐ MILESTONE: the encrypted-box end-to-end works on real hardware.** After a long
@@ -132,7 +186,8 @@ serving content, `.services` content-blind. The #27 saga's entire downstream is
 validated. (The unlock was MANUAL via the `manual` keyword + recovery passphrase — the
 PHONE-approval unlock still needs a fresh end-to-end run, see TODO.)
 
-**NEXT SESSION = EXECUTE THE CERT-MODEL MIGRATION.** Full detailed plan in
+**~~NEXT SESSION = EXECUTE THE CERT-MODEL MIGRATION~~ — DONE, see the block
+above.** Full detailed plan in
 `docs/cert-model-A-prime-migration.md` (all decisions LOCKED). Headline: move off the
 current model **C** (per-box key + per-user wildcard `*.<user>`, each box re-mints →
 hits LE's duplicate-cert limit at >5 boxes + forced the `--` name hack) to **A′**:
@@ -213,7 +268,7 @@ Gates (2026-06-10): `npx vitest run` 4517 (351 files) · iOS 824 · Android 620 
 - Remove the **burn-time LUKS recovery passphrase** (`flagship-burn-time-luks-rekey-me-immediately`, a kept known constant) + disarm the mass-wipe (#35) — before GA.
 - **/pods unauthenticated server-list enumeration (track to GA).** `GET /api/users/:u/pods` is unauthenticated (a deliberate #56 tradeoff to avoid a biometric Face ID on every list refresh, and because the boot worker's directory client reads it). It leaks METADATA to any knower-of-a-username: the user's server domains, identity pubkeys, registered timestamps, apps-served (NO secrets/keys/content; the serial is already opaque-`orderRef`'d). Pre-GA decision needed: require auth (re-introduces the refresh-biometric problem #56 solved), OR rate-limit + make usernames non-guessable, OR accept-with-rationale. Currently UNTRACKED-until-now.
 - **CAA pinning + CT monitoring — SPEC'd, NOT deployed (track to GA).** Because `.com` controls the `flagship.services` DNS zone, it could in principle satisfy a DNS-01 challenge and mint a ROGUE per-user cert (it never sees the box's cert private key — that's generated + held box-local and never transmitted — but it controls the name). Defenses are designed in `docs/per-user-cert-and-addressing.md` (CAA pinned to the user's ACME account so LE refuses out-of-account issuance; CT monitoring on the phone to alert on any cert the owner didn't mint) but NOT implemented. Mitigating factor today: a cert is NOT the access-control primitive — routing authority (RCK/STK, phone-held) is, so a rogue cert can't redirect traffic. Deploy CAA+CT before GA.
-- **Daemon liveness/cert reporting — partial.** A live box reports provision-status→`live` but does NOT (yet) POST the signed `daemon-status` report, so `/pods` `lastReported`/`currentCert` stay null for real boxes; a server-side bridge derives "online" from provision-status `live` (so the phone stops mislabeling live boxes "never came online"). FOLLOW-UP: make the daemon send the periodic signed daemon-status heartbeat (real cert display + current-liveness/offline detection), which the bridge only approximates ("ever reached live", not "up right now").
+- **Daemon liveness/cert reporting — DONE (2026-06-10 late).** The daemon sends the 5-minutely STK-signed daemon-status heartbeat (wired in server-daemon index); `/pods` now relays the VERBATIM signed report (`signedStatus`, migration 0048) so phones verify the cert fingerprint against the locally-derived STK and hard-fail-pin on it. The provision-status liveness bridge remains as the fallback for boxes that haven't reported yet.
 
 Gates (2026-06-09 evening): `npx vitest run` 4465 (348 files) · iOS 793 XCTests · Android 611 · burner 175 (TS) + 105 (swift) · webapp 1012 · `npx tsc -b` clean.
 

@@ -1,8 +1,13 @@
 # Cert model migration: C → A′ (per-box wildcard) + voi.ci + pinning
 
-Status: PLAN (execute next session). Pre-launch (all prod users wiped, only test
-boxes), so this is a forward CUTOVER — no live-user data migration needed; stale
-test boxes (abc*) get decommissioned, not migrated.
+Status: **EXECUTED IN CODE on `main` (2026-06-10/11)** — all phases (1, 2, 3, 4,
+5) are implemented and gated (vitest 4608 · iOS full suite · Android 669 ·
+burner 109 · tsc clean). Remaining: the deploy set (Worker + D1 0047/0048 + CAA
+client wiring + burner/iOS rebuilds), tier-2 client-side mint/install
+ORCHESTRATION UX (the daemon endpoints + protocol envelopes exist; no phone UI
+drives them yet), and the full post-rebuild hardware validation pass at the
+bottom of this doc. Pre-launch (all prod users wiped, only test boxes), so this
+was a forward CUTOVER — stale test boxes (abc*) get decommissioned, not migrated.
 
 ## The invariant we are protecting
 
