@@ -651,20 +651,26 @@ export async function tryControlPlane(
     // Prefer the broker (production posture). Fall back to direct
     // CloudflareDnsClient only when no broker URL is configured —
     // typically the local-dev path.
-    const dnsClient = env.DNS_BROKER_URL
-      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
-      : env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+    // The direct CloudflareDnsClient also speaks CAA (type:"CAA" with a
+    // structured `data` field); the broker has no CAA RPC yet, so CAA is
+    // published only on the direct path.
+    const cfDnsClient =
+      !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
         ? new CloudflareDnsClient({
             apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
             zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
           })
         : null;
+    const dnsClient = env.DNS_BROKER_URL
+      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+      : cfDnsClient;
     const dns =
       dnsClient && env.SERVICES_PASSTHROUGH_IPV4
         ? {
             client: dnsClient,
             servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
             servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+            ...(cfDnsClient ? { caa: { client: cfDnsClient } } : {}),
           }
         : undefined;
     const srForwarder = buildOptionalPushForwarder(env);
