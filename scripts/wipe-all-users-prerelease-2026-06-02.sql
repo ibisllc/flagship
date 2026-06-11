@@ -54,6 +54,7 @@ DELETE FROM unlock_key_deposits;
 DELETE FROM pending_unlock_approvals;
 DELETE FROM sealed_luks_keys;
 DELETE FROM secret_mailbox;
+DELETE FROM boot_nonces;
 
 -- Recovery + re-pair + peer backup
 DELETE FROM webauthn_recovery_records;
