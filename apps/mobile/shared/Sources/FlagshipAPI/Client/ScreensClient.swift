@@ -122,14 +122,66 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
     case http(status: Int, message: String)
     case decoding(String)
     case notImplemented(String)
+    /// UX-A — the box served a cert whose fingerprint doesn't match the pin
+    /// the phone recorded for it (cert-model A′ hard-fail). Distinct from an
+    /// ordinary network failure: it means an active interceptor, not bad
+    /// signal. `host` is the box / service host that failed to pin.
+    case certPinMismatch(host: String)
 
+    /// A short, NON-technical sentence safe to show a normal person. Never
+    /// leaks a raw status code or a server-supplied message string (UX-B).
     public var errorDescription: String? {
         switch self {
-        case .notPaired: return "Not paired to a server yet."
-        case .noSessionToken: return "No session token; re-pair."
-        case .http(let s, let m): return "HTTP \(s): \(m)"
-        case .decoding(let m): return "Could not parse response: \(m)"
-        case .notImplemented(let f): return "Not implemented yet: \(f)"
+        case .notPaired:
+            return "This device isn't connected to a server yet."
+        case .noSessionToken:
+            return "Your connection to this box expired. Reconnect and try again."
+        case .http(let s, _):
+            return Self.plainLanguage(forStatus: s)
+        case .decoding:
+            return "Something came back we couldn't read. Try again in a moment."
+        case .notImplemented:
+            return "That isn't available yet."
+        case .certPinMismatch:
+            return "This box's security certificate doesn't match what we expected — "
+                + "someone may be intercepting the connection. Reinstall the box, or "
+                + "contact whoever runs it before continuing."
+        }
+    }
+
+    /// UX-A/UX-B — the one place every surface should route a caught error
+    /// through to get a string safe to show a normal person: a
+    /// `ScreensClientError` yields its plain-language `errorDescription`
+    /// (incl. the cert-pin-mismatch warning); anything else (a raw URLSession
+    /// transport error, a `CancellationError`, …) collapses to a single
+    /// honest "couldn't reach the server" rather than leaking Apple's
+    /// developer-facing `localizedDescription`.
+    public static func userFacing(_ error: Error) -> String {
+        if let e = error as? ScreensClientError, let d = e.errorDescription {
+            return d
+        }
+        return "Couldn't reach the server. Check your connection and try again."
+    }
+
+    /// UX-B — map a raw HTTP status to plain language. Centralised here so no
+    /// surface has to interpolate a bare code into a user-facing string.
+    public static func plainLanguage(forStatus status: Int) -> String {
+        switch status {
+        case 0:
+            // No HTTP response at all — transport-level failure.
+            return "Couldn't reach the server. Check your connection and try again."
+        case 401, 403:
+            return "You're not signed in for that. Try signing in again."
+        case 404:
+            return "We couldn't find that. It may have moved or been removed."
+        case 408, 429:
+            return "The server is busy right now. Give it a moment and try again."
+        case 500...599:
+            return "Service temporarily unavailable. Try again in a few minutes."
+        case 400...499:
+            return "That didn't work. Check your connection and try again."
+        default:
+            return "Something went wrong. Try again in a moment."
         }
     }
 }

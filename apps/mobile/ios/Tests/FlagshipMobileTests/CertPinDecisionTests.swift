@@ -94,3 +94,81 @@ final class CertPinDecisionTests: XCTestCase {
         )
     }
 }
+
+/// UX-A — the mismatch sink that lets a client recognise a hard-fail pin
+/// mismatch (which surfaces as a generic transport cancellation) and report
+/// the distinct "someone may be intercepting" error.
+final class CertPinMismatchSinkTests: XCTestCase {
+    func testRecordedMismatchIsConsumedOnceWithinWindow() {
+        let sink = CertPinMismatchSink()
+        sink.record(host: "abc5.harry1.flagship.services", nowMs: 1_000)
+        // Fresh: claimable.
+        XCTAssertTrue(sink.consumeRecentMismatch(host: "abc5.harry1.flagship.services", nowMs: 1_500))
+        // Consumed: a second read finds nothing (can't bleed into a later
+        // unrelated failure).
+        XCTAssertFalse(sink.consumeRecentMismatch(host: "abc5.harry1.flagship.services", nowMs: 1_600))
+    }
+
+    func testStaleMismatchIsNotClaimed() {
+        let sink = CertPinMismatchSink()
+        sink.record(host: "abc5.harry1.flagship.services", nowMs: 1_000)
+        let tooLate = 1_000 + CertPinMismatchSink.freshnessMs + 1
+        XCTAssertFalse(sink.consumeRecentMismatch(host: "abc5.harry1.flagship.services", nowMs: tooLate))
+    }
+
+    func testNormalisesHostCaseAndTrailingDot() {
+        let sink = CertPinMismatchSink()
+        sink.record(host: "ABC5.harry1.flagship.services.", nowMs: 1_000)
+        XCTAssertTrue(sink.consumeRecentMismatch(host: "abc5.harry1.flagship.services", nowMs: 1_100))
+    }
+
+    func testUnrelatedHostNeverClaims() {
+        let sink = CertPinMismatchSink()
+        sink.record(host: "abc5.harry1.flagship.services", nowMs: 1_000)
+        XCTAssertFalse(sink.consumeRecentMismatch(host: "other.harry1.flagship.services", nowMs: 1_100))
+    }
+}
+
+/// UX-A/UX-B — ScreensClientError plain-language presentation. No surface
+/// should ever show a raw status code or a server-supplied message string.
+final class ScreensClientErrorPlainLanguageTests: XCTestCase {
+    func testHttpNeverLeaksStatusCodeOrServerMessage() {
+        let err = ScreensClientError.http(status: 503, message: "upstream connect error 111")
+        let shown = err.errorDescription ?? ""
+        XCTAssertFalse(shown.contains("503"))
+        XCTAssertFalse(shown.lowercased().contains("upstream"))
+        XCTAssertFalse(shown.contains("HTTP"))
+        XCTAssertTrue(shown.lowercased().contains("temporarily unavailable"))
+    }
+
+    func testStatusBuckets() {
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 500).lowercased().contains("temporarily unavailable"))
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 404).lowercased().contains("couldn't find"))
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 429).lowercased().contains("busy"))
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 401).lowercased().contains("signed in"))
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 400).lowercased().contains("connection"))
+        XCTAssertTrue(ScreensClientError.plainLanguage(forStatus: 0).lowercased().contains("connection"))
+    }
+
+    func testCertPinMismatchReadsAsInterceptionWarning() {
+        let err = ScreensClientError.certPinMismatch(host: "abc5.harry1.flagship.services")
+        let shown = err.errorDescription ?? ""
+        XCTAssertTrue(shown.lowercased().contains("intercept"))
+        XCTAssertTrue(shown.lowercased().contains("certificate"))
+        // No raw host / jargon leak.
+        XCTAssertFalse(shown.contains("HTTP"))
+    }
+
+    func testUserFacingFallsBackForRawErrors() {
+        struct Raw: Error {}
+        // A non-ScreensClientError collapses to a single honest message —
+        // never Apple's developer-facing localizedDescription.
+        let shown = ScreensClientError.userFacing(Raw())
+        XCTAssertTrue(shown.lowercased().contains("couldn't reach"))
+        // A ScreensClientError routes through its plain-language description.
+        let pinShown = ScreensClientError.userFacing(
+            ScreensClientError.certPinMismatch(host: "x.y.flagship.services")
+        )
+        XCTAssertTrue(pinShown.lowercased().contains("intercept"))
+    }
+}

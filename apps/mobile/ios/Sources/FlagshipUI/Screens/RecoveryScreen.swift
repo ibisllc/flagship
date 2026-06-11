@@ -37,16 +37,16 @@ public struct RecoveryScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Recover on a new device").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your User Master Key (UMK) owns your account, and it never leaves this device's secure hardware. Set recovery up so a replacement can get it back: we wrap a copy under your passkey (synced through iCloud Keychain) plus a recovery passphrase, and keep the ciphertext in the cloud. Lose this device? Get a new one, sign in, and enter your passphrase — single-admin accounts unlock after a 3-day safety wait.")
+                Text("Your account's master key lives only on this device. Set up recovery now so you can get back in if you lose it. We keep a copy locked away in the cloud — unlockable only with your passkey (synced through iCloud) and a recovery passphrase you choose. We can't open it, and we can't reset your passphrase. If you lose this device, install Flagship on a new one, sign in, and enter your passphrase. For safety, single-admin accounts unlock after a 3-day wait.")
                     .font(FS.font.body()).foregroundColor(c.textMuted)
 
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("CLOUD RECOVERY (WebAuthn-PRF)").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                        Text("CLOUD RECOVERY").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
                         switch vm.phase {
                         case .idle:
-                            Text("No recovery envelope on file yet.").foregroundColor(c.text)
-                            Text("Pick a recovery passphrase (8+ characters). You'll need it — plus your passkey — to recover on a new device.")
+                            Text("Recovery isn't set up yet.").foregroundColor(c.text)
+                            Text("Pick a passphrase (8+ characters) — treat it like a password and write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.")
                                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                             SecureField("Recovery passphrase", text: $enrollPassphrase)
                                 .textContentType(.newPassword)
@@ -80,7 +80,7 @@ public struct RecoveryScreen: View {
                                 Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
                                 Text("Recovery active").foregroundColor(c.text)
                             }
-                            Text("Credential: \(credId)").font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
+                            Text("Passkey: \(credId)").font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
                             Text("If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         case .recovering:
                             HStack { ProgressView(); Text("Verifying passkey…").foregroundColor(c.textMuted) }
@@ -101,7 +101,7 @@ public struct RecoveryScreen: View {
                         Image(systemName: "info.circle.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("Your passkey + a salt derive a 32-byte secret via the PRF extension (hmac-secret). We AES-GCM encrypt the UMK with it and store the ciphertext on flagshipserver.com keyed by credentialID. Flagship can't decrypt — only your passkey can.")
+                            Text("Your passkey turns your passphrase into a key that only you can produce. We use it to lock a copy of your account key and store that locked copy on our servers. We never see the key inside — only your passkey can unlock it.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }

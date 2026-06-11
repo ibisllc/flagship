@@ -97,8 +97,10 @@ public final class ServiceDetailViewModel {
                 runOnPodIds = [lead]
             }
         } catch {
-            detail = .failed(error.localizedDescription)
-            ownedUrls = .failed(error.localizedDescription)
+            // UX-A/UX-B — plain language; a cert-pin mismatch reads as a
+            // possible interception warning, not a generic network error.
+            detail = .failed(ScreensClientError.userFacing(error))
+            ownedUrls = .failed(ScreensClientError.userFacing(error))
         }
     }
 
@@ -280,7 +282,7 @@ public final class ServiceDetailViewModel {
             // we don't ask it for this simple numeric field.
             restoreCooldownFromLocal()
         } catch {
-            appLinks = .failed(error.localizedDescription)
+            appLinks = .failed(ScreensClientError.userFacing(error))
         }
     }
 

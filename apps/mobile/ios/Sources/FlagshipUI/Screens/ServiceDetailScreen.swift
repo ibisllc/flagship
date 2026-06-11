@@ -297,6 +297,10 @@ public struct ServiceDetailScreen: View {
     private func shortRedirectGroup(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             sectionLabel("SHORT REDIRECT", c: c)
+            // UX-E — name the trust tradeoff vs. the canonical link below.
+            Text("A convenient short link that redirects to your service.")
+                .font(FS.font.caption())
+                .foregroundColor(c.textMuted)
             if let short = vm.appLinks.value?.shortUrl, !short.isEmpty {
                 urlRow(url: short, style: .prominent, c: c)
             } else if vm.appLinks.isLoading {
@@ -315,6 +319,11 @@ public struct ServiceDetailScreen: View {
     private func canonicalGroup(c: FSColors, defaultLabel: String) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             sectionLabel("CANONICAL (SHARED BY ALL INSTANCES)", c: c)
+            // UX-E — the permanent, verifiable address (its certificate is
+            // pinned to your box); the short link above is just a redirect.
+            Text("The permanent, verifiable address — safe to share.")
+                .font(FS.font.caption())
+                .foregroundColor(c.textMuted)
             if let canonical = vm.appLinks.value?.canonicalUrl {
                 urlRow(url: canonical, style: .normal, c: c)
             } else if let user = username {

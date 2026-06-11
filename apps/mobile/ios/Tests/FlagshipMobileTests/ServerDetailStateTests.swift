@@ -6,7 +6,7 @@ import XCTest
 /// its detail through `HomeViewModel` (same VM the container uses). On success
 /// the `.loaded` state drives the full management view; on failure the screen
 /// shows a graceful "connecting…" state — it must NEVER surface the
-/// `.notPaired` ("Not paired to a server yet.") text, because tapping an online
+/// `.notPaired` ("This device isn't connected to a server yet.") text, because tapping an online
 /// server means it IS paired.
 @MainActor
 final class ServerDetailStateTests: XCTestCase {
@@ -38,6 +38,6 @@ final class ServerDetailStateTests: XCTestCase {
         // the live client's guard, but ServerDetailScreen's .failed arm renders
         // `connecting(...)` and never echoes this message.
         XCTAssertEqual(ScreensClientError.notPaired.errorDescription,
-                       "Not paired to a server yet.")
+                       "This device isn't connected to a server yet.")
     }
 }

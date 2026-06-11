@@ -31,7 +31,21 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             req.setValue("application/json", forHTTPHeaderField: "content-type")
         }
 
-        let (data, resp) = try await urlSession.data(for: req)
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await urlSession.data(for: req)
+        } catch {
+            // UX-A — a hard-fail pin mismatch surfaces here as a generic
+            // transport error (the delegate cancelled the auth challenge).
+            // If the pinning delegate just flagged this host, report the
+            // distinct "someone may be intercepting" error.
+            if let host = url.host,
+               CertPinMismatchSink.shared.consumeRecentMismatch(host: host) {
+                throw ScreensClientError.certPinMismatch(host: host)
+            }
+            throw error
+        }
         guard let http = resp as? HTTPURLResponse else {
             throw ScreensClientError.http(status: 0, message: "no response")
         }

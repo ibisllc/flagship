@@ -150,10 +150,11 @@ public final class WatchDelegateViewModel {
             isEnabled = true
             self.expiresAt = res.expiresAt
             phase = .idle
-        } catch let ScreensClientError.http(status, msg) {
-            phase = .failed("Server rejected the request (\(status)): \(msg)")
+        } catch let error as ScreensClientError {
+            // UX-B — plain language, no raw status code or server message.
+            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
         } catch {
-            phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
         }
     }
 

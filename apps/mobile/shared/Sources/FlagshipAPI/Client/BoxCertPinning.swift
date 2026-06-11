@@ -46,6 +46,57 @@ public enum CertPinDecision {
     }
 }
 
+/// UX-A — a process-wide sink that records the most-recent per-host pin
+/// MISMATCH so a client whose request then fails with a generic transport
+/// error (URLSession reports a cancelled auth challenge as a nondescript
+/// `NSURLErrorCancelled`) can recognise it was a pinning hard-fail and
+/// surface the distinct "someone may be intercepting this box" message
+/// instead of a generic "offline / try again". A mismatch is only meaningful
+/// for a few seconds around the failing request, so entries are timestamped
+/// and consumed with a freshness window.
+public final class CertPinMismatchSink: @unchecked Sendable {
+    public static let shared = CertPinMismatchSink()
+
+    /// How long after a recorded mismatch a failing request may still claim
+    /// it (the delegate fires synchronously just before the request fails).
+    public static let freshnessMs: Int64 = 5_000
+
+    private let lock = NSLock()
+    private var lastMismatchMs: [String: Int64] = [:]
+
+    public init() {}
+
+    public static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    private static func normalize(_ host: String) -> String {
+        var h = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while h.hasSuffix(".") { h.removeLast() }
+        return h
+    }
+
+    /// Called by the delegate on a `.mismatch` verdict.
+    public func record(host: String, nowMs: Int64 = CertPinMismatchSink.nowMs()) {
+        let key = Self.normalize(host)
+        guard !key.isEmpty else { return }
+        lock.lock(); lastMismatchMs[key] = nowMs; lock.unlock()
+    }
+
+    /// True iff `host` had a mismatch recorded within the freshness window.
+    /// Consumes the entry so it can't bleed into an unrelated later failure.
+    public func consumeRecentMismatch(host: String, nowMs: Int64 = CertPinMismatchSink.nowMs()) -> Bool {
+        let key = Self.normalize(host)
+        guard !key.isEmpty else { return false }
+        lock.lock(); defer { lock.unlock() }
+        guard let at = lastMismatchMs[key] else { return false }
+        lastMismatchMs.removeValue(forKey: key)
+        return nowMs - at <= Self.freshnessMs
+    }
+
+    public func clear() {
+        lock.lock(); lastMismatchMs.removeAll(); lock.unlock()
+    }
+}
+
 /// URLSession delegate enforcing the pin on `NSURLAuthenticationMethodServerTrust`
 /// challenges. Thin by design — see `CertPinDecision` for the logic.
 public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
@@ -78,8 +129,9 @@ public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchec
             return (.performDefaultHandling, nil)
         }
 
+        let host = challenge.protectionSpace.host
         switch CertPinDecision.verdict(
-            host: challenge.protectionSpace.host,
+            host: host,
             leafDerSha256Hex: Self.leafDerSha256Hex(trust),
             pinFor: pinFor
         ) {
@@ -88,6 +140,9 @@ public final class BoxCertPinningDelegate: NSObject, URLSessionDelegate, @unchec
         case .match:
             return (.useCredential, URLCredential(trust: trust))
         case .mismatch:
+            // UX-A — flag the host so the client that's about to see this
+            // request fail can surface the pin-mismatch message specifically.
+            CertPinMismatchSink.shared.record(host: host)
             return (.cancelAuthenticationChallenge, nil)
         }
     }

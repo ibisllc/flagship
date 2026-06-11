@@ -162,7 +162,7 @@ public struct SecureAccountScreen: View {
             Text("Recovery passphrase")
                 .font(FS.font.h4())
                 .foregroundColor(c.text)
-            Text("You'll need this passphrase AND your passkey to recover on a new device. Pick something memorable — we can't reset it.")
+            Text("Treat this like a password — write it down somewhere safe. You'll need it, plus your passkey, to get back in on a new device. We can't reset it.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             SecureField("Passphrase (8+ characters)", text: $cloudPassphrase)

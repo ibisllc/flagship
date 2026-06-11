@@ -108,11 +108,13 @@ public final class RevokeServerViewModel {
         } catch ScreensClientError.http(let status, _) where status == 404 {
             phase = .failed("That server is already gone — nothing to revoke.")
             return
-        } catch ScreensClientError.http(let status, let msg) {
-            phase = .failed("Server error (\(status)): \(msg)")
+        } catch let error as ScreensClientError {
+            // UX-B — plain language, no raw status code or server message;
+            // UX-A — a cert-pin mismatch reads as "someone may be intercepting".
+            phase = .failed(error.errorDescription ?? "That didn't work. Try again in a moment.")
             return
         } catch {
-            phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            phase = .failed("Couldn't reach the server. Check your connection and try again.")
             return
         }
         phase = .completed
