@@ -21,9 +21,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -54,10 +57,14 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.OkHttpJsonTransport
+import com.flagshipserver.app.core.PowerMode
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
+import com.flagshipserver.app.push.DeadManReminderScheduler
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -66,10 +73,15 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
+import com.flagshipserver.app.viewmodels.DeadManPhase
+import com.flagshipserver.app.viewmodels.DeadManViewModel
+import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.GrantCertAutonomyPhase
 import com.flagshipserver.app.viewmodels.GrantCertAutonomyViewModel
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.PowerOffPhase
+import com.flagshipserver.app.viewmodels.PowerOffViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerPhase
 import com.flagshipserver.app.viewmodels.RevokeServerReason
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
@@ -131,6 +143,10 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
         (detail as? LoadingState.Loaded)?.let { d ->
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            PowerCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            DeadManCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             CertAutonomyCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
@@ -353,6 +369,247 @@ private fun humanBytes(bytes: Long): String {
     var i = 0
     while (v >= k && i < units.lastIndex) { v /= k; i++ }
     return "%.1f %s".format(v, units[i])
+}
+
+// Manual lock-&-power buttons. "Lock and turn off" / "Lock and restart"
+// drop "Lock and " when the box is non-LUKS. Confirm dialog → owner-IRK-signed
+// `power-off` order (the deriveIRK signer fires the biometric) → POST to the
+// box's /api/power. Mirror of iOS PowerCard.
+//
+// LUKS LABEL: ServerDetailResponse carries no diskEncryption flag (set at
+// create-time on the InstallBlob, never surfaced on the detail model), so we
+// default to LUKS labeling. Tracked as a gap — when the detail model gains the
+// flag, pass it here to flip to plain "Turn off"/"Restart" for non-LUKS boxes.
+@Composable
+private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val username by app.currentUser.collectAsState()
+
+    val vm = remember(serverDomain) {
+        PowerOffViewModel(
+            serverDomain = serverDomain,
+            // deriveIRK runs the biometric gate, then signs with the owner IRK
+            // — the SAME key the daemon's /api/power pins. Never silent.
+            signer = { reason -> Keystore.deriveIRK(reason) },
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    var pending by remember { mutableStateOf<PowerMode?>(null) }
+    val busy = phase is PowerOffPhase.Signing || phase is PowerOffPhase.Posting
+
+    val prefix = if (isLuks) "Lock and " else ""
+    val offLabel = "${prefix}turn off".replaceFirstChar { it.uppercase() }
+    val restartLabel = "${prefix}restart".replaceFirstChar { it.uppercase() }
+
+    Text(
+        "Power",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            (phase as? PowerOffPhase.Failed)?.let { f ->
+                Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            }
+            (phase as? PowerOffPhase.Completed)?.let { c ->
+                val verb = if (c.mode == PowerMode.RESTART) "restarting" else "powering off"
+                Text("This box is $verb — it will go offline.", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            }
+            FSDangerButton(
+                label = if (busy) "Working…" else offLabel,
+                onClick = { if (!busy) pending = PowerMode.OFF },
+                enabled = !busy,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-power-off" },
+            )
+            FSDangerButton(
+                label = if (busy) "Working…" else restartLabel,
+                onClick = { if (!busy) pending = PowerMode.RESTART },
+                enabled = !busy,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-power-restart" },
+            )
+        }
+    }
+
+    pending?.let { mode ->
+        val confirmLabel = if (mode == PowerMode.RESTART) restartLabel else offLabel
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("$confirmLabel?") },
+            text = { Text("$serverDomain will go offline.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pending = null
+                    scope.launch {
+                        // The deriveIRK signer fires the biometric prompt inside
+                        // vm.run — no separate gate needed (matches DeadManCard).
+                        vm.run(mode)
+                        when (val p = vm.phase.value) {
+                            is PowerOffPhase.Completed ->
+                                toasts.success("Command sent to the box.")
+                            is PowerOffPhase.Failed ->
+                                toasts.error(p.message)
+                            else -> {}
+                        }
+                    }
+                }) { Text(confirmLabel) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+// Dead-man heartbeat-lock opt-in + the manual affirmation loop. Toggle arms
+// the IRK-signed SetDeadManPolicy; a window picker (24h default, down to
+// minutes) + a one-tap "tighten now" + a lockout-action choice (off default /
+// restart). "Affirm now" sends an IRK-signed DeadManAffirmation and reschedules
+// the T-6h/T-1h/T-15m reminders. Mirror of iOS DeadManCard.
+@Composable
+private fun DeadManCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val username by app.currentUser.collectAsState()
+
+    val vm = remember(serverDomain) {
+        DeadManViewModel(
+            serverDomain = serverDomain,
+            username = { username },
+            // deriveIRK runs the biometric gate — never a silent renew.
+            signer = { reason -> Keystore.deriveIRK(reason) },
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    val busy = phase is DeadManPhase.Signing || phase is DeadManPhase.Posting
+
+    var enabled by remember(serverDomain) { mutableStateOf(false) }
+    var window by remember(serverDomain) { mutableStateOf(DeadManWindow.DEFAULT) }
+    var lockout by remember(serverDomain) { mutableStateOf(PowerMode.OFF) }
+    var leaseExpiry by remember(serverDomain) { mutableStateOf<Long?>(null) }
+
+    fun applyPolicy(targetEnabled: Boolean, targetWindow: DeadManWindow, targetLockout: PowerMode) {
+        scope.launch {
+            val ok = vm.setPolicy(targetEnabled, targetWindow, targetLockout)
+            if (ok) {
+                enabled = targetEnabled
+                window = targetWindow
+                lockout = targetLockout
+                if (!targetEnabled) {
+                    leaseExpiry = null
+                    DeadManReminderScheduler.cancel(context, serverDomain)
+                    toasts.success("Dead-man lock disarmed.")
+                } else {
+                    toasts.success("Dead-man lock armed.")
+                }
+            } else {
+                (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
+            }
+        }
+    }
+
+    Text(
+        "Dead-man lock",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Auto-lock if I go quiet", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium))
+                    Text(
+                        "If you don't affirm within the window, this box powers off (or restarts) and needs your phone to come back.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    enabled = !busy,
+                    onCheckedChange = { applyPolicy(it, window, lockout) },
+                    modifier = Modifier.semantics { contentDescription = "sd-deadman-toggle" },
+                )
+            }
+
+            if (enabled) {
+                Text("Window", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    for (w in DeadManWindow.entries) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = window == w, enabled = !busy, onClick = { applyPolicy(true, w, lockout) })
+                                .semantics { contentDescription = "deadman-window-${w.windowMs}" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = window == w, onClick = { applyPolicy(true, w, lockout) })
+                            Text(w.label, color = FS.colors.text, style = TextStyle(fontSize = 15.sp))
+                        }
+                    }
+                }
+
+                Text("On lapse", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s4)) {
+                    for (m in listOf(PowerMode.OFF to "Turn off", PowerMode.RESTART to "Restart")) {
+                        Row(
+                            Modifier
+                                .selectable(selected = lockout == m.first, enabled = !busy, onClick = { applyPolicy(true, window, m.first) })
+                                .semantics { contentDescription = "deadman-lockout-${m.first.wire}" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = lockout == m.first, onClick = { applyPolicy(true, window, m.first) })
+                            Text(m.second, color = FS.colors.text, style = TextStyle(fontSize = 15.sp))
+                        }
+                    }
+                }
+
+                leaseExpiry?.let { exp ->
+                    Text(
+                        DeadManReminders.remainingLabel(exp, System.currentTimeMillis()),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                }
+
+                FSGhostButton(
+                    label = "Tighten now (5 min)",
+                    onClick = { applyPolicy(true, DeadManWindow.TIGHTEN, lockout) },
+                    block = true,
+                )
+                FSPrimaryButton(
+                    label = if (busy) "Working…" else "Affirm now",
+                    onClick = {
+                        scope.launch {
+                            val exp = vm.affirm()
+                            if (exp != null) {
+                                leaseExpiry = exp
+                                DeadManReminderScheduler.schedule(context, serverDomain, exp)
+                                toasts.success("Stay confirmed.")
+                            } else {
+                                (vm.phase.value as? DeadManPhase.Failed)?.let { toasts.error(it.message) }
+                            }
+                        }
+                    },
+                    enabled = !busy,
+                    block = true,
+                    modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
+                )
+            }
+        }
+    }
 }
 
 // #28 — "grant this box cert-minting autonomy". Seals the account's ACME

@@ -55,6 +55,11 @@
             </intent-filter>
         </service>
 
+        <!-- Dead-man affirmation reminder (T-6h/T-1h/T-15m alarms) -->
+        <receiver
+            android:name=".push.DeadManReminderReceiver"
+            android:exported="false" />
+
         <!-- Google Fonts provider declaration -->
         <meta-data
             android:name="preloaded_fonts"
