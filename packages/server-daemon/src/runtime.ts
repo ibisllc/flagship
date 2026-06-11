@@ -790,8 +790,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // wired only if the data-services env file is supplied + readable;
   // ServicePlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
+  await appRunner.ensureNetwork().catch((e) => {
+    console.warn(`[runtime] could not ensure app bridge network: ${(e as Error).message}`);
+  });
   const dataProvisioner = await maybeBuildDataProvisioner(
     opts.servicePlatform?.dataServicesEnvFile,
+    appRunner.dataHostAlias,
   );
 
   const apOpts = opts.servicePlatform;
@@ -1000,7 +1004,10 @@ export async function revokeCurrentCert(deps: {
   await deps.issuer.revokeCertificate(certPem, deps.reason ?? 1);
 }
 
-async function maybeBuildDataProvisioner(envFile?: string): Promise<DataProvisioner | null> {
+async function maybeBuildDataProvisioner(
+  envFile?: string,
+  appDataHost?: string,
+): Promise<DataProvisioner | null> {
   if (!envFile) return null;
   let env: Record<string, string>;
   try {
@@ -1024,9 +1031,15 @@ async function maybeBuildDataProvisioner(envFile?: string): Promise<DataProvisio
       return null;
     }
   }
+  // Admin connections run from the daemon HOST process, so they reach the
+  // data services over the host loopback. The per-app credential URLs (the
+  // ones injected INTO containers) are a different matter: a container is
+  // on the dedicated app bridge, so its `127.0.0.1` is its own namespace —
+  // it must reach the host data services via the host-gateway alias.
   const pgUrl = `postgresql://${env.POSTGRES_ADMIN_USER}:${encodeURIComponent(env.POSTGRES_ADMIN_PASSWORD!)}@127.0.0.1:5432/postgres`;
   const redisUrl = `redis://default:${encodeURIComponent(env.REDIS_ADMIN_PASSWORD!)}@127.0.0.1:6379/0`;
-  console.log(`[runtime] data layer wired (postgres + redis + minio admins ready)`);
+  const appHost = appDataHost ?? "127.0.0.1";
+  console.log(`[runtime] data layer wired (postgres + redis + minio admins ready); app data host = ${appHost}`);
   return new DataProvisioner({
     postgres: new RealPostgresAdmin({ adminUrl: pgUrl }),
     kv: new RealRedisAdmin({ adminUrl: redisUrl }),
@@ -1036,6 +1049,11 @@ async function maybeBuildDataProvisioner(envFile?: string): Promise<DataProvisio
       rootUser: env.MINIO_ROOT_USER!,
       rootPassword: env.MINIO_ROOT_PASSWORD!,
     }),
+    endpoints: {
+      postgresHost: appHost,
+      redisHost: appHost,
+      s3Endpoint: `http://${appHost}:9000`,
+    },
   });
 }
 

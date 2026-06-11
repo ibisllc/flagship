@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
+import {
+  AppRunner,
+  DEFAULT_CONTAINER_LIMITS,
+  type CommandRunner,
+} from "../src/serviceRunner.js";
 
 class RecordingRunner implements CommandRunner {
   calls: { cmd: string; args: string[] }[] = [];
@@ -11,6 +15,12 @@ class RecordingRunner implements CommandRunner {
     this.captures.push({ cmd, args });
     return { stdout: "log line\n", stderr: "" };
   }
+}
+
+/** Find the value following a `--flag` token in an arg list. */
+function flagValue(args: string[], flag: string): string | undefined {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : undefined;
 }
 
 describe("AppRunner", () => {
@@ -28,7 +38,93 @@ describe("AppRunner", () => {
     expect(call.args).toContain("flagship-photos");
     expect(call.args).toContain("ghcr.io/flagship/photos:latest");
     expect(call.args).toContain("PORT=8080");
-    expect(call.args).toContain("8080:8080");
+    // Published to host loopback only — never exposed off-box.
+    expect(call.args).toContain("127.0.0.1:8080:8080");
+  });
+
+  describe("container isolation (SEC-4)", () => {
+    async function deployArgs(
+      overrides?: ConstructorParameters<typeof AppRunner>[1],
+    ): Promise<string[]> {
+      const rec = new RecordingRunner();
+      const runner = new AppRunner(rec, overrides);
+      await runner.deploy({
+        serviceId: "photos",
+        image: "img:1",
+        env: { PORT: "8080" },
+        port: 8080,
+      });
+      return rec.calls[0]!.args;
+    }
+
+    it("drops all capabilities and forbids privilege escalation", async () => {
+      const args = await deployArgs();
+      expect(args).toContain("--cap-drop=ALL");
+      expect(args).toContain("--security-opt=no-new-privileges");
+    });
+
+    it("applies memory / cpu / pids resource caps with safe defaults", async () => {
+      const args = await deployArgs();
+      expect(flagValue(args, "--memory")).toBe(DEFAULT_CONTAINER_LIMITS.memory);
+      expect(flagValue(args, "--cpus")).toBe(DEFAULT_CONTAINER_LIMITS.cpus);
+      expect(flagValue(args, "--pids-limit")).toBe(String(DEFAULT_CONTAINER_LIMITS.pidsLimit));
+    });
+
+    it("confines the app to the dedicated bridge, not host networking nor the default bridge", async () => {
+      const args = await deployArgs();
+      expect(flagValue(args, "--network")).toBe("flagship-apps");
+      // Never host networking (which would expose the daemon API on host loopback).
+      const networks = args.filter((_, i) => args[i - 1] === "--network");
+      expect(networks).not.toContain("host");
+    });
+
+    it("reaches host data services via the host-gateway alias, not container loopback", async () => {
+      const args = await deployArgs();
+      expect(flagValue(args, "--add-host")).toBe("host.flagship.internal:host-gateway");
+    });
+
+    it("runs a read-only rootfs with a writable /tmp tmpfs by default", async () => {
+      const args = await deployArgs();
+      expect(args).toContain("--read-only");
+      expect(flagValue(args, "--tmpfs")).toBe("/tmp:rw,size=64m");
+    });
+
+    it("re-adds only the configured capabilities after cap-drop", async () => {
+      const args = await deployArgs({ limits: { capAdd: ["NET_BIND_SERVICE"] } });
+      expect(args).toContain("--cap-drop=ALL");
+      expect(flagValue(args, "--cap-add")).toBe("NET_BIND_SERVICE");
+    });
+
+    it("honors operator overrides for limits", async () => {
+      const args = await deployArgs({
+        limits: { memory: "2g", cpus: "4.0", pidsLimit: 1024, readOnlyRootfs: false },
+      });
+      expect(flagValue(args, "--memory")).toBe("2g");
+      expect(flagValue(args, "--cpus")).toBe("4.0");
+      expect(flagValue(args, "--pids-limit")).toBe("1024");
+      expect(args).not.toContain("--read-only");
+    });
+
+    it("ensureNetwork creates the bridge and swallows the already-exists error", async () => {
+      const rec = new RecordingRunner();
+      const runner = new AppRunner(rec);
+      await runner.ensureNetwork();
+      expect(rec.calls[0]!.args).toEqual(["network", "create", "flagship-apps"]);
+
+      const throwing: CommandRunner = {
+        async run() {
+          throw new Error("network with name flagship-apps already exists");
+        },
+      };
+      const r2 = new AppRunner(throwing);
+      await expect(r2.ensureNetwork()).resolves.toBeUndefined();
+    });
+
+    it("exposes the network + dataHostAlias for the provisioner to target", async () => {
+      const runner = new AppRunner(new RecordingRunner());
+      expect(runner.network).toBe("flagship-apps");
+      expect(runner.dataHostAlias).toBe("host.flagship.internal");
+    });
   });
 
   it("stop runs docker stop and rm", async () => {
