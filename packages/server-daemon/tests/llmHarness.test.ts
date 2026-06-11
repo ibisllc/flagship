@@ -107,6 +107,73 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
     expect(observedBase).toBe("https://my-proxy.example");
   });
 
+  it("blocks an SSRF baseUrl (loopback) before it reaches the provider", async () => {
+    let reached = false;
+    const stub: LLMProvider = {
+      name: "withbase",
+      async chat() {
+        reached = true;
+        return { content: "ok", model: "m" };
+      },
+    };
+    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const sealed = buildSealedRequest({
+      provider: "withbase",
+      apiKey: "x",
+      baseUrl: "https://127.0.0.1:9090",
+      request: { model: "m", messages: [{ role: "user", content: "hi" }] },
+    });
+    const out = await harness.chat(sealed);
+    const parsed = JSON.parse(new TextDecoder().decode(openLlmPayload(out, swk)));
+    expect(reached).toBe(false);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.message).toMatch(/unsafe baseUrl/);
+  });
+
+  it("blocks the cloud metadata IP baseUrl", async () => {
+    const stub: LLMProvider = {
+      name: "withbase",
+      async chat() {
+        return { content: "ok", model: "m" };
+      },
+    };
+    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const sealed = buildSealedRequest({
+      provider: "withbase",
+      apiKey: "x",
+      baseUrl: "https://169.254.169.254/latest/meta-data",
+      request: { model: "m", messages: [{ role: "user", content: "hi" }] },
+    });
+    const out = await harness.chat(sealed);
+    const parsed = JSON.parse(new TextDecoder().decode(openLlmPayload(out, swk)));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.message).toMatch(/metadata/);
+  });
+
+  it("honors a baseUrlGuard allowlist so a LAN model server still works", async () => {
+    let observedBase: string | undefined;
+    const stub: LLMProvider = {
+      name: "withbase",
+      async chat(_req, cfg) {
+        observedBase = cfg.baseUrl;
+        return { content: "ok", model: "m" };
+      },
+    };
+    const harness = new LlmHarness({
+      swk,
+      registry: new ProviderRegistry([stub]),
+      baseUrlGuard: { allowHttp: true, hostAllowlist: ["ollama.lan"] },
+    });
+    const sealed = buildSealedRequest({
+      provider: "withbase",
+      apiKey: "x",
+      baseUrl: "http://ollama.lan:11434",
+      request: { model: "m", messages: [{ role: "user", content: "hi" }] },
+    });
+    await harness.chat(sealed);
+    expect(observedBase).toBe("http://ollama.lan:11434");
+  });
+
   it("listProviders reflects the registry exactly", () => {
     const stub: LLMProvider = { name: "a", async chat() { return { content: "", model: "" }; } };
     const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });

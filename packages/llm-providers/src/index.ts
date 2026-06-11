@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./registry.js";
+export * from "./baseUrlGuard.js";
 export { anthropic, anthropicStreaming } from "./providers/anthropic.js";
 export { openai, openaiStreaming } from "./providers/openai.js";
 export { google, googleStreaming } from "./providers/google.js";

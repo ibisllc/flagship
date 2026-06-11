@@ -5,9 +5,12 @@ import {
   type SealedBlob,
 } from "@flagship/protocol";
 import {
+  assertSafeProviderBaseUrl,
   defaultRegistry,
   ProviderError,
   ProviderRegistry,
+  UnsafeBaseUrlError,
+  type BaseUrlGuardOptions,
   type ChatRequest,
   type ChatResponse,
   type FetchLike,
@@ -17,6 +20,13 @@ export interface LlmHarnessOptions {
   swk: Bytes;
   registry?: ProviderRegistry;
   fetchImpl?: FetchLike;
+  /**
+   * SSRF posture for a sealed-request `baseUrl`. Defaults to the strict
+   * public-build posture (https-only, internal ranges blocked). A
+   * self-hoster running a LAN model server flips `allowPrivate`/`allowHttp`
+   * or supplies a `hostAllowlist`.
+   */
+  baseUrlGuard?: BaseUrlGuardOptions;
 }
 
 interface SealedRequest {
@@ -48,11 +58,13 @@ export class LlmHarness {
   private readonly registry: ProviderRegistry;
   private readonly fetchImpl?: FetchLike;
   private readonly swk: Bytes;
+  private readonly baseUrlGuard?: BaseUrlGuardOptions;
 
   constructor(opts: LlmHarnessOptions) {
     this.swk = opts.swk;
     this.registry = opts.registry ?? defaultRegistry;
     this.fetchImpl = opts.fetchImpl;
+    this.baseUrlGuard = opts.baseUrlGuard;
   }
 
   listProviders(): string[] {
@@ -92,6 +104,19 @@ export class LlmHarness {
 
     if (!this.registry.has(req.provider)) {
       return this.sealError({ ok: false, provider: req.provider, message: "unknown provider" });
+    }
+
+    // Defense-in-depth: a sealed-request baseUrl must not point at an
+    // internal service before it ever reaches a provider fetch.
+    if (typeof req.baseUrl === "string" && req.baseUrl.length > 0) {
+      try {
+        assertSafeProviderBaseUrl(req.baseUrl, this.baseUrlGuard);
+      } catch (e) {
+        if (e instanceof UnsafeBaseUrlError) {
+          return this.sealError({ ok: false, provider: req.provider, message: e.message });
+        }
+        return this.sealError({ ok: false, provider: req.provider, message: "invalid baseUrl" });
+      }
     }
 
     try {
