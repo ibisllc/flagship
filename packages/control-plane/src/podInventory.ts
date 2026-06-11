@@ -22,7 +22,10 @@
  *     this server.
  */
 
-import { verifyTunnelHelloV2 } from "@flagship/protocol";
+import {
+  verifyDaemonStatusReport,
+  type DaemonStatusReport,
+} from "@flagship/protocol";
 import { sha256 } from "@noble/hashes/sha256";
 import type {
   DaemonStatusStorage,
@@ -140,6 +143,22 @@ export async function handleGetUserPods(
           /* enrichment failure must never drop the server */
         }
       }
+      // Cert-fingerprint pinning (A′ phase 4a) — relay the VERBATIM
+      // STK-signed report + signature so a client that derived the box STK
+      // locally re-verifies the fingerprint end-to-end (a rogue .com can
+      // drop it but not forge it). Parse is guarded: a corrupt row degrades
+      // to null, never fails the list.
+      let signedStatus: { report: unknown; signatureHex: string } | null = null;
+      if (status?.reportJson && status.signatureHex) {
+        try {
+          signedStatus = {
+            report: JSON.parse(status.reportJson) as unknown,
+            signatureHex: status.signatureHex,
+          };
+        } catch {
+          signedStatus = null;
+        }
+      }
       return {
         serverDomain: s.serverDomain,
         identityPubKey: s.identityPubKeyHex,
@@ -154,6 +173,7 @@ export async function handleGetUserPods(
               issuer: status.certIssuer,
             }
           : null,
+        signedStatus,
         appsServed,
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
@@ -218,16 +238,14 @@ interface DaemonStatusBody {
 }
 
 /**
- * Daemon reports its cert state. The signature is over a canonical
- * encoding of the request, using the pod's identity (STK) pubkey
- * registered at /api/server/register. We reuse the TunnelHelloV2
- * verification primitive — daemons already sign their HELLO; this
- * report is essentially "the HELLO content, but pushed instead of
- * pulled."
+ * Daemon reports its cert state. The signature is over the canonical
+ * daemon-status bytes (@flagship/protocol `canonicalDaemonStatusReport`),
+ * using the pod's identity (STK) pubkey registered at /api/server/register.
  *
- * For now we accept any well-formed signed report from a known
- * server-domain → server-identity binding; future hardening can
- * tighten the request envelope to its own canonical-bytes type.
+ * Cert-fingerprint pinning (A′ phase 4a): besides the parsed fields, the
+ * VERBATIM signed tuple + signature are persisted so /pods can relay the
+ * raw report for client-side re-verification under the locally-derived STK
+ * — .com relays the fingerprint but cannot forge it.
  */
 export async function handlePostDaemonStatus(
   deps: PodInventoryDeps,
@@ -248,82 +266,54 @@ export async function handlePostDaemonStatus(
       (typeof r.certSha256 !== "string" || !HEX64.test(r.certSha256))) {
     return malformed("certSha256 must be 32-byte hex");
   }
+  if (r.certValidUntil !== null && r.certValidUntil !== undefined &&
+      typeof r.certValidUntil !== "number") {
+    return malformed("certValidUntil must be a number");
+  }
+  if (r.certIssuer !== null && r.certIssuer !== undefined &&
+      typeof r.certIssuer !== "string") {
+    return malformed("certIssuer must be a string");
+  }
+  if (r.appsServed !== undefined &&
+      (!Array.isArray(r.appsServed) ||
+        r.appsServed.some((x) => typeof x !== "string"))) {
+    return malformed("appsServed must be a string array");
+  }
   const server = await deps.servers.get(r.serverDomain);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
 
-  // Verify signature against the registered identity key. We use the
-  // pubkey straight from the servers table; the daemon's HELLO flow
-  // is what guarantees that pubkey actually corresponds to the
-  // running pod.
-  const canonical = canonicalDaemonStatusReport(r);
-  const sig = hexToBytes(body.signature);
-  const stkPub = hexToBytes(server.identityPubKeyHex);
-  // We reuse the TunnelHelloV2 verifier shape — sign over identical
-  // bytes; treat the report-canonical bytes the same way.
-  if (!sigVerifyOver(canonical, sig, stkPub)) {
-    return forbidden("invalid signature");
-  }
-
-  const apps = Array.isArray(r.appsServed)
-    ? r.appsServed.filter((x): x is string => typeof x === "string")
-    : [];
-  await deps.daemonStatus.put({
-    serverDomain: r.serverDomain.toLowerCase(),
+  // The exact signed tuple, normalized only in the ways the canonical bytes
+  // already erase (absent optional → null encodes identically to null).
+  // This object — not a re-derivation — is what gets stored and relayed.
+  const report: DaemonStatusReport = {
+    serverDomain: r.serverDomain,
     certSha256: r.certSha256 ?? null,
     certValidUntil: r.certValidUntil ?? null,
     certIssuer: r.certIssuer ?? null,
-    servicesServedJson: JSON.stringify(apps),
+    appsServed: r.appsServed ?? [],
+    nonce: r.nonce,
+    issuedAt: r.issuedAt,
+  };
+
+  // Verify against the registered identity key. We use the pubkey straight
+  // from the servers table; the daemon's HELLO flow is what guarantees that
+  // pubkey actually corresponds to the running pod.
+  const sig = hexToBytes(body.signature);
+  const stkPub = hexToBytes(server.identityPubKeyHex);
+  if (!verifyDaemonStatusReport(report, sig, stkPub)) {
+    return forbidden("invalid signature");
+  }
+
+  await deps.daemonStatus.put({
+    serverDomain: r.serverDomain.toLowerCase(),
+    certSha256: report.certSha256,
+    certValidUntil: report.certValidUntil,
+    certIssuer: report.certIssuer,
+    servicesServedJson: JSON.stringify(report.appsServed),
     lastReported: (deps.now ?? (() => Date.now()))(),
+    reportJson: JSON.stringify(report),
+    signatureHex: body.signature,
   });
   return ok({ ok: true });
 }
-
-function canonicalDaemonStatusReport(r: {
-  serverDomain?: string;
-  certSha256?: string | null;
-  certValidUntil?: number | null;
-  certIssuer?: string | null;
-  appsServed?: string[];
-  nonce?: string;
-  issuedAt?: number;
-}): Uint8Array {
-  const apps = (r.appsServed ?? []).slice().sort().join(",");
-  return new TextEncoder().encode(
-    [
-      "flagship/daemon-status/v1",
-      r.serverDomain ?? "",
-      r.certSha256 ?? "",
-      String(r.certValidUntil ?? ""),
-      r.certIssuer ?? "",
-      apps,
-      r.nonce ?? "",
-      String(r.issuedAt ?? ""),
-    ].join("|"),
-  );
-}
-
-function sigVerifyOver(msg: Uint8Array, sig: Uint8Array, pub: Uint8Array): boolean {
-  // Defer to the synchronous Ed25519 verify available across the
-  // codebase. We can't import @flagship/protocol's `ed` directly
-  // without growing this module's dep surface; the verifier is small
-  // and used elsewhere. For now we delegate via verifyTunnelHelloV2's
-  // underlying primitive by constructing a one-off envelope shape;
-  // the bytes are what's signed.
-  try {
-    // verifyTunnelHelloV2 takes a TunnelHelloV2 + sig + pub and
-    // canonicalizes internally — we can't reuse it directly. Inline a
-    // minimal verifier using @noble/ed25519 via the protocol package.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ed25519 } = require("@noble/curves/ed25519.js") as {
-      ed25519: { verify: (sig: Uint8Array, msg: Uint8Array, pub: Uint8Array) => boolean };
-    };
-    return ed25519.verify(sig, msg, pub);
-  } catch {
-    return false;
-  }
-}
-
-// Suppress unused-import lint — verifyTunnelHelloV2 is imported to keep
-// the doc reference live for future hardening.
-void verifyTunnelHelloV2;

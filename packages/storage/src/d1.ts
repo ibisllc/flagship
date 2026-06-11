@@ -1963,8 +1963,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       .prepare(
         `INSERT OR REPLACE INTO daemon_status
          (server_domain, cert_sha256, cert_valid_until, cert_issuer,
-          services_served_json, last_reported)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+          services_served_json, last_reported, report_json, signature_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
       )
       .bind(
         rec.serverDomain.toLowerCase(),
@@ -1973,6 +1973,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         rec.certIssuer,
         rec.servicesServedJson,
         rec.lastReported,
+        rec.reportJson ?? null,
+        rec.signatureHex ?? null,
       )
       .run();
   }
@@ -1987,6 +1989,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         cert_issuer: string | null;
         services_served_json: string;
         last_reported: number;
+        report_json: string | null;
+        signature_hex: string | null;
       }>();
     if (!r) return undefined;
     return {
@@ -1996,6 +2000,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       certIssuer: r.cert_issuer,
       servicesServedJson: r.services_served_json,
       lastReported: r.last_reported,
+      reportJson: r.report_json ?? null,
+      signatureHex: r.signature_hex ?? null,
     };
   }
   async listForUser(username: string) {
@@ -2012,6 +2018,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         cert_issuer: string | null;
         services_served_json: string;
         last_reported: number;
+        report_json: string | null;
+        signature_hex: string | null;
       }>();
     return (r.results ?? []).map((row) => ({
       serverDomain: row.server_domain,
@@ -2020,6 +2028,8 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       certIssuer: row.cert_issuer,
       servicesServedJson: row.services_served_json,
       lastReported: row.last_reported,
+      reportJson: row.report_json ?? null,
+      signatureHex: row.signature_hex ?? null,
     }));
   }
 }

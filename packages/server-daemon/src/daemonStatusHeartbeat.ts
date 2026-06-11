@@ -1,5 +1,9 @@
 import { X509Certificate } from "node:crypto";
-import { ed, type Keypair } from "@flagship/protocol";
+import {
+  signDaemonStatusReport,
+  type DaemonStatusReport,
+  type Keypair,
+} from "@flagship/protocol";
 import type { CertMaterial } from "./certManager.js";
 
 /**
@@ -15,43 +19,18 @@ import type { CertMaterial } from "./certManager.js";
  * `daemon_status.lastReported` reflects TRUE current liveness and the UI can
  * render real cert info.
  *
- * The canonical signed bytes MUST stay byte-identical to
- * `canonicalDaemonStatusReport` in @flagship/control-plane (podInventory.ts);
- * the daemon deliberately does not import control-plane, so the format is
- * mirrored here. Both sign over:
- *   flagship/daemon-status/v1|<domain>|<certSha256>|<validUntil>|<issuer>|<apps>|<nonce>|<issuedAt>
+ * This report is ALSO the cert-fingerprint pinning primitive (A′ phase 4a):
+ * .com stores the verbatim signed tuple + signature and relays them on
+ * /pods, so a phone re-verifies the fingerprint under the locally-derived
+ * STK. Canonical bytes + sign live in @flagship/protocol (daemonStatus.ts)
+ * — the ONE implementation the control-plane verifier and the client
+ * mirrors pin against.
  */
 
 function bytesToHex(b: Uint8Array): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
-}
-
-interface DaemonStatusFields {
-  serverDomain: string;
-  certSha256: string | null;
-  certValidUntil: number | null;
-  certIssuer: string | null;
-  appsServed: string[];
-  nonce: string;
-  issuedAt: number;
-}
-
-function canonicalDaemonStatusReport(r: DaemonStatusFields): Uint8Array {
-  const apps = r.appsServed.slice().sort().join(",");
-  return new TextEncoder().encode(
-    [
-      "flagship/daemon-status/v1",
-      r.serverDomain,
-      r.certSha256 ?? "",
-      String(r.certValidUntil ?? ""),
-      r.certIssuer ?? "",
-      apps,
-      r.nonce,
-      String(r.issuedAt),
-    ].join("|"),
-  );
 }
 
 /** Pull the SHA-256 fingerprint (lowercase hex, no colons) + issuer DN from
@@ -89,7 +68,7 @@ export async function postDaemonStatus(args: {
     const issuedAt = (args.now ?? (() => Date.now()))();
     const nonce = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
     const { certSha256, certIssuer } = certDetails(args.cert.certPem);
-    const fields: DaemonStatusFields = {
+    const fields: DaemonStatusReport = {
       serverDomain: args.serverDomain,
       certSha256,
       certValidUntil: Number.isFinite(args.certValidUntil)
@@ -100,10 +79,7 @@ export async function postDaemonStatus(args: {
       nonce,
       issuedAt,
     };
-    const sig = ed.sign(
-      canonicalDaemonStatusReport(fields),
-      args.identity.privateKey,
-    );
+    const sig = signDaemonStatusReport(fields, args.identity);
     const url = `${args.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/daemon-status`;
     await doFetch(url, {
       method: "POST",

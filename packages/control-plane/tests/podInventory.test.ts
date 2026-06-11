@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  ed,
+  signDaemonStatusReport,
+  verifyDaemonStatusReport,
+  type DaemonStatusReport,
+} from "@flagship/protocol";
+import {
   InMemoryStorage,
   type AuthCodeRecord,
   type ProvisionStatusStorage,
 } from "@flagship/storage";
 import {
   handleGetUserPods,
+  handlePostDaemonStatus,
   orderRefForSerial,
   type PodInventoryDeps,
 } from "../src/podInventory.js";
@@ -295,6 +302,14 @@ describe("GET /api/users/:u/pods — liveness bridge (no daemon_status row)", ()
     expect(provisionConsulted).toBe(false);
   });
 
+  it("a pod with no daemon_status row exposes signedStatus:null (additive field, never absent)", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse;
+    expect(out.pods[0]).toHaveProperty("signedStatus", null);
+  });
+
   it("a bridge lookup failure NEVER drops the server or fails the list", async () => {
     const storage = new InMemoryStorage();
     await withServer(storage); // no daemon_status → bridge runs
@@ -318,5 +333,200 @@ describe("GET /api/users/:u/pods — liveness bridge (no daemon_status row)", ()
     const out = r.body as PodsResponse;
     expect(out.pods).toHaveLength(1);
     expect(out.pods[0]?.lastReported).toBeNull();
+  });
+});
+
+// ── Cert-fingerprint pinning (A′ phase 4a) — verbatim signed report ───────
+
+function bytesToHex(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+
+const STK_PRIV = new Uint8Array(32).fill(7);
+const STK_PUB_HEX = bytesToHex(ed.getPublicKey(STK_PRIV));
+
+function report(over: Partial<DaemonStatusReport> = {}): DaemonStatusReport {
+  return {
+    serverDomain: "home1.harry.flagship.services",
+    certSha256: "ab".repeat(32),
+    certValidUntil: NOW + 30 * 86_400_000,
+    certIssuer: "C=US, O=Let's Encrypt, CN=YR1",
+    appsServed: ["home1.harry.flagship.services"],
+    nonce: "00112233445566778899aabbccddeeff",
+    issuedAt: NOW - 1_000,
+    ...over,
+  };
+}
+
+function signedBody(r: DaemonStatusReport) {
+  return {
+    request: r,
+    signature: bytesToHex(
+      signDaemonStatusReport(r, {
+        privateKey: STK_PRIV,
+        publicKey: ed.getPublicKey(STK_PRIV),
+      }),
+    ),
+  };
+}
+
+async function withStkServer(storage: InMemoryStorage) {
+  await storage.servers.put({
+    serverDomain: "home1.harry.flagship.services",
+    username: "harry",
+    identityPubKeyHex: STK_PUB_HEX,
+    registeredAt: NOW - 50_000,
+  });
+}
+
+describe("POST /api/daemon-status — verbatim signed tuple persisted + relayed", () => {
+  it("stores the exact signed tuple + signature; /pods relays them; the relayed report re-verifies under the STK", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const rep = report();
+    const body = signedBody(rep);
+
+    const post = await handlePostDaemonStatus(deps(storage), body);
+    expect(post.status).toBe(200);
+
+    const row = await storage.daemonStatus.get("home1.harry.flagship.services");
+    expect(row?.signatureHex).toBe(body.signature);
+    expect(JSON.parse(row!.reportJson!)).toEqual(rep);
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & {
+      pods: Array<{
+        signedStatus: { report: DaemonStatusReport; signatureHex: string } | null;
+        currentCert: { sha256: string | null } | null;
+      }>;
+    };
+    const signed = out.pods[0]?.signedStatus;
+    expect(signed).not.toBeNull();
+    expect(signed?.signatureHex).toBe(body.signature);
+    expect(signed?.report).toEqual(rep);
+    // The end-to-end client check: rebuild canonical bytes from the RELAYED
+    // report and verify under the locally-derived STK — .com's currentCert
+    // summary is not trusted, the signed report is.
+    const sigBytes = Uint8Array.from(
+      signed!.signatureHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+    );
+    expect(
+      verifyDaemonStatusReport(signed!.report, sigBytes, ed.getPublicKey(STK_PRIV)),
+    ).toBe(true);
+    // And the relayed report agrees with the (convenience-only) summary.
+    expect(out.pods[0]?.currentCert?.sha256).toBe(rep.certSha256);
+  });
+
+  it("a report with null cert fields (liveness-only) round-trips and re-verifies", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const rep = report({
+      certSha256: null,
+      certValidUntil: null,
+      certIssuer: null,
+      appsServed: [],
+    });
+    const post = await handlePostDaemonStatus(deps(storage), signedBody(rep));
+    expect(post.status).toBe(200);
+    const row = await storage.daemonStatus.get("home1.harry.flagship.services");
+    expect(JSON.parse(row!.reportJson!)).toEqual(rep);
+  });
+
+  it("absent optional fields are stored as the nulls the signature already covers", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    // Sign the normalized (null) tuple but POST with the optionals absent —
+    // canonical bytes are identical, so the signature verifies, and the
+    // STORED tuple is the explicit-null form every client rebuilds.
+    const rep = report({
+      certSha256: null,
+      certValidUntil: null,
+      certIssuer: null,
+      appsServed: [],
+    });
+    const { signature } = signedBody(rep);
+    const post = await handlePostDaemonStatus(deps(storage), {
+      request: {
+        serverDomain: rep.serverDomain,
+        nonce: rep.nonce,
+        issuedAt: rep.issuedAt,
+      },
+      signature,
+    });
+    expect(post.status).toBe(200);
+    const row = await storage.daemonStatus.get("home1.harry.flagship.services");
+    expect(JSON.parse(row!.reportJson!)).toEqual(rep);
+  });
+
+  it("rejects an invalid signature (403) and stores nothing", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const rep = report();
+    const body = signedBody(rep);
+    const tampered = { ...rep, certSha256: "cd".repeat(32) };
+    const post = await handlePostDaemonStatus(deps(storage), {
+      request: tampered,
+      signature: body.signature,
+    });
+    expect(post.status).toBe(403);
+    expect(
+      await storage.daemonStatus.get("home1.harry.flagship.services"),
+    ).toBeUndefined();
+  });
+
+  it("rejects a non-string-array appsServed as malformed", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const body = signedBody(report());
+    const post = await handlePostDaemonStatus(deps(storage), {
+      request: { ...body.request, appsServed: [1, 2] as unknown as string[] },
+      signature: body.signature,
+    });
+    expect(post.status).toBe(400);
+  });
+
+  it("a corrupt stored reportJson degrades signedStatus to null and never fails /pods", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 1_000,
+      certIssuer: "x",
+      servicesServedJson: "[]",
+      lastReported: NOW - 1_000,
+      reportJson: "{not json",
+      signatureHex: "ee".repeat(64),
+    });
+    const r = await handleGetUserPods(deps(storage), "harry");
+    expect(r.status).toBe(200);
+    const out = r.body as PodsResponse & {
+      pods: Array<{ signedStatus: unknown }>;
+    };
+    expect(out.pods[0]?.signedStatus).toBeNull();
+  });
+
+  it("legacy rows (no signed report) keep the currentCert summary and expose signedStatus:null", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 1_000,
+      certIssuer: "x",
+      servicesServedJson: "[]",
+      lastReported: NOW - 1_000,
+    });
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & {
+      pods: Array<{
+        signedStatus: unknown;
+        currentCert: { sha256: string | null } | null;
+      }>;
+    };
+    expect(out.pods[0]?.currentCert?.sha256).toBe("ab".repeat(32));
+    expect(out.pods[0]?.signedStatus).toBeNull();
   });
 });

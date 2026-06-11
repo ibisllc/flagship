@@ -806,6 +806,13 @@ export interface DaemonStatusRecord {
   /** JSON-encoded list of canonical FQDNs the daemon currently serves. */
   servicesServedJson: string;
   lastReported: number;
+  /** Verbatim STK-signed report tuple as received (JSON object), relayed on
+   *  /pods so clients re-verify the cert fingerprint without trusting .com.
+   *  Null on rows that predate migration 0048. */
+  reportJson?: string | null;
+  /** Ed25519 signature (hex) over the report's canonical bytes
+   *  (flagship/daemon-status/v1), by the box identity (STK) key. */
+  signatureHex?: string | null;
 }
 
 export interface DaemonStatusStorage {
@@ -1658,8 +1665,9 @@ export interface MintReservationStorage {
 // (`<label>.<user>`), a BOX name (the per-box apex), and a DEVICE label
 // (the v2 device-addressing `<user>.<device-label>` form) — shares ONE
 // leftmost-label space beneath `*.<user>`. They MUST be mutually unique:
-// the resolver (worklist task #24) walks `--`-pin → box-name → device-label
-// → app-label, and that precedence is only sound if a single label can't
+// the resolver (worklist task #24) walks box-name → device-label
+// → app-label (the `--` pin step is retired — A′ migration), and that
+// precedence is only sound if a single label can't
 // simultaneously mean two different things. This store is the `.com`-side
 // serializer of phone-signed name claims — it orders + dedupes so an
 // offline cross-box install race resolves to exactly one owner per label.

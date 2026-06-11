@@ -767,7 +767,13 @@ export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStor
 export class InMemoryDaemonStatusStorage implements DaemonStatusStorage {
   private rows = new Map<string, DaemonStatusRecord>();
   async put(rec: DaemonStatusRecord) {
-    this.rows.set(rec.serverDomain.toLowerCase(), { ...rec });
+    // Normalize the optional signed-report fields to explicit nulls so the
+    // read shape matches the D1 adapter (SELECT returns NULL, not absent).
+    this.rows.set(rec.serverDomain.toLowerCase(), {
+      ...rec,
+      reportJson: rec.reportJson ?? null,
+      signatureHex: rec.signatureHex ?? null,
+    });
   }
   async get(serverDomain: string) {
     const r = this.rows.get(serverDomain.toLowerCase());
