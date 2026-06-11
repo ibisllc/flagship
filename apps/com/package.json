@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "predeploy": "bash ../../scripts/predeploy-com.sh",
     "deploy": "wrangler deploy",
     "test": "vitest run --dir test"
   },
