@@ -873,14 +873,15 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           resolveSource: async ({ creator, slug }) => {
             const ap = servicePlatformRef.current;
             if (!ap) return null;
-            const app = ap.byServiceId(`${creator}--${slug}`);
+            const serviceId = ServicePlatform.serviceId(creator, slug);
+            const app = ap.byServiceId(serviceId);
             if (!app) return null;
             // Vibe-coded apps live under <dataDir>/data/app-clones/<serviceId>;
             // cross-creator apps under their Forgejo checkout. The runtime
             // doesn't currently track per-app source paths centrally — the
             // common path is the daemon's app-clones dir. Caller may
             // override later when Forgejo discovery lands.
-            return `${opts.dataDir}/data/app-clones/${creator}--${slug}`;
+            return `${opts.dataDir}/data/app-clones/${serviceId}`;
           },
         })
       : null;
