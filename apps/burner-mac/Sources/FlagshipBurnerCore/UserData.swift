@@ -1757,6 +1757,25 @@ public enum UserData {
         # Baked by the bootstrap; default "auto" if the file is absent.
         BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"
 
+        # One-shot lock marker (packages/server-daemon BootUnlockModeSuppressor). The
+        # daemon writes /boot/flagship-lock-once at RUNTIME (manual "Lock and restart"
+        # or a dead-man lapse), so it lives on the LIVE FLAGSHIP_BOOT partition, NOT in
+        # the frozen initrd copy the hook staged — mount that partition here to see it.
+        # Present ⇒ force the approve relay for THIS boot, consumed only after a
+        # successful luksOpen below so a failed unlock keeps it armed for the retry.
+        # This is the SAME decision point boot-stage.sh makes for the unencrypted path;
+        # on an encrypted box only THIS premount runs, so the marker is never
+        # double-consumed. Best-effort throughout — it can never fail or hang the boot.
+        LOCK_ONCE_MOUNT=/run/flagship-lockmnt
+        LOCK_ONCE_FILE="$LOCK_ONCE_MOUNT/flagship-lock-once"
+        LOCK_ONCE="no"
+        mkdir -p "$LOCK_ONCE_MOUNT" 2>/dev/null || true
+        if mount /dev/disk/by-label/FLAGSHIP_BOOT "$LOCK_ONCE_MOUNT" 2>/dev/null; then
+            if [ -f "$LOCK_ONCE_FILE" ]; then LOCK_ONCE="yes"; fi
+        else
+            LOCK_ONCE_MOUNT=""
+        fi
+
         [ -f "$IDENTITY_KEY" ] || { echo "flagship: missing $IDENTITY_KEY"; exit 0; }
 
         sign_canonical() {
@@ -2061,8 +2080,15 @@ public enum UserData {
         # The legacy plaintext-consume path is RETIRED — never a fallback here.
         #   auto:    box-sealed lease (self-unlock); fall back to the phone relay.
         #   approve: phone relay EVERY boot; the box NEVER reads a box-sealed lease.
-        echo "flagship: boot-unlock mode = $BOOT_UNLOCK_MODE"
-        if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then
+        # EFFECTIVE mode = baseline OR a one-shot lock. The marker forces the approve
+        # relay for THIS boot on top of the baseline.
+        EFFECTIVE_MODE="$BOOT_UNLOCK_MODE"
+        if [ "$LOCK_ONCE" = "yes" ]; then
+            echo "flagship: one-shot lock marker present — forcing approve relay for THIS boot"
+            EFFECTIVE_MODE="approve"
+        fi
+        echo "flagship: boot-unlock mode = $EFFECTIVE_MODE (baseline=$BOOT_UNLOCK_MODE, lock-once=$LOCK_ONCE)"
+        if [ "$EFFECTIVE_MODE" = "approve" ]; then
             unlock_via_relay
         else
             if ! unlock_via_box_lease; then
@@ -2071,6 +2097,14 @@ public enum UserData {
         fi
 
         \(terminalUnlock)
+        # CONSUME the one-shot lock marker only now — AFTER a successful luksOpen (set -e
+        # aborts the premount before here if the unlock failed, so the lock stays armed
+        # for the retry). The next boot then reverts to the baseline BOOT_UNLOCK_MODE.
+        if [ "$LOCK_ONCE" = "yes" ]; then
+            rm -f "$LOCK_ONCE_FILE"
+            echo "flagship: consumed one-shot lock marker; next boot reverts to baseline ($BOOT_UNLOCK_MODE)"
+        fi
+        [ -n "$LOCK_ONCE_MOUNT" ] && umount "$LOCK_ONCE_MOUNT" 2>/dev/null || true
         PREMOUNT
         chmod +x /etc/initramfs-tools/scripts/local-top/flagship-unlock
         \(initramfsWifi)

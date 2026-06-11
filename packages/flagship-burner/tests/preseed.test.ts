@@ -356,7 +356,7 @@ describe("buildDebianPreseed — first-boot bootstrap (reused verbatim from Ubun
       buildDebianPreseed({ blob: { ...blob, bootUnlockMode: "approve" }, blobSignatureHex }),
     );
     expect(b).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
-    expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
   });
 });
 

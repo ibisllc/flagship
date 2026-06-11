@@ -27,6 +27,16 @@
 #      box-sealed lease at all (defense in depth — a critical server cannot
 #      self-unlock; a whole-box/disk thief cannot boot it).
 #
+# ONE-SHOT LOCK (/boot/flagship-lock-once): a transient marker the daemon
+# drops when the owner taps "Lock and restart"/"Lock and turn off" OR when
+# the dead-man timer lapses (packages/server-daemon/src/deadMan.ts —
+# BootUnlockModeSuppressor). When present it forces the approve relay for
+# THIS boot ONLY, on top of the baseline mode above; it is CONSUMED
+# (deleted) after a successful unlock so the NEXT boot reverts to the
+# baseline. This makes a manual lock a single-power-cycle event rather than
+# a permanent flip to approve-on-every-boot. If the baseline is already
+# approve, the marker is a harmless no-op (the box asks regardless).
+#
 # RELAY — the box POSTs an STK-signed SecretRequest to the boot worker's blind
 #      mailbox (/api/boot/request); the user's phone (woken by push) re-seals
 #      the LUKS key FOR this box's STK and posts it back; the box polls
@@ -63,6 +73,9 @@
 #   /boot/control-plane-url           optional, legacy; default flagshipserver.com
 #   /boot/flagship-unseal             static unseal helper (relay/lease; optional)
 #   /boot/flagship-boot-unlock-mode   "auto" | "approve"; optional, default "auto"
+#   /boot/flagship-lock-once          one-shot lock marker; optional. Present ⇒
+#                                     force the approve relay for THIS boot, then
+#                                     delete after a successful unlock.
 #
 # /boot is unencrypted by design: an attacker who pulls the disk gets the
 # identity key, but on the relay path the key is only ever sealed FOR that
@@ -86,8 +99,15 @@ BOOT_HOST="${BOOT_HOST%/}"
 IDENTITY_KEY=/boot/identity.pem
 UNSEAL_HELPER=/boot/flagship-unseal
 # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
-# Baked at install; default "auto" if the file is absent.
+# Baked at install; default "auto" if the file is absent. This is the box's
+# BASELINE mode — it is never mutated at runtime by a manual lock.
 BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"
+# One-shot lock marker (packages/server-daemon BootUnlockModeSuppressor).
+# Present ⇒ force the approve relay for THIS boot only; consumed after a
+# successful unlock so the next boot reverts to BOOT_UNLOCK_MODE above.
+LOCK_ONCE_MARKER=/boot/flagship-lock-once
+LOCK_ONCE="no"
+[ -f "$LOCK_ONCE_MARKER" ] && LOCK_ONCE="yes"
 
 # How long (seconds) to wait for the phone via the relay. The phone is
 # push-woken on the POST, so a few minutes is the human-attention budget
@@ -381,8 +401,18 @@ unlock_via_relay() {
 #   auto:    box-sealed lease (self-unlock, no phone); fall back to the relay.
 #   approve: phone relay EVERY boot; the box NEVER reads a box-sealed lease.
 # Either way $OUT_UNLOCK ends up with the LUKS key hex.
-echo "flagship: boot-unlock mode = $BOOT_UNLOCK_MODE"
-if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then
+#
+# EFFECTIVE mode = baseline OR a one-shot lock. The one-shot marker forces
+# the approve relay for THIS boot on top of the baseline; we consume it only
+# AFTER a successful luksOpen below so a failed/interrupted unlock keeps the
+# lock armed for the retry.
+EFFECTIVE_MODE="$BOOT_UNLOCK_MODE"
+if [ "$LOCK_ONCE" = "yes" ]; then
+    echo "flagship: one-shot lock marker present — forcing approve relay for THIS boot"
+    EFFECTIVE_MODE="approve"
+fi
+echo "flagship: boot-unlock mode = $EFFECTIVE_MODE (baseline=$BOOT_UNLOCK_MODE, lock-once=$LOCK_ONCE)"
+if [ "$EFFECTIVE_MODE" = "approve" ]; then
     unlock_via_relay
 else
     if ! unlock_via_box_lease; then
@@ -394,4 +424,11 @@ ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
 xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root
 mount /dev/mapper/flagship_root /mnt
 shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"
+# CONSUME the one-shot lock marker only now — after a successful unlock — so
+# the NEXT boot reverts to the baseline BOOT_UNLOCK_MODE. Done post-luksOpen
+# (not pre) so an unlock that never completes leaves the lock armed.
+if [ "$LOCK_ONCE" = "yes" ]; then
+    rm -f "$LOCK_ONCE_MARKER"
+    echo "flagship: consumed one-shot lock marker; next boot reverts to baseline ($BOOT_UNLOCK_MODE)"
+fi
 exec switch_root /mnt /sbin/init

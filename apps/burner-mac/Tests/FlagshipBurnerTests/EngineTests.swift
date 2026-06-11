@@ -297,7 +297,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("/api/boot/lease/"))
         XCTAssertTrue(b.contains("\"sealedKey\":\""))
         XCTAssertTrue(b.contains("--identity-priv-hex \"$SEED_HEX\" --sealed-hex \"$SEALED_KEY\""))
-        XCTAssertTrue(b.contains("if [ \"$BOOT_UNLOCK_MODE\" = \"approve\" ]; then"))
+        XCTAssertTrue(b.contains("if [ \"$EFFECTIVE_MODE\" = \"approve\" ]; then"))
         XCTAssertTrue(b.contains("if ! unlock_via_box_lease; then"))
         XCTAssertTrue(b.contains("BOOT_UNLOCK_MODE=\"$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)\""))
         XCTAssertFalse(b.contains("unlock_via_plaintext_consume"))
@@ -317,7 +317,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, bootUnlockMode: "approve")
         XCTAssertTrue(b.contains("echo \"approve\" > /boot/flagship-boot-unlock-mode"))
         XCTAssertFalse(b.contains("echo \"auto\" > /boot/flagship-boot-unlock-mode"))
-        XCTAssertTrue(b.contains("if [ \"$BOOT_UNLOCK_MODE\" = \"approve\" ]; then"))
+        XCTAssertTrue(b.contains("if [ \"$EFFECTIVE_MODE\" = \"approve\" ]; then"))
         XCTAssertTrue(b.contains("unlock_via_relay"))
         XCTAssertFalse(b.contains("unlock_via_plaintext_consume"))
         XCTAssertFalse(b.contains("flagship/consume-unlock-key/v1|"))
@@ -595,7 +595,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains(#"log_stage "boot fs mounted (persistent log live)""#))
         XCTAssertTrue(b.contains(#"log_stage "boot fs mount FAILED — log stays in /run (survives pivot)""#))
         let startLog = b.range(of: #"log_stage "premount start (ssid baked)""#)!
-        let mountAt = b.range(of: "mount /dev/disk/by-label/FLAGSHIP_BOOT")!
+        let mountAt = b.range(of: "mount /dev/disk/by-label/FLAGSHIP_BOOT", range: startLog.lowerBound ..< b.endIndex)!
         XCTAssertTrue(startLog.lowerBound < mountAt.lowerBound)
         XCTAssertTrue(b.contains("falling through"))
         // Creds embedded single-quote-escaped (NOT base64; initramfs /bin/sh).
@@ -638,7 +638,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "efe44ae8ff2f3660d8e076a7c00e710915e89443a4cd9c555613b7627976a91e",
+            hash, "92c3684a7c782d521f8b708207a4d4a941ad1dba19c4279f79cd454f24a01724",
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 
@@ -677,7 +677,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("for _nc in /run/net-*.conf; do"))
         XCTAssertTrue(b.contains("echo \"flagship: dns fallback: public resolvers\""))
         let ensureAt = b.range(of: "net-ensure")!.lowerBound
-        let dispatchAt = b.range(of: "echo \"flagship: boot-unlock mode = $BOOT_UNLOCK_MODE\"")!.lowerBound
+        let dispatchAt = b.range(of: "echo \"flagship: boot-unlock mode = $EFFECTIVE_MODE")!.lowerBound
         XCTAssertTrue(ensureAt < dispatchAt)
         XCTAssertFalse(b.contains("init-premount/flagship-wifi"))
         XCTAssertFalse(b.contains("flagship-wifi-safetynet"))

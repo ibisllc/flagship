@@ -310,7 +310,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     expect(b).toContain('"sealedKey":"');
     expect(b).toContain('--identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY"');
     // auto dispatch: box-lease first, relay fallback.
-    expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
     expect(b).toContain("if ! unlock_via_box_lease; then");
     expect(b).toContain("unlock_via_relay");
     // The premount script reads the mode (default auto if the file is absent).
@@ -336,7 +336,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     expect(b).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
     expect(b).not.toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
     // The relay is the ONLY dispatch in approve mode — no box-lease, no fallback.
-    expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
     expect(b).toContain("unlock_via_relay");
     // Defense in depth: the dispatch never CALLS the box-lease in approve mode
     // (the function may be defined, but `if ! unlock_via_box_lease; then` —
@@ -360,7 +360,7 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     for (const b of [autoB, approveB]) {
       expect(b).toContain("unlock_via_box_lease()");
       expect(b).toContain("unlock_via_relay()");
-      expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+      expect(b).toContain('if [ "$EFFECTIVE_MODE" = "approve" ]; then');
     }
     // The only bake difference is the mode literal written to /boot.
     expect(autoB).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
@@ -927,7 +927,7 @@ describe("INITRAMFS Wi-Fi (phone-gated unlock needs network in early boot)", () 
     // "premount start" is logged before the boot-fs mount; the accumulator is
     // seeded into the persistent log after the mount so the early lines survive.
     const startLog = b.indexOf('log_stage "premount start (ssid baked)"');
-    const mountAt = b.indexOf("mount /dev/disk/by-label/FLAGSHIP_BOOT");
+    const mountAt = b.indexOf("mount /dev/disk/by-label/FLAGSHIP_BOOT", startLog);
     expect(startLog).toBeGreaterThan(0);
     expect(mountAt).toBeGreaterThan(0);
     expect(startLog).toBeLessThan(mountAt);
@@ -1033,7 +1033,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(b).toContain('echo "flagship: dns configured:$_rdns"');
     expect(b).toContain('echo "flagship: dns fallback: public resolvers"');
     // Both run before the unlock dispatch.
-    expect(b.indexOf("net-ensure")).toBeLessThan(b.indexOf('echo "flagship: boot-unlock mode = $BOOT_UNLOCK_MODE"'));
+    expect(b.indexOf("net-ensure")).toBeLessThan(b.indexOf('echo "flagship: boot-unlock mode = $EFFECTIVE_MODE'));
     // The Wi-Fi-only blocks stay ABSENT on a wired burn.
     expect(b).not.toContain("init-premount/flagship-wifi");
     expect(b).not.toContain("flagship-wifi-safetynet");
@@ -1076,7 +1076,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "efe44ae8ff2f3660d8e076a7c00e710915e89443a4cd9c555613b7627976a91e",
+      "92c3684a7c782d521f8b708207a4d4a941ad1dba19c4279f79cd454f24a01724",
     );
   });
 });
