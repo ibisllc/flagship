@@ -211,7 +211,6 @@ final class RevokeServerTests: XCTestCase {
         func totpDisable(username: String, body: TotpDisableRequest) async throws -> TotpDisableResponse { throw error }
         func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? { throw error }
         func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse { throw error }
-        func grantAcmeAccountKeyAutonomy(serverDomain: String, body: AcmeAccountKeyGrantMintRequest) async throws -> AcmeAccountKeyAutonomyResponse { throw error }
     }
 
     @MainActor

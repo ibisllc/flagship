@@ -80,7 +80,6 @@ public struct ServerDetailScreen: View {
                     overview(d: d, c: c)
                     MetricsSection(state: metrics)
                     cert(d: d, c: c)
-                    CertAutonomyCard(serverDomain: d.serverFqdn)
                     deviceRow(d: d, c: c)
                     BootUnlockApprovalCard(serverDomain: d.serverFqdn)
                     BootUnlockCard(serverDomain: d.serverFqdn)
@@ -563,99 +562,6 @@ struct BootUnlockApprovalCard: View {
             },
             watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )
-    }
-}
-
-/// #28 seal-to-box — per-server "Grant cert-minting autonomy" action.
-///
-/// By default a box stays "managed": it asks the admin device for a fresh
-/// TLS cert each renewal. This card opts THIS box into autonomy — it seals
-/// the account key to the box's STK and IRK-signs the grant so the box can
-/// re-issue its own per-box `[<server>.<user>, *.<server>.<user>]` cert
-/// offline indefinitely.
-///
-/// Self-contained, mirroring `BootUnlockCard` / `DangerZoneCard`: reads its
-/// dependencies (the .com server client, the directory mailbox, the active
-/// account, toasts) from the environment so the parent screen stays a dumb
-/// state+callbacks view. The box STK is sourced from the pods directory
-/// inside `CertAutonomyGrantViewModel` (the same trust anchor the unlock
-/// coordinator uses) — `ServerDetailResponse` does NOT carry it.
-struct CertAutonomyCard: View {
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.flagshipServerClient) private var server
-    @Environment(\.secretMailboxClient) private var mailbox
-    @Environment(AppState.self) private var app
-    @Environment(ToastCenter.self) private var toasts
-
-    let serverDomain: String
-
-    @State private var vm: CertAutonomyGrantViewModel?
-    @State private var confirming = false
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("CERT AUTONOMY")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Label("Box renews its own certificate", systemImage: "lock.rotation")
-                        .font(FS.font.body())
-                        .foregroundColor(c.text)
-                    Text("Hand this box the authority to re-issue its own TLS certificate, so it keeps a valid padlock even when your phone is offline for a long stretch. The account key is sealed to this box alone — flagshipserver.com only relays ciphertext it can't read.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSPrimaryButton(buttonLabel, enabled: !isBusy, block: true) {
-                        confirming = true
-                    }
-                    .accessibilityIdentifier("sd-grant-cert-autonomy")
-                }
-            }
-        }
-        .alert("Grant cert-minting autonomy?", isPresented: $confirming) {
-            Button("Cancel", role: .cancel) {}
-            Button("Grant") { Task { await fire() } }
-        } message: {
-            Text("This box will be able to mint your TLS certificate on its own, indefinitely. You can still revoke it later from the admin device.")
-        }
-    }
-
-    private var isBusy: Bool {
-        switch vm?.phase {
-        case .resolving, .signing, .posting: return true
-        default: return false
-        }
-    }
-
-    private var buttonLabel: String {
-        switch vm?.phase {
-        case .resolving: return "Finding box…"
-        case .signing:   return "Sealing key…"
-        case .posting:   return "Granting…"
-        default:         return "Grant cert-minting autonomy"
-        }
-    }
-
-    @MainActor
-    private func fire() async {
-        let m = CertAutonomyGrantViewModel(
-            server: server,
-            mailbox: mailbox,
-            serverDomain: serverDomain,
-            username: { app.currentUser }
-        )
-        vm = m
-        await m.grant()
-        switch m.phase {
-        case .completed:
-            toasts.success("Done. This box can now renew its own certificate.")
-        case .failed(let msg):
-            toasts.error(msg)
-        default:
-            break
-        }
     }
 }
 

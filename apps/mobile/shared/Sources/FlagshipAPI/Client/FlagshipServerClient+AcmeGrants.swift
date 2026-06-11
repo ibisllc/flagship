@@ -68,19 +68,6 @@ public struct AcmeAccountKeyGrantMintRequest: Codable, Equatable, Sendable {
     }
 }
 
-/// Success body for `POST /api/server/<serverDomain>/acme-account-key`
-/// (the #28 box-autonomy delivery path). The cloud deposits the sealed key
-/// for the addressed box and echoes only the public `accountKeyId` — the
-/// sealed key is never reflected (a deposit is not a read channel).
-public struct AcmeAccountKeyAutonomyResponse: Codable, Equatable, Sendable {
-    public let ok: Bool
-    public let accountKeyId: String
-    public init(ok: Bool, accountKeyId: String) {
-        self.ok = ok
-        self.accountKeyId = accountKeyId
-    }
-}
-
 /// Success body for `POST /api/users/:u/acme-account-keys`. PUBLIC fields
 /// only — the sealed key is intentionally absent (a read is not a delivery
 /// channel).

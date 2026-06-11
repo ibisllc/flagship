@@ -58,7 +58,6 @@ import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
-import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.PowerMode
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
@@ -76,8 +75,6 @@ import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.DeadManPhase
 import com.flagshipserver.app.viewmodels.DeadManViewModel
 import com.flagshipserver.app.viewmodels.DeadManWindow
-import com.flagshipserver.app.viewmodels.GrantCertAutonomyPhase
-import com.flagshipserver.app.viewmodels.GrantCertAutonomyViewModel
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.PowerOffPhase
@@ -147,8 +144,6 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
             PowerCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DeadManCard(serverDomain = d.value.serverFqdn)
-            Spacer(Modifier.height(FS.space.s6))
-            CertAutonomyCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
@@ -608,83 +603,6 @@ private fun DeadManCard(serverDomain: String) {
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
                 )
             }
-        }
-    }
-}
-
-// #28 — "grant this box cert-minting autonomy". Seals the account's ACME
-// account key FOR this box's STK and delivers it to the domain-scoped
-// endpoint, so the box can renew its own per-box
-// [<server>.<user>, *.<server>.<user>] cert without the
-// phone re-sealing each time. The box STK is resolved from the directory
-// (mailbox /api/users/:u/pods) — the screens detail model doesn't surface it.
-// Build+seal+sign+POST live in GrantCertAutonomyViewModel.
-@Composable
-private fun CertAutonomyCard(serverDomain: String) {
-    val app = LocalAppState.current
-    val mailbox = LocalSecretMailboxClient.current
-    val server = LocalFlagshipServerClient.current
-    val toasts = LocalToastCenter.current
-    val scope = rememberCoroutineScope()
-    val username by app.currentUser.collectAsState()
-
-    val vm = remember(serverDomain, server, mailbox) {
-        GrantCertAutonomyViewModel(
-            serverDomain = serverDomain,
-            username = { username },
-            // Trust anchor for the box STK is the directory, re-resolved
-            // independently of any echo — the same anchor the boot-secret
-            // coordinator uses.
-            boxStkResolver = { user, domain ->
-                mailbox.fetchPods(user).identityPubKey(domain)
-            },
-            deliver = GrantCertAutonomyViewModel.liveDeliver(server, OkHttpJsonTransport()),
-        )
-    }
-    val phase by vm.phase.collectAsState()
-    val busy = phase is GrantCertAutonomyPhase.Resolving ||
-        phase is GrantCertAutonomyPhase.Sealing ||
-        phase is GrantCertAutonomyPhase.Posting
-
-    Text(
-        "Certificate autonomy",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Let this box renew its own TLS certificate. Your account key is sealed to this box and can be opened only by it — flagshipserver.com stores ciphertext it can't read.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            (phase as? GrantCertAutonomyPhase.Failed)?.let { f ->
-                Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
-            }
-            FSPrimaryButton(
-                label = when (phase) {
-                    is GrantCertAutonomyPhase.Resolving -> "Checking box…"
-                    is GrantCertAutonomyPhase.Sealing -> "Sealing key…"
-                    is GrantCertAutonomyPhase.Posting -> "Delivering…"
-                    else -> "Grant cert-minting autonomy"
-                },
-                onClick = {
-                    scope.launch {
-                        vm.run()
-                        when (val p = vm.phase.value) {
-                            is GrantCertAutonomyPhase.Completed ->
-                                toasts.success("This box can now renew its own certificate.")
-                            is GrantCertAutonomyPhase.Failed ->
-                                toasts.error("Couldn't grant autonomy: ${p.message}")
-                            else -> {}
-                        }
-                    }
-                },
-                enabled = !busy,
-                block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-grant-cert-autonomy" },
-            )
         }
     }
 }
