@@ -5,20 +5,22 @@
 //
 // Body shape: { sealedHex, nonceHex } — both lowercase hex. The Worker
 // rejects nonceHex != 24 chars (12-byte AEAD nonce) and caps sealedHex
-// at 16384 hex chars (8 KB sealed-blob abuse cap). The phone-side
-// sealWiFiConfig produces a well-under-1 KB sealed blob in practice.
+// at 16384 hex chars (8 KB sealed-blob abuse cap). `sealedHex` is the
+// protocol deposit blob: ePhonePub(32) || AEAD ciphertext (see
+// `buildWifiDepositBlob` in core.NfcPair — the box needs the pub to
+// derive K_session; tampering it in transit fails the AEAD open). The
+// phone-side blob is well under 1 KB in practice.
 
 package com.flagshipserver.app.api
 
 import com.flagshipserver.app.core.JsonHttpTransport
-import com.flagshipserver.app.core.NfcPairHex
-import com.flagshipserver.app.core.SealedWiFiConfig
 import kotlinx.serialization.Serializable
 
 interface NfcRendezvousClient {
-    /** Deposit the AEAD-sealed WiFiConfig at the given rendezvous slot.
-     *  Returns Result.failure when the Worker rejects the deposit. */
-    suspend fun depositSealedWifi(rendezvousId: String, sealed: SealedWiFiConfig): Result<Unit>
+    /** Deposit the deposit blob (hex) + AEAD nonce (hex) at the given
+     *  rendezvous slot. Returns Result.failure when the Worker rejects
+     *  the deposit. */
+    suspend fun depositSealedWifi(rendezvousId: String, sealedHex: String, nonceHex: String): Result<Unit>
 }
 
 @Serializable
@@ -48,12 +50,13 @@ class LiveNfcRendezvousClient(
 
     override suspend fun depositSealedWifi(
         rendezvousId: String,
-        sealed: SealedWiFiConfig,
+        sealedHex: String,
+        nonceHex: String,
     ): Result<Unit> {
         val encoded = java.net.URLEncoder.encode(rendezvousId, "UTF-8")
         val body = NfcRendezvousDepositRequest(
-            sealedHex = NfcPairHex.encode(sealed.ciphertext),
-            nonceHex = NfcPairHex.encode(sealed.nonce),
+            sealedHex = sealedHex,
+            nonceHex = nonceHex,
         )
         return try {
             transport.postJsonForResponse(
@@ -79,16 +82,17 @@ class LiveNfcRendezvousClient(
 class MockNfcRendezvousClient(
     var nextOutcome: Result<Unit> = Result.success(Unit),
 ) : NfcRendezvousClient {
-    data class Deposit(val rendezvousId: String, val sealed: SealedWiFiConfig)
+    data class Deposit(val rendezvousId: String, val sealedHex: String, val nonceHex: String)
 
     private val _deposits = mutableListOf<Deposit>()
     val deposits: List<Deposit> get() = _deposits
 
     override suspend fun depositSealedWifi(
         rendezvousId: String,
-        sealed: SealedWiFiConfig,
+        sealedHex: String,
+        nonceHex: String,
     ): Result<Unit> {
-        _deposits += Deposit(rendezvousId, sealed)
+        _deposits += Deposit(rendezvousId, sealedHex, nonceHex)
         return nextOutcome
     }
 }
