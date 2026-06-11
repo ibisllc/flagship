@@ -18,6 +18,7 @@
  *   <nonce>|<issuedAt>
  */
 import { ed } from "./edSync.js";
+import { legacyFieldGuard } from "./auth.js";
 import type { Bytes, Keypair } from "./types.js";
 
 export interface DaemonStatusReport {
@@ -35,6 +36,11 @@ export interface DaemonStatusReport {
 const TAG_DAEMON_STATUS = "flagship/daemon-status/v1";
 
 export function canonicalDaemonStatusReport(r: DaemonStatusReport): Bytes {
+  legacyFieldGuard("serverDomain", r.serverDomain);
+  if (r.certSha256 !== null) legacyFieldGuard("certSha256", r.certSha256);
+  if (r.certIssuer !== null) legacyFieldGuard("certIssuer", r.certIssuer);
+  for (const app of r.appsServed) legacyFieldGuard("appServed", app);
+  legacyFieldGuard("nonce", r.nonce);
   const apps = r.appsServed.slice().sort().join(",");
   return new TextEncoder().encode(
     [

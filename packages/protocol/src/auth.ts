@@ -615,6 +615,8 @@ function canonicalDeviceDisconnect(d: DeviceDisconnect): Bytes {
 }
 
 function canonicalPbAnnounce(a: PbAnnounce): Bytes {
+  if (a.region !== undefined) legacyFieldGuard("region", a.region);
+  legacyFieldGuard("tunnelEndpoint", a.tunnelEndpoint);
   return new TextEncoder().encode(
     [
       TAG_PB_ANNOUNCE,
@@ -643,18 +645,22 @@ function canonicalPbRequestPeers(r: PbRequestPeers): Bytes {
 }
 
 function canonicalPbPeerConfirm(c: PbPeerConfirm): Bytes {
+  legacyFieldGuard("shardId", c.shardId);
   return new TextEncoder().encode(
     [TAG_PB_PEER_CONFIRM, c.peerServerId, c.requesterServerId, c.shardId, c.issuedAt].join("|"),
   );
 }
 
 function canonicalLlmPromoIssueStart(r: LlmPromoIssueStart): Bytes {
+  legacyFieldGuard("userId", r.userId);
   return new TextEncoder().encode(
     [TAG_LLM_PROMO_ISSUE_START, r.userId, r.method, hex(r.identityHash), r.issuedAt].join("|"),
   );
 }
 
 function canonicalLlmPromoIssueComplete(r: LlmPromoIssueComplete): Bytes {
+  legacyFieldGuard("userId", r.userId);
+  legacyFieldGuard("ticket", r.ticket);
   return new TextEncoder().encode(
     [TAG_LLM_PROMO_ISSUE_COMPLETE, r.userId, r.ticket, hex(r.otpHash), r.issuedAt].join("|"),
   );
@@ -667,18 +673,25 @@ function canonicalBackupToggle(r: BackupToggle): Bytes {
 }
 
 function canonicalPublishServerDns(r: PublishServerDns): Bytes {
+  legacyFieldGuard("userId", r.userId);
+  legacyFieldGuard("serverId", r.serverId);
+  legacyFieldGuard("directIp", r.directIp);
   return new TextEncoder().encode(
     [TAG_PUBLISH_SERVER_DNS, r.userId, r.serverId, r.mode, r.directIp, r.issuedAt].join("|"),
   );
 }
 
 function canonicalDns01Publish(r: Dns01PublishRequest): Bytes {
+  legacyFieldGuard("serverId", r.serverId);
+  legacyFieldGuard("recordName", r.recordName);
   return new TextEncoder().encode(
     [TAG_DNS01_PUBLISH, r.serverId, r.recordName, hex(r.recordValueHash), r.issuedAt].join("|"),
   );
 }
 
 function canonicalDns01Delete(r: Dns01DeleteRequest): Bytes {
+  legacyFieldGuard("serverId", r.serverId);
+  legacyFieldGuard("recordId", r.recordId);
   return new TextEncoder().encode(
     [TAG_DNS01_DELETE, r.serverId, r.recordId, r.issuedAt].join("|"),
   );
@@ -968,6 +981,10 @@ export function verifyClaimUsername(c: ClaimUsername, sig: Bytes, irkPub: Bytes)
 }
 
 function canonicalAuthCode(c: AuthCode): Bytes {
+  legacyFieldGuard("serial", c.serial);
+  legacyFieldGuard("username", c.username);
+  legacyFieldGuard("serverName", c.serverName);
+  legacyFieldGuard("serverDomain", c.serverDomain);
   return new TextEncoder().encode(
     [
       TAG_AUTH_CODE,
@@ -985,6 +1002,12 @@ function canonicalAuthCode(c: AuthCode): Bytes {
 }
 
 function canonicalInstallBlob(b: InstallBlob): Bytes {
+  legacyFieldGuard("serverDomain", b.serverDomain);
+  legacyFieldGuard("username", b.username);
+  legacyFieldGuard("serverName", b.serverName);
+  legacyFieldGuard("registrationUrl", b.registrationUrl);
+  legacyFieldGuard("authCode.serial", b.authCode.serial);
+  legacyFieldGuard("installerGitRef", b.installerGitRef);
   const parts: (string | number)[] = [
     TAG_INSTALL_BLOB,
     b.version,
@@ -1022,6 +1045,8 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
 }
 
 function canonicalServerRegister(r: ServerRegisterRequest): Bytes {
+  legacyFieldGuard("authCode.serial", r.authCode.serial);
+  legacyFieldGuard("authCode.serverDomain", r.authCode.serverDomain);
   return new TextEncoder().encode(
     [
       TAG_SERVER_REGISTER,
@@ -1035,12 +1060,16 @@ function canonicalServerRegister(r: ServerRegisterRequest): Bytes {
 }
 
 function canonicalAuthCodeRevoke(r: AuthCodeRevocation): Bytes {
+  legacyFieldGuard("serial", r.serial);
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_AUTH_CODE_REVOKE, r.serial, r.username, r.issuedAt].join("|"),
   );
 }
 
 function canonicalReleaseServerName(r: ReleaseServerName): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("serverDomain", r.serverDomain);
   return new TextEncoder().encode(
     [TAG_RELEASE_SERVER_NAME, r.username, r.serverDomain, r.issuedAt].join("|"),
   );
@@ -1351,6 +1380,7 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "shut-down":
       return enc.encode([TAG_ORDER_SHUT_DOWN, o.serverId, o.issuedAt].join("|"));
     case "revoke-self":
+      legacyFieldGuard("reason", o.reason);
       return enc.encode([TAG_ORDER_REVOKE_SELF, o.serverId, o.reason, o.issuedAt].join("|"));
     case "rotate-server-identity":
       return enc.encode(
@@ -1361,6 +1391,9 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
         [TAG_ORDER_DELIVER_BAK, o.serverId, hex(o.bakPubKey), o.issuedAt].join("|"),
       );
     case "browser-input-response":
+      legacyFieldGuard("tabId", o.tabId);
+      legacyFieldGuard("value", o.value);
+      legacyFieldGuard("screenshotRef", o.screenshotRef);
       return enc.encode(
         [
           TAG_ORDER_BROWSER_INPUT,
@@ -1373,22 +1406,32 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
         ].join("|"),
       );
     case "add-subscriber":
+      legacyFieldGuard("serviceId", o.serviceId);
+      legacyFieldGuard("fqdn", o.fqdn);
       return enc.encode(
         [TAG_ORDER_ADD_SUBSCRIBER, o.serverId, o.serviceId, o.fqdn, o.issuedAt].join("|"),
       );
     case "remove-subscriber":
+      legacyFieldGuard("serviceId", o.serviceId);
+      legacyFieldGuard("fqdn", o.fqdn);
       return enc.encode(
         [TAG_ORDER_REMOVE_SUBSCRIBER, o.serverId, o.serviceId, o.fqdn, o.issuedAt].join("|"),
       );
     case "add-paired-session":
+      legacyFieldGuard("token", o.token);
+      legacyFieldGuard("label", o.label);
       return enc.encode(
         [TAG_ORDER_ADD_PAIRED_SESSION, o.serverId, o.token, o.label, o.issuedAt].join("|"),
       );
     case "remove-paired-session":
+      legacyFieldGuard("token", o.token);
       return enc.encode(
         [TAG_ORDER_REMOVE_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
       );
     case "backup-app":
+      legacyFieldGuard("creator", o.creator);
+      legacyFieldGuard("slug", o.slug);
+      if (o.password !== undefined) legacyFieldGuard("password", o.password);
       return enc.encode(
         [
           TAG_ORDER_BACKUP_APP,
@@ -1573,12 +1616,14 @@ export interface RePairObject {
 }
 
 function canonicalRePairInitiate(r: RePairInitiate): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_RE_PAIR_INITIATE, r.username, hex(r.newIrkPub), hex(r.oldIrkPub), r.issuedAt].join("|"),
   );
 }
 
 function canonicalRePairObject(r: RePairObject): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_RE_PAIR_OBJECT, r.username, hex(r.newIrkPub), r.issuedAt].join("|"),
   );
@@ -1632,6 +1677,9 @@ export interface WipeRestart {
 }
 
 function canonicalWipeRestart(r: WipeRestart): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("newCredentialIdHex", r.newCredentialIdHex);
+  legacyFieldGuard("newWrappedUmkHashHex", r.newWrappedUmkHashHex);
   return new TextEncoder().encode(
     [
       TAG_WIPE_RESTART,
@@ -1705,16 +1753,19 @@ export interface TotpDisable {
 }
 
 function canonicalTotpEnrollBegin(r: TotpEnrollBegin): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_TOTP_ENROLL_BEGIN, r.username, r.issuedAt].join("|"),
   );
 }
 function canonicalTotpEnrollConfirm(r: TotpEnrollConfirm): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_TOTP_ENROLL_CONFIRM, r.username, r.issuedAt].join("|"),
   );
 }
 function canonicalTotpDisable(r: TotpDisable): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_TOTP_DISABLE, r.username, r.issuedAt].join("|"),
   );
@@ -1788,6 +1839,9 @@ export interface ServiceRename {
 }
 
 function canonicalServiceRename(r: ServiceRename): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("serviceId", r.serviceId);
+  legacyFieldGuard("newDisplayLabel", r.newDisplayLabel);
   return new TextEncoder().encode(
     [TAG_SERVICE_RENAME, r.username, r.serviceId, r.newDisplayLabel.toLowerCase(), r.issuedAt].join("|"),
   );
@@ -1819,6 +1873,9 @@ export interface SetCustomDomain {
 }
 
 function canonicalSetCustomDomain(r: SetCustomDomain): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("serviceId", r.serviceId);
+  legacyFieldGuard("fqdn", r.fqdn);
   return new TextEncoder().encode(
     [TAG_SET_CUSTOM_DOMAIN, r.username, r.serviceId, r.fqdn.toLowerCase(), r.issuedAt].join("|"),
   );
@@ -1852,6 +1909,9 @@ export interface VoiciShorten {
 }
 
 function canonicalVoiciShorten(r: VoiciShorten): Bytes {
+  legacyFieldGuard("username", r.username);
+  if (r.serviceId !== undefined) legacyFieldGuard("serviceId", r.serviceId);
+  legacyFieldGuard("targetUrl", r.targetUrl);
   return new TextEncoder().encode(
     [TAG_VOICI_SHORTEN, r.username, r.serviceId ?? "", r.targetUrl, r.issuedAt].join("|"),
   );
@@ -1903,6 +1963,7 @@ export function verifyConsumeUnlockKey(r: ConsumeUnlockKey, sig: Bytes, identity
 }
 
 function canonicalAutoUnlockLease(r: AutoUnlockLease): Bytes {
+  legacyFieldGuard("leaseId", r.leaseId);
   // Field order is part of the canonical-bytes contract; do NOT reorder.
   // multiUse is encoded "1" / "0" rather than the JS string of a boolean
   // because the canonical-bytes layer is language-neutral.
@@ -1920,6 +1981,7 @@ function canonicalAutoUnlockLease(r: AutoUnlockLease): Bytes {
 }
 
 function canonicalRevokeAutoUnlockLease(r: RevokeAutoUnlockLease): Bytes {
+  legacyFieldGuard("leaseId", r.leaseId);
   return new TextEncoder().encode(
     [TAG_REVOKE_AUTO_UNLOCK_LEASE, r.serverId, r.leaseId, r.issuedAt].join("|"),
   );
@@ -1958,6 +2020,9 @@ export interface UploadRecoveryRecord {
 const TAG_UPLOAD_RECOVERY_RECORD = "flagship/upload-recovery-record/v1";
 
 function canonicalUploadRecoveryRecord(r: UploadRecoveryRecord): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("credentialIdHex", r.credentialIdHex);
+  legacyFieldGuard("wrappedUmkHashHex", r.wrappedUmkHashHex);
   return new TextEncoder().encode(
     [
       TAG_UPLOAD_RECOVERY_RECORD,
@@ -2030,6 +2095,7 @@ export interface ServerRevokeBySelf {
 const TAG_SERVER_REVOKE_BY_SELF = "flagship/server-revoke-by-self/v1";
 
 function canonicalServerRevokeBySelf(r: ServerRevokeBySelf): Bytes {
+  legacyFieldGuard("reason", r.reason);
   return new TextEncoder().encode(
     [TAG_SERVER_REVOKE_BY_SELF, r.serverId, r.reason, r.issuedAt].join("|"),
   );
@@ -2148,6 +2214,7 @@ export interface ProvisionEvent {
 const TAG_PROVISION_EVENT = "flagship/provision-event/v1";
 
 function canonicalProvisionEvent(e: ProvisionEvent): Bytes {
+  legacyFieldGuard("error", e.error);
   return new TextEncoder().encode(
     [
       TAG_PROVISION_EVENT,
@@ -2220,14 +2287,19 @@ const TAG_INSTALL_SERVICE = "flagship/install-service/v1";
 const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 
 function canonicalInstallService(r: InstallServiceRequest): Bytes {
+  legacyFieldGuard("creator", r.creator);
+  legacyFieldGuard("slug", r.slug);
+  // manifestJson is intentionally NOT guarded: it is a JSON blob that can
+  // legitimately contain '|'. Its integrity is bound the same way every other
+  // field's is — it is part of the signed canonical bytes (a swap fails
+  // Ed25519 verify) — and canonical bytes are only ever compared whole, never
+  // re-split on '|', so a '|' inside it cannot forge an adjacent-field boundary.
   return new TextEncoder().encode(
     [
       TAG_INSTALL_SERVICE,
       r.serverId,
       r.creator,
       r.slug,
-      // The manifest is included in the canonical bytes so a MITM can't
-      // swap the manifest body against a captured signature.
       r.manifestJson,
       r.addOwnerToMembership ? "1" : "0",
       r.issuedAt,
@@ -2236,6 +2308,8 @@ function canonicalInstallService(r: InstallServiceRequest): Bytes {
 }
 
 function canonicalUninstallService(r: UninstallServiceRequest): Bytes {
+  legacyFieldGuard("creator", r.creator);
+  legacyFieldGuard("slug", r.slug);
   return new TextEncoder().encode(
     [TAG_UNINSTALL_SERVICE, r.serverId, r.creator, r.slug, r.issuedAt].join("|"),
   );
@@ -2301,9 +2375,15 @@ const TAG_SET_SERVICE_ENV = "flagship/set-service-env/v1";
  * the signed bytes (a value swap must invalidate the signature).
  */
 function canonicalSetServiceEnv(r: SetServiceEnvRequest): Bytes {
+  legacyFieldGuard("creator", r.creator);
+  legacyFieldGuard("slug", r.slug);
   const pairs = Object.keys(r.env)
     .sort()
-    .map((k) => `${k}=${r.env[k]}`);
+    .map((k) => {
+      legacyFieldGuard(`env-key:${k}`, k);
+      legacyFieldGuard(`env-value:${k}`, r.env[k]!);
+      return `${k}=${r.env[k]}`;
+    });
   return new TextEncoder().encode(
     [
       TAG_SET_SERVICE_ENV,
@@ -2355,6 +2435,9 @@ export interface UpdatePullRequest {
 const TAG_UPDATE_PULL = "flagship/update-pull/v1";
 
 function canonicalUpdatePull(r: UpdatePullRequest): Bytes {
+  legacyFieldGuard("creator", r.creator);
+  legacyFieldGuard("slug", r.slug);
+  legacyFieldGuard("since", r.since);
   return new TextEncoder().encode(
     [
       TAG_UPDATE_PULL,
@@ -2397,6 +2480,7 @@ export interface RegisterUser {
 const TAG_REGISTER_USER = "flagship/register-user/v1";
 
 function canonicalRegisterUser(r: RegisterUser): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [TAG_REGISTER_USER, r.username, hex(r.irkPub), r.issuedAt].join("|"),
   );
@@ -2445,6 +2529,9 @@ export interface PushTokenRegister {
 const TAG_PUSH_TOKEN_REGISTER = "flagship/push-token-register/v1";
 
 function canonicalPushTokenRegister(r: PushTokenRegister): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("providerToken", r.providerToken);
+  legacyFieldGuard("label", r.label);
   return new TextEncoder().encode(
     [
       TAG_PUSH_TOKEN_REGISTER,
@@ -2543,6 +2630,8 @@ export interface LlmPromoIssueRequest {
 const TAG_LLM_PROMO_ISSUE = "flagship/llm-promo-issue/v1";
 
 function canonicalLlmPromoIssue(r: LlmPromoIssueRequest): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("serverFqdn", r.serverFqdn);
   return new TextEncoder().encode(
     [
       TAG_LLM_PROMO_ISSUE,
@@ -2624,6 +2713,8 @@ export interface RootEntitlement {
 const TAG_ROOT_ENTITLEMENT = "flagship/root-entitlement/v1";
 
 function canonicalRootEntitlement(c: RootEntitlement): Bytes {
+  legacyFieldGuard("username", c.username);
+  legacyFieldGuard("podCanonical", c.podCanonical);
   return new TextEncoder().encode(
     [
       TAG_ROOT_ENTITLEMENT,
@@ -2687,6 +2778,8 @@ export interface ServiceEntitlement {
 const TAG_SERVICE_ENTITLEMENT = "flagship/service-entitlement/v1";
 
 function canonicalServiceEntitlement(c: ServiceEntitlement): Bytes {
+  legacyFieldGuard("username", c.username);
+  for (const canonical of c.canonicals) legacyFieldGuard("canonical", canonical);
   // Sort canonicals so signing is order-independent.
   const list = [...c.canonicals].map((s) => s.toLowerCase()).sort().join(",");
   return new TextEncoder().encode(
@@ -2754,6 +2847,7 @@ export interface EntitlementRevocationList {
 const TAG_ENTITLEMENT_REVOKE = "flagship/entitlement-revoke/v1";
 
 function canonicalEntitlementRevocationList(r: EntitlementRevocationList): Bytes {
+  legacyFieldGuard("username", r.username);
   return new TextEncoder().encode(
     [
       TAG_ENTITLEMENT_REVOKE,
