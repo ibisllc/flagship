@@ -18,14 +18,6 @@ public struct RecipeAuthCode: Sendable, Equatable {
     public let expiresAt: Int64
 }
 
-/// Cert-autonomy policy (mirrors @flagship/protocol InstallBlob.certAutonomy).
-/// Phone-signed; nil (absent) ⇒ omitted from the canonical bytes so legacy
-/// recipes keep verifying.
-public struct RecipeCertAutonomy: Sendable, Equatable {
-    public let mode: String            // "managed" | "autonomous"
-    public let offlineWindowDays: Int? // nil ⇒ 0 on the wire
-}
-
 public struct Recipe: Sendable, Equatable {
     public let version: Int
     public let serverDomain: String
@@ -43,9 +35,6 @@ public struct Recipe: Sendable, Equatable {
     /// Mirrors @flagship/protocol InstallBlob.bootUnlockMode — OPTIONAL so the
     /// canonical-bytes match the TS (absent omits the field, present appends it).
     public let bootUnlockMode: String?
-    /// Cert-autonomy policy — phone-signed; nil omits it from the canonical
-    /// bytes. Mirrors @flagship/protocol InstallBlob.certAutonomy.
-    public let certAutonomy: RecipeCertAutonomy?
     /// Disk-encryption policy — phone-signed; nil omits it from the canonical
     /// bytes. Mirrors @flagship/protocol InstallBlob.diskEncryption. nil ⇒
     /// "luks" (the box encrypts unless the recipe explicitly says "none").
@@ -127,13 +116,7 @@ public enum RecipeLoader {
         // (old signatures keep verifying); present ⇒ appended, so the signer
         // commits to it and a relay can neither strip nor downgrade it.
         if let mode = r.bootUnlockMode { parts.append(mode) }
-        // certAutonomy appended after bootUnlockMode with a `ca=` prefix that
-        // can't collide with a bootUnlockMode value. MUST match @flagship/protocol
-        // canonicalInstallBlob byte-for-byte (the `certAutonomy` append).
-        if let ca = r.certAutonomy {
-            parts.append("ca=\(ca.mode):\(ca.offlineWindowDays ?? 0)")
-        }
-        // diskEncryption appended after certAutonomy with a `de=` prefix. MUST
+        // diskEncryption appended after bootUnlockMode with a `de=` prefix. MUST
         // match @flagship/protocol canonicalInstallBlob byte-for-byte.
         if let de = r.diskEncryption {
             parts.append("de=\(de)")
@@ -175,11 +158,6 @@ public enum RecipeLoader {
         let rckPubKey: String
         let blobSignatureHex: String
         let bootUnlockMode: String?
-        struct CA: Decodable {
-            let mode: String
-            let offlineWindowDays: Int?
-        }
-        let certAutonomy: CA?
         let diskEncryption: String?
     }
 
@@ -223,9 +201,6 @@ public enum RecipeLoader {
             rckPubKeyHex: dto.rckPubKey,
             blobSignatureHex: dto.blobSignatureHex,
             bootUnlockMode: dto.bootUnlockMode,
-            certAutonomy: dto.certAutonomy.map {
-                RecipeCertAutonomy(mode: $0.mode, offlineWindowDays: $0.offlineWindowDays)
-            },
             diskEncryption: dto.diskEncryption)
     }
 }
