@@ -376,6 +376,21 @@ serving content, `.services` content-blind. The #27 saga's entire downstream is
 validated. (The unlock was MANUAL via the `manual` keyword + recovery passphrase — the
 PHONE-approval unlock still needs a fresh end-to-end run, see TODO.)
 
+**DOCKER FIX (2026-06-11, agent, on real metal + on `main`):** the daemon was
+crash-looping on the live A′ box because docker was never installed — the bootstrap
+apt-installed node/git but not docker, so `ensureNetwork`'s `docker network create`
+hit ENOENT. Two commits: `1b1b75e7` made the daemon survive a missing docker
+(serviceRunner's realCommandRunner had no `'error'` listener → unhandled crash;
+`ensureNetwork` now swallows it); `edd3580e` installs docker in the bootstrap
+(`docker.io docker-cli docker-compose` — docker-cli listed explicitly because
+`--no-install-recommends` drops it) + a gated `flagship-data-services.service`
+oneshot that runs `installer/data-services/init.sh` after docker is up (NOT before
+the daemon — image pulls must not delay the padlock). Verified live: docker installs,
+`network create` succeeds, the full data stack (postgres/minio/redis/forgejo/chromium)
+comes up healthy, daemon logs **"data layer wired"**, green padlock holds. Swift burner
+mirror byte-identical (bootstrap sha pin re-asserts both sides). Burner 200 TS + 57
+swift EngineTests green; `tsc -b` clean.
+
 **~~NEXT SESSION = EXECUTE THE CERT-MODEL MIGRATION~~ — DONE, see the block
 above.** Full detailed plan in
 `docs/cert-model-A-prime-migration.md` (all decisions LOCKED). Headline: move off the
