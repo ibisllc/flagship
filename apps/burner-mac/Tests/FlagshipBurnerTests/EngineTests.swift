@@ -642,6 +642,24 @@ final class EngineTests: XCTestCase {
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 
+    /// The encrypted DEBIAN bootstrap must be BYTE-IDENTICAL to the TS twin —
+    /// userdata.test.ts pins this SAME sha256. The Debian premount must open the
+    /// LUKS container under the CRYPTTAB target name (read from
+    /// /cryptroot/crypttab, e.g. sda4_crypt) so Debian's local-top/cryptroot —
+    /// which runs after us and skips an already-active target — recognizes the
+    /// unlock. Opening as flagship_root hung every phone-approved boot at
+    /// "Please unlock disk sda4_crypt:" (metal, 2026-06-12).
+    func testEncryptedDebianBootstrapIsByteIdenticalToTs() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL,
+                                         encryptRoot: true, family: "debian")
+        XCTAssertTrue(b.contains(#"[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root"#))
+        XCTAssertTrue(b.contains(#"cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME""#))
+        let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(
+            hash, "21cfa21b7e4a2f64818a841c890264bcd21c49e97fda7e648670426aadfadf40",
+            "Swift encrypted Debian bootstrap drifted from the TS twin.")
+    }
+
     /// FIX 1+2: the build hook stages the driver's whole module dir (op-modes
     /// like iwlmvm are REVERSE deps, request_module'd at runtime, invisible to
     /// manual_add_modules) and the boot premount belt-and-braces-loads the

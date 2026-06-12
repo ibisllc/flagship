@@ -1585,12 +1585,19 @@ public enum UserData {
             """
             : "copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup"
         let terminalUnlock = family == "debian"
-            ? """
+            ? #"""
             ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
-            xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" flagship_root
+            # Open under the CRYPTTAB target name (the installer named it e.g. sda4_crypt).
+            # Debian's local-top/cryptroot runs after us (its prereqs() lists every other
+            # local-top script) and skips an already-active target — but only under ITS
+            # name. Opening as flagship_root left cryptroot prompting for a passphrase
+            # against an in-use device: boot hung forever (proven on metal 2026-06-12).
+            CRYPT_NAME="$(sed -n 's/^[[:space:]]*\([^#][^[:space:]]*\)[[:space:]].*/\1/p' /cryptroot/crypttab 2>/dev/null | head -n1)"
+            [ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root
+            xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"
             lvm vgchange -ay 2>/dev/null || vgchange -ay 2>/dev/null || true
             shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"
-            """
+            """#
             : """
             ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
             xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root

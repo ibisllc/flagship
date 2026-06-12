@@ -123,7 +123,35 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
-### 2026-06-12 (latest) — phone-approval unlock debugged to root cause + boot merge live
+### 2026-06-12 (later) — phone-approval unlock ROOT-CAUSED #2: premount/cryptroot mapper-name mismatch
+
+The az2 live run got further than ever (burn ok, phone lease granted, box
+self-unlocked from the box-sealed lease, VG activated) then hung forever at
+Debian's "Please unlock disk sda4_crypt:" prompt → app showed "Never came
+online". **ROOT CAUSE: the initramfs premount opened the LUKS container as
+`flagship_root`, but Debian's `local-top/cryptroot` skips an already-active
+target ONLY under its crypttab name (`sda4_crypt`)** — so cryptroot prompted
+against an in-use device (unanswerable: cryptsetup refuses a busy source).
+Every earlier encrypted e2e used the `manual` keyword, where cryptroot itself
+opens the device — the premount-succeeds handoff had never run on metal.
+**Fix (burner-only, committed): the Debian premount reads the target name from
+`/cryptroot/crypttab` and opens under THAT (fallback `flagship_root`)**;
+cryptroot then skips (verified against trixie cryptsetup 2:2.7.5-2 source:
+`setup_mapping()` returns 0 if `dm_blkdevname "$CRYPTTAB_NAME"` exists; its
+`prereqs()` lists every other local-top script, so the premount-first ordering
+is guaranteed, not luck). New cross-language sha pin for the encrypted DEBIAN
+bootstrap (`21cfa21b`, TS + Swift; the old `ba0f4fcc` pin covers the Ubuntu
+literal and is unchanged). Burner rebuilt + re-signed + installed.
+**az2 recovery without a reburn:** at the prompt press Enter 3× (cryptroot
+gives up + exits; root LV is already active so boot continues; ignore/Enter
+through the full-OS sda4_crypt passphrase prompt — it times out harmless),
+log in as `debug` on the console, then
+`sudo sed -i 's/"$ROOT_LUKS_PART" flagship_root/"$ROOT_LUKS_PART" sda4_crypt/' /etc/initramfs-tools/scripts/local-top/flagship-unlock && sudo update-initramfs -u`
+and reboot — the box should then self-unlock AND come online (validates the
+whole phone-approval chain). UI polish for the phone approval flow noted as a
+follow-up (owner request).
+
+### 2026-06-12 — phone-approval unlock debugged to root cause + boot merge live
 
 Long live-hardware session driving the FIRST end-to-end **phone-approval LUKS
 unlock** (every prior unlock used the `manual` keyword, so this path was never

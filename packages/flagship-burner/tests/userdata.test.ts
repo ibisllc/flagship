@@ -1112,4 +1112,27 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       "ba0f4fcc758a1fda7f6d6649f941059de0adc17bae8756b3819ecfe0b9ab5c4f",
     );
   });
+
+  it("the encrypted DEBIAN bootstrap is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
+    // EngineTests.testEncryptedDebianBootstrapIsByteIdenticalToTs pins this SAME
+    // sha256. The Debian premount must open the LUKS container under the
+    // CRYPTTAB target name (read from /cryptroot/crypttab, e.g. sda4_crypt) so
+    // Debian's local-top/cryptroot — which runs after us and skips an
+    // already-active target — recognizes the unlock. Opening as flagship_root
+    // hung every phone-approved boot at "Please unlock disk" (metal, 2026-06-12).
+    const s = buildBootstrapScript({
+      ref: "main",
+      repoUrl: "https://github.com/ibisllc/flagship.git",
+      encryptRoot: true,
+      bootUnlockMode: "auto",
+      bootHost: DEFAULT_BOOT_HOST,
+      family: "debian",
+    });
+    expect(s).toContain("/cryptroot/crypttab 2>/dev/null | head -n1");
+    expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
+    expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
+    expect(createHash("sha256").update(s).digest("hex")).toBe(
+      "21cfa21b7e4a2f64818a841c890264bcd21c49e97fda7e648670426aadfadf40",
+    );
+  });
 });
