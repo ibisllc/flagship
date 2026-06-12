@@ -1109,7 +1109,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "ba0f4fcc758a1fda7f6d6649f941059de0adc17bae8756b3819ecfe0b9ab5c4f",
+      "16ec057330f90971a5d6e9bc36b89bd7fed4fe2050dca45bd920138583a75176",
     );
   });
 
@@ -1132,7 +1132,36 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "21cfa21b7e4a2f64818a841c890264bcd21c49e97fda7e648670426aadfadf40",
+      "384951096900d413e93fcb44ddbeb54d0796d8c6557febe75ed0fd788a34826b",
+    );
+  });
+
+  it("the console banner (/etc/issue + motd) is PURE ASCII", () => {
+    // The VT decodes UTF-8 but Debian's default console font (Lat15) has no
+    // glyphs for block elements or em-dashes - block-Unicode art rendered as
+    // rows of missing-glyph boxes on real hardware (2026-06-12 photo). The
+    // teal "Get yours" line rides a printf'd ANSI escape, which the console
+    // does support.
+    const s = buildBootstrapScript({
+      ref: "main",
+      repoUrl: "https://github.com/ibisllc/flagship.git",
+      encryptRoot: true,
+      bootUnlockMode: "auto",
+      bootHost: DEFAULT_BOOT_HOST,
+      family: "debian",
+    });
+    // Span both /etc/issue heredocs (greedy to the LAST FLAGSHIP_ISSUE
+    // terminator) - shell comments around them may use typographic chars,
+    // but nothing between these markers ever renders on the console.
+    const banner = /cat > \/etc\/issue[\s\S]*FLAGSHIP_ISSUE\n/.exec(s)?.[0];
+    expect(banner).toBeTruthy();
+    expect(/^[\x00-\x7F]*$/.test(banner!)).toBe(true);
+    // The motd is variable-expanded - assert its three lines stay ASCII.
+    expect(s).toContain("Flagship - $SERVER_NAME");
+    expect(s).toContain("https://$SERVER_DOMAIN - TLS terminates here, on your hardware.");
+    expect(s).toContain("You hold the keys.");
+    expect(s).toContain(
+      String.raw`printf '  Get yours at \033[96mflagshipserver.com\033[0m\n' >> /etc/issue`,
     );
   });
 });

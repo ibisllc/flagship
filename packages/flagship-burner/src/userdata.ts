@@ -593,28 +593,36 @@ AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
 # ── Brand the box. /etc/issue is shown by getty ABOVE the login prompt (where
-#    you see "flagship-pod login:"); /etc/motd is shown right after login. Pure
-#    block-Unicode (no backslashes, so agetty won't eat escapes; the Debian
-#    console is UTF-8). Single-quoted heredoc ⇒ the art is static.
+#    you see "flagship-pod login:"); /etc/motd is shown right after login.
+#    PURE ASCII ONLY: the VT decodes UTF-8 but Debian's default console font
+#    (Lat15) has no glyphs for block elements or em-dashes — every non-ASCII
+#    char rendered as the missing-glyph box on real hardware (2026-06-12
+#    photo). Single-quoted heredocs ⇒ the art is static and agetty never
+#    sees a backslash escape; the one colored line is appended with printf
+#    so a LITERAL ESC byte lands in the file (the console's 16-color
+#    palette has no teal — bright cyan is the nearest).
 cat > /etc/issue <<'FLAGSHIP_ISSUE'
 
-  ██████ ██     ██████ ██████ ██████ ██  ██ ██████ ██████
-  ██     ██     ██  ██ ██     ██     ██  ██   ██   ██  ██
-  █████  ██     ██████ ██ ███ ██████ ██████   ██   ██████
-  ██     ██     ██  ██ ██  ██     ██ ██  ██   ██   ██
-  ██     ██████ ██  ██ ██████ ██████ ██  ██ ██████ ██
+  ###### ##     ###### ###### ###### ##  ## ###### ######
+  ##     ##     ##  ## ##     ##     ##  ##   ##   ##  ##
+  #####  ##     ###### ## ### ###### ######   ##   ######
+  ##     ##     ##  ## ##  ##     ## ##  ##   ##   ##
+  ##     ###### ##  ## ###### ###### ##  ## ###### ##
 
-  This is a Flagship box — your personal cloud. You hold the keys.
+  This is a Flagship box - your personal cloud. You hold the keys.
+FLAGSHIP_ISSUE
+printf '  Get yours at \\033[96mflagshipserver.com\\033[0m\\n' >> /etc/issue
+cat >> /etc/issue <<'FLAGSHIP_ISSUE'
 
-  !! DEBUG BUILD — console login 'debug' / password 'flagship' (sudo).
+  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).
   !! CHANGE OR REMOVE this user before production.
 
 FLAGSHIP_ISSUE
 # MOTD (post-login) names this specific box. Unquoted heredoc ⇒ vars expand.
 cat > /etc/motd <<FLAGSHIP_MOTD
 
-  Flagship · $SERVER_NAME
-  https://$SERVER_DOMAIN — TLS terminates here, on your hardware.
+  Flagship - $SERVER_NAME
+  https://$SERVER_DOMAIN - TLS terminates here, on your hardware.
   flagship.services is a blind pipe; it never sees your data.
 
 FLAGSHIP_MOTD
