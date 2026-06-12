@@ -54,6 +54,11 @@ public struct ServerDetailScreen: View {
         return deadServerFqdn
     }
 
+    private var isLoaded: Bool {
+        if case .loaded = state { return true }
+        return false
+    }
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -65,7 +70,10 @@ public struct ServerDetailScreen: View {
                 // polls the boot relay (not the box) and renders nothing until a
                 // request is actually waiting.
                 if let fqdn = approvalFqdn, !fqdn.isEmpty {
-                    BootUnlockApprovalCard(serverDomain: fqdn)
+                    // Prompt the user to check for a pending unlock when the box
+                    // isn't confirmed online (an online box has already
+                    // unlocked, so there's nothing to approve).
+                    BootUnlockApprovalCard(serverDomain: fqdn, promptWhenIdle: !isLoaded)
                 }
                 switch state {
                 case .idle, .loading:
@@ -429,8 +437,17 @@ struct BootUnlockApprovalCard: View {
     @Environment(AppState.self) private var app
 
     let serverDomain: String
+    /// When idle (no request known yet), show a tappable "check for a pending
+    /// unlock" prompt. Reading the mailbox needs an IRK signature and the IRK
+    /// is biometric-gated, so the read CANNOT run on a background timer (Face
+    /// ID can't fire unattended — it would throw before the network call). The
+    /// check therefore has to be user-initiated; the tap is the gesture that
+    /// authorizes Face ID. Pass true when the box isn't confirmed online (a box
+    /// that's up has already unlocked, so there's nothing to wait on).
+    var promptWhenIdle: Bool = false
 
     @State private var vm: BootUnlockApprovalViewModel?
+    @State private var checking = false
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -441,12 +458,12 @@ struct BootUnlockApprovalCard: View {
         }
         .onAppear {
             if vm == nil {
-                let m = BootUnlockApprovalViewModel(
+                // No background poll: the mailbox read is biometric (see
+                // promptWhenIdle) and must be user-initiated.
+                vm = BootUnlockApprovalViewModel(
                     serverDomain: serverDomain,
                     makeCoordinator: makeCoordinator
                 )
-                vm = m
-                m.start()
             }
         }
         .onDisappear { vm?.stop() }
@@ -456,7 +473,11 @@ struct BootUnlockApprovalCard: View {
     private func content(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
         switch vm.state {
         case .idle:
-            EmptyView()
+            if promptWhenIdle {
+                idleCheckCard(vm: vm, c: c)
+            } else {
+                EmptyView()
+            }
         case .waiting(let req):
             waitingCard(req: req, vm: vm, c: c)
         case .approving:
@@ -489,6 +510,34 @@ struct BootUnlockApprovalCard: View {
                     Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
                     FSGhostButton("Retry", block: true) { Task { await vm.retry() } }
                         .accessibilityIdentifier("sd-approve-unlock-retry")
+                }
+            }
+        }
+    }
+
+    /// Idle prompt: a user-initiated check for a pending unlock. The mailbox
+    /// read is biometric, so this tap is what authorizes Face ID — it can't be
+    /// done silently on a poll. On success the VM flips to `.waiting` and the
+    /// Approve button below replaces this card.
+    private func idleCheckCard(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
+        sectionWrap("BOX UNLOCK", c: c) {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Is your box waiting to unlock?")
+                        .font(FS.font.body()).foregroundColor(c.text)
+                    Text("If you just powered it on, it may be waiting for you to release its disk key. Check now to approve — you'll confirm with Face ID.")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    FSPrimaryButton(checking ? "Checking…" : "Check for unlock request", block: true) {
+                        guard !checking else { return }
+                        checking = true
+                        Task {
+                            await vm.checkNow()
+                            checking = false
+                        }
+                    }
+                    .disabled(checking)
+                    .accessibilityIdentifier("sd-check-unlock")
                 }
             }
         }

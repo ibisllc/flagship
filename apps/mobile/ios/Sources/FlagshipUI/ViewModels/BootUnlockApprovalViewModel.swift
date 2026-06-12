@@ -181,4 +181,13 @@ public final class BootUnlockApprovalViewModel {
         state = .idle
         _ = await pollOnce()
     }
+
+    /// User-initiated single fetch (the server-page "Check for unlock request"
+    /// button). The mailbox read is IRK-signed and the IRK is biometric-gated,
+    /// so this MUST be driven by a tap — it can't run on a background timer
+    /// (Face ID can't fire unattended). On success the state flips to `.waiting`
+    /// and the card shows the Approve action.
+    public func checkNow() async {
+        _ = await pollOnce()
+    }
 }
