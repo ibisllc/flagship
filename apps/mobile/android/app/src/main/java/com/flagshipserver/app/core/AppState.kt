@@ -227,9 +227,11 @@ class AppState(
     fun hasLiveUnlockRequest(fqdn: String): Boolean =
         _serversAwaitingApproval.value.contains(fqdn.lowercase())
 
-    /** Liveness for [pod] using the account-level waiting set. */
+    /** Liveness for [pod] using the cheap directory `awaitingUnlock` flag OR
+     *  the account-level (biometric-watcher) waiting set — either means the box
+     *  is actively waiting, so it must not read "never came online". */
     fun liveness(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = hasLiveUnlockRequest(pod.fqdn))
+        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || hasLiveUnlockRequest(pod.fqdn))
 
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
@@ -341,16 +343,18 @@ class AppState(
         description: String? = null,
         cameOnline: Boolean = true,
         registeredAt: Long = 0,
+        awaitingUnlock: Boolean = false,
     ): String {
         val target = fqdn.lowercase()
         val existing = _pods.value
         val idx = existing.indexOfFirst { it.fqdn.lowercase() == target }
         if (idx >= 0) {
             val old = existing[idx]
-            // Already online with a confirmed check-in — nothing to do (don't
-            // clobber a richer name). A previously-dead pod that has since come
-            // online is re-flowed below so its "never came online" pill clears.
-            if (old.status == PodInfo.Status.ONLINE && old.cameOnline) return old.podId
+            // Already online with a confirmed check-in AND not waiting — nothing
+            // to do (don't clobber a richer name). A previously-dead pod that has
+            // since come online, OR one now waiting for an unlock approval, is
+            // re-flowed below so its pill updates.
+            if (old.status == PodInfo.Status.ONLINE && old.cameOnline && !awaitingUnlock) return old.podId
             _pods.value = existing.toMutableList().also {
                 it[idx] = old.copy(
                     name = old.name.ifEmpty { name },
@@ -360,12 +364,13 @@ class AppState(
                     cameOnline = cameOnline,
                     // Keep a known registration time; never downgrade to 0.
                     registeredAt = if (registeredAt > 0) registeredAt else old.registeredAt,
+                    awaitingUnlock = awaitingUnlock,
                 )
             }
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
-        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline, registeredAt = registeredAt))
+        addPod(PodInfo(podId = id, name = name, description = description, fqdn = fqdn, status = PodInfo.Status.ONLINE, cameOnline = cameOnline, registeredAt = registeredAt, awaitingUnlock = awaitingUnlock))
         return id
     }
 
@@ -485,6 +490,12 @@ data class PodInfo(
      *  registered RECENTLY but hasn't checked in yet is provisioning, not dead.
      *  0 ⇒ unknown / not registered. Mirror of iOS PodInfo.registeredAt. */
     val registeredAt: Long = 0,
+    /** Cheap, non-biometric "this box is waiting for a boot-unlock approval
+     *  right now" flag, straight from `/pods` (`awaitingUnlock`). Feeds the
+     *  liveness classifier so a locked box reads "waiting for approval" (and
+     *  the decommission/delete stays hidden) instead of "never came online".
+     *  Mirror of iOS PodInfo.awaitingUnlock. */
+    val awaitingUnlock: Boolean = false,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 

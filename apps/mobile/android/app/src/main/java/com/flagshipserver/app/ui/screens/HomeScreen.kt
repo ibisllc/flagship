@@ -121,9 +121,10 @@ fun HomeScreen(
     // list by derived liveness. Pure presentation; every action is untouched.
     var statusFilter by remember { mutableStateOf(HomeStatusFilter.ALL) }
 
-    // Derived liveness per pod (folds in the account-level waiting signal).
+    // Derived liveness per pod (folds in the cheap directory awaitingUnlock
+    // flag OR the account-level biometric-watcher waiting signal).
     fun livenessOf(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = awaitingApproval.contains(pod.fqdn.lowercase()))
+        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercase()))
 
     // Per-filter counts off the full pod set (search-independent) so the chip
     // badges read the account-wide totals.

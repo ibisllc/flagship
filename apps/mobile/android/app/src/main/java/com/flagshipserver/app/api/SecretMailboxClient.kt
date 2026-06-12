@@ -195,6 +195,11 @@ data class PodDirectoryEntry(
      *  null when the daemon never reported (or `.com` dropped it). Consumed by
      *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
     val signedStatus: SignedDaemonStatus? = null,
+    /** Cheap directory signal: the box has a LIVE boot-unlock request parked
+     *  right now. Lets the phone show "waiting for approval" for a locked box
+     *  (instead of "never came online") without the biometric mailbox read.
+     *  Defaulted ⇒ absent on a pre-field Worker is false. Mirror of iOS. */
+    val awaitingUnlock: Boolean = false,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

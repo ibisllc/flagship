@@ -159,7 +159,7 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  *     window → genuinely dead, offer the free-the-name delete.
  *
  * @param {object} server  registered server (may carry `revoked`)
- * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert)
+ * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert / awaitingUnlock)
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
@@ -167,8 +167,10 @@ export function classifyServer(server, pod, opts = {}) {
   const now = opts.now ?? Date.now();
   if (!pod || pod.lastReported == null) {
     // Registered but never checked in. A live unlock request means it's
-    // actively waiting for the owner — not dead.
-    if (opts.hasLiveUnlockRequest) {
+    // actively waiting for the owner — not dead. `awaitingUnlock` is the cheap,
+    // unauthenticated directory signal (a live parked unlock request); the
+    // explicit opt is the biometric-read fallback. Either one ⇒ waiting.
+    if (opts.hasLiveUnlockRequest || pod?.awaitingUnlock) {
       return { kind: "waiting-for-approval", label: "waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.

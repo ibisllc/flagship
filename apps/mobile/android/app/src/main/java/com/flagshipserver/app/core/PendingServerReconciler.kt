@@ -73,6 +73,7 @@ class PendingServerReconciler(
                 name = pendingName ?: serverNameFromFqdn(fqdn),
                 cameOnline = entry.cameOnline,
                 registeredAt = entry.registeredAt ?: 0,
+                awaitingUnlock = entry.awaitingUnlock,
             )
         }
 
