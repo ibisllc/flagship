@@ -464,6 +464,11 @@ fun FSListRow(
     subtitle: String? = null,
     detail: String? = null,
     onClick: (() -> Unit)? = null,
+    // Optional content stacked UNDER the text lines, left-aligned, on its own
+    // row — for a status pill whose label ("Never came online") would be
+    // crushed in the right-floated `trailing` slot. The chevron / navigation
+    // accessory stays in `trailing`; the pill goes here. Null ⇒ no extra row.
+    below: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
     Row(
@@ -502,6 +507,10 @@ fun FSListRow(
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                 )
+            }
+            if (below != null) {
+                Spacer(Modifier.height(FS.space.s1))
+                below()
             }
         }
         Spacer(Modifier.width(FS.space.s2))

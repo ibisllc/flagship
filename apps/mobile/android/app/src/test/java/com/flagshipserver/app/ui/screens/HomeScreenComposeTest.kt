@@ -80,6 +80,9 @@ class HomeScreenComposeTest {
         composeRule.onNodeWithText("Welcome back, harry.").assertIsDisplayed()
         composeRule.onAllNodesWithText("home.harry.flagship.services")
             .onFirst().assertIsDisplayed()
+        // The status pill now renders in the row's stacked `below` slot (under
+        // the text), not the right-floated trailing slot — it still shows.
+        composeRule.onAllNodesWithText("Online").onFirst().assertIsDisplayed()
     }
 
     @Test fun failedState_rendersErrorCardWithMessage() {

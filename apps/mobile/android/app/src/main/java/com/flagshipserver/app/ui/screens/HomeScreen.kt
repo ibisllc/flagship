@@ -416,7 +416,10 @@ fun ServerRow(
                 onClick = onTap,
                 onLongClick = { menuOpen = true },
             ),
-            trailing = {
+            below = {
+                // Status pill (+ Leader badge) stacks UNDER the text on its own
+                // line — a long label like "Never came online" would be crushed
+                // in the right-floated trailing slot against the server name.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
@@ -429,8 +432,11 @@ fun ServerRow(
                         kind = PodStatusStyle.pillKind(liveness, pod.status),
                         modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
                     )
-                    Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
                 }
+            },
+            trailing = {
+                // Navigation chevron stays right, vertically centered.
+                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
             },
         )
 
