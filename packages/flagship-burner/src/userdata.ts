@@ -1485,9 +1485,17 @@ printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
 # B. SEAL the random key for the phone + upload to .com — BEFORE removing the
 #    burn passphrase, so a seal/upload failure leaves the box still openable
 #    (recoverable) instead of bricked. .com stores ciphertext only.
+#
+#    Seal to the account IRK (the blob's authCode.userPubKey) — a key the phone
+#    can re-derive at unlock time (Keystore.deriveIRK) AND that survives cloud
+#    recovery. NOT phoneDelegatedPubKey: the phone generates that per-server
+#    keypair at create-time and DISCARDS the private half, so a disk key sealed
+#    to it could NEVER be unsealed by any phone (the bug that made phone-approval
+#    unlock fail with "couldn't unseal the disk key with this phone's keys").
 report_phase sealing
+USER_PUB_HEX="$(jq -r .authCode.userPubKey "$BLOB_JSON")"
 SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
-    --bak-ed25519-pub "$PHONE_DELEGATED_PUBKEY" \\
+    --bak-ed25519-pub "$USER_PUB_HEX" \\
     --in "$LUKS_KEY" | tr -d '\\n')"
 if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
     echo "[flagship-bootstrap] FATAL: seal-for-bak produced nothing — keeping burn passphrase + plaintext key (recoverable), aborting"

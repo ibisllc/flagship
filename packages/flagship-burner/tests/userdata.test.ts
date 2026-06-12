@@ -541,7 +541,12 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("cryptsetup luksRemoveKey");
     // seal-for-bak + sign-sealed-key + POST to sealed-luks-key, like install.sh.
     expect(b).toContain("install-helper.ts seal-for-bak");
-    expect(b).toContain("--bak-ed25519-pub \"$PHONE_DELEGATED_PUBKEY\"");
+    // Seal to the account IRK (userPubKey) — a phone-rederivable, recovery-
+    // surviving key — NOT phoneDelegatedPubKey (whose private half the phone
+    // discards, which made phone-approval unlock fail to unseal).
+    expect(b).toContain('USER_PUB_HEX="$(jq -r .authCode.userPubKey "$BLOB_JSON")"');
+    expect(b).toContain("--bak-ed25519-pub \"$USER_PUB_HEX\"");
+    expect(b).not.toContain("--bak-ed25519-pub \"$PHONE_DELEGATED_PUBKEY\"");
     expect(b).toContain("install-helper.ts sign-sealed-key");
     expect(b).toContain("/sealed-luks-key");
     // Plaintext key shredded after sealing — never persisted.
@@ -1104,7 +1109,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "ada5b71b70811dabc4b85c9f8cd9b2f8bc07eb9c7510e553e128cb38031488c6",
+      "ba0f4fcc758a1fda7f6d6649f941059de0adc17bae8756b3819ecfe0b9ab5c4f",
     );
   });
 });
