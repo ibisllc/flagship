@@ -139,7 +139,11 @@ public final class AppState {
     /// `PodInfo.livenessState(hasLiveUnlockRequest:)` so callsites don't repeat
     /// the set lookup.
     public func liveness(for pod: PodInfo) -> PodInfo.LivenessState {
-        pod.livenessState(hasLiveUnlockRequest: hasLiveUnlockRequest(forFqdn: pod.fqdn))
+        // The cheap directory `awaitingUnlock` flag OR the biometric-watcher set
+        // — either one means the box is actively waiting, so it must not read as
+        // "never came online" (and the decommission/delete must stay hidden).
+        let waiting = pod.awaitingUnlock || hasLiveUnlockRequest(forFqdn: pod.fqdn)
+        return pod.livenessState(hasLiveUnlockRequest: waiting)
     }
 
     /// W3 — durable list of clouds this phone is a member of. The
@@ -389,15 +393,17 @@ public final class AppState {
         name: String,
         description: String? = nil,
         cameOnline: Bool = true,
-        registeredAt: Int64 = 0
+        registeredAt: Int64 = 0,
+        awaitingUnlock: Bool = false
     ) -> String {
         let target = fqdn.lowercased()
         if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
             let old = pods[idx]
-            // Already online with a confirmed check-in — nothing to do (don't
-            // clobber a richer name). A previously-dead pod that has since come
-            // online must still be re-flowed below so its pill clears.
-            if old.status == .online && old.cameOnline { return old.podId }
+            // Already online with a confirmed check-in AND not waiting — nothing
+            // to do (don't clobber a richer name). A previously-dead pod that has
+            // since come online, OR one that's now waiting for an unlock approval,
+            // must still be re-flowed below so its pill updates.
+            if old.status == .online && old.cameOnline && !awaitingUnlock { return old.podId }
             pods[idx] = PodInfo(
                 podId: old.podId,
                 name: old.name.isEmpty ? name : old.name,
@@ -407,7 +413,8 @@ public final class AppState {
                 pendingAuthCodeSerial: nil,
                 cameOnline: cameOnline,
                 // Keep a known registration time; never downgrade to 0.
-                registeredAt: registeredAt > 0 ? registeredAt : old.registeredAt
+                registeredAt: registeredAt > 0 ? registeredAt : old.registeredAt,
+                awaitingUnlock: awaitingUnlock
             )
             return old.podId
         }
@@ -419,7 +426,8 @@ public final class AppState {
             fqdn: fqdn,
             status: .online,
             cameOnline: cameOnline,
-            registeredAt: registeredAt
+            registeredAt: registeredAt,
+            awaitingUnlock: awaitingUnlock
         ))
         return id
     }
@@ -550,6 +558,16 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     public let demoServer: DemoServerBlock?
     public var id: String { podId }
 
+    /// Cheap, non-biometric "this box is waiting for a boot-unlock approval
+    /// right now" flag, straight from the `/pods` directory (`awaitingUnlock`).
+    /// A locked box can't reach its daemon BFF and won't heartbeat, so without
+    /// this it would read "Never came online" past the grace window; the phone's
+    /// only other signal (the IRK mailbox read) is biometric and can't poll
+    /// unattended. Feeds the liveness classifier so a waiting box reads
+    /// "waiting for approval" (and the dangerous decommission/delete stays
+    /// hidden). Defaults false (pending/demo/pre-field-Worker pods).
+    public let awaitingUnlock: Bool
+
     public init(
         podId: String,
         name: String,
@@ -559,7 +577,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         pendingAuthCodeSerial: String? = nil,
         demoServer: DemoServerBlock? = nil,
         cameOnline: Bool = true,
-        registeredAt: Int64 = 0
+        registeredAt: Int64 = 0,
+        awaitingUnlock: Bool = false
     ) {
         self.podId = podId
         self.name = name
@@ -570,6 +589,7 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.demoServer = demoServer
         self.cameOnline = cameOnline
         self.registeredAt = registeredAt
+        self.awaitingUnlock = awaitingUnlock
     }
 
     /// Derived per-server liveness — the single classifier the list, the

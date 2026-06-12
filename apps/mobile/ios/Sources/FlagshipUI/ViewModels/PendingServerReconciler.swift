@@ -100,7 +100,8 @@ public struct PendingServerReconciler {
                 fqdn: fqdn,
                 name: pendingName ?? Self.serverNameFromFqdn(fqdn),
                 cameOnline: entry.cameOnline,
-                registeredAt: entry.registeredAt ?? 0
+                registeredAt: entry.registeredAt ?? 0,
+                awaitingUnlock: entry.awaitingUnlock
             )
         }
 

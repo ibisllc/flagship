@@ -1250,6 +1250,7 @@ export async function tryControlPlane(
           routing: storage.routing,
           authCodes: storage.authCodes,
           provisionStatus: storage.provisionStatus,
+          secretMailbox: storage.secretMailbox,
         },
         decodeURIComponent(m[1]!),
       ),

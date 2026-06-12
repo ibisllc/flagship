@@ -50,6 +50,7 @@ function deps(
     routing: storage.routing,
     authCodes: storage.authCodes,
     provisionStatus: storage.provisionStatus,
+    secretMailbox: storage.secretMailbox,
     now: () => NOW,
     ...over,
   };
@@ -62,6 +63,7 @@ interface PodsResponse {
     state: string;
     lastReported: number | null;
     currentCert: { sha256: string | null } | null;
+    awaitingUnlock: boolean;
   }>;
   pending: Array<{
     orderRef: string;
@@ -81,6 +83,55 @@ async function withServer(storage: InMemoryStorage) {
     registeredAt: NOW - 50_000,
   });
 }
+
+describe("awaitingUnlock (cheap, non-biometric boot-unlock-waiting signal)", () => {
+  function unlockRequest(serverDomain: string, expiresAt: number) {
+    return {
+      serverDomain,
+      username: "harry",
+      requestNonceHex: "ab".repeat(32),
+      stkPubHex: "22".repeat(32),
+      purpose: "unlock-key" as const,
+      requestIssuedAt: NOW - 1_000,
+      requestSignatureHex: "cd".repeat(64),
+      deviceInfoJson: null,
+      postedAt: NOW - 1_000,
+      expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: null,
+      responseIssuedAt: null,
+      respondedAt: null,
+      consumedAt: null,
+    };
+  }
+
+  it("flags a box with a LIVE unlock-key request so a locked box isn't 'never came online'", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const put = await storage.secretMailbox.putRequest(
+      unlockRequest("home1.harry.flagship.services", NOW + 60_000),
+    );
+    expect(put.ok).toBe(true);
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(true);
+  });
+
+  it("does NOT flag a box with no pending unlock request", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(false);
+  });
+
+  it("does NOT flag when secretMailbox is unwired (degrades to false, never throws)", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const r = await handleGetUserPods(deps(storage, { secretMailbox: undefined }), "harry");
+    expect(r.status).toBe(200);
+    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(false);
+  });
+});
 
 describe("GET /api/users/:u/pods (merged registered + pending)", () => {
   it("returns registered servers tagged online AND active orders tagged pending in one fetch", async () => {

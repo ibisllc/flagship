@@ -33,6 +33,7 @@ import type {
   RoutingStorage,
   AuthCodeStorage,
   ProvisionStatusStorage,
+  SecretMailboxStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import {
@@ -54,6 +55,10 @@ export interface PodInventoryDeps {
    *  individually guarded so a `provision_status` failure can never empty or
    *  500 the authoritative list. */
   provisionStatus?: ProvisionStatusStorage;
+  /** The phone-as-unlock-endpoint mailbox. Used ONLY to derive the cheap,
+   *  unauthenticated `awaitingUnlock` flag (a box with a live boot-unlock
+   *  request) so a locked box isn't misclassified "never came online". */
+  secretMailbox?: SecretMailboxStorage;
   now?: () => number;
 }
 
@@ -101,6 +106,26 @@ export async function handleGetUserPods(
   }
 
   const now = (deps.now ?? (() => Date.now()))();
+
+  // Cheap, non-biometric "is this box waiting for a boot-unlock approval?"
+  // signal. A locked box can't reach its daemon BFF (the disk is sealed) and
+  // won't POST a daemon-status heartbeat, so without this it falls through to
+  // "never came online" past the grace window — and the phone's only other
+  // signal (the IRK-signed mailbox read) is biometric and can't run unattended,
+  // so it can't repopulate after an app restart. Reading the mailbox here needs
+  // no auth: listPendingForUser already returns only un-consumed, un-expired,
+  // un-answered rows. Guarded so a failure never drops or fails the list.
+  const awaitingUnlock = new Set<string>();
+  if (deps.secretMailbox) {
+    try {
+      const pendingReqs = await deps.secretMailbox.listPendingForUser(username, now);
+      for (const r of pendingReqs) {
+        if (r.purpose === "unlock-key") awaitingUnlock.add(r.serverDomain.toLowerCase());
+      }
+    } catch {
+      /* enrichment failure must never empty or 500 the authoritative list */
+    }
+  }
 
   const pods = await Promise.all(
     servers.map(async (s) => {
@@ -175,6 +200,12 @@ export async function handleGetUserPods(
           : null,
         signedStatus,
         appsServed,
+        // Cheap directory-level "this box is waiting for a boot-unlock
+        // approval right now" flag, so the client shows "waiting for approval"
+        // (and suppresses the dangerous decommission/delete) for a locked box
+        // instead of "never came online" — without needing the biometric
+        // mailbox read.
+        awaitingUnlock: awaitingUnlock.has(s.serverDomain.toLowerCase()),
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
         state: "online" as const,
