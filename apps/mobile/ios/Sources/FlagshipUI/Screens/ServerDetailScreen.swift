@@ -22,6 +22,10 @@ public struct ServerDetailScreen: View {
     /// has no `ServerDetailResponse.serverFqdn`). The loaded path prefers the
     /// response's own FQDN.
     let deadServerFqdn: String?
+    /// The directory's cheap `awaitingUnlock` flag for this box. When true the
+    /// box is definitely waiting for a boot-unlock approval, so the approval
+    /// card must be offered REGARDLESS of whether the daemon BFF detail loaded.
+    let awaitingUnlock: Bool
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -32,6 +36,7 @@ public struct ServerDetailScreen: View {
         deadServer: Bool = false,
         serverName: String? = nil,
         deadServerFqdn: String? = nil,
+        awaitingUnlock: Bool = false,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
@@ -41,6 +46,7 @@ public struct ServerDetailScreen: View {
         self.deadServer = deadServer
         self.serverName = serverName
         self.deadServerFqdn = deadServerFqdn
+        self.awaitingUnlock = awaitingUnlock
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
@@ -70,10 +76,14 @@ public struct ServerDetailScreen: View {
                 // polls the boot relay (not the box) and renders nothing until a
                 // request is actually waiting.
                 if let fqdn = approvalFqdn, !fqdn.isEmpty {
-                    // Prompt the user to check for a pending unlock when the box
-                    // isn't confirmed online (an online box has already
-                    // unlocked, so there's nothing to approve).
-                    BootUnlockApprovalCard(serverDomain: fqdn, promptWhenIdle: !isLoaded)
+                    // Offer the unlock-approval check when the directory says the
+                    // box is waiting (awaitingUnlock) OR the daemon BFF detail
+                    // hasn't loaded (a locked box can't answer it). An online,
+                    // loaded box that isn't waiting shows nothing.
+                    BootUnlockApprovalCard(
+                        serverDomain: fqdn,
+                        promptWhenIdle: awaitingUnlock || !isLoaded
+                    )
                 }
                 switch state {
                 case .idle, .loading:

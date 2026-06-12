@@ -655,6 +655,7 @@ struct ServerDetailContainer: View {
                     deadServer: pod.map { app.liveness(for: $0) == .dead } ?? false,
                     serverName: pod?.name,
                     deadServerFqdn: pod?.fqdn,
+                    awaitingUnlock: pod?.awaitingUnlock ?? false,
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
