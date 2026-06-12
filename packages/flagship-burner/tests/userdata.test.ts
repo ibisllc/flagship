@@ -203,6 +203,34 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
   });
 
+  it("installs docker so the daemon can run app containers + the data layer", () => {
+    const b = bootstrap();
+    // Root cause of the field "no docker" crash loop: docker was never
+    // installed, so the daemon's ensureNetwork (`docker network create`)
+    // hit ENOENT. The bootstrap apt line must install the engine, the CLI
+    // (explicitly — --no-install-recommends drops the docker-cli Recommends),
+    // and compose (the `docker compose` subcommand init.sh calls).
+    expect(b).toMatch(/apt-get install -y --no-install-recommends .*docker\.io docker-cli docker-compose/);
+    // docker.service is enabled so the engine is up on first real boot.
+    expect(b).toContain("systemctl enable docker.service containerd.service");
+  });
+
+  it("brings up the data layer as a gated, daemon-independent first-boot oneshot", () => {
+    const b = bootstrap();
+    expect(b).toContain("cat > /etc/systemd/system/flagship-data-services.service");
+    expect(b).toContain("ExecStart=/opt/flagship/installer/data-services/init.sh");
+    expect(b).toContain("After=docker.service network-online.target");
+    // Gated on the very file init.sh writes — re-running boots skip it once set up.
+    expect(b).toContain("ConditionPathExists=!/var/flagship/data-services.env");
+    expect(b).toContain("Type=oneshot");
+    // Enabled alongside the other first-boot units…
+    expect(b).toContain("flagship-data-services.service");
+    // …but NEVER ordered before the daemon — a multi-image pull must not delay
+    // the box reaching its green padlock.
+    expect(b).not.toMatch(/flagship-data-services\.service[\s\S]*Before=flagship-daemon/);
+    expect(b).not.toMatch(/Before=flagship-daemon[\s\S]*flagship-data-services/);
+  });
+
   it("reports canonical phases ONLY to the order-status channel (one channel)", () => {
     const b = bootstrap();
     // The single sink: POST /api/order/<serial>/status.
@@ -1076,7 +1104,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "92c3684a7c782d521f8b708207a4d4a941ad1dba19c4279f79cd454f24a01724",
+      "ada5b71b70811dabc4b85c9f8cd9b2f8bc07eb9c7510e553e128cb38031488c6",
     );
   });
 });

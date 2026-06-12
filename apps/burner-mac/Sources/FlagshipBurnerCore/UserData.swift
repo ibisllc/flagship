@@ -808,9 +808,17 @@ public enum UserData {
         # Install Node 20 + every tool the bootstrap and initramfs hook need. Do NOT
         # assume the installer's packages: list ran — a missing jq once parsed the
         # recipe into empty values and mis-sealed the LUKS key. NodeSource refreshes apt.
+        #
+        # docker.io/docker-cli/docker-compose: the daemon runs every marketplace app as
+        # a hardened container and brings up the data-layer (postgres/minio/redis/...)
+        # via compose, so docker is REQUIRED — without it the daemon's ensureNetwork
+        # (`docker network create`) used to crash the process at startup. docker-cli is
+        # listed explicitly because --no-install-recommends drops it (it's only a
+        # Recommends of docker.io); docker-compose ships the `docker compose` subcommand
+        # the data-services init.sh calls.
         export DEBIAN_FRONTEND=noninteractive
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm"
-        apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg\(wpaPkg)
+        apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg docker.io docker-cli docker-compose\(wpaPkg)
         # Debian's 'nodejs' package does NOT bundle npm (separate package); NodeSource's does.
         # On Debian 13 the NodeSource setup_20.x repo may not apply, leaving npm/npx absent —
         # which fails the entire build below (npm install, tsc, gen-identity, seal-for-bak).
@@ -1065,11 +1073,42 @@ public enum UserData {
         ENV
         chmod 600 /etc/flagship-bootstrap.env
 
+        # Data-layer first-boot bring-up. The daemon hands every marketplace app a
+        # provisioned Postgres/MinIO/Redis via the compose stack in the clone; init.sh
+        # generates the secrets file (/var/flagship/data-services.env — the exact path
+        # the daemon reads) and `docker compose up -d`s the stack. Run as a gated
+        # oneshot AFTER docker is up. Deliberately NOT ordered before flagship-daemon:
+        # pulling five images can take minutes and must never delay the box reaching
+        # its green padlock — the daemon degrades gracefully ("data layer disabled")
+        # until the env file appears and picks it up on its next restart. Best-effort:
+        # init.sh's own exit status never gates anything (the containers are already
+        # `up -d` by the time its healthcheck wait could time out).
+        cat > /etc/systemd/system/flagship-data-services.service <<'UNIT'
+        [Unit]
+        Description=Flagship data-layer (postgres/minio/redis/forgejo/chromium)
+        After=docker.service network-online.target
+        Wants=docker.service network-online.target
+        ConditionPathExists=!/var/flagship/data-services.env
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        WorkingDirectory=/opt/flagship/installer/data-services
+        ExecStart=/opt/flagship/installer/data-services/init.sh
+
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+
         # daemon-reload is a no-op (and may warn) in the install chroot; the
         # enable symlinks are what matter and they persist into the booted
         # system. Do NOT `systemctl start` — systemd isn't the init here.
         systemctl daemon-reload 2>/dev/null || true
-        systemctl enable flagship-daemon.service flagship-first-boot-register.service || \\
+        # docker.io's postinst already enables docker/containerd, but enable again
+        # explicitly so a recommends-stripped or partial install still comes up.
+        systemctl enable docker.service containerd.service 2>/dev/null || \\
+            echo "[flagship-bootstrap] WARNING: could not enable docker (daemon will retry network setup on boot)"
+        systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service || \\
             echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
         echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
         \(wifiSafetyNet)
