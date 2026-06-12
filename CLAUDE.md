@@ -123,7 +123,22 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
-### 2026-06-12 (later) — phone-approval unlock ROOT-CAUSED #2: premount/cryptroot mapper-name mismatch
+### 2026-06-12 (later) — ⭐ PHONE-APPROVAL UNLOCK E2E PROVEN ON METAL + mapper-name root cause
+
+**MILESTONE: the full phone-approval LUKS chain is validated end-to-end on real
+hardware.** az2.harry: burn → phone lease granted → box-sealed lease
+self-unlock → (after the in-place mapper-name patch below) clean cryptroot
+handoff → daemon up → Let's Encrypt per-box cert minted (issuer YR2, 20:01 UTC)
+→ `https://az2.harry.flagship.services/` HTTP 200 with a verifying chain.
+The 3×Enter + console-patch recovery worked exactly as designed.
+
+**🐛 NEW (track): the 5-minutely STK-signed daemon-status heartbeat is NOT
+landing** — 60+ min after cert mint, `/pods` shows
+`lastReported/signedStatus/currentCert` all null for az2 (and az). The box
+serves fine; impact is phone-side cert PINNING (no pin installs without
+`signedStatus`) + liveness detail. Next probe (console, `debug` user):
+`journalctl -u flagship-daemon --no-pager | grep -i -E 'daemon-status|heartbeat|report'`
+— then check the `.com` ingest path (handler auth? D1 write?).
 
 The az2 live run got further than ever (burn ok, phone lease granted, box
 self-unlocked from the box-sealed lease, VG activated) then hung forever at
