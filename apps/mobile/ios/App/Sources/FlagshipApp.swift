@@ -46,6 +46,7 @@ struct FlagshipApp: App {
         // endpoints on the SAME box; share the box-pinned session so a rogue
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
+        self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -192,6 +193,10 @@ struct FlagshipApp: App {
     // in dev/preview/demo.
     private let mockLockPower = MockLockPowerClient()
     private let liveLockPower: any LockPowerClient
+    // Front-page (owner-assignable apex) box-direct client — same pinned
+    // session and live/mock split as lock/power.
+    private let mockFrontPage = MockFrontPageClient()
+    private let liveFrontPage: any FrontPageClient
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -214,6 +219,9 @@ struct FlagshipApp: App {
     private var activeLockPower: any LockPowerClient {
         dev.useLiveClient ? liveLockPower : mockLockPower
     }
+    private var activeFrontPage: any FrontPageClient {
+        dev.useLiveClient ? liveFrontPage : mockFrontPage
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -230,6 +238,7 @@ struct FlagshipApp: App {
                 .environment(\.pairingRelayClient, pairingRelay)
                 .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.lockPowerClient, activeLockPower)
+                .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)

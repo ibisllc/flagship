@@ -1365,6 +1365,20 @@ export type PhoneOrder =
       includeUserData: boolean;
       password?: string;
       issuedAt: number;
+    }
+  | {
+      /**
+       * Choose what the box's apex serves: a 302 to the named installed
+       * service's tier-1 canonical (`https://<label>.<serverId>/`), or
+       * the default Flagship page when `label` is "" (clear). The daemon
+       * validates the label against its installed services at request
+       * time and falls back to the default page if it disappears.
+       */
+      type: "set-front-page";
+      serverId: ServerId;
+      /** Service url-label to front-page; "" clears the assignment. */
+      label: string;
+      issuedAt: number;
     };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
@@ -1380,6 +1394,7 @@ const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
 const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
 const TAG_ORDER_BACKUP_APP = "flagship/order/backup-app/v1";
+const TAG_ORDER_SET_FRONT_PAGE = "flagship/order/set-front-page/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1459,6 +1474,11 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
           o.password ?? "",
           o.issuedAt,
         ].join("|"),
+      );
+    case "set-front-page":
+      legacyFieldGuard("label", o.label);
+      return enc.encode(
+        [TAG_ORDER_SET_FRONT_PAGE, o.serverId, o.label, o.issuedAt].join("|"),
       );
   }
 }

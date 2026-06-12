@@ -67,6 +67,7 @@ import com.flagshipserver.app.push.DeadManReminderScheduler
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -74,6 +75,8 @@ import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.DeadManPhase
 import com.flagshipserver.app.viewmodels.DeadManViewModel
+import com.flagshipserver.app.viewmodels.FrontPagePhase
+import com.flagshipserver.app.viewmodels.FrontPageViewModel
 import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
@@ -140,6 +143,8 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
         (detail as? LoadingState.Loaded)?.let { d ->
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            FrontPageCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             PowerCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
@@ -364,6 +369,124 @@ private fun humanBytes(bytes: Long): String {
     var i = 0
     while (v >= k && i < units.lastIndex) { v /= k; i++ }
     return "%.1f %s".format(v, units[i])
+}
+
+// "Front page" picker: choose which installed app the box's root domain
+// redirects to (a visible 302 to the app's tier-1 canonical), or keep the
+// default Flagship page. Save signs a `set-front-page` order with the owner
+// IRK (biometric inside the signer) and POSTs it pod-direct. Mirror of iOS
+// FrontPageCard.
+@Composable
+private fun FrontPageCard(serverDomain: String) {
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+
+    val vm = remember(serverDomain) {
+        FrontPageViewModel(
+            serverDomain = serverDomain,
+            signer = { reason -> Keystore.deriveIRK(reason) },
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    val current by vm.current.collectAsState()
+    val options by vm.options.collectAsState()
+    var selection by remember { mutableStateOf("") }
+
+    LaunchedEffect(serverDomain) {
+        vm.load()
+        selection = vm.current.value ?: ""
+    }
+
+    val busy = phase is FrontPagePhase.Signing || phase is FrontPagePhase.Posting
+
+    Text(
+        "Front page",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "What visitors see at $serverDomain. Point it at one of your apps, or keep the default Flagship page.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            when (phase) {
+                is FrontPagePhase.Idle, is FrontPagePhase.Loading -> {
+                    Text("Loading…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                }
+                is FrontPagePhase.Failed -> {
+                    Text(
+                        (phase as FrontPagePhase.Failed).message,
+                        color = FS.colors.danger,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                    FSSecondaryButton(
+                        label = "Retry",
+                        onClick = {
+                            scope.launch {
+                                vm.load()
+                                selection = vm.current.value ?: ""
+                            }
+                        },
+                        block = true,
+                    )
+                }
+                else -> {
+                    // "" = the default page; then one row per installed app.
+                    // An assigned-but-uninstalled label still shows (marked)
+                    // so the owner can see and clear a stale assignment.
+                    val rows = buildList {
+                        add("" to "Default Flagship page")
+                        for (o in options) add(o.urlLabel to "${o.name ?: o.urlLabel} — ${o.urlLabel}")
+                        current?.let { cur ->
+                            if (options.none { it.urlLabel == cur }) add(cur to "$cur (no longer installed)")
+                        }
+                    }
+                    for ((value, labelText) in rows) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = selection == value, enabled = !busy) {
+                                    selection = value
+                                },
+                        ) {
+                            RadioButton(
+                                selected = selection == value,
+                                onClick = { if (!busy) selection = value },
+                            )
+                            Text(labelText, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                        }
+                    }
+                    FSSecondaryButton(
+                        label = if (busy) "Saving…" else "Save",
+                        onClick = {
+                            if (!busy && selection != (current ?: "")) {
+                                scope.launch {
+                                    vm.save(selection)
+                                    val p = vm.phase.value
+                                    if (p is FrontPagePhase.Failed) {
+                                        toasts.error(p.message)
+                                        selection = vm.current.value ?: ""
+                                    } else {
+                                        toasts.success(
+                                            if (selection.isEmpty()) "Front page reset to default"
+                                            else "Front page set to $selection",
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !busy && selection != (current ?: ""),
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-front-page-save" },
+                    )
+                }
+            }
+        }
+    }
 }
 
 // Manual lock-&-power buttons. "Lock and turn off" / "Lock and restart"

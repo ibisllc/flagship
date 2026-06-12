@@ -103,6 +103,21 @@ public extension EnvironmentValues {
     }
 }
 
+/// Box-direct delivery for the owner-assignable apex ("front page").
+/// Two unauthenticated reads + one IRK-signed write on the box's pinned
+/// canonical pipe. Defaults to the in-process Mock so previews/tests are
+/// inert.
+private struct FrontPageClientKey: EnvironmentKey {
+    static let defaultValue: any FrontPageClient = MockFrontPageClient()
+}
+
+public extension EnvironmentValues {
+    var frontPageClient: any FrontPageClient {
+        get { self[FrontPageClientKey.self] }
+        set { self[FrontPageClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed

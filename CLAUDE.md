@@ -123,6 +123,45 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
+### 2026-06-12 (latest) — owner-assignable apex ("Front page") shipped on all surfaces + console banner fixed
+
+**Front page (owner-assignable apex) — full slice, all surfaces.** The box
+apex now 302s (no-store, never 301) to an installed service's tier-1
+canonical, or serves the default Flagship card when unassigned. Design
+rationale (from the apex discussion): REDIRECT, not serve-in-place — one
+origin per app (no split cookie jars / zombie service workers on reassign),
+and the URL bar lands on the pinned trust tier.
+- **Protocol:** new `set-front-page` PhoneOrder
+  (`flagship/order/set-front-page/v1|<serverId>|<label>|<issuedAt>`, "" =
+  clear) + cross-platform pinned vector (`bc57770c…`, asserted by TS, webapp,
+  Swift, Kotlin).
+- **Daemon:** `frontPage.ts` — persisted `FrontPageStore`
+  (/var/flagship/front-page.json), `GET/POST /api/front-page` (POST is the
+  owner-IRK envelope path, same as `/api/power`; 422 on uninstalled label),
+  the 302 itself (GET/HEAD on "/", APEX HOST ONLY — LAN IPs + /api/* are
+  untouchable by construction), fallback to the default card when the
+  assigned service disappears.
+- **Clients:** "Front page" picker on server-detail — webapp
+  (lib/frontPage.js + section), iOS (FrontPageCard + FrontPageViewModel +
+  SetFrontPageOrder/FrontPageClient in shared, env-injected, pinned session),
+  Android (FrontPageCard + FrontPageViewModel + core/api mirrors). Options
+  come from the pod's unauthenticated `GET /api/services`; a stale assigned
+  label shows "(no longer installed)" so the owner can clear it.
+
+**Console banner fixed + subtitle (`a8666b51`).** The /etc/issue art was
+block-Unicode + em-dashes; Debian's console font (Lat15) has no such glyphs →
+rows of "?" boxes on metal (owner photo). Now pure ASCII + a bright-cyan
+"Get yours at flagshipserver.com" line via a printf'd literal ESC (the VT
+palette has no true teal). Test pins the banner to ASCII. Burner needs the
+usual rebuild+sign+install to carry it (done this session).
+
+Gates: vitest (protocol 507 · daemon 1221 · burner 185 · web 1135) · iOS 917
+· Android 734 · `tsc -b` clean. NOTE: Android tests need
+`JAVA_HOME=/opt/homebrew/opt/openjdk@17` on this machine (no system Java);
+iOS tests run via `xcodebuild test -scheme FlagshipMobile-Package
+-destination 'platform=iOS Simulator,id=<sim>,arch=arm64'` (plain `swift
+test` fails on UIKit).
+
 ### 2026-06-12 (later) — ⭐ PHONE-APPROVAL UNLOCK E2E PROVEN ON METAL + mapper-name root cause
 
 **MILESTONE: the full phone-approval LUKS chain is validated end-to-end on real

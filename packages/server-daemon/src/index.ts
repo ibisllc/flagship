@@ -30,6 +30,7 @@ import {
   type HostPowerRunner,
 } from "./deadMan.js";
 import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
+import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -866,6 +867,17 @@ async function main(): Promise<void> {
         runner: hostPowerRunner,
       }),
     );
+    // Owner-assignable apex: GET/POST /api/front-page + the 302 itself.
+    const frontPage = new FrontPageStore();
+    await frontPage.load();
+    runtime.addHandler(
+      buildFrontPageHttp({
+        serverId: env.serverFqdn!,
+        ownerIrkPub: cfg.irkPublicKey,
+        store: frontPage,
+        resolveLabel: (l) => servicePlatformRefForServer.current?.byLabel(l) !== undefined,
+      }),
+    );
     process.once("SIGTERM", () => deadMan.stop());
     process.once("SIGINT", () => deadMan.stop());
     console.log(
@@ -1378,6 +1390,7 @@ export type {
   DeadManPolicyState,
 } from "./deadMan.js";
 export { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
+export { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,

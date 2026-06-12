@@ -24,6 +24,11 @@ import {
   fmtRemaining,
 } from "../lib/lockAndPower.js";
 import { getPodBaseUrl } from "../lib/api.js";
+import {
+  getFrontPage,
+  listFrontPageOptions,
+  sendSetFrontPage,
+} from "../lib/frontPage.js";
 import { signWithIrk } from "../keystore.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -106,6 +111,19 @@ export async function renderServerDetail() {
             </div>
           </div>
         `).join("")}
+      <h2 class="mt-4">Front page</h2>
+      <div class="card" id="front-page-card">
+        <p class="note">
+          What visitors see at <code>${escapeHtml(body.serverFqdn)}</code>.
+          Point it at one of your apps (the browser is redirected to the
+          app's own address) or keep the default Flagship page.
+        </p>
+        <select id="front-page-select" class="full-width" disabled>
+          <option value="">Default Flagship page</option>
+        </select>
+        <button id="front-page-save" class="full-width mt-2" disabled>Save</button>
+        <p class="note small hidden" id="front-page-status"></p>
+      </div>
       <h2 class="mt-4">${escapeHtml(isLuksBox(body) ? "Lock & power" : "Power")}</h2>
       <div class="card" id="lock-power-card">
         <p class="note">
@@ -171,6 +189,7 @@ export async function renderServerDetail() {
       </div>
     `;
     wireAutoUnlock(body.serverFqdn);
+    wireFrontPage(body);
     wireLockPower(body);
     wireDeadMan(body);
     wireDangerZone(body.serverFqdn, body.username);
@@ -299,6 +318,87 @@ function startMetricsPolling(serverFqdn) {
   };
   void tick();
   metricsTimer = setInterval(tick, 15_000);
+}
+
+// ---- Front page (owner-assignable apex) --------------------------------
+
+// Load current assignment + installed apps from the pod (both reads are
+// unauthenticated), then let the owner pick + Save (IRK-signed set).
+function wireFrontPage(body) {
+  const select = $("front-page-select");
+  const save = $("front-page-save");
+  const status = $("front-page-status");
+  if (!select || !save) return;
+
+  const baseUrl = getPodBaseUrl();
+  if (!baseUrl) return; // not paired — leave the card disabled
+
+  let current = "";
+  void (async () => {
+    try {
+      const [fp, options] = await Promise.all([
+        getFrontPage({ baseUrl }),
+        listFrontPageOptions({ baseUrl }),
+      ]);
+      current = fp.label || "";
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o.urlLabel;
+        opt.textContent = `${o.name || o.urlLabel} — ${o.urlLabel}.${body.serverFqdn}`;
+        select.appendChild(opt);
+      }
+      // An assigned-but-uninstalled label still shows (marked), so the
+      // owner can see and clear a stale assignment.
+      if (current && !options.some((o) => o.urlLabel === current)) {
+        const opt = document.createElement("option");
+        opt.value = current;
+        opt.textContent = `${current} (no longer installed)`;
+        select.appendChild(opt);
+      }
+      select.value = current;
+      select.disabled = false;
+      save.disabled = false;
+    } catch {
+      if (status) {
+        status.classList.remove("hidden");
+        status.textContent = "Couldn't reach the server to load front-page settings.";
+      }
+    }
+  })();
+
+  save.addEventListener("click", async () => {
+    const session = getSession();
+    if (!session.umk) {
+      toast("Unlock the webapp first", "err");
+      return;
+    }
+    const label = select.value;
+    save.disabled = true;
+    const orig = save.textContent;
+    save.textContent = "Saving…";
+    try {
+      await sendSetFrontPage({
+        baseUrl,
+        label,
+        umk: session.umk,
+        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+      });
+      current = label;
+      toast(label ? `Front page set to ${label}` : "Front page reset to default", "ok");
+      if (status) {
+        status.classList.remove("hidden");
+        status.textContent = label
+          ? `Visitors to ${body.serverFqdn} now land on ${label}.${body.serverFqdn}.`
+          : `Visitors to ${body.serverFqdn} now see the default Flagship page.`;
+      }
+    } catch (e) {
+      toast(humanError(e), "err");
+      select.value = current;
+    } finally {
+      save.textContent = orig;
+      save.disabled = false;
+    }
+  });
 }
 
 // ---- Lock & power -----------------------------------------------------
