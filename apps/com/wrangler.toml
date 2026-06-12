@@ -46,7 +46,16 @@ routes = [
   # route must point at flagship-com (and NOT at the old flagship-boot
   # worker) for the consolidation to take effect — apps/boot stays only as
   # an optional cloneable target. See docs/boot-worker-consolidation.md.
-  { pattern = "boot.flagshipserver.com/*",     zone_name = "flagshipserver.com" },
+  #
+  # CUSTOM DOMAIN (not a zone route): the flagshipserver.com zone has NO
+  # wildcard DNS record, and a Worker Route only fires for a hostname that
+  # already resolves into Cloudflare (web. has an explicit proxied CNAME;
+  # recovery. — a route with no record — does not resolve at all). boot. used
+  # to resolve solely via its custom domain on flagship-boot; moving it here as
+  # a custom domain lets wrangler provision the proxied DNS record + edge cert
+  # itself, so the hostname resolves to flagship-com with no manual DNS step.
+  # (Cut over 2026-06-11 — detached from flagship-boot first.)
+  { pattern = "boot.flagshipserver.com",       custom_domain = true },
 ]
 
 # Static assets — marketing pages, the webapp source under /webapp/

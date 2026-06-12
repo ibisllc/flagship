@@ -31,12 +31,14 @@ workers_dev = false
 #                          + notify pipe target)
 #   FLAGSHIP_APEX          apex used to derive <user> from a box FQDN
 
-# boot.flagshipserver.com is a dedicated custom domain for this worker —
-# wrangler provisions the (proxied) DNS record + edge cert on deploy, so the
-# whole hostname routes here. (Enterprise clones set their own hostname.)
-routes = [
-  { pattern = "boot.flagshipserver.com", custom_domain = true },
-]
+# NO routes on the reference deployment. boot.flagshipserver.com was cut over
+# to the flagship-com worker (served from packages/boot-core in-process — see
+# docs/boot-worker-consolidation.md) on 2026-06-11; its custom domain was
+# detached from this worker so flagship-com can own the hostname. This worker
+# is retained ONLY as a cloneable target: an enterprise running its own boot
+# worker re-adds a custom-domain route here for THEIR hostname, e.g.
+#   routes = [ { pattern = "boot.example.com", custom_domain = true } ]
+routes = []
 
 [vars]
 IDENTITY_PLANE_URL = "https://flagshipserver.com"

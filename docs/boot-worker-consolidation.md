@@ -1,6 +1,6 @@
 # Boot-worker consolidation — `boot.flagshipserver.com` served by `.com`
 
-**Status: implemented (reference deployment). `apps/boot` retained as an optional cloneable target.**
+**Status: LIVE in production (cut over 2026-06-11). `boot.flagshipserver.com` is served by `flagship-com`; `apps/boot` retained as an optional cloneable target (no live hostname).**
 
 ## Why
 
@@ -100,20 +100,38 @@ box path no longer uses them.
 **`0050_boot_nonces.sql`** (additive + idempotent; the same shape as the boot
 worker's own `boot_nonces`).
 
-## Deploy
+## Deploy / cut-over (executed 2026-06-11)
 
 1. Apply `packages/storage/migrations/0050_boot_nonces.sql` to prod
    `flagship-state` **before** the Worker deploy (the boot gate needs the table).
-2. `npx tsc -b && cd apps/com && npx wrangler deploy` — this reconciles the
-   routes in `wrangler.toml`, which now includes
-   `boot.flagshipserver.com/*` → `flagship-com`.
-3. **Cut-over note:** `boot.flagshipserver.com` was previously a *custom domain*
-   on the `flagship-boot` worker. A Worker **Route** on `flagship-com`
-   intercepts before the old custom-domain binding, but to be unambiguous,
-   detach the custom domain from `flagship-boot` (or stop deploying it) so the
-   hostname resolves to `flagship-com` only. The box re-announces on its next
-   boot and a fresh unlock writes to `flagship-state`, so no migration of
-   in-flight boot state is needed (pre-launch).
+2. **`boot.flagshipserver.com` is a CUSTOM DOMAIN on `flagship-com`, not a zone
+   route.** This was the load-bearing correction at cut-over time: the
+   flagshipserver.com zone has **no wildcard DNS record**, and a Worker Route
+   only fires for a hostname that *already resolves into Cloudflare* (`web.` has
+   an explicit proxied CNAME; `recovery.` — a route with no record — does not
+   resolve at all). `boot.` previously resolved *solely* via its custom domain
+   on `flagship-boot`; a bare route on `flagship-com` would have had no DNS
+   record to catch and would have taken `boot.` fully offline. Declaring it a
+   custom domain (`{ pattern = "boot.flagshipserver.com", custom_domain = true }`
+   in `apps/com/wrangler.toml`) lets wrangler provision the proxied DNS record +
+   edge cert itself.
+3. **The cut-over (zero-downtime):** `apps/boot/wrangler.toml` was emptied to
+   `routes = []` and `apps/com/wrangler.toml` gained the boot custom domain;
+   then `wrangler deploy` of `flagship-com` **reassigns** the existing
+   `boot.flagshipserver.com` custom domain from `flagship-boot` to
+   `flagship-com` in place (confirm the reassignment prompt). Because the DNS
+   record + cert are reused, there is no resolution gap. Verified: `GET
+   https://boot.flagshipserver.com/api/health` flipped from
+   `{"service":"flagship-boot"}` to `{"service":"flagship-com","surface":"boot"}`
+   with `ssl_verify=0`, and the gate rejects an unauthed `/api/boot/lease/...`
+   with `400 {"error":"malformed authorization"}` (router + gate live). The box
+   re-announces on its next boot and a fresh unlock writes to `flagship-state`,
+   so no migration of in-flight boot state is needed (pre-launch).
+
+   > A standalone clone re-adds its OWN hostname as a custom-domain route in
+   > `apps/boot/wrangler.toml` and deploys `flagship-boot` against its own
+   > identity plane — the reference deployment just doesn't point a hostname at
+   > it anymore.
 4. No client (box, burner, phone) rebuild is required for the consolidation —
    the hostname + `/api/boot/*` contract are unchanged.
 

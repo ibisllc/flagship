@@ -129,14 +129,25 @@ Prepped a clean-slate e2e (no agent-doable blockers remained — machine backlog
 closed; this session's docker fix + status-pill UI all landed).
 - **Burner** rebuilt + re-signed (IBIS LLC Developer ID) + installed to
   `/Applications` (carries the docker-install bootstrap `edd3580e`).
-- **`.com` Worker deployed** (`npx tsc -b && wrangler deploy`, version
-  `af85351d`). Prod D1 already had migrations 0047/0048/0049; applied **0050
-  (boot_nonces, idempotent)**. **Boot-worker consolidation deliberately NOT cut
-  over** — `boot.flagshipserver.com` is a Custom Domain on the standalone
-  `flagship-boot` worker (outranks a Route), and the boot/unlock relay must keep
-  working for the e2e; deployed flagship-com with that route temporarily removed
-  (wrangler.toml restored after). The cutover (detach custom domain → re-enable
-  the route → flagship-com serves boot) stays a separate deliberate step.
+- **`.com` Worker deployed** (`npx tsc -b && wrangler deploy`). Prod D1 already
+  had migrations 0047/0048/0049; applied **0050 (boot_nonces, idempotent)**.
+- **Boot-worker consolidation CUT OVER (live, version `82bb011f`).** After
+  weighing merge-vs-true-decouple: the coupling is intrinsic (boot AUTHORIZES an
+  unlock by binding the principal to the identity-plane directory — `gate.ts`),
+  and the security boundary is the phone IRK, not the worker split, so a separate
+  deployment only ever bought the fragile shared-secret notify bridge (the
+  silent-401 unlock-hang). Kept the logical separation at the `@flagship/boot-core`
+  package boundary; merged the deployment. **Mechanism: `boot.flagshipserver.com`
+  is now a CUSTOM DOMAIN on flagship-com, not a zone route** — the zone has no
+  wildcard, and a bare route has no DNS record to catch (recovery., a route with
+  no record, doesn't even resolve). `wrangler deploy` reassigned the existing
+  custom domain from flagship-boot → flagship-com in place (DNS+cert reused →
+  zero downtime). Verified: `/api/health` flipped to `service:"flagship-com",
+  surface:"boot"` (ssl_verify=0), gate rejects unauthed `/api/boot/lease/…` with
+  `400 malformed authorization`. Contract byte-identical → box/burner/phone need
+  no change (compat audited: boot-core routes = `boot-stage.sh` + initramfs +
+  `SecretMailboxClient` call sites; in-process directory/notify/push wired in
+  `tryBootHost`). `apps/boot` kept as a routeless clone target.
 - **`.services` Fly app deployed** (`flyctl deploy`, immediate). Health: com /
   boot / services all 200.
 - **Prod DB wiped** (`scripts/wipe-all-users.sh` — 44 tables, marketplace_listings
