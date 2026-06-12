@@ -283,6 +283,7 @@ export function listRow({
   subtitle = "",
   detail = "",
   trailing = "",
+  trailingBelow = false,
   action = null,
 }) {
   const actionAttr = action ? ` data-row-action="${escapeHtml(action)}"` : "";
@@ -304,16 +305,28 @@ export function listRow({
   // `trailing` is caller-built HTML (e.g. a .pill from the existing status
   // vocabulary), NOT user-derived text — callers must escape any dynamic
   // label they fold into it (renderServerCard does, via escapeHtml on c.label).
-  const trail = trailing ? `<span class="fs-listrow-trailing">${trailing}</span>` : "";
+  // `trailingBelow` stacks it under the text instead of floating it right, so a
+  // long status label ("never came online") gets a full-width line of its own
+  // rather than being crushed against the title.
+  const trailInline =
+    trailing && !trailingBelow
+      ? `<span class="fs-listrow-trailing">${trailing}</span>`
+      : "";
+  const trailBelow =
+    trailing && trailingBelow
+      ? `<span class="fs-listrow-trailing-below">${trailing}</span>`
+      : "";
+  const stackedClass = trailBelow ? " fs-listrow--stacked" : "";
   return `
-    <div class="fs-listrow${action ? " fs-listrow--tappable" : ""}"${actionAttr}>
+    <div class="fs-listrow${action ? " fs-listrow--tappable" : ""}${stackedClass}"${actionAttr}>
       ${lead}
       <span class="fs-listrow-body">
         <span class="fs-listrow-title">${escapeHtml(String(title))}</span>
         ${sub}
         ${det}
+        ${trailBelow}
       </span>
-      ${trail}
+      ${trailInline}
     </div>
   `;
 }

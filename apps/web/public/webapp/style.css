@@ -1629,6 +1629,13 @@ button[data-device-restricted] {
 .fs-listrow-subtitle { font-size: var(--body-sm-size); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-listrow-detail { font-size: 12px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-listrow-trailing { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+/* Stacked status pill: sits under the text on its own line (so a long label
+ * like "never came online" isn't crushed against the title). Left-aligned,
+ * with a little breathing room above. The leading icon stays top-aligned (not
+ * centred on the taller body) so it lines up with the title. */
+.fs-listrow--stacked { align-items: flex-start; }
+.fs-listrow--stacked > .fs-listrow-icon { margin-top: 1px; }
+.fs-listrow-trailing-below { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
 
 /* App card (Services list) — a list-row-flavoured card: leading teal package
  * glyph + a body that keeps the richer app slots (version pill, summary,

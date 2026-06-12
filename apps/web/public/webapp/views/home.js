@@ -308,7 +308,10 @@ export function renderServerCard(server, pod, opts = {}) {
     title: String(server.serverId),
     subtitle,
     detail: certCountdown ? String(certCountdown) : "",
+    // Status pill stacks UNDER the text — labels like "never came online" need a
+    // full line rather than being crushed into the right margin against the title.
     trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
+    trailingBelow: true,
   });
   return `
     ${row}

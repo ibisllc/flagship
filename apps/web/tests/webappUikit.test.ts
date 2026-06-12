@@ -201,6 +201,25 @@ describe("listRow", () => {
     expect(html).toContain("fs-listrow-trailing");
     expect(html).toContain("pill ok");
   });
+  it("trailingBelow stacks the status pill under the text, not floated right", () => {
+    const html = listRow({
+      leading: { kind: "icon", svg: "<svg></svg>", tone: "muted" },
+      title: "blog.demo",
+      subtitle: "0 apps",
+      trailing: '<span class="pill">never came online</span>',
+      trailingBelow: true,
+    });
+    // The stacked variant, not the right-floated one.
+    expect(html).toContain("fs-listrow-trailing-below");
+    expect(html).toContain("fs-listrow--stacked");
+    expect(html).not.toContain('class="fs-listrow-trailing"');
+    // …and it lives INSIDE the body (before the body span closes), so the long
+    // label gets its own full-width line rather than crushing the title.
+    const bodyStart = html.indexOf("fs-listrow-body");
+    const trailIdx = html.indexOf("fs-listrow-trailing-below");
+    expect(trailIdx).toBeGreaterThan(bodyStart);
+    expect(html).toContain("never came online");
+  });
   it("monogram leading derives initials", () => {
     const html = listRow({ leading: { kind: "monogram", name: "Harry" }, title: "x" });
     expect(html).toContain("fs-monogram");
