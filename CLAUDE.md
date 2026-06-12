@@ -157,7 +157,23 @@ closed; this session's docker fix + status-pill UI all landed).
   fresh encrypted burn → register → green padlock → **phone-approval unlock**
   (the one path still unproven; prior e2e unlocked via the `manual` keyword).
   The previous live box (`xyz.harry.flagship.services`, 10.10.3.142) was just
-  de-registered by the wipe — reuse that hardware for the fresh burn.
+  de-registered by the wipe — reuse that hardware for the fresh burn. Burner
+  re-rebuilt + DB re-wiped right before this e2e (clean: servers/usernames/
+  mailbox = 0; boot merge live).
+
+- **🐛 FOUND (track to GA) — `recovery.flagshipserver.com` does NOT resolve.**
+  It's declared as a Worker **Route** in `apps/com/wrangler.toml`, but the
+  flagshipserver.com zone has **no wildcard** and recovery. has **no explicit
+  DNS record**, so `dig`/`curl` fail with "could not resolve host" — the webapp
+  cloud-recovery sub-origin flow (WebAuthn rpId `recovery.flagshipserver.com`)
+  is currently broken in prod. Same DNS gotcha the boot cutover surfaced: a
+  route only fires for a hostname that already resolves into Cloudflare (`web.`
+  works because it has an explicit proxied CNAME). **Fix:** either add a proxied
+  DNS record for recovery. (CNAME → flagshipserver.com, like web.) OR make it a
+  **custom domain** on flagship-com (like boot. now is — wrangler self-provisions
+  DNS+cert). Needs CF dashboard/API (no CF API token in the agent env; wrangler
+  can't create arbitrary DNS records, but the custom-domain route in wrangler.toml
+  would do it on the next deploy). Doesn't block the cert/boot/unlock e2e.
 
 ### 2026-06-11 — vestigial UI removed + WhatsApp-inspired redesign
 
