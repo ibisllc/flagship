@@ -123,7 +123,61 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
-### 2026-06-11 (latest) — full deploy + prod wipe for a fresh hardware e2e
+### 2026-06-12 (latest) — phone-approval unlock debugged to root cause + boot merge live
+
+Long live-hardware session driving the FIRST end-to-end **phone-approval LUKS
+unlock** (every prior unlock used the `manual` keyword, so this path was never
+exercised). Box `az.harry` (10.10.3.142) reached green padlock but the
+phone-approval flow surfaced a chain of real bugs, now all fixed + pushed +
+deployed (Worker `b23e0e3d`; com/boot/services all 200):
+
+- **⭐ ROOT-CAUSE: the box sealed its disk key to the discarded delegated key
+  (`eadd7195`, burner — needs re-burn to take).** The bootstrap sealed the LUKS
+  key to the blob's `phoneDelegatedPubKey`, but the phone generates that
+  per-server keypair at create-time and DISCARDS the private half — so the disk
+  key was sealed to a key NO phone could reproduce (error: "couldn't unseal the
+  disk key with this phone's keys"). Fix: seal to the account **IRK**
+  (`authCode.userPubKey`, already in the blob) — phone re-derives it via
+  `deriveIRK` and it survives cloud recovery. Burner-only (userdata.ts + Swift
+  mirror, sha re-pinned ba0f4fcc); **burner rebuilt+signed+installed**. This is
+  the "owner-IRK path" the pre-existing-bug note called for. EXISTING boxes
+  sealed to the dead key can't be unlocked → re-burn (or SSH re-seal a live box).
+- **Boot-worker consolidation CUT OVER (live).** `boot.flagshipserver.com` is now
+  a Custom Domain on `flagship-com` (served from `@flagship/boot-core` in-process);
+  the fragile cross-worker notify bridge is gone. `apps/boot` kept as a routeless
+  clone target. (Full rationale + DNS mechanics: the 2026-06-11 entry below +
+  `docs/boot-worker-consolidation.md`.)
+- **Cheap `awaitingUnlock` directory signal (`0a0c93ad` + trickle `19306f3c`).**
+  A locked box can't heartbeat and the phone's mailbox read is biometric (can't
+  poll), so a waiting box was misclassified "never came online" + offered for
+  (dangerous) deletion. `/api/users/:u/pods` now returns `awaitingUnlock` per pod
+  (from `secret_mailbox.listPendingForUser`, no auth); iOS + Android + webapp
+  consume it → "waiting for approval", delete suppressed.
+- **iOS approval-card chain fixed:** surfaced the boot-unlock card at the TOP of
+  the server page, OUTSIDE the state switch (`3ed05f12`); made the mailbox read
+  user-initiated since the IRK is biometric and can't poll (`db996e8e`); show it
+  whenever `awaitingUnlock` is true regardless of BFF load (`aa38e5d9`); and the
+  REAL blocker — **the card built its VM in `onAppear` inside a `Group { if let
+  vm }`, so the first render was a zero-size empty view and onAppear never fired
+  in the ScrollView → card permanently blank** — fixed by building the VM
+  synchronously in the body (`e8ac4ed9`). The full UI now works: card shows →
+  Check (Face ID) → finds request → Approve (Face ID).
+
+**OWNER — to validate the unlock fix (NOT yet proven):** the UI + relay are
+proven; only the unseal needs a box sealed with the new code. Either (A) **SSH
+re-seal** `az.harry`: console `manual`+burn-passphrase to boot it, then re-key +
+`seal-for-bak --bak-ed25519-pub <authCode.userPubKey>` + re-upload (faster, no
+burn), or (B) **fresh burn** with the rebuilt burner. Then Check→Approve should
+unseal. Also rebuild the iOS + Android apps (all the card/awaitingUnlock changes
+are source-only).
+
+**New follow-ups:** `phoneDelegatedPubKey` is now unused for unlock (still used by
+the separately-DEAD PhoneOrder path) — clean up or persist; phone-approval unlock
+e2e still unproven; (carried) `recovery.flagshipserver.com` doesn't resolve
+(route, no DNS record — make it a custom domain like boot.); push-token/APNs gap
+(no auto-notification until TestFlight/Play).
+
+### 2026-06-11 — full deploy + prod wipe for a fresh hardware e2e
 
 Prepped a clean-slate e2e (no agent-doable blockers remained — machine backlog
 closed; this session's docker fix + status-pill UI all landed).
