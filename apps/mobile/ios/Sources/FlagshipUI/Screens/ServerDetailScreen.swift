@@ -461,22 +461,20 @@ struct BootUnlockApprovalCard: View {
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        Group {
-            if let vm {
-                content(vm: vm, c: c)
-            }
-        }
-        .onAppear {
-            if vm == nil {
-                // No background poll: the mailbox read is biometric (see
-                // promptWhenIdle) and must be user-initiated.
-                vm = BootUnlockApprovalViewModel(
-                    serverDomain: serverDomain,
-                    makeCoordinator: makeCoordinator
-                )
-            }
-        }
-        .onDisappear { vm?.stop() }
+        // Create the VM SYNCHRONOUSLY on the first body eval, never in onAppear.
+        // The old `Group { if let vm { … } }.onAppear { vm = … }` rendered an
+        // empty (zero-size) view on the first pass; in a ScrollView, onAppear on
+        // a zero-size view frequently never fires, so the VM was never created
+        // and the card stayed permanently blank. Building it inline guarantees
+        // content (incl. the idle "check" prompt) renders on the first pass; the
+        // VM holds no side effects until the user taps (no background poll).
+        let model = vm ?? BootUnlockApprovalViewModel(
+            serverDomain: serverDomain,
+            makeCoordinator: makeCoordinator
+        )
+        return content(vm: model, c: c)
+            .onAppear { if vm == nil { vm = model } }
+            .onDisappear { vm?.stop() }
     }
 
     @ViewBuilder
