@@ -123,7 +123,32 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
 
-### 2026-06-11 (latest) — vestigial UI removed + WhatsApp-inspired redesign
+### 2026-06-11 (latest) — full deploy + prod wipe for a fresh hardware e2e
+
+Prepped a clean-slate e2e (no agent-doable blockers remained — machine backlog
+closed; this session's docker fix + status-pill UI all landed).
+- **Burner** rebuilt + re-signed (IBIS LLC Developer ID) + installed to
+  `/Applications` (carries the docker-install bootstrap `edd3580e`).
+- **`.com` Worker deployed** (`npx tsc -b && wrangler deploy`, version
+  `af85351d`). Prod D1 already had migrations 0047/0048/0049; applied **0050
+  (boot_nonces, idempotent)**. **Boot-worker consolidation deliberately NOT cut
+  over** — `boot.flagshipserver.com` is a Custom Domain on the standalone
+  `flagship-boot` worker (outranks a Route), and the boot/unlock relay must keep
+  working for the e2e; deployed flagship-com with that route temporarily removed
+  (wrangler.toml restored after). The cutover (detach custom domain → re-enable
+  the route → flagship-com serves boot) stays a separate deliberate step.
+- **`.services` Fly app deployed** (`flyctl deploy`, immediate). Health: com /
+  boot / services all 200.
+- **Prod DB wiped** (`scripts/wipe-all-users.sh` — 44 tables, marketplace_listings
+  + schema_version preserved). servers/usernames/secret_mailbox all 0.
+- **Owner-side for the e2e:** rebuild the iOS app in Xcode + the Android app
+  (the status-pill fix + cert simplification + push token are source-only); then
+  fresh encrypted burn → register → green padlock → **phone-approval unlock**
+  (the one path still unproven; prior e2e unlocked via the `manual` keyword).
+  The previous live box (`xyz.harry.flagship.services`, 10.10.3.142) was just
+  de-registered by the wipe — reuse that hardware for the fresh burn.
+
+### 2026-06-11 — vestigial UI removed + WhatsApp-inspired redesign
 
 - **Removed the vestigial "grant a box cert autonomy" ceremony** (iOS + Android;
   webapp never had it). Cert simplification made every box self-renew, so sealing
