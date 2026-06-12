@@ -422,17 +422,23 @@ public struct HomeScreen: View {
             FSListRow(
                 leading: .icon("server.rack", color: PodStatusStyle.iconColor(liveness: liveness, status: pod.status, c: c)),
                 title: pod.name,
-                subtitle: serverSubtitle(pod: pod, liveness: liveness)
-            ) {
-                HStack(spacing: FS.space.s2) {
-                    if isLeader && pod.cameOnline { LeaderBadge() }
-                    FSPill(
-                        PodStatusStyle.label(liveness: liveness, status: pod.status),
-                        kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
-                    )
-                    .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
-                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                subtitle: serverSubtitle(pod: pod, liveness: liveness),
+                below: {
+                    // Status pill (+ Leader badge) stacks UNDER the text on its
+                    // own line — a long label like "Never came online" would be
+                    // crushed in the right-floated trailing slot against the name.
+                    HStack(spacing: FS.space.s2) {
+                        if isLeader && pod.cameOnline { LeaderBadge() }
+                        FSPill(
+                            PodStatusStyle.label(liveness: liveness, status: pod.status),
+                            kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
+                        )
+                        .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
+                    }
                 }
+            ) {
+                // Navigation chevron stays right, vertically centered.
+                Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
         }
         .buttonStyle(.plain)

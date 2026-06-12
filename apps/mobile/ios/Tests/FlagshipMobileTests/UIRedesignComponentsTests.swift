@@ -155,5 +155,20 @@ final class UIRedesignComponentsTests: XCTestCase {
         _ = FSSettingsRow(icon: "gear", title: "Row", subtitle: "sub")
         _ = FSSettingsGroup("HEADER", rows: [FSSettingsRow(icon: "gear", title: "Row")])
         _ = FSListRow(leading: .icon("server.rack", color: .teal), title: "box", subtitle: "sub")
+        // trailing-only convenience (chevron on the right, no stacked content).
+        _ = FSListRow(leading: .icon("server.rack", color: .teal), title: "box", subtitle: "sub") {
+            Image(systemName: "chevron.right")
+        }
+        // below + trailing: status pill stacked under the text, chevron right —
+        // the Home server-row shape that keeps a long "Never came online" label
+        // off the crushed right margin.
+        _ = FSListRow(
+            leading: .icon("server.rack", color: .teal),
+            title: "box",
+            subtitle: "sub",
+            below: { FSPill("Never came online", kind: .offline) }
+        ) {
+            Image(systemName: "chevron.right")
+        }
     }
 }

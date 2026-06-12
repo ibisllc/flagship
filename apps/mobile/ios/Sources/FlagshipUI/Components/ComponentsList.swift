@@ -487,7 +487,7 @@ public struct FSSettingsRow: View {
 /// square icon (or a monogram), a bold title, a muted subtitle, and trailing
 /// metadata (a timestamp string, an `FSPill` status, or a small badge). Used
 /// for servers (Home) and apps (Services).
-public struct FSListRow<Trailing: View>: View {
+public struct FSListRow<Trailing: View, Below: View>: View {
     @Environment(\.colorScheme) private var scheme
     let leading: Leading
     let title: String
@@ -495,6 +495,11 @@ public struct FSListRow<Trailing: View>: View {
     /// Optional second muted line below the subtitle (e.g. a canonical URL).
     var detail: String?
     @ViewBuilder let trailing: () -> Trailing
+    /// Optional content stacked UNDER the text lines, left-aligned, on its own
+    /// row — for a status pill whose label ("Never came online") would be
+    /// crushed in the right-floated `trailing` slot. The chevron / navigation
+    /// accessory stays in `trailing`; the pill goes here.
+    @ViewBuilder let below: () -> Below
 
     public enum Leading {
         /// SF Symbol on a soft tint of `color`.
@@ -508,6 +513,7 @@ public struct FSListRow<Trailing: View>: View {
         title: String,
         subtitle: String? = nil,
         detail: String? = nil,
+        @ViewBuilder below: @escaping () -> Below,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) {
         self.leading = leading
@@ -515,6 +521,7 @@ public struct FSListRow<Trailing: View>: View {
         self.subtitle = subtitle
         self.detail = detail
         self.trailing = trailing
+        self.below = below
     }
 
     public var body: some View {
@@ -541,6 +548,10 @@ public struct FSListRow<Trailing: View>: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                // Stacked accessory (e.g. a long status pill) on its own line,
+                // left-aligned under the text. EmptyView by default ⇒ no row.
+                below()
+                    .padding(.top, 2)
             }
             Spacer(minLength: FS.space.s2)
             trailing()
@@ -572,7 +583,24 @@ public struct FSListRow<Trailing: View>: View {
     }
 }
 
-public extension FSListRow where Trailing == EmptyView {
+public extension FSListRow where Below == EmptyView {
+    /// Convenience for the common row with no stacked `below` content — just a
+    /// trailing accessory (chevron / pill).
+    init(
+        leading: Leading,
+        title: String,
+        subtitle: String? = nil,
+        detail: String? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.init(
+            leading: leading, title: title, subtitle: subtitle, detail: detail,
+            below: { EmptyView() }, trailing: trailing
+        )
+    }
+}
+
+public extension FSListRow where Trailing == EmptyView, Below == EmptyView {
     /// Convenience for a row with no trailing accessory (a plain chevron is
     /// added by the caller if wanted).
     init(leading: Leading, title: String, subtitle: String? = nil, detail: String? = nil) {
