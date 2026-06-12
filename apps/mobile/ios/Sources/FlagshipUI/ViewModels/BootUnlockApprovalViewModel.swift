@@ -134,7 +134,7 @@ public final class BootUnlockApprovalViewModel {
         }
 
         let mine = verified
-            .filter { $0.serverDomain == serverDomain && $0.purpose == .unlockKey }
+            .filter { $0.serverDomain.lowercased() == serverDomain.lowercased() && $0.purpose == .unlockKey }
             .sorted { $0.pending.postedAt > $1.pending.postedAt }
 
         // A live (non-expired) request wins outright.

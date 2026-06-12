@@ -46,10 +46,27 @@ public struct ServerDetailScreen: View {
         self.onRefresh = onRefresh
     }
 
+    /// FQDN for the boot-unlock approval card: the loaded detail's own FQDN,
+    /// else the pod FQDN the container always passes (available even when the
+    /// daemon BFF load fails — a locked box never answers its BFF).
+    private var approvalFqdn: String? {
+        if case .loaded(let d) = state, !d.serverFqdn.isEmpty { return d.serverFqdn }
+        return deadServerFqdn
+    }
+
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
+                // Boot-unlock approval — hoisted to the TOP and OUTSIDE the state
+                // switch so a box waiting for the owner to release its disk key is
+                // always actionable here, even when the daemon BFF can't load (a
+                // locked box is unreachable — that's the whole point). The card
+                // polls the boot relay (not the box) and renders nothing until a
+                // request is actually waiting.
+                if let fqdn = approvalFqdn, !fqdn.isEmpty {
+                    BootUnlockApprovalCard(serverDomain: fqdn)
+                }
                 switch state {
                 case .idle, .loading:
                     ServerCardSkeleton()
@@ -67,21 +84,17 @@ public struct ServerDetailScreen: View {
                         // answered this request yet, or the network blipped). Show a
                         // graceful "connecting" state, NEVER the words "not paired to
                         // a server": the server IS paired; we just don't have its
-                        // detail this instant. Pull-to-refresh retries.
+                        // detail this instant. Pull-to-refresh retries. (The
+                        // boot-unlock approval card is hoisted to the top of the
+                        // page, so a locked box waiting for approval stays
+                        // actionable here even though this BFF load failed.)
                         connecting(c: c)
-                        // Even before the daemon BFF answers, a box at the boot-
-                        // unlock step is actively waiting for the owner — surface
-                        // the Approve card here too (it renders nothing when idle).
-                        if let fqdn = deadServerFqdn, !fqdn.isEmpty {
-                            BootUnlockApprovalCard(serverDomain: fqdn)
-                        }
                     }
                 case .loaded(let d):
                     overview(d: d, c: c)
                     MetricsSection(state: metrics)
                     cert(d: d, c: c)
                     deviceRow(d: d, c: c)
-                    BootUnlockApprovalCard(serverDomain: d.serverFqdn)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
