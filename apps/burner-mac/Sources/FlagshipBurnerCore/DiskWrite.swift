@@ -10,6 +10,7 @@ public enum DiskWriteError: LocalizedError {
     case badDevice(String)
     case cannotOpen(String, String)
     case unmountFailed(String)
+    case writeFailed(bytesWritten: Int, reason: String)
 
     public var errorDescription: String? {
         switch self {
@@ -17,6 +18,8 @@ public enum DiskWriteError: LocalizedError {
         case .badDevice(let d): return "Refusing non-/dev/disk device: \(d)"
         case .cannotOpen(let path, let why): return "Can't open \(path): \(why)"
         case .unmountFailed(let err): return "Couldn't unmount the disk: \(err)"
+        case .writeFailed(let n, let reason):
+            return "Write failed \(n / (1024 * 1024)) MB in: \(reason)"
         }
     }
 }
@@ -66,7 +69,12 @@ public enum DiskWrite {
             // and without this, `write()` fails EINVAL ("couldn't be saved").
             let rem = data.count % sector
             if rem != 0 { data.append(Data(count: sector - rem)) }
-            try out.write(contentsOf: data)
+            do {
+                try out.write(contentsOf: data)
+            } catch {
+                throw DiskWriteError.writeFailed(bytesWritten: written,
+                                                 reason: writeFailureReason(error))
+            }
             written += data.count
             let pct = Int(Double(written) / Double(size) * 100)
             if pct != lastPct {
@@ -74,8 +82,41 @@ public enum DiskWrite {
                 progress(min(1.0, Double(written) / Double(size)))
             }
         }
-        try out.synchronize()
+        do {
+            try out.synchronize()
+        } catch {
+            throw DiskWriteError.writeFailed(bytesWritten: written,
+                                             reason: writeFailureReason(error))
+        }
         progress(1.0)
+    }
+
+    /// Foundation surfaces a failed raw-device write as the useless generic
+    /// "The file couldn't be saved." — dig the POSIX errno out of the
+    /// underlying-error chain and name the actual failure mode.
+    static func writeFailureReason(_ error: Error) -> String {
+        guard let code = posixCode(of: error) else { return error.localizedDescription }
+        switch code {
+        case ENXIO, ENODEV, ENOTCONN:
+            return "the USB stick disconnected mid-write — it may be failing; try another stick or port"
+        case EIO:
+            return "the USB stick reported an I/O error — it may be failing; try another stick or port"
+        case EROFS, EPERM, EACCES:
+            return "the device refused the write — check for a write-protect switch"
+        case EINVAL:
+            return "unaligned write (EINVAL) — the device may use a sector size this writer doesn't handle"
+        default:
+            return "\(String(cString: strerror(code))) (errno \(code))"
+        }
+    }
+
+    private static func posixCode(of error: Error) -> Int32? {
+        var next: NSError? = error as NSError
+        while let e = next {
+            if e.domain == NSPOSIXErrorDomain { return Int32(e.code) }
+            next = e.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return nil
     }
 
     private static func unmount(_ devicePath: String) throws {
