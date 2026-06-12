@@ -132,6 +132,21 @@ handoff → daemon up → Let's Encrypt per-box cert minted (issuer YR2, 20:01 U
 → `https://az2.harry.flagship.services/` HTTP 200 with a verifying chain.
 The 3×Enter + console-patch recovery worked exactly as designed.
 
+**Box apex page shipped (brand v2).** The daemon's unassigned-apex landing
+(`defaultApexPage`, runtime.ts) replaced the dev hello page: tokens.css
+palette + the square/ring/core mark (breathing core = liveness), FQDN
+rendered server-side, "This is a Flagship server… choose what appears here
+from the Flagship app." Fully SELF-CONTAINED by design — no remote fonts/
+assets, so a box never leaks its visitors to .com (pinned by test); noindex
+(hostnames are CT-public). **Design decisions from the apex discussion:** no
+in-page attestation ceremonies (self-attestation can't bootstrap trust —
+TLS + phone pinning are the real mechanism), no box stats on a public page
+(CT logs make every box apex discoverable). **Follow-up (product): make the
+apex owner-assignable to one of the box's apps** (the page copy already
+promises it); maybe a "verify this server" QR deep-linking into the app
+(phone = verifier), explicitly attesting box health only — not the
+browser's channel.
+
 **🐛 NEW (track): the 5-minutely STK-signed daemon-status heartbeat is NOT
 landing** — 60+ min after cert mint, `/pods` shows
 `lastReported/signedStatus/currentCert` all null for az2 (and az). The box

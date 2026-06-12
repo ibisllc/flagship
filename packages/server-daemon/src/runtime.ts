@@ -421,7 +421,7 @@ function buildDefaultHandler(
       return {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },
-        body: defaultHelloPage(),
+        body: defaultApexPage(opts.serverFqdn),
       };
     }
     return {
@@ -432,25 +432,171 @@ function buildDefaultHandler(
   };
 }
 
-function defaultHelloPage(): string {
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * The default page at the box's apex when the owner hasn't assigned one.
+ * Brand tokens mirror apps/web/public/tokens.css (canvas/ink/teal + the
+ * square/ring/core mark). Everything is INLINE — fonts fall back to the
+ * brand's system stacks and the favicon is a data URI — because a visitor's
+ * browser must never be sent to flagshipserver.com for assets: the box is
+ * the privacy boundary, and this page must not leak its visitors. The lone
+ * outbound reference is the visible wordmark link. noindex keeps the
+ * CT-log-discoverable hostname out of search engines.
+ */
+export function defaultApexPage(serverFqdn: string): string {
+  const fqdn = escapeHtml(serverFqdn);
   return `<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Flagship daemon</title>
-    <style>
-      body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0a0a0a; color: #eee; padding: 4rem 2rem; max-width: 720px; margin: 0 auto; line-height: 1.55; }
-      h1 { color: #6ee7a8; }
-      code { background: #1a1a1a; padding: 0.2rem 0.4rem; border-radius: 4px; color: #fbcc4a; }
-      .meta { color: #888; font-size: 0.9rem; margin-top: 2rem; }
-    </style>
-  </head>
-  <body>
-    <h1>🟢 Flagship daemon online</h1>
-    <p>This server is alive. No app is yet bound to <code id="host"></code>.</p>
-    <p class="meta">TLS terminated locally on this server. flagship.services only saw ciphertext.</p>
-    <script>document.getElementById("host").textContent = location.host;</script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${fqdn} · Flagship</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314B8A6'/%3E%3Ccircle cx='32' cy='32' r='23' fill='%23FFFFFF'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --canvas: #F7F6F2;
+    --ink: #14140F;
+    --ink-muted: #555149;
+    --ink-faint: #8A8478;
+    --rule: #E5E3DC;
+    --teal: #14B8A6;
+    --teal-bright: #2DD4BF;
+    --teal-deep: #0F8B7E;
+    --teal-soft: rgba(20,184,166,0.10);
+    --code-ink: var(--teal-deep);
+    --lg-frame: #0A0A09;
+    --lg-ring: #FFFFFF;
+    --lg-core: var(--teal);
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #0A0A09;
+      --ink: #ECE7D6;
+      --ink-muted: #8A8478;
+      --ink-faint: #565249;
+      --rule: #25231C;
+      --code-ink: var(--teal-bright);
+      --lg-frame: #FFFFFF;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--teal); color: var(--canvas); }
+  main { max-width: 34rem; padding: clamp(20px, 4vw, 56px); width: 100%; }
+  .mark { display: block; width: 56px; height: 56px; margin-bottom: 40px; }
+  .mark .core { animation: breathe 3.2s var(--ease-out) infinite; transform-origin: center; }
+  @keyframes breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.78; transform: scale(0.94); }
+  }
+  h1 {
+    margin: 0 0 14px;
+    font-size: clamp(27px, 5.4vw, 36px);
+    line-height: 1.08;
+    letter-spacing: -0.026em;
+    font-weight: 600;
+  }
+  .accent-bar {
+    display: inline-block;
+    width: 0.5em;
+    height: 0.72em;
+    margin-right: 0.32em;
+    background: var(--teal);
+    border-radius: 2px;
+  }
+  .host {
+    margin: 0 0 22px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    color: var(--code-ink);
+  }
+  .host .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 9px;
+    border-radius: 999px;
+    background: var(--teal);
+    box-shadow: 0 0 0 0 rgba(45,212,191,0.45);
+    animation: ping 3.2s var(--ease-out) infinite;
+    vertical-align: 1px;
+  }
+  @keyframes ping {
+    0% { box-shadow: 0 0 0 0 rgba(45,212,191,0.45); }
+    60%, 100% { box-shadow: 0 0 0 9px rgba(45,212,191,0); }
+  }
+  .host .state { color: var(--ink-faint); }
+  p { margin: 0 0 14px; color: var(--ink-muted); }
+  p strong { color: var(--ink); font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 36px 0 18px; }
+  .colophon { font-size: 12px; color: var(--ink-faint); }
+  .colophon .lock { color: var(--teal); vertical-align: -1px; margin-right: 3px; }
+  .wordmark {
+    display: inline-block;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--ink-faint);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .wordmark:hover { color: var(--teal-bright); }
+  .reveal { opacity: 0; transform: translateY(10px); animation: reveal 600ms var(--ease-out) forwards; }
+  .reveal:nth-child(2) { animation-delay: 70ms; }
+  .reveal:nth-child(3) { animation-delay: 140ms; }
+  .reveal:nth-child(4) { animation-delay: 210ms; }
+  .reveal:nth-child(5) { animation-delay: 280ms; }
+  .reveal:nth-child(6) { animation-delay: 350ms; }
+  @keyframes reveal { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <svg class="mark reveal" viewBox="0 0 64 64" role="img" aria-label="Flagship">
+    <rect x="7" y="7" width="50" height="50" rx="7" fill="var(--lg-frame)"/>
+    <circle cx="32" cy="32" r="18" fill="var(--lg-ring)"/>
+    <circle class="core" cx="32" cy="32" r="16" fill="var(--lg-core)"/>
+  </svg>
+  <h1 class="reveal"><span class="accent-bar" aria-hidden="true"></span>This is a Flagship server.</h1>
+  <p class="host reveal"><span class="dot" aria-hidden="true"></span>${fqdn} <span class="state">· online</span></p>
+  <p class="reveal">It runs on private hardware and answers to its owner's keys — not to a cloud.</p>
+  <p class="reveal">If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.</p>
+  <div class="reveal">
+    <hr>
+    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. flagship.services relays ciphertext it cannot read.</p>
+    <a class="wordmark" href="https://flagshipserver.com" rel="noopener">FLAGSHIP&nbsp;&rarr;</a>
+  </div>
+</main>
+</body>
 </html>`;
 }
 
