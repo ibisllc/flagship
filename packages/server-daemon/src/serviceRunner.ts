@@ -100,6 +100,10 @@ export const realCommandRunner: CommandRunner = {
   run(cmd, args) {
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: "inherit" });
+      // A spawn failure (e.g. the binary is missing — `docker` ENOENT) emits
+      // an 'error' event, not 'exit'. Without this listener Node treats it as
+      // an unhandled error and crashes the daemon; reject so callers can swallow.
+      p.on("error", reject);
       p.on("exit", (code) =>
         code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`)),
       );
@@ -110,6 +114,7 @@ export const realCommandRunner: CommandRunner = {
       const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
+      p.on("error", reject);
       p.stdout?.on("data", (d) => (stdout += d.toString()));
       p.stderr?.on("data", (d) => (stderr += d.toString()));
       p.on("exit", (code) =>

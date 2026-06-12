@@ -2,8 +2,32 @@ import { describe, expect, it } from "vitest";
 import {
   AppRunner,
   DEFAULT_CONTAINER_LIMITS,
+  realCommandRunner,
   type CommandRunner,
 } from "../src/serviceRunner.js";
+
+describe("realCommandRunner spawn-failure (regression: docker-missing daemon crash loop)", () => {
+  // A missing binary makes spawn emit an 'error' event, NOT 'exit'. Without an
+  // 'error' listener that becomes an unhandled error that crashed the daemon at
+  // startup (ensureNetwork → `docker network create` on a box without docker).
+  it("run rejects instead of crashing when the binary is missing", async () => {
+    await expect(
+      realCommandRunner.run("flagship-no-such-binary-xyz", ["network", "create", "flagship-apps"]),
+    ).rejects.toBeInstanceOf(Error);
+  });
+  it("capture rejects instead of crashing when the binary is missing", async () => {
+    await expect(
+      realCommandRunner.capture!("flagship-no-such-binary-xyz", ["x"]),
+    ).rejects.toBeInstanceOf(Error);
+  });
+  it("ensureNetwork swallows a missing-docker failure so the daemon still starts", async () => {
+    const rejecting: CommandRunner = {
+      run: () => Promise.reject(new Error("spawn docker ENOENT")),
+      capture: () => Promise.reject(new Error("spawn docker ENOENT")),
+    };
+    await expect(new AppRunner(rejecting).ensureNetwork()).resolves.toBeUndefined();
+  });
+});
 
 class RecordingRunner implements CommandRunner {
   calls: { cmd: string; args: string[] }[] = [];
