@@ -1,6 +1,7 @@
 {
   "name": "flagship",
   "private": true,
+  "type": "module",
   "version": "0.0.1",
   "description": "Flagship — personal-cloud ecosystem (phone app + flagshipserver.com + bootable server image)",
   "license": "BUSL-1.1",
