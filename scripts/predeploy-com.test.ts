@@ -28,13 +28,18 @@ function run(
 }
 
 describe("predeploy-com.sh — wrangler --route(s) guard", () => {
+  // These exercise the route guard in isolation; the build-freshness gate
+  // is a separate concern (covered in its own describe block) and depends
+  // on a built dist/ tree that isn't present in CI, so bypass it here.
+  const SKIP_FRESHNESS = { FLAGSHIP_SKIP_DIST_FRESHNESS: "1" };
+
   it("exits 0 when no args are passed", () => {
-    const r = run([]);
+    const r = run([], SKIP_FRESHNESS);
     expect(r.code).toBe(0);
   });
 
   it("exits 0 for a clean deploy command (only safe flags)", () => {
-    const r = run(["deploy", "--env", "production", "--minify"]);
+    const r = run(["deploy", "--env", "production", "--minify"], SKIP_FRESHNESS);
     expect(r.code).toBe(0);
   });
 
@@ -83,7 +88,7 @@ describe("predeploy-com.sh — wrangler --route(s) guard", () => {
     // without being the foot-gun (e.g. --routes-config-file would be
     // bad, but a hypothetical --some-route-thing isn't on our radar).
     // We only block exact --route / --routes / --route= / --routes=.
-    const r = run(["--router-thing", "--routed-output"]);
+    const r = run(["--router-thing", "--routed-output"], SKIP_FRESHNESS);
     expect(r.code).toBe(0);
   });
 });
