@@ -50,4 +50,10 @@ jobs:
           echo "Guard correctly rejected --routes"
 
       - name: Smoke — the guard accepts a bare deploy
+        # This step verifies the route guard, not the build-freshness gate.
+        # CI doesn't run `npx tsc -b`, so the bundled packages have no dist/
+        # and the freshness gate would (correctly) refuse. Bypass it here;
+        # the gate has its own fixture-based unit coverage.
+        env:
+          FLAGSHIP_SKIP_DIST_FRESHNESS: "1"
         run: bash scripts/predeploy-com.sh deploy
