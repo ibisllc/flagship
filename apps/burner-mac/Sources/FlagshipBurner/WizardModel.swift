@@ -62,6 +62,11 @@ final class WizardModel: ObservableObject {
     /// a production image with neither. The ONLY way to get those debug features.
     @Published var debugMode: Bool = false
 
+    /// Debug is an ADVANCED-only feature (the checkbox is hidden in Simple), so
+    /// the flag only ever takes effect in Advanced — a Simple burn is always a
+    /// production image even if the flag was left on from an earlier Advanced run.
+    var effectiveDebugMode: Bool { debugMode && mode == .advanced }
+
     /// Advanced-mode only: use the server-named base ISO (fetched/cached) like
     /// Simple does, instead of bringing your own ISO file. Default OFF.
     @Published var useSystemISO: Bool = false
@@ -232,14 +237,14 @@ final class WizardModel: ObservableObject {
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                debugMode: debugMode)
+                                                debugMode: effectiveDebugMode)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                  wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                 debugMode: debugMode)
+                                                 debugMode: effectiveDebugMode)
         return (yaml, preseed)
     }
 

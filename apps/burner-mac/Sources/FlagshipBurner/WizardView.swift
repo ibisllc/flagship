@@ -85,12 +85,15 @@ struct WizardView: View {
             // server-named Debian base ISO and shows the download progress. The
             // "Use system-provided ISO" checkbox lets Advanced fetch it too.
             if model.mode == .advanced {
-                VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                VStack(alignment: .leading, spacing: 0) {
                     isoRow
                         .opacity(model.useSystemISO ? 0.4 : 1)
                         .disabled(model.useSystemISO)
                     FBCheck(isOn: $model.useSystemISO, label: "Use system-provided ISO")
                         .disabled(model.isRunning)
+                        // Pull up snug under the ISO box — `isoRow` (optionGroup)
+                        // already carries an s2 bottom pad + a help-icon row.
+                        .padding(.top, -FB.Spacing.s2)
                         .help("Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.")
                 }
             }
@@ -107,9 +110,12 @@ struct WizardView: View {
     private var modePicker: some View {
         HStack(spacing: FB.Spacing.s3) {
             ModePill(selection: $model.mode)
-            Spacer(minLength: FB.Spacing.s2)
-            FBCheck(isOn: $model.debugMode, label: "Debug mode", tint: FB.Colors.warning)
-                .help("Burn a DEBUG image — keeps the 'debug' console login + DEBUG banner. Off = production (the only way to get debug features).")
+            // Debug is an Advanced-only concern — hidden in Simple.
+            if model.mode == .advanced {
+                Spacer(minLength: FB.Spacing.s2)
+                FBCheck(isOn: $model.debugMode, label: "Debug mode", tint: FB.Colors.primary)
+                    .help("Burn a DEBUG image — keeps the 'debug' console login + DEBUG banner. Off = production (the only way to get debug features).")
+            }
         }
         .disabled(model.isRunning)
         .opacity(model.isRunning ? 0.5 : 1)
