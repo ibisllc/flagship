@@ -95,4 +95,23 @@ class AppStateTest {
         assertEquals("server", SlugUtil.slugify(""))
         assertEquals("server-42", SlugUtil.slugify("Server 42"))
     }
+
+    // An explicit Settings → Lock must make the lock screen WAIT for a tap
+    // (awaitingManualUnlock) rather than auto-prompt and instantly undo the
+    // lock. markUnlocked() clears the latch so launch / return-from-background
+    // still auto-prompt. Mirror of iOS test_lock_armsManualUnlock_*.
+    @Test fun lock_armsManualUnlock_andMarkUnlockedClearsIt() {
+        val s = AppState()
+        s.markUnlocked()
+        assertTrue(s.isUnlocked.value)
+        assertFalse(s.awaitingManualUnlock.value)
+
+        s.lock()
+        assertFalse(s.isUnlocked.value)
+        assertTrue(s.awaitingManualUnlock.value)
+
+        s.markUnlocked()
+        assertTrue(s.isUnlocked.value)
+        assertFalse(s.awaitingManualUnlock.value)
+    }
 }

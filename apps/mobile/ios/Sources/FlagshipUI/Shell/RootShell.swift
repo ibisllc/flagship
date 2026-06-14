@@ -17,6 +17,7 @@ public struct RootShell: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(DeepLinker.self) private var linker
     @Environment(AppState.self) private var app
+    @Environment(PrivacySettings.self) private var privacy
 
     @State private var selected: RootDestination
 
@@ -74,6 +75,11 @@ public struct RootShell: View {
                 app.relockForBackground()
             }
         }
+        // Appearance override (Settings → Appearance). `auto` ⇒ nil ⇒ follow the
+        // system; light/dark force the scheme app-wide. Every view that reads
+        // `@Environment(\.colorScheme)` + `FSColors.scheme(scheme)` then resolves
+        // to the chosen palette.
+        .preferredColorScheme(privacy.themeMode.preferredColorScheme)
     }
 
     /// Tab that owns a given deep-link target. Inner navigation
@@ -89,10 +95,23 @@ public struct RootShell: View {
     }
 }
 
+/// Maps the persisted appearance choice to a SwiftUI scheme override.
+/// `auto` returns nil so the system appearance is honoured.
+public extension PrivacySettings.ThemeMode {
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .auto: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 // MARK: - iPhone (TabView)
 
 private struct iPhoneShell: View {
     @Binding var selected: RootDestination
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         TabView(selection: $selected) {
@@ -104,7 +123,7 @@ private struct iPhoneShell: View {
                     .tag(dest)
             }
         }
-        .tint(FSColors.scheme(.light).primary)
+        .tint(FSColors.scheme(scheme).primary)
     }
 }
 

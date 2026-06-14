@@ -210,4 +210,23 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(id, "o1")
         XCTAssertEqual(online.pods.first?.status, .online, "online pod always wins")
     }
+
+    // An explicit Settings → Lock must make the lock screen WAIT for a tap
+    // (awaitingManualUnlock), not auto-prompt Face ID and instantly undo the
+    // lock. A successful unlock clears the latch so launch / return-from-
+    // background still auto-prompt.
+    func test_lock_armsManualUnlock_andMarkUnlockedClearsIt() {
+        let s = AppState()
+        s.markUnlocked()
+        XCTAssertTrue(s.isUnlocked)
+        XCTAssertFalse(s.awaitingManualUnlock)
+
+        s.lock()
+        XCTAssertFalse(s.isUnlocked)
+        XCTAssertTrue(s.awaitingManualUnlock, "explicit Lock must suppress the lock screen's auto-prompt")
+
+        s.markUnlocked()
+        XCTAssertTrue(s.isUnlocked)
+        XCTAssertFalse(s.awaitingManualUnlock, "a successful unlock re-enables auto-prompt for next time")
+    }
 }

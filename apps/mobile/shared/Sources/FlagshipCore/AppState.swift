@@ -100,6 +100,14 @@ public final class AppState {
     /// — if biometric isn't required, this is true by default so the
     /// content renders immediately.
     public var isUnlocked: Bool
+    /// True when the lock screen was reached by an EXPLICIT user action (the
+    /// Settings "Lock" button) rather than a launch/background relock. The lock
+    /// screen suppresses its auto-Face-ID prompt in this case so a deliberate
+    /// lock waits for the user to tap "Unlock with Face ID" — locking and then
+    /// being instantly unlocked by an auto-prompt is pointless. Auto-prompt
+    /// stays on for launch + return-from-background. Cleared on a successful
+    /// unlock (`markUnlocked`).
+    public var awaitingManualUnlock: Bool = false
     /// v2 device-addressing — the effective scopes the current device
     /// holds under the signed-in user. Nil ⇒ legacy single-IRK path,
     /// no restriction (treat as full scope set). When non-nil, the
@@ -467,6 +475,7 @@ public final class AppState {
     /// flips the in-memory latch so content renders this session.
     public func markUnlocked() {
         isUnlocked = true
+        awaitingManualUnlock = false
     }
 
     /// Tier 1 — LOCK. Explicitly re-gate the app behind the biometric
@@ -483,6 +492,9 @@ public final class AppState {
     /// `markUnlocked()` to come back.
     public func lock() {
         isUnlocked = false
+        // Deliberate lock ⇒ the lock screen must WAIT for an explicit
+        // "Unlock with Face ID" tap, not auto-prompt and instantly undo the lock.
+        awaitingManualUnlock = true
     }
 
     /// B12 — call from the SceneDelegate / SwiftUI .scenePhase change

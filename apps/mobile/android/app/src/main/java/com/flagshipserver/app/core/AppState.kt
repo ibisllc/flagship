@@ -140,7 +140,20 @@ class AppState(
      */
     private val _isUnlocked = MutableStateFlow(isUnlocked ?: !requireBiometricAtLaunch)
     val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
-    fun markUnlocked() { _isUnlocked.value = true }
+
+    /** True when the lock screen was reached by an EXPLICIT user action (the
+     *  Settings "Lock" button) rather than a launch/background relock. The lock
+     *  screen suppresses its auto-biometric prompt in this case so a deliberate
+     *  lock waits for the user to tap "Unlock" — locking and then being instantly
+     *  auto-unlocked is pointless. Auto-prompt stays on for launch +
+     *  return-from-background. Cleared on a successful unlock. Mirror of iOS. */
+    private val _awaitingManualUnlock = MutableStateFlow(false)
+    val awaitingManualUnlock: StateFlow<Boolean> = _awaitingManualUnlock.asStateFlow()
+
+    fun markUnlocked() {
+        _isUnlocked.value = true
+        _awaitingManualUnlock.value = false
+    }
     fun relockForBackground() {
         if (_requireBiometricAtLaunch.value) _isUnlocked.value = false
     }
@@ -160,7 +173,12 @@ class AppState(
      * launch preference is off. The lock screen's unlock button drives
      * [markUnlocked] to come back. Mirror of iOS AppState.lock().
      */
-    fun lock() { _isUnlocked.value = false }
+    fun lock() {
+        _isUnlocked.value = false
+        // Deliberate lock ⇒ the lock screen must WAIT for an explicit tap, not
+        // auto-prompt and instantly undo the lock.
+        _awaitingManualUnlock.value = true
+    }
 
     /**
      * v2 device-addressing — the effective scopes the current device

@@ -3,7 +3,17 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.flagshipserver.app.core.LocalPrivacySettings
+import com.flagshipserver.app.core.ThemeMode
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,6 +62,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(nav: NavController) {
     val app = LocalAppState.current
+    val privacy = LocalPrivacySettings.current
+    val themeMode = privacy?.themeMode?.collectAsState()?.value ?: ThemeMode.AUTO
     val dev = LocalDeveloperSettings.current
     val server = LocalFlagshipServerClient.current
     val client = LocalScreensClient.current
@@ -287,6 +299,28 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
+        // APPEARANCE — Light / Dark / Auto as one horizontal segmented control
+        // (sun, moon, and a small "AUTO"). Applied app-wide by MainActivity.
+        Text(
+            "APPEARANCE",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            ThemeSegment(Modifier.weight(1f), label = "☀️", selected = themeMode == ThemeMode.LIGHT) {
+                privacy?.setThemeMode(ThemeMode.LIGHT)
+            }
+            ThemeSegment(Modifier.weight(1f), label = "🌙", selected = themeMode == ThemeMode.DARK) {
+                privacy?.setThemeMode(ThemeMode.DARK)
+            }
+            ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
+                privacy?.setThemeMode(ThemeMode.AUTO)
+            }
+        }
+
+        Spacer(Modifier.height(FS.space.s6))
+
         // The three-tier "leave the app" cluster, ordered by increasing
         // severity (mirror of iOS SettingsScreen.sessionActions). Tier 3
         // (Remove this device) lives in the danger zone just below.
@@ -507,4 +541,34 @@ private fun companionRequestsSubtitle(pending: Int): String = when {
     pending == 0 -> "Approve writes from docked browsers."
     pending == 1 -> "1 pending write from a docked browser."
     else -> "$pending pending writes from docked browsers."
+}
+
+/** One segment of the APPEARANCE control: a sun / moon / "AUTO" pill that
+ *  highlights when selected. */
+@Composable
+private fun ThemeSegment(
+    modifier: Modifier = Modifier,
+    label: String,
+    small: Boolean = false,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier
+            .height(46.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) FS.colors.primary else FS.colors.surfaceSunken)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (selected) Color.White else FS.colors.text,
+            style = TextStyle(
+                fontSize = if (small) 11.sp else 18.sp,
+                fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,
+                letterSpacing = if (small) 1.5.sp else 0.sp,
+            ),
+        )
+    }
 }

@@ -18,6 +18,9 @@ public struct SettingsScreen: View {
     /// iPad/regular: sidebar already names the destination → inline title.
     /// iPhone keeps the large collapsing title.
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Appearance choice (Light / Dark / Auto) — read + written by the
+    /// APPEARANCE segmented control; applied app-wide by RootShell.
+    @Environment(PrivacySettings.self) private var privacy
     @State private var disconnectTarget: TrustedDevice?
     @State private var disconnectMessage: String?
     /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
@@ -221,6 +224,7 @@ public struct SettingsScreen: View {
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
                 links(c: c)
+                appearanceSection(c: c)
                 sessionActions(c: c)
                 dangerZone(c: c)
                 about(c: c)
@@ -720,6 +724,48 @@ public struct SettingsScreen: View {
                 ? "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later."
                 : "You have no cloud recovery on this account. After removal, no other device can take over — your account is gone for good. Set up recovery first if you might want to come back.")
         }
+    }
+
+    /// Light / Dark / Auto appearance — one horizontal segmented control:
+    /// a sun for Light, a moon for Dark, and a small "AUTO" for system-derived.
+    /// Writes straight to PrivacySettings; RootShell applies it app-wide.
+    private func appearanceSection(c: FSColors) -> some View {
+        section("APPEARANCE", c: c) {
+            HStack(spacing: FS.space.s2) {
+                appearanceOption(.light, systemImage: "sun.max.fill", text: nil, c: c)
+                appearanceOption(.dark, systemImage: "moon.fill", text: nil, c: c)
+                appearanceOption(.auto, systemImage: nil, text: "AUTO", c: c)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func appearanceOption(
+        _ mode: PrivacySettings.ThemeMode,
+        systemImage: String?,
+        text: String?,
+        c: FSColors
+    ) -> some View {
+        let selected = privacy.themeMode == mode
+        Button {
+            privacy.themeMode = mode
+        } label: {
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: 18, weight: .medium))
+                } else if let text {
+                    Text(text).font(.system(size: 11, weight: .bold)).tracking(1.5)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .foregroundColor(selected ? .white : c.text)
+            .background(selected ? c.primary : c.surfaceSunken)
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(mode == .auto ? "Automatic appearance" : (mode == .light ? "Light appearance" : "Dark appearance"))
+        .accessibilityIdentifier("appearance-\(mode.rawValue)")
     }
 
     private func about(c: FSColors) -> some View {

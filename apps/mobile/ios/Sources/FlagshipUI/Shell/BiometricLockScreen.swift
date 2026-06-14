@@ -101,13 +101,18 @@ struct BiometricLockScreen: View {
                 : "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
         }
         // Auto-prompt on first appearance — pattern most password-manager
-        // apps follow. Subsequent failures require an explicit tap so we
-        // don't infinite-loop on "User cancelled" if the user genuinely
-        // wants to back out and force-quit.
+        // apps follow — EXCEPT when the user reached this screen by tapping
+        // "Lock" in Settings. A deliberate lock that instantly auto-unlocks
+        // itself is pointless, so in that case we wait for an explicit tap.
+        // Launch + return-from-background still auto-prompt. Subsequent failures
+        // also require an explicit tap so we don't infinite-loop on "User
+        // cancelled" if the user genuinely wants to back out and force-quit.
         .task {
             if !attemptedAuto {
                 attemptedAuto = true
-                await tryUnlock()
+                if !app.awaitingManualUnlock {
+                    await tryUnlock()
+                }
             }
         }
     }

@@ -12,9 +12,19 @@ import Observation
 @Observable
 @MainActor
 public final class PrivacySettings {
+    /// App appearance: follow the system, or force light / dark. Stored as a
+    /// raw string; the SwiftUI `ColorScheme?` mapping lives in the UI layer
+    /// (this module is Foundation-only). `auto` ⇒ no override (system-derived).
+    public enum ThemeMode: String, CaseIterable, Sendable {
+        case auto
+        case light
+        case dark
+    }
+
     private let defaults: UserDefaults
     private let requireBiometricKey = "flagship.privacy.requireBiometric"
     private let requirePassphraseKey = "flagship.privacy.requirePassphrase"
+    private let themeModeKey = "flagship.appearance.themeMode"
 
     /// True if a Face ID / Touch ID evaluation is required each time the
     /// app cold-launches or returns from background. Defaults to TRUE —
@@ -37,6 +47,12 @@ public final class PrivacySettings {
         didSet { defaults.set(requirePassphraseAtLaunch, forKey: requirePassphraseKey) }
     }
 
+    /// Chosen app appearance. Default `auto` (follow the system). Persisted on
+    /// every change; the UI layer applies it via `.preferredColorScheme`.
+    public var themeMode: ThemeMode {
+        didSet { defaults.set(themeMode.rawValue, forKey: themeModeKey) }
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         // Unset → default ON. Once the user makes an explicit choice we
@@ -48,5 +64,7 @@ public final class PrivacySettings {
         }
         // Unset → default OFF (opt-in to the slower, stricter mode).
         self.requirePassphraseAtLaunch = defaults.bool(forKey: requirePassphraseKey)
+        // Unset → default `auto` (follow the system appearance).
+        self.themeMode = ThemeMode(rawValue: defaults.string(forKey: themeModeKey) ?? "") ?? .auto
     }
 }

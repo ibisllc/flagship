@@ -172,9 +172,12 @@ fun BiometricLockScreen() {
             },
         )
     }
-    // Auto-prompt once on first appearance — matches the iOS flow.
+    // Auto-prompt once on first appearance — EXCEPT when the user reached this
+    // screen by tapping "Lock" in Settings. A deliberate lock that instantly
+    // auto-unlocks itself is pointless, so in that case we wait for an explicit
+    // tap. Launch + return-from-background still auto-prompt.
     LaunchedEffect(Unit) {
-        if (!attemptedAuto && activity != null) {
+        if (!attemptedAuto && activity != null && !app.awaitingManualUnlock.value) {
             attemptedAuto = true
             tryUnlock(activity) { newStatus ->
                 status = newStatus

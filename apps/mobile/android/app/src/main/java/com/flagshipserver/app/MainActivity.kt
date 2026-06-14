@@ -7,6 +7,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass as MaterialWindowWidthSizeClass
@@ -50,6 +51,7 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.PrivacySettings
+import com.flagshipserver.app.core.ThemeMode
 import com.flagshipserver.app.core.QrRelayClient
 import com.flagshipserver.app.core.ToastCenter
 import com.flagshipserver.app.keystore.BiometricAuthority
@@ -169,7 +171,16 @@ class MainActivity : FragmentActivity() {
 
             val sizeClass = calculateWindowSizeClass(this)
 
-            FlagshipTheme {
+            // Appearance override (Settings → Appearance). AUTO follows the
+            // system; LIGHT/DARK force the palette app-wide.
+            val themeMode by privacy.themeMode.collectAsState()
+            val useDark = when (themeMode) {
+                ThemeMode.AUTO -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+
+            FlagshipTheme(darkTheme = useDark) {
                 CompositionLocalProvider(
                     LocalAppState provides appState,
                     LocalScreensClient provides effectiveScreens,

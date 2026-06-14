@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
 private const val PRIVACY_PREFS = "flagship.privacy"
 private const val KEY_REQUIRE_BIOMETRIC = "requireBiometricAtLaunch"
 private const val KEY_REQUIRE_PASSPHRASE = "requirePassphraseAtLaunch"
+private const val KEY_THEME_MODE = "themeMode"
+
+/** App appearance: follow the system, or force light / dark. */
+enum class ThemeMode { AUTO, LIGHT, DARK }
 
 class PrivacySettings(private val prefs: SharedPreferences) {
 
@@ -47,6 +51,20 @@ class PrivacySettings(private val prefs: SharedPreferences) {
     fun setRequirePassphraseAtLaunch(value: Boolean) {
         prefs.edit().putBoolean(KEY_REQUIRE_PASSPHRASE, value).apply()
         _requirePassphraseAtLaunch.value = value
+    }
+
+    private val _themeMode = MutableStateFlow(
+        runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "AUTO") }
+            .getOrDefault(ThemeMode.AUTO),
+    )
+
+    /** Chosen app appearance. Default AUTO (follow the system). The theme
+     *  wrapper in MainActivity reads this to pick the light/dark palette. */
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(value: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, value.name).apply()
+        _themeMode.value = value
     }
 
     companion object {
