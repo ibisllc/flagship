@@ -6,6 +6,7 @@ import FlagshipCore
 /// (push-driven, top priority), recent install events, paired sessions.
 public struct ActivityScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let state: LoadingState<ActivityFeed>
     let pods: [PodInfo]
     let currentPodId: String?
@@ -49,15 +50,6 @@ public struct ActivityScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                HStack {
-                    Text("Activity")
-                        .font(.system(size: 32, weight: .medium))
-                        .foregroundColor(c.text)
-                    Spacer()
-                    podSwitcherIfMulti
-                }
-                .padding(.top, FS.space.s4)
-
                 switch state {
                 case .idle, .loading:
                     skeletons
@@ -113,8 +105,19 @@ public struct ActivityScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s2)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Activity")
+        .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
+        .toolbar {
+            if pods.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    podSwitcherIfMulti
+                }
+            }
+        }
         .refreshable { await onRefresh() }
     }
 
@@ -206,6 +209,8 @@ public struct ActivityScreen: View {
         case "recovery-set-up":     return "key.horizontal.fill"
         case "recovery-rotated":    return "arrow.triangle.2.circlepath"
         case "app-renamed":         return "link.circle"
+        case "server-created":      return "server.rack"
+        case "server-online":       return "checkmark.seal.fill"
         default:                    return "circle.fill"
         }
     }
@@ -216,6 +221,8 @@ public struct ActivityScreen: View {
         case "device-disconnected": return c.danger
         case "device-replaced":     return c.primary
         case "app-renamed":         return c.primary
+        case "server-online":       return c.success
+        case "server-created":      return c.primary
         default:                    return c.textMuted
         }
     }
@@ -229,6 +236,8 @@ public struct ActivityScreen: View {
         case "recovery-set-up":     return "Set up recovery"
         case "recovery-rotated":    return "Rotated recovery passkey"
         case "app-renamed":         return "Renamed app URL"
+        case "server-created":      return "Created server"
+        case "server-online":       return "Server came online"
         default:                    return kind
         }
     }

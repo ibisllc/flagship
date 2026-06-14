@@ -1,4 +1,5 @@
 import type {
+  AuditEventStorage,
   AuthCodeStorage,
   DemoUsersStorage,
   ProvisionStatusStorage,
@@ -42,6 +43,10 @@ export interface ProvisionStatusDeps {
   /** Native push fan-out (APNs / FCM / Web Push RFC 8291). Absent ⇒ the
    *  phase is stored but no push fires (no provider secrets configured). */
   pushFanout?: V12PushFanout;
+  /** Optional. When provided (alongside `authCodes`), the FIRST `live`
+   *  report for a serial appends a `server-online` row to the owner's audit
+   *  feed so the Activity tab shows the box coming online. Best-effort. */
+  auditEvents?: AuditEventStorage;
   now?: () => number;
 }
 
@@ -133,11 +138,40 @@ export async function handlePostProvisionStatus(
     if (!order) return forbidden("unknown serial");
   }
 
+  // Capture whether the box had already gone `live` BEFORE this report, so the
+  // audit emit below fires only on the FIRST live transition (a replayed/retried
+  // `live` POST mustn't append a duplicate "came online" row).
+  let wasLiveBefore = false;
+  if (body.phase === "live" && deps.auditEvents && deps.authCodes) {
+    const prior = await deps.storage.getProvisionStatus(serial);
+    wasLiveBefore =
+      prior?.phase === "live" || (prior?.history?.some((h) => h.phase === "live") ?? false);
+  }
+
   await deps.storage.putProvisionStatus(serial, {
     phase: body.phase,
     ...(body.detail !== undefined ? { detail: body.detail } : {}),
     ts: now,
   });
+
+  // Activity feed: the box is serving for the first time. SERIAL → auth-code →
+  // username, same resolution the push fan-out uses. Best-effort + once.
+  if (body.phase === "live" && !wasLiveBefore && deps.auditEvents && deps.authCodes) {
+    try {
+      const order = await deps.authCodes.get(serial);
+      if (order) {
+        await deps.auditEvents.append({
+          username: order.username,
+          eventKind: "server-online",
+          detail: order.serverName || order.serverDomain || serial,
+          devicePrefix: "",
+          postedAt: now,
+        });
+      }
+    } catch {
+      // never fail the status write on an audit insert
+    }
+  }
 
   // Mirror onto the demo_users row (if any) so the demo install-progress
   // timeline reads off this SAME canonical channel — one vocabulary for both

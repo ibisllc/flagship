@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 import FlagshipAPI
 import FlagshipCore
 import Flagship
@@ -76,13 +77,14 @@ public struct ServerDetailScreen: View {
                 // polls the boot relay (not the box) and renders nothing until a
                 // request is actually waiting.
                 if let fqdn = approvalFqdn, !fqdn.isEmpty {
-                    // Offer the unlock-approval check when the directory says the
-                    // box is waiting (awaitingUnlock) OR the daemon BFF detail
-                    // hasn't loaded (a locked box can't answer it). An online,
-                    // loaded box that isn't waiting shows nothing.
+                    // The directory's cheap `awaitingUnlock` flag (no biometric)
+                    // is the authoritative "this box is waiting" signal — a
+                    // locked-and-waiting box always sets it when it posts the
+                    // request. The card surfaces Approve/Deny directly when it's
+                    // set, and renders nothing otherwise.
                     BootUnlockApprovalCard(
                         serverDomain: fqdn,
-                        promptWhenIdle: awaitingUnlock || !isLoaded
+                        awaitingUnlock: awaitingUnlock
                     )
                 }
                 switch state {
@@ -448,33 +450,34 @@ struct BootUnlockApprovalCard: View {
     @Environment(AppState.self) private var app
 
     let serverDomain: String
-    /// When idle (no request known yet), show a tappable "check for a pending
-    /// unlock" prompt. Reading the mailbox needs an IRK signature and the IRK
-    /// is biometric-gated, so the read CANNOT run on a background timer (Face
-    /// ID can't fire unattended — it would throw before the network call). The
-    /// check therefore has to be user-initiated; the tap is the gesture that
-    /// authorizes Face ID. Pass true when the box isn't confirmed online (a box
-    /// that's up has already unlocked, so there's nothing to wait on).
-    var promptWhenIdle: Bool = false
+    /// The pod's cheap `awaitingUnlock` flag from the unauthenticated `/pods`
+    /// directory — NO biometric to read. When true the box has posted a
+    /// boot-unlock request, so the card surfaces the Approve/Deny prompt
+    /// directly (no "check for unlock request" tap, no Face ID just to look).
+    /// The directory poll refreshes it on a timer + on foreground, so the
+    /// prompt appears on its own the moment a box starts waiting.
+    var awaitingUnlock: Bool = false
 
     @State private var vm: BootUnlockApprovalViewModel?
-    @State private var checking = false
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        // Create the VM SYNCHRONOUSLY on the first body eval, never in onAppear.
-        // The old `Group { if let vm { … } }.onAppear { vm = … }` rendered an
-        // empty (zero-size) view on the first pass; in a ScrollView, onAppear on
-        // a zero-size view frequently never fires, so the VM was never created
-        // and the card stayed permanently blank. Building it inline guarantees
-        // content (incl. the idle "check" prompt) renders on the first pass; the
-        // VM holds no side effects until the user taps (no background poll).
+        // Build the VM synchronously on the first body eval (a zero-size view's
+        // onAppear can fail to fire inside a ScrollView). It holds no side
+        // effects — detection is driven by the `awaitingUnlock` flag below, and
+        // Face ID fires only when the owner taps Approve.
         let model = vm ?? BootUnlockApprovalViewModel(
             serverDomain: serverDomain,
             makeCoordinator: makeCoordinator
         )
         return content(vm: model, c: c)
-            .onAppear { if vm == nil { vm = model } }
+            .onAppear {
+                if vm == nil { vm = model }
+                model.setAwaitingUnlock(awaitingUnlock)
+            }
+            .onChange(of: awaitingUnlock) { _, now in
+                model.setAwaitingUnlock(now)
+            }
             .onDisappear { vm?.stop() }
     }
 
@@ -482,13 +485,9 @@ struct BootUnlockApprovalCard: View {
     private func content(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
         switch vm.state {
         case .idle:
-            if promptWhenIdle {
-                idleCheckCard(vm: vm, c: c)
-            } else {
-                EmptyView()
-            }
-        case .waiting(let req):
-            waitingCard(req: req, vm: vm, c: c)
+            EmptyView()
+        case .requestPending:
+            requestCard(vm: vm, c: c)
         case .approving:
             statusCard(c: c) {
                 HStack(spacing: FS.space.s2) {
@@ -502,85 +501,39 @@ struct BootUnlockApprovalCard: View {
                     .font(FS.font.body())
                     .foregroundColor(c.text)
             }
-        case .stoppedWaiting:
-            statusCard(c: c) {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Label("Your box stopped waiting", systemImage: "exclamationmark.triangle.fill")
-                        .font(FS.font.body())
-                        .foregroundColor(c.text)
-                    Text("Power-cycle it (unplug power, plug back in) and it'll ask for approval again.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                }
-            }
         case .failed(let msg):
             statusCard(c: c) {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
-                    FSGhostButton("Retry", block: true) { Task { await vm.retry() } }
+                    FSGhostButton("Retry", block: true) { vm.retry() }
                         .accessibilityIdentifier("sd-approve-unlock-retry")
                 }
             }
         }
     }
 
-    /// Idle prompt: a user-initiated check for a pending unlock. The mailbox
-    /// read is biometric, so this tap is what authorizes Face ID — it can't be
-    /// done silently on a poll. On success the VM flips to `.waiting` and the
-    /// Approve button below replaces this card.
-    private func idleCheckCard(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
-        sectionWrap("BOX UNLOCK", c: c) {
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Is your box waiting to unlock?")
-                        .font(FS.font.body()).foregroundColor(c.text)
-                    Text("If you just powered it on, it may be waiting for you to release its disk key. Check now to approve — you'll confirm with Face ID.")
-                        .font(FS.font.caption()).foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    FSPrimaryButton(checking ? "Checking…" : "Check for unlock request", block: true) {
-                        guard !checking else { return }
-                        checking = true
-                        Task {
-                            await vm.checkNow()
-                            checking = false
-                        }
-                    }
-                    .disabled(checking)
-                    .accessibilityIdentifier("sd-check-unlock")
-                }
-            }
-        }
-    }
-
-    private func waitingCard(
-        req: SecretRequestCoordinator.VerifiedRequest,
-        vm: BootUnlockApprovalViewModel,
-        c: FSColors
-    ) -> some View {
+    /// The directory says this box is waiting — ask the owner to Approve or
+    /// Deny DIRECTLY. No biometric has fired; Face ID fires once, only when
+    /// they tap Approve (and covers the whole ceremony via memoized keys).
+    private func requestCard(vm: BootUnlockApprovalViewModel, c: FSColors) -> some View {
         sectionWrap("BOX WAITING", c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     Text("Your box is waiting for your approval to unlock")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(c.text)
-                    if let info = req.deviceInfo {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let ip = info.ip { infoRow("IP", ip, c) }
-                            if let region = info.region { infoRow("Region", region, c) }
-                            if let os = info.os { infoRow("OS", os, c) }
-                            if let host = info.hostname { infoRow("Host", host, c) }
-                        }
-                        .padding(.top, FS.space.s1)
-                    }
-                    Text("Approve only if you recognise this machine. Your phone will ask for Face ID to release the key.")
+                    Text("If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, FS.space.s1)
                     FSPrimaryButton("Approve unlock", block: true, large: true) {
                         Task { await vm.approve() }
                     }
                     .accessibilityIdentifier("sd-approve-unlock")
                     .padding(.top, FS.space.s2)
+                    FSGhostButton("Deny", block: true) { vm.deny() }
+                        .accessibilityIdentifier("sd-deny-unlock")
                 }
             }
         }
@@ -603,36 +556,44 @@ struct BootUnlockApprovalCard: View {
         }
     }
 
-    private func infoRow(_ label: String, _ value: String, _ c: FSColors) -> some View {
-        HStack(spacing: FS.space.s2) {
-            Text(label).font(FS.font.caption()).foregroundColor(c.textMuted).frame(width: 56, alignment: .leading)
-            Text(value).font(FS.font.mono()).foregroundColor(c.text)
-        }
-    }
-
     private func makeCoordinator() -> ApprovalSource? {
         guard let username = app.currentUser else { return nil }
+        // Derive the IRK + this server's BAK in ONE biometric, memoized so the
+        // whole approve ceremony (mailbox-auth fetch → unseal → response →
+        // lease) reuses them instead of re-prompting Face ID 3-4 times.
+        let keys = ApprovalKeyCache(serverDomain: serverDomain)
         return SecretRequestCoordinator(
             mailbox: mailbox,
             username: username,
-            irkProvider: {
-                try await Keystore.deriveIRK(reason: "Approve your box's boot unlock")
-            },
-            unsealSeedProvider: { serverDomain in
-                var seeds: [Data] = []
-                if let bak = try? await Keystore.deriveBAK(
-                    serverId: serverDomain,
-                    reason: "Unseal the disk key for \(serverDomain)"
-                ) {
-                    seeds.append(bak.rawRepresentation)
-                }
-                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
-                    seeds.append(irk.rawRepresentation)
-                }
-                return seeds
-            },
+            irkProvider: { try await keys.irk() },
+            unsealSeedProvider: { _ in try await keys.unsealSeeds() },
             watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )
+    }
+}
+
+/// Memoizes the boot-unlock approval keys so the multi-step approve ceremony
+/// runs under a SINGLE Face ID. `Keystore.deriveApprovalKeys` unwraps the UMK
+/// once (one biometric) and yields the account IRK + the server BAK; every
+/// provider the coordinator calls (mailbox-auth IRK, unseal seeds, response
+/// header, lease) then resolves from this cache without re-prompting.
+private actor ApprovalKeyCache {
+    private let serverDomain: String
+    private var cached: (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey)?
+    init(serverDomain: String) { self.serverDomain = serverDomain }
+    private func keys() async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey) {
+        if let cached { return cached }
+        let k = try await Keystore.deriveApprovalKeys(
+            serverId: serverDomain,
+            reason: "Approve your box's boot unlock"
+        )
+        cached = k
+        return k
+    }
+    func irk() async throws -> Curve25519.Signing.PrivateKey { try await keys().irk }
+    func unsealSeeds() async throws -> [Data] {
+        let k = try await keys()
+        return [k.bak.rawRepresentation, k.irk.rawRepresentation]
     }
 }
 

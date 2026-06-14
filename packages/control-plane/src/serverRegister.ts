@@ -5,6 +5,7 @@ import {
   type ServerRegisterRequest,
 } from "@flagship/protocol";
 import type {
+  AuditEventStorage,
   AuthCodeStorage,
   InstallPolicyFanoutStorage,
   PushTokenStorage,
@@ -74,6 +75,12 @@ export interface ServerRegisterDeps {
    *  Entirely best-effort — a push failure never fails registration. */
   pushTokens?: PushTokenStorage;
   installPolicyFanout?: InstallPolicyFanoutStorage;
+  /** Optional. When provided, a successful FIRST registration appends a
+   *  `server-created` row to the account audit feed so the Activity tab
+   *  shows the box's lifecycle (created → online). Best-effort: an audit
+   *  failure never fails registration. The auth-code is consumed above, so
+   *  this point is reached at most once per server. */
+  auditEvents?: AuditEventStorage;
   forwardToProviders?: (args: {
     targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
     category: string;
@@ -203,6 +210,24 @@ export async function handleServerRegister(
     identityPubKeyHex: bytesToHex(identityPub),
     registeredAt: now,
   });
+
+  // Activity feed: record the box's birth on the account audit log. The
+  // auth-code was just consumed, so this fires exactly once per server.
+  // Best-effort — an audit insert must never fail an otherwise-good
+  // registration (the feed is informational, registration is load-bearing).
+  if (deps.auditEvents) {
+    try {
+      await deps.auditEvents.append({
+        username: authCode.username,
+        eventKind: "server-created",
+        detail: authCode.serverName || authCode.serverDomain,
+        devicePrefix: "",
+        postedAt: now,
+      });
+    } catch {
+      // swallow — never break registration on an audit write
+    }
+  }
 
   // N0d-2: nudge the user's device family to reconcile their server
   // list. Empty-payload / category-only — .com never sees content

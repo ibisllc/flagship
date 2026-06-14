@@ -32,6 +32,7 @@ public final class SecretRequestCoordinator {
         case luksUnsealFailed
         case directoryMissingServer(String)
         case purposeUnsupported(String)
+        case noPendingRequest(String)
 
         public var errorDescription: String? {
             switch self {
@@ -43,6 +44,8 @@ public final class SecretRequestCoordinator {
                 return "This box (\(d)) isn't registered to your account."
             case .purposeUnsupported(let p):
                 return "Unsupported secret request type: \(p)."
+            case .noPendingRequest:
+                return "Your box stopped waiting. Power-cycle it (unplug, plug back in) and it'll ask again."
             }
         }
     }
@@ -243,6 +246,30 @@ public final class SecretRequestCoordinator {
             return try await depositAutoUnlockLease(request: request, luksKey: key, irk: try requireIrk())
         }
         return nil
+    }
+
+    /// One-tap approval for the directory-driven server card. The pod's cheap
+    /// `awaitingUnlock` flag (no biometric) tells the UI a request is pending,
+    /// so — unlike the full approvals list — there's no separate "check" step.
+    /// This fetches + re-verifies the live unlock-key request for `serverDomain`
+    /// and responds, all under ONE biometric when the coordinator's key
+    /// providers are memoized (see the card's `makeCoordinator`). Throws
+    /// `.noPendingRequest` if the box already gave up between the directory
+    /// refresh and the tap. Returns the lease id when an auto lease was
+    /// deposited, else nil.
+    @discardableResult
+    public func approvePendingUnlock(
+        serverDomain: String,
+        depositAutoLease: Bool
+    ) async throws -> String? {
+        let verified = try await fetchVerifiedRequests()
+        let mine = verified
+            .filter { $0.serverDomain.lowercased() == serverDomain.lowercased() && $0.purpose == .unlockKey }
+            .sorted { $0.pending.postedAt > $1.pending.postedAt }
+        guard let live = mine.first(where: { now() <= $0.pending.expiresAt }) else {
+            throw CoordinatorError.noPendingRequest(serverDomain)
+        }
+        return try await confirmAndRespond(live, depositAutoLease: depositAutoLease)
     }
 
     /// Kill switch — revoke a server's auto-unlock lease. The box can no

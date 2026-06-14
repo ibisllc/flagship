@@ -765,6 +765,8 @@ export async function tryControlPlane(
           // N0d-2: nudge the device family on a new registration.
           pushTokens: storage.pushTokens,
           installPolicyFanout: storage.installPolicyFanout,
+          // Activity feed: record `server-created` on first registration.
+          auditEvents: storage.auditEvents,
           ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
         },
         await readJson(request),
@@ -1842,6 +1844,8 @@ export async function tryControlPlane(
           // demo install-progress timeline reads off this same channel (the
           // demo VPS bootstrap posts here now). Best-effort inside the handler.
           demoUsers: storage.demoUsers,
+          // Activity feed: emit `server-online` on the first `live` report.
+          auditEvents: storage.auditEvents,
           ...(psFanout ? { pushFanout: psFanout } : {}),
         },
         decodeURIComponent(m[1]!),

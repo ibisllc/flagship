@@ -15,6 +15,7 @@ import {
   type ServerRegisterRequest,
 } from "@flagship/protocol";
 import {
+  InMemoryAuditEventStorage,
   InMemoryAuthCodeStorage,
   InMemoryInstallPolicyFanoutStorage,
   InMemoryPushTokenStorage,
@@ -60,6 +61,7 @@ async function register(deps: {
   installPolicyFanout?: InMemoryInstallPolicyFanoutStorage;
   forwardToProviders?: (a: FanoutCall) => Promise<{ ok: boolean; sent: number; failed: number }>;
   servers?: InMemoryServerStorage;
+  auditEvents?: InMemoryAuditEventStorage;
 }) {
   const irk = makeKey();
   const authCodes = new InMemoryAuthCodeStorage();
@@ -107,6 +109,7 @@ async function register(deps: {
       pushTokens: deps.pushTokens,
       installPolicyFanout: deps.installPolicyFanout,
       forwardToProviders: deps.forwardToProviders,
+      auditEvents: deps.auditEvents,
       now: () => ISSUED_AT,
     },
     {
@@ -217,5 +220,25 @@ describe("serverRegister — install-policy push fan-out (N0d-2)", () => {
     expect(r.status).toBe(200);
     expect(calls).toHaveLength(0);
     expect((await installPolicyFanout.get("home.alice.flagship.services"))?.fanoutCount).toBe(0);
+  });
+
+  it("appends a 'server-created' audit row on first registration (Activity feed)", async () => {
+    const auditEvents = new InMemoryAuditEventStorage();
+    const r = await register({ auditEvents });
+    expect(r.status).toBe(200);
+    const rows = await auditEvents.list("alice", 0, 50);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.eventKind).toBe("server-created");
+    // Detail is the human server name (falls back to fqdn).
+    expect(rows[0]!.detail).toBe("home");
+  });
+
+  it("never fails registration when the audit append throws", async () => {
+    const auditEvents = new InMemoryAuditEventStorage();
+    auditEvents.append = async () => {
+      throw new Error("audit backend down");
+    };
+    const r = await register({ auditEvents });
+    expect(r.status).toBe(200);
   });
 });

@@ -241,6 +241,41 @@ public struct Keystore {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
+    /// Account-open fast path — generate + install a fresh UMK and derive the
+    /// account IRK from the SAME in-memory seed in ONE biometric ceremony.
+    /// `installUMK`'s wrap step is the only Secure-Enclave private-key op (a
+    /// single Face ID); deriving the IRK from the in-memory seed needs no
+    /// second unwrap, so opening an account prompts ONCE instead of twice
+    /// (the `generateUMK` + `deriveIRK` storm the user hit). The result is
+    /// byte-identical to `deriveIRK()` run right after `generateUMK()`:
+    /// `installUMK` resets the IRK version to v1 and we derive at that version.
+    public static func generateUMKAndDeriveIRK(
+        reason: String = "Open your Flagship account"
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        let umkSeed = SymmetricKey(size: .bits256)
+        try await installUMK(umkSeed, reason: reason)
+        let seed = derive(umk: umkSeed, info: "flagship/irk/v\(currentIrkVersion())")
+        return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
+    }
+
+    /// Boot-unlock approval fast path — unwrap the UMK ONCE and derive every
+    /// key the approve ceremony needs (account IRK + this server's BAK) from
+    /// the same in-memory seed. Behind a memoizing provider this collapses the
+    /// old 3–4 Face ID storm (mailbox fetch, unseal-with-BAK, unseal-with-IRK,
+    /// response header, lease deposit) into ONE biometric. The returned keys
+    /// are byte-identical to `deriveIRK()` + `deriveBAK(serverId:)`.
+    public static func deriveApprovalKeys(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let bakSeed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
+        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+        let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
+        return (irk, bak)
+    }
+
     /// Current IRK HKDF version. Defaults to 1 if the slot is absent
     /// — covers legacy installs that pre-date the rotation primitive.
     public static func currentIrkVersion() -> Int {

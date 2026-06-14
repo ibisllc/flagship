@@ -16,7 +16,11 @@ public final class HomeViewModel {
     }
 
     public func load() async {
-        detail = .loading
+        // Only show the skeleton on the very first attempt. On retries and
+        // pull-to-refresh, keep the current state (the "Connecting…" card or
+        // the last-good detail) so a transient failure doesn't flash the
+        // skeleton or wipe good data underneath the user.
+        if case .idle = detail { detail = .loading }
         do {
             // Mock-side: tell the in-memory client which pod fixture to
             // return. LiveScreensClient ignores this (its base URL is
@@ -27,6 +31,10 @@ public final class HomeViewModel {
             let resp = try await client.serverDetail()
             detail = .loaded(resp)
         } catch {
+            // Keep showing the last successful detail on a transient refresh
+            // failure; only fall back to the "Connecting…" state when we never
+            // had detail to begin with.
+            if case .loaded = detail { return }
             detail = .failed(error.localizedDescription)
         }
     }

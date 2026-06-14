@@ -347,6 +347,8 @@ export type AuditEventKind =
   | "recovery-set-up"
   | "recovery-rotated"
   | "app-renamed"            // V2 — voi.ci-aware Replace stem
+  | "server-created"         // a box registered to the account for the first time
+  | "server-online"          // a box reported live (cert serving) for the first time
   // Plan A — demo-user lifecycle (docs/sample-users.md §13). Stored
   // under the demo username so the regular /api/users/:u/audit feed
   // surfaces them; never emitted for non-demo accounts.

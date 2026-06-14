@@ -112,33 +112,31 @@ public final class OpenAccountViewModel {
             // here we always point at the named slot before key-gen.
             Keystore.setActiveProfile(username)
 
-            // Create account == generate the UMK. Guard against a
-            // double-generate if a prior attempt already minted one
-            // (so a retry doesn't orphan the first UMK + its claim).
-            if !Keystore.hasWrappedUMK {
-                try await Keystore.generateUMK(reason: "Open your Flagship account")
-            }
-
-            // Derive the account IRK, self-healing STALE local key material. A
-            // wrapped UMK can linger from a PRIOR account on this device — the
-            // Keychain survives an app delete+reinstall, and a partial reset can
-            // leave another profile's slot behind. If its Secure-Enclave wrapping
-            // key is gone/invalidated, the unwrap fails its AES-GCM tag check
-            // (.unwrapFailed "authenticationFailure") — the local key is unusable,
-            // NOT a biometric cancel. For an open-account that's safe to clear +
-            // re-mint: wipe THIS profile's stale slot and generate a fresh UMK.
-            // (If the name is already claimed server-side under the old IRK, the
-            // claimUsername below conflicts and the user is steered to recovery —
-            // we never silently fork a real identity.) Any other error — notably
-            // a biometric cancel (.biometricFailed) — rethrows untouched so we
-            // don't destroy a usable key just because the user dismissed Face ID.
+            // Create account == generate the UMK + derive the account IRK.
+            // The common fresh-account path does BOTH in ONE biometric
+            // ceremony (`generateUMKAndDeriveIRK` derives the IRK from the
+            // in-memory seed it just wrapped — no second Face ID), fixing the
+            // back-to-back prompt storm. The retry path (a UMK already exists
+            // from a prior partial run) still self-heals stale local key
+            // material: deriving from the existing UMK can fail its AES-GCM tag
+            // check (.unwrapFailed "authenticationFailure") if the Secure-Enclave
+            // wrapping key was lost/invalidated — that's an unusable local key,
+            // NOT a biometric cancel — so we wipe THIS profile's stale slot and
+            // re-mint. (If the name is already claimed server-side under the old
+            // IRK, the claimUsername below conflicts and the user is steered to
+            // recovery — we never silently fork a real identity.) A real
+            // biometric cancel (.biometricFailed) rethrows untouched so we don't
+            // destroy a usable key just because the user dismissed Face ID.
             let irk: Curve25519.Signing.PrivateKey
-            do {
-                irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
-            } catch Keystore.KeystoreError.unwrapFailed {
-                Keystore.wipe()
-                try await Keystore.generateUMK(reason: "Open your Flagship account")
-                irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
+            if !Keystore.hasWrappedUMK {
+                irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+            } else {
+                do {
+                    irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
+                } catch Keystore.KeystoreError.unwrapFailed {
+                    Keystore.wipe()
+                    irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+                }
             }
             let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
             let now = Int64(Date().timeIntervalSince1970 * 1000)

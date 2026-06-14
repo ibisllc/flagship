@@ -168,7 +168,7 @@ public struct HomeTab: View {
             // unlock surfaces an Approve affordance on the list/checklist
             // without waiting for a push or a per-card poller.
             if approvalWatcher == nil {
-                let w = BootApprovalWatcher(app: app, makeCoordinator: makeApprovalCoordinator)
+                let w = BootApprovalWatcher(app: app, pollAwaiting: pollAwaitingUnlock)
                 approvalWatcher = w
                 w.start()
             }
@@ -348,33 +348,19 @@ public struct HomeTab: View {
         if navigateHome { path.removeAll() }
     }
 
-    /// Build the boot-approval coordinator for the account-level watcher.
-    /// Mirrors `BootUnlockApprovalCard.makeCoordinator` — same mailbox + active
-    /// account + Keystore-derived keys — so the list poll and the per-card poll
-    /// resolve the identical request set. The IRK derive only fires for the
-    /// signed mailbox-auth read (not a destructive action).
-    private func makeApprovalCoordinator() -> ApprovalSource? {
-        guard let username = app.currentUser else { return nil }
-        return SecretRequestCoordinator(
-            mailbox: mailbox,
-            username: username,
-            irkProvider: {
-                try await Keystore.deriveIRK(reason: "Check for boxes waiting to unlock")
-            },
-            unsealSeedProvider: { serverDomain in
-                var seeds: [Data] = []
-                if let bak = try? await Keystore.deriveBAK(
-                    serverId: serverDomain,
-                    reason: "Unseal the disk key for \(serverDomain)"
-                ) {
-                    seeds.append(bak.rawRepresentation)
-                }
-                if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
-                    seeds.append(irk.rawRepresentation)
-                }
-                return seeds
-            },
-            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+    /// Account-level "which boxes are waiting to unlock?" poll for the watcher.
+    /// Reads the cheap `awaitingUnlock` flag straight from the unauthenticated
+    /// `/pods` directory — NO biometric. (The old path derived the IRK to read
+    /// the mailbox, which fired Face ID every 5s on device.) Best-effort: a blip
+    /// returns the prior set so the UI never thrashes.
+    private func pollAwaitingUnlock() async -> Set<String> {
+        guard let user = app.currentUser, !user.isEmpty,
+              let dir = try? await mailbox.fetchPods(username: user)
+        else { return app.serversAwaitingApproval }
+        return Set(
+            dir.pods
+                .filter { $0.awaitingUnlock }
+                .map { $0.serverDomain.lowercased() }
         )
     }
 
@@ -678,10 +664,23 @@ struct ServerDetailContainer: View {
             if metricsVm == nil {
                 metricsVm = ServerMetricsViewModel(podId: podId, client: client)
             }
-            await detailVm?.load()
             metricsVm?.startPolling(every: 15)
-            // Park the task here so polling stops when the view goes
-            // away. The stream never yields; binding it to a local keeps
+            // Retry the BFF detail load until it lands. A box that JUST came
+            // online can take a few seconds before its daemon answers the
+            // detail BFF; a single load() would otherwise leave the page stuck
+            // on "Connecting to your server…" until the user manually pulled to
+            // refresh (the bug). Backoff 2s→15s. The loop exits when the view
+            // goes away (`.task` cancels) — so it doubles as the keep-alive
+            // park that stops metrics polling on disappear.
+            var delay: UInt64 = 2_000_000_000
+            while !Task.isCancelled {
+                await detailVm?.load()
+                if let d = detailVm?.detail, case .loaded = d { break }
+                try? await Task.sleep(nanoseconds: delay)
+                delay = min(delay * 2, 15_000_000_000)
+            }
+            // Detail loaded — park so metrics polling continues until the view
+            // is removed. The stream never yields; binding it to a local keeps
             // the build closure unambiguous (not confusable with the loop body).
             let parkUntilCancelled = AsyncStream<Never> { _ in }
             for await _ in parkUntilCancelled { }

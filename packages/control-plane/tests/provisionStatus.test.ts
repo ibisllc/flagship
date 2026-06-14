@@ -453,4 +453,36 @@ describe("provision status channel", () => {
     );
     expect((get.body as { phase: string }).phase).toBe("live");
   });
+
+  it("emits a 'server-online' audit row on the FIRST live report, deduped on replay", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice", { withToken: false });
+    const deps = {
+      storage: storage.provisionStatus,
+      authCodes: storage.authCodes,
+      auditEvents: storage.auditEvents,
+      now: () => 5_000,
+    };
+    await handlePostProvisionStatus(deps, SERIAL, { phase: "registering" });
+    await handlePostProvisionStatus(deps, SERIAL, { phase: "live" });
+    // A replayed/retried `live` POST must NOT append a duplicate row.
+    await handlePostProvisionStatus(deps, SERIAL, { phase: "live" });
+
+    const rows = await storage.auditEvents.list("alice", 0, 50);
+    const online = rows.filter((r) => r.eventKind === "server-online");
+    expect(online).toHaveLength(1);
+    expect(online[0]!.detail).toBe("home");
+  });
+
+  it("emits no 'server-online' row when auditEvents is not wired", async () => {
+    const storage = new InMemoryStorage();
+    await seedOrderWithOwner(storage, SERIAL, "alice", { withToken: false });
+    const res = await handlePostProvisionStatus(
+      { storage: storage.provisionStatus, authCodes: storage.authCodes, now: () => 5_000 },
+      SERIAL,
+      { phase: "live" },
+    );
+    expect(res.status).toBe(200);
+    expect(await storage.auditEvents.list("alice", 0, 50)).toHaveLength(0);
+  });
 });

@@ -72,9 +72,9 @@ public struct ServicesTab: View {
                     .padding(.top, FS.space.s2)
                     .fsReadingColumn()
                 }
-                .navigationTitle("Apps")
+                .navigationTitle("Services")
                 .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
-                .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search apps")
+                .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search services")
                 .toolbar {
                     // V8 — server filter stays as the top-right PodSwitcher.
                     if app.pods.count > 1 {

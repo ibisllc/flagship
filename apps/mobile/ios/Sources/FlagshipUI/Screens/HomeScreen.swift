@@ -761,13 +761,14 @@ public struct LeaderBadge: View {
     public init() {}
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Image(systemName: "crown.fill").font(.system(size: 9))
             Text("Leader").font(.system(size: 11, weight: .semibold))
         }
         .foregroundColor(c.primary)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 2)
+        .frame(minHeight: 22)
         .background(c.primary.opacity(0.12))
         .clipShape(Capsule())
     }

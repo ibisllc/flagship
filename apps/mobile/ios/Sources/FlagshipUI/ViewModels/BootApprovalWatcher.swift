@@ -6,39 +6,36 @@ import FlagshipCore
 /// detail page, and the post-creation checklist via
 /// `AppState.serversAwaitingApproval`.
 ///
-/// This is the list-wide complement to `BootUnlockApprovalViewModel`, which
-/// owns the SINGLE-server card (the live request + the Approve action). Rather
-/// than spin one of those per row (N pollers + N biometric-free fetches), this
-/// watcher reuses the SAME `ApprovalSource.verifiedRequests()` account-wide
-/// fetch once, maps the verified unlock-key requests to their serverDomains,
-/// and publishes the set. A pod is `waitingForApproval` iff its fqdn is in it.
-///
-/// Mirrors `BootUnlockApprovalViewModel`'s shape: injected coordinator factory
-/// + clock + poll interval (tests pass 1ms), best-effort (a fetch failure
-/// leaves the prior set untouched — no thrash on a blip), no biometric (the
-/// fetch is an IRK-signed *read*; Face ID stays only on the Approve mutation).
+/// DIRECTORY-DRIVEN, NO BIOMETRIC. Detection reads the unauthenticated `/pods`
+/// directory's cheap `awaitingUnlock` flag — NOT the IRK-signed mailbox. The
+/// previous implementation polled `verifiedRequests()` every 5s, which derives
+/// the IRK from the Secure Enclave: on a real device that fired Face ID every
+/// five seconds on the Home tab (it was silent only on the simulator, where the
+/// wrap key is a plain Keychain item — which is why it slipped through). Face ID
+/// now fires ONLY on the actual Approve mutation, never to detect.
 @MainActor
 @Observable
 public final class BootApprovalWatcher {
-    /// 5s between polls — matches the per-server card so the two never drift.
+    /// 5s between directory polls — a cheap unauthenticated GET, so a box that
+    /// starts waiting surfaces its Approve affordance within a few seconds
+    /// without any prompt.
     public nonisolated static let pollInterval: UInt64 = 5_000_000_000
 
     private let app: AppState
-    private let makeCoordinator: () -> ApprovalSource?
+    /// Refresh the `/pods` directory (unauthenticated, NO biometric) and return
+    /// the set of server fqdns the directory marks `awaitingUnlock`.
+    private let pollAwaiting: () async -> Set<String>
     private let pollIntervalNanos: UInt64
-    private let now: () -> Int64
     private var task: Task<Void, Never>?
 
     public init(
         app: AppState,
-        makeCoordinator: @escaping () -> ApprovalSource?,
-        pollIntervalNanos: UInt64 = BootApprovalWatcher.pollInterval,
-        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        pollAwaiting: @escaping () async -> Set<String>,
+        pollIntervalNanos: UInt64 = BootApprovalWatcher.pollInterval
     ) {
         self.app = app
-        self.makeCoordinator = makeCoordinator
+        self.pollAwaiting = pollAwaiting
         self.pollIntervalNanos = pollIntervalNanos
-        self.now = now
     }
 
     public func start() {
@@ -57,24 +54,12 @@ public final class BootApprovalWatcher {
         task = nil
     }
 
-    /// One account-wide fetch → publish the set of fqdns with a LIVE
-    /// (non-expired) unlock-key request. Best-effort: a throw leaves the set
-    /// untouched. Exposed for the explicit pull-to-refresh.
+    /// One directory refresh → publish the set of fqdns with a live unlock
+    /// request. Best-effort: the closure swallows failures and returns the
+    /// prior set, so a blip never thrashes the UI. Exposed for pull-to-refresh.
     @discardableResult
     public func pollOnce() async -> Set<String> {
-        guard let coord = makeCoordinator() else { return app.serversAwaitingApproval }
-        let verified: [SecretRequestCoordinator.VerifiedRequest]
-        do {
-            verified = try await coord.verifiedRequests()
-        } catch {
-            return app.serversAwaitingApproval
-        }
-        let t = now()
-        let waiting = Set(
-            verified
-                .filter { $0.purpose == .unlockKey && t <= $0.pending.expiresAt }
-                .map { $0.serverDomain.lowercased() }
-        )
+        let waiting = await pollAwaiting()
         app.serversAwaitingApproval = waiting
         return waiting
     }
