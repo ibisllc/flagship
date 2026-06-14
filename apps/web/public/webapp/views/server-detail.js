@@ -29,6 +29,12 @@ import {
   listFrontPageOptions,
   sendSetFrontPage,
 } from "../lib/frontPage.js";
+import {
+  fetchJournal,
+  JOURNAL_UNITS,
+  JOURNAL_DEFAULT_UNIT,
+  JOURNAL_DEFAULT_LINES,
+} from "../lib/journal.js";
 import { signWithIrk } from "../keystore.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -178,6 +184,25 @@ export async function renderServerDetail() {
           </p>
         </div>
       </div>
+      <h2 class="mt-4">Diagnostics</h2>
+      <div class="card" id="journal-card">
+        <p class="note">
+          Read the recent system journal from the box — owner-only, signed with
+          your key and fetched straight from the server (flagshipserver.com never
+          sees it). Useful when a server is online but something isn't working.
+        </p>
+        <label class="caption mt-2">Unit</label>
+        <select id="journal-unit" class="full-width">
+          ${JOURNAL_UNITS.map(
+            (u) => `<option value="${escapeHtml(u)}"${u === JOURNAL_DEFAULT_UNIT ? " selected" : ""}>${escapeHtml(u)}</option>`,
+          ).join("")}
+        </select>
+        <label class="caption mt-2">Lines</label>
+        <input id="journal-lines" class="full-width" type="number" min="1" max="500" value="${JOURNAL_DEFAULT_LINES}" />
+        <button id="journal-fetch-btn" class="full-width mt-2">View journal</button>
+        <p class="note small hidden" id="journal-status"></p>
+        <pre id="journal-output" class="journal-output hidden" aria-label="journal output"></pre>
+      </div>
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -192,6 +217,7 @@ export async function renderServerDetail() {
     wireFrontPage(body);
     wireLockPower(body);
     wireDeadMan(body);
+    wireJournal(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -399,6 +425,57 @@ function wireFrontPage(body) {
       save.disabled = false;
     }
   });
+}
+
+// ---- Diagnostics: journal ---------------------------------------------
+
+function wireJournal(body) {
+  const btn = $("journal-fetch-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    runJournalFetch(body, btn).catch((e) => toast(humanError(e), "err"));
+  });
+}
+
+async function runJournalFetch(body, btn) {
+  const status = $("journal-status");
+  const out = $("journal-output");
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const baseUrl = getPodBaseUrl();
+  if (!baseUrl) {
+    toast("Not paired with this server", "err");
+    return;
+  }
+  const unit = $("journal-unit")?.value || JOURNAL_DEFAULT_UNIT;
+  const lines = Number($("journal-lines")?.value) || JOURNAL_DEFAULT_LINES;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Fetching…";
+  if (status) {
+    status.classList.remove("hidden");
+    status.textContent = "Asking the server…";
+  }
+  try {
+    const res = await fetchJournal({
+      baseUrl,
+      unit,
+      lines,
+      umk: session.umk,
+      signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+    });
+    if (out) {
+      out.classList.remove("hidden");
+      out.textContent = res.lines.length ? res.lines.join("\n") : "(journal is empty)";
+    }
+    if (status) status.textContent = `${res.lines.length} line${res.lines.length === 1 ? "" : "s"} from ${res.unit}.`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 // ---- Lock & power -----------------------------------------------------
