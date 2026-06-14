@@ -8,6 +8,7 @@ export default defineConfig({
       "apps/com/test/**/*.test.ts",
       "apps/boot/test/**/*.test.ts",
       "apps/dns-broker/test/**/*.test.ts",
+      "apps/services-site/test/**/*.test.ts",
       "services/*/tests/**/*.test.ts",
       "tools/*/tests/**/*.test.ts",
       "scripts/**/*.test.ts",

@@ -26,6 +26,34 @@ This Worker attaches **only to the bare apex and `www`** — names that
 carry no pod traffic and (verified 2026-06-06) had no DNS record at all.
 So bringing the marketing site back touches nothing on the data plane.
 
+## `/api/health`
+
+The site is otherwise pure static assets, but the Worker (`src/index.ts`)
+intercepts `/api/health` and returns JSON (`{ ok, service, surface:
+"apex-placeholder", note, now }`). Before this, the bare `[assets]` site's
+SPA fallback returned `200` + `index.html` for `/api/health`, which lies
+to uptime monitors — a `200` with HTML reads as "healthy" to a naive
+check. The endpoint reports `surface: "apex-placeholder"` so monitors can
+tell this apart from the `.com` control plane or a real pod.
+
+## TODO — the apex becomes the marketplace home
+
+This placeholder is temporary. Once the former-operator transition
+completes and it's decommissioned, the `flagship.services` **apex** is the
+intended home of the **Flagship marketplace**, which will host:
+
+- the marketplace **listings UI** (browse / search / install apps);
+- the **GitHub-equivalent code host** (Forgejo) for app source + releases;
+- the **app security-scan service** — pull the app's docker image, run
+  Trivy + custom checks, and post back `marketplace_listings.scan_grade`
+  plus an R2 report. (Today that column ships `NULL`; see
+  `docs/build-tasks.md` item 4 "Marketplace security scan service.")
+
+When that lands, replace this static-asset Worker with the real
+marketplace app and extend `/api/health` to report scanner + Forgejo
+liveness, not just "the apex Worker is up." (TODO markers also live in
+`src/index.ts` and `wrangler.toml`.)
+
 ## Deploy
 
 ```sh

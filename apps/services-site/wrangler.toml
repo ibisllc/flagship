@@ -19,6 +19,18 @@
 name = "flagship-services-site"
 compatibility_date = "2026-05-01"
 
+# Worker entry. The ONLY dynamic route is /api/health (real JSON for
+# uptime monitors); every other path is served straight from ./public by
+# the ASSETS binding below. See src/index.ts.
+#
+# TODO(marketplace): once the former-operator transition completes and
+# this placeholder is decommissioned, the flagship.services apex becomes
+# the home of the Flagship marketplace — listings UI + the GitHub-
+# equivalent code host (Forgejo) + the app security-scan service (Trivy +
+# custom checks → marketplace_listings.scan_grade + R2 report). Replace
+# this Worker with the real marketplace app then. Details in src/index.ts.
+main = "src/index.ts"
+
 # workers.dev gives us a stable verification URL before any DNS cutover.
 workers_dev = true
 
@@ -32,9 +44,11 @@ routes = [
   { pattern = "www.flagship.services", custom_domain = true },
 ]
 
-# Pure static site — no Worker script, just the asset edge.
+# Static asset edge, fronted by the Worker in `main`. The binding lets the
+# Worker delegate non-/api/health paths back to the assets (SPA fallback).
 [assets]
 directory = "./public"
+binding = "ASSETS"
 # Single-page Arsha template: in-page #anchors only, so falling back to
 # index.html for unknown paths keeps deep links graceful.
 not_found_handling = "single-page-application"
