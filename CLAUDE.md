@@ -123,7 +123,29 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — session-action buttons simplified across surfaces + webapp PIN lock
+### 2026-06-14 (latest) — owner-only journal diagnostics ("View journal") on all surfaces + daemon
+
+**New owner-IRK endpoint `POST /api/journal`** (new primitive) — returns the
+trailing lines of an allowlisted systemd unit's journal (`flagship-daemon` /
+`flagship-data-services`) for owner diagnostics ("server is online but X isn't
+working"). It rides the EXACT security shape as `/api/power`: an IRK-signed
+`{request,signature}` envelope verified against the box's config-pinned owner
+IRK, served over the box's OWN pinned pipe — `.com` never sees the request or
+the logs (no user data leaves the box). Standalone `flagship/journal-read/v1`
+envelope (`packages/protocol`, byte-identical across TS/Swift/Kotlin), 5-min
+replay window, `unit` allowlist + `lines` clamp on the daemon, `journalctl` via
+execFile (no shell). Surfaced as a **"Diagnostics → View journal"** card on the
+server-detail screen of all four surfaces: daemon (`journalHttp.ts`), webapp
+(`lib/journal.js` + card), iOS (`JournalRequest`/`JournalViewModel`/`JournalCard`,
+reusing `LockPowerClient`), Android (mirror). iOS/Android sign behind the
+biometric (deriveIRK); the webapp signs with the in-memory UMK. 5 commits.
+
+Gates: `npx tsc -b` clean · vitest green incl. new `journalHttp` (9) +
+`webappJournal` (6) + canonical-byte pins on iOS/Android. **iOS (xcodebuild) +
+Android (gradle) need a Mac build; the daemon endpoint reaches existing boxes
+only via a recipe/daemon rebuild + box update (the card 404s until then).**
+
+### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 
 **Settings "leave the app" cluster relabelled + grey-out gating (all
 surfaces).** The three tiers are now framed as a lock spectrum: tier-1
