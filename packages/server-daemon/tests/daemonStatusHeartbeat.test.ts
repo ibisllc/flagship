@@ -138,4 +138,61 @@ describe("daemon-status heartbeat", () => {
       }),
     ).resolves.toBeUndefined();
   });
+
+  // Regression: node's X509Certificate.issuer is a NEWLINE-separated DN
+  // ("C=US\nO=Lets Encrypt\nCN=R11"). The canonical-bytes guard rejects control
+  // chars, so the RAW issuer made signDaemonStatusReport THROW — swallowed
+  // silently by postDaemonStatus — so NO box ever posted a cert-bearing report
+  // and daemon_status stayed empty (currentCert/signedStatus null on /pods).
+  // A real EC cert with a multi-RDN issuer below; the report must now post with
+  // a single-line issuer and a signature that verifies.
+  const REAL_CERT_PEM = `-----BEGIN CERTIFICATE-----
+MIIBujCCAV+gAwIBAgIUH7WZFo6yv08iclpgG7yjjRty/HQwCgYIKoZIzj0EAwIw
+MjELMAkGA1UEBhMCVVMxFTATBgNVBAoMDExldHMgRW5jcnlwdDEMMAoGA1UEAwwD
+UjExMB4XDTI2MDYxNDEwMTkxNFoXDTI2MDYxNjEwMTkxNFowMjELMAkGA1UEBhMC
+VVMxFTATBgNVBAoMDExldHMgRW5jcnlwdDEMMAoGA1UEAwwDUjExMFkwEwYHKoZI
+zj0CAQYIKoZIzj0DAQcDQgAETZZP/X6443EC6PCK98VPWsWbqyNpCXbHgNyOBitN
+aS4CIEcSszwZayEn48TZzwtWgVFO7+qMD0N3CRKviqpE56NTMFEwHQYDVR0OBBYE
+FOgQ2l9j8rJtmqcG7MqXSh3J0gK0MB8GA1UdIwQYMBaAFOgQ2l9j8rJtmqcG7MqX
+Sh3J0gK0MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSQAwRgIhAKUnlyT6
+QX9GtjTqyre/j4m2NMk2wuppfEtNfn9HeS10AiEAhIx7FvMKCNtle3kw/vbRLaPs
+DI8uD7t+By9uA9EEqQM=
+-----END CERTIFICATE-----
+`;
+
+  it("sanitizes a newline-separated cert issuer so the report actually POSTs", async () => {
+    const id = makeKeypair(11);
+    let captured: { url: string; body: any } | null = null;
+    const fetchImpl = (async (url: any, init: any) => {
+      captured = { url: String(url), body: JSON.parse(init.body) };
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await postDaemonStatus({
+      serverDomain: "frank.harry.flagship.services",
+      identity: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      cert: { certPem: REAL_CERT_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: [],
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+
+    // The POST MUST have gone out — before the fix the newline issuer threw and
+    // was swallowed, so `captured` would stay null.
+    expect(captured).not.toBeNull();
+    const issuer: string = captured!.body.request.certIssuer;
+    expect(issuer).not.toMatch(/[\r\n|]/); // single safe line, no separator
+    expect(issuer).toBe("C=US, O=Lets Encrypt, CN=R11");
+    // A real cert ⇒ a real fingerprint was extracted too.
+    expect(captured!.body.request.certSha256).toMatch(/^[0-9a-f]{64}$/);
+    // The signature verifies over the canonical bytes of exactly what was sent.
+    const ok = ed.verify(
+      hexToBytes(captured!.body.signature),
+      canonical(captured!.body.request),
+      id.publicKey,
+    );
+    expect(ok).toBe(true);
+  });
 });
