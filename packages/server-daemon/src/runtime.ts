@@ -864,6 +864,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     console.log(
       `[runtime] reusing on-disk cert for ${opts.serverFqdn}; not after ${new Date(existing.notAfter).toISOString()}`,
     );
+    // Fire onCertIssued so the daemon-status heartbeat starts immediately on
+    // restart — without this, the callback only triggers on new issuance, so
+    // a rebooted box with a valid cert never reports lastReported to .com.
+    opts.onCertIssued?.(
+      { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
+      existing.notAfter,
+      sans,
+    );
   } else {
     certRetryLoop = startCertRetryLoop({
       issuer,
