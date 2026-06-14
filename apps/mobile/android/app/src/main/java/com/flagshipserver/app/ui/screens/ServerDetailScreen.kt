@@ -35,6 +35,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -49,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.ServerMetricsResponse
@@ -58,6 +60,7 @@ import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
+import com.flagshipserver.app.core.JournalUnits
 import com.flagshipserver.app.core.PowerMode
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
@@ -80,6 +83,8 @@ import com.flagshipserver.app.viewmodels.FrontPageViewModel
 import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.JournalPhase
+import com.flagshipserver.app.viewmodels.JournalViewModel
 import com.flagshipserver.app.viewmodels.PowerOffPhase
 import com.flagshipserver.app.viewmodels.PowerOffViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerPhase
@@ -151,6 +156,8 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
             PowerCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DeadManCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            JournalCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
@@ -583,6 +590,80 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 TextButton(onClick = { pending = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+// Diagnostics: fetch + show the box's recent journal. Owner-only (the deriveIRK
+// signer fires the biometric) and pod-direct — .com never sees the request or
+// the logs. Mirror of iOS JournalCard.
+@Composable
+private fun JournalCard(serverDomain: String) {
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+
+    val vm = remember(serverDomain) {
+        JournalViewModel(
+            serverDomain = serverDomain,
+            signer = { reason -> Keystore.deriveIRK(reason) },
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    val unit = JournalUnits.DEFAULT_UNIT
+    val busy = phase is JournalPhase.Loading
+
+    Text(
+        "Diagnostics",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Read the box's recent system log when a server is online but something " +
+                    "isn't working. Only you can — it's signed with your key and never " +
+                    "leaves your server.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            (phase as? JournalPhase.Failed)?.let { f ->
+                Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            }
+            FSSecondaryButton(
+                label = if (busy) "Fetching…" else "View journal",
+                onClick = {
+                    if (!busy) scope.launch {
+                        vm.load(unit, JournalUnits.DEFAULT_LINES)
+                        (vm.phase.value as? JournalPhase.Failed)?.let { toasts.error(it.message) }
+                    }
+                },
+                enabled = !busy,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-journal-fetch" },
+            )
+            (phase as? JournalPhase.Loaded)?.let { loaded ->
+                val text = if (loaded.lines.isEmpty()) {
+                    "(${loaded.unit}: journal is empty)"
+                } else {
+                    loaded.lines.joinToString("\n")
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .clip(RoundedCornerShape(FS.radius.md))
+                        .background(FS.colors.surface)
+                        .verticalScroll(rememberScrollState())
+                        .padding(FS.space.s2),
+                ) {
+                    Text(
+                        text,
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                    )
+                }
+            }
+        }
     }
 }
 

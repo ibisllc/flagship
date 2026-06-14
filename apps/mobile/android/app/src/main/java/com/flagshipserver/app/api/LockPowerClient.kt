@@ -86,6 +86,31 @@ data class DeadManAffirmAck(
     @SerialName("leaseExpiry") val leaseExpiry: Long? = null,
 )
 
+// ---------- journal read (owner-IRK-signed diagnostics) ----------------
+
+@Serializable
+data class JournalInner(
+    val serverId: String,
+    /** systemd unit (daemon allowlists it). */
+    val unit: String,
+    val lines: Long,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class JournalRequestBody(
+    val request: JournalInner,
+    val signature: String,
+)
+
+/** Daemon `/api/journal` response — `{ ok, unit, lines }`. */
+@Serializable
+data class JournalAck(
+    val ok: Boolean = false,
+    val unit: String = "",
+    val lines: List<String> = emptyList(),
+)
+
 /** Pod-direct client. [podBaseUrl] resolves `https://<serverDomain>` (the
  *  FQDN IS the pod). Pluggable transport for tests. */
 class LockPowerClient(
@@ -114,5 +139,13 @@ class LockPowerClient(
             body,
             DeadManAffirmRequest.serializer(),
             DeadManAffirmAck.serializer(),
+        )
+
+    suspend fun readJournal(serverDomain: String, body: JournalRequestBody): JournalAck =
+        transport.postJsonForResponse(
+            "${podBaseUrl(serverDomain)}/api/journal",
+            body,
+            JournalRequestBody.serializer(),
+            JournalAck.serializer(),
         )
 }
