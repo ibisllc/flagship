@@ -9,6 +9,7 @@ public struct SettingsTab: View {
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.pairingRelayClient) private var pairingRelay
     @Environment(\.pushRegistrar) private var pushRegistrar
+    @Environment(ToastCenter.self) private var toasts
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
     @Environment(DeepLinker.self) private var linker
@@ -142,6 +143,17 @@ public struct SettingsTab: View {
                     onOpenPrivacy: { path.append(.privacy) },
                     onRefresh: { await vm.load() },
                     onRemoveFromAccount: {
+                        // Recovery gate (mirrors onSignOut): removing this
+                        // device wipes the local key, so without cloud
+                        // recovery it would orphan the account. The button
+                        // is greyed in that state; this action-layer guard
+                        // makes the wipe structurally unreachable even if
+                        // some other path fires the closure. Demo/mock
+                        // sessions are exempt.
+                        guard SignOutPolicy.evaluate(
+                            hasCloudRecovery: app.hasCloudRecovery,
+                            isDemoAccount: !dev.useLiveClient
+                        ) == .allowed else { return }
                         // B6a — full self-revoke: drop push token on
                         // .com, wipe Keystore (UMK / IRK / wrapped
                         // UMK / push X25519 / pushTokenId), and sign
@@ -211,7 +223,10 @@ public struct SettingsTab: View {
                     signOutPolicy: SignOutPolicy.evaluate(
                         hasCloudRecovery: app.hasCloudRecovery,
                         isDemoAccount: !dev.useLiveClient
-                    )
+                    ),
+                    onRecoveryRequired: {
+                        toasts.warning("Set up account recovery to use this.")
+                    }
                 )
                 .alert(
                     "Replace device",

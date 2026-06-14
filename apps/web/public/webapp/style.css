@@ -299,6 +299,10 @@ button, .btn {
 button:hover, .btn:hover { background: var(--ink-soft); }
 button:active, .btn:active { transform: scale(0.97); }
 button:disabled, .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Recovery-gated session buttons: greyed but still TAPPABLE (a tap shows a
+   toast explaining recovery is required) — so not `:disabled`, which would
+   swallow the click. */
+button.gated, .btn.gated { opacity: 0.45; }
 
 button.primary, .btn.primary,
 button.accent, .btn.accent {

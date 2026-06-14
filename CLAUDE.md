@@ -121,9 +121,46 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-10**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-12 (latest) — owner-assignable apex ("Front page") shipped on all surfaces + console banner fixed
+### 2026-06-14 (latest) — session-action buttons simplified across surfaces + webapp PIN lock
+
+**Settings "leave the app" cluster relabelled + grey-out gating (all
+surfaces).** The three tiers are now framed as a lock spectrum: tier-1
+**"Lock with Face ID"** (iOS) / **"Lock with biometrics"** (Android), tier-2
+**"Lock with passkey"** (was "Sign out" — erases the local key + data, restore
+via recovery passkey), tier-3 **"Remove this device from account"**. Subtitles
+simplified. Tiers 2+3 are now **greyed-but-tappable until cloud recovery is
+enrolled** (demo exempt); a tap-while-greyed shows a toast ("Set up account
+recovery to use this.") instead of running the destructive path — this also
+closed an inconsistency where the *more* destructive remove-device had *no*
+gate while sign-out did. iOS adds a `muted` style to `FSDangerButton` +
+`onRecoveryRequired` wired to `ToastCenter`; Android mirrors it (Toast); the
+confirm dialogs realigned to "Lock with passkey?". A fail-closed action-layer
+backstop now guards remove-from-account too.
+
+**Tier-1 "Lock with PIN code" — webapp only (new primitive).** The browser has
+no biometric, so the webapp's tier-1 lock is a numeric PIN (replaces the
+dropped biometric button). `lib/pinLock.js`: the UMK is PIN-wrapped in
+IndexedDB (argon2id stretch) but the wrap key is bound to a **non-extractable
+WebCrypto HMAC "device pepper"** — so a stolen IndexedDB copy can't be
+brute-forced offline (guesses must run in-origin, where the **5-try lockout →
+wipe-PIN → fall back to passphrase** bites). Threat model is explicitly the
+casual "grabbed my unlocked tab", NOT device theft (that's tier-2 + disk
+encryption). Flows: "Lock with PIN code" runs first-time setup (new+confirm)
+then locks; **"Change PIN"** (visible only when set) requires the current PIN
+then new+confirm; **any** full-passphrase unlock CLEARS the PIN (the reset
+rule), and `resetDevice()` now clears it too so a tier-2/3 wipe can't leave a
+PIN-wrapped copy of the key behind. New views `view-pin-unlock` /
+`view-pin-set`; boot routes to the PIN screen when a PIN is set.
+
+Gates: `npx tsc -b` clean · web vitest 1142 pass + new `webappPinLock` (crypto
+roundtrip, lockout-wipe, device-pepper binding, reset-rule) + updated
+`uxCopyFindings`/`webappSessionTiers`. **iOS (xcodebuild) + Android (gradle)
+still need a build on the Mac** — this session was Linux, so only the TS/web
+gates ran. The relabel/grey-out touch no copy-pinned mobile tests.
+
+### 2026-06-12 — owner-assignable apex ("Front page") shipped on all surfaces + console banner fixed
 
 **Front page (owner-assignable apex) — full slice, all surfaces.** The box
 apex now 302s (no-store, never 301) to an installed service's tier-1

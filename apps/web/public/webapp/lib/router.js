@@ -37,6 +37,7 @@ export function show(id) {
   // Hide the tab bar for pre-paired surfaces — bootstrap, unlock,
   // first-run wizard (#25). The wizard shell sets its own class.
   const noTabs = id === "view-bootstrap" || id === "view-unlock"
+    || id === "view-pin-unlock" || id === "view-pin-set"
     || id === "view-wizard";
   document.body.classList.toggle("no-tabs", noTabs);
   // Side-channel so views can lazy-refresh on activation without

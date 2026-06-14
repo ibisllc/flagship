@@ -18,8 +18,9 @@ import { resetDevice } from "../keystore.js";
 import { setSubtitle } from "../lib/router.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
 import { hasCloudRecovery } from "../lib/recovery.js";
+import { hasPin } from "../lib/pinLock.js";
+import { lockToPin, startSetPin } from "./pinLock.js";
 import {
-  lock as lockTier,
   signOut as signOutTier,
   signOutConfirmCopy,
 } from "../lib/sessionTiers.js";
@@ -46,34 +47,41 @@ function withStatusLocal(err, status) {
 
 export { refreshPushStatus };
 
-/** Reflect the cloud-recovery gate in the static sign-out note so the
- *  severity is visible before the user even clicks. Best-effort + async;
- *  defaults to the safe (not-enrolled) framing on any failure. */
-async function refreshSignOutNote() {
-  const note = $("settings-signout-note");
-  if (!note) return;
+// Module-level cache of the recovery-enrollment state, consulted by the
+// gated session buttons' click handlers. Fail-closed: false until a
+// successful probe proves recovery is enrolled.
+let sessionRecoveryEnrolled = false;
+
+/** Grey out the recovery-gated session buttons ("Lock with passkey" +
+ *  "Remove this device") until cloud recovery is enrolled. The buttons
+ *  stay tappable while greyed — a tap surfaces a toast (see the click
+ *  wiring in initSettingsView) instead of running the destructive path.
+ *  Best-effort + async; defaults to the safe (not-enrolled ⇒ greyed)
+ *  framing on any failure. */
+async function refreshSessionGates() {
   let enrolled = false;
   try {
     enrolled = await hasCloudRecovery(getSession().username);
   } catch {
     enrolled = false;
   }
-  // UX-C — don't strand the user behind a disabled control. When recovery
-  // isn't set up, swap the Sign-out button for a one-tap "Set up cloud
-  // recovery" CTA that routes straight into enrollment; keep the
-  // explanation so the severity is still clear.
-  const signOutBtn = $("settings-signout");
-  const recoveryCta = $("settings-signout-recovery");
-  note.textContent = enrolled
-    ? "Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-    : "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access. Set up recovery and you'll be able to sign out safely.";
-  if (signOutBtn) signOutBtn.classList.toggle("hidden", !enrolled);
-  if (recoveryCta) recoveryCta.classList.toggle("hidden", enrolled);
+  sessionRecoveryEnrolled = enrolled;
+  for (const id of ["settings-signout", "settings-reset"]) {
+    $(id)?.classList.toggle("gated", !enrolled);
+  }
+  // "Change PIN" only appears once a PIN is set (tier-1 PIN lock).
+  let pinSet = false;
+  try {
+    pinSet = await hasPin();
+  } catch {
+    pinSet = false;
+  }
+  $("settings-pin-change")?.classList.toggle("hidden", !pinSet);
 }
 
 export async function renderProviders() {
   void refreshPushStatus();
-  void refreshSignOutNote();
+  void refreshSessionGates();
   const session = getSession();
   const list = $("providers-list");
   list.innerHTML = "";
@@ -361,12 +369,6 @@ async function runDisablePush() {
   }
 }
 
-/** Tier 1 — LOCK. Drop the in-memory session and re-gate behind the
- *  passphrase unlock screen. Removes nothing from storage. */
-function handleLock() {
-  lockTier({ lockSession, show, setSubtitle, stopRenewals });
-}
-
 /** Tier 2 — SIGN OUT. Erase this device's local key material WITHOUT a
  *  server-side revoke, gated on cloud-recovery enrollment. With recovery
  *  enrolled the same key comes back via passkey (instant re-pair); without
@@ -417,18 +419,44 @@ export function initSettingsView() {
     show("view-home");
     await renderActiveProviderChip();
   });
-  $("settings-lock")?.addEventListener("click", handleLock);
-  $("settings-signout")?.addEventListener("click", () =>
+  // Tier 1 — LOCK WITH PIN. First time (no PIN set) walks through setup
+  // (new + confirm); afterwards it locks straight to the PIN screen.
+  $("settings-pin-lock")?.addEventListener("click", async () => {
+    let pinSet = false;
+    try {
+      pinSet = await hasPin();
+    } catch {
+      pinSet = false;
+    }
+    if (pinSet) lockToPin();
+    else startSetPin({ mode: "set" });
+  });
+  // "Change PIN" requires the current PIN, then a new one (handled in the
+  // set/change view). Visible only when a PIN is already set.
+  $("settings-pin-change")?.addEventListener("click", () => startSetPin({ mode: "change" }));
+  // "Lock with passkey" (tier 2) is recovery-gated: greyed until cloud
+  // recovery is enrolled, and a tap-while-greyed surfaces a toast instead
+  // of running the key wipe.
+  $("settings-signout")?.addEventListener("click", () => {
+    if (!sessionRecoveryEnrolled) {
+      toast("Set up account recovery to use this.", "warn");
+      return;
+    }
     handleSignOut().catch((e) => {
       console.error("sign-out failed", e);
       toast(humanError(e), "err");
-    }),
-  );
-  // UX-C — the direct route into recovery enrollment, shown in place of
-  // Sign out whenever cloud recovery isn't set up yet.
-  $("settings-signout-recovery")?.addEventListener("click", () => enterRecovery());
-  // Tier 3 — REMOVE THIS DEVICE (danger zone). Unchanged local-reset path.
-  $("settings-reset")?.addEventListener("click", handleReset);
+    });
+  });
+  // Tier 3 — REMOVE THIS DEVICE (danger zone). Same recovery gate: removing
+  // this device wipes the only local copy of the key, so it stays greyed +
+  // toasts until recovery is enrolled.
+  $("settings-reset")?.addEventListener("click", () => {
+    if (!sessionRecoveryEnrolled) {
+      toast("Set up account recovery to use this.", "warn");
+      return;
+    }
+    handleReset();
+  });
   $("push-enable")?.addEventListener("click", runEnablePush);
   $("push-disable")?.addEventListener("click", runDisablePush);
   // Refresh once on init; repeated renders are kicked from the

@@ -94,23 +94,29 @@ public struct FSDangerButton: View {
     @Environment(\.colorScheme) private var scheme
     let label: String
     let action: () -> Void
+    /// Greys the button (muted foreground + border) while leaving it
+    /// TAPPABLE — used for a recovery-gated action so a tap can surface a
+    /// "set up recovery first" toast instead of running the destructive
+    /// path. Distinct from a true `.disabled` (which would swallow taps).
+    var muted: Bool = false
     var block: Bool = false
     var large: Bool = false
-    public init(_ label: String, block: Bool = false, large: Bool = false, action: @escaping () -> Void) {
-        self.label = label; self.action = action; self.block = block; self.large = large
+    public init(_ label: String, muted: Bool = false, block: Bool = false, large: Bool = false, action: @escaping () -> Void) {
+        self.label = label; self.action = action; self.muted = muted; self.block = block; self.large = large
     }
     public var body: some View {
         let c = FSColors.scheme(scheme)
+        let fg = muted ? c.textMuted : c.danger
         Button(action: action) {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
                 .frame(height: large ? 48 : 40)
                 .padding(.horizontal, large ? 28 : 20)
-                .foregroundColor(c.danger)
+                .foregroundColor(fg)
                 .overlay(
                     RoundedRectangle(cornerRadius: FS.radius.md)
-                        .stroke(c.danger, lineWidth: 1)
+                        .stroke(fg, lineWidth: 1)
                 )
         }
     }

@@ -31,6 +31,8 @@ import { profileCard } from "./lib/uikit.js";
 import { getSession } from "./lib/state.js";
 import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
+import { initPinViews } from "./views/pinLock.js";
+import { hasPin } from "./lib/pinLock.js";
 import { initHomeView, enterHome } from "./views/home.js";
 import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
@@ -291,6 +293,7 @@ async function boot() {
   try { cleanupProfilesLegacyKeys(); } catch { /* swallow — best-effort */ }
   initBootstrapView();
   initUnlockView();
+  initPinViews();
   initHomeView({
     onPair: () => startPairing(),
     onSettings: async () => {
@@ -399,7 +402,15 @@ async function boot() {
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");
-    show("view-unlock");
+    // Prefer the PIN screen when a PIN is set; the passphrase remains
+    // reachable from there via "Unlock with passphrase instead".
+    let pinSet = false;
+    try {
+      pinSet = await hasPin();
+    } catch {
+      pinSet = false;
+    }
+    show(pinSet ? "view-pin-unlock" : "view-unlock");
   } else {
     setSubtitle("first run");
     show("view-bootstrap");

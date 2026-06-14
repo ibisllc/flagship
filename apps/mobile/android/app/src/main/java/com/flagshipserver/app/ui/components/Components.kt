@@ -123,6 +123,11 @@ fun FSDangerButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    // Greys the button (muted foreground + border) while leaving it
+    // TAPPABLE — used for a recovery-gated action so a tap can surface a
+    // "set up recovery first" toast instead of running the destructive
+    // path. Distinct from `enabled = false`, which would swallow taps.
+    muted: Boolean = false,
     block: Boolean = false,
     large: Boolean = false,
 ) = FSButtonBase(
@@ -133,8 +138,8 @@ fun FSDangerButton(
     block = block,
     large = large,
     bg = Color.Transparent,
-    fg = FS.colors.danger,
-    border = FS.colors.danger,
+    fg = if (muted) FS.colors.textMuted else FS.colors.danger,
+    border = if (muted) FS.colors.textMuted else FS.colors.danger,
 )
 
 @Composable

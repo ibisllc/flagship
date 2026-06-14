@@ -52,6 +52,33 @@
         </div>
       </section>
 
+      <!-- View 2b: PIN-locked — numeric PIN to re-derive the in-memory key -->
+      <section id="view-pin-unlock" class="hidden">
+        <h2>Enter PIN</h2>
+        <div class="card">
+          <input id="pin-unlock-input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="PIN" />
+          <button id="pin-unlock-go" class="full-width mt-3">Unlock</button>
+          <p class="note mt-2" id="pin-unlock-error" style="display: none;"></p>
+          <button class="secondary full-width mt-2" id="pin-unlock-passphrase">Unlock with passphrase instead</button>
+        </div>
+      </section>
+
+      <!-- View 2c: Set / change the PIN (reached from Settings) -->
+      <section id="view-pin-set" class="hidden">
+        <h2 id="pin-set-title">Set a PIN</h2>
+        <div class="card">
+          <p class="note">
+            Choose a 4–6 digit PIN to quickly re-lock and unlock this browser. Your passphrase still works and is the real key — unlocking with it clears the PIN.
+          </p>
+          <input id="pin-set-current" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Current PIN" class="hidden" />
+          <input id="pin-set-input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="New PIN" class="mt-2" />
+          <input id="pin-set-confirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Confirm PIN" class="mt-2" />
+          <button id="pin-set-go" class="full-width mt-3">Save PIN</button>
+          <p class="note mt-2" id="pin-set-error" style="display: none;"></p>
+          <button class="secondary full-width mt-2" id="pin-set-cancel">Cancel</button>
+        </div>
+      </section>
+
       <!-- View 3a: Home tab — identity + servers + AI provider chip.
            The "Servers" heading + search + filter chips are rendered INTO
            #servers-list by views/home.js (the WhatsApp-style large
@@ -770,24 +797,24 @@
         <h2 class="mt-5">Session</h2>
         <div class="card">
           <p class="note">
-            Locks the app behind your passphrase. Nothing is removed — this just hides everything until you unlock again. The cheapest way to step away from a shared computer.
+            Locks the app behind a PIN code. Nothing is interrupted.
           </p>
-          <button class="secondary full-width mt-2" id="settings-lock">Lock</button>
+          <button class="secondary full-width mt-2" id="settings-pin-lock">Lock with PIN code</button>
+          <button class="secondary full-width mt-2 hidden" id="settings-pin-change">Change PIN</button>
         </div>
         <div class="card mt-2">
           <p class="note" id="settings-signout-note">
-            Erases this device's account key so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put.
+            Erases account key and deletes data. Sign back in with your recovery passkey.
           </p>
-          <button class="secondary full-width mt-2" id="settings-signout">Sign out</button>
-          <button class="full-width mt-2 hidden" id="settings-signout-recovery">Set up cloud recovery</button>
+          <button class="secondary full-width mt-2" id="settings-signout">Lock with passkey</button>
         </div>
 
         <h2 class="mt-5">Danger zone</h2>
         <div class="card danger-zone">
           <p class="note">
-            Permanently remove this device from your account. To cryptographically evict a device (revoke + rotate), open “Paired sessions” and revoke it there.
+            Remove this device from your account. You may need account recovery to resume.
           </p>
-          <button class="secondary full-width mt-2" id="settings-reset">Remove this device</button>
+          <button class="secondary full-width mt-2" id="settings-reset">Remove this device from account</button>
         </div>
         <button class="secondary full-width mt-2" id="settings-back">← Back</button>
       </section>

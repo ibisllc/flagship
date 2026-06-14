@@ -61,19 +61,53 @@ describe("UX-B — raw HTTP status codes no longer reach users", () => {
   });
 });
 
-describe("UX-C — sign-out blocked has a one-tap recovery CTA", () => {
-  it("the settings card carries a 'Set up cloud recovery' button", () => {
+describe("UX-C — recovery-gated session buttons are greyed + toast on tap", () => {
+  it("the settings card drops the old recovery CTA and reframes tier-2 as 'Lock with passkey'", () => {
     const html = readFileSync(join(WEBAPP, "index.html"), "utf8");
-    expect(html).toContain('id="settings-signout-recovery"');
-    expect(html).toContain("Set up cloud recovery");
+    // The swap-to-CTA design is gone in favour of a greyed button + toast.
+    expect(html).not.toContain('id="settings-signout-recovery"');
+    expect(html).toContain('id="settings-signout"');
+    expect(html).toContain("Lock with passkey");
   });
 
-  it("the CTA routes into recovery enrollment and toggles with enrollment", () => {
+  it("settings.js greys the gated buttons until recovery is enrolled and toasts on a blocked tap", () => {
     const src = read("views", "settings.js");
-    expect(src).toContain("settings-signout-recovery");
-    expect(src).toContain("enterRecovery()");
-    // The note swaps the Sign-out button for the recovery CTA when not enrolled.
-    expect(src).toContain('classList.toggle("hidden"');
+    // Both destructive buttons carry the `.gated` greyed class until enrolled.
+    expect(src).toContain('classList.toggle("gated"');
+    expect(src).toContain("settings-signout");
+    expect(src).toContain("settings-reset");
+    // A tap while not enrolled surfaces a toast instead of running the action.
+    expect(src).toContain("Set up account recovery to use this.");
+    expect(src).toContain("sessionRecoveryEnrolled");
+  });
+});
+
+describe("Tier-1 'Lock with PIN code' (webapp-only)", () => {
+  it("the Session card carries the PIN lock + a hidden Change-PIN control", () => {
+    const html = readFileSync(join(WEBAPP, "index.html"), "utf8");
+    expect(html).toContain('id="settings-pin-lock"');
+    expect(html).toContain("Lock with PIN code");
+    // Change PIN ships hidden — settings.js reveals it once a PIN is set.
+    expect(html).toMatch(/class="[^"]*hidden[^"]*"\s+id="settings-pin-change"/);
+    // The PIN unlock + set views exist, with the passphrase fallback.
+    expect(html).toContain('id="view-pin-unlock"');
+    expect(html).toContain('id="pin-unlock-passphrase"');
+    expect(html).toContain('id="view-pin-set"');
+    expect(html).toContain('id="pin-set-current"');
+  });
+
+  it("settings.js gates Change-PIN on hasPin and wires the lock/setup buttons", () => {
+    const src = read("views", "settings.js");
+    expect(src).toContain("settings-pin-lock");
+    expect(src).toContain("settings-pin-change");
+    expect(src).toContain("hasPin(");
+    expect(src).toContain("startSetPin(");
+    expect(src).toContain("lockToPin(");
+  });
+
+  it("a full passphrase unlock clears the PIN (the reset rule)", () => {
+    const src = read("views", "unlock.js");
+    expect(src).toContain("clearPin(");
   });
 });
 

@@ -322,10 +322,10 @@ describe("three-tier session model — webapp (task #46)", () => {
     it("confirm copy: enrolled ⇒ routine destructive framing (not blocked)", async () => {
       const tiers = await loadTiers();
       const copy = tiers.signOutConfirmCopy(true);
-      expect(copy.title).toMatch(/sign out of this device/i);
+      expect(copy.title).toMatch(/lock with passkey/i);
       expect(copy.message).toMatch(/recovery passkey/i);
       expect(copy.message).not.toMatch(/lost for good|permanently/i);
-      expect(copy.okLabel).toBe("Sign out");
+      expect(copy.okLabel).toBe("Lock with passkey");
       expect(copy.blocked).toBe(false);
     });
 

@@ -116,9 +116,15 @@ public struct SettingsScreen: View {
     var hasCloudRecovery: Bool = true
     /// #52 — the Tier-2 sign-out gate, computed by the container
     /// (SettingsTab) via SignOutPolicy.evaluate so the demo exemption
-    /// lives in ONE place. `.blockedNoRecovery` replaces the destructive
-    /// confirm with an explainer + a route into recovery enrollment.
+    /// lives in ONE place. `.blockedNoRecovery` greys out the gated
+    /// buttons ("Lock with passkey" + "Remove this device") and routes a
+    /// tap to `onRecoveryRequired` instead of the destructive confirm.
     var signOutPolicy: SignOutPolicy = .allowed
+    /// Fired when a recovery-gated button is tapped while still greyed
+    /// (no cloud recovery enrolled). The container surfaces a toast —
+    /// "Set up account recovery to use this." — rather than running the
+    /// destructive path.
+    var onRecoveryRequired: () -> Void = {}
 
     public init(
         username: String,
@@ -151,7 +157,8 @@ public struct SettingsScreen: View {
         onReplaceDevice: @escaping () async -> Void = {},
         onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
-        signOutPolicy: SignOutPolicy = .allowed
+        signOutPolicy: SignOutPolicy = .allowed,
+        onRecoveryRequired: @escaping () -> Void = {}
     ) {
         self.username = username
         self.tier = tier
@@ -184,6 +191,7 @@ public struct SettingsScreen: View {
         self.onWipeRestart = onWipeRestart
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
+        self.onRecoveryRequired = onRecoveryRequired
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -308,32 +316,19 @@ public struct SettingsScreen: View {
             Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
         }
         .confirmationDialog(
-            signOutPolicy == .blockedNoRecovery
-                ? "Set up recovery first"
-                : "Sign out of this device?",
+            "Lock with passkey?",
             isPresented: $signOutConfirm,
             titleVisibility: .visible
         ) {
-            // #52 — without cloud recovery a key-wipe sign-out is permanent
-            // account loss, so there is NO destructive proceed at all: the
-            // only forward action routes into recovery enrollment. With
-            // recovery enrolled (or in demo mode) it's a routine confirm —
-            // the same IRK comes back via passkey.
-            if signOutPolicy == .blockedNoRecovery {
-                Button("Set up recovery") {
-                    onOpenRecovery()
-                }
-                Button("Cancel", role: .cancel) {}
-            } else {
-                Button("Sign out", role: .destructive) {
-                    onSignOut()
-                }
-                Button("Cancel", role: .cancel) {}
+            // Only reachable when recovery is enrolled (or in demo mode) —
+            // the button is greyed and routes to a toast otherwise. The
+            // same IRK comes back via the recovery passkey.
+            Button("Lock with passkey", role: .destructive) {
+                onSignOut()
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text(signOutPolicy == .blockedNoRecovery
-                ? "Enroll cloud recovery first — signing out now would permanently lose access to this account. This device holds the only copy of your account key."
-                : "This erases this device's account key from the Keychain so nothing sensitive is left at rest while you're signed out. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.")
+            Text("This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.")
         }
     }
 
@@ -667,22 +662,22 @@ public struct SettingsScreen: View {
     ///     that restores the SAME key (instant re-pair, no rotation).
     ///     Gated on cloud recovery — see the confirmation dialog.
     private func sessionActions(c: FSColors) -> some View {
-        VStack(spacing: FS.space.s3) {
+        // "Lock with passkey" (tier 2) is recovery-gated: greyed until
+        // cloud recovery is enrolled, and a tap on the greyed button
+        // surfaces a toast instead of running the key wipe.
+        let gated = signOutPolicy == .blockedNoRecovery
+        return VStack(spacing: FS.space.s3) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Locks Flagship behind Face ID. Nothing is removed and your apps keep running — just hides the screen until you unlock.")
+                Text("Locks Flagship behind Face ID. Nothing is interrupted.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSGhostButton("Lock", block: true, large: true, action: onLock)
+                FSGhostButton("Lock with Face ID", block: true, large: true, action: onLock)
                     .accessibilityIdentifier("settings-lock-btn")
             }
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text(signOutPolicy == .blockedNoRecovery
-                    ? "Sign out is disabled until you set up cloud recovery — this device holds the only copy of your account key, and erasing it would permanently lose access."
-                    : (hasCloudRecovery
-                        ? "Erases this device's account key from the Keychain so nothing's left at rest while you're signed out. Sign back in with your recovery passkey to restore it — your account and servers stay put."
-                        : "Erases this device's account key. ⚠️ You have NO cloud recovery — this would permanently lose access."))
+                Text("Erases account key and deletes data. Sign back in with your recovery passkey.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSDangerButton("Sign out", block: true, large: true) {
-                    signOutConfirm = true
+                FSDangerButton("Lock with passkey", muted: gated, block: true, large: true) {
+                    if gated { onRecoveryRequired() } else { signOutConfirm = true }
                 }
                 .accessibilityIdentifier("settings-sign-out-btn")
             }
@@ -696,14 +691,15 @@ public struct SettingsScreen: View {
     /// account from scratch) to come back. Two-stage confirm so a
     /// fat-finger doesn't blow up the user's setup.
     private func dangerZone(c: FSColors) -> some View {
-        section("DANGER ZONE", c: c) {
+        // Recovery-gated like "Lock with passkey": greyed until cloud
+        // recovery is enrolled, tap-while-greyed surfaces a toast.
+        let gated = signOutPolicy == .blockedNoRecovery
+        return section("DANGER ZONE", c: c) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text(hasCloudRecovery
-                    ? "Remove this device from your account. You'll need your recovery passkey to come back."
-                    : "Remove this device from your account. ⚠️ You have NO cloud recovery enrolled — this will permanently lose access.")
+                Text("Remove this device from your account. You may need account recovery to resume.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSDangerButton("Remove this device from account", block: true) {
-                    showRemoveConfirm = true
+                FSDangerButton("Remove this device from account", muted: gated, block: true) {
+                    if gated { onRecoveryRequired() } else { showRemoveConfirm = true }
                 }
                 .accessibilityIdentifier("remove-from-account-btn")
             }

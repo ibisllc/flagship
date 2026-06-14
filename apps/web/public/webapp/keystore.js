@@ -82,6 +82,15 @@ async function dbDel(key) {
   });
 }
 
+/* ---------- shared KV (used by lib/pinLock.js) ----------
+ * Thin re-exports of the same `flagship-webapp`/`keystore` object store so
+ * the PIN-lock feature persists alongside the wrapped UMK in ONE database
+ * (no second connection, no upgrade-version race). Values may be any
+ * structured-cloneable type — including a non-extractable CryptoKey. */
+export const kvGet = dbGet;
+export const kvPut = dbPut;
+export const kvDel = dbDel;
+
 /* ---------- per-profile keying ---------- */
 
 // In-process override for the active profile. When non-null it wins over the
@@ -531,6 +540,15 @@ export async function unlockUmk(passphrase, profileId = activeProfileId()) {
 
 export async function resetDevice(profileId = activeProfileId()) {
   await dbDel(wrappedUmkRecordKey(profileId));
+  // Also drop any tier-1 PIN: a PIN-wrapped copy of the UMK would otherwise
+  // survive a tier-2/tier-3 wipe and defeat the "erases the key" promise.
+  // Dynamic import avoids a static keystore↔pinLock cycle; best-effort.
+  try {
+    const { clearPin } = await import("./lib/pinLock.js");
+    await clearPin({ profileId });
+  } catch {
+    /* pinLock unavailable / no PIN — nothing to clear */
+  }
 }
 
 /** Persist a UMK seed under a SPECIFIC profile's record, scoping the

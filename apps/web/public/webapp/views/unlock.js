@@ -5,6 +5,7 @@ import { unlockSession, lockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { stopRenewals } from "./home.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
+import { clearPin } from "../lib/pinLock.js";
 
 registerView("view-unlock");
 
@@ -13,6 +14,14 @@ async function handleUnlock() {
   try {
     const seed = await unlockUmk(a);
     await unlockSession(seed);
+    // The reset rule: restoring via the full passphrase (chosen, or after a
+    // forgotten PIN / lockout) clears any PIN — the passphrase is the real
+    // key, and the PIN must be re-set deliberately afterwards.
+    try {
+      await clearPin();
+    } catch {
+      /* best-effort — never block an otherwise-good unlock */
+    }
     await dispatchInitialView();
     toast("unlocked");
   } catch {
