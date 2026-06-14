@@ -37,6 +37,8 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "recovery-set-up"     -> "Set up recovery"
     "recovery-rotated"    -> "Rotated recovery passkey"
     "app-renamed"         -> "Renamed app URL"
+    "server-created"      -> "Created server"
+    "server-online"       -> "Server came online"
     else                  -> kind
 }
 

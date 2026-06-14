@@ -99,7 +99,9 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
     val metrics by metricsVm.state.collectAsState()
 
     LaunchedEffect(podId) {
-        detailVm.load()
+        // Retry until the box answers its BFF — an online box whose daemon
+        // raced readiness no longer sticks on the skeleton until manual refresh.
+        detailVm.loadUntilLoaded()
         metricsVm.load()
     }
 

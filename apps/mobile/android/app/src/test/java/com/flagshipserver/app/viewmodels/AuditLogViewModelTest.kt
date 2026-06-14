@@ -47,6 +47,8 @@ class AuditLogViewModelTest {
         assertEquals("Set up recovery", auditEventLabel("recovery-set-up"))
         assertEquals("Rotated recovery passkey", auditEventLabel("recovery-rotated"))
         assertEquals("Renamed app URL", auditEventLabel("app-renamed"))
+        assertEquals("Created server", auditEventLabel("server-created"))
+        assertEquals("Server came online", auditEventLabel("server-online"))
         // Unknown kinds fall back to the raw string — never blank or
         // localized away.
         assertEquals("custom-future-kind", auditEventLabel("custom-future-kind"))

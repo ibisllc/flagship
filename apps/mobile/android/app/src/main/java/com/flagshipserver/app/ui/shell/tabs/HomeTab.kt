@@ -29,7 +29,6 @@ import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.BootApprovalWatcher
 import com.flagshipserver.app.core.PendingServerReconciler
-import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
@@ -67,14 +66,19 @@ fun HomeTab() {
     val approvalWatcher = remember(mailbox) {
         BootApprovalWatcher(
             app = app,
-            makeCoordinator = {
-                app.currentUser.value?.let {
-                    SecretRequestCoordinator(
-                        mailbox = mailbox,
-                        username = it,
-                        irk = com.flagshipserver.app.keystore.KeystoreIrkAccess(),
-                    )
-                }
+            // DIRECTORY-DRIVEN, no biometric: read the cheap `awaitingUnlock`
+            // flag straight from the unauthenticated `/pods` directory. (The old
+            // path derived the IRK to read the mailbox, firing Face ID on a
+            // timer.) Best-effort: a blip returns the prior set.
+            pollAwaiting = pollAwaiting@{
+                val user = app.currentUser.value
+                if (user.isNullOrEmpty()) return@pollAwaiting app.serversAwaitingApproval.value
+                val dir = runCatching { mailbox.fetchPods(user) }
+                    .getOrElse { return@pollAwaiting app.serversAwaitingApproval.value }
+                dir.pods
+                    .filter { it.awaitingUnlock }
+                    .map { it.serverDomain.lowercase() }
+                    .toSet()
             },
         )
     }

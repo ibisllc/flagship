@@ -133,7 +133,7 @@ fun ServicesListScreen(nav: NavController) {
       ) {
         Spacer(Modifier.height(FS.space.s10))
         Text(
-            text = "Apps",
+            text = "Services",
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
         )

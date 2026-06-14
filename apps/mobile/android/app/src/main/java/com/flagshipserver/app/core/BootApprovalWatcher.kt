@@ -3,35 +3,28 @@
 // detail page, and the post-creation checklist via
 // AppState.serversAwaitingApproval. Kotlin mirror of iOS BootApprovalWatcher.
 //
-// The complement to the per-server approval flow (SecretRequestsScreen):
-// rather than poll one coordinator per row, this reuses the SAME
-// SecretRequestCoordinator.fetchVerifiedRequests() account-wide fetch once,
-// maps the verified, non-expired unlock-key requests to their serverDomains,
-// and publishes the set. A pod is WAITING_FOR_APPROVAL iff its fqdn is in it.
+// DIRECTORY-DRIVEN, NO BIOMETRIC. Detection reads the unauthenticated `/pods`
+// directory's cheap `awaitingUnlock` flag — NOT the IRK-signed mailbox. The
+// previous implementation polled SecretRequestCoordinator.fetchVerifiedRequests()
+// every 5s, which derives the IRK (a Keystore biometric gate): on a real device
+// that fired Face ID on the Home tab every freshness window. Face ID now fires
+// ONLY on the actual Approve mutation, never to detect.
 //
-// Best-effort: a fetch failure leaves the prior set untouched (no thrash on a
-// blip). No biometric beyond the IRK-signed mailbox-auth *read* the coordinator
-// already does — Face ID stays only on the Approve mutation.
+// Best-effort: the `pollAwaiting` closure swallows failures and returns the
+// prior set, so a blip never thrashes the UI.
 
 package com.flagshipserver.app.core
 
 class BootApprovalWatcher(
     private val app: AppState,
-    private val makeCoordinator: () -> SecretRequestCoordinator?,
-    private val now: () -> Long = { System.currentTimeMillis() },
+    /** Refresh the `/pods` directory (unauthenticated, NO biometric) and return
+     *  the set of server fqdns the directory marks `awaitingUnlock`. */
+    private val pollAwaiting: suspend () -> Set<String>,
 ) {
-    /** One account-wide fetch → publish the set of fqdns with a LIVE
-     *  (non-expired) unlock-key request onto AppState. Best-effort: a throw
-     *  leaves the set untouched. Returns the resolved set. */
+    /** One directory refresh → publish the set of fqdns with a pending unlock
+     *  request onto AppState. Returns the resolved set. */
     suspend fun pollOnce(): Set<String> {
-        val coord = makeCoordinator() ?: return app.serversAwaitingApproval.value
-        val verified = runCatching { coord.fetchVerifiedRequests() }
-            .getOrElse { return app.serversAwaitingApproval.value }
-        val t = now()
-        val waiting = verified
-            .filter { it.purpose == SecretPurpose.UNLOCK_KEY && t <= it.pending.expiresAt }
-            .map { it.serverDomain.lowercase() }
-            .toSet()
+        val waiting = pollAwaiting()
         app.setServersAwaitingApproval(waiting)
         return waiting
     }

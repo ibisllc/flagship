@@ -194,6 +194,7 @@ private fun EventRow(e: AuditEvent) {
 @Composable
 private fun colorFor(kind: String): Color = when (kind) {
     "wipe-restart", "device-disconnected" -> FS.colors.danger
-    "device-replaced", "app-renamed"      -> FS.colors.primary
+    "device-replaced", "app-renamed", "server-created" -> FS.colors.primary
+    "server-online"                       -> FS.colors.success
     else                                  -> FS.colors.text  // primary label tone; subtitle is textMuted
 }

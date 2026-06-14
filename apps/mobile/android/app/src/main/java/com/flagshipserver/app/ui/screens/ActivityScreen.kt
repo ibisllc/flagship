@@ -70,7 +70,9 @@ fun ActivityScreen(nav: NavController) {
                 Text(
                     "Activity",
                     color = FS.colors.text,
-                    style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+                    // Match the Home/Services large-title size (32/40) so the
+                    // tab headers are consistent — was 28sp here.
+                    style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
                 )
                 Text(
                     "Pending approvals, install timelines, and recovery progress.",

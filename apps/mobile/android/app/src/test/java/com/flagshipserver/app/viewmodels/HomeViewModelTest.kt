@@ -35,4 +35,24 @@ class HomeViewModelTest {
         assertTrue(state is LoadingState.Failed)
         assertEquals("HTTP 503: simulated failure", (state as LoadingState.Failed).message)
     }
+
+    // loadUntilLoaded keeps showing the skeleton across failures (never flashes
+    // the error card) and lands Loaded once the box answers — the fix for the
+    // "stuck connecting" page when a box just came online.
+    @Test fun loadUntilLoaded_keepsSkeletonThenLoadsOnRecovery() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
+        val client = MockScreensClient(simulatedLatencyMs = 0)
+        client.shouldFail = true
+        val vm = HomeViewModel(client, scope)
+        val job = vm.loadUntilLoaded()
+        testScheduler.advanceTimeBy(50); testScheduler.runCurrent()
+        // First attempt failed → still Loading (skeleton), NOT Failed.
+        assertTrue(vm.state.value is LoadingState.Loading)
+        // The box answers; the next retry (after the 2s backoff) lands Loaded.
+        client.shouldFail = false
+        testScheduler.advanceTimeBy(2_100); testScheduler.runCurrent()
+        assertTrue(vm.state.value is LoadingState.Loaded<*>)
+        job.cancel()
+    }
 }
