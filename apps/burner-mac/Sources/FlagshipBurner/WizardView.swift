@@ -64,7 +64,7 @@ struct WizardView: View {
             .clipped()
             logBar
         }
-        .frame(width: 560, height: 640)
+        .frame(width: 560, height: 700)
         .background(FB.Colors.bg)
         .preferredColorScheme(preferredScheme)
         .task { await model.refreshDisks() }
@@ -82,9 +82,17 @@ struct WizardView: View {
             modePicker
             recipeRow
             // Advanced brings its own stock Ubuntu/Debian ISO; Simple fetches a
-            // server-named Debian base ISO and shows the download progress.
-            if model.mode.requiresUserISO {
-                isoRow
+            // server-named Debian base ISO and shows the download progress. The
+            // "Use system-provided ISO" checkbox lets Advanced fetch it too.
+            if model.mode == .advanced {
+                VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                    isoRow
+                        .opacity(model.useSystemISO ? 0.4 : 1)
+                        .disabled(model.useSystemISO)
+                    FBCheck(isOn: $model.useSystemISO, label: "Use system-provided ISO")
+                        .disabled(model.isRunning)
+                        .help("Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.")
+                }
             }
             diskRow
             wifiRow
@@ -97,9 +105,14 @@ struct WizardView: View {
     /// Simple (default, server-named Debian base) vs Advanced (bring your own
     /// ISO). Disabled while a burn is running so the inputs can't change mid-run.
     private var modePicker: some View {
-        ModePill(selection: $model.mode)
-            .disabled(model.isRunning)
-            .opacity(model.isRunning ? 0.5 : 1)
+        HStack(spacing: FB.Spacing.s3) {
+            ModePill(selection: $model.mode)
+            Spacer(minLength: FB.Spacing.s2)
+            FBCheck(isOn: $model.debugMode, label: "Debug mode", tint: FB.Colors.warning)
+                .help("Burn a DEBUG image — keeps the 'debug' console login + DEBUG banner. Off = production (the only way to get debug features).")
+        }
+        .disabled(model.isRunning)
+        .opacity(model.isRunning ? 0.5 : 1)
     }
 
     /// The remaster runs on the burner before the write; show it in the warning
@@ -774,6 +787,41 @@ private struct LogPane: View {
 /// teal capsule slides under the selected segment; the selected label reads in
 /// white, the unselected one in muted ink. Replaces the plain `.segmented`
 /// Picker — same two modes, same binding, purely a visual upgrade.
+/// A small labeled checkbox matching the app's aesthetic: a rounded square that
+/// fills with `tint` + a checkmark when on, a hairline-bordered empty square when
+/// off. The whole row is the hit target.
+private struct FBCheck: View {
+    @Binding var isOn: Bool
+    let label: String
+    var tint: Color = FB.Colors.primary
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            HStack(spacing: FB.Spacing.s2) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(isOn ? tint : FB.Colors.surface)
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(isOn ? tint : FB.Colors.border, lineWidth: 1.5)
+                    if isOn {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(width: 18, height: 18)
+                Text(label)
+                    .font(FB.Font.rowHint())
+                    .foregroundStyle(isOn ? FB.Colors.ink : FB.Colors.textMuted)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .animation(.easeOut(duration: 0.12), value: isOn)
+    }
+}
+
 private struct ModePill: View {
     @Binding var selection: BurnerMode
     @Namespace private var pill

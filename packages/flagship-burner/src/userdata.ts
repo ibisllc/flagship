@@ -79,6 +79,13 @@ export interface UserDataOptions {
    */
   debugSshAuthorizedKey?: string;
   /**
+   * DEBUG build toggle (the burner's "Debug mode" checkbox, default OFF). When
+   * true the image keeps the known-password `debug` sudo console account + the
+   * "DEBUG BUILD" /etc/issue banner. Default/false ⇒ a PRODUCTION image with
+   * neither. This is the ONLY way to get those debug features.
+   */
+  debugMode?: boolean;
+  /**
    * The dedicated boot worker the box's boot-stage talks to for its LUKS
    * unlock (lease GET / approval request POST / response poll), baked to
    * /boot/flagship-boot-host so the initramfs unlock hook reads it on every
@@ -187,6 +194,7 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    debugMode: opts.debugMode,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
@@ -481,6 +489,47 @@ export interface BootstrapTemplateArgs {
   wifiPassword?: string;
   /** DEBUG-ONLY: replace the bootstrap with a minimal sshd+key remote-access stub. */
   debugSshAuthorizedKey?: string;
+  /**
+   * When true the burned image is a DEBUG build: it keeps the known-password
+   * `debug` sudo console account + the "DEBUG BUILD" /etc/issue banner. Default
+   * FALSE ⇒ a PRODUCTION image with neither (the `debug:flagship` backdoor is
+   * stripped). This flag is the ONLY way to get those debug features — see
+   * `stripDebugFeatures`, which also fails loud if the markers ever survive a
+   * strip so a refactor can't silently re-ship the backdoor.
+   */
+  debugMode?: boolean;
+}
+
+/** The /etc/issue "DEBUG BUILD" banner block (appended after the brand banner). */
+const DEBUG_BANNER_BLOCK =
+  "cat >> /etc/issue <<'FLAGSHIP_ISSUE'\n\n" +
+  "  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).\n" +
+  "  !! CHANGE OR REMOVE this user before production.\n\n" +
+  "FLAGSHIP_ISSUE\n";
+
+/**
+ * Strip every DEBUG-only feature from an assembled bootstrap, leaving a
+ * production image: removes the "DEBUG BUILD" /etc/issue banner and the
+ * known-password `debug` sudo account (comment + useradd + chpasswd). The
+ * account block carries non-ASCII box-drawing/em-dash chars in its comment, so
+ * it's matched by a regex anchored on stable ASCII rather than a literal. FAILS
+ * LOUD if either backdoor marker survives — a moved block must never silently
+ * ship the `debug:flagship` account.
+ */
+export function stripDebugFeatures(script: string): string {
+  const stripped = script
+    .replace(DEBUG_BANNER_BLOCK, "")
+    .replace(
+      /# .{0,4}DEBUG-ONLY console login[\s\S]*?echo 'debug:flagship' \| chpasswd 2>\/dev\/null \|\| true\n\n/,
+      "",
+    );
+  if (stripped.includes("debug:flagship") || stripped.includes("DEBUG BUILD")) {
+    throw new Error(
+      "stripDebugFeatures: a debug marker survived the strip — the debug block " +
+        "moved; refusing to ship a production image that still carries the backdoor",
+    );
+  }
+  return stripped;
 }
 
 /**
@@ -490,9 +539,15 @@ export interface BootstrapTemplateArgs {
  * same script (no drift between the two installers' downstream setup).
  */
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
+  // The sshd remote-access stub is its own debug mechanism (dev-only, never
+  // CLI/GUI) and is unaffected by debugMode.
   if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
-  if (args.encryptRoot) return buildBootstrapScriptEncrypted(args);
-  return buildBootstrapScriptPlain(args);
+  const script = args.encryptRoot
+    ? buildBootstrapScriptEncrypted(args)
+    : buildBootstrapScriptPlain(args);
+  // Production by default: strip the debug account + banner unless this is an
+  // explicit debug build. This is the ONLY switch that keeps them.
+  return args.debugMode ? script : stripDebugFeatures(script);
 }
 
 /**

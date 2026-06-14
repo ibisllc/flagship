@@ -57,6 +57,23 @@ final class WizardModel: ObservableObject {
     /// supplies. Both end in the same remaster+flash path.
     @Published var mode: BurnerMode = .simple
 
+    /// DEBUG build toggle (default OFF). On ⇒ the burned image keeps the
+    /// `debug`/`flagship` sudo console account + the "DEBUG BUILD" banner. Off ⇒
+    /// a production image with neither. The ONLY way to get those debug features.
+    @Published var debugMode: Bool = false
+
+    /// Advanced-mode only: use the server-named base ISO (fetched/cached) like
+    /// Simple does, instead of bringing your own ISO file. Default OFF.
+    @Published var useSystemISO: Bool = false
+
+    /// Whether the user must supply an ISO file: Advanced needs one UNLESS they
+    /// opted into the system-provided ISO (then it's fetched like Simple).
+    var effectiveRequiresUserISO: Bool { mode.requiresUserISO && !useSystemISO }
+
+    /// True when the burner fetches the base ISO itself (Simple, or Advanced
+    /// with "Use system-provided ISO").
+    var fetchesBaseISO: Bool { mode == .simple || useSystemISO }
+
     /// The base-ISO URL currently being downloaded in Simple mode — surfaced
     /// under the download progress bar so the user can see exactly what's being
     /// fetched. nil when not downloading.
@@ -109,7 +126,7 @@ final class WizardModel: ObservableObject {
 
     var canFlash: Bool {
         guard selectedDisk != nil else { return false }
-        if mode.requiresUserISO && iso == nil { return false }
+        if effectiveRequiresUserISO && iso == nil { return false }
         if mode.requiresRecipe && recipe == nil { return false }
         return true
     }
@@ -117,10 +134,10 @@ final class WizardModel: ObservableObject {
     var readinessSummary: String {
         var missing: [String] = []
         if mode.requiresRecipe && recipe == nil { missing.append("Certificate") }
-        if mode.requiresUserISO && iso == nil { missing.append("ISO") }
+        if effectiveRequiresUserISO && iso == nil { missing.append("ISO") }
         if selectedDisk == nil { missing.append("USB drive") }
         if missing.isEmpty {
-            let what = mode.requiresUserISO ? (iso?.lastPathComponent ?? "") : (verified?.serverDomain ?? "your server")
+            let what = effectiveRequiresUserISO ? (iso?.lastPathComponent ?? "") : (verified?.serverDomain ?? "your server")
             return "Ready: \(what) → \(selectedDisk?.deviceNode ?? "")"
         }
         return "Need: \(missing.joined(separator: ", "))."
@@ -214,13 +231,15 @@ final class WizardModel: ObservableObject {
                                                 encryptRoot: encryptRoot,
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
+                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
+                                                debugMode: debugMode)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
+                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
+                                                 debugMode: debugMode)
         return (yaml, preseed)
     }
 
@@ -287,7 +306,7 @@ final class WizardModel: ObservableObject {
     /// signed helper for the raw write.
     func runWrite() async {
         guard let disk = selectedDisk else { return }
-        if mode.requiresUserISO && iso == nil { return }
+        if effectiveRequiresUserISO && iso == nil { return }
         if mode.requiresRecipe && recipe == nil { return }
         guard !isRunning else { return }
         isRunning = true
@@ -303,11 +322,11 @@ final class WizardModel: ObservableObject {
 
         guard let recipe = recipe else { return }
 
-        // The ISO to remaster: in Simple mode we fetch the server-named Debian
-        // base; in Advanced the user supplied one.
+        // The ISO to remaster: fetch the server-named Debian base when we own the
+        // ISO (Simple, or Advanced + "Use system-provided ISO"); otherwise use
+        // the stock ISO the user supplied.
         let srcISO: URL
-        switch mode {
-        case .simple:
+        if fetchesBaseISO {
             phase = "download"
             do {
                 srcISO = try await ensureBaseISO()
@@ -315,7 +334,7 @@ final class WizardModel: ObservableObject {
                 appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
                 return
             }
-        case .advanced:
+        } else {
             guard let iso = iso else { return }
             srcISO = iso
         }

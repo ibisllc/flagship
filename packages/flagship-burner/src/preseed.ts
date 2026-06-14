@@ -112,6 +112,7 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
+    debugMode: opts.debugMode,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
 

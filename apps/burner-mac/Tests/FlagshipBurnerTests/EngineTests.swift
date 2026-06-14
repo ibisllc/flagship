@@ -638,7 +638,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "16ec057330f90971a5d6e9bc36b89bd7fed4fe2050dca45bd920138583a75176",
+            hash, "0ed08629d5cd7751785e2c1b1de8aff8e5fbcad64f9cdef60d40999a165c0b59",
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 
@@ -656,7 +656,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains(#"cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME""#))
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "384951096900d413e93fcb44ddbeb54d0796d8c6557febe75ed0fd788a34826b",
+            hash, "a6ee44f31bee7c7004e8556b6b591cc3c9103958b7931c7b797c4bb2903cf5bf",
             "Swift encrypted Debian bootstrap drifted from the TS twin.")
     }
 

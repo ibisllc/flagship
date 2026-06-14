@@ -53,7 +53,8 @@ public enum UserData {
                                        bootUnlockMode: String = "auto",
                                        bootHost: String = defaultBootHost,
                                        wifiSSID: String? = nil,
-                                       wifiPassword: String? = nil) throws -> String {
+                                       wifiPassword: String? = nil,
+                                       debugMode: Bool = false) throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
         let ref = trimmed.isEmpty ? "main" : trimmed
         guard ref.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else {
@@ -72,7 +73,7 @@ public enum UserData {
         // recipe). Matches the TS burner's installBlobToJson output.
         let blobB64 = RecipeLoader.normalizeEnvelope(recipeJSON).base64EncodedString()
         let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host,
-                                                wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8)
+                                                wifiSSID: wifiSSID, wifiPassword: wifiPassword, debugMode: debugMode).utf8)
             .base64EncodedString()
         // Emitted only when encryptRoot is on; "" keeps the default path
         // byte-identical (subiquity falls back to its whole-disk layout).
@@ -159,7 +160,8 @@ public enum UserData {
                                      bootUnlockMode: String = "auto",
                                      bootHost: String = defaultBootHost,
                                      wifiSSID: String? = nil,
-                                     wifiPassword: String? = nil) throws -> String {
+                                     wifiPassword: String? = nil,
+                                     debugMode: Bool = false) throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
         let ref = trimmed.isEmpty ? "main" : trimmed
         guard ref.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else {
@@ -176,7 +178,7 @@ public enum UserData {
         let blobB64 = RecipeLoader.normalizeEnvelope(recipeJSON).base64EncodedString()
         let bootstrapB64 = Data(
             bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode, bootHost: host, family: "debian",
-                            wifiSSID: wifiSSID, wifiPassword: wifiPassword).utf8
+                            wifiSSID: wifiSSID, wifiPassword: wifiPassword, debugMode: debugMode).utf8
         ).base64EncodedString()
 
         // Phone-home beacons → the canonical order-status channel. The serial is
@@ -765,9 +767,9 @@ public enum UserData {
     /// sha256 pins hold). "debian" only adapts the LVM-on-LUKS unlock inside the
     /// encrypted block — the plain bootstrap body is identical either way.
     /// Mirrors userdata.ts buildBootstrapScript.
-    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu", wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
+    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu", wifiSSID: String? = nil, wifiPassword: String? = nil, debugMode: Bool = false) -> String {
         let plain = bootstrapScriptPlain(ref: ref, repoURL: repoURL, wifiSSID: wifiSSID, wifiPassword: wifiPassword)
-        guard encryptRoot else { return plain }
+        guard encryptRoot else { return debugMode ? plain : stripDebugFeatures(plain) }
         // Boot-unlock policy is baked into the LUKS block; only "approve" is the
         // critical-server path; anything else ⇒ "auto" (mirror userdata.ts).
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
@@ -784,7 +786,34 @@ public enum UserData {
 
         """
         precondition(plain.hasSuffix(tail), "plain bootstrap tail drifted; encrypted splice would be wrong")
-        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam, wifiSSID: wifiSSID ?? "", wifiPassword: wifiPassword ?? "") + tail
+        let assembled = String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam, wifiSSID: wifiSSID ?? "", wifiPassword: wifiPassword ?? "") + tail
+        // Production by default: strip the debug account + banner unless this is an
+        // explicit debug build. Mirror of userdata.ts buildBootstrapScript.
+        return debugMode ? assembled : stripDebugFeatures(assembled)
+    }
+
+    /// Strip every DEBUG-only feature from an assembled bootstrap, leaving a
+    /// production image: removes the "DEBUG BUILD" /etc/issue banner and the
+    /// known-password `debug` sudo account (comment + useradd + chpasswd). The
+    /// account block carries non-ASCII chars in its comment, so it's matched by
+    /// a regex anchored on stable ASCII. FAILS LOUD if either backdoor marker
+    /// survives. Byte-identical to userdata.ts `stripDebugFeatures`.
+    static func stripDebugFeatures(_ script: String) -> String {
+        let banner = "cat >> /etc/issue <<'FLAGSHIP_ISSUE'\n\n"
+            + "  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).\n"
+            + "  !! CHANGE OR REMOVE this user before production.\n\n"
+            + "FLAGSHIP_ISSUE\n"
+        var s = script.replacingOccurrences(of: banner, with: "")
+        s = s.replacingOccurrences(
+            of: "# .{0,4}DEBUG-ONLY console login[\\s\\S]*?echo 'debug:flagship' \\| chpasswd 2>/dev/null \\|\\| true\n\n",
+            with: "",
+            options: .regularExpression
+        )
+        precondition(
+            !s.contains("debug:flagship") && !s.contains("DEBUG BUILD"),
+            "stripDebugFeatures: a debug marker survived the strip — refusing to ship a production image with the backdoor"
+        )
+        return s
     }
 
     static func bootstrapScriptPlain(ref: String, repoURL: String, wifiSSID: String? = nil, wifiPassword: String? = nil) -> String {
