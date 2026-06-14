@@ -34,7 +34,14 @@ routes = [
   # on the marketing or webapp surface cannot reach the recovery
   # credential. The page is intentionally tiny and ships under a strict
   # CSP; runbook lives at docs/runbooks/recovery-subdomain.md.
-  { pattern = "recovery.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+  #
+  # CUSTOM DOMAIN (not a zone route): recovery. had NO DNS record, so the zone
+  # route never fired (a Worker Route only matches a host that already resolves
+  # into Cloudflare). Same fix as boot. below — a custom domain lets wrangler
+  # provision the proxied DNS record + edge cert itself, so the hostname
+  # resolves to flagship-com with no manual DNS step / no dns:write token.
+  # (Cut over 2026-06-14.)
+  { pattern = "recovery.flagshipserver.com",   custom_domain = true },
   # boot.flagshipserver.com — the box/phone-facing BOOT operations
   # (`/api/boot/*`: auto-unlock lease release + the phone-gated approval
   # relay). Previously a SEPARATE worker (apps/boot) with its own D1 + a
