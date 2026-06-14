@@ -85,17 +85,7 @@ struct WizardView: View {
             // server-named Debian base ISO and shows the download progress. The
             // "Use system-provided ISO" checkbox lets Advanced fetch it too.
             if model.mode == .advanced {
-                VStack(alignment: .leading, spacing: 0) {
-                    isoRow
-                        .opacity(model.useSystemISO ? 0.4 : 1)
-                        .disabled(model.useSystemISO)
-                    FBCheck(isOn: $model.useSystemISO, label: "Use system-provided ISO")
-                        .disabled(model.isRunning)
-                        // Pull up snug under the ISO box — `isoRow` (optionGroup)
-                        // already carries an s2 bottom pad + a help-icon row.
-                        .padding(.top, -FB.Spacing.s2)
-                        .help("Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.")
-                }
+                isoRow
             }
             diskRow
             wifiRow
@@ -176,13 +166,17 @@ struct WizardView: View {
     /// A clickable card with a help icon. For most rows the icon floats to the
     /// right just below the card; the certificate row overrides this and pins
     /// its icon to the right of the "Paste certificate…" prompt instead.
-    private func optionGroup<Card: View>(
+    private func optionGroup<Card: View, Leading: View>(
         @ViewBuilder card: () -> Card,
+        @ViewBuilder leading: () -> Leading = { EmptyView() },
         help: HelpIcon
     ) -> some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s2) {
             card()
             HStack {
+                // Optional left-aligned control (e.g. the "Use system-provided
+                // ISO" checkbox) shares the help icon's row.
+                leading()
                 Spacer()
                 help
             }
@@ -267,6 +261,15 @@ struct WizardView: View {
                         }
                     }
                 )
+                // Dim ONLY the picker when fetching the base ISO ourselves; the
+                // checkbox below stays interactive so it can be turned back off.
+                .opacity(model.useSystemISO ? 0.4 : 1)
+                .disabled(model.useSystemISO)
+            },
+            leading: {
+                FBCheck(isOn: $model.useSystemISO, label: "Use system-provided ISO")
+                    .disabled(model.isRunning)
+                    .help("Fetch the recommended base ISO automatically (like Simple mode) instead of supplying your own.")
             },
             help: HelpIcon(
                 title: "Recommended distributions",
