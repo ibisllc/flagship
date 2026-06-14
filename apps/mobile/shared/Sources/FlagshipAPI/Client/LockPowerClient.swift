@@ -27,6 +27,21 @@ public protocol LockPowerClient: Sendable {
     /// `leaseExpiry` is the new lease deadline in ms (the phone tracks
     /// time-remaining + schedules its reminders off it).
     func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult
+
+    /// POST a signed `JournalRequest` to `/api/journal`. Returns the daemon's
+    /// `{ ok, unit, lines }` — the trailing journal lines for diagnostics.
+    func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult
+}
+
+public struct JournalResult: Equatable, Sendable {
+    public let ok: Bool
+    public let unit: String
+    public let lines: [String]
+    public init(ok: Bool, unit: String, lines: [String]) {
+        self.ok = ok
+        self.unit = unit
+        self.lines = lines
+    }
 }
 
 public struct DeadManPolicyResult: Equatable, Sendable {
@@ -115,6 +130,15 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         let expiry = numberToInt64(obj?["leaseExpiry"])
         return DeadManAffirmResult(ok: ok, leaseExpiry: expiry)
     }
+
+    public func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult {
+        let data = try await post(serverDomain: serverDomain, path: "/api/journal", request: request, signatureHex: signatureHex)
+        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let ok = (obj?["ok"] as? Bool) ?? false
+        let unit = (obj?["unit"] as? String) ?? ""
+        let lines = (obj?["lines"] as? [String]) ?? []
+        return JournalResult(ok: ok, unit: unit, lines: lines)
+    }
 }
 
 private func numberToInt64(_ v: Any?) -> Int64 {
@@ -173,5 +197,14 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     public func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult {
         try record(serverDomain, "/api/deadman/affirm", request, signatureHex)
         return DeadManAffirmResult(ok: true, leaseExpiry: affirmLeaseExpiry)
+    }
+
+    /// Lines the mock returns for `readJournal`.
+    public var journalLines: [String] = []
+
+    public func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult {
+        try record(serverDomain, "/api/journal", request, signatureHex)
+        let unit = (request["unit"] as? String) ?? "flagship-daemon"
+        return JournalResult(ok: true, unit: unit, lines: journalLines)
     }
 }
