@@ -123,7 +123,35 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — BYOK AI wired LIVE on the box (`feat/build-modes`)
+### 2026-06-14 (latest) — build-a-service multi-mode SHIPPED + folded into `main`
+
+**Merged to `main`** (core feature, owner-directed). The whole multi-mode
+"build a service" flow — chooser (scratch / git / mcp / marketplace / journal)
++ the shared build journal + AI-adapt + value-free env-requests + scratch
+multimodal chat + **BYOK wired live** + an **AI-key step** on every surface —
+is now on `main`. `feat/marketplace` + `feat/retail` must integrate `main` to
+pick it up. Design + contract: `docs/build-modes.md`.
+
+**AI-key flow (all surfaces).** The box-AI paths (scratch always; git only
+when a non-fit repo needs adapting) show a "provide or confirm your AI key"
+step before the model runs; marketplace + MCP skip it (no box model). It
+recalls **device-saved keys** as a masked slug (`provider · label · ····1234`,
+never the full key), pre-selects the active one (Confirm), and offers "Save on
+this device". Storage is device-local + encrypted per surface — webapp
+`providers.js` (UMK-wrapped IndexedDB), iOS Keychain (`SavedKeyStore`), Android
+`EncryptedSharedPreferences` (`AiKeyStore`) — plus a **Settings → AI keys**
+manager (view-slug / add / delete). The chosen `{provider, apiKey, baseUrl?}`
+rides the build request as `credential` (sealed transiently per session/build
+by the daemon; flagshipserver.com never in the path). One future item: the
+**in-house / self-hosted inference server** (LAN `baseUrl` + `baseUrlGuard`
+override) — BYOK needs no inference infra.
+
+Final gates at merge: `npx tsc -b` clean · `npx vitest run` **5147 pass / 8
+skip / 392 files** · iOS **979** XCTests · Android **789** unit tests + both
+build. (Mobile chat *attachment picker* is the one deferred nice-to-have;
+webapp has it.)
+
+### 2026-06-14 — BYOK AI wired LIVE on the box
 
 **`LlmHarness` is now complete + the live build paths actually run the
 model.** Closed the three gaps that left scratch-chat + git-adapt as tested

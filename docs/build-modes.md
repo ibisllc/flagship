@@ -1,15 +1,17 @@
 # Build-a-service modes
 
-> **Branch discipline.** Workspace artifact (design doc) → lives on `main`.
-> The feature code lives on **`feat/build-modes`** until launch. The
-> marketplace *tile* in the chooser degrades to "coming soon" until
-> `feat/marketplace` merges (it's the only mode whose code isn't on
-> `feat/build-modes`).
+> **Status: LAUNCHED — merged into `main`.** This was developed on
+> `feat/build-modes` and folded into `main` once BYOK went live (core
+> feature). The marketplace *tile* in the chooser still degrades to
+> "coming soon" until `feat/marketplace` merges (it's the only mode whose
+> code isn't here). `feat/marketplace` + `feat/retail` will need to
+> integrate `main` to pick this up.
 
-Status: **feature-complete on `feat/build-modes` (pending launch).** Daemon
-backbone + git/mcp/scratch modes + the shared journal + the AI-adapt endpoint
-+ value-free env-requests + the scratch multimodal-chat seam, all tested, on
-all three clients (webapp + iOS + Android).
+Status: **shipped on `main`.** Daemon backbone + git/mcp/scratch modes + the
+shared journal + the AI-adapt endpoint + value-free env-requests + the scratch
+multimodal chat, all tested, on all three clients (webapp + iOS + Android),
+with **BYOK wired live** end-to-end and an **AI-key step** (provide/confirm/
+recall a device-saved key) on every surface.
 
 **BYOK AI is now wired LIVE into the daemon boot path** (`index.ts`): the
 `LlmHarness` streams (`chatStream`) + the non-streaming git-`adaptRunner`
@@ -159,13 +161,27 @@ The create-a-service entry opens **"Build a service — how do you want to
 build it?"** with four tiles → scratch / git / mcp / marketplace, plus a
 "past builds" link to the journal viewer. Webapp is the reference
 implementation (`views/build-*.js`). iOS + Android mirror it:
-- **scratch** → existing vibe flow (to gain: a real multi-turn chat with
-  attachments).
-- **git** → URL+ref field → fitness verdict card → Install (fit) or Build-
-  with-AI (not fit).
+- **scratch** → **AI-key step** → multi-turn chat (with attachments on webapp).
+- **git** → URL+ref field → fitness verdict card → Install (fit) or, on
+  not-fit, **AI-key step** → Build-with-AI (adapt).
 - **mcp** → "Create connection" → show URL + key + copyable IDE config +
-  rotate + deploy.
+  rotate + deploy (no key step — the IDE brings its own AI).
+- **marketplace** → "coming soon" until `feat/marketplace` (no key step).
 - **journal** → per-build timeline; also reachable from service detail.
+
+### AI-key step (the box-AI paths only)
+
+Scratch (always) and git-adapt (only when a repo needs adapting) show a
+"provide or confirm your AI key" screen before the box's model runs;
+marketplace + MCP skip it. The screen recalls **device-saved keys** (shown as
+a masked slug `provider · label · ····1234`, never the full key), pre-selects
+the active one with a **Confirm** affordance, and lets the user enter a new
+key with an optional **"Save on this device"** toggle. Storage is device-local
+and encrypted per surface — webapp `providers.js` (UMK-wrapped IndexedDB),
+iOS Keychain (`SavedKeyStore`), Android `EncryptedSharedPreferences`
+(`AiKeyStore`) — and a **Settings → AI keys** manager lists (slug) / adds /
+deletes. The chosen `{provider, apiKey, baseUrl?}` rides the build request as
+`credential` (see the contract above); flagshipserver.com never sees it.
 
 ## Remaining work
 
