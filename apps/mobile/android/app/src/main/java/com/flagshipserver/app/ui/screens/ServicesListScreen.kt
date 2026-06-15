@@ -158,8 +158,8 @@ fun ServicesListScreen(nav: NavController) {
                         style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                     )
                     FSPrimaryButton(
-                        label = "Vibe-code an app",
-                        onClick = { nav.navigate("vibe/describe") },
+                        label = "Build a service",
+                        onClick = { nav.navigate("build/source") },
                         block = true,
                     )
                 }
@@ -190,7 +190,7 @@ fun ServicesListScreen(nav: NavController) {
                 apps.forEach { app ->
                     AppRow(app, me = me, onClick = { nav.navigate("app-detail/${app.serviceId}") })
                 }
-                BuildAnotherAppRow(onClick = { nav.navigate("vibe/describe") })
+                BuildAnotherAppRow(onClick = { nav.navigate("build/source") })
             }
         }
       }
