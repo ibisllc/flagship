@@ -86,6 +86,7 @@ const OPTIONAL_SHELL = [
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
+  "/lib/allowance.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
