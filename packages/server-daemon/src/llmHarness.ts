@@ -7,19 +7,36 @@ import {
 import {
   assertSafeProviderBaseUrl,
   defaultRegistry,
+  defaultStreamingFetch,
+  defaultStreamingRegistry,
   ProviderError,
   ProviderRegistry,
+  StreamingProviderRegistry,
   UnsafeBaseUrlError,
   type BaseUrlGuardOptions,
   type ChatRequest,
   type ChatResponse,
+  type ChatStreamEvent,
   type FetchLike,
+  type ProviderConfig,
+  type StreamingFetchLike,
 } from "@flagship/llm-providers";
 
 export interface LlmHarnessOptions {
   swk: Bytes;
   registry?: ProviderRegistry;
+  /**
+   * Streaming-provider registry for `chatStream`. Defaults to the
+   * built-in streaming providers (anthropic / openai / google).
+   */
+  streamingRegistry?: StreamingProviderRegistry;
   fetchImpl?: FetchLike;
+  /**
+   * Streaming-fetch implementation for `chatStream`. Production omits
+   * this and the harness uses Node's global fetch (`defaultStreamingFetch`);
+   * tests inject a fake that yields pre-baked SSE lines.
+   */
+  streamingFetchImpl?: StreamingFetchLike;
   /**
    * SSRF posture for a sealed-request `baseUrl`. Defaults to the strict
    * public-build posture (https-only, internal ranges blocked). A
@@ -28,6 +45,23 @@ export interface LlmHarnessOptions {
    */
   baseUrlGuard?: BaseUrlGuardOptions;
 }
+
+/**
+ * A BYOK credential the box holds (transiently, sealed at rest) for a
+ * session/build. The harness opens it in memory ONLY for the duration
+ * of one provider call. flagshipserver.com NEVER sees this — it arrives
+ * at the box over the paired-session-gated pinned pipe and never leaves.
+ */
+export interface LlmCredential {
+  provider: string;
+  apiKey: string;
+  baseUrl?: string;
+}
+
+/** Outcome of a `chatStream` call (no model text — that flows via onEvent). */
+export type ChatStreamOutcome =
+  | { ok: true }
+  | { ok: false; reason: "unknown-provider" | "unsafe-base-url" | "no-streaming" | "provider-error"; message: string };
 
 interface SealedRequest {
   provider: string;
@@ -56,19 +90,107 @@ interface SealedError {
  */
 export class LlmHarness {
   private readonly registry: ProviderRegistry;
+  private readonly streamingRegistry: StreamingProviderRegistry;
   private readonly fetchImpl?: FetchLike;
+  private readonly streamingFetchImpl: StreamingFetchLike;
   private readonly swk: Bytes;
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
 
   constructor(opts: LlmHarnessOptions) {
     this.swk = opts.swk;
     this.registry = opts.registry ?? defaultRegistry;
+    this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
     this.fetchImpl = opts.fetchImpl;
+    this.streamingFetchImpl = opts.streamingFetchImpl ?? defaultStreamingFetch;
     this.baseUrlGuard = opts.baseUrlGuard;
   }
 
   listProviders(): string[] {
     return this.registry.list();
+  }
+
+  listStreamingProviders(): string[] {
+    return this.streamingRegistry.list();
+  }
+
+  /** Whether `chatStream` can run for a given provider name. */
+  canStream(provider: string): boolean {
+    return this.streamingRegistry.has(provider);
+  }
+
+  /**
+   * Run a streaming chat with a credential held only for this call. The
+   * credential arrives in plaintext (the caller unseals it from the
+   * transient credential store just-in-time) — it is NEVER logged and
+   * NEVER part of an event. flagshipserver.com is not in this path: the
+   * box terminates TLS and calls the provider directly with the owner's
+   * BYOK key.
+   *
+   * Mirrors `chat()`'s validation: resolve the provider, apply the
+   * baseUrl SSRF guard, then stream `ChatStreamEvent`s to `onEvent`.
+   * Returns a structured outcome (no model text — that flows via events).
+   */
+  async chatStream(
+    credential: LlmCredential,
+    request: ChatRequest,
+    onEvent: (e: ChatStreamEvent) => void,
+  ): Promise<ChatStreamOutcome> {
+    if (!this.streamingRegistry.has(credential.provider)) {
+      const message = "no streaming adapter for provider";
+      onEvent({ kind: "error", message });
+      return { ok: false, reason: "no-streaming", message };
+    }
+    const cfg: ProviderConfig = { apiKey: credential.apiKey };
+    if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
+      try {
+        assertSafeProviderBaseUrl(credential.baseUrl, this.baseUrlGuard);
+      } catch (e) {
+        const message =
+          e instanceof UnsafeBaseUrlError ? e.message : "invalid baseUrl";
+        onEvent({ kind: "error", message });
+        return { ok: false, reason: "unsafe-base-url", message };
+      }
+      cfg.baseUrl = credential.baseUrl;
+    }
+    let sawError: { message: string } | null = null;
+    const provider = this.streamingRegistry.get(credential.provider);
+    await provider.chatStream(
+      request,
+      cfg,
+      (e: ChatStreamEvent) => {
+        if (e.kind === "error" && !sawError) sawError = { message: e.message };
+        onEvent(e);
+      },
+      this.streamingFetchImpl,
+    );
+    if (sawError) {
+      return { ok: false, reason: "provider-error", message: (sawError as { message: string }).message };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Non-streaming chat with a plaintext credential (the build-mode
+   * `adaptRunner` path). Same provider dispatch + baseUrl guard as
+   * `chat()`, but takes the credential directly instead of a sealed
+   * blob, and returns the model's text. Throws on provider / guard
+   * failure so the orchestrator can journal a value-free reason.
+   */
+  async chatWithCredential(
+    credential: LlmCredential,
+    request: ChatRequest,
+  ): Promise<ChatResponse> {
+    if (!this.registry.has(credential.provider)) {
+      throw new Error("unknown provider");
+    }
+    if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
+      assertSafeProviderBaseUrl(credential.baseUrl, this.baseUrlGuard);
+    }
+    const cfg: ProviderConfig = { apiKey: credential.apiKey };
+    if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
+      cfg.baseUrl = credential.baseUrl;
+    }
+    return this.registry.get(credential.provider).chat(request, cfg, this.fetchImpl);
   }
 
   /**
