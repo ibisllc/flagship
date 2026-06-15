@@ -242,6 +242,7 @@ const OPTIONAL_SHELL = [
   "/lib/memberRoles.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
+  "/lib/allowance.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
