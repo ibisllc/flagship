@@ -68,13 +68,47 @@ function renderVerdict(r) {
         <p><strong>Not Flagship-ready yet</strong></p>
         <p class="note">${escapeHtml(r.reason)}</p>
         <button id="build-git-adapt" class="full-width mt-2">Build with AI instead</button>
-        <p class="note mt-2">The AI can adapt this repo to Flagship from a description of what it does.</p>
+        <p class="note mt-2">The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.</p>
         <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
       </div>`;
-    $("build-git-adapt").addEventListener("click", () => enterVibeCode());
+    $("build-git-adapt").addEventListener("click", adapt);
   }
   const j = $("build-git-journal");
   if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
+}
+
+// Run the AI adapt pass on a non-fit repo. On success, reveal an
+// "Install it" button reusing the same deploy call as the fit path. If
+// the box has no model wired (503), fall back to the from-scratch flow
+// with a friendly note.
+async function adapt() {
+  if (!buildId) return;
+  const btn = $("build-git-adapt");
+  btn.disabled = true;
+  btn.textContent = "adapting…";
+  try {
+    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/adapt`, { method: "POST" });
+    $("build-git-verdict").innerHTML = `
+      <div class="card">
+        <p><strong>Adapted ✓</strong></p>
+        <p class="note">The AI rewrote this repo into a Flagship app (${r.fileCount} file(s)).</p>
+        <button id="build-git-deploy" class="full-width mt-2">Install it</button>
+        <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
+      </div>`;
+    $("build-git-deploy").addEventListener("click", deploy);
+    const j = $("build-git-journal");
+    if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
+    toast("adapted — review and install", "ok");
+  } catch (e) {
+    if (e instanceof ScreensError && e.status === 503) {
+      toast("AI adapt isn't available on this server yet — starting from scratch instead", "warn");
+      enterVibeCode();
+      return;
+    }
+    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    btn.disabled = false;
+    btn.textContent = "Build with AI instead";
+  }
 }
 
 async function deploy() {

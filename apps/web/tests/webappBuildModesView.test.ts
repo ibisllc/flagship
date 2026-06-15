@@ -31,6 +31,20 @@ describe("webapp build-modes views", () => {
     expect(body).toMatch(/Build with AI instead/);
   });
 
+  it("the not-fit path runs the adapt endpoint and falls back to scratch on 503", async () => {
+    const body = await asset("/webapp/views/build-git.js");
+    // The AI button now calls the adapt endpoint (not a direct route to scratch).
+    expect(body).toContain("/adapt");
+    expect(body).toMatch(/adapting/i);
+    // On success it reveals an Install (deploy) button reusing the deploy call.
+    expect(body).toMatch(/Adapted/);
+    expect(body).toContain("build-git-deploy");
+    // 503 → friendly toast + fall back to the scratch vibe flow.
+    expect(body).toContain("e.status === 503");
+    expect(body).toContain("enterVibeCode");
+    expect(body).toMatch(/starting from scratch instead/i);
+  });
+
   it("mcp view mints a connection and shows the key + IDE config", async () => {
     const body = await asset("/webapp/views/build-mcp.js");
     expect(body).toContain('registerView("view-build-mcp")');

@@ -60,9 +60,17 @@ One user option. Shallow-clone → read the text tree (skip
 top-level `flagship.app.json` that parses against the manifest schema?
 
 - **Fit** → deterministic install as-is. No model.
-- **Not fit** → `buildAdaptPrompt` renders the repo for the AI adapt path
-  (vibe loop with an adapt system prompt). Needs a model. *(adapt endpoint
-  is the one remaining server piece — the renderer + UI affordance exist.)*
+- **Not fit** → `buildAdaptPrompt` renders the repo for the AI adapt path.
+  `POST /api/build/sessions/:id/adapt` runs it: the rendered tree (+ any
+  owner instructions) goes through an injected `adaptRunner` model call,
+  the output is parsed by the SAME `VibeCodeStreamParser` as scratch, and
+  the produced files are merged into the workspace (path-guarded by
+  `workspace.write`, requires a `flagship.app.json`). The owner then
+  deploys via `.../deploy`. **The live model isn't wired into the daemon
+  yet** (the pre-existing gap — `buildVibeCodeStartStreaming` is never
+  constructed in `index.ts`), so `adaptRunner` is left undefined and the
+  endpoint returns a clean **503 "AI adapt not configured"**; the webapp
+  falls back to from-scratch on a 503.
 
 URL/ref validated: https or `git@` only (no `file://`), no shell
 metacharacters, no `..` traversal.
@@ -152,8 +160,14 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
     Deploy affordance.
   REMAINING: iOS + Android attachment pickers; openai/google adapters mirror
   the Anthropic translation when needed; live-provider wiring (separate task).
-- **AI-adapt endpoint** — feed `buildAdaptPrompt(files)` into the vibe loop
-  for non-fit git repos and deploy the result.
+- **AI-adapt endpoint** — DONE (server + webapp). `POST
+  /api/build/sessions/:id/adapt` runs `buildAdaptPrompt(files)` through an
+  injected `adaptRunner`, parses the emit-format output with
+  `VibeCodeStreamParser`, and merges the path-guarded files into the
+  workspace (manifest required). Returns 503 until the daemon's live LLM
+  provider is wired (the separate pre-existing gap); the webapp falls back
+  to from-scratch on a 503. REMAINING: that live-provider wiring, and the
+  iOS/Android affordance.
 - **iOS + Android** — the chooser + git/mcp/journal screens to this spec.
 - **request_env_var → phone** — DONE (server + webapp). The orchestrator
   keeps a value-free per-build pending list, fires a value-free

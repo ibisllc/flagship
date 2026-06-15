@@ -186,8 +186,13 @@ daemon vibe/buildmodes/screens green (+ new `vibeCodeAttachments` +
 `screensVibeAttachments`) · web `webappBuildModesView` + new
 `webappScratchChatView` · `llm-providers/multimodal` still green.
 
-**Remaining (next):** AI-adapt endpoint for non-fit git repos (renderer + UI
-exist, needs the LLM-loop endpoint). **iOS + Android** chooser/git/mcp/journal
+**Remaining (next):** AI-adapt endpoint for non-fit git repos — DONE (server
++ webapp): `POST /api/build/sessions/:id/adapt` renders the cloned tree via
+`buildAdaptPrompt`, runs it through an injected `adaptRunner`, parses the
+emit-format output with `VibeCodeStreamParser`, and merges the path-guarded
+files into the workspace (manifest required); 503 "AI adapt not configured"
+until the daemon's live LLM provider is wired (the pre-existing gap), and the
+webapp falls back to from-scratch on a 503. **iOS + Android** chooser/git/mcp/journal
 screens + the scratch attachment picker to the `docs/build-modes.md` UX spec
 (incl. the env-requests list + the real push fan-out for the value-free
 `request_env_var` notify hook — server + webapp DONE). Live-provider wiring
