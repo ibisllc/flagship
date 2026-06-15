@@ -6,6 +6,7 @@ import {
   parseClientHelloSni,
 } from "@flagship/tunnel-protocol";
 import type { TunnelRegistry } from "./registry.js";
+import { accountFromCanonical, type UsageMeter } from "./usageMeter.js";
 
 export interface SniRouterOptions {
   port: number;
@@ -27,11 +28,17 @@ const DEFAULT_PEEK_TIMEOUT_MS = 10_000;
 export function startSniRouter(
   registry: TunnelRegistry,
   opts: SniRouterOptions,
+  /** Optional public-egress meter. When present, the router counts bytes per
+   *  account and refuses NEW streams for over-quota free accounts. Absent ⇒
+   *  metering off (the default; nothing changes). */
+  meter?: UsageMeter,
 ): Promise<RunningSniRouter> {
   const maxPeek = opts.maxPeekBytes ?? DEFAULT_MAX_PEEK_BYTES;
   const peekTimeoutMs = opts.peekTimeoutMs ?? DEFAULT_PEEK_TIMEOUT_MS;
 
-  const server: Server = createServer((client) => handleConnection(client, registry, maxPeek, peekTimeoutMs));
+  const server: Server = createServer((client) =>
+    handleConnection(client, registry, maxPeek, peekTimeoutMs, meter),
+  );
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -56,6 +63,7 @@ function handleConnection(
   registry: TunnelRegistry,
   maxPeek: number,
   peekTimeoutMs: number,
+  meter?: UsageMeter,
 ): void {
   let peeked: Uint8Array = new Uint8Array(0);
   let resolved = false;
@@ -86,7 +94,7 @@ function handleConnection(
       bail("no SNI — refusing to route");
       return;
     }
-    routeToTunnel(client, registry, r.sni, peeked);
+    routeToTunnel(client, registry, r.sni, peeked, meter);
   };
 
   function bail(reason: string): void {
@@ -111,10 +119,20 @@ function routeToTunnel(
   registry: TunnelRegistry,
   sni: string,
   initialBytes: Uint8Array,
+  meter?: UsageMeter,
 ): void {
   const tunnel = registry.findBySni(sni);
   if (!tunnel) {
     client.destroy(new Error(`no tunnel for ${sni}`));
+    return;
+  }
+  // Per-account metering: attribute this stream to the box's owner. Custom
+  // domains resolve to a tunnel whose podCanonical carries the username too.
+  const account = meter ? accountFromCanonical(tunnel.podCanonical) : null;
+  // Hard cap: an over-quota free account stops getting NEW public streams.
+  // (Existing in-flight streams are left alone — we never kill live traffic.)
+  if (meter && account && !meter.admits(account)) {
+    client.destroy(new Error("over quota"));
     return;
   }
   const streamId = tunnel.nextStreamId();
@@ -132,6 +150,8 @@ function routeToTunnel(
 
   tunnel.attachStream(streamId, {
     onData(data) {
+      // box → visitor (the dominant egress leg).
+      meter?.add(account, data.byteLength);
       client.write(Buffer.from(data));
     },
     onRemoteClose() {
@@ -143,9 +163,12 @@ function routeToTunnel(
 
   // Hand off the ClientHello bytes we already buffered.
   tunnel.send(openFrame(streamId, sni));
+  meter?.add(account, initialBytes.byteLength);
   tunnel.send(dataFrame(streamId, initialBytes));
 
   client.on("data", (chunk: Buffer) => {
+    // visitor → box (request leg; small, but still relay egress).
+    meter?.add(account, chunk.byteLength);
     tunnel.send(dataFrame(streamId, bufferToBytes(chunk)));
   });
   client.on("end", closeStream);

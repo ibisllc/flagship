@@ -98,6 +98,8 @@ import {
   handlePushRegister,
   handlePushRelay,
   handlePushRevoke,
+  handleUsageReport,
+  handleUsageStatus,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -136,7 +138,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1UsageStorage, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -221,6 +223,14 @@ export interface ControlPlaneEnv {
    * set via `wrangler secret put BOOT_NOTIFY_SECRET`.
    */
   BOOT_NOTIFY_SECRET?: string;
+
+  /**
+   * Shared bearer secret for the `.services` relay's usage-metering report
+   * pipe (relay → POST /api/usage/report). Presented as `x-usage-secret`.
+   * When unset, /api/usage/* return 503 (metering off). Set the SAME value as
+   * the relay's USAGE_REPORT_SECRET. NOT in git — `wrangler secret put`.
+   */
+  USAGE_REPORT_SECRET?: string;
 
   /** APNs HTTP/2 token-auth credentials. Set together to enable APNs. */
   APNS_KEY_ID?: string;
@@ -372,6 +382,8 @@ interface ProvisioningTempBucket {
 }
 
 const ROUTE_RE = {
+  USAGE_REPORT: /^\/api\/usage\/report$/,
+  USAGE_STATUS: /^\/api\/usage\/status$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
@@ -650,6 +662,31 @@ export async function tryControlPlane(
   };
 
   let m: RegExpMatchArray | null;
+
+  // Usage metering (feat/metering) — the relay reports per-account egress
+  // deltas and reads quota status. Shared-secret authed (x-usage-secret),
+  // internal infra, not a user signature.
+  if (method === "POST" && ROUTE_RE.USAGE_REPORT.test(path)) {
+    return finishPlain(
+      await handleUsageReport(
+        { usage: new D1UsageStorage(env.DB), tiers: storage.tiers },
+        request.headers.get("x-usage-secret"),
+        env.USAGE_REPORT_SECRET,
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.USAGE_STATUS.test(path)) {
+    return finishPlain(
+      await handleUsageStatus(
+        { usage: new D1UsageStorage(env.DB), tiers: storage.tiers },
+        request.headers.get("x-usage-secret"),
+        env.USAGE_REPORT_SECRET,
+        url.searchParams.get("username"),
+      ),
+    );
+  }
+
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
   }

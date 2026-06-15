@@ -31,6 +31,7 @@ import {
 } from "./deadMan.js";
 import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
+import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -1114,6 +1115,15 @@ async function main(): Promise<void> {
         resolveLabel: (l) => servicePlatformRefForServer.current?.byLabel(l) !== undefined,
       }),
     );
+    // Owner-only diagnostics: POST /api/journal — IRK-signed read of the
+    // flagship-daemon systemd journal, served over the box's own pinned pipe.
+    runtime.addHandler(
+      buildJournalHttp({
+        serverId: env.serverFqdn!,
+        ownerIrkPub: cfg.irkPublicKey,
+        reader: new JournalctlReader(),
+      }),
+    );
     process.once("SIGTERM", () => deadMan.stop());
     process.once("SIGINT", () => deadMan.stop());
     console.log(
@@ -1627,6 +1637,7 @@ export type {
 } from "./deadMan.js";
 export { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 export { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
+export { buildJournalHttp, JournalctlReader, type JournalReader } from "./journalHttp.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,

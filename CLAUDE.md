@@ -277,6 +277,27 @@ streaming + git-adapt on all surfaces. Plus two nice-to-haves: the mobile
 scratch **attachment picker** (mobile scratch uses the existing vibe screen),
 and swapping the value-free `notifyOwner` env-request hook for the real push
 relay (it's log-only by default, like the vibe-code W10 hook).
+### 2026-06-14 — owner-only journal diagnostics ("View journal") on all surfaces + daemon
+
+**New owner-IRK endpoint `POST /api/journal`** (new primitive) — returns the
+trailing lines of an allowlisted systemd unit's journal (`flagship-daemon` /
+`flagship-data-services`) for owner diagnostics ("server is online but X isn't
+working"). It rides the EXACT security shape as `/api/power`: an IRK-signed
+`{request,signature}` envelope verified against the box's config-pinned owner
+IRK, served over the box's OWN pinned pipe — `.com` never sees the request or
+the logs (no user data leaves the box). Standalone `flagship/journal-read/v1`
+envelope (`packages/protocol`, byte-identical across TS/Swift/Kotlin), 5-min
+replay window, `unit` allowlist + `lines` clamp on the daemon, `journalctl` via
+execFile (no shell). Surfaced as a **"Diagnostics → View journal"** card on the
+server-detail screen of all four surfaces: daemon (`journalHttp.ts`), webapp
+(`lib/journal.js` + card), iOS (`JournalRequest`/`JournalViewModel`/`JournalCard`,
+reusing `LockPowerClient`), Android (mirror). iOS/Android sign behind the
+biometric (deriveIRK); the webapp signs with the in-memory UMK. 5 commits.
+
+Gates: `npx tsc -b` clean · vitest green incl. new `journalHttp` (9) +
+`webappJournal` (6) + canonical-byte pins on iOS/Android. **iOS (xcodebuild) +
+Android (gradle) need a Mac build; the daemon endpoint reaches existing boxes
+only via a recipe/daemon rebuild + box update (the card 404s until then).**
 
 ### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 

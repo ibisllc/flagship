@@ -67,6 +67,7 @@ import {
   type PushTokenStore,
 } from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
+import { UsageMeter } from "./tunnel/usageMeter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
 import {
@@ -400,9 +401,25 @@ export async function start(opts: {
     authLookup: remoteAuthLookup,
   });
 
+  // Public-egress metering (feat/metering). OFF unless USAGE_REPORT_SECRET is
+  // set — so deploying this code is a no-op until the secret is provisioned.
+  // The meter counts bytes per account in the SNI splice and flushes deltas to
+  // .com; it also refuses NEW streams for over-quota free accounts.
+  let meter: UsageMeter | undefined;
+  const usageSecret = process.env.USAGE_REPORT_SECRET;
+  if (usageSecret) {
+    meter = new UsageMeter({
+      reportUrl: `${comBaseUrl}/api/usage/report`,
+      secret: usageSecret,
+      flushIntervalMs: process.env.USAGE_FLUSH_MS ? Number(process.env.USAGE_FLUSH_MS) : undefined,
+    });
+    meter.start();
+    console.log(`usage metering ON → ${comBaseUrl}/api/usage/report`);
+  }
+
   let router: RunningSniRouter | null = null;
   if (opts.tunnelTcpPort !== undefined) {
-    router = await startSniRouter(registry, { port: opts.tunnelTcpPort, host });
+    router = await startSniRouter(registry, { port: opts.tunnelTcpPort, host }, meter);
     console.log(`SNI router listening on :${router.port} (raw TCP / TLS passthrough)`);
   }
 
@@ -416,6 +433,7 @@ export async function start(opts: {
     router,
     stopHub,
     async close() {
+      meter?.stop();
       if (router) await router.close();
       await stopHub();
       await app.close();

@@ -37,6 +37,8 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
+  UsageStorage,
+  UsageCounterRecord,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -1839,6 +1841,38 @@ export class D1TierStorage implements TierStorage {
       rec.currentPeriodEnd ?? null, rec.irkReceiptHex ?? null, rec.irkSignatureHex ?? null,
       rec.updatedAt,
     ).run();
+  }
+}
+
+/** Public-egress metering counter (migration 0051). Standalone — constructed
+ *  on demand (like D1NonceStore), not part of the D1Storage aggregate. */
+export class D1UsageStorage implements UsageStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async addEgress(username: string, period: string, bytes: number, now: number): Promise<number> {
+    const delta = Math.max(0, Math.floor(bytes));
+    await this.db
+      .prepare(
+        `INSERT INTO usage_counters (username, period, bytes_egress, updated_at)
+         VALUES (?,?,?,?)
+         ON CONFLICT(username, period) DO UPDATE SET
+           bytes_egress = bytes_egress + excluded.bytes_egress,
+           updated_at   = excluded.updated_at`,
+      )
+      .bind(username, period, delta, now)
+      .run();
+    const r = await this.get(username, period);
+    return r?.bytesEgress ?? 0;
+  }
+
+  async get(username: string, period: string): Promise<UsageCounterRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM usage_counters WHERE username = ? AND period = ?`)
+      .bind(username, period)
+      .first<{ username: string; period: string; bytes_egress: number; updated_at: number }>();
+    return r
+      ? { username: r.username, period: r.period, bytesEgress: r.bytes_egress, updatedAt: r.updated_at }
+      : undefined;
   }
 }
 

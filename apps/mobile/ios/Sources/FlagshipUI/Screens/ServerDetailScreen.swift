@@ -119,6 +119,7 @@ public struct ServerDetailScreen: View {
                     FrontPageCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
+                    JournalCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
                     if deadServer {
                         // Registered but never came online: offer the
