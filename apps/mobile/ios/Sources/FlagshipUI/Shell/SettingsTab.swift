@@ -72,7 +72,6 @@ public struct SettingsTab: View {
             if let vm {
                 SettingsScreen(
                     username: app.currentUser ?? "",
-                    tier: vm.tier,
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     // Developer tools are a mock-mode concern: a shipped
@@ -131,7 +130,6 @@ public struct SettingsTab: View {
                     },
                     onOpenProviders: { path.append(.providers) },
                     onOpenAiKeys: { path.append(.aiKeys) },
-                    onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
@@ -263,7 +261,7 @@ public struct SettingsTab: View {
                     username: { [app] in app.currentUser }
                 )
             }
-            if case .idle = vm?.tier { await vm?.load() }
+            if case .idle = vm?.browserSessions { await vm?.load() }
         }
         .task {
             await refreshCompanionPendingCount()
@@ -290,8 +288,6 @@ public struct SettingsTab: View {
             ProvidersStub()
         case .aiKeys:
             AiKeysScreen(vm: AiKeysViewModel())
-        case .tierStatus:
-            TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .keyfileBackup:

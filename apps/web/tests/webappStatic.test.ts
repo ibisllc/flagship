@@ -114,7 +114,6 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/services-list.js",
       "/webapp/views/service-detail.js",
       "/webapp/views/paired-sessions.js",
-      "/webapp/views/tier-status.js",
       "/webapp/views/pod-pair.js",
       "/webapp/views/vibe-code.js",
       "/webapp/views/recovery.js",
@@ -138,7 +137,6 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/apps-list", "/webapp/views/services-list.js"],
       ["/api/screens/app-detail/", "/webapp/views/service-detail.js"],
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
-      ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
       // install-progress.js no longer uses a /api/screens/* BFF — it reads the
       // SINGLE canonical provisioning channel directly

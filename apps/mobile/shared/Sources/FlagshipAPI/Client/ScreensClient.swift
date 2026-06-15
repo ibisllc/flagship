@@ -36,9 +36,6 @@ public protocol ScreensClient: Sendable {
     // P1.14 orders/send
     func ordersSend(_ req: OrdersSendRequest) async throws -> OrdersSendResponse
 
-    // P1.16 tier-status
-    func tierStatus() async throws -> TierStatusResponse
-
     // P1.17 url-controller/owned
     func urlControllerOwned() async throws -> UrlControllerOwnedResponse
 

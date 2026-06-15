@@ -6,7 +6,6 @@ import FlagshipAPI
 //   - scratch     → the existing vibe-code flow
 //   - git         → BuildGitScreen (URL → verdict → install / adapt)
 //   - mcp         → BuildMcpScreen (connect Cursor/Cline with your own AI)
-//   - marketplace → degrades to "coming soon" (lives on feat/marketplace)
 // plus a "View past builds" link into BuildJournalScreen.
 //
 // Mirrors the canonical webapp `views/build-*.js`.
@@ -19,20 +18,17 @@ public struct BuildSourceChooserScreen: View {
     var onScratch: () -> Void = {}
     var onGit: () -> Void = {}
     var onMcp: () -> Void = {}
-    var onMarketplace: () -> Void = {}
     var onPastBuilds: () -> Void = {}
 
     public init(
         onScratch: @escaping () -> Void = {},
         onGit: @escaping () -> Void = {},
         onMcp: @escaping () -> Void = {},
-        onMarketplace: @escaping () -> Void = {},
         onPastBuilds: @escaping () -> Void = {}
     ) {
         self.onScratch = onScratch
         self.onGit = onGit
         self.onMcp = onMcp
-        self.onMarketplace = onMarketplace
         self.onPastBuilds = onPastBuilds
     }
 
@@ -70,14 +66,6 @@ public struct BuildSourceChooserScreen: View {
                         action: onMcp
                     )
                     .accessibilityIdentifier("build-src-mcp")
-
-                    BuildSourceTile(
-                        icon: "bag",
-                        title: "Get from the marketplace",
-                        subtitle: "Install something already built and reviewed.",
-                        action: onMarketplace
-                    )
-                    .accessibilityIdentifier("build-src-market")
 
                     Button(action: onPastBuilds) {
                         HStack(spacing: 8) {

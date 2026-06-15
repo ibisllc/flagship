@@ -145,25 +145,6 @@ class MockScreensClient(
         tick(); return OrdersSendResponse(ok = true, response = null)
     }
 
-    /** Overridable fixture so tests (and dev mode) can pin an exact tier
-     *  wire shape — BYOK, custom-domains-present, free-tier, etc. — without
-     *  editing the default. Null = the default promo fixture below. */
-    var tierStatusFixture: TierStatusResponse? = null
-
-    override suspend fun tierStatus(): TierStatusResponse {
-        tick()
-        tierStatusFixture?.let { return it }
-        return TierStatusResponse(
-            tier = "promo",
-            llmCreditsRemainingDay = 38,
-            llmCreditsRemainingTotal = 162,
-            dispatcherUsageGBmonth = 1.2,
-            dispatcherFreeQuotaGBmonth = 50.0,
-            customDomains = emptyList(),
-            reservedNames = listOf("harry"),
-        )
-    }
-
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse {
         tick()
         return UrlControllerOwnedResponse(

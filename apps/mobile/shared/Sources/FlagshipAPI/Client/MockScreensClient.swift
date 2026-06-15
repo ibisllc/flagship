@@ -193,27 +193,6 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return OrdersSendResponse(ok: true, response: nil)
     }
 
-    // MARK: - P1.16 tier-status
-
-    /// Overridable fixture so tests (and dev mode) can pin an exact tier
-    /// wire shape — BYOK, custom-domains-present, free-tier, etc. — without
-    /// editing the default. Nil = the default promo fixture below.
-    public var tierStatusFixture: TierStatusResponse?
-
-    public func tierStatus() async throws -> TierStatusResponse {
-        try await tick()
-        if let fixture = tierStatusFixture { return fixture }
-        return TierStatusResponse(
-            tier: "promo",
-            llmCreditsRemainingDay: 38,
-            llmCreditsRemainingTotal: 162,
-            dispatcherUsageGBmonth: 1.2,
-            dispatcherFreeQuotaGBmonth: 50.0,
-            customDomains: [],
-            reservedNames: ["harry"]
-        )
-    }
-
     // MARK: - P1.17 / P1.18 url-controller
 
     public func urlControllerOwned() async throws -> UrlControllerOwnedResponse {

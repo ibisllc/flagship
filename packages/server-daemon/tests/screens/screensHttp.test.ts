@@ -518,60 +518,6 @@ function jsonFail(status: number, body: unknown) {
   };
 }
 
-describe("screens HTTP — P1.16 tier-status", () => {
-  it("returns the upstream tier when .com is healthy", async () => {
-    const fakeFetch: FetchLike = async () =>
-      jsonOk({
-        tier: "byok",
-        customDomains: ["mybrand.com"],
-        reservedNames: [],
-        dispatcherUsageGBmonth: 1.2,
-        dispatcherFreeQuotaGBmonth: 50,
-      }) as never;
-    const handle = buildScreensHttp({
-      ...COMMON,
-      gate: fakeGate(),
-      controlPlaneBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fakeFetch,
-    });
-    const r = await handle(req({
-      path: "/api/screens/tier-status",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(200);
-    const body = JSON.parse(r!.body as string);
-    expect(body.tier).toBe("byok");
-    expect(body.customDomains).toEqual(["mybrand.com"]);
-  });
-
-  it("falls back to free-tier on upstream 5xx instead of erroring", async () => {
-    const fakeFetch: FetchLike = async () => jsonFail(503, "down") as never;
-    const handle = buildScreensHttp({
-      ...COMMON,
-      gate: fakeGate(),
-      controlPlaneBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fakeFetch,
-    });
-    const r = await handle(req({
-      path: "/api/screens/tier-status",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(200);
-    const body = JSON.parse(r!.body as string);
-    expect(body.tier).toBe("free");
-  });
-
-  it("returns free-tier when no control plane is configured", async () => {
-    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
-    const r = await handle(req({
-      path: "/api/screens/tier-status",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(200);
-    expect(JSON.parse(r!.body as string).tier).toBe("free");
-  });
-});
-
 describe("screens HTTP — P1.5 / P1.7 vibe-code", () => {
   function makeVibeCode(opts: { withCredentials?: boolean } = {}): {
     runtime: VibeCodeRuntime;

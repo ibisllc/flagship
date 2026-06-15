@@ -1,8 +1,8 @@
 // "Build a service" modes BFF contract — Kotlin mirror.
 //
 // The create-a-service flow asks "how do you want to build it?" and fans
-// into build modes (scratch / git / mcp / marketplace) that all converge
-// on the same deploy primitive + one append-only build journal per build.
+// into build modes (scratch / git / mcp) that all converge on the same
+// deploy primitive + one append-only build journal per build.
 //
 // These endpoints are PAIRED-SESSION GATED (x-flagship-session), served by
 // the user's pod at `<server>.<user>.flagship.services`. Two implementations:

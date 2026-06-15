@@ -62,7 +62,6 @@ import type {
   ServiceEnvOpResponse,
   ServiceEnvSetRequest,
   ServiceEnvUnsetRequest,
-  TierStatusResponse,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
   VerifyCustomDomainRequest,
@@ -626,34 +625,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       });
       const out: ServerMetricsResponse = snapshot;
       return jok(out);
-    }
-
-    // ---- P1.16 GET /api/screens/tier-status (proxied to .com)
-    if (path === "/api/screens/tier-status" && method === "GET") {
-      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
-      if (!deps.controlPlaneBaseUrl) {
-        // No control plane → free tier with no quota visibility.
-        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
-        return jok(body);
-      }
-      try {
-        const r = await f(
-          `${trimSlash(deps.controlPlaneBaseUrl)}/api/tier/status`,
-          { method: "GET" },
-        );
-        if (!r.ok) {
-          // Treat as free tier on upstream failure rather than 502 — the
-          // tier dashboard is a soft surface; we don't want a .com
-          // outage to break the webapp's settings view.
-          const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
-          return jok(body);
-        }
-        const upstream = (await r.json()) as TierStatusResponse;
-        return jok(upstream);
-      } catch {
-        const body: TierStatusResponse = { tier: "free", customDomains: [], reservedNames: [] };
-        return jok(body);
-      }
     }
 
     // ---- P1.5 POST /api/screens/vibe-code/start

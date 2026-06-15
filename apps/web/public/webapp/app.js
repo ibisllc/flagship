@@ -55,7 +55,6 @@ import {
   enterCompanionRequests,
   refreshBadgeOnce as refreshCompanionRequestsBadge,
 } from "./views/companion-requests.js";
-import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
@@ -122,7 +121,6 @@ const SUB_VIEW_TABS = {
   "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
-  "view-tier-status": "settings",
   "view-paired-sessions": "settings",
   "view-peer-backup": "settings",
   "view-companion-dock": "settings",
@@ -255,7 +253,6 @@ function wireSettingsTabEntries() {
     document.querySelector("#push-enable")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-recovery", enterRecovery);
-  wire("settings-tab-tier", enterTierStatus);
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
@@ -332,7 +329,6 @@ async function boot() {
   initAccountSecurityView();
   initAddDeviceView();
   initJoinView();
-  initTierStatusView();
   initVibeCodeView();
   initBuildSourceView();
   initBuildKeyView();
