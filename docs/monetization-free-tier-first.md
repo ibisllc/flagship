@@ -88,7 +88,7 @@ real control is bounding free egress (one viral free box at 1 TB/mo = ~$20).
 | Tier | Monthly public-egress quota | Our worst-case cost | Price |
 | --- | --- | --- | --- |
 | **Free** | **50 GB** (hard cap → relay stops admitting new public traffic) | ~$1/mo (avg free user ≈ cents) | $0 |
-| **Plus** (paid tier) | **250 GB** + overage | $5/mo at the included max | **$5/mo** or anonymous voucher |
+| **Pro** (paid tier) | **250 GB** + overage | $5/mo at the included max | **$5/mo** or anonymous voucher |
 | Overage (paid only) | beyond the included quota | — | **$0.05/GB** (~2.5× our cost) |
 
 The free cap is the one dial that matters: max exposure per free user =
