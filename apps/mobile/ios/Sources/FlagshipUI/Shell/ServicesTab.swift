@@ -836,17 +836,16 @@ struct VibeCodeGeneratingContainer: View {
 
 // Build-a-service chooser container. The new create-a-service entry; fans
 // into the build modes. Scratch reuses the existing vibe flow; the
-// marketplace tile degrades to a "coming soon" toast (its code lives on
-// feat/marketplace).
+// marketplace tile routes to the live MarketplaceContainer (this branch
+// ships the marketplace).
 struct BuildSourceChooserContainer: View {
     @Binding var path: [AppsRoute]
-    @Environment(ToastCenter.self) private var toasts
     var body: some View {
         BuildSourceChooserScreen(
             onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
-            onMarketplace: { toasts.info("The marketplace is coming soon.") },
+            onMarketplace: { path.append(.marketplace) },
             onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
         )
     }
