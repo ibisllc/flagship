@@ -11,6 +11,7 @@ struct FlagshipApp: App {
     @State private var appState = AppState()
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
+    @State private var operations = ActiveOperationsCenter()
     @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
@@ -229,6 +230,7 @@ struct FlagshipApp: App {
                 .environment(appState)
                 .environment(linker)
                 .environment(toasts)
+                .environment(operations)
                 .environment(dev)
                 .environment(privacy)
                 .environment(\.screensClient, activeClient)

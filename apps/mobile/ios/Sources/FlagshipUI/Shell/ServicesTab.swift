@@ -495,6 +495,8 @@ struct VibeCodeDescribeContainer: View {
 struct VibeCodeGeneratingContainer: View {
     let sessionId: String
     @Environment(\.screensClient) private var client
+    @Environment(ActiveOperationsCenter.self) private var operations
+    @Environment(AppState.self) private var app
     @State private var vm: VibeCodeStreamViewModel?
 
     var body: some View {
@@ -507,7 +509,16 @@ struct VibeCodeGeneratingContainer: View {
             }
         }
         .task {
-            if vm == nil { vm = VibeCodeStreamViewModel(sessionId: sessionId, client: client) }
+            if vm == nil {
+                // The build runs on the currently-selected box; surface it in
+                // the global operations sliver as "building … on <server>".
+                vm = VibeCodeStreamViewModel(
+                    sessionId: sessionId,
+                    client: client,
+                    operations: operations,
+                    serverLabel: app.currentPod?.name
+                )
+            }
         }
     }
 }

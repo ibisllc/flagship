@@ -55,6 +55,9 @@ import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildJournalEntry
 import com.flagshipserver.app.api.BuildMcpConnection
 import com.flagshipserver.app.api.BuildSummary
+import com.flagshipserver.app.core.DeepLink
+import com.flagshipserver.app.core.LocalActiveOperationsCenter
+import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
@@ -222,7 +225,21 @@ private fun SourceTile(title: String, body: String, onClick: () -> Unit) {
 fun BuildGitScreen(nav: NavController) {
     val client = LocalBuildClient.current
     val toasts = LocalToastCenter.current
-    val vm = remember { BuildGitViewModel(client) }
+    val operations = LocalActiveOperationsCenter.current
+    val appState = LocalAppState.current
+    // The server this build deploys onto — its name fills the sliver's
+    // "building <service> on <server>" clause and its detail screen is the
+    // tap target. Resolved once at first composition (the current/leader pod).
+    val targetPod = remember(appState) { appState.currentPod ?: appState.leaderPod }
+    val vm = remember {
+        BuildGitViewModel(
+            client = client,
+            operations = operations,
+            serviceLabel = "your repo",
+            serverLabel = targetPod?.name,
+            operationTarget = targetPod?.let { DeepLink.ServerDetail(it.podId) },
+        )
+    }
     val phase by vm.phase.collectAsState()
 
     var url by remember { mutableStateOf("") }

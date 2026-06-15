@@ -20,6 +20,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
+import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { enterBuildKey } from "./build-key.js";
@@ -45,12 +46,56 @@ let buildCredential = null;
 let staged = [];
 // The pending talkToUser tool the AI is waiting on, when any.
 let pendingTalkToolId = null;
+// The headline noun shown in the global operations sliver for this build —
+// seeded from the first prompt so the sliver reads "building <subject> on
+// <server>" while the AI works. Refreshed if the build's name is learned.
+let buildSubject = null;
 
 function clearPoll() {
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
   }
+}
+
+// ---- global operations sliver (build feeder) -----------------------------
+
+/** The short server name for the sliver's "on <server>" clause — the first
+ *  DNS label of the paired pod's host (`home.alice.flagship.services` → "home").
+ *  Empty when no pod is paired (the sliver then drops the "on …" clause). */
+function pairedServerName() {
+  const base = getPodBaseUrl();
+  if (!base) return null;
+  try {
+    return new URL(base).hostname.split(".")[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/** A friendly subject from the first prompt — the first few words, so the
+ *  sliver shows something human while the service has no name yet. */
+function subjectFromPrompt(text) {
+  const t = String(text ?? "").trim().replace(/\s+/g, " ");
+  if (!t) return "new service";
+  const words = t.split(" ").slice(0, 4).join(" ");
+  return words.length > 32 ? `${words.slice(0, 31)}…` : words;
+}
+
+/** Register / refresh this session's build op in the sliver. */
+function registerBuildOp() {
+  if (!activeSessionId) return;
+  activeOperations.upsertBuild(
+    activeSessionId,
+    buildSubject || "new service",
+    pairedServerName(),
+    { view: "view-vibe-code" },
+  );
+}
+
+/** Drop this session's build op (terminal status, reset, or leaving). */
+function removeBuildOp() {
+  if (activeSessionId) activeOperations.removeBuild(activeSessionId);
 }
 
 // ---- attachment staging --------------------------------------------------
@@ -169,6 +214,7 @@ async function send() {
       activeSessionId = r.sessionId;
       if (r.needsCredential) {
         // No model can drive this yet — gently route into the AI-key step.
+        // Don't surface a sliver op for a build that hasn't actually started.
         toast("Add an AI key to start.", "warn");
         promptEl.value = text; // keep what they typed
         promptEl.disabled = false;
@@ -184,6 +230,10 @@ async function send() {
         });
         return;
       }
+      // The build is really running now — surface it in the global operations
+      // sliver as "building <subject> on <server>" until it deploys or fails.
+      buildSubject = subjectFromPrompt(text);
+      registerBuildOp();
     } else if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
@@ -242,7 +292,13 @@ async function poll() {
     }
   }
   render(state);
-  if (!TERMINAL_STATUSES.has(state.status)) schedulePoll();
+  if (!TERMINAL_STATUSES.has(state.status)) {
+    schedulePoll();
+  } else {
+    // Deployed / failed / cancelled — the operation is over; clear it from
+    // the global sliver so the strip collapses.
+    removeBuildOp();
+  }
 }
 
 function statusLabel(status) {
@@ -388,10 +444,14 @@ async function triggerDeploy() {
 
 function reset() {
   clearPoll();
+  // Drop any in-flight build op from the global sliver before we forget the
+  // session id (removeBuildOp keys off activeSessionId).
+  removeBuildOp();
   activeSessionId = null;
   staged = [];
   pendingTalkToolId = null;
   buildCredential = null;
+  buildSubject = null;
   renderChips();
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
@@ -440,4 +500,17 @@ export async function enterVibeCode(opts = {}) {
   // The AI-key step hands the chosen credential in here; reset() clears it,
   // so apply it after.
   if (opts.credential) buildCredential = opts.credential;
+}
+
+/**
+ * Return to the chat WITHOUT discarding an in-flight build — used when the
+ * user taps the global operations sliver for a running build. If a session
+ * is live we just re-show the view and re-arm polling so the transcript +
+ * status pick up where they left off; otherwise this is a fresh entry.
+ */
+export async function resumeVibeCode() {
+  if (!activeSessionId) return enterVibeCode();
+  show("view-vibe-code");
+  schedulePoll();
+  await poll().catch(() => {});
 }

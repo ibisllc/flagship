@@ -48,6 +48,11 @@ val LocalToastCenter = staticCompositionLocalOf<ToastCenter> { ToastCenter() }
 
 val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
 
+/** App-wide "active operations" registry feeding the global teal sliver
+ *  (the WhatsApp-style active-call bar). Production MainActivity installs
+ *  one instance; previews + tests get the default empty center. */
+val LocalActiveOperationsCenter = staticCompositionLocalOf<ActiveOperationsCenter> { ActiveOperationsCenter() }
+
 val LocalDeveloperSettings = staticCompositionLocalOf<DeveloperSettings?> { null }
 
 /** C12 — PrivacySettings persistence handle. Null on previews and in

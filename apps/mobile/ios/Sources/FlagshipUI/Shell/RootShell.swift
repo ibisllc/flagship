@@ -34,6 +34,14 @@ public struct RootShell: View {
                     iPhoneShell(selected: $selected)
                 }
             }
+            // The global operations sliver lives in the top safe-area inset
+            // so it physically slides the whole shell (every tab + its nav
+            // stack) DOWN to reveal itself — WhatsApp's active-call bar — and
+            // collapses to zero height (no push) when idle. One mount covers
+            // both the iPhone TabView and the iPad sidebar layout.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                GlobalOperationsBar()
+            }
             // B12 — top overlay. The lock screen renders ABOVE the
             // shell whenever the runtime unlock latch is false. Putting
             // it inside the shell's ZStack (not as a presentation-style

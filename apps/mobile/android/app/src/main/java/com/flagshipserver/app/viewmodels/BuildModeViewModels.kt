@@ -41,6 +41,18 @@ private fun friendly(t: Throwable): String = when (t) {
 class BuildGitViewModel(
     private val client: BuildClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** Optional bridge to the global operations sliver. While a deploy is
+     *  running this build shows up as "building <service> on <server>" in the
+     *  sliver and survives navigation to another tab. Pure presentation; null
+     *  in tests/previews leaves the VM behaviour unchanged. Mirror of iOS
+     *  VibeCodeStreamViewModel's `operations`. */
+    private val operations: com.flagshipserver.app.core.ActiveOperationsCenter? = null,
+    private val serviceLabel: String? = null,
+    private val serverLabel: String? = null,
+    /** Where a tap on the sliver navigates — the deploy lands here. Defaulted
+     *  null so callers without a target (and all existing call sites) compile;
+     *  only set when [operations] is wired. */
+    private val operationTarget: com.flagshipserver.app.core.DeepLink? = null,
 ) {
     sealed interface GitPhase {
         data object Idle : GitPhase
@@ -101,15 +113,29 @@ class BuildGitViewModel(
     fun deploy(): Job = scope.launch {
         val id = buildId ?: return@launch
         _phase.value = GitPhase.Deploying
+        // Surface this build in the global operations sliver while it runs.
+        val target = operationTarget
+        if (target != null) {
+            operations?.upsertBuild(
+                id = id,
+                subject = serviceLabel ?: "a service",
+                onServer = serverLabel,
+                target = target,
+            )
+        }
         try {
             val r = client.deploy(id)
             _phase.value = GitPhase.Deployed(url = r.url)
         } catch (t: Throwable) {
             _phase.value = GitPhase.Failed(friendly(t))
+        } finally {
+            // Deployed, failed, or cancelled — drop the phantom op either way.
+            operations?.removeBuild(id)
         }
     }
 
     fun reset() {
+        buildId?.let { operations?.removeBuild(it) }
         buildId = null
         _phase.value = GitPhase.Idle
     }

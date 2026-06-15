@@ -121,9 +121,66 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-15**.
 
-### 2026-06-14 (latest) — build-a-service multi-mode SHIPPED + folded into `main`
+### 2026-06-15 (latest) — global "active operations" sliver (WhatsApp-style) on all surfaces
+
+**New core feature, owner-directed, on `main`.** A teal strip pinned in the top
+safe-area that the whole shell slides DOWN to reveal (modelled on WhatsApp's
+active-call bar): it shows the most-recent in-progress operation ("deploying
+server Home" / "building blog on Home") with a spinner, a `+N` hint for the
+rest, hides under the biometric lock, and deep-links to that operation's own
+screen on tap.
+
+**One generic primitive — `ActiveOperationsCenter`** (mirrors the
+`ToastCenter`/`DeepLinker` app-scope-observable pattern; the sliver reads ONLY
+from it), fed by two deliberately different sources:
+- **Deploy** ops are DERIVED from the pending-pod list
+  (`syncDeployOperations(pods)`) — pods are already global/persistent/polled, so
+  a deploying server stays in the sliver across navigation with zero extra
+  plumbing.
+- **Build** ops are REGISTERED imperatively (`upsertBuild`/`removeBuild`) by the
+  in-app build lifecycle — a service build has no global signal today.
+
+`primary` = highest `seq` (most recent); reconciliation is churn-free (a steady
+re-sync never reorders/reassigns); namespaced `deploy:`/`build:` ids keep a pod
+and a build session from ever colliding. Label shapes are identical everywhere:
+`deploying server <X>` / `building <X> on <Y>` / `building <X>`.
+
+- **iOS (reference):** `FlagshipCore/ActiveOperationsCenter.swift` +
+  `FlagshipUI/Components/GlobalOperationsBar.swift`, mounted via
+  `.safeAreaInset(edge:.top)` on the shell (one mount covers the iPhone TabView
+  AND the iPad sidebar); injected in `FlagshipApp`, deploy-synced in
+  `ContentView` on every pod-list change, build lifecycle hooked in
+  `VibeCodeStreamViewModel` (registers on `.building`, clears on
+  deploy/done/error/teardown).
+- **Android:** Kotlin/Compose mirror — StateFlow center + `GlobalOperationsBar`
+  above `RootShell` in a Column (push-down via `AnimatedVisibility`),
+  `LaunchedEffect(pods)` deploy sync; build feeder on `BuildGitViewModel` (the
+  vibe-code screen is still a static mock, so git-import is its real imperative
+  build-with-deploy lifecycle).
+- **Webapp:** pure `lib/activeOperations.js` (the testable half) +
+  `lib/operationsBar.js` (fixed teal bar; `--ops-bar-h` pushes the sticky header
+  down = the slide); deploy feeder in `views/home.js`, build feeder in
+  `views/vibe-code.js` (tap resumes the LIVE session). Deploy tap routes to Home
+  (a still-deploying box has no paired session for server-detail) where its
+  pending card already renders.
+
+Gates: iOS xcodebuild **995** XCTests (+13) + App build (+ a live-sim screenshot
+of the sliver) · Android **805** unit tests (+13, `:app:testDebugUnitTest`) ·
+web `npx vitest run` **1197** (+16) + `npx tsc -b` clean. Each surface ships an
+`ActiveOperations*` test class (label shapes, churn-free sync, primary ordering,
+build lifecycle, deep-link targets, id-collision safety).
+
+**Follow-ups:** build ops persist across tab-switches (TabView keeps the VM
+alive) and clear on terminal/back-out, but a build started OUTSIDE the app
+(MCP/IDE) or surviving a hard nav-pop needs a server-side "active builds" signal
+to surface — the center is generic, so that's a drop-in. Android's build feeder
+rides git-import until the live vibe-code stream VM exists; the live LLM provider
++ mobile scratch attachment picker (the pre-existing gaps) also light up richer
+build-op labels (real service name) when they land.
+
+### 2026-06-14 — build-a-service multi-mode SHIPPED + folded into `main`
 
 **Merged to `main`** (core feature, owner-directed). The whole multi-mode
 "build a service" flow — chooser (scratch / git / mcp / marketplace / journal)

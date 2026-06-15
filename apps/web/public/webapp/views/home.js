@@ -7,6 +7,7 @@ import {
   listRow,
 } from "../lib/uikit.js";
 import { tickRenewals } from "../lib/leases.js";
+import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
@@ -206,6 +207,15 @@ function formatAge(ms) {
 function formatDays(ms) {
   const d = Math.max(1, Math.round(ms / 86400_000));
   return `${d}d`;
+}
+
+/** The short server label for the operations-sliver "deploying server <name>"
+ *  line — the first DNS segment of `<server>.<user>.flagship.services` (the
+ *  home cards still show the full fqdn). Falls back to the raw value. */
+function serverShortName(serverIdOrFqdn) {
+  const s = String(serverIdOrFqdn ?? "");
+  const first = s.split(".")[0];
+  return first || s;
 }
 
 /**
@@ -773,6 +783,7 @@ export async function renderHome() {
     // valid "account ready, no servers yet" state and the CTA adds the
     // first server. Otherwise we guide them to open an account / build.
     renderEmptyServersList(list, { reason: "unpaired", username: session.username });
+    activeOperations.syncDeployOperations([]);
     return;
   }
   try {
@@ -797,6 +808,7 @@ export async function renderHome() {
     // Zero registered AND zero pending → the honest empty zero-state.
     if (!body.servers.length && !pendingOrders.length) {
       renderEmptyServersList(list, { reason: "no-servers", username: session.username });
+      activeOperations.syncDeployOperations([]);
       return;
     }
 
@@ -813,18 +825,33 @@ export async function renderHome() {
     // its searchable fields (name / fqdn) so chip + search are pure local
     // re-renders that never re-fetch and never touch any server action.
     const entries = [];
+    // A server still on its way up feeds the global operations sliver as a
+    // "deploying server <name>" op (the WhatsApp-style active-operations bar).
+    // We collect both registered-but-coming-up boxes and in-flight pending
+    // orders into one `{podId,name,status:"pending"}` list and hand it to the
+    // churn-free reconciler, so a deploying server stays in the sliver across
+    // navigation and clears the moment it goes live.
+    const deployPods = [];
     for (const s of body.servers) {
       const hasLiveUnlockRequest = awaitingApproval.has(
         String(s.serverId ?? "").toLowerCase(),
       );
       const pod = podStatusByDomain.get(s.serverId.toLowerCase());
       const cls = classifyServer(s, pod, { hasLiveUnlockRequest });
+      const bucket = statusBucketForKind(cls.kind);
       entries.push({
         html: renderServerCard(s, pod, { hasLiveUnlockRequest }),
-        bucket: statusBucketForKind(cls.kind),
+        bucket,
         fields: { name: String(s.serverId ?? ""), fqdn: String(s.serverId ?? "") },
         cardClass: "server-card",
       });
+      if (bucket === "pending") {
+        deployPods.push({
+          podId: String(s.serverId ?? ""),
+          name: serverShortName(s.serverId),
+          status: "pending",
+        });
+      }
     }
     for (const order of pendingOrders) {
       entries.push({
@@ -836,9 +863,17 @@ export async function renderHome() {
         },
         cardClass: "server-card server-card--pending",
       });
+      deployPods.push({
+        podId: String(order.fqdn ?? ""),
+        name: String(order.serverName || serverShortName(order.fqdn)),
+        status: "pending",
+      });
     }
     homeServerEntries = entries;
     renderServerCards();
+    // Reconcile the sliver's deploy operations against this tick's pending
+    // set. Build operations (vibe-code) are untouched.
+    activeOperations.syncDeployOperations(deployPods);
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user
@@ -856,6 +891,7 @@ export async function renderHome() {
     sessionStatusEl.textContent = "no servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
+    activeOperations.syncDeployOperations([]);
   }
 }
 

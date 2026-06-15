@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -14,6 +15,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass as Materi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,12 +36,14 @@ import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
+import com.flagshipserver.app.core.ActiveOperationsCenter
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
 import com.flagshipserver.app.core.DeveloperSettings
 import com.flagshipserver.app.core.LiveQrRelayClient
+import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalDeveloperSettings
@@ -65,6 +69,7 @@ import com.flagshipserver.app.push.FlagshipFcmService
 import com.flagshipserver.app.push.PushHolder
 import com.flagshipserver.app.push.PushRegistrar
 import com.flagshipserver.app.push.SecretRequestBridge
+import com.flagshipserver.app.ui.components.GlobalOperationsBar
 import com.flagshipserver.app.ui.components.Toaster
 import com.flagshipserver.app.ui.onboarding.OnboardingFlow
 import com.flagshipserver.app.ui.shell.RootShell
@@ -106,6 +111,10 @@ class MainActivity : FragmentActivity() {
         }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
         val toasts = ToastCenter()
+        // App-wide "active operations" registry feeding the global teal sliver.
+        // Deploy ops are kept in sync from the pod list in AppRoot; build ops
+        // are registered by the build lifecycle (BuildGitViewModel).
+        val operations = ActiveOperationsCenter()
         deepLinker = DeepLinker()
         val devSettings = DeveloperSettings.create(applicationContext)
         AiKeyStore.attach(applicationContext)
@@ -199,6 +208,7 @@ class MainActivity : FragmentActivity() {
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalToastCenter provides toasts,
+                    LocalActiveOperationsCenter provides operations,
                     LocalDeepLinker provides deepLinker,
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
@@ -272,12 +282,27 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
     val isUnlocked by app.isUnlocked.collectAsState()
     val toasts = LocalToastCenter.current
     val toastQueue by toasts.queue.collectAsState()
+    val operations = LocalActiveOperationsCenter.current
+    val pods by app.pods.collectAsState()
 
     val showSecureAccount by app.pendingSecureAccountNudge.collectAsState()
 
+    // Keep the global operations sliver's deploy feeder in sync with the pod
+    // list (mirror of iOS ContentView's syncDeployOperations on every pod
+    // change). Cleared to empty while unpaired so a sign-out drops the sliver.
+    LaunchedEffect(pods, isPaired) {
+        operations.syncDeployOperations(if (isPaired) pods else emptyList())
+    }
+
     Box(Modifier.fillMaxSize()) {
         if (isPaired) {
-            RootShell(widthSizeClass = widthSizeClass)
+            // The teal sliver sits ABOVE the shell in a Column so revealing it
+            // physically pushes the whole shell down (it animates its own
+            // height), exactly like WhatsApp's active-call bar.
+            Column(Modifier.fillMaxSize()) {
+                GlobalOperationsBar()
+                RootShell(widthSizeClass = widthSizeClass)
+            }
         } else {
             OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
         }

@@ -61,6 +61,13 @@
   --accent-soft:     rgba(20, 184, 166, 0.14);
   --accent-on:       #14120D;
 
+  /* Brand teal pair (matches tokens.css on the marketing site). The webapp
+     doesn't load tokens.css, so the on-brand teal strip (.ops-bar) needs
+     these defined here. --teal === --accent; --teal-bright is the lighter
+     hue used for the gradient top. */
+  --teal:            #14B8A6;
+  --teal-bright:     #2DD4BF;
+
   --ok:              #6BB088;
   --warn:            #D9A85A;
   --err:             #D87463;
@@ -135,10 +142,86 @@ body {
   min-height: 100dvh;
 }
 
+/* ── Global operations sliver (WhatsApp-style active-operations bar) ──
+ * A teal strip pinned above the header that the whole shell slides DOWN to
+ * reveal. Sits at top:0; the header tucks below it via --ops-bar-h (0 when
+ * collapsed). The height transition IS the slide; --ops-bar-h drives the
+ * header offset in lockstep. Spans the full viewport width even though the
+ * body is a 640px reading column, so it reads as global chrome. */
+.ops-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 0;
+  overflow: hidden;
+  padding: 0 22px;
+  background: linear-gradient(180deg, var(--teal-bright), var(--teal));
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.ops-bar.is-shown {
+  height: calc(44px + env(safe-area-inset-top, 0px));
+}
+.ops-bar-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ops-bar-extra {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.ops-bar-chevron {
+  flex: 0 0 auto;
+  display: inline-flex;
+  opacity: 0.85;
+}
+.ops-bar-chevron svg {
+  width: 14px;
+  height: 14px;
+  stroke: #fff;
+}
+.ops-bar-spinner {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: ops-bar-spin 0.7s linear infinite;
+}
+@keyframes ops-bar-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-bar { transition: none; }
+  .ops-bar-spinner { animation-duration: 1.4s; }
+}
+
 /* ── Header (app chrome) ──────────────────────────────────────────── */
 header {
   position: sticky;
-  top: 0;
+  /* Tuck below the operations sliver when it's shown (var is 0 when not). */
+  top: var(--ops-bar-h, 0px);
   z-index: 10;
   padding: 18px 22px 14px;
   background: color-mix(in srgb, var(--canvas) 78%, transparent);

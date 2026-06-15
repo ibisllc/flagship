@@ -10,8 +10,13 @@
 // `lib/state.js`'s closure — never on `window`, never logged.
 
 import { hasWrappedUmk } from "./keystore.js";
-import { setSubtitle, show, $, registerView, setViewTab, isDebug } from "./lib/router.js";
+import { setSubtitle, show, $, registerView, setViewTab, isDebug, currentViewId } from "./lib/router.js";
 import { toast } from "./lib/toast.js";
+import {
+  initOperationsBar,
+  refreshOperationsBar,
+  setOperationsBarUnlockedResolver,
+} from "./lib/operationsBar.js";
 import {
   activityIcon,
   packageIcon,
@@ -375,6 +380,27 @@ async function boot() {
   wireSettingsTabEntries();
   wireActivityEntries();
   wireServicesTabEntries();
+
+  // Global operations sliver (WhatsApp-style active-operations bar). It reads
+  // lib/activeOperations.js (fed by Home's pod sync + the vibe-code build
+  // lifecycle) and pins a teal strip the shell slides down to reveal. Hide it
+  // on the pre-paired / locked surfaces so operation names never slide in over
+  // the bootstrap/unlock/PIN screens — same intent as iOS's hide-under-lock.
+  setOperationsBarUnlockedResolver(() => {
+    const v = currentViewId();
+    return (
+      v !== "view-bootstrap" &&
+      v !== "view-unlock" &&
+      v !== "view-pin-unlock" &&
+      v !== "view-pin-set" &&
+      v !== "view-wizard" &&
+      v != null
+    );
+  });
+  initOperationsBar();
+  // Re-evaluate the bar's visibility on every navigation (the lock surfaces
+  // hide it; unlocking back into the app reveals any running operations).
+  document.addEventListener("flagship:view-shown", () => refreshOperationsBar());
 
   // Phase 3b — cross-device QR pairing: a /join?sid=&pk= deep-link routes
   // straight into the add-profile pairing receiver, BEFORE the normal

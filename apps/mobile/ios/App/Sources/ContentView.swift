@@ -8,6 +8,7 @@ struct ContentView: View {
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
+    @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.sessionStore) private var sessionStore
     @State private var pendingWatchers: PendingPodWatcherRegistry?
@@ -38,11 +39,13 @@ struct ContentView: View {
             if paired { Task { await registerPush() } }
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // A `/pods`-reconciled server flips to .online here (not via the
             // pairing flow), so this is the moment its base URL must be set.
             syncPodSession()
@@ -57,6 +60,7 @@ struct ContentView: View {
         .task {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
             syncPodSession()
