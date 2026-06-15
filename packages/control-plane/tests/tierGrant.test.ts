@@ -46,6 +46,40 @@ describe("grantTier — happy path", () => {
   });
 });
 
+describe("grantTier — Stripe paths (#11)", () => {
+  it("absolutePeriodEnd sets the period exactly (ignores durationDays/extend)", async () => {
+    const future = NOW + 10 * DAY;
+    const d = deps({ username: "alice", tier: "hobby", currentPeriodEnd: future, updatedAt: NOW - DAY });
+    const end = NOW + 27 * DAY;
+    const res = await grantTier(d, { username: "alice", tier: "hobby", durationDays: 99, absolutePeriodEnd: end });
+    expect(res.currentPeriodEnd).toBe(end); // pinned, NOT extended from `future`
+  });
+
+  it("rejects an absolutePeriodEnd in the past or absurdly far out", async () => {
+    await expect(
+      grantTier(deps(), { username: "alice", tier: "hobby", durationDays: 0, absolutePeriodEnd: NOW - DAY }),
+    ).rejects.toThrow(/absolutePeriodEnd/);
+    await expect(
+      grantTier(deps(), { username: "alice", tier: "hobby", durationDays: 0, absolutePeriodEnd: NOW + (MAX_GRANT_DAYS + 5) * DAY }),
+    ).rejects.toThrow(/absolutePeriodEnd/);
+  });
+
+  it("persists Stripe ids on a paid grant and drops them on downgrade to free", async () => {
+    const d = deps();
+    await grantTier(d, {
+      username: "alice",
+      tier: "hobby",
+      durationDays: 31,
+      stripeCustomerId: "cus_1",
+      stripeSubscriptionId: "sub_1",
+    });
+    expect(d.tiers.rec).toMatchObject({ stripeCustomerId: "cus_1", stripeSubscriptionId: "sub_1" });
+    await grantTier(d, { username: "alice", tier: "free", durationDays: 0 });
+    expect(d.tiers.rec!.stripeCustomerId).toBeUndefined();
+    expect(d.tiers.rec!.stripeSubscriptionId).toBeUndefined();
+  });
+});
+
 describe("grantTier — extend vs reset", () => {
   it("re-granting the SAME active tier EXTENDS from the existing period end", async () => {
     const future = NOW + 10 * DAY;
