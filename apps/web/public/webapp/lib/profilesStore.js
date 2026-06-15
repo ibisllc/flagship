@@ -84,6 +84,7 @@ export const SLOT_FIELDS = Object.freeze([
   { slot: "currentIrkVersion",       legacy: "flagship.irk.version",                    deviceWideOrPreProfile: true },
   { slot: "recoveryWarn",            legacy: "flagship.recovery.warn.v1" },
   { slot: "recoveryBannerDismissed", legacy: "flagship.recovery.banner.dismissed.v1" },
+  { slot: "proBannerDismissed",      legacy: "flagship.pro.banner.dismissed.v1" },
   { slot: "peerBackupChoice",        legacy: "flagship.peerBackup.choice.v1" },
   { slot: "pushTokenId",             legacy: "flagship.pushTokenId" },
   { slot: "sessionId",               legacy: "flagship.sessionId" },
