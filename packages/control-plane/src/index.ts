@@ -29,6 +29,7 @@ export * from "./admin.js";
 export * from "./schemaStatus.js";
 export * from "./caLeaseWarning.js";
 export * from "./metering.js";
+export * from "./tierGrant.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
 export * from "./marketplace.js";

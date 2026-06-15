@@ -111,6 +111,7 @@ import {
   handlePushRevoke,
   handleUsageReport,
   handleUsageStatus,
+  handleAdminTierGrant,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -501,6 +502,7 @@ const ROUTE_RE = {
   ADMIN_SCHEMA_STATUS: /^\/api\/admin\/schema-status$/,
   ADMIN_SCHEMA_STAMP: /^\/api\/admin\/schema-version\/([^/]+)$/,
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
+  ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
@@ -1908,6 +1910,19 @@ export async function tryControlPlane(
         now: () => Date.now(),
       }),
     );
+  }
+
+  // ── Admin: tier grant (#8) ────────────────────────────────────
+  // POST /api/admin/tier-grant — the entitlement-WRITE path the manual
+  // cash/Monero Pro flow uses: set a username's tier + expiry by hand.
+  // Body: { username, tier, durationDays }. Admin-secret authed.
+  if (method === "POST" && ROUTE_RE.ADMIN_TIER_GRANT.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(await handleAdminTierGrant({ tiers: storage.tiers }, await readJson(request)));
   }
 
   if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
