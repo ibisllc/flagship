@@ -109,6 +109,7 @@ const OPTIONAL_SHELL = [
   "/lib/companionReceiver.js",
   "/lib/companionGuard.js",
   "/lib/companionDockStart.js",
+  "/lib/allowance.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
