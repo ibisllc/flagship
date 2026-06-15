@@ -1899,6 +1899,42 @@ button[data-device-restricted] {
 .fs-app-card-body { flex: 1; min-width: 0; }
 .fs-app-card-head > .secondary { flex: 0 0 auto; }
 
+/* #6 / #7 — bandwidth usage/allowance card + over-allowance upgrade alert. */
+.allowance-card { margin-bottom: 14px; }
+.allowance-head { align-items: center; margin-bottom: 10px; }
+.allowance-tier { flex: 0 0 auto; }
+.allowance-bar {
+  height: 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.allowance-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+  background: var(--accent);
+}
+.allowance-bar-fill--ok   { background: var(--accent); }
+.allowance-bar-fill--warn { background: var(--warn); }
+.allowance-bar-fill--err  { background: var(--err); }
+.allowance-meta { justify-content: space-between; margin-top: 8px; }
+.allowance-alert {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.allowance-alert--warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+.allowance-alert--err {
+  background: var(--err-soft);
+  border-color: color-mix(in srgb, var(--err) 30%, transparent);
+}
+.allowance-alert-msg { margin: 0 0 10px; }
+.allowance-upgrade { text-align: center; text-decoration: none; display: block; }
 /* Build-a-service modes */
 .build-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; }
 .build-tile strong { font-size: 1rem; }
