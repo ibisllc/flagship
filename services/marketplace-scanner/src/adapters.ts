@@ -30,11 +30,13 @@ import {
   type ScanRunner,
   type ScanTarget,
 } from "./ports.js";
-import type {
-  NpmAuditResult,
-  SemgrepResult,
-  TrivyVulnerability,
-} from "./grade.js";
+import type { NpmAuditResult, SemgrepResult } from "./grade.js";
+import {
+  findingsToVulnerabilities,
+  parseTrivyJson,
+  type Finding,
+  type TrivyRunner,
+} from "./trivy.js";
 
 const execFileP = promisify(execFile);
 const STEP_TIMEOUT_MS = 10 * 60_000;
@@ -70,11 +72,50 @@ async function run(
 }
 
 /**
+ * REAL `TrivyRunner` — the injected container/source vulnerability
+ * seam. Shells out to the `trivy` binary; the `imageRef` is either a
+ * built container image ref (`trivy image <ref>`) or a local source
+ * path (`trivy fs <path>`), discriminated by the `docker://` prefix.
+ *
+ * TODO(live): this is NOT exercised by the vitest gate — Trivy + Docker
+ * are not present in CI / the dev sandbox. The pipeline tests inject
+ * `FakeTrivyRunner` instead. Wire the real binary + its rootless/
+ * no-net sandbox flags in the deployment unit, then smoke it against a
+ * known-vulnerable image (e.g. an old `node:18` tag).
+ */
+export class ExecTrivyRunner implements TrivyRunner {
+  constructor(private readonly cwd: string = process.cwd()) {}
+
+  async scan(imageRef: string): Promise<Finding[]> {
+    const isImage = imageRef.startsWith("docker://");
+    const ref = isImage ? imageRef.slice("docker://".length) : imageRef;
+    const args = isImage
+      ? ["image", "--quiet", "--no-progress", "--format", "json", "--severity", "CRITICAL,HIGH,MEDIUM,LOW", ref]
+      : ["fs", "--quiet", "--no-progress", "--format", "json", "--severity", "CRITICAL,HIGH,MEDIUM,LOW", ref];
+    const out = await run("trivy", args, this.cwd, "trivy-failed");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(out);
+    } catch {
+      throw new ScanRunnerError("trivy produced non-JSON output", "trivy-parse-failed");
+    }
+    return parseTrivyJson(parsed);
+  }
+}
+
+/**
  * Real ScanRunner: git clone @ manifest_hash → verify tree hash →
- * `npm audit` + `trivy fs` + `semgrep p/owasp-top-ten`. Throws
+ * (injected Trivy) + `npm audit` + `semgrep p/owasp-top-ten`. Throws
  * `ScanRunnerError` on ANY failure (the core fail-closes to F).
+ *
+ * The container-vuln scan is the injected `TrivyRunner` (defaulting to
+ * `ExecTrivyRunner`) — so the whole pipeline is unit-testable with a
+ * fake, and a caller can swap in a `trivy image <ref>` runner without
+ * touching this orchestration.
  */
 export class ExecScanRunner implements ScanRunner {
+  constructor(private readonly trivy: TrivyRunner = new ExecTrivyRunner()) {}
+
   async run(target: ScanTarget): Promise<ScanArtifacts> {
     const work = await mkdtemp(join(tmpdir(), "flagship-scan-"));
     const repo = join(work, "repo");
@@ -100,14 +141,9 @@ export class ExecScanRunner implements ScanRunner {
         manifest = undefined; // runCustomChecks fail-closes on this
       }
 
-      const trivy = parseTrivyFs(
-        await run(
-          "trivy",
-          ["fs", "--quiet", "--no-progress", "--format", "json", "--severity", "CRITICAL,HIGH,MEDIUM,LOW", "."],
-          repo,
-          "trivy-failed",
-        ),
-      );
+      // Container/source vuln scan via the injected Trivy seam. The
+      // checked-out repo path IS the scan target for `trivy fs`.
+      const findings = await this.trivy.scan(repo);
       const npmAudit = parseNpmAudit(
         await run("npm", ["audit", "--json", "--audit-level=low"], repo, "npm-audit-failed"),
       );
@@ -118,31 +154,15 @@ export class ExecScanRunner implements ScanRunner {
       return {
         treeDigestHex,
         manifest,
-        trivy: trivy.vulns,
+        trivy: findingsToVulnerabilities(findings),
         npmAudit,
         semgrep,
-        raw: { trivy: trivy.raw, npmAudit, semgrep },
+        raw: { trivy: findings, npmAudit, semgrep },
       };
     } finally {
       await rm(work, { recursive: true, force: true });
     }
   }
-}
-
-function parseTrivyFs(out: string): { vulns: TrivyVulnerability[]; raw: unknown } {
-  const parsed = JSON.parse(out) as {
-    Results?: Array<{ Vulnerabilities?: Array<{ Severity?: string; VulnerabilityID?: string; PkgName?: string }> }>;
-  };
-  const vulns: TrivyVulnerability[] = [];
-  for (const r of parsed.Results ?? []) {
-    for (const v of r.Vulnerabilities ?? []) {
-      const sev = v.Severity;
-      if (sev === "CRITICAL" || sev === "HIGH" || sev === "MEDIUM" || sev === "LOW") {
-        vulns.push({ Severity: sev, VulnerabilityID: v.VulnerabilityID ?? "UNKNOWN", PkgName: v.PkgName });
-      }
-    }
-  }
-  return { vulns, raw: parsed };
 }
 
 function parseNpmAudit(out: string): NpmAuditResult {
@@ -185,6 +205,11 @@ export class HttpReportStore implements ReportStore {
     if (!this.bucketUrlPrefix) {
       throw new Error("R2 bucket URL prefix not configured");
     }
+    // TODO(live): swap this presign-free PUT for the operator's actual
+    // R2 path — either an aws4-signed S3 request to the bucket endpoint
+    // or a `wrangler`/Worker-binding write proxy. The pipeline only
+    // depends on the `ReportStore` contract (returns the object key),
+    // so this is the single place the real R2 wiring lands.
     const res = await fetch(`${this.bucketUrlPrefix}/${key}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
