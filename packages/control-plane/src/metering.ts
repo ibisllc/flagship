@@ -232,9 +232,9 @@ export interface AllowanceView {
   overQuota: boolean;
   overageUsd: number;
   /** "ok" < 80% · "approaching" ≥ 80% & ≤ 100% · "over" > 100%. The #7 upgrade
-   *  alert fires on "approaching"/"over"; free + "over" is the hard cap. */
+   *  alert fires on "approaching"/"over"; free + "over" is slowed. */
   state: "ok" | "approaching" | "over";
-  /** Free tier is a hard cap (blocked when over); paid bills overage instead. */
+  /** Free over its allowance is slowed (not blocked, not billed); paid bills overage instead. */
   hardCapped: boolean;
 }
 
