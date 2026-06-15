@@ -167,7 +167,11 @@ import {
   handleIssueVoucher,
   handleStripeWebhook,
   handleCreateCheckout,
+  handleCreateAppCheckout,
   type StripeConfig,
+  handleListUserPurchases,
+  handleAdminSetAppPrice,
+  handleAdminGrantPurchase,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -209,7 +213,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, D1StripeEventStore, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -492,6 +496,9 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USER_ALLOWANCE: /^\/api\/users\/([^/]+)\/allowance$/,
+  USER_PURCHASES: /^\/api\/users\/([^/]+)\/purchases$/,
+  ADMIN_APP_PRICE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/price$/,
+  ADMIN_APP_GRANT_PURCHASE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/grant-purchase$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
   USERS_CHECK: /^\/api\/users\/check$/,
@@ -702,6 +709,7 @@ const ROUTE_RE = {
   VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
   STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
   STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
+  STRIPE_APP_CHECKOUT: /^\/api\/stripe\/app-checkout$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
@@ -2893,19 +2901,36 @@ export async function tryControlPlane(
         {
           tiers: storage.tiers,
           stripeEvents: new D1StripeEventStore(env.DB),
+          purchases: new D1AppPurchaseStorage(env.DB),
+          marketplace: storage.marketplace,
           config: stripeConfigFromEnv(env),
         },
         { rawBody, signature: request.headers.get("stripe-signature") },
       ),
     );
   }
-  // POST /api/stripe/checkout (PUBLIC) — mint a hosted Checkout URL.
+  // POST /api/stripe/checkout (PUBLIC) — mint a hosted subscription Checkout URL.
   if (method === "POST" && ROUTE_RE.STRIPE_CHECKOUT.test(path)) {
     return finishPlain(
       await handleCreateCheckout(
         {
           tiers: storage.tiers,
           stripeEvents: new D1StripeEventStore(env.DB),
+          config: stripeConfigFromEnv(env),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/stripe/app-checkout (PUBLIC) — mint a one-time app-purchase URL.
+  if (method === "POST" && ROUTE_RE.STRIPE_APP_CHECKOUT.test(path)) {
+    return finishPlain(
+      await handleCreateAppCheckout(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          purchases: new D1AppPurchaseStorage(env.DB),
+          marketplace: storage.marketplace,
           config: stripeConfigFromEnv(env),
         },
         await readJson(request),
@@ -3030,11 +3055,18 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_INSTALL))) {
+    // #14 — paid apps gate on ownership. The installer identifies the account
+    // via ?username=; a free app ignores it.
     return finish(
       await handleMarketplaceInstall(
-        { marketplace: storage.marketplace, usernames: storage.usernames },
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          purchases: new D1AppPurchaseStorage(env.DB),
+        },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
+        url.searchParams.get("username"),
       ),
     );
   }
@@ -3058,6 +3090,49 @@ export async function tryControlPlane(
     return finish(
       await handleMarketplaceScanResult(
         { marketplace: storage.marketplace, scannerPubkey },
+        await readJson(request),
+      ),
+    );
+  }
+
+  // ── Paid apps (#14) — purchase entitlements + curated pricing ─
+  // GET /api/users/:u/purchases (PUBLIC) — the install-what-you-own list.
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_PURCHASES))) {
+    return finishPlain(
+      await handleListUserPurchases(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // POST /api/admin/marketplace/:creator/:slug/price (ADMIN) — set a price.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_APP_PRICE))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleAdminSetAppPrice(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/admin/marketplace/:creator/:slug/grant-purchase (ADMIN) — comp.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_APP_GRANT_PURCHASE))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleAdminGrantPurchase(
+        { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
         await readJson(request),
       ),
     );

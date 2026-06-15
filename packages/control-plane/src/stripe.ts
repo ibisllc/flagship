@@ -18,8 +18,9 @@
 // Everything is env-gated: with no STRIPE_* config the surfaces 503, so the
 // feature ships dark until the owner sets the keys (task #12).
 
-import type { TierName, StripeEventStore } from "@flagship/storage";
+import type { TierName, StripeEventStore, AppPurchaseStorage, MarketplaceStorage } from "@flagship/storage";
 import { grantTier, type TierGrantDeps } from "./tierGrant.js";
+import { grantAppPurchase } from "./appPurchase.js";
 
 /** Days granted on the initial checkout, before the first invoice.paid pins the
  *  real subscription period. A hair over a month so a slightly-late first
@@ -42,6 +43,10 @@ export interface StripeConfig {
 export interface StripeDeps extends TierGrantDeps {
   stripeEvents: StripeEventStore;
   config: StripeConfig;
+  /** Paid-app stores (#14). Present ⇒ the webhook handles app-purchase
+   *  checkouts + /api/stripe/app-checkout works. Absent ⇒ subscription-only. */
+  purchases?: AppPurchaseStorage;
+  marketplace?: MarketplaceStorage;
   /** Injectable for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
@@ -205,6 +210,19 @@ async function applyEvent(
   obj: any,
 ): Promise<{ action: string; username?: string; tier?: TierName }> {
   if (type === "checkout.session.completed") {
+    // An app purchase (mode=payment) is tagged kind="app" in metadata.
+    if (obj?.metadata?.kind === "app") {
+      if (!deps.purchases || !deps.marketplace) throw new Error("app purchases not configured");
+      const username = usernameFrom(obj);
+      const creator = String(obj?.metadata?.creator ?? "").toLowerCase();
+      const slug = String(obj?.metadata?.slug ?? "").toLowerCase();
+      if (!username || !creator || !slug) throw new Error("app checkout missing username/creator/slug metadata");
+      const res = await grantAppPurchase(
+        { purchases: deps.purchases, marketplace: deps.marketplace, ...(deps.now ? { now: deps.now } : {}) },
+        { username, creator, slug, source: "stripe", ref: typeof obj?.id === "string" ? obj.id : undefined },
+      );
+      return { action: res.granted ? "purchased" : "already-owned", username };
+    }
     const username = usernameFrom(obj);
     const tier = tierFromObject(deps, obj);
     if (!username || !tier) throw new Error("checkout missing username/tier metadata");
@@ -291,6 +309,81 @@ export async function createCheckoutSession(
   if (!resp.ok) throw new Error(json?.error?.message || `stripe error ${resp.status}`);
   if (typeof json?.url !== "string") throw new Error("stripe returned no checkout url");
   return { url: json.url };
+}
+
+// ── app-purchase checkout (#14) ──────────────────────────────────────
+
+/** Create a Stripe-hosted Checkout session to BUY a paid marketplace app
+ *  (mode=payment, one-time). Prices inline from the listing's priceUsdCents
+ *  (no per-app Stripe Price object needed — apps are curated). Stamps
+ *  kind=app + username + creator + slug so the webhook grants the purchase. */
+export async function createAppCheckoutSession(
+  deps: StripeDeps,
+  args: { username: string; creator: string; slug: string },
+): Promise<{ url: string }> {
+  const { config } = deps;
+  if (!config.secretKey) throw new Error("stripe checkout not configured");
+  if (!config.successUrl || !config.cancelUrl) throw new Error("stripe redirect urls not configured");
+  if (!deps.marketplace) throw new Error("marketplace not configured");
+  const username = String(args.username ?? "").trim().toLowerCase();
+  if (!USERNAME_RE.test(username)) throw new Error("invalid username");
+  const creator = String(args.creator ?? "").trim().toLowerCase();
+  const slug = String(args.slug ?? "").trim().toLowerCase();
+  if (!creator || !slug) throw new Error("creator and slug are required");
+
+  const listing = await deps.marketplace.get(creator, slug);
+  if (!listing || listing.status !== "listed") throw new Error("listing not found");
+  const cents = listing.priceUsdCents ?? 0;
+  if (cents <= 0) throw new Error("this app is free — no purchase needed");
+
+  const form = new URLSearchParams();
+  form.set("mode", "payment");
+  form.set("line_items[0][price_data][currency]", "usd");
+  form.set("line_items[0][price_data][unit_amount]", String(Math.floor(cents)));
+  form.set("line_items[0][price_data][product_data][name]", `${listing.name} (${creator}/${slug})`);
+  form.set("line_items[0][quantity]", "1");
+  form.set("client_reference_id", username);
+  form.set("metadata[kind]", "app");
+  form.set("metadata[username]", username);
+  form.set("metadata[creator]", creator);
+  form.set("metadata[slug]", slug);
+  // Propagate to the PaymentIntent too, so a charge-level event can attribute.
+  form.set("payment_intent_data[metadata][kind]", "app");
+  form.set("payment_intent_data[metadata][username]", username);
+  form.set("payment_intent_data[metadata][creator]", creator);
+  form.set("payment_intent_data[metadata][slug]", slug);
+  form.set("success_url", config.successUrl);
+  form.set("cancel_url", config.cancelUrl);
+
+  const doFetch = deps.fetch ?? fetch;
+  const resp = await doFetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.secretKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  const json: any = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(json?.error?.message || `stripe error ${resp.status}`);
+  if (typeof json?.url !== "string") throw new Error("stripe returned no checkout url");
+  return { url: json.url };
+}
+
+/** `POST /api/stripe/app-checkout` — PUBLIC. Body `{ username, creator, slug }`.
+ *  Returns the hosted Checkout URL to buy the app. */
+export async function handleCreateAppCheckout(deps: StripeDeps, body: unknown): Promise<StripeHttpResult> {
+  const b = (body ?? {}) as { username?: unknown; creator?: unknown; slug?: unknown };
+  if (typeof b.username !== "string" || typeof b.creator !== "string" || typeof b.slug !== "string") {
+    return { status: 400, body: { error: "username, creator and slug are required" } };
+  }
+  if (!deps.config.secretKey) return { status: 503, body: { error: "card checkout not available" } };
+  try {
+    const { url } = await createAppCheckoutSession(deps, { username: b.username, creator: b.creator, slug: b.slug });
+    return { status: 200, body: { ok: true, url } };
+  } catch (e) {
+    return { status: 400, body: { error: (e as Error).message } };
+  }
 }
 
 /** `POST /api/stripe/checkout` — PUBLIC. Body `{ username, tier }`. Returns the

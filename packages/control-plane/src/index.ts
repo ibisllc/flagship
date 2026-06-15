@@ -35,6 +35,7 @@ export * from "./metering.js";
 export * from "./tierGrant.js";
 export * from "./voucher.js";
 export * from "./stripe.js";
+export * from "./appPurchase.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
 export * from "./accountDeletion.js";
