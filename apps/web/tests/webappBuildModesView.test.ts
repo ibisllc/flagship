@@ -20,8 +20,8 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("enterBuildGit");
     expect(body).toContain("enterBuildMcp");
     expect(body).toContain("enterBuildJournal");
-    // Marketplace degrades gracefully (no marketplace code on this branch).
-    expect(body).toMatch(/marketplace is coming soon/i);
+    // feat/marketplace: the tile opens the live marketplace catalog.
+    expect(body).toContain("enterMarketplace");
   });
 
   it("scratch routes through the AI-key step before opening the chat", async () => {
