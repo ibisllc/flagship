@@ -96,6 +96,7 @@ Paired-session gated (`x-flagship-session`):
 - `GET  /api/build/sessions` → `{builds:[BuildJournalSummary]}`
 - `GET  /api/build/sessions/:id` → `{state, files:[path]}`
 - `GET  /api/build/sessions/:id/journal` → `{entries:[BuildJournalEntry]}`
+- `GET  /api/build/sessions/:id/env-requests` → `{requests:[{name, why?, secret?, requestedAt, requestedBy, currentlySet}]}` (value-free)
 - `POST /api/build/sessions/:id/deploy` → `{ok, serviceId, url}`
 - `GET  /api/build/sessions/:id/mcp` → connection info (re-display)
 - `POST /api/build/sessions/:id/mcp/rotate {label?}` → new connection info
@@ -129,5 +130,12 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
 - **AI-adapt endpoint** — feed `buildAdaptPrompt(files)` into the vibe loop
   for non-fit git repos and deploy the result.
 - **iOS + Android** — the chooser + git/mcp/journal screens to this spec.
-- **request_env_var → phone** — surface the mcp value-free env request as a
-  phone prompt (today it reports pending; the owner sets it post-deploy).
+- **request_env_var → phone** — DONE (server + webapp). The orchestrator
+  keeps a value-free per-build pending list, fires a value-free
+  `notifyOwner({buildId, name})` hook (log-only by default, swap in the push
+  relay in production — mirrors the vibe-code W10 hook) and journals an
+  `env-requested` entry; `GET /api/build/sessions/:id/env-requests` returns
+  `{requests:[{name, why?, secret?, requestedAt, requestedBy, currentlySet}]}`
+  (deduped by name, never a value); the webapp mcp view surfaces it with a
+  "the IDE never sees the value — set it in Configure environment" note.
+  REMAINING: the real push fan-out + the iOS/Android surfaces.

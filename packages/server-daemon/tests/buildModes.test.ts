@@ -132,6 +132,56 @@ describe("BuildOrchestrator — mcp mode", () => {
   });
 });
 
+describe("BuildOrchestrator — env requests (value-free)", () => {
+  it("records a request_env_var call, fires notifyOwner + recordEnvRequest, and lists it", async () => {
+    const notified: Array<{ buildId: string; name: string }> = [];
+    const sideEffects: Array<{ buildId: string; name: string; why?: string; secret?: boolean }> = [];
+    const { o } = makeOrchestrator({
+      envNames: async () => ["ALREADY_SET"],
+      notifyOwner: (n) => notified.push(n),
+      recordEnvRequest: async (r) => {
+        sideEffects.push(r);
+      },
+    });
+    const { buildId, connection } = await o.createMcp();
+    const call = (name: string, args: Record<string, unknown> = {}) =>
+      o.handleMcpRpc(connection.key, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+
+    const r = await call("request_env_var", { name: "STRIPE_KEY", why: "checkout", secret: true });
+    const text = JSON.parse((r.response!.result as any).content[0].text);
+    // VALUE-FREE: the tool reports status only, never carries a value field.
+    expect(text.currentlySet).toBe(false);
+    expect(text).not.toHaveProperty("value");
+
+    // notify + side-effect both fired, value-free.
+    expect(notified).toEqual([{ buildId, name: "STRIPE_KEY" }]);
+    expect(sideEffects[0]).toMatchObject({ buildId, name: "STRIPE_KEY", why: "checkout", secret: true });
+
+    // The pending list carries names + metadata but never a value field.
+    const pending = o.pendingEnvRequests(buildId);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ name: "STRIPE_KEY", why: "checkout", secret: true, requestedBy: "ide" });
+    expect(pending[0]).not.toHaveProperty("value");
+  });
+
+  it("dedupes resolvedEnvRequests by name (latest wins) and marks currentlySet", async () => {
+    const { o } = makeOrchestrator({ envNames: async () => ["DB_URL"] });
+    const { buildId, connection } = await o.createMcp();
+    const call = (args: Record<string, unknown>) =>
+      o.handleMcpRpc(connection.key, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "request_env_var", arguments: args } });
+    await call({ name: "DB_URL", why: "first" });
+    await call({ name: "DB_URL", why: "second" }); // same name, newer
+    await call({ name: "API_TOKEN", secret: true });
+
+    const resolved = await o.resolvedEnvRequests(buildId);
+    const byName = Object.fromEntries(resolved.map((r) => [r.name, r]));
+    expect(Object.keys(byName).sort()).toEqual(["API_TOKEN", "DB_URL"]);
+    expect(byName.DB_URL!.why).toBe("second");
+    expect(byName.DB_URL!.currentlySet).toBe(true);
+    expect(byName.API_TOKEN!.currentlySet).toBe(false);
+  });
+});
+
 // ----- HTTP surface -----
 
 const allowGate = { check: () => null };
@@ -184,6 +234,30 @@ describe("buildModesHttp", () => {
     expect(JSON.parse(jr!.body as string).entries.length).toBeGreaterThan(0);
     const list = await handle(req({ method: "GET", path: "/api/build/sessions" }));
     expect(JSON.parse(list!.body as string).builds.length).toBe(1);
+  });
+
+  it("GET .../env-requests returns the value-free request list", async () => {
+    const { o } = makeOrchestrator({ envNames: async () => [] });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate });
+    const created = await handle(req({ method: "POST", path: "/api/build/mcp", body: jbody({}) }));
+    const conn = JSON.parse(created!.body as string).connection;
+    const buildId = JSON.parse(created!.body as string).buildId;
+    // The IDE asks for a secret over the bearer-gated MCP pipe.
+    await handle(
+      req({
+        method: "POST",
+        path: `/mcp/build/${buildId}`,
+        headers: { authorization: `Bearer ${conn.key}` },
+        body: jbody({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "request_env_var", arguments: { name: "STRIPE_KEY", why: "checkout", secret: true } } }),
+      }),
+    );
+    const resp = await handle(req({ method: "GET", path: `/api/build/sessions/${buildId}/env-requests` }));
+    expect(resp!.status).toBe(200);
+    const out = JSON.parse(resp!.body as string);
+    expect(out.requests).toHaveLength(1);
+    expect(out.requests[0]).toMatchObject({ name: "STRIPE_KEY", why: "checkout", secret: true, requestedBy: "ide", currentlySet: false });
+    // Never a value anywhere in the response.
+    expect(resp!.body as string).not.toContain('"value"');
   });
 
   it("returns null for unrelated paths (so other handlers run)", async () => {

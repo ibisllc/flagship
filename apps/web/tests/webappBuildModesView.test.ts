@@ -40,6 +40,17 @@ describe("webapp build-modes views", () => {
     expect(body).toMatch(/no model key on the box/i);
   });
 
+  it("mcp view surfaces value-free env requests and reassures about the value", async () => {
+    const body = await asset("/webapp/views/build-mcp.js");
+    expect(body).toContain("/env-requests");
+    expect(body).toContain("mcp-env-requests");
+    // Reassurance: the IDE/AI never sees the value; the owner sets it on the box.
+    expect(body).toMatch(/never see/i);
+    expect(body).toMatch(/Configure environment/);
+    // No value-carrying field is ever read/rendered.
+    expect(body).not.toMatch(/\.value\b/);
+  });
+
   it("journal viewer reads the shared journal", async () => {
     const body = await asset("/webapp/views/build-journal.js");
     expect(body).toContain('registerView("view-build-journal")');

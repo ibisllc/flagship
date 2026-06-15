@@ -61,11 +61,51 @@ function renderConnection(conn) {
       </div>
       <p class="note mt-2">Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:</p>
       <button id="mcp-deploy" class="full-width mt-2">Deploy now</button>
+      <div id="mcp-env-requests"></div>
     </div>`;
   $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, "config copied"));
   $("mcp-rotate").addEventListener("click", rotate);
   $("mcp-journal").addEventListener("click", () => enterBuildJournal(buildId));
   $("mcp-deploy").addEventListener("click", deploy);
+  refreshEnvRequests();
+}
+
+// Show the env vars the IDE asked for. VALUE-FREE: the IDE/AI never sees or
+// sends the value — you set it on your box from the "Configure environment"
+// screen after the service is installed. We only ever learn the NAME here.
+async function refreshEnvRequests() {
+  if (!buildId) return;
+  const box = $("mcp-env-requests");
+  if (!box) return;
+  let requests = [];
+  try {
+    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/env-requests`);
+    requests = Array.isArray(r.requests) ? r.requests : [];
+  } catch {
+    box.innerHTML = "";
+    return;
+  }
+  if (requests.length === 0) {
+    box.innerHTML = "";
+    return;
+  }
+  const rows = requests
+    .map((q) => {
+      const why = q.why ? `<span class="note">${escapeHtml(q.why)}</span>` : "";
+      const status = q.currentlySet
+        ? '<span class="value">set ✓</span>'
+        : '<span class="value">needs you</span>';
+      return `<div class="row mt-1"><span class="label mono">${escapeHtml(q.name)}</span>${status}</div>${why}`;
+    })
+    .join("");
+  box.innerHTML = `
+    <div class="card mt-2">
+      <p class="label">Your IDE asked for these secrets</p>
+      <p class="note">The editor and its AI never see the value — you set it here on your box. Open <strong>Configure environment</strong> on the service after it's deployed and enter each value there; it never travels through your IDE.</p>
+      ${rows}
+      <button id="mcp-env-refresh" class="secondary full-width mt-2">Refresh</button>
+    </div>`;
+  $("mcp-env-refresh").addEventListener("click", refreshEnvRequests);
 }
 
 async function rotate() {

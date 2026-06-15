@@ -696,6 +696,31 @@ async function main(): Promise<void> {
         deployArtifact: artifactDeployer,
         serverFqdn: env.serverFqdn!,
         mcpBaseUrl: `https://${env.serverFqdn!}`,
+        // An external IDE / the AI can ask the owner to set a secret env var
+        // VALUE-FREE (request_env_var). Journal it (names not values) so the
+        // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.
+        recordEnvRequest: async ({ buildId, name, why }) => {
+          await buildJournal.append(buildId, {
+            mode: "mcp",
+            kind: "env-requested",
+            actor: "ide",
+            summary: `requested env var ${name}`,
+            ...(why != null ? { detail: why } : {}),
+          });
+        },
+        // Mirror the vibe-code W10 notify-owner hook: log-only by default so
+        // the chain is provably wired; production deployments that integrate
+        // with .com's push relay replace this with a real fan-out (POST
+        // `<controlPlane>/api/push/relay`, category "build-needs-env"). The
+        // callback is value-free by construction — only the build id + the
+        // env NAME, never a value, reason, or secret flag.
+        notifyOwner: ({ buildId, name }) => {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[build] build=${buildId} env-requested=${name} ` +
+              `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
+          );
+        },
       });
       runtime.addHandler(
         buildBuildModesHttpHandlers({ orchestrator: buildOrchestrator, gate: pairedSessions }),

@@ -83,6 +83,14 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       return jok({ entries: await o.readJournal(buildId) });
     }
 
+    // GET .../env-requests → value-free list of env vars an authoring agent
+    // (IDE over MCP, or the AI) asked the owner to set. NEVER a value: only
+    // the name, an optional reason, the secret flag, when it was asked, who
+    // asked, and whether the owner has set it. Deduped by name (latest wins).
+    if (verb === "env-requests" && req.method === "GET") {
+      return jok({ requests: await o.resolvedEnvRequests(buildId) });
+    }
+
     if (verb === "deploy" && req.method === "POST") {
       const r = await o.deploy(buildId);
       if (!r.ok) return jerr(502, r.reason);

@@ -150,6 +150,14 @@ the phone is locked).
 - **Webapp client:** chooser + git + mcp (URL/key/IDE-config/rotate) + journal
   viewer (`views/build-*.js`); create-service entry repointed to the chooser;
   marketplace tile degrades to "coming soon" until `feat/marketplace` merges.
+- **`request_env_var` → owner (value-free):** the orchestrator keeps a per-build
+  pending env-request list, fires a value-free `notifyOwner({buildId, name})`
+  hook (log-only by default — production swaps in the push relay, mirroring the
+  vibe-code W10 hook) + journals an `env-requested` entry; new
+  `GET /api/build/sessions/:id/env-requests` returns the deduped list
+  (`name/why?/secret?/requestedAt/requestedBy/currentlySet`, NEVER a value);
+  the webapp mcp view shows it with a "the IDE never sees the value — set it in
+  Configure environment" note.
 
 Gates: `npx tsc -b` clean · daemon vitest +~70 new (buildJournal/gitImport/
 buildWorkspace/mcpServer/mcpKeyStore/buildModes) · web vitest **1152** (+ new
@@ -162,8 +170,9 @@ mcp, the harness materializes).
 tested); still needs session+upload-endpoint wiring + the chat UI w/
 attachment picker on each client. AI-adapt endpoint for non-fit git repos
 (renderer + UI exist, needs the LLM-loop endpoint). **iOS + Android**
-chooser/git/mcp/journal screens to the `docs/build-modes.md` UX spec. Surface
-mcp `request_env_var` as a phone prompt.
+chooser/git/mcp/journal screens to the `docs/build-modes.md` UX spec (incl. the
+env-requests list + the real push fan-out for the value-free `request_env_var`
+notify hook — server + webapp DONE).
 
 ### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 

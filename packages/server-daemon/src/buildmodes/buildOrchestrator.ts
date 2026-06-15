@@ -32,6 +32,27 @@ export interface BuildState {
   deployedUrl?: string;
 }
 
+/**
+ * A value-free record of an env var an authoring agent asked the owner to
+ * set. The VALUE is NEVER part of this shape — only the name, an optional
+ * human-readable reason, whether the author flagged it secret, when it was
+ * asked, and which kind of author asked. The owner supplies the value later
+ * over the signed set-app-env path from their phone — never through the IDE
+ * / AI. Mirrors `serviceEnvStore`'s names-not-values rule.
+ */
+export interface PendingEnvRequest {
+  name: string;
+  why?: string;
+  secret?: boolean;
+  requestedAt: number;
+  requestedBy: "ide" | "ai";
+}
+
+/** A pending env request annotated with whether the owner has set it yet. */
+export interface ResolvedEnvRequest extends PendingEnvRequest {
+  currentlySet: boolean;
+}
+
 export interface BuildOrchestratorDeps {
   journal: BuildJournal;
   gitImporter: GitImporter;
@@ -41,8 +62,19 @@ export interface BuildOrchestratorDeps {
   serverFqdn: string;
   /** Owner-set env var NAMES (never values) for the mcp request_env_var tool. */
   envNames?: () => Promise<string[]>;
-  /** Records a value-free owner env request (mcp request_env_var). */
-  recordEnvRequest?: (req: { name: string; why?: string; secret?: boolean }) => Promise<void>;
+  /**
+   * Side-effect hook the wiring layer supplies to react to a value-free env
+   * request (journal it, etc.). The orchestrator ALWAYS records the request
+   * in its own per-build list first, then awaits this; absent ⇒ list-only.
+   */
+  recordEnvRequest?: (req: { buildId: string; name: string; why?: string; secret?: boolean }) => Promise<void>;
+  /**
+   * Fired (value-free) when an authoring agent asks the owner to set an env
+   * var, so a client can surface "your IDE asked for STRIPE_KEY" on the
+   * phone. Carries only the build id + the env name — never a value, why, or
+   * secret flag. Mirrors the vibe-code W10 notify hook.
+   */
+  notifyOwner?: (n: { buildId: string; name: string }) => void;
   /** Public base URL the IDE points its MCP client at (mcp mode). */
   mcpBaseUrl?: string;
   now?: () => number;
@@ -60,6 +92,8 @@ export class BuildOrchestrator {
   private readonly states = new Map<string, BuildState>();
   private readonly workspaces = new Map<string, BuildWorkspace>();
   private readonly mcpServers = new Map<string, McpBuildServer>();
+  /** Value-free per-build env requests an authoring agent made. */
+  private readonly envRequests = new Map<string, PendingEnvRequest[]>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
@@ -87,6 +121,48 @@ export class BuildOrchestrator {
 
   async readJournal(buildId: string): Promise<BuildJournalEntry[]> {
     return this.deps.journal.read(buildId);
+  }
+
+  // ----- env requests (value-free) --------------------------------------
+
+  /**
+   * Record a value-free env request from an authoring agent: append it to
+   * the build's pending list, fire the (value-free) notify hook so a client
+   * can surface it on the phone, and run the wiring side-effect (journal).
+   * The VALUE is never an argument here, by construction.
+   */
+  private async recordEnvRequest(buildId: string, req: PendingEnvRequest): Promise<void> {
+    const list = this.envRequests.get(buildId) ?? [];
+    list.push(req);
+    this.envRequests.set(buildId, list);
+    this.deps.notifyOwner?.({ buildId, name: req.name });
+    if (this.deps.recordEnvRequest) {
+      await this.deps.recordEnvRequest({
+        buildId,
+        name: req.name,
+        ...(req.why != null ? { why: req.why } : {}),
+        ...(req.secret != null ? { secret: req.secret } : {}),
+      });
+    }
+  }
+
+  /** The raw per-build pending env requests (newest last). Never any value. */
+  pendingEnvRequests(buildId: string): PendingEnvRequest[] {
+    return [...(this.envRequests.get(buildId) ?? [])];
+  }
+
+  /**
+   * The build's env requests deduped by name (latest wins), each annotated
+   * with whether the owner has set it yet. Value-free.
+   */
+  async resolvedEnvRequests(buildId: string): Promise<ResolvedEnvRequest[]> {
+    const requests = this.envRequests.get(buildId) ?? [];
+    if (requests.length === 0) return [];
+    const byName = new Map<string, PendingEnvRequest>();
+    for (const r of requests) byName.set(r.name, r); // later wins
+    const names = this.deps.envNames ? await this.deps.envNames() : [];
+    const set = new Set(names);
+    return [...byName.values()].map((r) => ({ ...r, currentlySet: set.has(r.name) }));
   }
 
   // ----- git mode --------------------------------------------------------
@@ -192,7 +268,16 @@ export class BuildOrchestrator {
       journal: this.deps.journal,
       serverFqdn: this.deps.serverFqdn,
       envNames: this.deps.envNames ?? (async () => []),
-      ...(this.deps.recordEnvRequest ? { recordEnvRequest: this.deps.recordEnvRequest } : {}),
+      // The MCP tool is value-free; the orchestrator owns the pending list,
+      // the notify-owner fan-out, and the wiring side-effect.
+      recordEnvRequest: async (req) =>
+        this.recordEnvRequest(buildId, {
+          name: req.name,
+          ...(req.why != null ? { why: req.why } : {}),
+          ...(req.secret != null ? { secret: req.secret } : {}),
+          requestedAt: this.now(),
+          requestedBy: "ide",
+        }),
       deploy: async (): Promise<McpDeployResult> => {
         const r = await this.deploy(buildId);
         return r.ok
