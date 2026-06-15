@@ -4,6 +4,7 @@ import FlagshipCore
 
 /// Settings tab, organised into the spec S1 six-group taxonomy:
 ///   - ACCOUNT — account security · AI keys · Recovery · Back up account key · Profiles
+///   - SUBSCRIPTION — tier, credits, bandwidth, manage providers
 ///   - DEVICES — trusted devices · browser sessions · companions (dock / requests)
 ///   - WEB ACCESS — open secured sessions · process URL
 ///   - BACKUP & PEERS — peer-backup
@@ -49,6 +50,7 @@ public struct SettingsScreen: View {
     /// permanent account loss, so it gets the danger-zone framing).
     @State private var signOutConfirm: Bool = false
     let username: String
+    let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
     /// Peer-class devices on this user's account (push-token holders).
     /// The new "Trusted devices" section. Empty list renders an
@@ -83,6 +85,8 @@ public struct SettingsScreen: View {
     var onOpenProviders: () -> Void = {}
     /// Open Settings → AI keys (device-local BYOK key manager).
     var onOpenAiKeys: () -> Void = {}
+    /// P7 — open the dedicated tier-status / subscription screen.
+    var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
@@ -156,6 +160,7 @@ public struct SettingsScreen: View {
 
     public init(
         username: String,
+        tier: LoadingState<TierStatusResponse>,
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
@@ -169,6 +174,7 @@ public struct SettingsScreen: View {
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenAiKeys: @escaping () -> Void = {},
+        onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
@@ -193,6 +199,7 @@ public struct SettingsScreen: View {
         onDeleteAccount: @escaping () -> Void = {}
     ) {
         self.username = username
+        self.tier = tier
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
@@ -206,6 +213,7 @@ public struct SettingsScreen: View {
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenAiKeys = onOpenAiKeys
+        self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
@@ -259,10 +267,12 @@ public struct SettingsScreen: View {
                     )
                 }
 
-                // Settings taxonomy (spec S1): Account · Devices · Web access ·
-                // Backup & peers · App · Danger zone · Developer (hidden). One
-                // tap to any row; account security leads the Account group.
+                // Settings taxonomy (spec S1): Account · Subscription · Devices ·
+                // Web access · Backup & peers · App · Danger zone · Developer
+                // (hidden). One tap to any row; account security leads the
+                // Account group; Subscription (tier/usage) follows it.
                 accountGroup(c: c)
+                subscription(c: c)
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
                 deviceExtrasGroup(c: c)
@@ -392,6 +402,34 @@ public struct SettingsScreen: View {
         case "multi":  return "Multi-device + 2FA"
         case "single": return "Single-device account"
         default:       return "Tap to manage account security"
+        }
+    }
+
+    /// SUBSCRIPTION group (marketplace) — tier / usage / credits / domains.
+    private func subscription(c: FSColors) -> some View {
+        FSSettingsGroup("SUBSCRIPTION", rows: [
+            FSSettingsRow(
+                icon: "creditcard.fill",
+                title: "Tier & usage",
+                subtitle: subscriptionSubtitle,
+                action: onOpenSubscription
+            )
+        ])
+        .accessibilityIdentifier("settings-open-subscription")
+    }
+
+    private var subscriptionSubtitle: String {
+        switch tier {
+        case .loaded(let t):
+            switch t.tier {
+            case "byok":  return "Bring-your-own-key • credits, usage, domains"
+            case "promo": return "Free credits • credits, usage, domains"
+            default:      return "Free • credits, usage, domains"
+            }
+        case .failed:
+            return "Credits, usage, custom domains, reserved names"
+        default:
+            return "Loading…"
         }
     }
 

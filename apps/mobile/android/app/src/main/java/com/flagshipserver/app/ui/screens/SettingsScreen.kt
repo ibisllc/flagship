@@ -203,11 +203,18 @@ fun SettingsScreen(nav: NavController) {
         // One tap to any row; account security leads the Account group. Matches
         // the iOS six-group result so the surfaces stay isomorphic.
 
-        // 1 — ACCOUNT: account security · AI keys · Recovery · Back up account
-        //     key · Profiles.
+        // 1 — ACCOUNT: Plan/Subscription · account security · AI keys · Recovery
+        //     · Back up account key · Profiles.
         FSSettingsGroup(
             header = "ACCOUNT",
             rows = listOf(
+                // P7 — dedicated tier-status / subscription screen (marketplace).
+                FSSettingsRowData(
+                    icon = "💳",
+                    title = "Plan / Subscription",
+                    subtitle = "Tier, LLM credits, dispatcher usage, custom domains.",
+                    onClick = { nav.navigate("tier-status") },
+                ),
                 // Account security leads; title is stable, the live account
                 // type (single vs multi-device + 2FA) rides the subtitle. The
                 // last branch is the load-pending fallback.

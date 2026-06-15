@@ -45,6 +45,9 @@ interface ScreensClient {
     // P1.14 orders/send
     suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse
 
+    // P1.16 tier-status
+    suspend fun tierStatus(): TierStatusResponse
+
     // P1.17 url-controller/owned
     suspend fun urlControllerOwned(): UrlControllerOwnedResponse
 

@@ -210,6 +210,7 @@
           <div class="fs-group">
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-tier"><span class="fs-row-icon icon" data-row-icon="tier"></span><span class="fs-row-body"><span class="fs-row-title">Tier &amp; usage</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -499,6 +500,15 @@
         </div>
       </section>
 
+      <!-- View 11: Tier dashboard (P2.11) -->
+      <section id="view-tier-status" class="hidden">
+        <h2>Tier &amp; usage</h2>
+        <div id="tier-status-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="tier-status-refresh">Refresh</button>
+          <button class="secondary" id="tier-status-back">← Back</button>
+        </div>
+      </section>
 
       <!-- View 12: Marketplace (P2.4) -->
       <section id="view-marketplace" class="hidden">
@@ -593,6 +603,10 @@
           <button class="card build-tile full-width mt-2" id="build-src-mcp">
             <strong>Connect your IDE (Cursor / Cline)</strong>
             <span class="note">Build from your editor with your own AI. Your box exposes a secure tool surface — no AI key on the box.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-market">
+            <strong>Get from the marketplace</strong>
+            <span class="note">Install something a neighbour already built.</span>
           </button>
         </div>
         <p class="note mt-4"><a id="build-source-journal-link" href="#">View past builds →</a></p>

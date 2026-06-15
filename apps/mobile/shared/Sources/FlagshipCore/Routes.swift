@@ -102,6 +102,9 @@ public enum SettingsRoute: Hashable, Sendable {
     /// Settings → AI keys. View saved BYOK keys (masked slugs), add, delete.
     /// Device-local; never shows a full key.
     case aiKeys
+    /// P7 — the dedicated tier-status / subscription screen, reached from
+    /// the Settings "Subscription" nav row.
+    case tierStatus
     case recovery
     /// Settings → Account security. TOTP enroll/disable, recovery codes, and
     /// the Watch delegate. Reached via the account-security row — previously

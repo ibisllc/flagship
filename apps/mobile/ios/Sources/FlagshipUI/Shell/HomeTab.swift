@@ -962,3 +962,67 @@ struct PairedSessionRow: View {
     }
 }
 
+struct TierStatusContainer: View {
+    @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @State private var vm: SettingsViewModel?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if let vm {
+                    switch vm.tier {
+                    case .idle, .loading:
+                        ServerCardSkeleton()
+                    case .failed(let msg):
+                        ErrorCard(message: msg)
+                    case .loaded(let t):
+                        TierBreakdownCard(tier: t)
+                    }
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .navigationTitle("Tier & usage")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if vm == nil {
+                vm = SettingsViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
+            await vm?.load()
+        }
+    }
+}
+
+struct TierBreakdownCard: View {
+    @Environment(\.colorScheme) private var scheme
+    let tier: TierStatusResponse
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text(tier.tier.uppercased())
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundColor(c.textMuted)
+                if let day = tier.llmCreditsRemainingDay {
+                    HStack { Text("LLM credits today"); Spacer(); Text("\(day)") }
+                }
+                if let usage = tier.dispatcherUsageGBmonth, let quota = tier.dispatcherFreeQuotaGBmonth {
+                    HStack { Text("Bandwidth"); Spacer(); Text(String(format: "%.1f / %.0f GB", usage, quota)) }
+                }
+                if !tier.customDomains.isEmpty {
+                    Text("Custom domains:").foregroundColor(c.textMuted)
+                    ForEach(tier.customDomains, id: \.self) { d in
+                        Text(d).font(FS.font.mono())
+                    }
+                }
+            }
+        }
+    }
+}

@@ -38,6 +38,7 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.api.ServerMetricsResponse
+import com.flagshipserver.app.api.TierStatusResponse
 import com.flagshipserver.app.api.UrlControllerClaimRequest
 import com.flagshipserver.app.api.UrlControllerClaimResponse
 import com.flagshipserver.app.api.UrlControllerOwnedResponse
@@ -98,6 +99,7 @@ private class StubScreensClient(
     override suspend fun pairedSessionsList(): PairedSessionsListResponse = error("unused")
     override suspend fun revokePairedSession(tokenPrefix: String) = error("unused")
     override suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse = error("unused")
+    override suspend fun tierStatus(): TierStatusResponse = error("unused")
     override suspend fun peerBackupStatus(): PeerBackupStatusResponse = error("unused")
     override suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse = error("unused")
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse = error("unused")
