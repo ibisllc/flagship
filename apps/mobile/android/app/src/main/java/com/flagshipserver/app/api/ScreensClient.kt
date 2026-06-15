@@ -27,6 +27,17 @@ interface ScreensClient {
     // P1.4 marketplace-browse
     suspend fun marketplaceBrowse(): MarketplaceBrowseResponse
 
+    // P1.4 marketplace single-listing fetch — pulls the full listing
+    // (incl. `manifestJson`) from `.com` (`GET /api/marketplace/<creator>/<slug>`,
+    // unauthenticated). `marketplaceBrowse` returns metadata only.
+    suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail
+
+    // P1.4 marketplace install — POST the IRK-signed envelope straight to the
+    // paired pod (`POST <pod>/api/services`). Mirrors the iOS
+    // `installFromMarketplace`; the daemon verifies the signature against the
+    // host's IRK pubkey before provisioning.
+    suspend fun installFromMarketplace(envelope: InstallServiceEnvelope): InstallServiceResponse
+
     // P1.5 vibe-code/start
     suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse
 

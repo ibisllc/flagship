@@ -106,6 +106,7 @@ fun ServicesTab() {
         composable("build/journal/{buildId}") { entry ->
             val bid = entry.arguments?.getString("buildId") ?: return@composable
             BuildJournalScreen(nav, buildId = bid)
+        }
         composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
         // AI-key step for the from-scratch path. On confirm it stows the
         // in-memory credential and continues to the describe screen, which

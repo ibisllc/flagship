@@ -107,6 +107,83 @@ data class MarketplaceListing(
 @Serializable
 data class MarketplaceBrowseResponse(val listings: List<MarketplaceListing>)
 
+/**
+ * Single-listing fetch (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`).
+ * MIRRORS the iOS `MarketplaceListingDetail` + the webapp's `fetchListing`
+ * in `apps/web/public/webapp/lib/installService.js` — `manifestJson` is the
+ * opaque JSON the daemon verifies on install. Extra fields the .com worker
+ * returns are tolerated (`ignoreUnknownKeys`).
+ */
+@Serializable
+data class MarketplaceListingDetail(
+    val creator: String,
+    val slug: String,
+    val title: String,
+    val summary: String,
+    val manifestJson: String,
+)
+
+/**
+ * Install-marketplace-app request. Wire-identical to the iOS
+ * `InstallServiceRequest` + the webapp body in
+ * `apps/web/public/webapp/lib/installService.js`: same field names, same
+ * canonical tag (`flagship/install-service/v1`), same envelope
+ * (`{ request, signature }`). The daemon endpoint is `POST <pod>/api/services`
+ * (NOT a screens-BFF route — the install pipeline lives on the
+ * service-platform handler in `packages/server-daemon/src/servicePlatform.ts`).
+ */
+@Serializable
+data class InstallServiceRequest(
+    val serverId: String,
+    val creator: String,
+    val slug: String,
+    val manifestJson: String,
+    val addOwnerToMembership: Boolean,
+    val issuedAt: Long,
+)
+
+/**
+ * `{request, signature}` envelope expected by `POST <pod>/api/services`.
+ * `signature` is the hex-encoded Ed25519 signature of
+ * [installServiceCanonicalBytes] produced with the user's IRK.
+ */
+@Serializable
+data class InstallServiceEnvelope(
+    val request: InstallServiceRequest,
+    val signature: String,
+)
+
+/** Daemon's success body for `POST /api/services`. Mirrors `installService`
+ *  in `servicePlatform.ts` (+ the iOS `InstallServiceResponse`). */
+@Serializable
+data class InstallServiceResponse(
+    val ok: Boolean,
+    val serviceId: String,
+    val urlLabel: String,
+    val port: Int? = null,
+)
+
+/**
+ * Canonical-bytes for [InstallServiceRequest], byte-identical with the iOS
+ * `installServiceCanonicalBytes`, the webapp's `canonicalInstallService`,
+ * and the TS protocol `canonicalInstallService` in
+ * `packages/protocol/src/auth.ts`. Format:
+ *
+ *     flagship/install-service/v1 | serverId | creator | slug | manifestJson | (1|0) | issuedAt
+ *
+ * `addOwnerToMembership` is encoded as `"1"` (true) / `"0"` (false);
+ * `issuedAt` is a base-10 integer (no padding, no inner separator).
+ */
+fun installServiceCanonicalBytes(r: InstallServiceRequest): ByteArray = listOf(
+    "flagship/install-service/v1",
+    r.serverId,
+    r.creator,
+    r.slug,
+    r.manifestJson,
+    if (r.addOwnerToMembership) "1" else "0",
+    r.issuedAt.toString(),
+).joinToString("|").toByteArray(Charsets.UTF_8)
+
 // ---------- P1.5 vibe-code/start ---------------------------------------
 
 /**

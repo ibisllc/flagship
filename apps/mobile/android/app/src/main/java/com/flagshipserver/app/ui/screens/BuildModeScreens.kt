@@ -3,7 +3,7 @@
 //   - scratch     → the existing vibe-code flow
 //   - git         → import a repo (fit → install / not fit → AI-adapt)
 //   - mcp         → connect Cursor/Cline with your own AI
-//   - marketplace → install something already built (degrades to "coming soon")
+//   - marketplace → install something already built (opens the catalog)
 // plus a "View past builds" link to the build journal.
 //
 // MIRRORS the webapp reference apps/web/public/webapp/views/build-*.js and
@@ -155,12 +155,10 @@ private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholde
 /**
  * "Build a service — how do you want to build it?" Four tiles + a
  * "View past builds" link. The scratch tile routes to the existing vibe
- * flow; marketplace degrades to a "coming soon" toast (its code isn't on
- * this branch).
+ * flow; the marketplace tile opens the marketplace catalog.
  */
 @Composable
 fun BuildSourceChooserScreen(nav: NavController) {
-    val toasts = LocalToastCenter.current
     ScreenScaffold(
         title = "Build a service",
         subtitle = "How do you want to build it?",
@@ -185,8 +183,8 @@ fun BuildSourceChooserScreen(nav: NavController) {
             )
             SourceTile(
                 title = "Get from the marketplace",
-                body = "Install something already built. Coming soon.",
-                onClick = { toasts.info("The marketplace is coming soon.") },
+                body = "Install something your neighbours already built. One tap onto any of your boxes.",
+                onClick = { nav.navigate("marketplace") },
             )
         }
         Spacer(Modifier.height(FS.space.s4))

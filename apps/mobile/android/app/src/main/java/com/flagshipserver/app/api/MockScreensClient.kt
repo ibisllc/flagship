@@ -116,6 +116,54 @@ class MockScreensClient(
         )
     }
 
+    // P1.4 marketplace install plumbing.
+    //
+    // Tests inspect these recorders to assert the install call shape (request
+    // body + signature presence). The Live client posts the same payload to
+    // `<pod>/api/services`. Mirrors iOS MockScreensClient.
+
+    /** Records each `installFromMarketplace` envelope so tests can assert
+     *  the wire shape. Mirrors iOS `installCalls`. */
+    val installCalls: MutableList<InstallServiceEnvelope> = mutableListOf()
+
+    /** Records each `marketplaceFetchListing` call. Mirrors iOS `listingFetches`. */
+    data class ListingFetch(val creator: String, val slug: String)
+    val listingFetches: MutableList<ListingFetch> = mutableListOf()
+
+    /** When true the next `installFromMarketplace` call throws so tests can
+     *  exercise the error path. Mirrors iOS `installShouldFail`. */
+    var installShouldFail: Boolean = false
+    var installFailureMessage: String = "simulated daemon error"
+
+    /** Deterministic listing detail. The `manifestJson` is opaque (a real
+     *  daemon validates the inner JSON); the mock returns a small recognizable
+     *  stub so tests can assert it round-trips into the install request. */
+    override suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail {
+        tick()
+        listingFetches.add(ListingFetch(creator, slug))
+        return MarketplaceListingDetail(
+            creator = creator,
+            slug = slug,
+            title = slug.replaceFirstChar { it.uppercase() },
+            summary = "Marketplace stub for $creator/$slug",
+            manifestJson = """{"name":"$slug","version":"1.0.0","creator":"$creator"}""",
+        )
+    }
+
+    /** Records the install envelope, then returns a deterministic success
+     *  body. Set `installShouldFail = true` to exercise the error path. */
+    override suspend fun installFromMarketplace(envelope: InstallServiceEnvelope): InstallServiceResponse {
+        tick()
+        installCalls.add(envelope)
+        if (installShouldFail) throw ScreensError.Http(400, installFailureMessage)
+        return InstallServiceResponse(
+            ok = true,
+            serviceId = "${envelope.request.creator}--${envelope.request.slug}",
+            urlLabel = envelope.request.slug,
+            port = 8080,
+        )
+    }
+
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         tick()
         // Wire-match the live contract: no credential + no promo budget ⇒ the
