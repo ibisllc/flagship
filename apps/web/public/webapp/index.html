@@ -82,7 +82,10 @@
       <!-- View 3a: Home tab — identity + servers + AI provider chip.
            The "Servers" heading + search + filter chips are rendered INTO
            #servers-list by views/home.js (the WhatsApp-style large
-           collapsing title); the empty-state path renders its own card. -->
+           collapsing title); the empty-state path renders its own card.
+           Dismissible banners (recovery nudge, account-reset alert, and the
+           always-available "Become a Pro member" CTA) are DOM-inserted ABOVE
+           #servers-list by their respective lib modules — no static slot. -->
       <section id="view-home" class="hidden" data-tab="home">
         <div id="servers-list"></div>
 
