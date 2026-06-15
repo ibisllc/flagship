@@ -137,7 +137,17 @@ export type RateLimitEndpoint =
   // Free AI credits: an IRK-signed token mint (one per build start and per
   // reply) or a status read. Minting records nothing, so this only fences
   // signature-check load from one address.
-  | "free-ai";
+  | "free-ai"
+  // Monetization — prepaid Pro voucher redeem. The code is a 100-bit bearer
+  // secret, so brute force is already infeasible; the cap is a cheap flood
+  // fence (each attempt does two D1 reads + a possible write). Per-IP only —
+  // there's no signature/IRK at the edge, just the code in the body.
+  | "voucher-redeem"
+  // Monetization — public per-user allowance read (the #6 dashboard + #7
+  // alert data source). Unauthenticated account metadata (same class as the
+  // `/pods` directory) keyed by username in the path; per-IP only, generous
+  // enough for a polling dashboard while fencing a scrape loop.
+  | "user-allowance";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -293,6 +303,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 600, windowSec: 3600 },
   ],
+  // Voucher redeem — flood fence over an already-unguessable 100-bit code.
+  "voucher-redeem": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  // Public allowance read — generous for a polling dashboard, fences a scrape.
+  "user-allowance": [{ axis: "ip", limit: 60, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -522,6 +539,13 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // addresses on every model call, and is token-authenticated: not limited.
   if (m === "POST" && (pathname === "/api/free-ai/token" || pathname === "/api/free-ai/status")) {
     return "free-ai";
+  }
+  // Monetization — voucher redeem + public allowance read.
+  if (m === "POST" && pathname === "/api/voucher/redeem") {
+    return "voucher-redeem";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/allowance$/.test(pathname)) {
+    return "user-allowance";
   }
   return null;
 }
