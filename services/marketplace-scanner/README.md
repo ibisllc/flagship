@@ -18,15 +18,35 @@ runtime-agnostic, fully-unit-tested core + thin runtime adapters.
 | File | Role |
 |---|---|
 | `src/grade.ts` | Pure A–F policy. Single source of truth for thresholds (see `POLICY.md`). Includes the fail-closed `gradeScanError`. |
+| `src/trivy.ts` | The **injectable container-vuln seam** — `TrivyRunner { scan(imageRef): Promise<Finding[]> }`, the `Finding` type, the shared `parseTrivyJson`/`tallyFindings`/`findingsToVulnerabilities` helpers, and a deterministic `FakeTrivyRunner` for tests. |
 | `src/scanResult.ts` | Builds + signs the envelope using **`@flagship/protocol`'s `signMarketplaceScanResult`** — same bytes `.com` verifies. No hand-rolled canonical bytes. |
 | `src/scanner.ts` | Pure orchestration: assess → grade → assemble report → (upload) → signed post. Fail-closed. |
 | `src/ports.ts` | Injected interfaces: `ScanRunner`, `ReportStore`, `ResultPoster`, `QueueSource`, `Clock`. |
-| `src/adapters.ts` | **Thin real adapters** (git/npm/trivy/semgrep, R2 PUT, HTTP post, scan-queue). NOT unit-tested against real infra. |
+| `src/adapters.ts` | **Thin real adapters** — `ExecTrivyRunner` (`trivy image`/`trivy fs` via `execFile`), `ExecScanRunner` (git/npm/semgrep + the injected `TrivyRunner`), R2 PUT, HTTP post, scan-queue. NOT unit-tested against real infra. |
 | `src/index.ts` | Thin cron entry: wires real adapters + drains the landed scan-queue. |
 
 The vitest gate substitutes fake ports — it never execs
 git/npm/trivy/semgrep/docker or touches the network. The real tools
 run only at the live/operator edge.
+
+### The Trivy seam (HARD CONSTRAINT: no Trivy/Docker in CI)
+
+The container-vulnerability scan is an **injected dependency**:
+
+```ts
+interface TrivyRunner { scan(imageRef: string): Promise<Finding[]> }
+```
+
+`ExecTrivyRunner` (in `adapters.ts`) is the real impl — it shells out
+via `execFile('trivy', ['image' | 'fs', …])` and is **never** run by
+the test gate. `FakeTrivyRunner` (in `trivy.ts`) returns canned
+findings (or throws to exercise fail-closed) so the whole pipeline —
+fold → grade → report → signed post — is unit-tested with no binaries.
+`ExecScanRunner` takes a `TrivyRunner` in its constructor (defaulting
+to `ExecTrivyRunner`), so a caller can swap in a `trivy image <ref>`
+runner without touching the orchestration. Search the source for
+`TODO(live):` for the two real-edge seams (the Trivy binary + sandbox
+flags, and the R2 upload).
 
 ## Grade policy
 
