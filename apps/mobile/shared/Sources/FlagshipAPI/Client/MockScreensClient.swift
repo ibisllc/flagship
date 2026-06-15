@@ -137,7 +137,14 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
         try await tick()
-        return VibeCodeStartResponse(sessionId: "vc-\(UUID().uuidString.prefix(8).lowercased())")
+        // Mirror the daemon's graceful-absence signal: a start with no BYOK
+        // credential (and nothing stored) can't drive a model, so the box
+        // answers `needsCredential: true` (the session still exists). The
+        // client routes back into the AI-key step to deliver one + retry.
+        return VibeCodeStartResponse(
+            sessionId: "vc-\(UUID().uuidString.prefix(8).lowercased())",
+            needsCredential: req.credential == nil ? true : nil
+        )
     }
 
     // MARK: - P1.7 vibe-code/:id
