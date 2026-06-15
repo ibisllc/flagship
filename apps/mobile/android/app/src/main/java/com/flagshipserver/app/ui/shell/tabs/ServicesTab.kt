@@ -13,6 +13,10 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
+import com.flagshipserver.app.ui.screens.BuildGitScreen
+import com.flagshipserver.app.ui.screens.BuildJournalScreen
+import com.flagshipserver.app.ui.screens.BuildMcpScreen
+import com.flagshipserver.app.ui.screens.BuildSourceChooserScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
@@ -40,6 +44,14 @@ fun ServicesTab() {
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
             ServiceDetailScreen(nav, serviceId = id)
+        }
+        composable("build/source") { BuildSourceChooserScreen(nav) }
+        composable("build/git") { BuildGitScreen(nav) }
+        composable("build/mcp") { BuildMcpScreen(nav) }
+        composable("build/journal") { BuildJournalScreen(nav) }
+        composable("build/journal/{buildId}") { entry ->
+            val bid = entry.arguments?.getString("buildId") ?: return@composable
+            BuildJournalScreen(nav, buildId = bid)
         }
         composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
         composable("vibe/describe") { VibeCodeDescribeScreen(nav) }

@@ -8,8 +8,10 @@
 package com.flagshipserver.app.core
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.DemoConnectClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
@@ -18,6 +20,11 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 
 val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { MockScreensClient() }
+
+/** "Build a service" modes client (the `/api/build/` surface, paired-
+ *  session gated). Production wires the live client (OkHttp + session
+ *  token) in MainActivity; previews + tests get the in-memory Mock. */
+val LocalBuildClient = staticCompositionLocalOf<BuildClient> { MockBuildClient() }
 
 val LocalFlagshipServerClient = staticCompositionLocalOf<FlagshipServerClient> { MockFlagshipServerClient() }
 
