@@ -278,6 +278,47 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try await request("/api/screens/companion/resolve-pending", method: "POST", body: body)
     }
 
+    // MARK: - Build-a-service modes (/api/build/*)
+    //
+    // These hang off the daemon root, NOT /api/screens — same paired
+    // `x-flagship-session` auth the `request` helper already applies.
+
+    public func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/build/git", method: "POST", body: body)
+    }
+    public func buildAdapt(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/build/sessions/\(esc(buildId))/adapt", method: "POST", body: body)
+    }
+    public func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/build/mcp", method: "POST", body: body)
+    }
+    public func buildMcpInfo(buildId: String) async throws -> BuildMcpConnection {
+        try await request("/api/build/sessions/\(esc(buildId))/mcp")
+    }
+    public func buildMcpRotate(buildId: String, _ req: BuildMcpRequest) async throws -> BuildMcpConnection {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/build/sessions/\(esc(buildId))/mcp/rotate", method: "POST", body: body)
+    }
+    public func buildEnvRequests(buildId: String) async throws -> BuildEnvRequestsResponse {
+        try await request("/api/build/sessions/\(esc(buildId))/env-requests")
+    }
+    public func buildDeploy(buildId: String) async throws -> BuildDeployResponse {
+        try await request("/api/build/sessions/\(esc(buildId))/deploy", method: "POST", body: Data("{}".utf8))
+    }
+    public func buildSessions() async throws -> BuildSessionsResponse {
+        try await request("/api/build/sessions")
+    }
+    public func buildJournal(buildId: String) async throws -> BuildJournalResponse {
+        try await request("/api/build/sessions/\(esc(buildId))/journal")
+    }
+
+    private func esc(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
+    }
+
     // MARK: - P8 browser-tab framebuffer stream
 
     public func browserTabStream(tabId: String) -> any BrowserStream {

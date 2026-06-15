@@ -1650,3 +1650,92 @@ button[data-device-restricted] {
 .fs-app-card-head > .fs-listrow-icon { margin-top: 1px; }
 .fs-app-card-body { flex: 1; min-width: 0; }
 .fs-app-card-head > .secondary { flex: 0 0 auto; }
+
+/* Build-a-service modes */
+.build-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; }
+.build-tile strong { font-size: 1rem; }
+.build-tile .note { margin: 0; }
+.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--surface-2, #1c2530); font-size: 0.72rem; font-family: var(--font-mono); }
+.build-journal-timeline { list-style: none; padding: 0; margin: 0; }
+.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border, #243); }
+.build-journal-timeline li:last-child { border-bottom: none; }
+
+/* Build-from-scratch chat (vibe-code) */
+.vc-chat-status { color: var(--ink-muted); font-size: 13px; white-space: nowrap; }
+.vc-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+  margin-top: var(--space-2);
+}
+.vc-msg {
+  max-width: 86%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.vc-msg-role { font-size: 11px; color: var(--ink-muted); margin-bottom: 2px; }
+.vc-msg-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+.vc-msg-ai { align-self: flex-start; background: var(--surface); border-bottom-left-radius: var(--radius-sm); }
+.vc-msg-user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-color: rgba(20, 184, 166, 0.3);
+  border-bottom-right-radius: var(--radius-sm);
+}
+.vc-msg-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.vc-msg-thumb { max-width: 120px; max-height: 120px; border-radius: var(--radius-sm); display: block; }
+.vc-msg-file { font-size: 12px; color: var(--ink-soft); }
+
+/* Composer */
+.vc-composer { display: flex; flex-direction: column; gap: var(--space-2); }
+.vc-composer textarea { width: 100%; resize: vertical; }
+.vc-composer-actions { display: flex; align-items: center; gap: var(--space-2); }
+.btn-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.vc-send { margin-left: auto; }
+.vc-caps-note { margin: 0; font-size: 11px; }
+
+/* Staged attachment chips */
+.vc-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.vc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  font-size: 12px;
+  max-width: 200px;
+}
+.vc-chip-thumb { width: 24px; height: 24px; object-fit: cover; border-radius: 6px; }
+.vc-chip-icon { font-size: 16px; }
+.vc-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vc-chip-x {
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.vc-chip-x:hover { color: var(--ink); }
+
+/* AI-key step — "Save on this device" toggle row */
+.bk-save-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.bk-save-row input { width: auto; margin: 0; }

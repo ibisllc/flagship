@@ -54,6 +54,11 @@ import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
+import { initBuildSourceView, enterBuildSource } from "./views/build-source.js";
+import { initBuildKeyView } from "./views/build-key.js";
+import { initBuildGitView } from "./views/build-git.js";
+import { initBuildMcpView } from "./views/build-mcp.js";
+import { initBuildJournalView } from "./views/build-journal.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
@@ -97,6 +102,11 @@ const SUB_VIEW_TABS = {
   "view-invite-manage": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
+  "view-build-source": "apps",
+  "view-build-key": "apps",
+  "view-build-git": "apps",
+  "view-build-mcp": "apps",
+  "view-build-journal": "apps",
   "view-service-env": "apps",
   "view-browser-viewer": "apps",
   "view-install-progress": "activity",
@@ -278,7 +288,7 @@ function wireActivityEntries() {
 function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
-  wire("services-list-open-vibe-code", enterVibeCode);
+  wire("services-list-open-vibe-code", enterBuildSource);
 }
 
 async function boot() {
@@ -319,6 +329,11 @@ async function boot() {
   initJoinView();
   initTierStatusView();
   initVibeCodeView();
+  initBuildSourceView();
+  initBuildKeyView();
+  initBuildGitView();
+  initBuildMcpView();
+  initBuildJournalView();
   initServiceEnvView();
   initVibeCodeChatView();
   initRecoveryView();

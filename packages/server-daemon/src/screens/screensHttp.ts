@@ -23,7 +23,13 @@ import type {
   VibeCodeSessionRegistry,
 } from "../llm/vibeCodeSession.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
-import type { FetchLike } from "@flagship/llm-providers";
+import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
+import type { LlmCredential } from "../llmHarness.js";
+import {
+  summarizeAttachment,
+  validateAttachments,
+} from "../llm/vibeCodeAttachments.js";
+import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { verifySetServiceEnv } from "@flagship/protocol";
 import type {
   AppBackupStartRequest,
@@ -263,6 +269,17 @@ export interface VibeCodeRuntime {
   /** Server FQDN for the spawned session metadata. */
   serverFqdn: string;
   /**
+   * Transient, sealed-at-rest BYOK credential store keyed by sessionId.
+   * The start/reply handlers store a delivered credential here; the
+   * `startStreaming` thunk opens it just-in-time for the provider call.
+   * When omitted, the start path can never stream (always
+   * `needsCredential: true`) — the daemon was wired without BYOK.
+   *
+   * flagshipserver.com is NEVER in this path — the credential arrives
+   * over the paired-session-gated pinned pipe and never leaves the box.
+   */
+  credentials?: BuildCredentialStore;
+  /**
    * Non-streaming convenience: when supplied, P1.5's "start" handler
    * fires-and-forgets a session-driving task that pushes assistant
    * tokens into the session. P1.6 (WS stream) replays them. When
@@ -273,7 +290,22 @@ export interface VibeCodeRuntime {
     sessionId: string;
     prompt: string;
     model?: string;
+    attachments?: Attachment[];
   }) => Promise<void>;
+  /**
+   * Value-free journal hook for a scratch chat turn. The daemon wires
+   * this to the shared build journal (buildId = the vibe sessionId) so
+   * scratch turns appear alongside git/mcp builds. `attachmentSummaries`
+   * are NAME + kind + size strings ONLY — never the content/base64 — so
+   * the journal never captures an attachment value. Fire-and-forget;
+   * never blocks the chat. Optional: omitted in tests that don't assert
+   * journaling.
+   */
+  recordScratchTurn?: (args: {
+    sessionId: string;
+    text: string;
+    attachmentSummaries: string[];
+  }) => void;
 }
 
 export interface OrdersDispatchLike {
@@ -631,23 +663,60 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!body || typeof body.prompt !== "string" || body.prompt.length === 0) {
         return jerr(400, "prompt required");
       }
+      const attach = validateAttachments(body.attachments);
+      if (!attach.ok) return jerr(400, attach.reason);
+      const cred = parseCredential((body as { credential?: unknown }).credential);
+      if (cred === "invalid") return jerr(400, "malformed credential");
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
       });
-      session.pushUserMessage(body.prompt);
-      if (deps.vibeCode.startStreaming) {
+      session.pushUserMessage(body.prompt, attach.attachments);
+      // Value-free journal: a short text preview + per-attachment
+      // name/kind/size summaries (NEVER the content/base64). The
+      // credential is NEVER journalled — at most the provider NAME, below.
+      deps.vibeCode.recordScratchTurn?.({
+        sessionId: session.meta.sessionId,
+        text: body.prompt,
+        attachmentSummaries: attach.attachments.map(summarizeAttachment),
+      });
+      // Seal the delivered BYOK credential for the session, if one came
+      // (and a store is wired). flagshipserver.com is never in this path —
+      // the credential arrived over the pinned pipe and stays on the box.
+      if (cred && deps.vibeCode.credentials) {
+        try {
+          await deps.vibeCode.credentials.put(session.meta.sessionId, cred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+      }
+      // Graceful absence: only stream if a model can actually drive the
+      // session — startStreaming wired AND a credential available (just
+      // delivered or already stored for this fresh session).
+      const haveCredential =
+        !!cred ||
+        (!!deps.vibeCode.credentials && deps.vibeCode.credentials.has(session.meta.sessionId));
+      if (deps.vibeCode.startStreaming && haveCredential) {
         // Fire-and-forget. Streaming consumers attach via P1.6 WS;
         // P1.7 replays whatever's been emitted so far.
         void deps.vibeCode.startStreaming({
           sessionId: session.meta.sessionId,
           prompt: body.prompt,
           model: body.model,
+          ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
         }).catch((e: Error) => {
           session.fail(e.message ?? "stream failed", true);
         });
+        const out: VibeCodeStartResponse = { sessionId: session.meta.sessionId };
+        return jok(out);
       }
-      const out: VibeCodeStartResponse = { sessionId: session.meta.sessionId };
+      // No model is driving the session — tell the client to add an AI key.
+      // The session still exists; the owner can deliver a credential on a
+      // /reply turn and resume.
+      const out: VibeCodeStartResponse = {
+        sessionId: session.meta.sessionId,
+        needsCredential: true,
+      };
       return jok(out);
     }
 
@@ -975,15 +1044,35 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!session) return jerr(404, "session not found");
       const body = parseJson(req.body) as VibeCodeReplyRequest | null;
       if (!body) return jerr(400, "body required");
+      // A reply may carry a BYOK credential to seed/replace the session's
+      // stored credential (the needsCredential resume case). Same box-only
+      // contract as the start path; never echoed, never logged.
+      const replyCred = parseCredential((body as { credential?: unknown }).credential);
+      if (replyCred === "invalid") return jerr(400, "malformed credential");
+      if (replyCred && deps.vibeCode.credentials) {
+        try {
+          await deps.vibeCode.credentials.put(session.meta.sessionId, replyCred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+      }
       const pending = session.pendingRequest();
       if (!pending) return jerr(409, "no pending tool to reply to");
       if (pending.kind === "talkToUser") {
         if (typeof body.text !== "string") return jerr(400, "text required");
+        const attach = validateAttachments(body.attachments);
+        if (!attach.ok) return jerr(400, attach.reason);
         const r = session.pushUserReply({
           toolUseId: pending.toolUseId,
           text: body.text,
+          ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
         });
         if (!r.ok) return jerr(409, r.reason ?? "reply rejected");
+        deps.vibeCode.recordScratchTurn?.({
+          sessionId: session.meta.sessionId,
+          text: body.text,
+          attachmentSummaries: attach.attachments.map(summarizeAttachment),
+        });
         const out: VibeCodeReplyResponse = { ok: true };
         return jok(out);
       }
@@ -1326,6 +1415,25 @@ function parseJson(buf: Buffer): unknown {
   } catch {
     return null;
   }
+}
+
+/**
+ * Validate an optional BYOK credential off a request body.
+ *   - absent / null / undefined → `null` (no credential delivered)
+ *   - well-formed → the `LlmCredential` (provider + apiKey [+ baseUrl])
+ *   - present-but-malformed → the sentinel string `"invalid"`
+ * The value is NEVER logged here — only shape-checked.
+ */
+function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) return "invalid";
+  const o = raw as Record<string, unknown>;
+  if (typeof o.provider !== "string" || o.provider.length === 0) return "invalid";
+  if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
+  if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
+  const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
+  if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  return out;
 }
 
 function jok(body: unknown): HttpResponse {

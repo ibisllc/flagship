@@ -130,6 +130,7 @@ public struct SettingsTab: View {
                         app.signOut()
                     },
                     onOpenProviders: { path.append(.providers) },
+                    onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
@@ -287,6 +288,8 @@ public struct SettingsTab: View {
         switch route {
         case .providers:
             ProvidersStub()
+        case .aiKeys:
+            AiKeysScreen(vm: AiKeysViewModel())
         case .tierStatus:
             TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:

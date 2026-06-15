@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,11 +34,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.VibeCodeStartRequest
+import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.PendingBuildCredential
+import kotlinx.coroutines.launch
 
 /**
  * D.6.1 — VibeCodeProviderPickView.
@@ -96,7 +102,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
                 Spacer(Modifier.height(FS.space.s4))
                 FSPrimaryButton(
                     label = "Use the promo →",
-                    onClick = { nav.navigate("vibe-describe?provider=promo") },
+                    onClick = { nav.navigate("vibe/describe") },
                     block = true,
                 )
             }
@@ -116,7 +122,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
                 Spacer(Modifier.height(FS.space.s4))
                 FSSecondaryButton(
                     label = "Set up a key",
-                    onClick = { nav.navigate("vibe-byok") },
+                    onClick = { nav.navigate("vibe/key") },
                     block = true,
                 )
             }
@@ -155,6 +161,12 @@ fun VibeCodeDescribeScreen(nav: NavController) {
         )
     }
     var name by remember { mutableStateOf("plants") }
+
+    val screens = LocalScreensClient.current
+    val scope = rememberCoroutineScope()
+    // A credential picked at the AI-key step (BYOK path) — null for promo.
+    val credential = remember { PendingBuildCredential.peek() }
+    var starting by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
@@ -239,8 +251,32 @@ fun VibeCodeDescribeScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s8))
 
         FSPrimaryButton(
-            label = "Build it",
-            onClick = { nav.navigate("vibe-generating") },
+            label = if (starting) "Starting…" else "Build it",
+            onClick = {
+                if (starting) return@FSPrimaryButton
+                starting = true
+                scope.launch {
+                    try {
+                        val cred = PendingBuildCredential.peek()?.let {
+                            BuildCredential(it.provider, it.apiKey, it.baseUrl)
+                        }
+                        val resp = screens.vibeCodeStart(
+                            VibeCodeStartRequest(prompt = prompt, credential = cred),
+                        )
+                        if (resp.needsCredential) {
+                            // Box wants a key — route into the AI-key step.
+                            starting = false
+                            nav.navigate("vibe/key")
+                        } else {
+                            PendingBuildCredential.take()
+                            nav.navigate("vibe/generating/${resp.sessionId}")
+                        }
+                    } catch (_: Exception) {
+                        starting = false
+                    }
+                }
+            },
+            enabled = !starting,
             block = true,
             large = true,
         )

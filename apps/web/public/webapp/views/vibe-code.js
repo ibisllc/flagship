@@ -1,36 +1,50 @@
-// P2.5 — Vibe-code dialog.
+// P2.5 — Build-from-scratch chat.
+//
+// A real multi-turn chat with attachments. The owner describes a service
+// (optionally attaching a screenshot/mockup or a text file the app should
+// use); the AI writes + deploys it on the box.
 //
 // Flow:
-//   1. User types a prompt → POST /api/screens/vibe-code/start (P1.5).
-//   2. Open a WS to /api/screens/vibe-code/<id>/stream (P1.6) and
-//      render frames live. Token frames append to the assistant
-//      transcript; manifest-emit / deploy / done / error are surfaced
-//      as discrete UI states.
-//   3. On WS open we ALSO do an immediate GET P1.7 to pull the
-//      current files snapshot, since the WS doesn't replay token
-//      deltas (clients that need transcript history use polling).
-//   4. If the WS errors out — older daemons return 501 — fall back to
-//      polling P1.7 every 500ms until terminal.
-//   5. When status becomes ready-to-deploy, surface a Deploy button
-//      that calls /api/llm/sessions/<id>/deploy.
+//   1. First turn → POST /api/screens/vibe-code/start { prompt, attachments }.
+//   2. Poll GET /api/screens/vibe-code/<id> for status + files; render the
+//      streamed/assembled assistant reply into the message list.
+//   3. When the AI pauses to ask a question (status awaiting-tool-response
+//      with a talkToUser pending request), the composer sends the next
+//      turn to POST /api/screens/llm/sessions/<id>/reply { text, attachments }.
+//   4. When status becomes ready-to-deploy, surface Deploy →
+//      /api/llm/sessions/<id>/deploy.
 //
-// Both code paths run against the same daemon-side primitives, so the
-// fallback is fully equivalent — just chattier on the network.
+// Attachments are inlined as base64 (no upload endpoint). The client
+// mirrors the server caps so a violation is a friendly toast, not a 400.
+// The chat is NOT a secret channel — the composer note says so.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { enterBuildKey } from "./build-key.js";
 
 registerView("view-vibe-code");
 
-const POLL_INTERVAL_MS = 500;
+const POLL_INTERVAL_MS = 800;
 const TERMINAL_STATUSES = new Set(["deployed", "failed", "cancelled"]);
+
+// Caps — mirror packages/server-daemon/src/llm/vibeCodeAttachments.ts.
+const MAX_ATTACHMENTS = 6;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
+const MAX_TEXT_BYTES = 256 * 1024; // 256 KB
+const TEXT_EXTENSIONS = /\.(txt|md|sql|json|csv)$/i;
 
 let activeSessionId = null;
 let pollTimer = null;
-let activeSocket = null;
-let assistantStreamBuffer = "";
+// The in-memory BYOK credential the box should use to drive this build, set
+// from the AI-key step. { provider, apiKey, baseUrl? } — never persisted here
+// and never sent to flagshipserver.com (screensFetch goes to the box).
+let buildCredential = null;
+// Pending attachments staged in the composer for the NEXT turn.
+let staged = [];
+// The pending talkToUser tool the AI is waiting on, when any.
+let pendingTalkToolId = null;
 
 function clearPoll() {
   if (pollTimer) {
@@ -39,191 +53,304 @@ function clearPoll() {
   }
 }
 
-function closeSocket() {
-  if (activeSocket) {
-    try { activeSocket.close(); } catch (_e) { /* ignore */ }
-    activeSocket = null;
-  }
+// ---- attachment staging --------------------------------------------------
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("could not read file"));
+    reader.onload = () => {
+      // data:<mime>;base64,<data>
+      const res = String(reader.result || "");
+      const comma = res.indexOf(",");
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
-async function startSession() {
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("could not read file"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsText(file);
+  });
+}
+
+async function stageFiles(fileList) {
+  const files = Array.from(fileList || []);
+  for (const file of files) {
+    if (staged.length >= MAX_ATTACHMENTS) {
+      toast(`Up to ${MAX_ATTACHMENTS} files per message.`, "err");
+      break;
+    }
+    const isImage = file.type.startsWith("image/");
+    const isText = file.type.startsWith("text/") || TEXT_EXTENSIONS.test(file.name);
+    try {
+      if (isImage) {
+        if (file.size > MAX_IMAGE_BYTES) {
+          toast(`"${file.name}" is too large (images ≤ 4 MB).`, "err");
+          continue;
+        }
+        const dataBase64 = await readFileAsBase64(file);
+        staged.push({ kind: "image", mediaType: file.type, dataBase64, name: file.name });
+      } else if (isText) {
+        if (file.size > MAX_TEXT_BYTES) {
+          toast(`"${file.name}" is too large (text ≤ 256 KB).`, "err");
+          continue;
+        }
+        const text = await readFileAsText(file);
+        staged.push({ kind: "text", text, name: file.name });
+      } else {
+        toast(`"${file.name}" isn't a supported type (image or text).`, "err");
+      }
+    } catch (e) {
+      toast(`Couldn't attach "${file.name}".`, "err");
+    }
+  }
+  renderChips();
+}
+
+function removeStaged(idx) {
+  staged.splice(idx, 1);
+  renderChips();
+}
+
+function renderChips() {
+  const box = $("vc-attach-chips");
+  if (!box) return;
+  if (staged.length === 0) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  box.innerHTML = staged
+    .map((a, i) => {
+      const thumb =
+        a.kind === "image"
+          ? `<img class="vc-chip-thumb" alt="" src="data:${escapeHtml(a.mediaType)};base64,${a.dataBase64}">`
+          : `<span class="vc-chip-icon" aria-hidden="true">📄</span>`;
+      const label = escapeHtml(a.name || (a.kind === "image" ? "image" : "text"));
+      return `
+        <span class="vc-chip" data-idx="${i}">
+          ${thumb}
+          <span class="vc-chip-name">${label}</span>
+          <button class="vc-chip-x" data-idx="${i}" aria-label="Remove ${label}">×</button>
+        </span>`;
+    })
+    .join("");
+  box.querySelectorAll(".vc-chip-x").forEach((btn) => {
+    btn.addEventListener("click", () => removeStaged(Number(btn.dataset.idx)));
+  });
+}
+
+// ---- send / poll ---------------------------------------------------------
+
+async function send() {
   const promptEl = $("vc-prompt");
-  const prompt = promptEl.value.trim();
-  if (!prompt) return toast("enter a prompt first", "err");
-  const startBtn = $("vc-start");
-  startBtn.disabled = true;
-  startBtn.textContent = "starting…";
+  const text = promptEl.value.trim();
+  if (!text && staged.length === 0) return toast("Type a message first.", "err");
+  const attachments = staged.slice();
+  const sendBtn = $("vc-send");
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Sending…";
   try {
-    const r = await screensFetch("/api/screens/vibe-code/start", {
-      method: "POST",
-      body: JSON.stringify({ prompt }),
-    });
-    activeSessionId = r.sessionId;
-    promptEl.disabled = true;
-    openStream();
-  } catch (e) {
-    if (e instanceof ScreensError) toast(e.message, "err");
-    else toast(String(e), "err");
-    startBtn.disabled = false;
-    startBtn.textContent = "Start";
-  }
-}
-
-function openStream() {
-  if (!activeSessionId) return;
-  const baseUrl = getPodBaseUrl();
-  const tok = getSessionToken();
-  if (!baseUrl || !tok) {
-    schedulePoll();
-    return;
-  }
-  // The pod URL is https://; flip the protocol for the WS upgrade.
-  const wsBase = baseUrl.replace(/^http/, "ws").replace(/\/+$/, "");
-  const url = `${wsBase}/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}/stream?sessionToken=${encodeURIComponent(tok)}`;
-  let socket;
-  try {
-    socket = new WebSocket(url);
-  } catch {
-    schedulePoll();
-    return;
-  }
-  activeSocket = socket;
-
-  // Pull the current snapshot once so the files-tree renders even
-  // before any frames arrive.
-  void (async () => {
-    try {
-      const body = await screensFetch(
-        `/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}`,
+    if (!activeSessionId) {
+      // First turn — start the session, carrying the BYOK credential so the
+      // box can drive the build with the owner's chosen key.
+      const startBody = { prompt: text, attachments };
+      if (buildCredential) startBody.credential = buildCredential;
+      const r = await screensFetch("/api/screens/vibe-code/start", {
+        method: "POST",
+        body: JSON.stringify(startBody),
+      });
+      activeSessionId = r.sessionId;
+      if (r.needsCredential) {
+        // No model can drive this yet — gently route into the AI-key step.
+        toast("Add an AI key to start.", "warn");
+        promptEl.value = text; // keep what they typed
+        promptEl.disabled = false;
+        enterBuildKey({
+          contextLabel: "Start from scratch with AI",
+          back: "view-vibe-code",
+          onChosen: (credential) => {
+            buildCredential = credential;
+            activeSessionId = null; // re-start cleanly with the key
+            show("view-vibe-code");
+            void send();
+          },
+        });
+        return;
+      }
+    } else if (pendingTalkToolId) {
+      // Follow-up turn answering the AI's talkToUser question.
+      const replyBody = { text, attachments };
+      if (buildCredential) replyBody.credential = buildCredential;
+      await screensFetch(
+        `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
+        { method: "POST", body: JSON.stringify(replyBody) },
       );
-      renderSession(body);
-    } catch {
-      /* ignore — the WS will catch us up when frames flow */
-    }
-  })();
-
-  socket.addEventListener("message", (ev) => {
-    let frame;
-    try {
-      frame = JSON.parse(ev.data);
-    } catch {
+      pendingTalkToolId = null;
+    } else {
+      toast("Wait for the AI to finish this turn.", "info");
       return;
     }
-    handleFrame(frame);
-  });
-  socket.addEventListener("error", () => {
-    // Often the server returned a non-101; fall back to polling.
-    if (activeSocket === socket) activeSocket = null;
+    // Clear the composer + staged attachments.
+    promptEl.value = "";
+    staged = [];
+    renderChips();
     schedulePoll();
-  });
-  socket.addEventListener("close", () => {
-    if (activeSocket === socket) activeSocket = null;
-    // After WS close, refresh once via GET — picks up the terminal
-    // state if we missed the closing frame.
-    if (activeSessionId) {
-      poll().catch(() => {});
-    }
-  });
-}
-
-function handleFrame(frame) {
-  if (!frame || typeof frame.kind !== "string") return;
-  switch (frame.kind) {
-    case "token": {
-      assistantStreamBuffer += frame.text ?? "";
-      $("vc-transcript").textContent = assistantStreamBuffer;
-      // Keep status fresh — the GET reconciles files-tree snapshots.
-      $("vc-status").textContent = "streaming";
-      return;
-    }
-    case "manifest-emit":
-    case "build-start":
-    case "deploy":
-    case "done":
-    case "error":
-      // For these state transitions we re-fetch P1.7 once — the
-      // session's files-tree + status are easier to render against
-      // the canonical snapshot than to maintain locally in the FE.
-      poll().catch(() => {});
-      if (frame.kind === "error" && frame.message) toast(frame.message, "err");
-      return;
-    default:
-      return;
+    await poll();
+  } catch (e) {
+    toast(e instanceof ScreensError ? e.message : String(e), "err");
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send";
   }
 }
 
 function schedulePoll() {
   clearPoll();
-  pollTimer = setTimeout(() => poll().catch((e) => toast(String(e), "err")), POLL_INTERVAL_MS);
+  pollTimer = setTimeout(() => poll().catch(() => {}), POLL_INTERVAL_MS);
 }
 
 async function poll() {
   if (!activeSessionId) return;
-  let body;
+  // The richer public state carries per-message attachments + the pending
+  // tool; the older /vibe-code/:id snapshot is the fallback.
+  let state;
   try {
-    body = await screensFetch(
-      `/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}`,
+    state = await screensFetch(
+      `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}`,
     );
-  } catch (e) {
-    if (e instanceof ScreensError) {
-      $("vc-status").textContent = `error: ${e.message}`;
+  } catch {
+    try {
+      const snap = await screensFetch(
+        `/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}`,
+      );
+      state = {
+        status: snap.status,
+        messages: (snap.transcript || []).map((t) => ({ role: t.role, text: t.content })),
+        files: snap.files,
+        deployedUrl: snap.deployedUrl,
+      };
+    } catch (e) {
+      $("vc-status").textContent = e instanceof ScreensError ? `error: ${e.message}` : "error";
       return;
     }
-    throw e;
   }
-  renderSession(body);
-  if (!TERMINAL_STATUSES.has(body.status)) {
-    schedulePoll();
+  render(state);
+  if (!TERMINAL_STATUSES.has(state.status)) schedulePoll();
+}
+
+function statusLabel(status) {
+  switch (status) {
+    case "streaming": return "Writing…";
+    case "awaiting-tool-response": return "The AI has a question";
+    case "ready-to-deploy": return "Ready to deploy";
+    case "deploying": return "Deploying…";
+    case "deployed": return "Deployed";
+    case "failed": return "Something went wrong";
+    case "cancelled": return "Cancelled";
+    default: return status || "idle";
   }
 }
 
-function renderSession(body) {
-  $("vc-status").textContent = body.status;
-  // Transcript: just the assistant's most-recent reply, if any.
-  const assistant = body.transcript.find((t) => t.role === "assistant");
-  $("vc-transcript").textContent = assistant?.content ?? "";
+function attachmentMarkup(att) {
+  if (!att || att.length === 0) return "";
+  return `<div class="vc-msg-attachments">${att
+    .map((a) => {
+      if (a.kind === "image" && a.dataBase64) {
+        return `<img class="vc-msg-thumb" alt="${escapeHtml(a.name || "image")}" src="data:${escapeHtml(a.mediaType || "image/png")};base64,${a.dataBase64}">`;
+      }
+      return `<span class="vc-msg-file">📄 ${escapeHtml(a.name || "text")}</span>`;
+    })
+    .join("")}</div>`;
+}
+
+function render(state) {
+  $("vc-status").textContent = statusLabel(state.status);
+
+  // Message list — user right, assistant left.
+  const log = $("vc-messages");
+  const messages = state.messages || [];
+  // When the AI is asking a question, surface it as the latest assistant
+  // bubble so the user sees what they're replying to.
+  let extra = [];
+  pendingTalkToolId = null;
+  if (state.pendingRequest && state.pendingRequest.kind === "talkToUser") {
+    pendingTalkToolId = state.pendingRequest.toolUseId;
+    extra = [{ role: "assistant", text: state.pendingRequest.payload.message }];
+  }
+  const all = messages.concat(extra);
+  if (all.length === 0) {
+    log.innerHTML = '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
+  } else {
+    log.innerHTML = all
+      .map((m) => {
+        const side = m.role === "user" ? "vc-msg-user" : "vc-msg-ai";
+        const who = m.role === "user" ? "You" : "AI";
+        return `
+          <div class="vc-msg ${side}">
+            <div class="vc-msg-role">${who}</div>
+            <div class="vc-msg-text">${escapeHtml(m.text || "")}</div>
+            ${attachmentMarkup(m.attachments)}
+          </div>`;
+      })
+      .join("");
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // The composer is a reply box only when the AI asked a question, ready
+  // for a fresh build, or pre-session. While the AI is writing, the Send
+  // button is disabled to make the turn-taking obvious.
+  const sendBtn = $("vc-send");
+  if (state.status === "streaming" || state.status === "deploying") {
+    sendBtn.disabled = true;
+  } else {
+    sendBtn.disabled = false;
+  }
 
   // Files tree.
-  const filesRoot = $("vc-files");
-  const files = body.files ?? {};
+  const files = state.files || {};
   const paths = Object.keys(files).sort();
+  $("vc-files-count").textContent = paths.length === 0 ? "(none yet)" : `(${paths.length})`;
+  const filesRoot = $("vc-files");
   if (paths.length === 0) {
-    filesRoot.innerHTML = '<div class="card placeholder">files appear here as the LLM emits them…</div>';
+    filesRoot.innerHTML = '<div class="card placeholder">files appear here as the AI emits them…</div>';
   } else {
-    filesRoot.innerHTML = paths.map((p) => `
+    filesRoot.innerHTML = paths
+      .map(
+        (p) => `
       <div class="card card-compact">
         <details>
           <summary class="file-summary">${escapeHtml(p)} <span class="file-summary-meta">(${files[p].length} chars)</span></summary>
           <pre class="file-body">${escapeHtml(files[p])}</pre>
         </details>
-      </div>
-    `).join("");
+      </div>`,
+      )
+      .join("");
   }
 
-  // Deploy button — visible when ready-to-deploy.
+  // Deploy affordance.
   const deployBox = $("vc-deploy-box");
-  if (body.status === "ready-to-deploy") {
-    deployBox.classList.remove("hidden");
-  } else {
-    deployBox.classList.add("hidden");
-  }
+  deployBox.classList.toggle("hidden", state.status !== "ready-to-deploy");
 
-  // Deployed result.
+  // Result.
   const resultBox = $("vc-result");
-  if (body.deployedUrl) {
+  if (state.deployedUrl) {
     resultBox.innerHTML = `
       <div class="card">
-        <div class="weight-600">deployed ✓</div>
+        <div class="weight-600">Deployed ✓</div>
         <div class="value text-sm mt-1">
-          <a href="${escapeHtml(body.deployedUrl)}" target="_blank" rel="noopener">${escapeHtml(body.deployedUrl)}</a>
+          <a href="${escapeHtml(state.deployedUrl)}" target="_blank" rel="noopener">${escapeHtml(state.deployedUrl)}</a>
         </div>
-      </div>
-    `;
+      </div>`;
     resultBox.classList.remove("hidden");
-  } else if (body.errorReason) {
-    resultBox.innerHTML = `
-      <div class="card"><p class="err-text">${escapeHtml(body.errorReason)}</p></div>
-    `;
+  } else if (state.errorReason) {
+    resultBox.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(state.errorReason)}</p></div>`;
     resultBox.classList.remove("hidden");
   } else {
     resultBox.classList.add("hidden");
@@ -243,10 +370,7 @@ async function triggerDeploy() {
       `${baseUrl.replace(/\/+$/, "")}/api/llm/sessions/${encodeURIComponent(activeSessionId)}/deploy`,
       {
         method: "POST",
-        headers: {
-          "x-flagship-session": tok,
-          "content-type": "application/json",
-        },
+        headers: { "x-flagship-session": tok, "content-type": "application/json" },
       },
     );
     if (!r.ok) {
@@ -254,7 +378,7 @@ async function triggerDeploy() {
       throw new Error(`deploy failed: ${r.status} ${text}`.trim());
     }
     toast("deployed");
-    schedulePoll(); // pick up the new status + url
+    schedulePoll();
   } catch (e) {
     toast(e.message, "err");
     btn.disabled = false;
@@ -264,20 +388,24 @@ async function triggerDeploy() {
 
 function reset() {
   clearPoll();
-  closeSocket();
   activeSessionId = null;
-  assistantStreamBuffer = "";
+  staged = [];
+  pendingTalkToolId = null;
+  buildCredential = null;
+  renderChips();
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
   promptEl.value = "";
   $("vc-status").textContent = "idle";
-  $("vc-transcript").textContent = "";
+  $("vc-messages").innerHTML =
+    '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
   $("vc-files").innerHTML = "";
+  $("vc-files-count").textContent = "(none yet)";
   $("vc-deploy-box")?.classList.add("hidden");
   $("vc-result")?.classList.add("hidden");
-  const startBtn = $("vc-start");
-  startBtn.disabled = false;
-  startBtn.textContent = "Start";
+  const sendBtn = $("vc-send");
+  sendBtn.disabled = false;
+  sendBtn.textContent = "Send";
   const deployBtn = $("vc-deploy-go");
   if (deployBtn) {
     deployBtn.disabled = false;
@@ -286,17 +414,20 @@ function reset() {
 }
 
 export function initVibeCodeView() {
-  $("vc-start")?.addEventListener("click", startSession);
+  $("vc-send")?.addEventListener("click", send);
   $("vc-deploy-go")?.addEventListener("click", triggerDeploy);
   $("vc-reset")?.addEventListener("click", reset);
+  $("vc-attach-input")?.addEventListener("change", (e) => {
+    void stageFiles(e.target.files);
+    e.target.value = ""; // allow re-selecting the same file
+  });
   $("vibe-code-back")?.addEventListener("click", () => {
     clearPoll();
-    closeSocket();
     show("view-home");
   });
 }
 
-export async function enterVibeCode() {
+export async function enterVibeCode(opts = {}) {
   // Building a service needs a server to build and run it. With none
   // paired, nudge the user to add one rather than opening a dead form.
   if (!getPodBaseUrl()) {
@@ -306,4 +437,7 @@ export async function enterVibeCode() {
   }
   show("view-vibe-code");
   reset();
+  // The AI-key step hands the chosen credential in here; reset() clears it,
+  // so apply it after.
+  if (opts.credential) buildCredential = opts.credential;
 }

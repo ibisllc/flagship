@@ -123,7 +123,162 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — session-action buttons simplified across surfaces + webapp PIN lock
+### 2026-06-14 (latest) — build-a-service multi-mode SHIPPED + folded into `main`
+
+**Merged to `main`** (core feature, owner-directed). The whole multi-mode
+"build a service" flow — chooser (scratch / git / mcp / marketplace / journal)
++ the shared build journal + AI-adapt + value-free env-requests + scratch
+multimodal chat + **BYOK wired live** + an **AI-key step** on every surface —
+is now on `main`. `feat/marketplace` + `feat/retail` must integrate `main` to
+pick it up. Design + contract: `docs/build-modes.md`.
+
+**AI-key flow (all surfaces).** The box-AI paths (scratch always; git only
+when a non-fit repo needs adapting) show a "provide or confirm your AI key"
+step before the model runs; marketplace + MCP skip it (no box model). It
+recalls **device-saved keys** as a masked slug (`provider · label · ····1234`,
+never the full key), pre-selects the active one (Confirm), and offers "Save on
+this device". Storage is device-local + encrypted per surface — webapp
+`providers.js` (UMK-wrapped IndexedDB), iOS Keychain (`SavedKeyStore`), Android
+`EncryptedSharedPreferences` (`AiKeyStore`) — plus a **Settings → AI keys**
+manager (view-slug / add / delete). The chosen `{provider, apiKey, baseUrl?}`
+rides the build request as `credential` (sealed transiently per session/build
+by the daemon; flagshipserver.com never in the path). One future item: the
+**in-house / self-hosted inference server** (LAN `baseUrl` + `baseUrlGuard`
+override) — BYOK needs no inference infra.
+
+Final gates at merge: `npx tsc -b` clean · `npx vitest run` **5147 pass / 8
+skip / 392 files** · iOS **979** XCTests · Android **789** unit tests + both
+build. (Mobile chat *attachment picker* is the one deferred nice-to-have;
+webapp has it.)
+
+### 2026-06-14 — BYOK AI wired LIVE on the box
+
+**`LlmHarness` is now complete + the live build paths actually run the
+model.** Closed the three gaps that left scratch-chat + git-adapt as tested
+seams:
+- **Streaming in `LlmHarness`** (`chatStream(credential, request, onEvent)`):
+  resolves a `StreamingLLMProvider` from a new `StreamingProviderRegistry`
+  (anthropic/openai/google), applies the SSRF `baseUrlGuard`, streams
+  `ChatStreamEvent`s; defaults `streamingFetchImpl` to a shared
+  `defaultStreamingFetch` (Node fetch) so openai/google work in prod too. Plus
+  `chatWithCredential` (non-streaming) for the adapt path. The harness holds
+  NO key — it opens a credential per call.
+- **Transient sealed BYOK credential store** (`llm/buildCredentialStore.ts`,
+  mirrors `serviceEnvStore`): InMemory + File, keyed by session/build, SWK-
+  sealed at rest (one `.cred` file, mode-0600), reload-on-boot so an in-flight
+  build survives a daemon restart (the owner-endorsed "transient key on the
+  box while the phone is locked"). `providerName()` is the only non-secret
+  accessor; the value is never logged.
+- **Contract:** optional `credential: {provider, apiKey, baseUrl?}` on
+  vibe-code start/reply + build git/adapt. Delivered ONCE over the
+  paired-session-gated pinned pipe (box terminates TLS), sealed for the
+  session/build, **reused on later turns** — never echoed, never logged,
+  never journalled (provider NAME at most). **flagshipserver.com is NEVER in
+  the credential path.**
+- **`index.ts` wiring:** constructs the harness + `FileBuildCredentialStore`,
+  the live `startStreaming` thunk (`buildVibeCodeStartStreaming` now resolves
+  provider+config per-session from the stored credential), and the live
+  `adaptRunner` (+ `adaptCredentialAvailable` → clean 503 ONLY on genuine
+  no-credential).
+- **Graceful absence:** scratch start returns `200 {needsCredential:true}`
+  (session exists, not streaming) → client shows "add an AI key"; adapt → 503
+  "AI adapt not configured".
+
+Future item: in-house / self-hosted inference server (LAN `baseUrl` +
+`baseUrlGuard` override) — strict public-https guard applies today.
+
+Gates: `npx tsc -b` clean · full `npx vitest run` **5138** pass / 8 skip (391
+files; server-daemon+providers slice green incl. new `buildCredentialStore`,
+`LlmHarness.chatStream`/`chatWithCredential`, live startStreaming + adapt
+tests). iOS/Android untouched (clients are a later worker).
+
+### 2026-06-14 — build-a-service multi-mode (`feat/build-modes`, FEATURE-COMPLETE pending launch)
+
+**New feature branch `feat/build-modes`** — the "build a service" workflow
+fans from one model-source pick into a **"how do you want to build it?"**
+chooser over four sources, all converging on ONE deploy primitive
+(harness-only Forgejo push → docker build → signed install) and ONE shared
+**build journal**. Design + wire contract: `docs/build-modes.md`. Key answer
+to the design question: **the box never needs an AI key as architecture** —
+it's a contract-bounded function surface; the model is only needed by whoever
+*authors*. 3 of 5 modes need no box-side model (git-fit, mcp, marketplace);
+transient sealed keys for scratch/adapt are deliberate (build continues while
+the phone is locked).
+
+**Landed + gated (daemon + webapp):**
+- **`buildmodes/` daemon backbone (all tested):** `buildJournal` (append-only
+  JSONL, value-free/redacted, restart-safe), `gitImport` (clone + Flagship-
+  fitness verdict + `buildAdaptPrompt`), `buildWorkspace` (path-safe file
+  tree), `contract` (rules restated for an external agent), `mcpServer` (pure
+  JSON-RPC 2.0 MCP — tools express the whole limited surface incl. value-free
+  `request_env_var`), `mcpKeyStore` (sealed per-build bearer key, binds an IDE
+  to one build), `deployArtifact` (mode-agnostic deploy core), `buildOrchestrator`,
+  `buildModesHttp` (`/api/build/*` paired-gated + `/mcp/build/:id` bearer-gated
+  Streamable-HTTP). Wired into `index.ts` (guarded on servicePlatform; scratch
+  bridged into the same journal).
+- **Webapp client:** chooser + git + mcp (URL/key/IDE-config/rotate) + journal
+  viewer (`views/build-*.js`); create-service entry repointed to the chooser;
+  marketplace tile degrades to "coming soon" until `feat/marketplace` merges.
+- **`request_env_var` → owner (value-free):** the orchestrator keeps a per-build
+  pending env-request list, fires a value-free `notifyOwner({buildId, name})`
+  hook (log-only by default — production swaps in the push relay, mirroring the
+  vibe-code W10 hook) + journals an `env-requested` entry; new
+  `GET /api/build/sessions/:id/env-requests` returns the deduped list
+  (`name/why?/secret?/requestedAt/requestedBy/currentlySet`, NEVER a value);
+  the webapp mcp view shows it with a "the IDE never sees the value — set it in
+  Configure environment" note.
+
+Gates: `npx tsc -b` clean · daemon+providers+web vitest **2539** (229 files) ·
+**iOS 945 XCTests** (+31, xcodebuild green) · **Android 761 unit tests** (+16,
+gradle green). Forgejo-push stays harness-only (external actors go through
+chat/git/mcp, the harness materializes).
+
+**Multimodal chat for scratch — DONE (server seam + webapp UI).** Provider
+layer was already done (`Attachment`/`ChatMessage.attachments` + Anthropic
+base64 translation). Now: the vibe session carries attachments
+(`pushUserMessage(text, attachments)` / `pushUserReply`), `vibeCodeStartStreaming`
+puts them on the `ChatRequest` user message, and `messages()` surfaces them for
+a reload; the screens BFF (`/vibe-code/start` + `talkToUser` `/reply`) and the
+`/api/llm/sessions` start + `user-reply` paths accept inlined base64
+attachments via one shared validator (`llm/vibeCodeAttachments.ts`: **≤6/turn,
+image ≤4 MB decoded, text ≤256 KB, common image/* + text**); scratch turns
+journal `user-message` (truncated text preview) + `attachment-added` (NAME +
+kind + size ONLY, never content/base64) to the shared build journal (buildId =
+vibe sessionId, hoisted above the vibe wiring in `index.ts`); the webapp
+`views/vibe-code.js` is now a real chat (message list, composer with an
+image/text attach picker, removable chips + image thumbnails, FileReader→base64
+with the caps mirrored client-side, `/reply` follow-ups, Deploy). NOTE: the
+live LLM provider is still NOT constructed in `index.ts` — this is the proven
+*seam*; it lights up when that separate wiring lands. Gates: `tsc -b` clean ·
+daemon vibe/buildmodes/screens green (+ new `vibeCodeAttachments` +
+`screensVibeAttachments`) · web `webappBuildModesView` + new
+`webappScratchChatView` · `llm-providers/multimodal` still green.
+
+**Remaining (next):** AI-adapt endpoint for non-fit git repos — DONE (server
++ webapp): `POST /api/build/sessions/:id/adapt` renders the cloned tree via
+`buildAdaptPrompt`, runs it through an injected `adaptRunner`, parses the
+emit-format output with `VibeCodeStreamParser`, and merges the path-guarded
+files into the workspace (manifest required); 503 "AI adapt not configured"
+until the daemon's live LLM provider is wired (the pre-existing gap), and the
+webapp falls back to from-scratch on a 503.
+
+**iOS + Android — DONE.** Native chooser + git/mcp/journal screens (SwiftUI +
+Compose) built to the `docs/build-modes.md` UX spec, with a build-modes API
+client whose Mock matches the live wire format (pinned by tests). MCP screen
+shows the copyable key + IDE config + the value-free env-requests list; git
+screen has the fitness verdict + Install / Build-with-AI (503 → scratch);
+journal list + timeline. Scratch tile routes to the existing vibe screen;
+marketplace tile degrades to "coming soon".
+
+**Remaining (all gated on one pre-existing dependency):** wire a **live LLM
+provider** into the daemon boot path (`index.ts` never constructs one today —
+not specific to this feature) — that single change lights up scratch-chat
+streaming + git-adapt on all surfaces. Plus two nice-to-haves: the mobile
+scratch **attachment picker** (mobile scratch uses the existing vibe screen),
+and swapping the value-free `notifyOwner` env-request hook for the real push
+relay (it's log-only by default, like the vibe-code W10 hook).
+
+### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 
 **Settings "leave the app" cluster relabelled + grey-out gating (all
 surfaces).** The three tiers are now framed as a lock spectrum: tier-1

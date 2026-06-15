@@ -383,36 +383,155 @@
       </section>
 
 
-      <!-- View 13: Vibe-code dialog (P2.5) -->
+      <!-- View 13: Vibe-code chat (P2.5) — a multi-turn chat with attachments -->
       <section id="view-vibe-code" class="hidden">
-        <h2>Vibe-code a service</h2>
-        <div class="card">
-          <p class="note">
-            Describe a service. The LLM emits a manifest + Dockerfile + source; the daemon commits to your Forgejo, builds the container, and deploys.
-          </p>
-          <textarea id="vc-prompt" rows="4" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible, JSON-persisted."></textarea>
-          <button id="vc-start" class="full-width mt-2">Start</button>
+        <div class="row-top">
+          <h2>Build from scratch</h2>
+          <span class="value vc-chat-status" id="vc-status">idle</span>
         </div>
-        <div class="card mt-2">
-          <div class="row"><span class="label">status</span><span class="value" id="vc-status">idle</span></div>
+        <p class="note">
+          Describe the service you want. The AI writes and deploys it on your box.
+          Drop a screenshot or a file the app should use — it stays on your server.
+        </p>
+
+        <div id="vc-messages" class="vc-chat-log" aria-live="polite">
+          <div class="card placeholder">Say what you'd like to build to get started.</div>
         </div>
-        <h3 class="mt-4">Files</h3>
-        <div id="vc-files"><div class="card placeholder">files appear here as the LLM emits them…</div></div>
-        <h3 class="mt-4">Transcript</h3>
-        <div class="card">
-          <pre id="vc-transcript" class="vc-transcript"></pre>
+
+        <!-- Composer: textarea + attach affordance + attachment chips -->
+        <div class="vc-composer card mt-2">
+          <div id="vc-attach-chips" class="vc-chips hidden" aria-label="Attached files"></div>
+          <textarea id="vc-prompt" rows="3" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible."></textarea>
+          <div class="vc-composer-actions">
+            <label class="secondary btn-attach" for="vc-attach-input" title="Attach an image or text file">
+              <span aria-hidden="true">＋</span> Attach
+            </label>
+            <input id="vc-attach-input" type="file" class="hidden" multiple
+                   accept="image/*,.txt,.md,.sql,.json,.csv">
+            <button id="vc-send" class="vc-send">Send</button>
+          </div>
+          <p class="note vc-caps-note">Up to 6 files per message · images ≤ 4 MB · text ≤ 256 KB. Not a place for passwords or keys.</p>
         </div>
+
+        <details class="card mt-2" id="vc-files-box">
+          <summary class="file-summary">Files <span class="file-summary-meta" id="vc-files-count">(none yet)</span></summary>
+          <div id="vc-files"><div class="card placeholder">files appear here as the AI emits them…</div></div>
+        </details>
+
         <div id="vc-deploy-box" class="card hidden mt-2">
           <p class="note">
-            Session ready to deploy. Tapping deploy runs docker build + ServicePlatform.install on your pod.
+            Ready to deploy. Deploying runs docker build + install on your box.
           </p>
           <button id="vc-deploy-go" class="full-width">Deploy</button>
         </div>
         <div id="vc-result" class="hidden mt-2"></div>
-        <div class="row-2">
-          <button class="secondary" id="vc-reset">Reset</button>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="vc-reset">New build</button>
           <button class="secondary" id="vibe-code-back">← Back</button>
         </div>
+      </section>
+
+      <!-- Build-a-service source chooser -->
+      <section id="view-build-source" class="hidden">
+        <h2>Build a service</h2>
+        <p class="note">How do you want to build it?</p>
+        <div id="build-source-tiles" class="mt-2">
+          <button class="card build-tile full-width" id="build-src-scratch">
+            <strong>Start from scratch with AI</strong>
+            <span class="note">Describe it in plain words. The AI writes and deploys it.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-git">
+            <strong>Import from a Git repo</strong>
+            <span class="note">If it's Flagship-ready we install it as-is; if not, the AI adapts it.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-mcp">
+            <strong>Connect your IDE (Cursor / Cline)</strong>
+            <span class="note">Build from your editor with your own AI. Your box exposes a secure tool surface — no AI key on the box.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-market">
+            <strong>Get from the marketplace</strong>
+            <span class="note">Install something a neighbour already built.</span>
+          </button>
+        </div>
+        <p class="note mt-4"><a id="build-source-journal-link" href="#">View past builds →</a></p>
+        <div class="row-2 mt-2"><button class="secondary" id="build-source-back">← Back</button></div>
+      </section>
+
+      <!-- Reusable AI-key step (shown before any build path that uses the box's model) -->
+      <section id="view-build-key" class="hidden">
+        <h2>Provide an AI key</h2>
+        <p class="note" id="build-key-context">Your box needs an AI key to do this.</p>
+        <p class="note">
+          The key stays on this device. Your box calls the provider directly —
+          flagshipserver.com never sees it.
+        </p>
+
+        <div id="build-key-saved" class="mt-2"></div>
+
+        <button id="build-key-different" class="secondary full-width mt-2">Use a different key</button>
+
+        <div class="card hidden mt-2" id="build-key-form">
+          <h3>Use a different key</h3>
+          <label for="bk-provider">Provider</label>
+          <select id="bk-provider">
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <label for="bk-base">Base URL <span class="faint-sm">(optional, for OpenAI-compatible)</span></label>
+          <input id="bk-base" type="text" placeholder="https://your-proxy.example" autocomplete="off" />
+          <label for="bk-key">API key</label>
+          <input id="bk-key" type="password" placeholder="sk-…" autocomplete="off" />
+          <label for="bk-label">Label <span class="faint-sm">(optional)</span></label>
+          <input id="bk-label" type="text" placeholder="personal / work" autocomplete="off" />
+          <label class="bk-save-row mt-2">
+            <input id="bk-save" type="checkbox" />
+            <span>Save on this device</span>
+          </label>
+          <div class="row-gap-3 mt-2">
+            <button id="bk-use">Use this key</button>
+            <button class="secondary" id="bk-cancel">Cancel</button>
+          </div>
+          <p class="faint-sm mt-3">
+            Saved keys are wrapped under your passphrase on this device.
+            flagshipserver.com never sees them.
+          </p>
+        </div>
+
+        <div class="row-2 mt-2"><button class="secondary" id="build-key-back">← Back</button></div>
+      </section>
+
+      <!-- Build mode: import from Git -->
+      <section id="view-build-git" class="hidden">
+        <h2>Import from Git</h2>
+        <div class="card">
+          <p class="note">The repo is cloned on your box and checked for a <code>flagship.app.json</code>.</p>
+          <input id="build-git-url" type="text" placeholder="https://github.com/you/app" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <input id="build-git-ref" type="text" placeholder="branch / tag (optional)" class="mt-2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="build-git-check" class="full-width mt-2">Check repo</button>
+        </div>
+        <div id="build-git-verdict" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-git-back">← Back</button></div>
+      </section>
+
+      <!-- Build mode: connect your IDE via MCP -->
+      <section id="view-build-mcp" class="hidden">
+        <h2>Connect your IDE</h2>
+        <div class="card">
+          <p class="note">Build a service from Cursor or Cline using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).</p>
+          <button id="build-mcp-create" class="full-width mt-2">Create a connection</button>
+        </div>
+        <div id="build-mcp-conn" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-mcp-back">← Back</button></div>
+      </section>
+
+      <!-- Build journal viewer -->
+      <section id="view-build-journal" class="hidden">
+        <h2>Build history</h2>
+        <div id="build-journal-list" class="mt-2"></div>
+        <div id="build-journal-detail" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-journal-back">← Back</button></div>
       </section>
 
       <!-- W10 — per-app env-var KV editor -->

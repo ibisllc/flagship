@@ -1,8 +1,22 @@
 export type Role = "system" | "user" | "assistant";
 
+/**
+ * An attachment carried by a user message (the vibe-code chat lets the
+ * owner attach a screenshot/mockup or a text file). Adapters that support
+ * multimodal input translate these into the provider's native content
+ * blocks; adapters that don't (Ollama) ignore image attachments and may
+ * inline text attachments. Carries NO secret values by contract — the
+ * chat is not a secret channel.
+ */
+export type Attachment =
+  | { kind: "image"; mediaType: string; dataBase64: string; name?: string }
+  | { kind: "text"; text: string; name?: string };
+
 export interface ChatMessage {
   role: Role;
   content: string;
+  /** Optional multimodal attachments (user messages only). */
+  attachments?: Attachment[];
 }
 
 export interface ChatRequest {

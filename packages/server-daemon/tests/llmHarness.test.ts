@@ -6,10 +6,16 @@ import {
   sealLlmPayload,
 } from "@flagship/protocol";
 import {
+  anthropicStreaming,
   ProviderRegistry,
+  StreamingProviderRegistry,
   type ChatRequest,
+  type ChatStreamEvent,
   type FetchLike,
   type LLMProvider,
+  type ProviderConfig,
+  type StreamingFetchLike,
+  type StreamingLLMProvider,
 } from "@flagship/llm-providers";
 import { LlmHarness, type SealedRequest } from "../src/llmHarness.js";
 import { AppMembership } from "../src/membership.js";
@@ -178,6 +184,162 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
     const stub: LLMProvider = { name: "a", async chat() { return { content: "", model: "" }; } };
     const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
     expect(harness.listProviders()).toEqual(["a"]);
+  });
+});
+
+describe("LlmHarness.chatStream — live BYOK streaming", () => {
+  /** A fake streaming provider that echoes its config + emits deltas. */
+  function streamStub(opts: { deltas?: string[]; emitError?: boolean } = {}): {
+    provider: StreamingLLMProvider;
+    seen: { config?: ProviderConfig; request?: ChatRequest };
+  } {
+    const seen: { config?: ProviderConfig; request?: ChatRequest } = {};
+    const provider: StreamingLLMProvider = {
+      name: "stream-stub",
+      async chatStream(req, cfg, onEvent) {
+        seen.config = cfg;
+        seen.request = req;
+        if (opts.emitError) {
+          onEvent({ kind: "error", message: "boom", status: 500 });
+          return;
+        }
+        for (const d of opts.deltas ?? ["a", "b"]) onEvent({ kind: "delta", text: d });
+        onEvent({ kind: "end", stopReason: "stop" });
+      },
+    };
+    return { provider, seen };
+  }
+
+  it("streams deltas to onEvent using the supplied credential key", async () => {
+    const { provider, seen } = streamStub({ deltas: ["hel", "lo"] });
+    const harness = new LlmHarness({
+      swk,
+      streamingRegistry: new StreamingProviderRegistry([provider]),
+    });
+    const events: ChatStreamEvent[] = [];
+    const out = await harness.chatStream(
+      { provider: "stream-stub", apiKey: "byok-secret" },
+      { model: "m", messages: [{ role: "user", content: "hi" }] },
+      (e) => events.push(e),
+    );
+    expect(out.ok).toBe(true);
+    expect(seen.config?.apiKey).toBe("byok-secret");
+    const text = events.filter((e) => e.kind === "delta").map((e) => (e as { text: string }).text).join("");
+    expect(text).toBe("hello");
+    expect(events.at(-1)?.kind).toBe("end");
+  });
+
+  it("returns no-streaming (and emits an error event) for a provider with no streaming adapter", async () => {
+    const harness = new LlmHarness({
+      swk,
+      streamingRegistry: new StreamingProviderRegistry([]),
+    });
+    const events: ChatStreamEvent[] = [];
+    const out = await harness.chatStream(
+      { provider: "nope", apiKey: "k" },
+      { model: "m", messages: [{ role: "user", content: "hi" }] },
+      (e) => events.push(e),
+    );
+    expect(out).toEqual({ ok: false, reason: "no-streaming", message: expect.any(String) });
+    expect(events[0]?.kind).toBe("error");
+  });
+
+  it("blocks an SSRF baseUrl before the provider stream is reached", async () => {
+    const { provider, seen } = streamStub();
+    const harness = new LlmHarness({
+      swk,
+      streamingRegistry: new StreamingProviderRegistry([provider]),
+    });
+    const events: ChatStreamEvent[] = [];
+    const out = await harness.chatStream(
+      { provider: "stream-stub", apiKey: "k", baseUrl: "https://127.0.0.1:9090" },
+      { model: "m", messages: [{ role: "user", content: "hi" }] },
+      (e) => events.push(e),
+    );
+    expect(out.ok).toBe(false);
+    expect(seen.request).toBeUndefined(); // never reached the provider
+    expect((events[0] as { kind: string }).kind).toBe("error");
+  });
+
+  it("surfaces a provider-side error as a failed outcome", async () => {
+    const { provider } = streamStub({ emitError: true });
+    const harness = new LlmHarness({
+      swk,
+      streamingRegistry: new StreamingProviderRegistry([provider]),
+    });
+    const out = await harness.chatStream(
+      { provider: "stream-stub", apiKey: "k" },
+      { model: "m", messages: [{ role: "user", content: "hi" }] },
+      () => {},
+    );
+    expect(out).toEqual({ ok: false, reason: "provider-error", message: "boom" });
+  });
+
+  it("wires the streamingFetchImpl through to a real adapter (fake SSE lines)", async () => {
+    // Anthropic SSE: text delta then message stop. The harness must hand
+    // its streamingFetchImpl to the adapter so production uses Node fetch
+    // and tests inject canned lines.
+    const lines = [
+      'event: content_block_delta',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}',
+      'event: message_delta',
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}',
+      'event: message_stop',
+      'data: {"type":"message_stop"}',
+    ];
+    const fakeFetch: StreamingFetchLike = async () => ({
+      ok: true,
+      status: 200,
+      text: async () => "",
+      lines: async function* () {
+        for (const l of lines) yield l;
+      },
+    });
+    const harness = new LlmHarness({
+      swk,
+      streamingRegistry: new StreamingProviderRegistry([anthropicStreaming]),
+      streamingFetchImpl: fakeFetch,
+    });
+    const events: ChatStreamEvent[] = [];
+    const out = await harness.chatStream(
+      { provider: "anthropic", apiKey: "k" },
+      { model: "claude-x", messages: [{ role: "user", content: "hi" }] },
+      (e) => events.push(e),
+    );
+    expect(out.ok).toBe(true);
+    const text = events.filter((e) => e.kind === "delta").map((e) => (e as { text: string }).text).join("");
+    expect(text).toBe("Hi");
+  });
+});
+
+describe("LlmHarness.chatWithCredential — non-streaming BYOK (adapt path)", () => {
+  it("dispatches with the credential key and returns the text", async () => {
+    let seenKey = "";
+    const stub: LLMProvider = {
+      name: "p",
+      async chat(req, cfg) {
+        seenKey = cfg.apiKey;
+        return { content: `text:${req.messages.at(-1)!.content}`, model: req.model };
+      },
+    };
+    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const resp = await harness.chatWithCredential(
+      { provider: "p", apiKey: "adapt-key" },
+      { model: "m", messages: [{ role: "user", content: "rewrite" }] },
+    );
+    expect(seenKey).toBe("adapt-key");
+    expect(resp.content).toBe("text:rewrite");
+  });
+
+  it("throws on an SSRF baseUrl", async () => {
+    const stub: LLMProvider = { name: "p", async chat() { return { content: "", model: "" }; } };
+    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    await expect(
+      harness.chatWithCredential(
+        { provider: "p", apiKey: "k", baseUrl: "http://169.254.169.254/" },
+        { model: "m", messages: [{ role: "user", content: "x" }] },
+      ),
+    ).rejects.toThrow();
   });
 });
 

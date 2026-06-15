@@ -12,6 +12,25 @@ public enum HomeRoute: Hashable, Sendable {
 
 public enum AppsRoute: Hashable, Sendable {
     case appDetail(serviceId: String)
+    /// Build-a-service chooser ("how do you want to build it?"). The new
+    /// create-a-service entry; fans into the build modes below. Scratch
+    /// routes on to `.vibeCodeProviderPick` (the existing vibe flow).
+    case buildSource
+    /// git build mode — paste a repo URL → fitness verdict → install /
+    /// AI-adapt.
+    case buildGit
+    /// mcp build mode — connect Cursor/Cline with the user's own AI.
+    case buildMcp
+    /// Build-journal viewer. `buildId == nil` opens the list of past
+    /// builds; non-nil opens that build's timeline directly.
+    case buildJournal(buildId: String?)
+    /// AI-key step — confirm or provide the BYOK key the box's model will
+    /// use, BEFORE a box-AI build path runs. `purpose` decides what happens
+    /// once a credential is chosen (the chosen credential itself rides an
+    /// in-memory holder, not the route, since it's a secret). Only the
+    /// box-model paths (scratch, git-adapt) route through here; marketplace
+    /// + MCP skip it.
+    case buildKey(purpose: BuildKeyPurpose)
     case vibeCodeProviderPick
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)
@@ -35,6 +54,18 @@ public enum AppsRoute: Hashable, Sendable {
     case inviteIssue(serviceId: String)
 }
 
+/// What the AI-key step does once a credential is chosen. The credential
+/// itself is NOT carried here (it's a secret held in an in-memory holder) —
+/// only the downstream intent.
+public enum BuildKeyPurpose: Hashable, Sendable {
+    /// Start-from-scratch: seed the vibe-code describe → start flow with the
+    /// chosen credential.
+    case scratch
+    /// Git non-fit "Build with AI": run the adapt pass on this build with the
+    /// chosen credential (keeps the 503 → fall-back-to-scratch path).
+    case gitAdapt(buildId: String)
+}
+
 public enum ActivityRoute: Hashable, Sendable {
     /// The sealed-key RELAY approval surface (SecretRequestsContainer).
     case secretRequests
@@ -50,6 +81,9 @@ public enum ActivityRoute: Hashable, Sendable {
 
 public enum SettingsRoute: Hashable, Sendable {
     case providers
+    /// Settings → AI keys. View saved BYOK keys (masked slugs), add, delete.
+    /// Device-local; never shows a full key.
+    case aiKeys
     /// P7 — the dedicated tier-status / subscription screen, reached from
     /// the Settings "Subscription" nav row.
     case tierStatus

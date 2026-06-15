@@ -2,31 +2,38 @@
  * Produces a `startStreaming` thunk for the `VibeCodeRuntime` injection
  * point on the screens BFF (`/api/screens/vibe-code/start`).
  *
- * This is the Stage 1 live wiring of `buildUserContext` into the
- * production vibecode call:
+ * This is the live wiring of `buildUserContext` into the production
+ * vibecode call:
  *
- *   1. Compute the env-var NAMES list via `appEnvStore.names(serviceId)` —
+ *   1. Resolve the session's BYOK credential from the transient
+ *      credential store. NO credential ⇒ the session is left idle (the
+ *      caller already surfaced `needsCredential` to the client) — we
+ *      never invent a provider/key.
+ *   2. Compute the env-var NAMES list via `appEnvStore.names(serviceId)` —
  *      `.get()` is NEVER called from this path.
- *   2. Assemble the system message via `buildUserContext()` with those
+ *   3. Assemble the system message via `buildUserContext()` with those
  *      names + the existing context fields.
- *   3. Issue the chat-stream call with `tools: VIBE_CODE_TOOLS` attached
- *      so the model can invoke `requestEnvVar` / `talkToUser`.
- *   4. Feed deltas + tool_use events into the session via
- *      `streamIntoSession`.
+ *   4. Issue the chat-stream call through `LlmHarness.chatStream` (which
+ *      opens the credential in memory ONLY for the call + applies the
+ *      SSRF baseUrl guard) with `tools: VIBE_CODE_TOOLS` attached so the
+ *      model can invoke `requestEnvVar` / `talkToUser`.
+ *   5. Feed deltas + tool_use events into the session.
  *
- * The function returns a function-shaped value, so the daemon can drop
- * it straight onto `VibeCodeRuntime.startStreaming`.
+ * ── flagshipserver.com is NEVER in this path ──────────────────────────
+ * The credential never leaves the box; the daemon calls the provider
+ * directly. The function returns a function-shaped value the daemon
+ * drops straight onto `VibeCodeRuntime.startStreaming`.
  */
 
 import type {
+  Attachment,
   ChatRequest,
-  ProviderConfig,
-  StreamingFetchLike,
-  StreamingLLMProvider,
+  ChatStreamEvent,
 } from "@flagship/llm-providers";
+import type { LlmHarness } from "../llmHarness.js";
+import type { BuildCredentialStore } from "./buildCredentialStore.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
-import { streamIntoSession } from "./streamIntoSession.js";
 import {
   buildUserContext,
   type ExistingAppSummary,
@@ -36,10 +43,10 @@ import { TOOL_USE_PROMPT_SUPPLEMENT, VIBE_CODE_TOOLS } from "./vibeCodeTools.js"
 
 export interface BuildVibeCodeStartStreamingArgs {
   registry: VibeCodeSessionRegistry;
-  provider: StreamingLLMProvider;
-  config: ProviderConfig;
-  /** Streaming-fetch implementation; tests inject. Production omits. */
-  fetchImpl?: StreamingFetchLike;
+  /** The harness holds no key — it opens the credential per-call. */
+  harness: LlmHarness;
+  /** Transient, sealed-at-rest BYOK credential store keyed by sessionId. */
+  credentials: BuildCredentialStore;
   /** Resolves the serviceId an in-flight session is editing. */
   resolveAppId: (sessionId: string) => string | null;
   /** Read-only env-var-name accessor. NEVER values. */
@@ -56,6 +63,14 @@ export interface StartStreamingArgs {
   sessionId: string;
   prompt: string;
   model?: string;
+  /**
+   * Multimodal attachments on the user turn (image / text). Already
+   * validated by the caller (caps/kinds/sizes). They ride on the
+   * `ChatRequest`'s user message so a multimodal-capable adapter
+   * (Anthropic) translates them into native content blocks. Value-free
+   * w.r.t. secrets by contract.
+   */
+  attachments?: Attachment[];
 }
 
 /**
@@ -68,6 +83,17 @@ export function buildVibeCodeStartStreaming(
   return async function startStreaming(s: StartStreamingArgs): Promise<void> {
     const session = args.registry.get(s.sessionId);
     if (!session) return;
+
+    // Resolve the BYOK credential just-in-time. Absence here should be
+    // rare (the BFF already short-circuits + signals `needsCredential`),
+    // but if a session is driven with no key we fail the session cleanly
+    // rather than inventing one.
+    const credential = await args.credentials.get(s.sessionId);
+    if (!credential) {
+      session.fail("no AI credential set for this session", true);
+      return;
+    }
+
     const serviceId = args.resolveAppId(s.sessionId);
     // CRITICAL: only .names(). `.get()` is never called on this path —
     // values must never reach the prompt or the request body.
@@ -84,16 +110,33 @@ export function buildVibeCodeStartStreaming(
       model: s.model ?? args.defaultModel,
       messages: [
         { role: "system", content: systemMessage },
-        { role: "user", content: s.prompt },
+        {
+          role: "user",
+          content: s.prompt,
+          ...(s.attachments && s.attachments.length > 0
+            ? { attachments: s.attachments }
+            : {}),
+        },
       ],
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
     };
-    await streamIntoSession({
-      session,
-      provider: args.provider,
-      request,
-      config: args.config,
-      fetchImpl: args.fetchImpl,
+
+    await args.harness.chatStream(credential, request, (e: ChatStreamEvent) => {
+      if (e.kind === "delta") {
+        session.feedAssistant(e.text);
+        return;
+      }
+      if (e.kind === "tool_use") {
+        session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
+        return;
+      }
+      if (e.kind === "end") {
+        session.endAssistant();
+        return;
+      }
+      if (e.kind === "error") {
+        session.fail(e.message, true);
+      }
     });
   };
 }

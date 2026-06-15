@@ -20,9 +20,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.EncryptedSessionStore
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
+import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
 import com.flagshipserver.app.api.LiveFlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
@@ -32,6 +35,7 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
 import com.flagshipserver.app.core.AppState
+import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
 import com.flagshipserver.app.core.DeveloperSettings
@@ -44,6 +48,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
 import com.flagshipserver.app.core.canonicalSetServiceEnv
+import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
@@ -103,6 +108,7 @@ class MainActivity : FragmentActivity() {
         val toasts = ToastCenter()
         deepLinker = DeepLinker()
         val devSettings = DeveloperSettings.create(applicationContext)
+        AiKeyStore.attach(applicationContext)
         val okHttp = buildOkHttp()
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the
@@ -115,6 +121,8 @@ class MainActivity : FragmentActivity() {
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
+        val mockBuild = MockBuildClient()
+        val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
         val mockMailbox = MockSecretMailboxClient()
@@ -160,6 +168,8 @@ class MainActivity : FragmentActivity() {
             val sessionToken by sessionStore.sessionToken.collectAsState()
             val effectiveScreens: ScreensClient =
                 if (useLive && sessionToken != null) liveScreens else mockScreens
+            val effectiveBuild: BuildClient =
+                if (useLive && sessionToken != null) liveBuild else mockBuild
             val effectiveRelay: QrRelayClient =
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
@@ -184,6 +194,7 @@ class MainActivity : FragmentActivity() {
                 CompositionLocalProvider(
                     LocalAppState provides appState,
                     LocalScreensClient provides effectiveScreens,
+                    LocalBuildClient provides effectiveBuild,
                     LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
