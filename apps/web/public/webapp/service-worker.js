@@ -338,6 +338,7 @@ const OPTIONAL_SHELL = [
   "/lib/uikit.js",
   "/lib/usersCheck.js",
   "/lib/wipeRestartCeremony.js",
+  "/lib/allowance.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
