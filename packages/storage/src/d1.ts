@@ -42,6 +42,8 @@ import type {
   TierSubscriptionRecord,
   UsageStorage,
   UsageCounterRecord,
+  VoucherStorage,
+  VoucherRecord,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -2033,6 +2035,66 @@ export class D1UsageStorage implements UsageStorage {
     return r
       ? { username: r.username, period: r.period, bytesEgress: r.bytes_egress, updatedAt: r.updated_at }
       : undefined;
+  }
+}
+
+/** Prepaid Pro vouchers (migration 0052). Standalone — constructed on demand,
+ *  not part of the D1Storage aggregate. */
+export class D1VoucherStorage implements VoucherStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async create(rec: VoucherRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO vouchers (code_hash, tier, duration_days, created_at) VALUES (?,?,?,?)`,
+        )
+        .bind(rec.codeHash, rec.tier, rec.durationDays, rec.createdAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/unique constraint|constraint failed/i.test(msg)) {
+        return { ok: false as const, reason: "voucher code already exists" };
+      }
+      throw e;
+    }
+  }
+
+  async get(codeHash: string): Promise<VoucherRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM vouchers WHERE code_hash = ?`)
+      .bind(codeHash)
+      .first<{
+        code_hash: string;
+        tier: string;
+        duration_days: number;
+        created_at: number;
+        redeemed_at: number | null;
+        redeemed_by: string | null;
+      }>();
+    return r
+      ? {
+          codeHash: r.code_hash,
+          tier: r.tier as VoucherRecord["tier"],
+          durationDays: r.duration_days,
+          createdAt: r.created_at,
+          redeemedAt: r.redeemed_at ?? undefined,
+          redeemedBy: r.redeemed_by ?? undefined,
+        }
+      : undefined;
+  }
+
+  async redeem(codeHash: string, username: string, now: number): Promise<boolean> {
+    // Atomic single-use: the WHERE redeemed_at IS NULL means only the first
+    // concurrent redemption changes a row.
+    const r = await this.db
+      .prepare(
+        `UPDATE vouchers SET redeemed_at = ?, redeemed_by = ? WHERE code_hash = ? AND redeemed_at IS NULL`,
+      )
+      .bind(now, username, codeHash)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
   }
 }
 
