@@ -12,13 +12,13 @@ import { $, registerView, show } from "../lib/router.js";
 import { escapeHtml } from "../lib/util.js";
 import { countActiveSessions, fetchVibeSessions } from "../lib/vibeSessions.js";
 import { getSession } from "../lib/state.js";
-import { toast } from "../lib/toast.js";
 import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildGit } from "./build-git.js";
 import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
 import { loadAccountPods, sessionServers, startCreation } from "../lib/appPlacement.js";
+import { enterMarketplace } from "./marketplace.js";
 
 registerView("view-build-source");
 
@@ -48,15 +48,7 @@ export function initBuildSourceView() {
   );
   $("build-src-git").addEventListener("click", () => enterBuildGit());
   $("build-src-mcp").addEventListener("click", () => enterBuildMcp());
-  $("build-src-market").addEventListener("click", () => {
-    // Marketplace UI lives on feat/marketplace; until that merges, the
-    // tile degrades gracefully rather than dead-ending.
-    if (typeof window !== "undefined" && window.__flagshipMarketplace) {
-      window.__flagshipMarketplace();
-    } else {
-      toast("The marketplace is coming soon.", "info");
-    }
-  });
+  $("build-src-market").addEventListener("click", () => enterMarketplace());
   $("build-source-journal-link").addEventListener("click", (e) => {
     e.preventDefault();
     enterBuildJournal();
