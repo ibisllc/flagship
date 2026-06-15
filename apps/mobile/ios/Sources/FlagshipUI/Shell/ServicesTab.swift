@@ -47,8 +47,8 @@ public struct ServicesTab: View {
             }
             _ = linker.consume()
         case .startVibeCode:
-            if path.last != .vibeCodeProviderPick {
-                path.append(.vibeCodeProviderPick)
+            if path.last != .buildSource {
+                path.append(.buildSource)
             }
             _ = linker.consume()
         default:
@@ -120,6 +120,14 @@ public struct ServicesTab: View {
         switch route {
         case .appDetail(let id):
             ServiceDetailContainer(serviceId: id, path: $path)
+        case .buildSource:
+            BuildSourceChooserContainer(path: $path)
+        case .buildGit:
+            BuildGitContainer(path: $path)
+        case .buildMcp:
+            BuildMcpContainer(path: $path)
+        case .buildJournal(let buildId):
+            BuildJournalContainer(buildId: buildId)
         case .vibeCodeProviderPick:
             VibeCodeProviderPickScreen(
                 onPickPromo: { path.append(.vibeCodeDescribe) },
@@ -208,7 +216,7 @@ public struct ServicesTab: View {
                         Text("Describe it in plain English. The AI writes it, the daemon runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                         FSPrimaryButton("Build an app", block: true) {
-                            path.append(.vibeCodeProviderPick)
+                            path.append(.buildSource)
                         }
                     }
                 }
@@ -225,7 +233,7 @@ public struct ServicesTab: View {
                         .buttonStyle(.plain)
                     }
                 }
-                Button(action: { path.append(.vibeCodeProviderPick) }) {
+                Button(action: { path.append(.buildSource) }) {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles").foregroundColor(c.primary)
                         Text("Build another app").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
@@ -481,6 +489,99 @@ struct VibeCodeGeneratingContainer: View {
         }
         .task {
             if vm == nil { vm = VibeCodeStreamViewModel(sessionId: sessionId, client: client) }
+        }
+    }
+}
+
+// Build-a-service chooser container. The new create-a-service entry; fans
+// into the build modes. Scratch reuses the existing vibe flow; the
+// marketplace tile degrades to a "coming soon" toast (its code lives on
+// feat/marketplace).
+struct BuildSourceChooserContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(ToastCenter.self) private var toasts
+    var body: some View {
+        BuildSourceChooserScreen(
+            onScratch: { path.append(.vibeCodeProviderPick) },
+            onGit: { path.append(.buildGit) },
+            onMcp: { path.append(.buildMcp) },
+            onMarketplace: { toasts.info("The marketplace is coming soon.") },
+            onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
+        )
+    }
+}
+
+// git build mode container. Owns the BuildGitViewModel; a 503 on adapt
+// pops back to the chooser and pushes the scratch flow.
+struct BuildGitContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @State private var vm: BuildGitViewModel?
+    var body: some View {
+        Group {
+            if let vm {
+                BuildGitScreen(
+                    vm: vm,
+                    onViewJournal: { id in path.append(.buildJournal(buildId: id)) },
+                    onFallBackToScratch: { path.append(.vibeCodeProviderPick) }
+                )
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task { if vm == nil { vm = BuildGitViewModel(client: client) } }
+    }
+}
+
+// mcp build mode container. Copy goes through UIPasteboard + a toast.
+struct BuildMcpContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(ToastCenter.self) private var toasts
+    @State private var vm: BuildMcpViewModel?
+    var body: some View {
+        Group {
+            if let vm {
+                BuildMcpScreen(
+                    vm: vm,
+                    onViewJournal: { id in path.append(.buildJournal(buildId: id)) },
+                    onCopy: { text, msg in
+                        UIPasteboard.general.string = text
+                        toasts.success(msg)
+                    }
+                )
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task { if vm == nil { vm = BuildMcpViewModel(client: client) } }
+    }
+}
+
+// Build-journal container. Opens the list, or a specific build's timeline
+// when `buildId` is non-nil.
+struct BuildJournalContainer: View {
+    let buildId: String?
+    @Environment(\.screensClient) private var client
+    @State private var vm: BuildJournalViewModel?
+    var body: some View {
+        Group {
+            if let vm {
+                BuildJournalScreen(vm: vm)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            if vm == nil {
+                let model = BuildJournalViewModel(client: client)
+                vm = model
+                if let buildId {
+                    await model.loadDetail(buildId: buildId)
+                } else {
+                    await model.loadList()
+                }
+            }
         }
     }
 }

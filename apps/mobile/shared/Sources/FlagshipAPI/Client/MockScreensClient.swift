@@ -722,4 +722,183 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         return s
     }
+
+    // MARK: - Build-a-service modes
+    //
+    // Fixtures mirror the live wire shapes documented in
+    // packages/server-daemon/src/buildmodes/buildModesHttp.ts and the
+    // webapp views/build-*.js. Hard repo rule: the Mock matches the live
+    // JSON byte-for-byte in field names + shapes.
+
+    /// Records each `buildGit` request so tests can assert the wire shape.
+    public private(set) var buildGitCalls: [BuildGitRequest] = []
+    /// Override the git verdict. Nil → a deterministic verdict keyed off
+    /// the URL: a URL containing "flagship" reports FIT, anything else
+    /// reports NOT FIT (so both branches are exercisable).
+    public var buildGitFixture: BuildGitResponse?
+
+    /// When true, `buildAdapt` throws a 503 ("AI adapt not configured")
+    /// so the chooser's fall-back-to-scratch path is testable. Default
+    /// false → a clean adapt result.
+    public var buildAdaptUnavailable: Bool = false
+    public private(set) var buildAdaptCalls: [(buildId: String, req: BuildAdaptRequest)] = []
+
+    public private(set) var buildMcpCreateCalls: [BuildMcpRequest] = []
+    public private(set) var buildMcpRotateCalls: [(buildId: String, req: BuildMcpRequest)] = []
+    /// Override the MCP connection. Nil → the deterministic default below.
+    public var buildMcpFixture: BuildMcpConnection?
+
+    /// Override the env-requests list. Nil → a single non-secret request
+    /// fixture (NEVER a value).
+    public var buildEnvRequestsFixture: BuildEnvRequestsResponse?
+
+    public private(set) var buildDeployCalls: [String] = []
+
+    /// Override the past-builds list. Nil → a two-entry default.
+    public var buildSessionsFixture: BuildSessionsResponse?
+    /// Override the journal. Nil → a small deterministic timeline.
+    public var buildJournalFixture: BuildJournalResponse?
+
+    private func mockMcpConnection(buildId: String) -> BuildMcpConnection {
+        if let f = buildMcpFixture { return f }
+        let url = "https://\(podContext).harry.flagship.services/mcp/build/\(buildId)"
+        let key = "fbk_\(UUID().uuidString.prefix(16).lowercased())"
+        let ideConfig: [String: AnyCodable] = [
+            "mcpServers": AnyCodable([
+                "flagship-build": [
+                    "url": url,
+                    "headers": ["Authorization": "Bearer \(key)"],
+                ] as [String: Any]
+            ] as [String: Any])
+        ]
+        return BuildMcpConnection(url: url, key: key, ideConfig: ideConfig)
+    }
+
+    public func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse {
+        try await tick()
+        buildGitCalls.append(req)
+        if let f = buildGitFixture { return f }
+        let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
+        let fit = req.gitUrl.lowercased().contains("flagship")
+        if fit {
+            return BuildGitResponse(
+                buildId: buildId,
+                fit: true,
+                reason: "Found flagship.app.json",
+                manifestName: "imported-app",
+                fileCount: 14
+            )
+        }
+        return BuildGitResponse(
+            buildId: buildId,
+            fit: false,
+            reason: "No top-level flagship.app.json — this repo isn't a Flagship app yet.",
+            manifestName: nil,
+            fileCount: 23
+        )
+    }
+
+    public func buildAdapt(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptResponse {
+        try await tick()
+        buildAdaptCalls.append((buildId, req))
+        if buildAdaptUnavailable {
+            throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
+        }
+        return BuildAdaptResponse(ok: true, fileCount: 16)
+    }
+
+    public func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse {
+        try await tick()
+        buildMcpCreateCalls.append(req)
+        let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
+        return BuildMcpResponse(buildId: buildId, connection: mockMcpConnection(buildId: buildId))
+    }
+
+    public func buildMcpInfo(buildId: String) async throws -> BuildMcpConnection {
+        try await tick()
+        return mockMcpConnection(buildId: buildId)
+    }
+
+    public func buildMcpRotate(buildId: String, _ req: BuildMcpRequest) async throws -> BuildMcpConnection {
+        try await tick()
+        buildMcpRotateCalls.append((buildId, req))
+        // A fresh key each rotate (unless a fixture pins it).
+        if let f = buildMcpFixture { return f }
+        return mockMcpConnection(buildId: buildId)
+    }
+
+    public func buildEnvRequests(buildId: String) async throws -> BuildEnvRequestsResponse {
+        try await tick()
+        if let f = buildEnvRequestsFixture { return f }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return BuildEnvRequestsResponse(requests: [
+            BuildEnvRequest(
+                name: "STRIPE_SECRET_KEY",
+                why: "to take payments in the app",
+                secret: true,
+                requestedAt: now - 60_000,
+                requestedBy: "ide",
+                currentlySet: false
+            )
+        ])
+    }
+
+    public func buildDeploy(buildId: String) async throws -> BuildDeployResponse {
+        try await tick()
+        buildDeployCalls.append(buildId)
+        return BuildDeployResponse(
+            ok: true,
+            serviceId: "harry-imported-app",
+            url: "https://imported-app.\(podContext).harry.flagship.services/"
+        )
+    }
+
+    public func buildSessions() async throws -> BuildSessionsResponse {
+        try await tick()
+        if let f = buildSessionsFixture { return f }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return BuildSessionsResponse(builds: [
+            BuildSummary(
+                buildId: "bld-plants01",
+                mode: "scratch",
+                serviceId: "harry-plants",
+                startedAt: now - 60_000 * 60,
+                lastAt: now - 60_000 * 58,
+                entryCount: 9,
+                lastKind: "deployed"
+            ),
+            BuildSummary(
+                buildId: "bld-wiki0002",
+                mode: "git",
+                serviceId: nil,
+                startedAt: now - 60_000 * 10,
+                lastAt: now - 60_000 * 9,
+                entryCount: 3,
+                lastKind: "fitness-check"
+            ),
+        ])
+    }
+
+    public func buildJournal(buildId: String) async throws -> BuildJournalResponse {
+        try await tick()
+        if let f = buildJournalFixture { return f }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return BuildJournalResponse(entries: [
+            BuildJournalEntry(
+                seq: 1, ts: now - 60_000 * 60, buildId: buildId,
+                mode: "scratch", kind: "session-started", actor: "owner",
+                summary: "Build a houseplant watering tracker"
+            ),
+            BuildJournalEntry(
+                seq: 2, ts: now - 60_000 * 59, buildId: buildId,
+                mode: "scratch", kind: "file-written", actor: "ai",
+                summary: "wrote flagship.app.json", detail: "name: plants"
+            ),
+            BuildJournalEntry(
+                seq: 3, ts: now - 60_000 * 58, buildId: buildId,
+                mode: "scratch", kind: "deployed", actor: "system",
+                summary: "deployed to home pod", serviceId: "harry-plants"
+            ),
+        ])
+    }
 }

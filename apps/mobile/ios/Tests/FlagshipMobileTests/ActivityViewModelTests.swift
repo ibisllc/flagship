@@ -172,4 +172,13 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse {
         try await real.companionResolvePending(req)
     }
+    func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse { try await real.buildGit(req) }
+    func buildAdapt(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptResponse { try await real.buildAdapt(buildId: buildId, req) }
+    func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse { try await real.buildMcpCreate(req) }
+    func buildMcpInfo(buildId: String) async throws -> BuildMcpConnection { try await real.buildMcpInfo(buildId: buildId) }
+    func buildMcpRotate(buildId: String, _ req: BuildMcpRequest) async throws -> BuildMcpConnection { try await real.buildMcpRotate(buildId: buildId, req) }
+    func buildEnvRequests(buildId: String) async throws -> BuildEnvRequestsResponse { try await real.buildEnvRequests(buildId: buildId) }
+    func buildDeploy(buildId: String) async throws -> BuildDeployResponse { try await real.buildDeploy(buildId: buildId) }
+    func buildSessions() async throws -> BuildSessionsResponse { try await real.buildSessions() }
+    func buildJournal(buildId: String) async throws -> BuildJournalResponse { try await real.buildJournal(buildId: buildId) }
 }

@@ -12,6 +12,18 @@ public enum HomeRoute: Hashable, Sendable {
 
 public enum AppsRoute: Hashable, Sendable {
     case appDetail(serviceId: String)
+    /// Build-a-service chooser ("how do you want to build it?"). The new
+    /// create-a-service entry; fans into the build modes below. Scratch
+    /// routes on to `.vibeCodeProviderPick` (the existing vibe flow).
+    case buildSource
+    /// git build mode — paste a repo URL → fitness verdict → install /
+    /// AI-adapt.
+    case buildGit
+    /// mcp build mode — connect Cursor/Cline with the user's own AI.
+    case buildMcp
+    /// Build-journal viewer. `buildId == nil` opens the list of past
+    /// builds; non-nil opens that build's timeline directly.
+    case buildJournal(buildId: String?)
     case vibeCodeProviderPick
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)
