@@ -3,6 +3,7 @@
 //   - scratch     → the existing vibe-code flow
 //   - git         → import a repo (fit → install / not fit → AI-adapt)
 //   - mcp         → connect Cursor/Cline with your own AI
+//   - marketplace → install something already built (degrades to "coming soon")
 // plus "Resume or view past builds" into the build sessions list.
 //
 // MIRRORS the webapp reference apps/web/public/webapp/views/build-*.js and
@@ -207,6 +208,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
         val sessions = runCatching { screens.vibeCodeSessions().sessions }.getOrDefault(emptyList())
         activeSessions = sessions.count { it.isActive }
     }
+    val toasts = LocalToastCenter.current
     ScreenScaffold(
         title = "Build a service",
         subtitle = null,
@@ -247,6 +249,11 @@ fun BuildSourceChooserScreen(nav: NavController) {
                 body = "Build from your editor using your own AI. No model key lives on the box.",
                 onClick = { nav.navigate("build/mcp") },
                 testTag = "build-src-mcp",
+            )
+            SourceTile(
+                title = "Get from the marketplace",
+                body = "Install something already built. Coming soon.",
+                onClick = { toasts.info("The marketplace is coming soon.") },
             )
         }
     }
