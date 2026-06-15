@@ -91,6 +91,21 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       return jok({ requests: await o.resolvedEnvRequests(buildId) });
     }
 
+    // POST .../adapt { instructions? } → run the AI adapt pass on a
+    // non-fit git build, merging the rewritten files into the workspace.
+    // 503 when no model is configured (the live LLM provider isn't wired
+    // into the daemon yet — the same pre-existing gap scratch has); 502
+    // with the reason on any other failure; 200 {ok, fileCount} on
+    // success (the owner deploys next via .../deploy).
+    if (verb === "adapt" && req.method === "POST") {
+      const body = parseJson(req.body) as { instructions?: string } | null;
+      const r = await o.adaptGit(buildId, typeof body?.instructions === "string" ? { instructions: body.instructions } : {});
+      if (!r.ok) {
+        return jerr(r.reason === "AI adapt not configured" ? 503 : 502, r.reason);
+      }
+      return jok({ ok: true, fileCount: r.fileCount });
+    }
+
     if (verb === "deploy" && req.method === "POST") {
       const r = await o.deploy(buildId);
       if (!r.ok) return jerr(502, r.reason);

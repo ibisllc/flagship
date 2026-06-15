@@ -728,6 +728,19 @@ async function main(): Promise<void> {
         deployArtifact: artifactDeployer,
         serverFqdn: env.serverFqdn!,
         mcpBaseUrl: `https://${env.serverFqdn!}`,
+        // AI "adapt" pass for non-fit git imports. Wire this to the SAME
+        // live LLM provider mechanism the scratch vibe path uses. That
+        // provider is NOT constructed in this file yet
+        // (`buildVibeCodeStartStreaming` / `VibeCodeRuntime.startStreaming`
+        // is optional/undefined in production — a separate pre-existing
+        // task), so we leave `adaptRunner` undefined here. While it is
+        // undefined the adapt endpoint returns a clean 503 ("AI adapt not
+        // configured"), exactly mirroring how the scratch live path
+        // degrades. It lights up the moment the daemon's live provider is
+        // wired: build an `AdaptRunner` that issues one provider chat call
+        // with the given system + user prompt and returns the raw
+        // assistant text (emit-format blocks).
+        // adaptRunner: <wire when the live LLM provider is constructed>,
         // An external IDE / the AI can ask the owner to set a secret env var
         // VALUE-FREE (request_env_var). Journal it (names not values) so the
         // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.

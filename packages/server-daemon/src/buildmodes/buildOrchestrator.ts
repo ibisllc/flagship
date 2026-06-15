@@ -14,11 +14,33 @@
 
 import { randomBytes } from "node:crypto";
 import { BuildWorkspace } from "./buildWorkspace.js";
-import { GitImporter } from "./gitImport.js";
+import { GitImporter, buildAdaptPrompt } from "./gitImport.js";
 import { McpBuildServer, type JsonRpcResponse, type McpDeployResult } from "./mcpServer.js";
 import type { McpKeyStore } from "./mcpKeyStore.js";
 import type { BuildJournal, BuildJournalEntry, BuildJournalSummary, BuildMode } from "./buildJournal.js";
 import type { DeployResult } from "./deployArtifact.js";
+import { VibeCodeStreamParser } from "../llm/vibeCodeSession.js";
+import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
+
+/**
+ * The model call the AI "adapt" pass makes. Provider-agnostic by design:
+ * the orchestrator hands it a system + user prompt and gets back the
+ * model's RAW assistant text (the `=== filename ===` … `=== END ===`
+ * emit-format the `VibeCodeStreamParser` reads).
+ *
+ * Production wires this to the SAME live LLM provider mechanism the
+ * scratch vibe path uses — which, today, is NOT constructed in
+ * `index.ts` (`buildVibeCodeStartStreaming` / `VibeCodeRuntime.start
+ * Streaming` is optional/undefined in production). So when that wiring
+ * is absent the runner is left undefined and `adaptGit` reports it as a
+ * clean "AI adapt not configured", exactly mirroring how the scratch
+ * live path degrades. Tests inject a fake returning canned block text.
+ */
+export type AdaptRunner = (args: {
+  systemPrompt: string;
+  userPrompt: string;
+  model?: string;
+}) => Promise<string>;
 
 export interface BuildState {
   buildId: string;
@@ -77,6 +99,13 @@ export interface BuildOrchestratorDeps {
   notifyOwner?: (n: { buildId: string; name: string }) => void;
   /** Public base URL the IDE points its MCP client at (mcp mode). */
   mcpBaseUrl?: string;
+  /**
+   * The live model call for the git AI "adapt" pass (rewrites a non-fit
+   * cloned repo into a Flagship app). Provider-agnostic. Absent ⇒ the
+   * adapt endpoint reports "AI adapt not configured" (503) — the same
+   * way the scratch live path degrades when the provider isn't wired.
+   */
+  adaptRunner?: AdaptRunner;
   now?: () => number;
   rand?: () => string;
 }
@@ -189,6 +218,102 @@ export class BuildOrchestrator {
       ...(fitness.fit ? { manifestName: fitness.manifest.name } : {}),
       fileCount: Object.keys(fitness.files).length,
     };
+  }
+
+  /**
+   * AI "adapt" pass for a NON-FIT git build: render the cloned tree into
+   * the adapt user prompt, run it through the model (the injected
+   * `adaptRunner`), parse the model's emit-format output with the SAME
+   * `VibeCodeStreamParser` the scratch path uses, and MERGE the produced
+   * files into the build's workspace (path-guarded by `workspace.write`).
+   *
+   * The result MUST contain a `flagship.app.json` — that's the point of
+   * the pass (turn a non-Flagship repo into a Flagship app). The user
+   * deploys next via the existing `POST /api/build/sessions/:id/deploy`.
+   *
+   * Returns `{ok:false}` (never throws) for: an unknown / non-git build,
+   * a build with no loaded workspace, no `adaptRunner` configured, or a
+   * model output that produced no manifest.
+   */
+  async adaptGit(
+    buildId: string,
+    opts: { instructions?: string } = {},
+  ): Promise<{ ok: true; fileCount: number } | { ok: false; reason: string }> {
+    const st = this.states.get(buildId);
+    if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
+    const ws = this.workspaces.get(buildId);
+    if (!ws) return { ok: false, reason: "no workspace for build" };
+    if (!this.deps.adaptRunner) {
+      // Mirror the scratch live-path degradation: the live LLM provider
+      // is not wired into the daemon yet, so there is no model to adapt
+      // with. The HTTP layer turns this into a 503.
+      return { ok: false, reason: "AI adapt not configured" };
+    }
+
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "adapt-step",
+      actor: "ai",
+      summary: `adapting ${ws.count()} repo file(s)`,
+    });
+
+    let userPrompt = buildAdaptPrompt(ws.snapshot());
+    const extra = (opts.instructions ?? "").trim();
+    if (extra.length > 0) {
+      // The owner's free-form steering is appended as plain context. It
+      // is NOT a secret channel (the system prompt forbids soliciting
+      // secrets) so it's safe to pass through verbatim.
+      userPrompt += `\n\nExtra instructions: ${extra}`;
+    }
+
+    let raw: string;
+    try {
+      raw = await this.deps.adaptRunner({ systemPrompt: SYSTEM_PROMPT_V1, userPrompt });
+    } catch (e) {
+      const reason = `adapt model call failed: ${(e as Error).message}`;
+      await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });
+      return { ok: false, reason };
+    }
+
+    // Parse the model's emit-format output with the SAME parser the
+    // scratch vibe path uses, so the two paths can never drift on format.
+    const parser = new VibeCodeStreamParser();
+    let parsed: Record<string, string> = {};
+    parser.on("event", (ev: { kind: string; files?: Record<string, string> }) => {
+      if (ev.kind === "done" && ev.files) parsed = ev.files;
+    });
+    parser.feed(raw);
+    parser.end();
+    if (Object.keys(parsed).length === 0) parsed = parser.snapshot();
+
+    if (parsed["flagship.app.json"] == null) {
+      const reason = "adapt produced no flagship.app.json";
+      await this.deps.journal.append(buildId, { mode: "git", kind: "adapt-step", actor: "ai", summary: reason });
+      return { ok: false, reason };
+    }
+
+    // Merge the produced files into the workspace. `write` path-guards
+    // every entry (no `..`, no leading `/`, bounded size); unsafe paths
+    // are skipped + journalled, never silently overwriting the tree.
+    const written: string[] = [];
+    const skipped: string[] = [];
+    for (const [path, content] of Object.entries(parsed)) {
+      const r = ws.write(path, content);
+      if (r.ok) written.push(path);
+      else skipped.push(path);
+    }
+
+    await this.deps.journal.append(buildId, {
+      mode: "git",
+      kind: "adapt-step",
+      actor: "ai",
+      // Value-free: file COUNTS + NAMES only, never file contents.
+      summary: `adapt wrote ${written.length} file(s)${skipped.length ? `, skipped ${skipped.length} unsafe` : ""}`,
+      detail: written.join(", "),
+    });
+
+    st.gitFit = true;
+    return { ok: true, fileCount: written.length };
   }
 
   // ----- mcp mode --------------------------------------------------------
