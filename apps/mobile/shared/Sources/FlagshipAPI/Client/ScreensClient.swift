@@ -114,6 +114,40 @@ public protocol ScreensClient: Sendable {
     // an outcome once the owner signs + dispatches (or refuses).
     func companionPendingWrites() async throws -> CompanionPendingWritesResponse
     func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse
+
+    // Build-a-service modes — the "how do you want to build it?" chooser
+    // fans into git / mcp / journal; scratch reuses the vibe-code surface.
+    // All paired-session gated; mirrors buildmodes/buildModesHttp.ts.
+
+    /// git: clone a repo + report Flagship-fitness.
+    /// `POST /api/build/git`
+    func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse
+    /// git (non-fit): run the AI adapt pass. 503 → "AI adapt not
+    /// configured" (caller falls back to scratch).
+    /// `POST /api/build/sessions/:id/adapt`
+    func buildAdapt(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptResponse
+    /// mcp: create the per-build IDE connection (URL + bearer key + config).
+    /// `POST /api/build/mcp`
+    func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse
+    /// mcp: re-display the existing connection.
+    /// `GET /api/build/sessions/:id/mcp`
+    func buildMcpInfo(buildId: String) async throws -> BuildMcpConnection
+    /// mcp: regenerate the bearer key (invalidates the old one).
+    /// `POST /api/build/sessions/:id/mcp/rotate`
+    func buildMcpRotate(buildId: String, _ req: BuildMcpRequest) async throws -> BuildMcpConnection
+    /// Value-free list of env vars an authoring agent asked the owner to
+    /// set on the box. NEVER a value.
+    /// `GET /api/build/sessions/:id/env-requests`
+    func buildEnvRequests(buildId: String) async throws -> BuildEnvRequestsResponse
+    /// Deploy the build artifact (mode-agnostic) → installed service.
+    /// `POST /api/build/sessions/:id/deploy`
+    func buildDeploy(buildId: String) async throws -> BuildDeployResponse
+    /// The list of past builds across every mode (the journal index).
+    /// `GET /api/build/sessions`
+    func buildSessions() async throws -> BuildSessionsResponse
+    /// One build's append-only timeline.
+    /// `GET /api/build/sessions/:id/journal`
+    func buildJournal(buildId: String) async throws -> BuildJournalResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {
