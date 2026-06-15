@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
-import type { TierStorage, TierSubscriptionRecord, StripeEventStore } from "@flagship/storage";
+import { InMemoryMarketplaceStorage } from "@flagship/storage";
+import type {
+  TierStorage,
+  TierSubscriptionRecord,
+  StripeEventStore,
+  AppPurchaseRecord,
+  AppPurchaseStorage,
+  MarketplaceListingRecord,
+} from "@flagship/storage";
 import {
   verifyStripeSignature,
   tierForPrice,
   handleStripeWebhook,
   createCheckoutSession,
   handleCreateCheckout,
+  createAppCheckoutSession,
+  handleCreateAppCheckout,
   type StripeConfig,
   type StripeDeps,
 } from "../src/stripe.js";
@@ -254,6 +264,121 @@ describe("createCheckoutSession", () => {
     const fetchImpl = (async () =>
       new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/x" }), { status: 200 })) as unknown as typeof fetch;
     const res = await handleCreateCheckout(deps(CONFIG, fetchImpl), { username: "alice", tier: "maker" });
+    expect(res.status).toBe(200);
+    expect((res.body as { url: string }).url).toContain("checkout.stripe.com");
+  });
+});
+
+// ── app purchases (#14) ──────────────────────────────────────────────
+
+function fakePurchases(): AppPurchaseStorage & { rows: AppPurchaseRecord[] } {
+  const rows: AppPurchaseRecord[] = [];
+  return {
+    rows,
+    async grant(rec) {
+      if (rows.some((r) => r.username === rec.username && r.creator === rec.creator && r.slug === rec.slug)) return false;
+      rows.push({ ...rec });
+      return true;
+    },
+    async has(u, c, s) {
+      return rows.some((r) => r.username === u && r.creator === c && r.slug === s);
+    },
+    async listForUser(u) {
+      return rows.filter((r) => r.username === u);
+    },
+  };
+}
+
+function paidListing(): MarketplaceListingRecord {
+  return {
+    creator: "acme", slug: "notes", name: "Notes", tagline: "take notes",
+    descriptionMd: "x", category: "productivity", tagsCsv: "notes",
+    canonicalUrl: "https://notes.acme.flagship.services", manifestHashHex: "00".repeat(32),
+    screenshotKeysJson: "[]", status: "listed", priceUsdCents: 700, rankScore: 1,
+    installCount: 0, publicDistribution: true, listedAt: NOW, updatedAt: NOW,
+    irkSignatureHex: "ab".repeat(32),
+  };
+}
+
+async function appDeps(fetchImpl?: typeof fetch) {
+  const marketplace = new InMemoryMarketplaceStorage();
+  await marketplace.upsert(paidListing());
+  const purchases = fakePurchases();
+  const d: StripeDeps & { tiers: ReturnType<typeof fakeTiers>; purchases: typeof purchases; marketplace: typeof marketplace } = {
+    tiers: fakeTiers(),
+    stripeEvents: fakeEvents(),
+    purchases,
+    marketplace,
+    config: CONFIG,
+    now: () => NOW,
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
+  };
+  return d;
+}
+
+describe("Stripe app purchases (#14)", () => {
+  it("webhook checkout.session.completed kind=app grants the purchase idempotently", async () => {
+    const d = await appDeps();
+    const event = {
+      id: "evt_app1",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_1", metadata: { kind: "app", username: "alice", creator: "acme", slug: "notes" } } },
+    };
+    const res = await postEvent(d, event);
+    expect(res.status).toBe(200);
+    expect(await d.purchases.has("alice", "acme", "notes")).toBe(true);
+    expect((res.body as { action?: string }).action).toBe("purchased");
+    // Redelivery is a no-op (idempotent at the event-id layer).
+    const again = await postEvent(d, event);
+    expect((again.body as { idempotent?: boolean }).idempotent).toBe(true);
+    expect(d.purchases.rows.length).toBe(1);
+  });
+
+  it("webhook app event without the stores ACKs but grants nothing", async () => {
+    const d = deps(); // no purchases/marketplace
+    const res = await postEvent(d, {
+      id: "evt_app2",
+      type: "checkout.session.completed",
+      data: { object: { metadata: { kind: "app", username: "alice", creator: "acme", slug: "notes" } } },
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { ignored?: string }).ignored).toBeTruthy();
+  });
+
+  it("createAppCheckoutSession posts a one-time payment session priced from the listing", async () => {
+    let captured: any;
+    const fetchImpl = (async (_url: any, init: any) => {
+      captured = init;
+      return new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/app_1" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const d = await appDeps(fetchImpl);
+    const { url } = await createAppCheckoutSession(d, { username: "alice", creator: "acme", slug: "notes" });
+    expect(url).toContain("checkout.stripe.com");
+    const body = captured.body as string;
+    expect(body).toContain("mode=payment");
+    expect(body).toContain("%5Bunit_amount%5D=700");
+    expect(body).toContain("metadata%5Bkind%5D=app");
+    expect(body).toContain("metadata%5Bslug%5D=notes");
+  });
+
+  it("createAppCheckoutSession refuses a free or unknown listing", async () => {
+    const d = await appDeps();
+    await d.marketplace.setPrice("acme", "notes", 0); // make it free
+    await expect(createAppCheckoutSession(d, { username: "alice", creator: "acme", slug: "notes" })).rejects.toThrow(/free/);
+    await expect(createAppCheckoutSession(d, { username: "alice", creator: "acme", slug: "ghost" })).rejects.toThrow(/not found/);
+  });
+
+  it("handleCreateAppCheckout: 400 on bad input, 503 without a key, 200 with url", async () => {
+    const d = await appDeps();
+    expect((await handleCreateAppCheckout(d, {})).status).toBe(400);
+    const noKey = await appDeps();
+    noKey.config = { ...CONFIG, secretKey: undefined };
+    expect((await handleCreateAppCheckout(noKey, { username: "alice", creator: "acme", slug: "notes" })).status).toBe(503);
+
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/app_x" }), { status: 200 })) as unknown as typeof fetch;
+    const ok = await appDeps(fetchImpl);
+    const res = await handleCreateAppCheckout(ok, { username: "alice", creator: "acme", slug: "notes" });
     expect(res.status).toBe(200);
     expect((res.body as { url: string }).url).toContain("checkout.stripe.com");
   });
