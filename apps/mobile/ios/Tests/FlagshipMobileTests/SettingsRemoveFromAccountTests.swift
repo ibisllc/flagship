@@ -21,6 +21,7 @@ final class SettingsRemoveFromAccountTests: XCTestCase {
         var called = false
         let _ = SettingsScreen(
             username: "u",
+            tier: .idle,
             controlDevices: .loaded([]),
             trustedDevices: .loaded([]),
             onRemoveFromAccount: { called = true },
@@ -41,6 +42,7 @@ final class SettingsRemoveFromAccountTests: XCTestCase {
         // explicitly, but the default protects callers that forget.
         let _ = SettingsScreen(
             username: "u",
+            tier: .idle,
             controlDevices: .loaded([]),
             trustedDevices: .loaded([])
         )
