@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildJournalEntry
 import com.flagshipserver.app.api.BuildMcpConnection
@@ -61,10 +62,15 @@ import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
 import com.flagshipserver.app.viewmodels.BuildGitViewModel
 import com.flagshipserver.app.viewmodels.BuildJournalViewModel
 import com.flagshipserver.app.viewmodels.BuildMcpViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -162,7 +168,8 @@ fun BuildSourceChooserScreen(nav: NavController) {
             SourceTile(
                 title = "Start from scratch with AI",
                 body = "Describe what you want. The AI writes it and the box runs it.",
-                onClick = { nav.navigate("vibe/describe") },
+                // The box's model drives this build, so confirm an AI key first.
+                onClick = { nav.navigate("vibe/key") },
             )
             SourceTile(
                 title = "Import from a Git repo",
@@ -225,8 +232,26 @@ fun BuildGitScreen(nav: NavController) {
     LaunchedEffect(phase) {
         if (phase is BuildGitViewModel.GitPhase.AdaptUnavailable) {
             toasts.info("AI adapt isn't available on this server yet — starting from scratch instead.")
-            nav.navigate("vibe/describe")
+            nav.navigate("vibe/key")
         }
+    }
+
+    // Returning from the AI-key step (build/git/key): a credential was chosen
+    // for THIS adapt → run the adapt pass with it (single-use). Fires on the
+    // RESUME after the key screen pops back.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                PendingBuildCredential.take()?.let { cred ->
+                    vm.adapt(
+                        credential = BuildCredential(cred.provider, cred.apiKey, cred.baseUrl),
+                    )
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     ScreenScaffold(
@@ -284,7 +309,9 @@ private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewM
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
             Spacer(Modifier.height(FS.space.s4))
-            FSPrimaryButton("Build with AI instead", onClick = { vm.adapt() }, block = true)
+            // The box's model rewrites the repo, so confirm an AI key first;
+            // the git screen runs the adapt pass on return with it.
+            FSPrimaryButton("Build with AI instead", onClick = { nav.navigate("build/git/key") }, block = true)
         }
         Spacer(Modifier.height(FS.space.s2))
         JournalLink(nav, vm.buildId)

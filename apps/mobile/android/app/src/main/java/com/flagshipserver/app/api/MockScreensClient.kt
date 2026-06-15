@@ -102,6 +102,12 @@ class MockScreensClient(
 
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         tick()
+        // Wire-match the live contract: no credential + no promo budget ⇒ the
+        // box asks the client for a key. The mock has no promo budget, so a
+        // credential-less start signals needsCredential.
+        if (req.credential == null) {
+            return VibeCodeStartResponse(sessionId = "", needsCredential = true)
+        }
         return VibeCodeStartResponse(sessionId = "vc-${UUID.randomUUID().toString().take(8).lowercase()}")
     }
 

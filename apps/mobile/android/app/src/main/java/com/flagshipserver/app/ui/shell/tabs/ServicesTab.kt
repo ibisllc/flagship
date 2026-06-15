@@ -13,6 +13,7 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
+import com.flagshipserver.app.ui.screens.AiKeyStepScreen
 import com.flagshipserver.app.ui.screens.BuildGitScreen
 import com.flagshipserver.app.ui.screens.BuildJournalScreen
 import com.flagshipserver.app.ui.screens.BuildMcpScreen
@@ -20,6 +21,7 @@ import com.flagshipserver.app.ui.screens.BuildSourceChooserScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
+import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
 import com.flagshipserver.app.ui.screens.InviteIssueScreen
@@ -47,6 +49,18 @@ fun ServicesTab() {
         }
         composable("build/source") { BuildSourceChooserScreen(nav) }
         composable("build/git") { BuildGitScreen(nav) }
+        // AI-key step for the git-adapt path. On confirm it stows the chosen
+        // credential and pops back to the git screen, whose onAppear takes it
+        // off PendingBuildCredential and runs the adapt pass with it.
+        composable("build/git/key") {
+            AiKeyStepScreen(
+                onConfirm = { cred ->
+                    PendingBuildCredential.set(cred)
+                    nav.popBackStack()
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
         composable("build/mcp") { BuildMcpScreen(nav) }
         composable("build/journal") { BuildJournalScreen(nav) }
         composable("build/journal/{buildId}") { entry ->
@@ -54,6 +68,20 @@ fun ServicesTab() {
             BuildJournalScreen(nav, buildId = bid)
         }
         composable("vibe/provider") { VibeCodeProviderPickScreen(nav) }
+        // AI-key step for the from-scratch path. On confirm it stows the
+        // in-memory credential and continues to the describe screen, which
+        // hands it to the box's model when the build starts.
+        composable("vibe/key") {
+            AiKeyStepScreen(
+                onConfirm = { cred ->
+                    PendingBuildCredential.set(cred)
+                    nav.navigate("vibe/describe") {
+                        popUpTo("vibe/key") { inclusive = true }
+                    }
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
         composable("vibe/describe") { VibeCodeDescribeScreen(nav) }
         composable("vibe/generating/{sessionId}") { entry ->
             val sid = entry.arguments?.getString("sessionId") ?: return@composable

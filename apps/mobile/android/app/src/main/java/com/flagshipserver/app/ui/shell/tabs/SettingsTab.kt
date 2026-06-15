@@ -23,6 +23,7 @@ import com.flagshipserver.app.ui.screens.JoinDeviceScreen
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
+import com.flagshipserver.app.ui.screens.AiKeysManagerScreen
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
@@ -94,6 +95,7 @@ fun SettingsTab() {
         composable("keyfile-export") { KeyfileExportScreen(nav) }
         composable("developer") { DeveloperScreen(nav) }
         composable("providers") { ProvidersScreen(nav) }
+        composable("ai-keys") { AiKeysManagerScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
         composable("profiles") { ProfilesScreen(nav) }
         // P7 — dedicated tier-status / subscription screen.

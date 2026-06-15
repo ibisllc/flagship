@@ -35,6 +35,7 @@ import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
 import com.flagshipserver.app.core.AppState
+import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
 import com.flagshipserver.app.core.DeveloperSettings
@@ -107,6 +108,7 @@ class MainActivity : FragmentActivity() {
         val toasts = ToastCenter()
         deepLinker = DeepLinker()
         val devSettings = DeveloperSettings.create(applicationContext)
+        AiKeyStore.attach(applicationContext)
         val okHttp = buildOkHttp()
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the

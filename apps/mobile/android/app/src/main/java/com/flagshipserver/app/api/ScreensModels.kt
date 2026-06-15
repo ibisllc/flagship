@@ -92,11 +92,35 @@ data class AppDetailResponse(
 
 // ---------- P1.5 vibe-code/start ---------------------------------------
 
+/**
+ * BYOK credential handed to a build. Wire-identical to the webapp's
+ * providers.js entry shape (`{ provider, apiKey, baseUrl? }`) and the daemon
+ * BYOK contract. Lives in memory only — the device-local AiKeyStore decides
+ * whether the underlying key is persisted. NEVER logged.
+ */
 @Serializable
-data class VibeCodeStartRequest(val prompt: String, val model: String? = null)
+data class BuildCredential(
+    val provider: String,
+    val apiKey: String,
+    val baseUrl: String? = null,
+)
 
 @Serializable
-data class VibeCodeStartResponse(val sessionId: String)
+data class VibeCodeStartRequest(
+    val prompt: String,
+    val model: String? = null,
+    /** Optional BYOK credential. Omitted ⇒ box uses promo/credits. */
+    val credential: BuildCredential? = null,
+)
+
+@Serializable
+data class VibeCodeStartResponse(
+    val sessionId: String,
+    /** True when the box needs a credential before it can build (none was
+     *  supplied and no promo budget is available). The client routes back
+     *  into the AI-key step. */
+    val needsCredential: Boolean = false,
+)
 
 // ---------- P1.6 vibe-code stream frames -------------------------------
 
@@ -514,6 +538,9 @@ data class VibeCodeReplyRequest(
     /** "set" | "declined" | "deferred" — only meaningful when the
      *  pending tool is `requestEnvVar`. */
     val envVarStatus: String? = null,
+    /** Optional BYOK credential carried on a reply (e.g. the box asked for a
+     *  key mid-session, or an adapt step needs the box's model). */
+    val credential: BuildCredential? = null,
 )
 
 @Serializable

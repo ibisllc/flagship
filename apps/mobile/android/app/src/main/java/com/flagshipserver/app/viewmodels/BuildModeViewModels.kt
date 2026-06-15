@@ -77,11 +77,17 @@ class BuildGitViewModel(
         }
     }
 
-    fun adapt(instructions: String? = null): Job = scope.launch {
+    fun adapt(
+        instructions: String? = null,
+        credential: com.flagshipserver.app.api.BuildCredential? = null,
+    ): Job = scope.launch {
         val id = buildId ?: return@launch
         _phase.value = GitPhase.Adapting
         try {
-            val r = client.adapt(id, com.flagshipserver.app.api.BuildAdaptRequest(instructions = instructions))
+            val r = client.adapt(
+                id,
+                com.flagshipserver.app.api.BuildAdaptRequest(instructions = instructions, credential = credential),
+            )
             _phase.value = GitPhase.Adapted(fileCount = r.fileCount)
         } catch (t: Throwable) {
             if (t is ScreensError.Http && t.status == 503) {

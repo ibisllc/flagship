@@ -41,10 +41,16 @@ data class BuildGitResponse(
 )
 
 /** POST /api/build/sessions/:id/adapt body. Optional owner instructions
- *  steer the rewrite. */
+ *  steer the rewrite. The optional BYOK [credential] is the AI key chosen at
+ *  the build-flow key step; the box stores it keyed by buildId and the
+ *  adaptRunner opens it just-in-time. Omitted ⇒ the box uses what it has and
+ *  may answer 503 ("AI adapt not configured" → fall back to scratch).
+ *  Box-only, never logged. MIRRORS the `credential` field parsed in the
+ *  daemon's buildModesHttp.ts and iOS BuildAdaptRequest. */
 @Serializable
 data class BuildAdaptRequest(
     val instructions: String? = null,
+    val credential: BuildCredential? = null,
 )
 
 /** POST /api/build/sessions/:id/adapt response. A 503 means "AI adapt not

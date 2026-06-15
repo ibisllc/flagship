@@ -169,9 +169,9 @@ fun SettingsScreen(nav: NavController) {
                 ),
                 FSSettingsRowData(
                     icon = "🔑",
-                    title = "AI providers",
-                    subtitle = "BYO LLM provider keys (Anthropic, OpenAI, Google…).",
-                    onClick = { nav.navigate("providers") },
+                    title = "AI keys",
+                    subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
+                    onClick = { nav.navigate("ai-keys") },
                 ),
                 // v1.2 Phase 4 — Account security badge + drill-down.
                 FSSettingsRowData(
