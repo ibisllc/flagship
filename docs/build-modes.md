@@ -6,12 +6,16 @@
 > `feat/marketplace` merges (it's the only mode whose code isn't on
 > `feat/build-modes`).
 
-Status: **in progress on `feat/build-modes`.** Daemon backbone + git & mcp
-modes + webapp client landed & tested; the scratch multimodal chat (chat +
-attachments) seam + webapp UI landed & tested. Remaining: iOS + Android
-clients, AI-adapt endpoint for non-fit git repos, and live-provider wiring
-into the daemon boot path (the model isn't constructed in `index.ts` yet —
-a separate pre-existing task).
+Status: **feature-complete on `feat/build-modes` (pending launch).** Daemon
+backbone + git/mcp/scratch modes + the shared journal + the AI-adapt endpoint
++ value-free env-requests + the scratch multimodal-chat seam, all tested, on
+all three clients (webapp + iOS + Android). The ONE remaining dependency is
+**live-provider wiring into the daemon boot path** — the LLM is not
+constructed in `index.ts` yet (a separate pre-existing gap, not specific to
+this feature); until it lands, the AI-dependent paths (scratch chat, git
+adapt) are proven seams that degrade cleanly (adapt → 503 → fall back to
+scratch). The mobile scratch *attachment picker* is the one nice-to-have not
+yet ported (mobile scratch uses the existing vibe screen).
 
 ## The idea
 
@@ -158,17 +162,21 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
     thumbnails, FileReader→base64 with the same caps enforced client-side
     (friendly toast on violation), follow-up turns over `/reply`, and the
     Deploy affordance.
-  REMAINING: iOS + Android attachment pickers; openai/google adapters mirror
-  the Anthropic translation when needed; live-provider wiring (separate task).
+  REMAINING: the mobile scratch attachment picker (iOS/Android scratch routes
+  to the existing vibe screen for now); openai/google adapters mirror the
+  Anthropic translation when needed; live-provider wiring (separate task).
 - **AI-adapt endpoint** — DONE (server + webapp). `POST
   /api/build/sessions/:id/adapt` runs `buildAdaptPrompt(files)` through an
   injected `adaptRunner`, parses the emit-format output with
   `VibeCodeStreamParser`, and merges the path-guarded files into the
   workspace (manifest required). Returns 503 until the daemon's live LLM
-  provider is wired (the separate pre-existing gap); the webapp falls back
-  to from-scratch on a 503. REMAINING: that live-provider wiring, and the
-  iOS/Android affordance.
-- **iOS + Android** — the chooser + git/mcp/journal screens to this spec.
+  provider is wired (the separate pre-existing gap); webapp + iOS + Android all
+  fall back to from-scratch on a 503. REMAINING: that live-provider wiring.
+- **iOS + Android** — DONE. The chooser + git/mcp/journal screens are native
+  on both (SwiftUI + Compose), built to this spec, with a build-modes API
+  client whose Mock matches the live wire format (pinned by tests). iOS 945
+  XCTests (+31), Android 761 unit tests (+16); both build. Scratch tile routes
+  to the existing vibe screen; marketplace tile degrades to "coming soon".
 - **request_env_var → phone** — DONE (server + webapp). The orchestrator
   keeps a value-free per-build pending list, fires a value-free
   `notifyOwner({buildId, name})` hook (log-only by default, swap in the push

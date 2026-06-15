@@ -123,7 +123,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — build-a-service multi-mode (`feat/build-modes`, IN PROGRESS)
+### 2026-06-14 (latest) — build-a-service multi-mode (`feat/build-modes`, FEATURE-COMPLETE pending launch)
 
 **New feature branch `feat/build-modes`** — the "build a service" workflow
 fans from one model-source pick into a **"how do you want to build it?"**
@@ -159,11 +159,10 @@ the phone is locked).
   the webapp mcp view shows it with a "the IDE never sees the value — set it in
   Configure environment" note.
 
-Gates: `npx tsc -b` clean · daemon vitest +~70 new (buildJournal/gitImport/
-buildWorkspace/mcpServer/mcpKeyStore/buildModes) · web vitest **1152** (+ new
-`webappBuildModesView`). **iOS + Android NOT yet built** (this work is daemon +
-webapp). Forgejo-push stays harness-only (external actors go through chat/git/
-mcp, the harness materializes).
+Gates: `npx tsc -b` clean · daemon+providers+web vitest **2539** (229 files) ·
+**iOS 945 XCTests** (+31, xcodebuild green) · **Android 761 unit tests** (+16,
+gradle green). Forgejo-push stays harness-only (external actors go through
+chat/git/mcp, the harness materializes).
 
 **Multimodal chat for scratch — DONE (server seam + webapp UI).** Provider
 layer was already done (`Attachment`/`ChatMessage.attachments` + Anthropic
@@ -192,11 +191,23 @@ daemon vibe/buildmodes/screens green (+ new `vibeCodeAttachments` +
 emit-format output with `VibeCodeStreamParser`, and merges the path-guarded
 files into the workspace (manifest required); 503 "AI adapt not configured"
 until the daemon's live LLM provider is wired (the pre-existing gap), and the
-webapp falls back to from-scratch on a 503. **iOS + Android** chooser/git/mcp/journal
-screens + the scratch attachment picker to the `docs/build-modes.md` UX spec
-(incl. the env-requests list + the real push fan-out for the value-free
-`request_env_var` notify hook — server + webapp DONE). Live-provider wiring
-into the daemon boot path.
+webapp falls back to from-scratch on a 503.
+
+**iOS + Android — DONE.** Native chooser + git/mcp/journal screens (SwiftUI +
+Compose) built to the `docs/build-modes.md` UX spec, with a build-modes API
+client whose Mock matches the live wire format (pinned by tests). MCP screen
+shows the copyable key + IDE config + the value-free env-requests list; git
+screen has the fitness verdict + Install / Build-with-AI (503 → scratch);
+journal list + timeline. Scratch tile routes to the existing vibe screen;
+marketplace tile degrades to "coming soon".
+
+**Remaining (all gated on one pre-existing dependency):** wire a **live LLM
+provider** into the daemon boot path (`index.ts` never constructs one today —
+not specific to this feature) — that single change lights up scratch-chat
+streaming + git-adapt on all surfaces. Plus two nice-to-haves: the mobile
+scratch **attachment picker** (mobile scratch uses the existing vibe screen),
+and swapping the value-free `notifyOwner` env-request hook for the real push
+relay (it's log-only by default, like the vibe-code W10 hook).
 
 ### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 
