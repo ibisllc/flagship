@@ -1650,3 +1650,12 @@ button[data-device-restricted] {
 .fs-app-card-head > .fs-listrow-icon { margin-top: 1px; }
 .fs-app-card-body { flex: 1; min-width: 0; }
 .fs-app-card-head > .secondary { flex: 0 0 auto; }
+
+/* Build-a-service modes */
+.build-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; }
+.build-tile strong { font-size: 1rem; }
+.build-tile .note { margin: 0; }
+.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--surface-2, #1c2530); font-size: 0.72rem; font-family: var(--font-mono); }
+.build-journal-timeline { list-style: none; padding: 0; margin: 0; }
+.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border, #243); }
+.build-journal-timeline li:last-child { border-bottom: none; }

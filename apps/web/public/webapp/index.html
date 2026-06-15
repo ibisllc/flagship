@@ -415,6 +415,64 @@
         </div>
       </section>
 
+      <!-- Build-a-service source chooser -->
+      <section id="view-build-source" class="hidden">
+        <h2>Build a service</h2>
+        <p class="note">How do you want to build it?</p>
+        <div id="build-source-tiles" class="mt-2">
+          <button class="card build-tile full-width" id="build-src-scratch">
+            <strong>Start from scratch with AI</strong>
+            <span class="note">Describe it in plain words. The AI writes and deploys it.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-git">
+            <strong>Import from a Git repo</strong>
+            <span class="note">If it's Flagship-ready we install it as-is; if not, the AI adapts it.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-mcp">
+            <strong>Connect your IDE (Cursor / Cline)</strong>
+            <span class="note">Build from your editor with your own AI. Your box exposes a secure tool surface — no AI key on the box.</span>
+          </button>
+          <button class="card build-tile full-width mt-2" id="build-src-market">
+            <strong>Get from the marketplace</strong>
+            <span class="note">Install something a neighbour already built.</span>
+          </button>
+        </div>
+        <p class="note mt-4"><a id="build-source-journal-link" href="#">View past builds →</a></p>
+        <div class="row-2 mt-2"><button class="secondary" id="build-source-back">← Back</button></div>
+      </section>
+
+      <!-- Build mode: import from Git -->
+      <section id="view-build-git" class="hidden">
+        <h2>Import from Git</h2>
+        <div class="card">
+          <p class="note">The repo is cloned on your box and checked for a <code>flagship.app.json</code>.</p>
+          <input id="build-git-url" type="text" placeholder="https://github.com/you/app" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <input id="build-git-ref" type="text" placeholder="branch / tag (optional)" class="mt-2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="build-git-check" class="full-width mt-2">Check repo</button>
+        </div>
+        <div id="build-git-verdict" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-git-back">← Back</button></div>
+      </section>
+
+      <!-- Build mode: connect your IDE via MCP -->
+      <section id="view-build-mcp" class="hidden">
+        <h2>Connect your IDE</h2>
+        <div class="card">
+          <p class="note">Build a service from Cursor or Cline using your own AI subscription. Your box runs a small MCP server, scoped to this one build, that exposes only safe build tools (write files, validate, request a secret value-free, deploy).</p>
+          <button id="build-mcp-create" class="full-width mt-2">Create a connection</button>
+        </div>
+        <div id="build-mcp-conn" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-mcp-back">← Back</button></div>
+      </section>
+
+      <!-- Build journal viewer -->
+      <section id="view-build-journal" class="hidden">
+        <h2>Build history</h2>
+        <div id="build-journal-list" class="mt-2"></div>
+        <div id="build-journal-detail" class="hidden mt-2"></div>
+        <div class="row-2 mt-2"><button class="secondary" id="build-journal-back">← Back</button></div>
+      </section>
+
       <!-- W10 — per-app env-var KV editor -->
       <section id="view-service-env" class="hidden">
         <h2>Configure environment</h2>
