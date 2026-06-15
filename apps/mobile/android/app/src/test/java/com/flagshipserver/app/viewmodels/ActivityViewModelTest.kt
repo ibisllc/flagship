@@ -20,7 +20,10 @@ import com.flagshipserver.app.api.AppBackupStartRequest
 import com.flagshipserver.app.api.AppBackupStartResponse
 import com.flagshipserver.app.api.BrowserTabsListResponse
 import com.flagshipserver.app.api.InstallEvent
+import com.flagshipserver.app.api.InstallServiceEnvelope
+import com.flagshipserver.app.api.InstallServiceResponse
 import com.flagshipserver.app.api.MarketplaceBrowseResponse
+import com.flagshipserver.app.api.MarketplaceListingDetail
 import com.flagshipserver.app.api.OrdersSendRequest
 import com.flagshipserver.app.api.OrdersSendResponse
 import com.flagshipserver.app.api.PairedSessionsListResponse
@@ -85,6 +88,8 @@ private class StubScreensClient(
     override suspend fun appsList(): AppsListResponse = error("unused")
     override suspend fun appDetail(serviceId: String): AppDetailResponse = error("unused")
     override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse = error("unused")
+    override suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail = error("unused")
+    override suspend fun installFromMarketplace(envelope: InstallServiceEnvelope): InstallServiceResponse = error("unused")
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse = error("unused")
     override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse = error("unused")
     override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse = error("unused")
