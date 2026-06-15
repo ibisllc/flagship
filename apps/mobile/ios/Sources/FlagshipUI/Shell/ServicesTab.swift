@@ -1051,7 +1051,9 @@ struct VibeCodeDescribeContainer: View {
 }
 
 // Build-a-service chooser container. The new create-a-service entry; fans
-// into the build modes. Scratch reuses the existing vibe flow.
+// into the build modes. Scratch reuses the existing vibe flow; the
+// marketplace tile degrades to a "coming soon" toast (its code lives on
+// feat/marketplace).
 struct BuildSourceChooserContainer: View {
     @Binding var path: [AppsRoute]
     /// "Runs on" for this creation flow; nil hides the row.
@@ -1060,6 +1062,7 @@ struct BuildSourceChooserContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.screensServerFqdn) private var bound
     @State private var activeSessions = 0
+    @Environment(ToastCenter.self) private var toasts
     var body: some View {
         BuildSourceChooserScreen(
             target: target,
@@ -1068,6 +1071,7 @@ struct BuildSourceChooserContainer: View {
             onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
+            onMarketplace: { toasts.info("The marketplace is coming soon.") },
             onPastBuilds: { path.append(.buildJournal(buildId: nil)) }
         )
         // Re-counted each time the chooser shows (e.g. Back from a session)

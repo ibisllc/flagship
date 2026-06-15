@@ -322,6 +322,8 @@ function wireSettingsTabEntries() {
     await renderProviders();
     document.querySelector("#push-switch")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+  // Tier & usage (marketplace) — dedicated subscription/tier-status screen.
+  wire("settings-tab-tier", enterTierStatus);
   wire("settings-tab-recovery", enterRecovery);
   // "Back up account key" reuses the Recovery screen's `.flagshipkey`
   // export ceremony — jump there and focus the backup button.
