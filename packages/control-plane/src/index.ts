@@ -28,6 +28,7 @@ export * from "./customDomainVerifier.js";
 export * from "./admin.js";
 export * from "./schemaStatus.js";
 export * from "./caLeaseWarning.js";
+export * from "./metering.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
 export * from "./push.js";
