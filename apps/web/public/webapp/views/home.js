@@ -15,6 +15,7 @@ import { escapeHtml } from "../lib/util.js";
 import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
+import { renderProBanner } from "../lib/proBanner.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import {
   deviceCapabilityChipText,
@@ -943,6 +944,12 @@ export async function renderHome() {
   // as skipped (not enrolled) and the user hasn't dismissed it on this
   // device. Local-only signal; no API call.
   renderRecoveryBanner();
+
+  // Always-available "Become a Pro member" support CTA — a gentle, on-brand
+  // membership nudge (distinct from the cap-hit upgrade alert) for the ~95%
+  // who never hit the bandwidth cap but would happily back the project.
+  // Fully dismissible; once dismissed on this device it never re-appears.
+  renderProBanner();
 
   const sid = recoveryStoreGet("sessionId");
   const sessionStatusEl = $("session-status");
