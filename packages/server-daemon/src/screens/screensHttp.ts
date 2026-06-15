@@ -70,6 +70,7 @@ import type {
   ServiceEnvOpResponse,
   ServiceEnvSetRequest,
   ServiceEnvUnsetRequest,
+  TierStatusResponse,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
   VerifyCustomDomainRequest,
