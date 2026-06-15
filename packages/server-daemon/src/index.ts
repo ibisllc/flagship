@@ -57,6 +57,12 @@ import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
+import { FileBuildJournal } from "./buildmodes/buildJournal.js";
+import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
+import { GitImporter } from "./buildmodes/gitImport.js";
+import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
+import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
+import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import {
   startDaemonRuntime,
@@ -657,6 +663,64 @@ async function main(): Promise<void> {
           `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
       );
     });
+
+    // ---- Build modes: git import + MCP (the two new create-service
+    // sources beyond scratch). They share ONE journal with scratch so the
+    // "your builds" list + the journal viewer span every mode. The deploy
+    // path is the same artifact deployer (harness-only Forgejo push,
+    // docker build, signed install) all modes funnel through.
+    if (runtime.servicePlatform) {
+      const buildJournal = new FileBuildJournal(join(dataDir, "build-journals"));
+      const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
+      const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
+      await mcpKeys.load();
+      const realCmd = (await import("./serviceRunner.js")).realCommandRunner;
+      const gitImporter = new GitImporter({
+        cmd: realCmd,
+        workingDir: join(dataDir, "data", "git-imports"),
+        journal: buildJournal,
+      });
+      const artifactDeployer = buildArtifactDeployer({
+        servicePlatform: runtime.servicePlatform,
+        hostIrk: identityKeypair,
+        hostUsername: username,
+        workingDir: vibeAppDir,
+        cmd: realCmd,
+        forgejoAdmin,
+        journal: buildJournal,
+      });
+      const buildOrchestrator = new BuildOrchestrator({
+        journal: buildJournal,
+        gitImporter,
+        mcpKeys,
+        deployArtifact: artifactDeployer,
+        serverFqdn: env.serverFqdn!,
+        mcpBaseUrl: `https://${env.serverFqdn!}`,
+      });
+      runtime.addHandler(
+        buildBuildModesHttpHandlers({ orchestrator: buildOrchestrator, gate: pairedSessions }),
+      );
+
+      // Bridge scratch (vibe-code) into the same journal so all three
+      // modes appear together. Value-free: only the session id + tool
+      // kind, mirroring the notify hook's contract. This replaces the
+      // log-only hook above with log + journal.
+      vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
+            `→ owner-notify hook fired`,
+        );
+        void buildJournal
+          .append(sessionId, {
+            mode: "scratch",
+            kind: kind === "requestEnvVar" ? "env-requested" : "question",
+            actor: "ai",
+            summary: kind === "requestEnvVar" ? "AI requested an env var" : "AI asked a question",
+          })
+          .catch(() => {});
+      });
+    }
 
     const lineageResolver = buildLineageResolverAdapter({
       store: pullStateStore,
