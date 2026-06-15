@@ -33,6 +33,7 @@ export * from "./schemaStatus.js";
 export * from "./caLeaseWarning.js";
 export * from "./metering.js";
 export * from "./tierGrant.js";
+export * from "./voucher.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
 export * from "./accountDeletion.js";

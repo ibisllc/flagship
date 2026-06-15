@@ -2177,6 +2177,31 @@ export interface UsageStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Prepaid Pro vouchers (migration 0052) — feat/marketplace #9
+// ──────────────────────────────────────────────────────────────────────
+
+/** A bearer voucher: redeeming it grants `tier` for `durationDays`. We persist
+ *  only the SHA-256 of the normalized code (`codeHash`). Single-use. */
+export interface VoucherRecord {
+  codeHash: string;
+  tier: TierName;
+  durationDays: number;
+  createdAt: number;
+  redeemedAt?: number;
+  redeemedBy?: string;
+}
+
+/** Standalone store (like UsageStorage — not part of the `Storage` aggregate). */
+export interface VoucherStorage {
+  /** Insert a new voucher. Collision on code_hash → ok:false. */
+  create(rec: VoucherRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(codeHash: string): Promise<VoucherRecord | undefined>;
+  /** Atomically mark redeemed IFF not already redeemed. Returns true only when
+   *  THIS call won the redemption (false ⇒ missing or already redeemed). */
+  redeem(codeHash: string, username: string, now: number): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // User-identity mandate store (#71)
 // ──────────────────────────────────────────────────────────────────────
 

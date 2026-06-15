@@ -162,6 +162,8 @@ import {
   handleUsageReport,
   handleUsageStatus,
   handleAdminTierGrant,
+  handleRedeemVoucher,
+  handleIssueVoucher,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -203,7 +205,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1UsageStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -675,6 +677,8 @@ const ROUTE_RE = {
   ADMIN_USERNAME_RECLAIM: /^\/api\/admin\/username\/([^/]+)\/reclaim$/,
   ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
   ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
+  ADMIN_VOUCHER_ISSUE: /^\/api\/admin\/voucher\/issue$/,
+  VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
@@ -2804,6 +2808,31 @@ export async function tryControlPlane(
     });
     if (auth) return finishPlain(auth);
     return finishPlain(await handleAdminTierGrant({ tiers: storage.tiers }, await readJson(request)));
+  }
+
+  // ── Vouchers (#9) — prepaid Pro, bearer codes ─────────────────
+  // POST /api/admin/voucher/issue (admin) — mint a code, return it ONCE.
+  if (method === "POST" && ROUTE_RE.ADMIN_VOUCHER_ISSUE.test(path)) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    return finishPlain(
+      await handleIssueVoucher(
+        { vouchers: new D1VoucherStorage(env.DB), tiers: storage.tiers },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/voucher/redeem (PUBLIC) — the code is the bearer secret.
+  if (method === "POST" && ROUTE_RE.VOUCHER_REDEEM.test(path)) {
+    return finishPlain(
+      await handleRedeemVoucher(
+        { vouchers: new D1VoucherStorage(env.DB), tiers: storage.tiers },
+        await readJson(request),
+      ),
+    );
   }
 
   if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
