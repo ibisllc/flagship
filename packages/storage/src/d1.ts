@@ -44,6 +44,7 @@ import type {
   UsageCounterRecord,
   VoucherStorage,
   VoucherRecord,
+  StripeEventStore,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -2093,6 +2094,22 @@ export class D1VoucherStorage implements VoucherStorage {
         `UPDATE vouchers SET redeemed_at = ?, redeemed_by = ? WHERE code_hash = ? AND redeemed_at IS NULL`,
       )
       .bind(now, username, codeHash)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+}
+
+export class D1StripeEventStore implements StripeEventStore {
+  constructor(private readonly db: D1Database) {}
+
+  async claim(eventId: string, eventType: string, now: number): Promise<boolean> {
+    // INSERT OR IGNORE: a redelivery of an already-claimed event id changes 0
+    // rows, so only the first delivery returns true and proceeds to grant.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO stripe_events (event_id, event_type, processed_at) VALUES (?,?,?)`,
+      )
+      .bind(eventId, eventType, now)
       .run();
     return (r.meta?.changes ?? 0) > 0;
   }

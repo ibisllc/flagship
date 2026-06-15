@@ -1373,6 +1373,20 @@ export interface VoucherRecord {
   redeemedBy?: string;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Stripe webhook idempotency (migration 0053) — feat/marketplace #11
+// ──────────────────────────────────────────────────────────────────────
+
+/** Standalone store (constructed on demand like D1VoucherStorage). The webhook
+ *  CLAIMS an event id before granting; only the first claimer proceeds, so a
+ *  Stripe redelivery never double-grants. */
+export interface StripeEventStore {
+  /** Atomically record `eventId` as processed. Returns true if THIS call
+   *  claimed it (first delivery → proceed), false if it was already present
+   *  (a redelivery → skip). */
+  claim(eventId: string, eventType: string, now: number): Promise<boolean>;
+}
+
 /** Standalone store (like UsageStorage — not part of the `Storage` aggregate). */
 export interface VoucherStorage {
   /** Insert a new voucher. Collision on code_hash → ok:false. */

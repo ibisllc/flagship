@@ -115,6 +115,9 @@ import {
   handleAdminTierGrant,
   handleRedeemVoucher,
   handleIssueVoucher,
+  handleStripeWebhook,
+  handleCreateCheckout,
+  type StripeConfig,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -153,7 +156,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, D1StripeEventStore, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -249,6 +252,22 @@ export interface ControlPlaneEnv {
    * the relay's USAGE_REPORT_SECRET. NOT in git — `wrangler secret put`.
    */
   USAGE_REPORT_SECRET?: string;
+
+  /**
+   * Stripe (#11 — the "convenient lane"). All optional: with none set, the
+   * Stripe checkout + webhook routes 503 (feature ships dark). NOT in git —
+   * `wrangler secret put` for the secrets; price ids + URLs may live in [vars].
+   *   STRIPE_SECRET_KEY      `sk_…`   authorizes outbound Checkout creation
+   *   STRIPE_WEBHOOK_SECRET  `whsec_…` verifies inbound webhooks
+   *   STRIPE_PRICE_HOBBY/_MAKER        price ids → tier
+   *   STRIPE_SUCCESS_URL / _CANCEL_URL post-checkout redirects
+   */
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_HOBBY?: string;
+  STRIPE_PRICE_MAKER?: string;
+  STRIPE_SUCCESS_URL?: string;
+  STRIPE_CANCEL_URL?: string;
 
   /** APNs HTTP/2 token-auth credentials. Set together to enable APNs. */
   APNS_KEY_ID?: string;
@@ -509,6 +528,8 @@ const ROUTE_RE = {
   ADMIN_TIER_GRANT: /^\/api\/admin\/tier-grant$/,
   ADMIN_VOUCHER_ISSUE: /^\/api\/admin\/voucher\/issue$/,
   VOUCHER_REDEEM: /^\/api\/voucher\/redeem$/,
+  STRIPE_WEBHOOK: /^\/api\/stripe\/webhook$/,
+  STRIPE_CHECKOUT: /^\/api\/stripe\/checkout$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
@@ -667,6 +688,20 @@ function bootJson(body: unknown, status: number): Response {
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
+}
+
+/** Assemble the Stripe config from env (#11). Every field optional — the
+ *  handlers 503 when the field they need is absent, so the feature ships dark
+ *  until the owner sets the keys. */
+function stripeConfigFromEnv(env: ControlPlaneEnv): StripeConfig {
+  return {
+    ...(env.STRIPE_WEBHOOK_SECRET ? { webhookSecret: env.STRIPE_WEBHOOK_SECRET } : {}),
+    ...(env.STRIPE_SECRET_KEY ? { secretKey: env.STRIPE_SECRET_KEY } : {}),
+    ...(env.STRIPE_PRICE_HOBBY ? { priceHobby: env.STRIPE_PRICE_HOBBY } : {}),
+    ...(env.STRIPE_PRICE_MAKER ? { priceMaker: env.STRIPE_PRICE_MAKER } : {}),
+    ...(env.STRIPE_SUCCESS_URL ? { successUrl: env.STRIPE_SUCCESS_URL } : {}),
+    ...(env.STRIPE_CANCEL_URL ? { cancelUrl: env.STRIPE_CANCEL_URL } : {}),
+  };
 }
 
 export async function tryControlPlane(
@@ -1962,6 +1997,36 @@ export async function tryControlPlane(
     return finishPlain(
       await handleRedeemVoucher(
         { vouchers: new D1VoucherStorage(env.DB), tiers: storage.tiers },
+        await readJson(request),
+      ),
+    );
+  }
+
+  // ── Stripe (#11) — the convenient card lane ───────────────────
+  // POST /api/stripe/webhook (Stripe → us). Needs the EXACT signed bytes, so
+  // read request.text() (NOT readJson) and pass the Stripe-Signature header.
+  if (method === "POST" && ROUTE_RE.STRIPE_WEBHOOK.test(path)) {
+    const rawBody = await request.text();
+    return finishPlain(
+      await handleStripeWebhook(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          config: stripeConfigFromEnv(env),
+        },
+        { rawBody, signature: request.headers.get("stripe-signature") },
+      ),
+    );
+  }
+  // POST /api/stripe/checkout (PUBLIC) — mint a hosted Checkout URL.
+  if (method === "POST" && ROUTE_RE.STRIPE_CHECKOUT.test(path)) {
+    return finishPlain(
+      await handleCreateCheckout(
+        {
+          tiers: storage.tiers,
+          stripeEvents: new D1StripeEventStore(env.DB),
+          config: stripeConfigFromEnv(env),
+        },
         await readJson(request),
       ),
     );
