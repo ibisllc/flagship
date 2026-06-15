@@ -88,6 +88,7 @@ export const HOME_BUTTON_ICONS = {
   "open-marketplace":       shoppingBagIcon,
   "open-vibe-code":         sparklesIcon,
   "open-paired-sessions":   usersIcon,
+  "open-tier-status":       activityIcon,
   "open-install-progress":  downloadIcon,
   "open-orders-debug":      sendIcon,
   // #32 — only entry point is service-detail.js; legacy id kept so a

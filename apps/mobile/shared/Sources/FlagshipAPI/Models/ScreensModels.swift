@@ -423,6 +423,36 @@ public enum InstallEvent: Codable, Equatable {
     }
 }
 
+// MARK: - P1.16 tier-status
+
+public struct TierStatusResponse: Codable, Equatable, Sendable {
+    public let tier: String   // "free" | "promo" | "byok"
+    public let llmCreditsRemainingDay: Int64?
+    public let llmCreditsRemainingTotal: Int64?
+    public let dispatcherUsageGBmonth: Double?
+    public let dispatcherFreeQuotaGBmonth: Double?
+    public let customDomains: [String]
+    public let reservedNames: [String]
+
+    public init(
+        tier: String,
+        llmCreditsRemainingDay: Int64?,
+        llmCreditsRemainingTotal: Int64?,
+        dispatcherUsageGBmonth: Double?,
+        dispatcherFreeQuotaGBmonth: Double?,
+        customDomains: [String],
+        reservedNames: [String]
+    ) {
+        self.tier = tier
+        self.llmCreditsRemainingDay = llmCreditsRemainingDay
+        self.llmCreditsRemainingTotal = llmCreditsRemainingTotal
+        self.dispatcherUsageGBmonth = dispatcherUsageGBmonth
+        self.dispatcherFreeQuotaGBmonth = dispatcherFreeQuotaGBmonth
+        self.customDomains = customDomains
+        self.reservedNames = reservedNames
+    }
+}
+
 // MARK: - P1.17 / P1.18 url-controller
 
 public struct OwnedUrl: Codable, Equatable, Sendable {

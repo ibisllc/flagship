@@ -4,6 +4,7 @@ import FlagshipCore
 
 /// Settings tab. Sections:
 ///   - ACCOUNT — username
+///   - SUBSCRIPTION — tier, credits, bandwidth, manage providers
 ///   - BROWSER SESSIONS — computers you've docked a browser from to
 ///                        manage this account (temporary, NOT pods).
 ///                        Hidden entirely when none are active.
@@ -44,6 +45,7 @@ public struct SettingsScreen: View {
     /// permanent account loss, so it gets the danger-zone framing).
     @State private var signOutConfirm: Bool = false
     let username: String
+    let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
     /// Peer-class devices on this user's account (push-token holders).
     /// The new "Trusted devices" section. Empty list renders an
@@ -78,6 +80,8 @@ public struct SettingsScreen: View {
     var onOpenProviders: () -> Void = {}
     /// Open Settings → AI keys (device-local BYOK key manager).
     var onOpenAiKeys: () -> Void = {}
+    /// P7 — open the dedicated tier-status / subscription screen.
+    var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
@@ -138,6 +142,7 @@ public struct SettingsScreen: View {
 
     public init(
         username: String,
+        tier: LoadingState<TierStatusResponse>,
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
@@ -151,6 +156,7 @@ public struct SettingsScreen: View {
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenAiKeys: @escaping () -> Void = {},
+        onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
@@ -172,6 +178,7 @@ public struct SettingsScreen: View {
         onRecoveryRequired: @escaping () -> Void = {}
     ) {
         self.username = username
+        self.tier = tier
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
         self.pendingRePair = pendingRePair
@@ -185,6 +192,7 @@ public struct SettingsScreen: View {
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenAiKeys = onOpenAiKeys
+        self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
@@ -240,6 +248,7 @@ public struct SettingsScreen: View {
                 // "Multi-device + 2FA" state is one of the first
                 // things the user sees.
                 accountSecuritySection(c: c)
+                subscription(c: c)
                 trustedDevicesSection(c: c)
                 browserSessionsSection(c: c)
                 links(c: c)
@@ -349,6 +358,33 @@ public struct SettingsScreen: View {
         case "multi":  return "Multi-device + 2FA"
         case "single": return "Single-device account"
         default:       return "Tap to manage account security"
+        }
+    }
+
+    private func subscription(c: FSColors) -> some View {
+        FSSettingsGroup("SUBSCRIPTION", rows: [
+            FSSettingsRow(
+                icon: "creditcard.fill",
+                title: "Tier & usage",
+                subtitle: subscriptionSubtitle,
+                action: onOpenSubscription
+            )
+        ])
+        .accessibilityIdentifier("settings-open-subscription")
+    }
+
+    private var subscriptionSubtitle: String {
+        switch tier {
+        case .loaded(let t):
+            switch t.tier {
+            case "byok":  return "Bring-your-own-key • credits, usage, domains"
+            case "promo": return "Free credits • credits, usage, domains"
+            default:      return "Free • credits, usage, domains"
+            }
+        case .failed:
+            return "Credits, usage, custom domains, reserved names"
+        default:
+            return "Loading…"
         }
     }
 

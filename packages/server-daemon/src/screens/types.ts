@@ -255,6 +255,18 @@ export type InstallEvent =
   | { kind: "ready"; serverFqdn: string; at: number }
   | { kind: "failed"; reason: string; at: number };
 
+// ---------- P1.16 — /api/screens/tier-status ---------------------------
+
+export interface TierStatusResponse {
+  tier: "free" | "promo" | "byok";
+  llmCreditsRemainingDay?: number;
+  llmCreditsRemainingTotal?: number;
+  dispatcherUsageGBmonth?: number;
+  dispatcherFreeQuotaGBmonth?: number;
+  customDomains: string[];
+  reservedNames: string[];
+}
+
 // ---------- P1.17 / P1.18 — /api/screens/url-controller ----------------
 
 export interface OwnedUrl {

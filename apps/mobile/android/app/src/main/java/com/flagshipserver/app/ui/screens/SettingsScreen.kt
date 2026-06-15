@@ -183,10 +183,17 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
-        // Account-security + providers.
+        // P7 + account-security: subscription/tier, providers, security.
         FSSettingsGroup(
             header = "ACCOUNT",
             rows = listOf(
+                // P7 — dedicated tier-status / subscription screen.
+                FSSettingsRowData(
+                    icon = "💳",
+                    title = "Plan / Subscription",
+                    subtitle = "Tier, LLM credits, dispatcher usage, custom domains.",
+                    onClick = { nav.navigate("tier-status") },
+                ),
                 FSSettingsRowData(
                     icon = "🔑",
                     title = "AI keys",

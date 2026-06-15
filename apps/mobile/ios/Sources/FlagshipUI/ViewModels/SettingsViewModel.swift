@@ -8,6 +8,7 @@ import FlagshipCore
 @Observable
 @MainActor
 public final class SettingsViewModel {
+    public private(set) var tier: LoadingState<TierStatusResponse> = .idle
     /// Peer-class trusted devices on this user's account — the
     /// new "Trusted devices" section the user manages from Settings.
     /// Backed by GET /api/users/:u/devices.
@@ -59,12 +60,17 @@ public final class SettingsViewModel {
     }
 
     public func load() async {
+        tier = .loading
         browserSessions = .loading
         trustedDevices = .loading
         do {
-            let ss = try await screens.pairedSessionsList()
+            async let t  = screens.tierStatus()
+            async let s  = screens.pairedSessionsList()
+            let (ti, ss) = try await (t, s)
+            tier = .loaded(ti)
             browserSessions = .loaded(ss.sessions)
         } catch {
+            tier = .failed(error.localizedDescription)
             browserSessions = .failed(error.localizedDescription)
         }
         await loadTrustedDevices()

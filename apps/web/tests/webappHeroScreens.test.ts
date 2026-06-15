@@ -142,6 +142,7 @@ describe("Settings tab — profile hero + grouped rounded sections", () => {
       "settings-tab-account-security",
       "settings-tab-push",
       "settings-tab-recovery",
+      "settings-tab-tier",
       "settings-tab-trusted-devices",
       "settings-tab-sessions",
       "settings-tab-peer-backup",
