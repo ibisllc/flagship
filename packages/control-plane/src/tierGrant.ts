@@ -28,8 +28,18 @@ export interface TierGrantDeps {
 export interface TierGrantArgs {
   username: string;
   tier: TierName;
-  /** Days of access from now. Ignored (may be 0) when tier is "free". */
+  /** Days of access from now. Ignored (may be 0) when tier is "free", or when
+   *  `absolutePeriodEnd` is given. */
   durationDays: number;
+  /** Set the paid period to this exact epoch-ms instead of computing it from
+   *  `durationDays`. Stripe (#11) passes its authoritative subscription period
+   *  end here so renewals track Stripe rather than stacking fixed windows the
+   *  way prepaid vouchers/cash do. Ignored for "free". */
+  absolutePeriodEnd?: number;
+  /** Persisted alongside the record so the Stripe webhook can correlate a later
+   *  event (renewal / cancellation) back to the account. Cleared on "free". */
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
 }
 
 export interface TierGrantResult {
@@ -63,20 +73,33 @@ export async function grantTier(deps: TierGrantDeps, args: TierGrantArgs): Promi
 
   let currentPeriodEnd: number | undefined;
   if (args.tier !== "free") {
-    const days = Math.floor(Number(args.durationDays));
-    if (!Number.isFinite(days) || days <= 0 || days > MAX_GRANT_DAYS) {
-      throw new Error(`durationDays must be an integer 1..${MAX_GRANT_DAYS}`);
+    if (args.absolutePeriodEnd !== undefined) {
+      const end = Math.floor(Number(args.absolutePeriodEnd));
+      if (!Number.isFinite(end) || end <= now || end > now + MAX_GRANT_DAYS * DAY_MS) {
+        throw new Error(`absolutePeriodEnd must be a future epoch-ms within ${MAX_GRANT_DAYS} days`);
+      }
+      currentPeriodEnd = end;
+    } else {
+      const days = Math.floor(Number(args.durationDays));
+      if (!Number.isFinite(days) || days <= 0 || days > MAX_GRANT_DAYS) {
+        throw new Error(`durationDays must be an integer 1..${MAX_GRANT_DAYS}`);
+      }
+      const existing = await deps.tiers.get(username);
+      const stillActiveSameTier =
+        existing?.tier === args.tier &&
+        existing.currentPeriodEnd !== undefined &&
+        existing.currentPeriodEnd > now;
+      const base = stillActiveSameTier ? existing!.currentPeriodEnd! : now;
+      currentPeriodEnd = base + days * DAY_MS;
     }
-    const existing = await deps.tiers.get(username);
-    const stillActiveSameTier =
-      existing?.tier === args.tier &&
-      existing.currentPeriodEnd !== undefined &&
-      existing.currentPeriodEnd > now;
-    const base = stillActiveSameTier ? existing!.currentPeriodEnd! : now;
-    currentPeriodEnd = base + days * DAY_MS;
   }
 
   const rec: TierSubscriptionRecord = { username, tier: args.tier, currentPeriodEnd, updatedAt: now };
+  // Keep the Stripe linkage on paid grants (drop it on a downgrade to free).
+  if (args.tier !== "free") {
+    if (args.stripeCustomerId) rec.stripeCustomerId = args.stripeCustomerId;
+    if (args.stripeSubscriptionId) rec.stripeSubscriptionId = args.stripeSubscriptionId;
+  }
   await deps.tiers.put(rec);
   return { username, tier: args.tier, currentPeriodEnd, updatedAt: now };
 }
