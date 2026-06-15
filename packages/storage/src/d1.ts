@@ -45,6 +45,8 @@ import type {
   VoucherStorage,
   VoucherRecord,
   StripeEventStore,
+  AppPurchaseStorage,
+  AppPurchaseRecord,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -1745,6 +1747,14 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
       .bind(Date.now(), creator, slug)
       .run();
   }
+
+  async setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean> {
+    const r = await this.db
+      .prepare(`UPDATE marketplace_listings SET price_usd_cents = ?, updated_at = ? WHERE creator = ? AND slug = ?`)
+      .bind(priceUsdCents > 0 ? Math.floor(priceUsdCents) : null, Date.now(), creator, slug)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
   async setScanResult(
     creator: string,
     slug: string,
@@ -1785,6 +1795,7 @@ interface RawMarketplaceRow {
   scan_completed_at: number | null; featured_until: number | null;
   rank_score: number; install_count: number; public_distribution: number;
   listed_at: number; updated_at: number; irk_signature_hex: string;
+  price_usd_cents: number | null;
 }
 
 function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
@@ -1800,6 +1811,7 @@ function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
     manifestHashHex: r.manifest_hash_hex,
     screenshotKeysJson: r.screenshot_keys_json,
     status: r.status as "listed" | "private" | "removed",
+    priceUsdCents: r.price_usd_cents ?? undefined,
     scanGrade: (r.scan_grade ?? undefined) as "A" | "B" | "C" | "D" | "F" | undefined,
     scanReportKey: r.scan_report_key ?? undefined,
     scanCompletedAt: r.scan_completed_at ?? undefined,
@@ -2112,6 +2124,49 @@ export class D1StripeEventStore implements StripeEventStore {
       .bind(eventId, eventType, now)
       .run();
     return (r.meta?.changes ?? 0) > 0;
+  }
+}
+
+export class D1AppPurchaseStorage implements AppPurchaseStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async grant(rec: AppPurchaseRecord): Promise<boolean> {
+    // INSERT OR IGNORE: re-granting an owned (user, app) changes 0 rows, so a
+    // Stripe redelivery / double-purchase never duplicates the entitlement.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO app_purchases (username, creator, slug, purchased_at, source, ref)
+         VALUES (?,?,?,?,?,?)`,
+      )
+      .bind(rec.username, rec.creator, rec.slug, rec.purchasedAt, rec.source, rec.ref ?? null)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async has(username: string, creator: string, slug: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(`SELECT 1 AS one FROM app_purchases WHERE username = ? AND creator = ? AND slug = ?`)
+      .bind(username, creator, slug)
+      .first<{ one: number }>();
+    return row != null;
+  }
+
+  async listForUser(username: string): Promise<AppPurchaseRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT username, creator, slug, purchased_at, source, ref
+           FROM app_purchases WHERE username = ? ORDER BY purchased_at DESC`,
+      )
+      .bind(username)
+      .all<{ username: string; creator: string; slug: string; purchased_at: number; source: string; ref: string | null }>();
+    return (result.results ?? []).map((r) => ({
+      username: r.username,
+      creator: r.creator,
+      slug: r.slug,
+      purchasedAt: r.purchased_at,
+      source: r.source,
+      ref: r.ref ?? undefined,
+    }));
   }
 }
 

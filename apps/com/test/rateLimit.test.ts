@@ -109,6 +109,17 @@ describe("rateLimit — endpoint detection", () => {
     expect(LIMITS["user-allowance"]?.every((a) => a.axis === "ip")).toBe(true);
   });
 
+  it("rate-limits Stripe checkout + the install-what-you-own read per-IP (#14)", () => {
+    expect(endpointFor("POST", "/api/stripe/checkout")).toBe("stripe-checkout");
+    expect(endpointFor("POST", "/api/stripe/app-checkout")).toBe("stripe-checkout");
+    expect(endpointFor("GET", "/api/users/alice/purchases")).toBe("user-purchases");
+    // The webhook is signed by Stripe (no edge bucket); admin price/grant are admin-only.
+    expect(endpointFor("POST", "/api/stripe/webhook")).toBeNull();
+    expect(endpointFor("POST", "/api/admin/marketplace/acme/notes/price")).toBeNull();
+    expect(LIMITS["stripe-checkout"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["user-purchases"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();

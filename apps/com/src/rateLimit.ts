@@ -149,7 +149,14 @@ export type RateLimitEndpoint =
   // alert data source). Unauthenticated account metadata (same class as the
   // `/pods` directory) keyed by username in the path; per-IP only, generous
   // enough for a polling dashboard while fencing a scrape loop.
-  | "user-allowance";
+  | "user-allowance"
+  // Monetization — public Stripe Checkout creation (subscription + app
+  // purchase). Each call hits the Stripe API, so per-IP and tight to fence a
+  // session-farming loop; a human clicks "pay" a handful of times.
+  | "stripe-checkout"
+  // Monetization — public install-what-you-own read (#14/#19). Account
+  // metadata (same class as /pods), per-IP, generous for a polling client.
+  | "user-purchases";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -318,6 +325,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   ],
   // Public allowance read — generous for a polling dashboard, fences a scrape.
   "user-allowance": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  // Stripe Checkout creation — each call hits the Stripe API; tight per-IP.
+  "stripe-checkout": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+  ],
+  // Install-what-you-own read — generous for a polling client, fences a scrape.
+  "user-purchases": [{ axis: "ip", limit: 60, windowSec: 60 }],
 };
 
 export interface RateLimitInput {
@@ -557,6 +571,12 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "GET" && /^\/api\/users\/[^/]+\/allowance$/.test(pathname)) {
     return "user-allowance";
+  }
+  if (m === "POST" && (pathname === "/api/stripe/checkout" || pathname === "/api/stripe/app-checkout")) {
+    return "stripe-checkout";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/purchases$/.test(pathname)) {
+    return "user-purchases";
   }
   return null;
 }

@@ -493,6 +493,12 @@ export class InMemoryMarketplaceStorage implements MarketplaceStorage {
       r.rankScore = computeMarketplaceRank(r);
     }
   }
+  async setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (!r) return false;
+    r.priceUsdCents = priceUsdCents > 0 ? Math.floor(priceUsdCents) : undefined;
+    return true;
+  }
   async setScanResult(
     creator: string,
     slug: string,

@@ -1091,6 +1091,9 @@ export interface MarketplaceListingRecord {
   manifestHashHex: string;
   screenshotKeysJson: string;       // JSON array of strings
   status: "listed" | "private" | "removed";
+  /** Price in USD cents (#14). Absent/0 ⇒ free. Curated (admin-set) for now;
+   *  developer self-serve pricing is #15. */
+  priceUsdCents?: number;
   scanGrade?: "A" | "B" | "C" | "D" | "F";
   scanReportKey?: string;
   scanCompletedAt?: number;
@@ -1118,6 +1121,10 @@ export interface MarketplaceStorage {
   search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
   remove(creator: string, slug: string): Promise<void>;
   recordInstall(creator: string, slug: string): Promise<void>;
+  /** Set the listing's price in USD cents (#14; null/0 ⇒ free). Curated path —
+   *  the creator's IRK-signed listing claim is unchanged (no canonical-bytes
+   *  ripple). Returns false if the listing doesn't exist. */
+  setPrice(creator: string, slug: string, priceUsdCents: number): Promise<boolean>;
   /**
    * Update scan_grade + scan_report_key + scan_completed_at on an
    * existing listing. Called by the scanner service after it
@@ -1385,6 +1392,35 @@ export interface StripeEventStore {
    *  claimed it (first delivery → proceed), false if it was already present
    *  (a redelivery → skip). */
   claim(eventId: string, eventType: string, now: number): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Paid-app purchase entitlements (migration 0054) — feat/marketplace #14
+// ──────────────────────────────────────────────────────────────────────
+
+/** Proof that `username` owns the paid app `<creator>/<slug>` — the
+ *  install-entitlement primitive. One per (user, app). */
+export interface AppPurchaseRecord {
+  username: string;
+  creator: string;
+  slug: string;
+  purchasedAt: number;
+  /** "stripe" | "admin" | "voucher". */
+  source: string;
+  /** Opaque provenance ref (audit only). */
+  ref?: string;
+}
+
+/** Standalone store (like VoucherStorage — not part of the `Storage`
+ *  aggregate). */
+export interface AppPurchaseStorage {
+  /** Idempotently record a purchase. Returns true if THIS call created it,
+   *  false if the (user, app) already owned it (re-grant / redelivery). */
+  grant(rec: AppPurchaseRecord): Promise<boolean>;
+  /** Does `username` own `<creator>/<slug>`? */
+  has(username: string, creator: string, slug: string): Promise<boolean>;
+  /** Every app `username` owns (the install-what-you-own list). */
+  listForUser(username: string): Promise<AppPurchaseRecord[]>;
 }
 
 /** Standalone store (like UsageStorage — not part of the `Storage` aggregate). */
