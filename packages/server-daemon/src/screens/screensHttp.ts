@@ -23,7 +23,11 @@ import type {
   VibeCodeSessionRegistry,
 } from "../llm/vibeCodeSession.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
-import type { FetchLike } from "@flagship/llm-providers";
+import {
+  summarizeAttachment,
+  validateAttachments,
+} from "../llm/vibeCodeAttachments.js";
+import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { verifySetServiceEnv } from "@flagship/protocol";
 import type {
   AppBackupStartRequest,
@@ -273,7 +277,22 @@ export interface VibeCodeRuntime {
     sessionId: string;
     prompt: string;
     model?: string;
+    attachments?: Attachment[];
   }) => Promise<void>;
+  /**
+   * Value-free journal hook for a scratch chat turn. The daemon wires
+   * this to the shared build journal (buildId = the vibe sessionId) so
+   * scratch turns appear alongside git/mcp builds. `attachmentSummaries`
+   * are NAME + kind + size strings ONLY — never the content/base64 — so
+   * the journal never captures an attachment value. Fire-and-forget;
+   * never blocks the chat. Optional: omitted in tests that don't assert
+   * journaling.
+   */
+  recordScratchTurn?: (args: {
+    sessionId: string;
+    text: string;
+    attachmentSummaries: string[];
+  }) => void;
 }
 
 export interface OrdersDispatchLike {
@@ -631,11 +650,20 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!body || typeof body.prompt !== "string" || body.prompt.length === 0) {
         return jerr(400, "prompt required");
       }
+      const attach = validateAttachments(body.attachments);
+      if (!attach.ok) return jerr(400, attach.reason);
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
       });
-      session.pushUserMessage(body.prompt);
+      session.pushUserMessage(body.prompt, attach.attachments);
+      // Value-free journal: a short text preview + per-attachment
+      // name/kind/size summaries (NEVER the content/base64).
+      deps.vibeCode.recordScratchTurn?.({
+        sessionId: session.meta.sessionId,
+        text: body.prompt,
+        attachmentSummaries: attach.attachments.map(summarizeAttachment),
+      });
       if (deps.vibeCode.startStreaming) {
         // Fire-and-forget. Streaming consumers attach via P1.6 WS;
         // P1.7 replays whatever's been emitted so far.
@@ -643,6 +671,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           sessionId: session.meta.sessionId,
           prompt: body.prompt,
           model: body.model,
+          ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
         }).catch((e: Error) => {
           session.fail(e.message ?? "stream failed", true);
         });
@@ -979,11 +1008,19 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!pending) return jerr(409, "no pending tool to reply to");
       if (pending.kind === "talkToUser") {
         if (typeof body.text !== "string") return jerr(400, "text required");
+        const attach = validateAttachments(body.attachments);
+        if (!attach.ok) return jerr(400, attach.reason);
         const r = session.pushUserReply({
           toolUseId: pending.toolUseId,
           text: body.text,
+          ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
         });
         if (!r.ok) return jerr(409, r.reason ?? "reply rejected");
+        deps.vibeCode.recordScratchTurn?.({
+          sessionId: session.meta.sessionId,
+          text: body.text,
+          attachmentSummaries: attach.attachments.map(summarizeAttachment),
+        });
         const out: VibeCodeReplyResponse = { ok: true };
         return jok(out);
       }

@@ -39,6 +39,7 @@ import {
   type VibeCodeSession,
   type VibeCodeSessionRegistry,
 } from "./vibeCodeSession.js";
+import { summarizeAttachment, validateAttachments } from "./vibeCodeAttachments.js";
 
 export interface VibeCodeHttpDeps {
   registry: VibeCodeSessionRegistry;
@@ -72,6 +73,17 @@ export interface VibeCodeHttpDeps {
    * mistake. Defaults to a `console.warn`.
    */
   onPastedSecretSuspicion?: (args: { sessionId: string; toolUseId: string }) => void;
+  /**
+   * Value-free journal hook for a scratch chat turn (buildId = the vibe
+   * sessionId). `attachmentSummaries` are NAME + kind + size strings
+   * ONLY — never the content/base64. Fire-and-forget; never blocks the
+   * chat. Optional.
+   */
+  recordScratchTurn?: (args: {
+    sessionId: string;
+    text: string;
+    attachmentSummaries: string[];
+  }) => void;
 }
 
 const J = { "content-type": "application/json" } as const;
@@ -85,15 +97,22 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
     const path = req.path.split("?")[0]!;
 
     if (path === "/api/llm/sessions" && req.method === "POST") {
-      const body = parseJson(req.body) as { prompt?: string } | null;
+      const body = parseJson(req.body) as { prompt?: string; attachments?: unknown } | null;
       if (!body || typeof body.prompt !== "string" || body.prompt.length === 0) {
         return jerr(400, "prompt required");
       }
+      const attach = validateAttachments(body.attachments);
+      if (!attach.ok) return jerr(400, attach.reason);
       const session = deps.registry.create({
         username: deps.username,
         serverFqdn: deps.serverFqdn,
       });
-      session.pushUserMessage(body.prompt);
+      session.pushUserMessage(body.prompt, attach.attachments);
+      deps.recordScratchTurn?.({
+        sessionId: session.meta.sessionId,
+        text: body.prompt,
+        attachmentSummaries: attach.attachments.map(summarizeAttachment),
+      });
       return jok({
         sessionId: session.meta.sessionId,
         status: session.meta.status,
@@ -141,10 +160,16 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
       // prompt already forbids the model from soliciting secret VALUES
       // through it. We log (but do not block) if the body looks like a
       // pasted credential so the daemon operator can see a misuse.
-      const body = parseJson(req.body) as { text?: string; toolUseId?: string } | null;
+      const body = parseJson(req.body) as {
+        text?: string;
+        toolUseId?: string;
+        attachments?: unknown;
+      } | null;
       if (!body || typeof body.text !== "string" || typeof body.toolUseId !== "string") {
         return jerr(400, "text + toolUseId required");
       }
+      const attach = validateAttachments(body.attachments);
+      if (!attach.ok) return jerr(400, attach.reason);
       if (looksLikePastedSecret(body.text)) {
         const cb =
           deps.onPastedSecretSuspicion ??
@@ -158,8 +183,17 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
           });
         cb({ sessionId: session.meta.sessionId, toolUseId: body.toolUseId });
       }
-      const r = session.pushUserReply({ toolUseId: body.toolUseId, text: body.text });
+      const r = session.pushUserReply({
+        toolUseId: body.toolUseId,
+        text: body.text,
+        ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
+      });
       if (!r.ok) return jerr(409, r.reason ?? "user-reply rejected");
+      deps.recordScratchTurn?.({
+        sessionId: session.meta.sessionId,
+        text: body.text,
+        attachmentSummaries: attach.attachments.map(summarizeAttachment),
+      });
       return jok({ ok: true });
     }
     if (verb === "tool-ack" && req.method === "POST") {

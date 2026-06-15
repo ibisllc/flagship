@@ -44,6 +44,7 @@
 
 import { EventEmitter } from "node:events";
 import { randomBytes } from "node:crypto";
+import type { Attachment } from "@flagship/llm-providers";
 
 export type VibeCodeEvent =
   | { kind: "thinking"; text: string }
@@ -277,7 +278,12 @@ export type NotifyOwnerCallback = (args: {
 export class VibeCodeSession extends EventEmitter {
   readonly meta: VibeCodeSessionMeta;
   readonly parser = new VibeCodeStreamParser();
-  private readonly history: Array<{ role: "user" | "assistant"; content: string }> = [];
+  private readonly history: Array<{
+    role: "user" | "assistant";
+    content: string;
+    /** Multimodal attachments on a user turn (image / text). */
+    attachments?: Attachment[];
+  }> = [];
   /** Unix-ms per history entry — parallel to `history`. */
   private readonly historyTimestamps: number[] = [];
   private cancelled = false;
@@ -308,8 +314,19 @@ export class VibeCodeSession extends EventEmitter {
     this.notifyOwner = cb;
   }
 
-  pushUserMessage(text: string): void {
-    this.history.push({ role: "user", content: text });
+  /**
+   * Append a user turn. `attachments` (image / text) ride alongside the
+   * text and are carried through to the next `ChatRequest`'s
+   * corresponding user message. Attachments are VALUE-FREE w.r.t. secrets
+   * by contract — the chat is not a secret channel. Empty attachment
+   * arrays are normalized away.
+   */
+  pushUserMessage(text: string, attachments?: Attachment[]): void {
+    this.history.push({
+      role: "user",
+      content: text,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    });
     this.historyTimestamps.push(Date.now());
   }
 
@@ -421,14 +438,29 @@ export class VibeCodeSession extends EventEmitter {
     return { ok: true };
   }
 
-  /** Resolve a pending talkToUser tool_use with the owner's free-form reply. */
-  pushUserReply(args: { toolUseId: string; text: string }): { ok: boolean; reason?: string } {
+  /**
+   * Resolve a pending talkToUser tool_use with the owner's free-form
+   * reply. `attachments` (image / text) ride alongside the text into the
+   * next turn's user message, same as `pushUserMessage`. Value-free
+   * w.r.t. secrets by contract.
+   */
+  pushUserReply(args: {
+    toolUseId: string;
+    text: string;
+    attachments?: Attachment[];
+  }): { ok: boolean; reason?: string } {
     const entry = this.pendingTools.get(args.toolUseId);
     if (!entry) return { ok: false, reason: "no pending tool with that id" };
     if (entry.name !== "talkToUser") {
       return { ok: false, reason: `tool id is not talkToUser (got '${entry.name}')` };
     }
-    this.history.push({ role: "user", content: args.text });
+    this.history.push({
+      role: "user",
+      content: args.text,
+      ...(args.attachments && args.attachments.length > 0
+        ? { attachments: args.attachments }
+        : {}),
+    });
     this.historyTimestamps.push(Date.now());
     this.pendingTools.delete(args.toolUseId);
     if (this.pendingTools.size === 0 && this.meta.status === "awaiting-tool-response") {
@@ -506,7 +538,11 @@ export class VibeCodeSession extends EventEmitter {
   manifestJson(): string | undefined {
     return this.parser.snapshot()["flagship.app.json"];
   }
-  conversation(): ReadonlyArray<{ role: "user" | "assistant"; content: string }> {
+  conversation(): ReadonlyArray<{
+    role: "user" | "assistant";
+    content: string;
+    attachments?: Attachment[];
+  }> {
     return [...this.history];
   }
 
@@ -516,8 +552,18 @@ export class VibeCodeSession extends EventEmitter {
    * metadata, not human chat) and surfaces a unix-ms timestamp per
    * message. The role mapping is the same as `conversation()`.
    */
-  messages(): Array<{ role: "user" | "assistant"; text: string; timestamp: number }> {
-    const out: Array<{ role: "user" | "assistant"; text: string; timestamp: number }> = [];
+  messages(): Array<{
+    role: "user" | "assistant";
+    text: string;
+    timestamp: number;
+    attachments?: Attachment[];
+  }> {
+    const out: Array<{
+      role: "user" | "assistant";
+      text: string;
+      timestamp: number;
+      attachments?: Attachment[];
+    }> = [];
     for (let i = 0; i < this.history.length; i++) {
       const h = this.history[i];
       if (!h) continue;
@@ -526,6 +572,7 @@ export class VibeCodeSession extends EventEmitter {
         role: h.role,
         text: h.content,
         timestamp: this.historyTimestamps[i] ?? this.meta.startedAt,
+        ...(h.attachments && h.attachments.length > 0 ? { attachments: h.attachments } : {}),
       });
     }
     return out;

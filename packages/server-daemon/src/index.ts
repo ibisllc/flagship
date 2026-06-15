@@ -628,6 +628,38 @@ async function main(): Promise<void> {
         : null;
     const vibeAppDir = join(dataDir, "data", "app-clones");
     const username = cfg?.userId ?? env.serverFqdn!.split(".")[1] ?? "user";
+
+    // The shared build journal — written by every mode (scratch / git /
+    // mcp). Hoisted above the vibe-code wiring so scratch chat turns +
+    // attachments land in the SAME journal the git/mcp paths use (buildId
+    // = the vibe sessionId). Value-free: a short text preview + per-
+    // attachment NAME/kind/size summaries, never the content/base64.
+    const buildJournal = new FileBuildJournal(join(dataDir, "build-journals"));
+    const recordScratchTurn = (a: {
+      sessionId: string;
+      text: string;
+      attachmentSummaries: string[];
+    }): void => {
+      const preview = a.text.length > 120 ? `${a.text.slice(0, 117)}…` : a.text;
+      void buildJournal
+        .append(a.sessionId, {
+          mode: "scratch",
+          kind: "user-message",
+          actor: "owner",
+          summary: preview.length > 0 ? preview : "(no text)",
+        })
+        .catch(() => {});
+      for (const summary of a.attachmentSummaries) {
+        void buildJournal
+          .append(a.sessionId, {
+            mode: "scratch",
+            kind: "attachment-added",
+            actor: "owner",
+            summary,
+          })
+          .catch(() => {});
+      }
+    };
     const deploySession = runtime.servicePlatform
       ? buildDeploySession({
           servicePlatform: runtime.servicePlatform,
@@ -644,6 +676,7 @@ async function main(): Promise<void> {
       username,
       serverFqdn: env.serverFqdn!,
       deploySession,
+      recordScratchTurn,
     });
     runtime.addHandler(vibeCodeHandle);
 
@@ -670,7 +703,6 @@ async function main(): Promise<void> {
     // path is the same artifact deployer (harness-only Forgejo push,
     // docker build, signed install) all modes funnel through.
     if (runtime.servicePlatform) {
-      const buildJournal = new FileBuildJournal(join(dataDir, "build-journals"));
       const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
       const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
       await mcpKeys.load();
@@ -791,6 +823,7 @@ async function main(): Promise<void> {
             registry: vibeRegistry,
             username,
             serverFqdn: env.serverFqdn!,
+            recordScratchTurn,
           }
         : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,

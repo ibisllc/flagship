@@ -19,6 +19,7 @@
  */
 
 import type {
+  Attachment,
   ChatRequest,
   ProviderConfig,
   StreamingFetchLike,
@@ -56,6 +57,14 @@ export interface StartStreamingArgs {
   sessionId: string;
   prompt: string;
   model?: string;
+  /**
+   * Multimodal attachments on the user turn (image / text). Already
+   * validated by the caller (caps/kinds/sizes). They ride on the
+   * `ChatRequest`'s user message so a multimodal-capable adapter
+   * (Anthropic) translates them into native content blocks. Value-free
+   * w.r.t. secrets by contract.
+   */
+  attachments?: Attachment[];
 }
 
 /**
@@ -84,7 +93,13 @@ export function buildVibeCodeStartStreaming(
       model: s.model ?? args.defaultModel,
       messages: [
         { role: "system", content: systemMessage },
-        { role: "user", content: s.prompt },
+        {
+          role: "user",
+          content: s.prompt,
+          ...(s.attachments && s.attachments.length > 0
+            ? { attachments: s.attachments }
+            : {}),
+        },
       ],
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
     };

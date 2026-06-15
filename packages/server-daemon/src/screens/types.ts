@@ -97,7 +97,20 @@ export interface VibeCodeStartRequest {
   prompt: string;
   /** Optional model identifier; daemon picks a default if omitted. */
   model?: string;
+  /**
+   * Optional multimodal attachments on the opening user turn (a
+   * screenshot/mockup or a text file the app should use). Inlined as
+   * base64 — no separate upload endpoint. Server-validated: ≤6 per turn,
+   * image ≤4 MB decoded, text ≤256 KB, common image/* + text only.
+   * VALUE-FREE w.r.t. secrets by contract — the chat is not a secret
+   * channel.
+   */
+  attachments?: VibeCodeAttachment[];
 }
+
+export type VibeCodeAttachment =
+  | { kind: "image"; mediaType: string; dataBase64: string; name?: string }
+  | { kind: "text"; text: string; name?: string };
 
 export interface VibeCodeStartResponse {
   sessionId: string;
@@ -490,6 +503,13 @@ export interface VibeCodeSessionMessage {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  /**
+   * Multimodal attachments the owner sent on this turn (user messages
+   * only). Surfaced so a reload re-renders the thumbnails/chips. The
+   * chat is paired-session gated on the owner's own box and attachments
+   * are value-free w.r.t. secrets by contract.
+   */
+  attachments?: VibeCodeAttachment[];
 }
 
 export interface VibeCodePendingTalkToUser {
@@ -535,6 +555,12 @@ export interface VibeCodeReplyRequest {
   /** Free-form text — relayed verbatim for talkToUser; ignored when
    *  the pending tool is requestEnvVar (the value flows through /env/set). */
   text?: string;
+  /**
+   * Optional multimodal attachments on a talkToUser reply turn — same
+   * shape + caps as `VibeCodeStartRequest.attachments`. Ignored on the
+   * requestEnvVar path. VALUE-FREE w.r.t. secrets by contract.
+   */
+  attachments?: VibeCodeAttachment[];
   /**
    * When the pending tool is `requestEnvVar`, the phone signals the
    * outcome here. The value itself is NEVER carried by /reply — the
