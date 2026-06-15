@@ -119,10 +119,13 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
 
 ## Remaining work
 
-- **Multimodal chat for scratch** — turn the one-shot vibe prompt into a
-  multi-turn chat with attachments (images/text). Additive `attachments` on
-  `ChatMessage` in `@flagship/llm-providers`; Anthropic adapter translates to
-  image blocks; others ignore/inline. Journal the turns.
+- **Multimodal chat for scratch** — provider foundation LANDED: additive
+  `Attachment` + `ChatMessage.attachments` in `@flagship/llm-providers`, the
+  Anthropic adapter translates to base64 image / text blocks (tested,
+  backward-compatible). REMAINING: thread attachments through the vibe
+  session + an upload endpoint, journal the turns, and add the chat UI with an
+  attachment picker on each client (openai/google adapters can mirror the
+  Anthropic translation when needed).
 - **AI-adapt endpoint** — feed `buildAdaptPrompt(files)` into the vibe loop
   for non-fit git repos and deploy the result.
 - **iOS + Android** — the chooser + git/mcp/journal screens to this spec.

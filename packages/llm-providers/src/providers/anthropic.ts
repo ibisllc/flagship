@@ -13,11 +13,36 @@ import { ProviderError } from "../types.js";
 const DEFAULT_BASE = "https://api.anthropic.com";
 const ANTHROPIC_VERSION = "2023-06-01";
 
+/**
+ * Map a message's content to Anthropic's wire shape. With no attachments
+ * this is the bare string (unchanged from before). With attachments it
+ * becomes a content-block array: the text first, then one `image` block
+ * per image attachment (base64 source) and a text block per text
+ * attachment.
+ */
+function toAnthropicContent(m: ChatRequest["messages"][number]): unknown {
+  if (!m.attachments || m.attachments.length === 0) return m.content;
+  const blocks: unknown[] = [];
+  if (m.content.length > 0) blocks.push({ type: "text", text: m.content });
+  for (const a of m.attachments) {
+    if (a.kind === "image") {
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: a.mediaType, data: a.dataBase64 },
+      });
+    } else {
+      const label = a.name ? `${a.name}:\n` : "";
+      blocks.push({ type: "text", text: `${label}${a.text}` });
+    }
+  }
+  return blocks;
+}
+
 function splitSystem(messages: ChatRequest["messages"]) {
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
   const conv = messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({ role: m.role, content: toAnthropicContent(m) }));
   return { system, conv };
 }
 

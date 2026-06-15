@@ -157,12 +157,13 @@ buildWorkspace/mcpServer/mcpKeyStore/buildModes) · web vitest **1152** (+ new
 webapp). Forgejo-push stays harness-only (external actors go through chat/git/
 mcp, the harness materializes).
 
-**Remaining (next):** multimodal chat + attachments for scratch (additive
-`ChatMessage.attachments` in `@flagship/llm-providers`, Anthropic adapter
-translates); AI-adapt endpoint for non-fit git repos (renderer + UI exist,
-needs the LLM-loop endpoint); **iOS + Android** chooser/git/mcp/journal screens
-to the `docs/build-modes.md` UX spec; surface mcp `request_env_var` as a phone
-prompt.
+**Remaining (next):** multimodal chat for scratch — provider layer DONE
+(`Attachment`/`ChatMessage.attachments` + Anthropic base64 translation,
+tested); still needs session+upload-endpoint wiring + the chat UI w/
+attachment picker on each client. AI-adapt endpoint for non-fit git repos
+(renderer + UI exist, needs the LLM-loop endpoint). **iOS + Android**
+chooser/git/mcp/journal screens to the `docs/build-modes.md` UX spec. Surface
+mcp `request_env_var` as a phone prompt.
 
 ### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 
