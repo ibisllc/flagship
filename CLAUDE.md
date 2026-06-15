@@ -165,14 +165,33 @@ buildWorkspace/mcpServer/mcpKeyStore/buildModes) · web vitest **1152** (+ new
 webapp). Forgejo-push stays harness-only (external actors go through chat/git/
 mcp, the harness materializes).
 
-**Remaining (next):** multimodal chat for scratch — provider layer DONE
-(`Attachment`/`ChatMessage.attachments` + Anthropic base64 translation,
-tested); still needs session+upload-endpoint wiring + the chat UI w/
-attachment picker on each client. AI-adapt endpoint for non-fit git repos
-(renderer + UI exist, needs the LLM-loop endpoint). **iOS + Android**
-chooser/git/mcp/journal screens to the `docs/build-modes.md` UX spec (incl. the
-env-requests list + the real push fan-out for the value-free `request_env_var`
-notify hook — server + webapp DONE).
+**Multimodal chat for scratch — DONE (server seam + webapp UI).** Provider
+layer was already done (`Attachment`/`ChatMessage.attachments` + Anthropic
+base64 translation). Now: the vibe session carries attachments
+(`pushUserMessage(text, attachments)` / `pushUserReply`), `vibeCodeStartStreaming`
+puts them on the `ChatRequest` user message, and `messages()` surfaces them for
+a reload; the screens BFF (`/vibe-code/start` + `talkToUser` `/reply`) and the
+`/api/llm/sessions` start + `user-reply` paths accept inlined base64
+attachments via one shared validator (`llm/vibeCodeAttachments.ts`: **≤6/turn,
+image ≤4 MB decoded, text ≤256 KB, common image/* + text**); scratch turns
+journal `user-message` (truncated text preview) + `attachment-added` (NAME +
+kind + size ONLY, never content/base64) to the shared build journal (buildId =
+vibe sessionId, hoisted above the vibe wiring in `index.ts`); the webapp
+`views/vibe-code.js` is now a real chat (message list, composer with an
+image/text attach picker, removable chips + image thumbnails, FileReader→base64
+with the caps mirrored client-side, `/reply` follow-ups, Deploy). NOTE: the
+live LLM provider is still NOT constructed in `index.ts` — this is the proven
+*seam*; it lights up when that separate wiring lands. Gates: `tsc -b` clean ·
+daemon vibe/buildmodes/screens green (+ new `vibeCodeAttachments` +
+`screensVibeAttachments`) · web `webappBuildModesView` + new
+`webappScratchChatView` · `llm-providers/multimodal` still green.
+
+**Remaining (next):** AI-adapt endpoint for non-fit git repos (renderer + UI
+exist, needs the LLM-loop endpoint). **iOS + Android** chooser/git/mcp/journal
+screens + the scratch attachment picker to the `docs/build-modes.md` UX spec
+(incl. the env-requests list + the real push fan-out for the value-free
+`request_env_var` notify hook — server + webapp DONE). Live-provider wiring
+into the daemon boot path.
 
 ### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 

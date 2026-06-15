@@ -383,34 +383,50 @@
       </section>
 
 
-      <!-- View 13: Vibe-code dialog (P2.5) -->
+      <!-- View 13: Vibe-code chat (P2.5) — a multi-turn chat with attachments -->
       <section id="view-vibe-code" class="hidden">
-        <h2>Vibe-code a service</h2>
-        <div class="card">
-          <p class="note">
-            Describe a service. The LLM emits a manifest + Dockerfile + source; the daemon commits to your Forgejo, builds the container, and deploys.
-          </p>
-          <textarea id="vc-prompt" rows="4" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible, JSON-persisted."></textarea>
-          <button id="vc-start" class="full-width mt-2">Start</button>
+        <div class="row-top">
+          <h2>Build from scratch</h2>
+          <span class="value vc-chat-status" id="vc-status">idle</span>
         </div>
-        <div class="card mt-2">
-          <div class="row"><span class="label">status</span><span class="value" id="vc-status">idle</span></div>
+        <p class="note">
+          Describe the service you want. The AI writes and deploys it on your box.
+          Drop a screenshot or a file the app should use — it stays on your server.
+        </p>
+
+        <div id="vc-messages" class="vc-chat-log" aria-live="polite">
+          <div class="card placeholder">Say what you'd like to build to get started.</div>
         </div>
-        <h3 class="mt-4">Files</h3>
-        <div id="vc-files"><div class="card placeholder">files appear here as the LLM emits them…</div></div>
-        <h3 class="mt-4">Transcript</h3>
-        <div class="card">
-          <pre id="vc-transcript" class="vc-transcript"></pre>
+
+        <!-- Composer: textarea + attach affordance + attachment chips -->
+        <div class="vc-composer card mt-2">
+          <div id="vc-attach-chips" class="vc-chips hidden" aria-label="Attached files"></div>
+          <textarea id="vc-prompt" rows="3" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible."></textarea>
+          <div class="vc-composer-actions">
+            <label class="secondary btn-attach" for="vc-attach-input" title="Attach an image or text file">
+              <span aria-hidden="true">＋</span> Attach
+            </label>
+            <input id="vc-attach-input" type="file" class="hidden" multiple
+                   accept="image/*,.txt,.md,.sql,.json,.csv">
+            <button id="vc-send" class="vc-send">Send</button>
+          </div>
+          <p class="note vc-caps-note">Up to 6 files per message · images ≤ 4 MB · text ≤ 256 KB. Not a place for passwords or keys.</p>
         </div>
+
+        <details class="card mt-2" id="vc-files-box">
+          <summary class="file-summary">Files <span class="file-summary-meta" id="vc-files-count">(none yet)</span></summary>
+          <div id="vc-files"><div class="card placeholder">files appear here as the AI emits them…</div></div>
+        </details>
+
         <div id="vc-deploy-box" class="card hidden mt-2">
           <p class="note">
-            Session ready to deploy. Tapping deploy runs docker build + ServicePlatform.install on your pod.
+            Ready to deploy. Deploying runs docker build + install on your box.
           </p>
           <button id="vc-deploy-go" class="full-width">Deploy</button>
         </div>
         <div id="vc-result" class="hidden mt-2"></div>
-        <div class="row-2">
-          <button class="secondary" id="vc-reset">Reset</button>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="vc-reset">New build</button>
           <button class="secondary" id="vibe-code-back">← Back</button>
         </div>
       </section>

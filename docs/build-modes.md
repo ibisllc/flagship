@@ -7,8 +7,11 @@
 > `feat/build-modes`).
 
 Status: **in progress on `feat/build-modes`.** Daemon backbone + git & mcp
-modes + webapp client landed & tested. Remaining: multimodal chat for
-scratch, iOS + Android clients, AI-adapt endpoint for non-fit git repos.
+modes + webapp client landed & tested; the scratch multimodal chat (chat +
+attachments) seam + webapp UI landed & tested. Remaining: iOS + Android
+clients, AI-adapt endpoint for non-fit git repos, and live-provider wiring
+into the daemon boot path (the model isn't constructed in `index.ts` yet —
+a separate pre-existing task).
 
 ## The idea
 
@@ -120,13 +123,35 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
 
 ## Remaining work
 
-- **Multimodal chat for scratch** — provider foundation LANDED: additive
-  `Attachment` + `ChatMessage.attachments` in `@flagship/llm-providers`, the
-  Anthropic adapter translates to base64 image / text blocks (tested,
-  backward-compatible). REMAINING: thread attachments through the vibe
-  session + an upload endpoint, journal the turns, and add the chat UI with an
-  attachment picker on each client (openai/google adapters can mirror the
-  Anthropic translation when needed).
+- **Multimodal chat for scratch** — DONE except mobile + live-provider
+  wiring. Provider foundation (additive `Attachment` + `ChatMessage.attachments`
+  in `@flagship/llm-providers`, Anthropic adapter → base64 image / text blocks)
+  was already landed. NOW landed:
+  - The vibe **session carries attachments** (`pushUserMessage(text,
+    attachments)` / `pushUserReply({…, attachments})`); they ride on the next
+    `ChatRequest`'s user message (`vibeCodeStartStreaming`) so the multimodal
+    adapter translates them. `messages()`/`conversation()` surface them for a
+    reload. (The live provider is still NOT constructed in `index.ts`, so this
+    is the *seam* — it lights up when that separate wiring lands.)
+  - **HTTP** accepts inlined base64 attachments on `POST
+    /api/screens/vibe-code/start`, the screens `talkToUser` `/reply` path, and
+    the `/api/llm/sessions` start + `user-reply` paths. One shared validator
+    (`llm/vibeCodeAttachments.ts`): **≤6/turn, image ≤4 MB decoded, text
+    ≤256 KB, common image/* + text only**; unknown kinds/types rejected. No
+    separate upload endpoint for v1.
+  - **Journal (value-free):** scratch turns append `user-message` (a short
+    truncated text preview) + `attachment-added` (summary = NAME + kind + size
+    ONLY, never the content/base64) to the shared build journal (buildId = the
+    vibe sessionId). The journal is hoisted above the vibe wiring in `index.ts`
+    so scratch shares it with git/mcp.
+  - **Webapp chat UI** (`views/vibe-code.js`): a scrollable message list
+    (user-right / AI-left), a composer with a textarea + an `accept="image/*,
+    .txt,.md,.sql,.json,.csv"` attach input, removable chips with image
+    thumbnails, FileReader→base64 with the same caps enforced client-side
+    (friendly toast on violation), follow-up turns over `/reply`, and the
+    Deploy affordance.
+  REMAINING: iOS + Android attachment pickers; openai/google adapters mirror
+  the Anthropic translation when needed; live-provider wiring (separate task).
 - **AI-adapt endpoint** — feed `buildAdaptPrompt(files)` into the vibe loop
   for non-fit git repos and deploy the result.
 - **iOS + Android** — the chooser + git/mcp/journal screens to this spec.
