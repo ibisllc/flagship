@@ -10,6 +10,7 @@ import {
   type VibeCodeRuntime,
 } from "../../src/screens/screensHttp.js";
 import { VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
+import { InMemoryBuildCredentialStore } from "../../src/llm/buildCredentialStore.js";
 import type { OwnedUrl } from "../../src/screens/types.js";
 import type { HttpRequest } from "../../src/runtime.js";
 import type { InstalledService } from "../../src/servicePlatform.js";
@@ -572,9 +573,15 @@ describe("screens HTTP — P1.16 tier-status", () => {
 });
 
 describe("screens HTTP — P1.5 / P1.7 vibe-code", () => {
-  function makeVibeCode(): { runtime: VibeCodeRuntime; registry: VibeCodeSessionRegistry; startCalls: Array<{ sessionId: string; prompt: string }> } {
+  function makeVibeCode(opts: { withCredentials?: boolean } = {}): {
+    runtime: VibeCodeRuntime;
+    registry: VibeCodeSessionRegistry;
+    startCalls: Array<{ sessionId: string; prompt: string }>;
+    credentials?: InMemoryBuildCredentialStore;
+  } {
     const registry = new VibeCodeSessionRegistry();
     const startCalls: Array<{ sessionId: string; prompt: string }> = [];
+    const credentials = opts.withCredentials ? new InMemoryBuildCredentialStore() : undefined;
     const runtime: VibeCodeRuntime = {
       registry,
       username: USERNAME,
@@ -582,12 +589,13 @@ describe("screens HTTP — P1.5 / P1.7 vibe-code", () => {
       startStreaming: async ({ sessionId, prompt }) => {
         startCalls.push({ sessionId, prompt });
       },
+      ...(credentials ? { credentials } : {}),
     };
-    return { runtime, registry, startCalls };
+    return { runtime, registry, startCalls, ...(credentials ? { credentials } : {}) };
   }
 
-  it("start: returns sessionId + invokes startStreaming exactly once", async () => {
-    const { runtime, startCalls } = makeVibeCode();
+  it("start: streams when a credential is delivered + does NOT echo the key", async () => {
+    const { runtime, startCalls, credentials } = makeVibeCode({ withCredentials: true });
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
@@ -597,15 +605,57 @@ describe("screens HTTP — P1.5 / P1.7 vibe-code", () => {
       method: "POST",
       path: "/api/screens/vibe-code/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ prompt: "build a habit tracker" })),
+      body: Buffer.from(JSON.stringify({
+        prompt: "build a habit tracker",
+        credential: { provider: "anthropic", apiKey: "byok-LIVE-secret" },
+      })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(typeof body.sessionId).toBe("string");
+    expect(body.needsCredential).toBeUndefined();
+    // The key is NEVER echoed in the response.
+    expect(r!.body as string).not.toContain("byok-LIVE-secret");
+    // The credential was stored sealed for the session.
+    expect(credentials!.has(body.sessionId)).toBe(true);
+    expect(credentials!.providerName(body.sessionId)).toBe("anthropic");
     // Wait one tick for the fire-and-forget to land
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(startCalls).toHaveLength(1);
     expect(startCalls[0]!.prompt).toBe("build a habit tracker");
+  });
+
+  it("start: returns needsCredential (and does NOT stream) when no key is available", async () => {
+    const { runtime, startCalls } = makeVibeCode({ withCredentials: true });
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      vibeCode: runtime,
+    });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/vibe-code/start",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ prompt: "build a thing" })),
+    }));
+    expect(r?.status).toBe(200);
+    const body = JSON.parse(r!.body as string);
+    expect(typeof body.sessionId).toBe("string");
+    expect(body.needsCredential).toBe(true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(startCalls).toHaveLength(0);
+  });
+
+  it("start: rejects a malformed credential with 400", async () => {
+    const { runtime } = makeVibeCode({ withCredentials: true });
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate(), vibeCode: runtime });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/vibe-code/start",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ prompt: "x", credential: { provider: "anthropic" } })),
+    }));
+    expect(r?.status).toBe(400);
   });
 
   it("start: rejects empty prompt with 400", async () => {

@@ -6,13 +6,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type {
-  Attachment,
-  ChatRequest,
-  ChatStreamEvent,
-  ProviderConfig,
-  StreamingLLMProvider,
+import {
+  StreamingProviderRegistry,
+  type Attachment,
+  type ChatRequest,
+  type ChatStreamEvent,
+  type ProviderConfig,
+  type StreamingLLMProvider,
 } from "@flagship/llm-providers";
+import { deriveSWK } from "@flagship/protocol";
 import {
   MAX_ATTACHMENTS_PER_TURN,
   summarizeAttachment,
@@ -23,7 +25,11 @@ import {
   VibeCodeSessionRegistry,
 } from "../../src/llm/vibeCodeSession.js";
 import { buildVibeCodeStartStreaming } from "../../src/llm/vibeCodeStartStreaming.js";
+import { LlmHarness } from "../../src/llmHarness.js";
+import { InMemoryBuildCredentialStore } from "../../src/llm/buildCredentialStore.js";
 import { InMemoryAppEnvStore } from "../../src/serviceEnvStore.js";
+
+const attSwk = deriveSWK({ seed: new Uint8Array(32).fill(5) }, "srv-att");
 
 const PNG_1x1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -135,26 +141,34 @@ function capturingProvider(): {
   return { provider, capture };
 }
 
+function harnessFor(provider: StreamingLLMProvider): LlmHarness {
+  return new LlmHarness({ swk: attSwk, streamingRegistry: new StreamingProviderRegistry([provider]) });
+}
+
+const attCtx = {
+  username: "alice",
+  hostname: "home",
+  tier: "free" as const,
+  availableProviders: ["fake"],
+};
+
 describe("buildVibeCodeStartStreaming — attachments reach the ChatRequest", () => {
   it("the user message on the wire carries the attachments", async () => {
     const registry = new VibeCodeSessionRegistry();
     const { provider, capture } = capturingProvider();
+    const credentials = new InMemoryBuildCredentialStore();
     const startStreaming = buildVibeCodeStartStreaming({
       registry,
-      provider,
-      config: { apiKey: "k" },
+      harness: harnessFor(provider),
+      credentials,
       resolveAppId: () => null,
       appEnvStore: new InMemoryAppEnvStore(),
-      context: {
-        username: "alice",
-        hostname: "home",
-        tier: "free",
-        availableProviders: ["anthropic"],
-      },
+      context: attCtx,
       existingAppsSnapshot: () => [],
       defaultModel: "claude-haiku",
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
+    await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });
     await startStreaming({
       sessionId: session.meta.sessionId,
       prompt: "build me a thing like this",
@@ -169,22 +183,19 @@ describe("buildVibeCodeStartStreaming — attachments reach the ChatRequest", ()
   it("no attachments ⇒ a plain user message (backward compatible)", async () => {
     const registry = new VibeCodeSessionRegistry();
     const { provider, capture } = capturingProvider();
+    const credentials = new InMemoryBuildCredentialStore();
     const startStreaming = buildVibeCodeStartStreaming({
       registry,
-      provider,
-      config: { apiKey: "k" },
+      harness: harnessFor(provider),
+      credentials,
       resolveAppId: () => null,
       appEnvStore: new InMemoryAppEnvStore(),
-      context: {
-        username: "alice",
-        hostname: "home",
-        tier: "free",
-        availableProviders: ["anthropic"],
-      },
+      context: attCtx,
       existingAppsSnapshot: () => [],
       defaultModel: "m",
     });
     const session = registry.create({ username: "alice", serverFqdn: "home.alice.flagship.services" });
+    await credentials.put(session.meta.sessionId, { provider: "fake", apiKey: "k" });
     await startStreaming({ sessionId: session.meta.sessionId, prompt: "x" });
     const userMsg = capture.request!.messages.find((m) => m.role === "user")!;
     expect(userMsg.attachments).toBeUndefined();

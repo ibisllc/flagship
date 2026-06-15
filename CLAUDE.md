@@ -123,7 +123,48 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — build-a-service multi-mode (`feat/build-modes`, FEATURE-COMPLETE pending launch)
+### 2026-06-14 (latest) — BYOK AI wired LIVE on the box (`feat/build-modes`)
+
+**`LlmHarness` is now complete + the live build paths actually run the
+model.** Closed the three gaps that left scratch-chat + git-adapt as tested
+seams:
+- **Streaming in `LlmHarness`** (`chatStream(credential, request, onEvent)`):
+  resolves a `StreamingLLMProvider` from a new `StreamingProviderRegistry`
+  (anthropic/openai/google), applies the SSRF `baseUrlGuard`, streams
+  `ChatStreamEvent`s; defaults `streamingFetchImpl` to a shared
+  `defaultStreamingFetch` (Node fetch) so openai/google work in prod too. Plus
+  `chatWithCredential` (non-streaming) for the adapt path. The harness holds
+  NO key — it opens a credential per call.
+- **Transient sealed BYOK credential store** (`llm/buildCredentialStore.ts`,
+  mirrors `serviceEnvStore`): InMemory + File, keyed by session/build, SWK-
+  sealed at rest (one `.cred` file, mode-0600), reload-on-boot so an in-flight
+  build survives a daemon restart (the owner-endorsed "transient key on the
+  box while the phone is locked"). `providerName()` is the only non-secret
+  accessor; the value is never logged.
+- **Contract:** optional `credential: {provider, apiKey, baseUrl?}` on
+  vibe-code start/reply + build git/adapt. Delivered ONCE over the
+  paired-session-gated pinned pipe (box terminates TLS), sealed for the
+  session/build, **reused on later turns** — never echoed, never logged,
+  never journalled (provider NAME at most). **flagshipserver.com is NEVER in
+  the credential path.**
+- **`index.ts` wiring:** constructs the harness + `FileBuildCredentialStore`,
+  the live `startStreaming` thunk (`buildVibeCodeStartStreaming` now resolves
+  provider+config per-session from the stored credential), and the live
+  `adaptRunner` (+ `adaptCredentialAvailable` → clean 503 ONLY on genuine
+  no-credential).
+- **Graceful absence:** scratch start returns `200 {needsCredential:true}`
+  (session exists, not streaming) → client shows "add an AI key"; adapt → 503
+  "AI adapt not configured".
+
+Future item: in-house / self-hosted inference server (LAN `baseUrl` +
+`baseUrlGuard` override) — strict public-https guard applies today.
+
+Gates: `npx tsc -b` clean · full `npx vitest run` **5138** pass / 8 skip (391
+files; server-daemon+providers slice green incl. new `buildCredentialStore`,
+`LlmHarness.chatStream`/`chatWithCredential`, live startStreaming + adapt
+tests). iOS/Android untouched (clients are a later worker).
+
+### 2026-06-14 — build-a-service multi-mode (`feat/build-modes`, FEATURE-COMPLETE pending launch)
 
 **New feature branch `feat/build-modes`** — the "build a service" workflow
 fans from one model-source pick into a **"how do you want to build it?"**

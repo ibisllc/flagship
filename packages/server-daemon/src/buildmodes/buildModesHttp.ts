@@ -20,10 +20,21 @@
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { BuildOrchestrator } from "./buildOrchestrator.js";
+import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
+import type { LlmCredential } from "../llmHarness.js";
 
 export interface BuildModesHttpDeps {
   orchestrator: BuildOrchestrator;
   gate: PairedSessionGate;
+  /**
+   * Transient, sealed-at-rest BYOK credential store keyed by buildId.
+   * The git-create + adapt endpoints stash a delivered credential here so
+   * the orchestrator's `adaptRunner` can open it just-in-time for the AI
+   * adapt pass. flagshipserver.com is NEVER in this path — the credential
+   * arrives over the paired-session-gated pinned pipe and stays on the box.
+   * Omitted ⇒ no BYOK; adapt returns the clean "AI adapt not configured".
+   */
+  credentials?: BuildCredentialStore;
 }
 
 const J = { "content-type": "application/json" } as const;
@@ -45,13 +56,26 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     const denied = deps.gate.check(req);
     if (denied) return denied;
 
-    // POST /api/build/git   { gitUrl, ref? }  → create + inspect
+    // POST /api/build/git   { gitUrl, ref?, credential? }  → create + inspect
     if (path === "/api/build/git" && req.method === "POST") {
-      const body = parseJson(req.body) as { gitUrl?: string; ref?: string } | null;
+      const body = parseJson(req.body) as
+        | { gitUrl?: string; ref?: string; credential?: unknown }
+        | null;
       if (!body || typeof body.gitUrl !== "string" || body.gitUrl.length === 0) {
         return jerr(400, "gitUrl required");
       }
+      const cred = parseCredential(body.credential);
+      if (cred === "invalid") return jerr(400, "malformed credential");
       const r = await o.createGit({ gitUrl: body.gitUrl, ...(typeof body.ref === "string" ? { ref: body.ref } : {}) });
+      // Seal the BYOK credential for the new build, if delivered. The
+      // adapt pass reuses it; never echoed, never logged.
+      if (cred && deps.credentials) {
+        try {
+          await deps.credentials.put(r.buildId, cred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+      }
       return jok(r);
     }
 
@@ -98,7 +122,21 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     // with the reason on any other failure; 200 {ok, fileCount} on
     // success (the owner deploys next via .../deploy).
     if (verb === "adapt" && req.method === "POST") {
-      const body = parseJson(req.body) as { instructions?: string } | null;
+      const body = parseJson(req.body) as
+        | { instructions?: string; credential?: unknown }
+        | null;
+      // A credential may be delivered here too (e.g. the owner adds an AI
+      // key only when the adapt pass is actually needed). Same box-only,
+      // never-echoed, never-logged contract.
+      const cred = parseCredential(body?.credential);
+      if (cred === "invalid") return jerr(400, "malformed credential");
+      if (cred && deps.credentials) {
+        try {
+          await deps.credentials.put(buildId, cred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+      }
       const r = await o.adaptGit(buildId, typeof body?.instructions === "string" ? { instructions: body.instructions } : {});
       if (!r.ok) {
         return jerr(r.reason === "AI adapt not configured" ? 503 : 502, r.reason);
@@ -191,6 +229,24 @@ function parseJson(buf: Buffer): unknown {
     return null;
   }
 }
+
+/**
+ * Validate an optional BYOK credential off a request body. Mirrors the
+ * screens-BFF parser: absent → null; well-formed → the LlmCredential;
+ * present-but-malformed → the sentinel `"invalid"`. Never logged.
+ */
+function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) return "invalid";
+  const o = raw as Record<string, unknown>;
+  if (typeof o.provider !== "string" || o.provider.length === 0) return "invalid";
+  if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
+  if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
+  const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
+  if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  return out;
+}
+
 function jok(body: unknown): HttpResponse {
   return { status: 200, headers: J, body: JSON.stringify(body) };
 }

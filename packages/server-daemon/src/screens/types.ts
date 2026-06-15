@@ -106,6 +106,30 @@ export interface VibeCodeStartRequest {
    * channel.
    */
   attachments?: VibeCodeAttachment[];
+  /**
+   * BYOK provider credential the box uses to drive this session's model
+   * calls. Delivered ONCE here over the paired-session-gated pinned pipe
+   * (the box terminates TLS); the daemon seals it for the session and
+   * REUSES it on every subsequent turn — no re-send needed. flagshipserver
+   * .com is NEVER in this path: the box calls the provider directly with
+   * this key. The daemon never echoes it back, never logs it, and never
+   * journals the value (the journal records only that a provider was set,
+   * and at most the provider NAME).
+   */
+  credential?: LlmProviderCredential;
+}
+
+/**
+ * A BYOK LLM-provider credential. Travels phone/webapp → box ONLY. Never
+ * relayed by .com, never echoed, never logged.
+ */
+export interface LlmProviderCredential {
+  /** Provider name, e.g. "anthropic" | "openai" | "google". */
+  provider: string;
+  /** The owner's API key. SECRET. */
+  apiKey: string;
+  /** Optional override base URL for an OpenAI-compatible / proxy endpoint. */
+  baseUrl?: string;
 }
 
 export type VibeCodeAttachment =
@@ -114,6 +138,15 @@ export type VibeCodeAttachment =
 
 export interface VibeCodeStartResponse {
   sessionId: string;
+  /**
+   * Graceful-absence signal: `true` when the session was created but NO
+   * model is driving it because no BYOK credential is available (none was
+   * delivered on this request and none is stored for the session). The
+   * client surfaces this as "add an AI key" — the session exists (the
+   * owner can still deliver a credential + retry), it just isn't
+   * streaming. Omitted / `false` when a model IS driving the session.
+   */
+  needsCredential?: boolean;
 }
 
 // ---------- P1.6 — /api/screens/vibe-code/:id/stream (WS frames) -------
@@ -561,6 +594,14 @@ export interface VibeCodeReplyRequest {
    * requestEnvVar path. VALUE-FREE w.r.t. secrets by contract.
    */
   attachments?: VibeCodeAttachment[];
+  /**
+   * BYOK provider credential. Normally the credential delivered on
+   * `start` is reused for the whole session, so a reply need NOT carry
+   * one. Supplied here only to seed a session that started without a
+   * credential (the `needsCredential` case) before resuming it. Same
+   * box-only, never-echoed, never-logged contract as the start path.
+   */
+  credential?: LlmProviderCredential;
   /**
    * When the pending tool is `requestEnvVar`, the phone signals the
    * outcome here. The value itself is NEVER carried by /reply — the

@@ -37,6 +37,8 @@ import { SYSTEM_PROMPT_V1 } from "../llm/systemPrompt.js";
  * live path degrades. Tests inject a fake returning canned block text.
  */
 export type AdaptRunner = (args: {
+  /** The build whose transient BYOK credential drives the call. */
+  buildId: string;
   systemPrompt: string;
   userPrompt: string;
   model?: string;
@@ -106,6 +108,16 @@ export interface BuildOrchestratorDeps {
    * way the scratch live path degrades when the provider isn't wired.
    */
   adaptRunner?: AdaptRunner;
+  /**
+   * Optional per-build credential probe. When supplied AND it returns
+   * false for a build, `adaptGit` short-circuits with the SAME clean
+   * "AI adapt not configured" 503 it returns when `adaptRunner` is
+   * absent — so the genuine no-credential case (a build for which the
+   * owner never delivered a BYOK key) degrades identically to the
+   * provider-not-wired case. Absent ⇒ assume a credential is available
+   * (back-compat: tests inject an `adaptRunner` directly).
+   */
+  adaptCredentialAvailable?: (buildId: string) => boolean;
   now?: () => number;
   rand?: () => string;
 }
@@ -249,6 +261,11 @@ export class BuildOrchestrator {
       // with. The HTTP layer turns this into a 503.
       return { ok: false, reason: "AI adapt not configured" };
     }
+    if (this.deps.adaptCredentialAvailable && !this.deps.adaptCredentialAvailable(buildId)) {
+      // The provider IS wired, but this build has no BYOK credential —
+      // the genuine no-credential case. Degrade identically (clean 503).
+      return { ok: false, reason: "AI adapt not configured" };
+    }
 
     await this.deps.journal.append(buildId, {
       mode: "git",
@@ -268,7 +285,7 @@ export class BuildOrchestrator {
 
     let raw: string;
     try {
-      raw = await this.deps.adaptRunner({ systemPrompt: SYSTEM_PROMPT_V1, userPrompt });
+      raw = await this.deps.adaptRunner({ buildId, systemPrompt: SYSTEM_PROMPT_V1, userPrompt });
     } catch (e) {
       const reason = `adapt model call failed: ${(e as Error).message}`;
       await this.deps.journal.append(buildId, { mode: "git", kind: "error", actor: "ai", summary: reason });

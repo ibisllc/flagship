@@ -8,6 +8,7 @@ import { buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js
 import { GitImporter } from "../src/buildmodes/gitImport.js";
 import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
+import { InMemoryBuildCredentialStore } from "../src/llm/buildCredentialStore.js";
 import type { CommandRunner } from "../src/serviceRunner.js";
 import type { HttpRequest } from "../src/runtime.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
@@ -163,6 +164,34 @@ describe("BuildOrchestrator — git AI adapt", () => {
     const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
     const r = await o.adaptGit(created.buildId);
     expect(r).toEqual({ ok: false, reason: "AI adapt not configured" });
+  });
+
+  it("adaptGit degrades to 'not configured' when a runner IS wired but the build has no credential", async () => {
+    // The genuine no-credential case: provider wired, but the owner never
+    // delivered a BYOK key for THIS build → identical clean signal.
+    const { o } = makeNotFitOrchestrator({
+      adaptRunner: async () => ADAPT_OUTPUT,
+      adaptCredentialAvailable: () => false,
+    });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r).toEqual({ ok: false, reason: "AI adapt not configured" });
+  });
+
+  it("adaptGit runs the runner when a credential IS available", async () => {
+    let ranWithBuildId = "";
+    const { o } = makeNotFitOrchestrator({
+      adaptRunner: async (a: { buildId: string }) => {
+        ranWithBuildId = a.buildId;
+        return ADAPT_OUTPUT;
+      },
+      adaptCredentialAvailable: () => true,
+    });
+    const created = await o.createGit({ gitUrl: "https://github.com/a/legacy" });
+    const r = await o.adaptGit(created.buildId);
+    expect(r.ok).toBe(true);
+    // The runner received the build id so it can open that build's key.
+    expect(ranWithBuildId).toBe(created.buildId);
   });
 
   it("adaptGit fails when the model output has no manifest", async () => {
@@ -351,6 +380,67 @@ describe("buildModesHttp", () => {
     expect(out.requests[0]).toMatchObject({ name: "STRIPE_KEY", why: "checkout", secret: true, requestedBy: "ide", currentlySet: false });
     // Never a value anywhere in the response.
     expect(resp!.body as string).not.toContain('"value"');
+  });
+
+  it("POST /api/build/git stores a delivered BYOK credential; the adapt pass then runs live", async () => {
+    const credentials = new InMemoryBuildCredentialStore();
+    let seenKey = "";
+    const { o } = makeNotFitOrchestrator({
+      adaptRunner: async (a: { buildId: string }) => {
+        const c = await credentials.get(a.buildId);
+        seenKey = c?.apiKey ?? "";
+        return ADAPT_OUTPUT;
+      },
+      adaptCredentialAvailable: (buildId: string) => credentials.has(buildId),
+    });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate, credentials });
+
+    const created = await handle(
+      req({
+        method: "POST",
+        path: "/api/build/git",
+        body: jbody({
+          gitUrl: "https://github.com/a/legacy",
+          credential: { provider: "anthropic", apiKey: "byok-LIVE-secret" },
+        }),
+      }),
+    );
+    expect(created!.status).toBe(200);
+    // The credential is NEVER echoed in the create response.
+    expect(created!.body as string).not.toContain("byok-LIVE-secret");
+    const buildId = JSON.parse(created!.body as string).buildId;
+
+    const adapt = await handle(req({ method: "POST", path: `/api/build/sessions/${buildId}/adapt`, body: jbody({}) }));
+    expect(adapt!.status).toBe(200);
+    expect(seenKey).toBe("byok-LIVE-secret");
+  });
+
+  it("POST .../adapt 503s when a credential store is wired but the build has no key", async () => {
+    const credentials = new InMemoryBuildCredentialStore();
+    const { o } = makeNotFitOrchestrator({
+      adaptRunner: async () => ADAPT_OUTPUT,
+      adaptCredentialAvailable: (buildId: string) => credentials.has(buildId),
+    });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate, credentials });
+    const created = await handle(req({ method: "POST", path: "/api/build/git", body: jbody({ gitUrl: "https://github.com/a/legacy" }) }));
+    const buildId = JSON.parse(created!.body as string).buildId;
+    const adapt = await handle(req({ method: "POST", path: `/api/build/sessions/${buildId}/adapt`, body: jbody({}) }));
+    expect(adapt!.status).toBe(503);
+    expect(JSON.parse(adapt!.body as string).error).toBe("AI adapt not configured");
+  });
+
+  it("POST /api/build/git rejects a malformed credential", async () => {
+    const credentials = new InMemoryBuildCredentialStore();
+    const { o } = makeNotFitOrchestrator();
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate, credentials });
+    const resp = await handle(
+      req({
+        method: "POST",
+        path: "/api/build/git",
+        body: jbody({ gitUrl: "https://github.com/a/legacy", credential: { provider: "anthropic" } }),
+      }),
+    );
+    expect(resp!.status).toBe(400);
   });
 
   it("POST .../adapt 503s when no runner is configured, then succeeds when one is", async () => {

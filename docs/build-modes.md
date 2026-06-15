@@ -9,13 +9,45 @@
 Status: **feature-complete on `feat/build-modes` (pending launch).** Daemon
 backbone + git/mcp/scratch modes + the shared journal + the AI-adapt endpoint
 + value-free env-requests + the scratch multimodal-chat seam, all tested, on
-all three clients (webapp + iOS + Android). The ONE remaining dependency is
-**live-provider wiring into the daemon boot path** — the LLM is not
-constructed in `index.ts` yet (a separate pre-existing gap, not specific to
-this feature); until it lands, the AI-dependent paths (scratch chat, git
-adapt) are proven seams that degrade cleanly (adapt → 503 → fall back to
-scratch). The mobile scratch *attachment picker* is the one nice-to-have not
-yet ported (mobile scratch uses the existing vibe screen).
+all three clients (webapp + iOS + Android).
+
+**BYOK AI is now wired LIVE into the daemon boot path** (`index.ts`): the
+`LlmHarness` streams (`chatStream`) + the non-streaming git-`adaptRunner`
+both run for real. The credential flows phone/webapp → box over the
+paired-session-gated **pinned pipe** (the box terminates TLS; flagshipserver
+.com is NEVER in the credential path — the box calls the provider directly)
+and is held in a **transient, sealed-at-rest credential store** keyed by
+session/build (the "key on the box so a build continues while the phone is
+locked" posture). When no credential is available the paths degrade cleanly
+(scratch start → `needsCredential`; adapt → 503 "AI adapt not configured").
+
+The remaining future item is the **in-house / self-hosted inference server**
+(a LAN `baseUrl` + a `baseUrlGuard` override for private hosts); today the
+strict public-https guard applies, with an explicit `baseUrl` allowed for
+OpenAI-compatible / proxy *public* endpoints. The mobile scratch *attachment
+picker* is the one nice-to-have not yet ported (mobile scratch uses the
+existing vibe screen).
+
+### BYOK credential delivery — the contract
+
+The credential rides three optional request fields (one shape everywhere):
+
+```jsonc
+"credential": { "provider": "anthropic", "apiKey": "<owner key>", "baseUrl": "https://..." }
+```
+
+- **scratch:** `POST /api/screens/vibe-code/start` (and `…/reply` to seed a
+  session that started without one). On receipt the daemon seals it for the
+  session and **reuses it on every later turn** — no re-send needed. The
+  start response carries `needsCredential: true` (200, session still exists)
+  when no model can drive the session yet.
+- **git adapt:** `POST /api/build/git` (and `…/adapt`). Stored keyed by
+  `buildId`; the `adaptRunner` opens it just-in-time.
+
+The value is **never echoed, never logged, never journalled** — at most the
+provider NAME. Sealed at rest under the same SWK-derived AEAD the
+`serviceEnvStore` uses; the store reloads on boot so an in-flight build
+survives a daemon restart.
 
 ## The idea
 
@@ -70,10 +102,12 @@ top-level `flagship.app.json` that parses against the manifest schema?
   the output is parsed by the SAME `VibeCodeStreamParser` as scratch, and
   the produced files are merged into the workspace (path-guarded by
   `workspace.write`, requires a `flagship.app.json`). The owner then
-  deploys via `.../deploy`. **The live model isn't wired into the daemon
-  yet** (the pre-existing gap — `buildVibeCodeStartStreaming` is never
-  constructed in `index.ts`), so `adaptRunner` is left undefined and the
-  endpoint returns a clean **503 "AI adapt not configured"**; the webapp
+  deploys via `.../deploy`. **The live model IS wired now**: `index.ts`
+  builds `adaptRunner` from `LlmHarness.chatWithCredential` + the build's
+  transient sealed credential (keyed by `buildId`). The endpoint returns the
+  clean **503 "AI adapt not configured"** ONLY when no credential is stored
+  for the build (`adaptCredentialAvailable(buildId) === false`) — the genuine
+  no-key case, identical to the provider-not-wired degradation; the webapp
   falls back to from-scratch on a 503.
 
 URL/ref validated: https or `git@` only (no `file://`), no shell
@@ -135,16 +169,28 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
 
 ## Remaining work
 
-- **Multimodal chat for scratch** — DONE except mobile + live-provider
-  wiring. Provider foundation (additive `Attachment` + `ChatMessage.attachments`
+- **Live BYOK wiring** — DONE. `LlmHarness.chatStream` (streaming) +
+  `chatWithCredential` (non-streaming, for adapt) land in the daemon boot
+  path: `index.ts` builds the harness, a `FileBuildCredentialStore`
+  (transient, SWK-sealed, reload-on-boot), the live `startStreaming` thunk
+  (`buildVibeCodeStartStreaming` resolves the session's credential + streams
+  through the harness), and the live `adaptRunner` (+ `adaptCredentialAvailable`
+  for the clean 503). Credential delivery contract: the optional
+  `credential` field on vibe-code start/reply + build git/adapt (sealed for
+  the session/build, reused on later turns, never echoed/logged/journalled).
+  flagshipserver.com is NEVER in the credential path. REMAINING: the
+  in-house / self-hosted inference server (LAN `baseUrl` + `baseUrlGuard`
+  override for private hosts) — the strict public-https guard applies today.
+- **Multimodal chat for scratch** — DONE except the mobile attachment picker.
+  Provider foundation (additive `Attachment` + `ChatMessage.attachments`
   in `@flagship/llm-providers`, Anthropic adapter → base64 image / text blocks)
   was already landed. NOW landed:
   - The vibe **session carries attachments** (`pushUserMessage(text,
     attachments)` / `pushUserReply({…, attachments})`); they ride on the next
     `ChatRequest`'s user message (`vibeCodeStartStreaming`) so the multimodal
     adapter translates them. `messages()`/`conversation()` surface them for a
-    reload. (The live provider is still NOT constructed in `index.ts`, so this
-    is the *seam* — it lights up when that separate wiring lands.)
+    reload. The live provider is now constructed in `index.ts` (see "Live
+    BYOK wiring" above), so this streams for real.
   - **HTTP** accepts inlined base64 attachments on `POST
     /api/screens/vibe-code/start`, the screens `talkToUser` `/reply` path, and
     the `/api/llm/sessions` start + `user-reply` paths. One shared validator
@@ -164,14 +210,14 @@ implementation (`views/build-*.js`). iOS + Android mirror it:
     Deploy affordance.
   REMAINING: the mobile scratch attachment picker (iOS/Android scratch routes
   to the existing vibe screen for now); openai/google adapters mirror the
-  Anthropic translation when needed; live-provider wiring (separate task).
+  Anthropic translation when needed.
 - **AI-adapt endpoint** — DONE (server + webapp). `POST
   /api/build/sessions/:id/adapt` runs `buildAdaptPrompt(files)` through an
   injected `adaptRunner`, parses the emit-format output with
   `VibeCodeStreamParser`, and merges the path-guarded files into the
-  workspace (manifest required). Returns 503 until the daemon's live LLM
-  provider is wired (the separate pre-existing gap); webapp + iOS + Android all
-  fall back to from-scratch on a 503. REMAINING: that live-provider wiring.
+  workspace (manifest required). The live `adaptRunner` is wired (see "Live
+  BYOK wiring"); the 503 now means the genuine no-credential case for the
+  build; webapp + iOS + Android all fall back to from-scratch on a 503.
 - **iOS + Android** — DONE. The chooser + git/mcp/journal screens are native
   on both (SwiftUI + Compose), built to this spec, with a build-modes API
   client whose Mock matches the live wire format (pinned by tests). iOS 945

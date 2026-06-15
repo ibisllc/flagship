@@ -57,6 +57,9 @@ import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
+import { LlmHarness } from "./llmHarness.js";
+import { FileBuildCredentialStore } from "./llm/buildCredentialStore.js";
+import { buildVibeCodeStartStreaming } from "./llm/vibeCodeStartStreaming.js";
 import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
@@ -660,6 +663,30 @@ async function main(): Promise<void> {
           .catch(() => {});
       }
     };
+    // ---- Live BYOK LLM wiring (scratch streaming + git-adapt) ----------
+    //
+    // The harness holds NO key — it opens a transient, sealed-at-rest
+    // credential just-in-time for each provider call. The credential
+    // arrives over the paired-session-gated pinned pipe (the box
+    // terminates TLS) and NEVER leaves the box; flagshipserver.com is not
+    // in this path. The credential store survives a daemon restart so an
+    // in-flight build continues while the phone is locked (the owner's
+    // endorsed "transient key on the box" posture). The strict default
+    // baseUrlGuard (https + public only) applies; an explicit `baseUrl`
+    // for an OpenAI-compatible / proxy endpoint is allowed by the guard's
+    // normal public-host rules. (LAN baseUrl override is a future
+    // self-host item, not enabled here.)
+    const llmHarness = new LlmHarness({
+      swk: swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+    });
+    const llmCredentials = new FileBuildCredentialStore(
+      join(dataDir, "llm-credentials"),
+      swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+    );
+    await llmCredentials.load();
+    const defaultLlmModel =
+      process.env.FLAGSHIP_LLM_DEFAULT_MODEL ?? "claude-3-5-sonnet-latest";
+
     const deploySession = runtime.servicePlatform
       ? buildDeploySession({
           servicePlatform: runtime.servicePlatform,
@@ -728,19 +755,37 @@ async function main(): Promise<void> {
         deployArtifact: artifactDeployer,
         serverFqdn: env.serverFqdn!,
         mcpBaseUrl: `https://${env.serverFqdn!}`,
-        // AI "adapt" pass for non-fit git imports. Wire this to the SAME
-        // live LLM provider mechanism the scratch vibe path uses. That
-        // provider is NOT constructed in this file yet
-        // (`buildVibeCodeStartStreaming` / `VibeCodeRuntime.startStreaming`
-        // is optional/undefined in production — a separate pre-existing
-        // task), so we leave `adaptRunner` undefined here. While it is
-        // undefined the adapt endpoint returns a clean 503 ("AI adapt not
-        // configured"), exactly mirroring how the scratch live path
-        // degrades. It lights up the moment the daemon's live provider is
-        // wired: build an `AdaptRunner` that issues one provider chat call
-        // with the given system + user prompt and returns the raw
-        // assistant text (emit-format blocks).
-        // adaptRunner: <wire when the live LLM provider is constructed>,
+        // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
+        // provider chat call (the harness opens the build's transient,
+        // sealed BYOK credential just-in-time, applies the SSRF baseUrl
+        // guard, and returns the raw assistant text in the emit-format the
+        // VibeCodeStreamParser reads). The credential is keyed by buildId
+        // in the same store the scratch path uses; the owner delivers it
+        // over the pinned pipe. When NO credential is stored for the build,
+        // this resolves to undefined-equivalent: the runner throws and the
+        // orchestrator surfaces the clean "AI adapt not configured" 503 —
+        // exactly the genuine no-credential case the contract calls for.
+        // flagshipserver.com is never in this path.
+        adaptRunner: async ({ buildId, systemPrompt, userPrompt, model }) => {
+          const credential = await llmCredentials.get(buildId);
+          if (!credential) {
+            // Defensive — adaptCredentialAvailable below already
+            // short-circuits this case into the clean 503.
+            throw new Error("AI adapt not configured");
+          }
+          const resp = await llmHarness.chatWithCredential(credential, {
+            model: model ?? defaultLlmModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
+          return resp.content;
+        },
+        // The genuine no-credential case: a build for which the owner
+        // never delivered a BYOK key degrades to the same clean 503 as
+        // the provider-not-wired case.
+        adaptCredentialAvailable: (buildId) => llmCredentials.has(buildId),
         // An external IDE / the AI can ask the owner to set a secret env var
         // VALUE-FREE (request_env_var). Journal it (names not values) so the
         // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.
@@ -768,7 +813,11 @@ async function main(): Promise<void> {
         },
       });
       runtime.addHandler(
-        buildBuildModesHttpHandlers({ orchestrator: buildOrchestrator, gate: pairedSessions }),
+        buildBuildModesHttpHandlers({
+          orchestrator: buildOrchestrator,
+          gate: pairedSessions,
+          credentials: llmCredentials,
+        }),
       );
 
       // Bridge scratch (vibe-code) into the same journal so all three
@@ -820,6 +869,56 @@ async function main(): Promise<void> {
     // request. The watcher constructed later assigns itself here so the
     // status endpoint returns the live snapshot.
     const rePairWatcherRef: { current: import("./postRecovery/rePairWatcher.js").RePairWatcher | null } = { current: null };
+
+    // Resolve a session's editing serviceId from its pending manifest —
+    // shared by startStreaming + the screens `resolveSessionAppId`.
+    const resolveSessionServiceId = (sessionId: string): string | null => {
+      const session = vibeRegistry.get(sessionId);
+      if (!session) return null;
+      const mj = session.manifestJson();
+      if (!mj) return null;
+      try {
+        const m = JSON.parse(mj) as { name?: unknown };
+        if (typeof m.name === "string" && m.name.length > 0) {
+          return `${username}-${m.name}`;
+        }
+      } catch {
+        // ignore malformed mid-stream JSON
+      }
+      return null;
+    };
+
+    // The live scratch-streaming thunk: resolves the session's transient
+    // BYOK credential, assembles the system prompt from env-var NAMES
+    // only, and streams the model reply through the harness. Only wired
+    // when a deploy session exists (otherwise there's no app surface to
+    // build into).
+    const vibeStartStreaming = deploySession && runtime.envStore
+      ? buildVibeCodeStartStreaming({
+          registry: vibeRegistry,
+          harness: llmHarness,
+          credentials: llmCredentials,
+          resolveAppId: resolveSessionServiceId,
+          appEnvStore: runtime.envStore,
+          context: {
+            username,
+            hostname: env.serverFqdn!.split(".")[0] ?? "home",
+            tier: "free",
+            availableProviders: llmHarness.listStreamingProviders(),
+          },
+          existingAppsSnapshot: () =>
+            (runtime.servicePlatform?.list() ?? []).map((a) => ({
+              name: a.slug,
+              description:
+                typeof a.manifest.description === "string"
+                  ? a.manifest.description
+                  : undefined,
+              stores: "",
+            })),
+          defaultModel: defaultLlmModel,
+        })
+      : undefined;
+
     const screensHandle = buildScreensHttp({
       gate: pairedSessions,
       serverFqdn: env.serverFqdn!,
@@ -837,6 +936,8 @@ async function main(): Promise<void> {
             username,
             serverFqdn: env.serverFqdn!,
             recordScratchTurn,
+            credentials: llmCredentials,
+            ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
           }
         : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
