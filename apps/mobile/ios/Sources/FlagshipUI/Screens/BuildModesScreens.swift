@@ -146,15 +146,21 @@ public struct BuildGitScreen: View {
     var onViewJournal: (String) -> Void = { _ in }
     /// 503 fall-back hook: the box has no model wired → start from scratch.
     var onFallBackToScratch: () -> Void = {}
+    /// "Build with AI instead" on a non-fit repo: route through the AI-key
+    /// step FIRST so the owner provides/confirms the key the adapt pass uses.
+    /// The host runs `vm.adapt(credential:)` once a key is chosen.
+    var onBuildWithAI: () -> Void = {}
 
     public init(
         vm: BuildGitViewModel,
         onViewJournal: @escaping (String) -> Void = { _ in },
-        onFallBackToScratch: @escaping () -> Void = {}
+        onFallBackToScratch: @escaping () -> Void = {},
+        onBuildWithAI: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.onViewJournal = onViewJournal
         self.onFallBackToScratch = onFallBackToScratch
+        self.onBuildWithAI = onBuildWithAI
     }
 
     public var body: some View {
@@ -224,7 +230,7 @@ public struct BuildGitScreen: View {
                     Text("Not Flagship-ready yet").font(FS.font.h4()).foregroundColor(c.text)
                     Text(r.reason).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
-                    FSSecondaryButton("Build with AI instead", block: true) { Task { await vm.adapt() } }
+                    FSSecondaryButton("Build with AI instead", block: true) { onBuildWithAI() }
                         .accessibilityIdentifier("build-git-adapt")
                     Text("The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)

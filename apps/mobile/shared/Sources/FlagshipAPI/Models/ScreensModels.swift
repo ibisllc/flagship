@@ -80,19 +80,62 @@ public struct AppDetailResponse: Codable {
     }
 }
 
+// MARK: - BYOK provider credential
+
+/// A bring-your-own-key LLM-provider credential. Travels phone → box ONLY,
+/// over the paired-session-gated pinned pipe; the box terminates TLS and
+/// calls the provider directly with this key. flagshipserver.com is NEVER
+/// in this path. The daemon seals it for the session/build, never echoes
+/// it, never logs it, and never journals the value (at most the provider
+/// NAME). The raw key only ever lives in a typed input or the device-local
+/// `SavedKeyStore` Keychain.
+///
+/// WIRE: `{ "provider": "anthropic", "apiKey": "<owner key>", "baseUrl"? }`
+/// MIRRORS: `LlmProviderCredential` in
+/// packages/server-daemon/src/screens/types.ts + the `parseCredential`
+/// validator in buildmodes/buildModesHttp.ts + apps/web/.../providers.js.
+public struct LlmProviderCredential: Codable, Equatable, Sendable {
+    /// Provider name, e.g. "anthropic" | "openai" | "google".
+    public let provider: String
+    /// The owner's API key. SECRET — never logged.
+    public let apiKey: String
+    /// Optional override base URL for an OpenAI-compatible / proxy endpoint.
+    public let baseUrl: String?
+    public init(provider: String, apiKey: String, baseUrl: String? = nil) {
+        self.provider = provider
+        self.apiKey = apiKey
+        self.baseUrl = baseUrl
+    }
+}
+
 // MARK: - P1.5 vibe-code/start
 
 public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
     public let prompt: String
     public let model: String?
-    public init(prompt: String, model: String?) {
+    /// BYOK provider credential the box uses to drive this session. Delivered
+    /// ONCE here; the daemon seals it for the session and reuses it on every
+    /// later turn. Omitted ⇒ the box falls back to whatever it has (and may
+    /// answer `needsCredential: true`).
+    public let credential: LlmProviderCredential?
+    public init(prompt: String, model: String?, credential: LlmProviderCredential? = nil) {
         self.prompt = prompt
         self.model = model
+        self.credential = credential
     }
 }
 
 public struct VibeCodeStartResponse: Codable, Equatable, Sendable {
     public let sessionId: String
+    /// Graceful-absence signal: `true` when the session was created but NO
+    /// model is driving it because no BYOK credential is available. The
+    /// client routes back into the AI-key step to deliver one + retry.
+    /// Omitted / `false` when a model IS driving the session.
+    public let needsCredential: Bool?
+    public init(sessionId: String, needsCredential: Bool? = nil) {
+        self.sessionId = sessionId
+        self.needsCredential = needsCredential
+    }
 }
 
 // MARK: - P1.6 vibe-code/:id/stream (WS frames)
@@ -851,8 +894,13 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
 public struct VibeCodeReplyRequest: Codable, Equatable, Sendable {
     public let text: String?
     public let envVarStatus: String?   // "set" | "declined" | "deferred"
-    public init(text: String? = nil, envVarStatus: String? = nil) {
-        self.text = text; self.envVarStatus = envVarStatus
+    /// BYOK provider credential. Normally `start`'s credential is reused for
+    /// the whole session, so a reply need NOT carry one — it's supplied here
+    /// only to seed a session that started without one (the `needsCredential`
+    /// case) before resuming. Same box-only, never-logged contract.
+    public let credential: LlmProviderCredential?
+    public init(text: String? = nil, envVarStatus: String? = nil, credential: LlmProviderCredential? = nil) {
+        self.text = text; self.envVarStatus = envVarStatus; self.credential = credential
     }
 }
 

@@ -18,6 +18,10 @@ public struct ServicesTab: View {
 
     @State private var path: [AppsRoute] = []
     @State private var vm: ServicesListViewModel?
+    /// In-memory BYOK credential for the current build, set at the AI-key
+    /// step and consumed by the downstream scratch/git containers. Never
+    /// persisted here, never rides a route.
+    @State private var buildCred = BuildCredentialHolder()
     /// Presentation-only creator filter chip (All / Yours / Shared). Narrows
     /// the rendered list; never mutates the loaded apps.
     @State private var ownerFilter: AppsOwnerFilter = .all
@@ -123,18 +127,20 @@ public struct ServicesTab: View {
         case .buildSource:
             BuildSourceChooserContainer(path: $path)
         case .buildGit:
-            BuildGitContainer(path: $path)
+            BuildGitContainer(path: $path, holder: buildCred)
         case .buildMcp:
             BuildMcpContainer(path: $path)
         case .buildJournal(let buildId):
             BuildJournalContainer(buildId: buildId)
+        case .buildKey(let purpose):
+            BuildKeyContainer(purpose: purpose, path: $path, holder: buildCred)
         case .vibeCodeProviderPick:
             VibeCodeProviderPickScreen(
                 onPickPromo: { path.append(.vibeCodeDescribe) },
                 onPickBYOK: { path.append(.vibeCodeDescribe) }
             )
         case .vibeCodeDescribe:
-            VibeCodeDescribeContainer(path: $path)
+            VibeCodeDescribeContainer(path: $path, holder: buildCred)
         case .vibeCodeGenerating(let sessionId):
             VibeCodeGeneratingContainer(sessionId: sessionId)
         case .vibeCodeChat(let sessionId):
@@ -458,12 +464,25 @@ struct ServiceEnvContainer: View {
 
 struct VibeCodeDescribeContainer: View {
     @Binding var path: [AppsRoute]
+    let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt in
             Task {
                 do {
-                    let resp = try await client.vibeCodeStart(VibeCodeStartRequest(prompt: prompt, model: nil))
+                    // Seed the box's model with the credential chosen at the
+                    // AI-key step (kept on the holder so the describe screen
+                    // could re-render without losing it).
+                    let cred = holder.credential
+                    let resp = try await client.vibeCodeStart(
+                        VibeCodeStartRequest(prompt: prompt, model: nil, credential: cred)
+                    )
+                    if resp.needsCredential == true {
+                        // The box still has no usable model — route BACK into
+                        // the AI-key step to provide one, then retry.
+                        path.append(.buildKey(purpose: .scratch))
+                        return
+                    }
                     path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
                 } catch {
                     // surface error toast later
@@ -502,7 +521,7 @@ struct BuildSourceChooserContainer: View {
     @Environment(ToastCenter.self) private var toasts
     var body: some View {
         BuildSourceChooserScreen(
-            onScratch: { path.append(.vibeCodeProviderPick) },
+            onScratch: { path.append(.buildKey(purpose: .scratch)) },
             onGit: { path.append(.buildGit) },
             onMcp: { path.append(.buildMcp) },
             onMarketplace: { toasts.info("The marketplace is coming soon.") },
@@ -512,9 +531,12 @@ struct BuildSourceChooserContainer: View {
 }
 
 // git build mode container. Owns the BuildGitViewModel; a 503 on adapt
-// pops back to the chooser and pushes the scratch flow.
+// pops back to the chooser and pushes the scratch flow. "Build with AI
+// instead" routes through the AI-key step first; on return the chosen
+// credential (held by `holder`) drives the adapt pass.
 struct BuildGitContainer: View {
     @Binding var path: [AppsRoute]
+    let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
     @State private var vm: BuildGitViewModel?
     var body: some View {
@@ -523,13 +545,56 @@ struct BuildGitContainer: View {
                 BuildGitScreen(
                     vm: vm,
                     onViewJournal: { id in path.append(.buildJournal(buildId: id)) },
-                    onFallBackToScratch: { path.append(.vibeCodeProviderPick) }
+                    onFallBackToScratch: { path.append(.buildKey(purpose: .scratch)) },
+                    onBuildWithAI: {
+                        guard let id = vm.buildId else { return }
+                        path.append(.buildKey(purpose: .gitAdapt(buildId: id)))
+                    }
                 )
+                .onAppear {
+                    // Returning from the AI-key step: a credential was chosen
+                    // for THIS build → run the adapt pass with it (single use).
+                    if let cred = holder.take() {
+                        Task { await vm.adapt(credential: cred) }
+                    }
+                }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task { if vm == nil { vm = BuildGitViewModel(client: client) } }
+    }
+}
+
+// AI-key step container. Confirms/provides the BYOK key the box's model
+// uses, then dispatches per purpose: scratch seeds the describe flow; git
+// adapt stashes the credential on the holder + pops back so the git
+// container runs the adapt pass with it. Marketplace + MCP never reach here.
+struct BuildKeyContainer: View {
+    let purpose: BuildKeyPurpose
+    @Binding var path: [AppsRoute]
+    let holder: BuildCredentialHolder
+    @State private var vm = BuildKeyViewModel()
+
+    private var contextLabel: String {
+        switch purpose {
+        case .scratch:  return "Start from scratch with AI"
+        case .gitAdapt: return "Building this repo with AI"
+        }
+    }
+
+    var body: some View {
+        BuildKeyScreen(vm: vm, contextLabel: contextLabel) { cred in
+            holder.credential = cred
+            switch purpose {
+            case .scratch:
+                path.append(.vibeCodeDescribe)
+            case .gitAdapt:
+                // Pop back to the git screen; its onAppear takes the
+                // credential off the holder + runs the adapt pass.
+                if path.count > 0 { path.removeLast() }
+            }
+        }
     }
 }
 

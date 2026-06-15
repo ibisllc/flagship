@@ -40,11 +40,18 @@ public struct BuildGitResponse: Codable, Equatable, Sendable {
     }
 }
 
-/// `POST /api/build/sessions/:id/adapt {instructions?}`
+/// `POST /api/build/sessions/:id/adapt {instructions?, credential?}`
 public struct BuildAdaptRequest: Codable, Equatable, Sendable {
     public let instructions: String?
-    public init(instructions: String? = nil) {
+    /// BYOK provider credential the box uses to drive the AI adapt pass.
+    /// Stored keyed by buildId on the box; the adaptRunner opens it
+    /// just-in-time. Box-only, never logged. Omitted ⇒ the box uses what it
+    /// has and may answer 503 ("AI adapt not configured" → fall back to
+    /// scratch). MIRRORS the `credential` field parsed in buildModesHttp.ts.
+    public let credential: LlmProviderCredential?
+    public init(instructions: String? = nil, credential: LlmProviderCredential? = nil) {
         self.instructions = instructions
+        self.credential = credential
     }
 }
 

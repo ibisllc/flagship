@@ -68,12 +68,17 @@ public final class BuildGitViewModel {
 
     /// Run the AI adapt pass on a non-fit repo. On a 503 the box has no
     /// model wired — flag the fall-back so the host pivots to scratch.
-    public func adapt() async {
+    /// `credential` is the BYOK key chosen at the AI-key step; it's delivered
+    /// to the box over its own pinned pipe and never logged.
+    public func adapt(credential: LlmProviderCredential? = nil) async {
         guard let buildId else { return }
         errorMessage = nil
         phase = .adapting
         do {
-            let r = try await client.buildAdapt(buildId: buildId, BuildAdaptRequest())
+            let r = try await client.buildAdapt(
+                buildId: buildId,
+                BuildAdaptRequest(credential: credential)
+            )
             phase = .adapted(fileCount: r.fileCount)
         } catch let ScreensClientError.http(status, _) where status == 503 {
             shouldFallBackToScratch = true

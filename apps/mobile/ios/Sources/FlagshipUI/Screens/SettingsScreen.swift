@@ -72,6 +72,8 @@ public struct SettingsScreen: View {
     /// safe when cloud recovery is enrolled; the screen gates on that.
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
+    /// Open Settings → AI keys (device-local BYOK key manager).
+    var onOpenAiKeys: () -> Void = {}
     /// P7 — open the dedicated tier-status / subscription screen.
     var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
@@ -140,6 +142,7 @@ public struct SettingsScreen: View {
         onLock: @escaping () -> Void = {},
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
+        onOpenAiKeys: @escaping () -> Void = {},
         onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
@@ -173,6 +176,7 @@ public struct SettingsScreen: View {
         self.onLock = onLock
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
+        self.onOpenAiKeys = onOpenAiKeys
         self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
@@ -627,6 +631,7 @@ public struct SettingsScreen: View {
 
     private func links(c: FSColors) -> some View {
         var rows: [FSSettingsRow] = [
+            FSSettingsRow(icon: "sparkles", title: "AI keys", subtitle: "Bring-your-own keys for building apps", action: onOpenAiKeys),
             FSSettingsRow(icon: "key.horizontal.fill", title: "Recovery setup", subtitle: "Recover on a new device", action: onOpenRecovery),
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
             FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
