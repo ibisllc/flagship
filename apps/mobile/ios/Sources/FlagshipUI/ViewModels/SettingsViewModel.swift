@@ -25,6 +25,7 @@ public final class SettingsViewModel {
 
     public private(set) var trustedDevices: LoadingState<[DirectoryDevice]> = .idle
     public private(set) var accountDisplayName: String?
+    public private(set) var tier: LoadingState<TierStatusResponse> = .idle
     public private(set) var devicesEtag: String?
     /// v1.2 Phase 4 — account-type badge state read from
     /// `GET /api/users/:u`. Nil while loading or on failure;
@@ -70,12 +71,17 @@ public final class SettingsViewModel {
     }
 
     public func load() async {
+        tier = .loading
         browserSessions = .loading
         trustedDevices = .loading
         do {
-            let ss = try await screens.pairedSessionsList()
+            async let t  = screens.tierStatus()
+            async let s  = screens.pairedSessionsList()
+            let (ti, ss) = try await (t, s)
+            tier = .loaded(ti)
             browserSessions = .loaded(ss.sessions)
         } catch {
+            tier = .failed(error.localizedDescription)
             browserSessions = .failed(error.localizedDescription)
         }
         await loadTrustedDevices()
