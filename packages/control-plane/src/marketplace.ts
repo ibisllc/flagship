@@ -30,10 +30,15 @@ import type {
 import { hexToBytes } from "./hex.js";
 import { constantTimeEqual } from "./customDomainRedirections.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
+import { isPaidListing, isEntitledToInstall, type AppPurchaseDeps } from "./appPurchase.js";
 
 export interface MarketplaceDeps {
   marketplace: MarketplaceStorage;
   usernames: UsernameStorage;
+  /** Paid-app entitlement store (#14). When present, the install endpoint
+   *  gates paid listings on ownership; absent ⇒ everything installs free
+   *  (pre-#14 behaviour). */
+  purchases?: AppPurchaseDeps["purchases"];
   freshnessMs?: number;
   now?: () => number;
   /** Cap descriptionMd at this many chars. Default 10_000. */
@@ -202,11 +207,38 @@ export async function handleMarketplaceInstall(
   deps: MarketplaceDeps,
   creator: string,
   slug: string,
+  username?: string | null,
 ): Promise<HandlerResponse> {
   const rec = await deps.marketplace.get(creator, slug);
   if (!rec || rec.status !== "listed") return notFound("listing not found");
+
+  // Paid-app gate (#14): a paid listing needs a purchase. Free apps (or a
+  // deployment without the purchases store wired) install unconditionally.
+  const paid = isPaidListing(rec);
+  if (paid && deps.purchases) {
+    const entitled = await isEntitledToInstall(
+      { purchases: deps.purchases, marketplace: deps.marketplace },
+      rec,
+      username,
+    );
+    if (!entitled) {
+      // 402 Payment Required — the client routes the user to checkout.
+      return {
+        status: 402,
+        body: {
+          ok: false,
+          paid: true,
+          price_usd_cents: rec.priceUsdCents ?? 0,
+          creator: rec.creator,
+          slug: rec.slug,
+          error: "this app must be purchased before it can be installed",
+        },
+      };
+    }
+  }
+
   await deps.marketplace.recordInstall(creator, slug);
-  return ok({ ok: true });
+  return ok({ ok: true, paid, owned: paid ? true : undefined });
 }
 
 /**
@@ -337,6 +369,8 @@ function serializeListing(r: MarketplaceListingRecord) {
     manifest_hash: r.manifestHashHex,
     screenshots: JSON.parse(r.screenshotKeysJson) as string[],
     status: r.status,
+    price_usd_cents: r.priceUsdCents ?? 0,
+    is_paid: (r.priceUsdCents ?? 0) > 0,
     scan_grade: r.scanGrade ?? null,
     install_count: r.installCount,
     public_distribution: r.publicDistribution,
