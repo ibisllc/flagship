@@ -1730,3 +1730,12 @@ button[data-device-restricted] {
   padding: 0 2px;
 }
 .vc-chip-x:hover { color: var(--ink); }
+
+/* AI-key step — "Save on this device" toggle row */
+.bk-save-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.bk-save-row input { width: auto; margin: 0; }

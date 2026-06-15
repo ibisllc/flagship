@@ -22,6 +22,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { enterBuildKey } from "./build-key.js";
 
 registerView("view-vibe-code");
 
@@ -36,6 +37,10 @@ const TEXT_EXTENSIONS = /\.(txt|md|sql|json|csv)$/i;
 
 let activeSessionId = null;
 let pollTimer = null;
+// The in-memory BYOK credential the box should use to drive this build, set
+// from the AI-key step. { provider, apiKey, baseUrl? } — never persisted here
+// and never sent to flagshipserver.com (screensFetch goes to the box).
+let buildCredential = null;
 // Pending attachments staged in the composer for the NEXT turn.
 let staged = [];
 // The pending talkToUser tool the AI is waiting on, when any.
@@ -153,17 +158,39 @@ async function send() {
   sendBtn.textContent = "Sending…";
   try {
     if (!activeSessionId) {
-      // First turn — start the session.
+      // First turn — start the session, carrying the BYOK credential so the
+      // box can drive the build with the owner's chosen key.
+      const startBody = { prompt: text, attachments };
+      if (buildCredential) startBody.credential = buildCredential;
       const r = await screensFetch("/api/screens/vibe-code/start", {
         method: "POST",
-        body: JSON.stringify({ prompt: text, attachments }),
+        body: JSON.stringify(startBody),
       });
       activeSessionId = r.sessionId;
+      if (r.needsCredential) {
+        // No model can drive this yet — gently route into the AI-key step.
+        toast("Add an AI key to start.", "warn");
+        promptEl.value = text; // keep what they typed
+        promptEl.disabled = false;
+        enterBuildKey({
+          contextLabel: "Start from scratch with AI",
+          back: "view-vibe-code",
+          onChosen: (credential) => {
+            buildCredential = credential;
+            activeSessionId = null; // re-start cleanly with the key
+            show("view-vibe-code");
+            void send();
+          },
+        });
+        return;
+      }
     } else if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
+      const replyBody = { text, attachments };
+      if (buildCredential) replyBody.credential = buildCredential;
       await screensFetch(
         `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
-        { method: "POST", body: JSON.stringify({ text, attachments }) },
+        { method: "POST", body: JSON.stringify(replyBody) },
       );
       pendingTalkToolId = null;
     } else {
@@ -364,6 +391,7 @@ function reset() {
   activeSessionId = null;
   staged = [];
   pendingTalkToolId = null;
+  buildCredential = null;
   renderChips();
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
@@ -399,7 +427,7 @@ export function initVibeCodeView() {
   });
 }
 
-export async function enterVibeCode() {
+export async function enterVibeCode(opts = {}) {
   // Building a service needs a server to build and run it. With none
   // paired, nudge the user to add one rather than opening a dead form.
   if (!getPodBaseUrl()) {
@@ -409,4 +437,7 @@ export async function enterVibeCode() {
   }
   show("view-vibe-code");
   reset();
+  // The AI-key step hands the chosen credential in here; reset() clears it,
+  // so apply it after.
+  if (opts.credential) buildCredential = opts.credential;
 }

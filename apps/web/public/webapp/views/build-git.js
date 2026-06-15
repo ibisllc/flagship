@@ -10,10 +10,13 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildJournal } from "./build-journal.js";
+import { enterBuildKey } from "./build-key.js";
 
 registerView("view-build-git");
 
 let buildId = null;
+// The in-memory BYOK credential for the adapt pass, set from the AI-key step.
+let adaptCredential = null;
 
 export function initBuildGitView() {
   $("build-git-check").addEventListener("click", checkRepo);
@@ -22,6 +25,7 @@ export function initBuildGitView() {
 
 export function enterBuildGit() {
   buildId = null;
+  adaptCredential = null;
   $("build-git-url").value = "";
   $("build-git-ref").value = "";
   $("build-git-verdict").classList.add("hidden");
@@ -71,7 +75,19 @@ function renderVerdict(r) {
         <p class="note mt-2">The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.</p>
         <p class="note mt-2"><a id="build-git-journal" href="#">View build journal →</a></p>
       </div>`;
-    $("build-git-adapt").addEventListener("click", adapt);
+    // The adapt pass uses the box's model — confirm/provide the AI key first,
+    // then run the adapt with that in-memory credential.
+    $("build-git-adapt").addEventListener("click", () =>
+      enterBuildKey({
+        contextLabel: "Building with AI",
+        back: "view-build-git",
+        onChosen: (credential) => {
+          adaptCredential = credential;
+          show("view-build-git");
+          void adapt();
+        },
+      }),
+    );
   }
   const j = $("build-git-journal");
   if (j) j.addEventListener("click", (e) => { e.preventDefault(); enterBuildJournal(buildId); });
@@ -84,10 +100,16 @@ function renderVerdict(r) {
 async function adapt() {
   if (!buildId) return;
   const btn = $("build-git-adapt");
-  btn.disabled = true;
-  btn.textContent = "adapting…";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "adapting…";
+  }
   try {
-    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/adapt`, { method: "POST" });
+    const body = adaptCredential ? JSON.stringify({ credential: adaptCredential }) : undefined;
+    const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/adapt`, {
+      method: "POST",
+      ...(body ? { body } : {}),
+    });
     $("build-git-verdict").innerHTML = `
       <div class="card">
         <p><strong>Adapted ✓</strong></p>
@@ -106,8 +128,10 @@ async function adapt() {
       return;
     }
     toast(e instanceof ScreensError ? e.message : String(e), "err");
-    btn.disabled = false;
-    btn.textContent = "Build with AI instead";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Build with AI instead";
+    }
   }
 }
 

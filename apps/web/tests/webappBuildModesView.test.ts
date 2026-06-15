@@ -22,6 +22,13 @@ describe("webapp build-modes views", () => {
     expect(body).toMatch(/marketplace is coming soon/i);
   });
 
+  it("scratch routes through the AI-key step before opening the chat", async () => {
+    const body = await asset("/webapp/views/build-source.js");
+    expect(body).toContain("enterBuildKey");
+    // The chosen credential is handed onward to the vibe-code chat.
+    expect(body).toContain("enterVibeCode({ credential })");
+  });
+
   it("git view checks fitness then deploys via /api/build", async () => {
     const body = await asset("/webapp/views/build-git.js");
     expect(body).toContain('registerView("view-build-git")');
@@ -43,6 +50,15 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("e.status === 503");
     expect(body).toContain("enterVibeCode");
     expect(body).toMatch(/starting from scratch instead/i);
+  });
+
+  it("git-adapt confirms an AI key first and sends it as credential", async () => {
+    const body = await asset("/webapp/views/build-git.js");
+    // The not-fit AI button routes through the reusable key step…
+    expect(body).toContain("enterBuildKey");
+    // …and the adapt request carries the in-memory credential.
+    expect(body).toContain("adaptCredential");
+    expect(body).toContain("{ credential: adaptCredential }");
   });
 
   it("mcp view mints a connection and shows the key + IDE config", async () => {

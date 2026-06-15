@@ -457,6 +457,51 @@
         <div class="row-2 mt-2"><button class="secondary" id="build-source-back">← Back</button></div>
       </section>
 
+      <!-- Reusable AI-key step (shown before any build path that uses the box's model) -->
+      <section id="view-build-key" class="hidden">
+        <h2>Provide an AI key</h2>
+        <p class="note" id="build-key-context">Your box needs an AI key to do this.</p>
+        <p class="note">
+          The key stays on this device. Your box calls the provider directly —
+          flagshipserver.com never sees it.
+        </p>
+
+        <div id="build-key-saved" class="mt-2"></div>
+
+        <button id="build-key-different" class="secondary full-width mt-2">Use a different key</button>
+
+        <div class="card hidden mt-2" id="build-key-form">
+          <h3>Use a different key</h3>
+          <label for="bk-provider">Provider</label>
+          <select id="bk-provider">
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <label for="bk-base">Base URL <span class="faint-sm">(optional, for OpenAI-compatible)</span></label>
+          <input id="bk-base" type="text" placeholder="https://your-proxy.example" autocomplete="off" />
+          <label for="bk-key">API key</label>
+          <input id="bk-key" type="password" placeholder="sk-…" autocomplete="off" />
+          <label for="bk-label">Label <span class="faint-sm">(optional)</span></label>
+          <input id="bk-label" type="text" placeholder="personal / work" autocomplete="off" />
+          <label class="bk-save-row mt-2">
+            <input id="bk-save" type="checkbox" />
+            <span>Save on this device</span>
+          </label>
+          <div class="row-gap-3 mt-2">
+            <button id="bk-use">Use this key</button>
+            <button class="secondary" id="bk-cancel">Cancel</button>
+          </div>
+          <p class="faint-sm mt-3">
+            Saved keys are wrapped under your passphrase on this device.
+            flagshipserver.com never sees them.
+          </p>
+        </div>
+
+        <div class="row-2 mt-2"><button class="secondary" id="build-key-back">← Back</button></div>
+      </section>
+
       <!-- Build mode: import from Git -->
       <section id="view-build-git" class="hidden">
         <h2>Import from Git</h2>

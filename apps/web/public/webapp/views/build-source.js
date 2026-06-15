@@ -13,11 +13,19 @@ import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildGit } from "./build-git.js";
 import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
+import { enterBuildKey } from "./build-key.js";
 
 registerView("view-build-source");
 
 export function initBuildSourceView() {
-  $("build-src-scratch").addEventListener("click", () => enterVibeCode());
+  // Scratch uses the box's model — the next screen asks for / confirms the
+  // AI key, then opens the chat seeded with the in-memory credential.
+  $("build-src-scratch").addEventListener("click", () =>
+    enterBuildKey({
+      contextLabel: "Start from scratch with AI",
+      onChosen: (credential) => enterVibeCode({ credential }),
+    }),
+  );
   $("build-src-git").addEventListener("click", () => enterBuildGit());
   $("build-src-mcp").addEventListener("click", () => enterBuildMcp());
   $("build-src-market").addEventListener("click", () => {

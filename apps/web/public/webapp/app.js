@@ -55,6 +55,7 @@ import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
 import { initBuildSourceView, enterBuildSource } from "./views/build-source.js";
+import { initBuildKeyView } from "./views/build-key.js";
 import { initBuildGitView } from "./views/build-git.js";
 import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
@@ -102,6 +103,7 @@ const SUB_VIEW_TABS = {
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
+  "view-build-key": "apps",
   "view-build-git": "apps",
   "view-build-mcp": "apps",
   "view-build-journal": "apps",
@@ -328,6 +330,7 @@ async function boot() {
   initTierStatusView();
   initVibeCodeView();
   initBuildSourceView();
+  initBuildKeyView();
   initBuildGitView();
   initBuildMcpView();
   initBuildJournalView();
