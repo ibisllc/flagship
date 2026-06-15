@@ -16,6 +16,7 @@ import { escapeHtml } from "../lib/util.js";
 import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
+import { renderProBanner } from "../lib/proBanner.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { demoLifecycle, ensureDemoServerPairing } from "../lib/usersCheck.js";
 import {
@@ -1411,6 +1412,11 @@ export async function renderHome() {
   renderRecoveryBanner();
 
   void renderSharedWithMe();
+  // Always-available "Become a Pro member" support CTA — a gentle, on-brand
+  // membership nudge (distinct from the cap-hit upgrade alert) for the ~95%
+  // who never hit the bandwidth cap but would happily back the project.
+  // Fully dismissible; once dismissed on this device it never re-appears.
+  renderProBanner();
 
   const sid = recoveryStoreGet("sessionId");
   const serverSource = homeServerSource(sid, getActiveProfile(), Date.now(), {
