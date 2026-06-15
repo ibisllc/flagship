@@ -154,6 +154,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/orders/send", method: "POST", body: body)
     }
+    public func tierStatus() async throws -> TierStatusResponse {
+        try await request("/api/screens/tier-status")
+    }
     public func urlControllerOwned() async throws -> UrlControllerOwnedResponse {
         try await request("/api/screens/url-controller/owned")
     }

@@ -54,6 +54,9 @@ sealed interface ActivityRoute {
 
 sealed interface SettingsRoute {
     data object Providers : SettingsRoute
+    /** P7 — the dedicated tier-status / subscription screen, reached from
+     *  the Settings "Plan / Subscription" nav row. */
+    data object TierStatus : SettingsRoute
     data object Recovery : SettingsRoute
     data object PostRecoveryProgress : SettingsRoute
     data object About : SettingsRoute

@@ -79,6 +79,7 @@ public struct SettingsTab: View {
                 SettingsScreen(
                     username: app.currentUser ?? "",
                     accountDisplayName: vm.accountDisplayName,
+                    tier: vm.tier,
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
@@ -146,6 +147,7 @@ public struct SettingsTab: View {
                         app.signOut()
                     },
                     onOpenAiKeys: { path.append(.aiKeys) },
+                    onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenAccountSecurity: { path.append(.accountSecurity) },
@@ -313,7 +315,7 @@ public struct SettingsTab: View {
                     }
                 )
             }
-            if case .idle = vm?.browserSessions { await vm?.load() }
+            if case .idle = vm?.tier { await vm?.load() }
         }
         .task {
             await refreshCompanionPendingCount()
@@ -362,6 +364,8 @@ public struct SettingsTab: View {
             )
         case .aiKeys:
             AiKeysScreen(vm: AiKeysViewModel())
+        case .tierStatus:
+            TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:

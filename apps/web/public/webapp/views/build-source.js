@@ -5,8 +5,10 @@
 //   - scratch     → describe it, the AI writes + deploys it (existing vibe flow)
 //   - git         → import a repo; if Flagship-ready install as-is, else AI-adapt
 //   - mcp         → connect Cursor/Cline; build from your editor with your own AI
+//   - marketplace → install something already built (lit up by feat/marketplace)
 
 import { $, registerView, show } from "../lib/router.js";
+import { toast } from "../lib/toast.js";
 import { enterVibeCode } from "./vibe-code.js";
 import { enterBuildGit } from "./build-git.js";
 import { enterBuildMcp } from "./build-mcp.js";
@@ -26,6 +28,15 @@ export function initBuildSourceView() {
   );
   $("build-src-git").addEventListener("click", () => enterBuildGit());
   $("build-src-mcp").addEventListener("click", () => enterBuildMcp());
+  $("build-src-market").addEventListener("click", () => {
+    // Marketplace UI lives on feat/marketplace; until that merges, the
+    // tile degrades gracefully rather than dead-ending.
+    if (typeof window !== "undefined" && window.__flagshipMarketplace) {
+      window.__flagshipMarketplace();
+    } else {
+      toast("The marketplace is coming soon.", "info");
+    }
+  });
   $("build-source-journal-link").addEventListener("click", (e) => {
     e.preventDefault();
     enterBuildJournal();

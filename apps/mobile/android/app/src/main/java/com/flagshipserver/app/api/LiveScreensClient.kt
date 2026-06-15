@@ -133,6 +133,9 @@ class LiveScreensClient(
         return request("/api/screens/orders/send", OrdersSendResponse.serializer(), "POST", body)
     }
 
+    override suspend fun tierStatus(): TierStatusResponse =
+        request("/api/screens/tier-status", TierStatusResponse.serializer())
+
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse =
         request("/api/screens/url-controller/owned", UrlControllerOwnedResponse.serializer())
 
