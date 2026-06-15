@@ -123,7 +123,48 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-14**.
 
-### 2026-06-14 (latest) — session-action buttons simplified across surfaces + webapp PIN lock
+### 2026-06-14 (latest) — build-a-service multi-mode (`feat/build-modes`, IN PROGRESS)
+
+**New feature branch `feat/build-modes`** — the "build a service" workflow
+fans from one model-source pick into a **"how do you want to build it?"**
+chooser over four sources, all converging on ONE deploy primitive
+(harness-only Forgejo push → docker build → signed install) and ONE shared
+**build journal**. Design + wire contract: `docs/build-modes.md`. Key answer
+to the design question: **the box never needs an AI key as architecture** —
+it's a contract-bounded function surface; the model is only needed by whoever
+*authors*. 3 of 5 modes need no box-side model (git-fit, mcp, marketplace);
+transient sealed keys for scratch/adapt are deliberate (build continues while
+the phone is locked).
+
+**Landed + gated (daemon + webapp):**
+- **`buildmodes/` daemon backbone (all tested):** `buildJournal` (append-only
+  JSONL, value-free/redacted, restart-safe), `gitImport` (clone + Flagship-
+  fitness verdict + `buildAdaptPrompt`), `buildWorkspace` (path-safe file
+  tree), `contract` (rules restated for an external agent), `mcpServer` (pure
+  JSON-RPC 2.0 MCP — tools express the whole limited surface incl. value-free
+  `request_env_var`), `mcpKeyStore` (sealed per-build bearer key, binds an IDE
+  to one build), `deployArtifact` (mode-agnostic deploy core), `buildOrchestrator`,
+  `buildModesHttp` (`/api/build/*` paired-gated + `/mcp/build/:id` bearer-gated
+  Streamable-HTTP). Wired into `index.ts` (guarded on servicePlatform; scratch
+  bridged into the same journal).
+- **Webapp client:** chooser + git + mcp (URL/key/IDE-config/rotate) + journal
+  viewer (`views/build-*.js`); create-service entry repointed to the chooser;
+  marketplace tile degrades to "coming soon" until `feat/marketplace` merges.
+
+Gates: `npx tsc -b` clean · daemon vitest +~70 new (buildJournal/gitImport/
+buildWorkspace/mcpServer/mcpKeyStore/buildModes) · web vitest **1152** (+ new
+`webappBuildModesView`). **iOS + Android NOT yet built** (this work is daemon +
+webapp). Forgejo-push stays harness-only (external actors go through chat/git/
+mcp, the harness materializes).
+
+**Remaining (next):** multimodal chat + attachments for scratch (additive
+`ChatMessage.attachments` in `@flagship/llm-providers`, Anthropic adapter
+translates); AI-adapt endpoint for non-fit git repos (renderer + UI exist,
+needs the LLM-loop endpoint); **iOS + Android** chooser/git/mcp/journal screens
+to the `docs/build-modes.md` UX spec; surface mcp `request_env_var` as a phone
+prompt.
+
+### 2026-06-14 — session-action buttons simplified across surfaces + webapp PIN lock
 
 **Settings "leave the app" cluster relabelled + grey-out gating (all
 surfaces).** The three tiers are now framed as a lock spectrum: tier-1
