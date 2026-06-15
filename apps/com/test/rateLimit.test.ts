@@ -100,6 +100,15 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("POST", "/api/push/relay")).not.toBe("push-revoke");
   });
 
+  it("rate-limits the monetization voucher-redeem + allowance reads per-IP", () => {
+    expect(endpointFor("POST", "/api/voucher/redeem")).toBe("voucher-redeem");
+    expect(endpointFor("GET", "/api/users/alice/allowance")).toBe("user-allowance");
+    // The voucher ISSUE path is admin-only (no edge bucket); only redeem is here.
+    expect(endpointFor("POST", "/api/admin/voucher/issue")).toBeNull();
+    expect(LIMITS["voucher-redeem"]?.every((a) => a.axis === "ip")).toBe(true);
+    expect(LIMITS["user-allowance"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();

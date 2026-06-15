@@ -111,6 +111,7 @@ import {
   handlePushRevoke,
   handleUsageReport,
   handleUsageStatus,
+  handleUserAllowance,
   handleAdminTierGrant,
   handleRedeemVoucher,
   handleIssueVoucher,
@@ -401,6 +402,7 @@ interface ProvisioningTempBucket {
 const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
+  USER_ALLOWANCE: /^\/api\/users\/([^/]+)\/allowance$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
@@ -715,6 +717,17 @@ export async function tryControlPlane(
         request.headers.get("x-usage-secret"),
         env.USAGE_REPORT_SECRET,
         url.searchParams.get("username"),
+      ),
+    );
+  }
+  // Public per-user allowance read — the #6 dashboard + #7 alert data source.
+  // Unauthenticated account METADATA (same disclosure class as /pods); the
+  // edge rate-limits it ("user-allowance").
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_ALLOWANCE))) {
+    return finishPlain(
+      await handleUserAllowance(
+        { usage: new D1UsageStorage(env.DB), tiers: storage.tiers },
+        decodeURIComponent(m[1]!),
       ),
     );
   }

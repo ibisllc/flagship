@@ -9,6 +9,8 @@ import {
   OVERAGE_USD_PER_GB,
   handleUsageReport,
   handleUsageStatus,
+  handleUserAllowance,
+  allowanceViewFrom,
   type MeteringDeps,
 } from "../src/metering.js";
 
@@ -139,5 +141,55 @@ describe("metering — HTTP handlers (relay shared-secret auth)", () => {
     const res = await handleUsageStatus(d, SECRET, SECRET, "alice");
     expect(res.status).toBe(200);
     expect((res.body as { usedBytes: number }).usedBytes).toBe(5 * GB);
+  });
+});
+
+describe("allowance view (#6/#7 dashboard + alert)", () => {
+  it("classifies state by used fraction (ok <80% · approaching ≥80% · over >100%)", async () => {
+    const ok = allowanceViewFrom("alice", await quotaStatus(deps(), "alice")); // 0 used
+    expect(ok.state).toBe("ok");
+    expect(ok.usedFraction).toBe(0);
+
+    const approaching = await (async () => {
+      const d = deps();
+      await recordEgress(d, "alice", 40 * GB); // 80% of free 50 GB
+      return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
+    })();
+    expect(approaching.state).toBe("approaching");
+    expect(approaching.usedFraction).toBeCloseTo(0.8, 5);
+
+    const over = await (async () => {
+      const d = deps();
+      await recordEgress(d, "alice", 60 * GB); // over free 50 GB
+      return allowanceViewFrom("alice", await quotaStatus(d, "alice"));
+    })();
+    expect(over.state).toBe("over");
+    expect(over.usedFraction).toBe(1); // clamped
+    expect(over.hardCapped).toBe(true); // free + over = hard cap
+  });
+
+  it("a paid tier over quota is 'over' but NOT hard-capped (bills overage)", async () => {
+    const d = deps(tier("hobby", NOW + 30 * 24 * 3600 * 1000));
+    await recordEgress(d, "alice", 300 * GB); // over hobby 250 GB
+    const v = allowanceViewFrom("alice", await quotaStatus(d, "alice"));
+    expect(v.state).toBe("over");
+    expect(v.hardCapped).toBe(false);
+    expect(v.overageUsd).toBeGreaterThan(0);
+  });
+
+  it("handleUserAllowance: 400 on a bad username, 200 with the dashboard body", async () => {
+    const d = deps();
+    expect((await handleUserAllowance(d, "no")).status).toBe(400);
+    expect((await handleUserAllowance(d, "bad name!")).status).toBe(400);
+    await recordEgress(d, "alice", 5 * GB);
+    const res = await handleUserAllowance(d, "Alice"); // case-insensitive
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, username: "alice", tier: "free", usedBytes: 5 * GB, state: "ok" });
+  });
+
+  it("an unknown username reads as free / zero (no existence oracle)", async () => {
+    const res = await handleUserAllowance(deps(), "nobody123");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ tier: "free", usedBytes: 0, quotaBytes: 50 * GB, state: "ok" });
   });
 });

@@ -168,11 +168,72 @@ export async function handleUsageReport(
   return { status: 200, body: { ok: true, results } };
 }
 
+/** Dashboard-shaped allowance view (the public `/allowance` body). Same numbers
+ *  as `QuotaStatus` but framed for a user, not the relay: it drops the relay's
+ *  `admit` flag and adds a `usedFraction` (0..1, clamped) + a coarse `state`
+ *  the clients colour on without re-deriving thresholds. */
+export interface AllowanceView {
+  username: string;
+  tier: TierName;
+  period: string;
+  usedBytes: number;
+  quotaBytes: number;
+  remainingBytes: number;
+  usedFraction: number;
+  overQuota: boolean;
+  overageUsd: number;
+  /** "ok" < 80% · "approaching" ≥ 80% & ≤ 100% · "over" > 100%. The #7 upgrade
+   *  alert fires on "approaching"/"over"; free + "over" is the hard cap. */
+  state: "ok" | "approaching" | "over";
+  /** Free tier is a hard cap (blocked when over); paid bills overage instead. */
+  hardCapped: boolean;
+}
+
+const APPROACHING_FRACTION = 0.8;
+
+export function allowanceViewFrom(username: string, s: QuotaStatus): AllowanceView {
+  const usedFraction = s.quotaBytes > 0 ? Math.min(1, s.usedBytes / s.quotaBytes) : 0;
+  const state: AllowanceView["state"] = s.overQuota
+    ? "over"
+    : s.usedBytes / Math.max(1, s.quotaBytes) >= APPROACHING_FRACTION
+      ? "approaching"
+      : "ok";
+  return {
+    username: username.toLowerCase(),
+    tier: s.tier,
+    period: s.period,
+    usedBytes: s.usedBytes,
+    quotaBytes: s.quotaBytes,
+    remainingBytes: s.remainingBytes,
+    usedFraction,
+    overQuota: s.overQuota,
+    overageUsd: s.overageUsd,
+    state,
+    hardCapped: s.tier === "free" && s.overQuota,
+  };
+}
+
+/** `GET /api/users/:u/allowance` — PUBLIC, unauthenticated read of a user's
+ *  current public-bandwidth allowance (the #6 dashboard + #7 alert data
+ *  source). This is account METADATA only (tier + a byte total for the month,
+ *  no content, no keys), the same disclosure class as the unauthenticated
+ *  `/pods` directory — so it carries no secret, but the route MUST rate-limit
+ *  it. Returns 0-usage/free defaults for an unknown username (no oracle on
+ *  existence beyond what `/pods` already gives). */
+export async function handleUserAllowance(
+  deps: MeteringDeps,
+  username: string | null,
+): Promise<UsageHttpResult> {
+  const u = String(username ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9]{3,30}$/.test(u)) return { status: 400, body: { error: "valid username required" } };
+  const s = await quotaStatus(deps, u);
+  return { status: 200, body: { ok: true, ...allowanceViewFrom(u, s) } };
+}
+
 /** `GET /api/usage/status?username=<u>` — read-only quota status. Same shared
  *  secret (the relay's pre-flight admit check + an admin/dashboard read).
  *  NOTE: this is account METADATA (no content), but it's gated to internal
- *  callers; the user-facing dashboard reads it through the existing
- *  TierStatus surface, not here. */
+ *  callers; the user-facing dashboard reads it through `handleUserAllowance`. */
 export async function handleUsageStatus(
   deps: MeteringDeps,
   presentedSecret: string | null,
