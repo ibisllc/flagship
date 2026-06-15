@@ -75,6 +75,29 @@ per-GB above the quota.
 - **OSS escape hatch:** run your own VPS as the dispatcher. The protocol
   is open; the only gating is whose hub the user's daemon connects to.
 
+#### Locked pricing + the cost basis (2026-06-14)
+
+The only cost that scales with usage is **public-ingress egress through the
+`.services` relay** — all visitor traffic transits the Fly app (`iad`, SNI
+passthrough), and Fly bills outbound at **$0.02/GB** (NA/EU; our single
+region). Everything else (box compute, storage, apps) runs on the user's
+hardware and costs us $0. Fixed baseline is ~$20/mo (2 Fly machines +
+Workers Paid $5 + R2/D1 ~$1 + domains), so break-even is ~4 paid subs; the
+real control is bounding free egress (one viral free box at 1 TB/mo = ~$20).
+
+| Tier | Monthly public-egress quota | Our worst-case cost | Price |
+| --- | --- | --- | --- |
+| **Free** | **50 GB** (hard cap → relay stops admitting new public traffic) | ~$1/mo (avg free user ≈ cents) | $0 |
+| **Plus** (paid tier) | **250 GB** + overage | $5/mo at the included max | **$5/mo** or anonymous voucher |
+| Overage (paid only) | beyond the included quota | — | **$0.05/GB** (~2.5× our cost) |
+
+The free cap is the one dial that matters: max exposure per free user =
+`cap × $0.02`. 50 GB → $1; 100 GB → $2. Tune to taste; never remove it.
+**Do NOT gate server/box count or device profiles** — meter the bandwidth,
+not the count (a 3-low-traffic-box user costs nothing; a 1-viral-box user
+costs a lot). See `0051_usage_counters.sql` + `packages/control-plane/
+src/metering.ts` (built on `feat/metering`).
+
 ### 3. Custom domains
 
 `example.com` instead of `<pod>.<user>.flagship.services`. The default
@@ -143,7 +166,14 @@ When a feature proposal includes a payment surface, walk through:
   deferred. None of it gates v1 alpha.
 - Custom-domain CNAME provisioning is deferred (P5.2 in the cycle plan).
 - Reserved / trademark reservation flow is deferred (P5.3).
-- Dispatcher overage metering + billing is deferred (P5.4).
+- **Metering INFRASTRUCTURE** (usage accounting + quota model + the
+  relay-report endpoint) is being built on the **`feat/metering`** branch —
+  the DB migration + this doc stay on `main` (workspace artifacts), the
+  application code stays on the branch until launch. No payment SURFACE
+  (Stripe checkout, in-app paywall, voucher UI) ships until the core loop is
+  proven without one. **Voucher redemption is web-only** (a `.com` page):
+  an in-app "enter voucher" screen reads to App Review as circumventing IAP,
+  so the apps only ever *reflect* the `plus` entitlement, never sell it.
 
 The core user loop must work end-to-end *without any payment surface
 existing* before we plumb any of those four. That's the gate for
