@@ -123,7 +123,46 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-15**.
 
-### 2026-06-15 (latest) — global "active operations" sliver (WhatsApp-style) on all surfaces
+### 2026-06-15 (latest) — `feat/marketplace` brought up to speed + `main` shed marketplace/monetization
+
+**`main` is now clean of ALL marketplace + monetization app code** (commit
+`390e92fb`): the build-a-service chooser's "Get from the marketplace" tile and
+the "Tier & usage" / "Plan / Subscription" monetization dashboard (the
+TierStatus screen/VM/route/settings-row across webapp/iOS/Android + the
+`/api/screens/tier-status` daemon proxy + `TierStatusResponse`) were extracted
+from every surface. Workspace artifacts stay on `main` (the
+`marketplace_listings` migration + the marketplace/monetization design docs).
+Branching IS the gate — no flag/gating code on `main`. (`main` gates after the
+extraction: vitest **2554** web/daemon · iOS **984** · Android **797** · `tsc
+-b` clean.)
+
+**`feat/marketplace` = `main` + the feature, integrated** (4 commits on top of
+`main`; `git diff main feat/marketplace` is exactly the marketplace+monetization
+delta — mergeable to ship). It had been 220 commits behind (forked 2026-06-06,
+pre-build-modes), so it was **rebased onto current `main`**, then:
+- tier/usage re-added ON the branch (the inverse of the main extraction — the
+  branch carries the full monetization surface);
+- the chooser's marketplace tile wired to the LIVE marketplace
+  (`AppsRoute.marketplace` / nav `"marketplace"` / `enterMarketplace`) instead
+  of main's removed "coming soon" stub (build-modes landed after the branch
+  forked, so this was the integration point);
+- **the Android marketplace brought to full parity with iOS** — the previously
+  Mac-blocked + stubbed piece. Was a UI stub (`sampleListings()`=empty, install
+  a TODO); now real browse (`marketplaceBrowse()`) + real IRK-signed install
+  (`InstallServiceEnvelope` over byte-identical `installServiceCanonicalBytes`,
+  POST `<pod>/api/services`, mirroring `FrontPageViewModel`'s signed-order
+  flow). iOS + webapp marketplace were already real.
+
+Branch gates: `npx tsc -b` clean · `npx vitest run` **5276** · iOS **1003**
+XCTests + app build · Android **816** unit tests. The marketplace is
+**code-complete on the branch**; what remains is OPERATIONAL, not code: run the
+security-scanner cron against real listings (Trivy/semgrep/R2 + the E2 live
+exercise), seed `marketplace_listings`, and the product call on "Hearth". Not
+launched — it ships only when `feat/marketplace` merges. (`feat/retail` still
+needs to integrate `main` to pick up build-modes + the ops sliver + this
+extraction.)
+
+### 2026-06-15 — global "active operations" sliver (WhatsApp-style) on all surfaces
 
 **New core feature, owner-directed, on `main`.** A teal strip pinned in the top
 safe-area that the whole shell slides DOWN to reveal (modelled on WhatsApp's
