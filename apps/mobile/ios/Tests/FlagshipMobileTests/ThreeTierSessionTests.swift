@@ -95,6 +95,7 @@ final class ThreeTierSessionTests: XCTestCase {
         var signedOut = false
         let _ = SettingsScreen(
             username: "u",
+            tier: .idle,
             controlDevices: .loaded([]),
             trustedDevices: .loaded([]),
             onLock: { locked = true },
