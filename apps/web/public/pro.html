@@ -48,7 +48,9 @@
     .voucher-form label { font-size: var(--caption-size); color: var(--text-muted); font-weight: 600; }
     .voucher-form input { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
       border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: var(--font-mono); }
-    .voucher-form input:focus { outline: 2px solid var(--accent, #14B8A6); outline-offset: 1px; }
+    .voucher-form input:focus, .voucher-form select:focus { outline: 2px solid var(--accent, #14B8A6); outline-offset: 1px; }
+    .voucher-form select { width: 100%; box-sizing: border-box; padding: var(--space-3); font-size: var(--body-sm-size);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
     .voucher-form .btn { margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-sm);
       background: var(--accent, #14B8A6); color: #042f2a; font-weight: 600; cursor: pointer; font-size: var(--body-sm-size); }
     .voucher-form .btn:disabled { opacity: 0.6; cursor: default; }
@@ -129,7 +131,19 @@
         </div>
         <div class="pay-card">
           <h4>Card / Stripe <span class="priv meh">convenient, less private</span></h4>
-          <p>Coming soon. Convenient, but see the note above — the payment processor will know you're a customer.</p>
+          <p>One-click card checkout. Convenient — but see the note above: the payment processor will know you're a customer.</p>
+          <form id="checkout-form" class="voucher-form" autocomplete="off">
+            <label for="c-username">Your username</label>
+            <input id="c-username" name="username" type="text" inputmode="latin" placeholder="alice" required
+                   pattern="[a-z0-9]{3,30}" maxlength="30" spellcheck="false" autocapitalize="none">
+            <label for="c-tier">Plan</label>
+            <select id="c-tier" name="tier">
+              <option value="hobby">Pro — 250 GB / month</option>
+              <option value="maker">Pro Max — 1 TB / month</option>
+            </select>
+            <button type="submit" class="btn">Continue to card checkout</button>
+            <p id="checkout-msg" class="voucher-msg" role="status" aria-live="polite"></p>
+          </form>
         </div>
         <div class="pay-card">
           <h4>A voucher code <span class="priv good">private</span></h4>
@@ -218,6 +232,52 @@
         msg.textContent = "Network error — please try again.";
       })
       .finally(function () { btn.disabled = false; btn.textContent = prev; });
+  });
+})();
+
+(function () {
+  var form = document.getElementById("checkout-form");
+  if (!form) return;
+  var msg = document.getElementById("checkout-msg");
+  var btn = form.querySelector("button[type=submit]");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var username = form.username.value.trim().toLowerCase();
+    var tier = form.tier.value;
+    msg.className = "voucher-msg";
+    msg.textContent = "";
+    if (!/^[a-z0-9]{3,30}$/.test(username)) {
+      msg.className = "voucher-msg err";
+      msg.textContent = "Enter your username (3–30 lowercase letters or digits).";
+      return;
+    }
+    btn.disabled = true;
+    var prev = btn.textContent;
+    btn.textContent = "Starting checkout…";
+    fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: username, tier: tier }),
+    })
+      .then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); })
+      .then(function (res) {
+        if (res.body && res.body.ok && res.body.url) {
+          window.location.href = res.body.url; // → Stripe-hosted Checkout
+          return;
+        }
+        msg.className = "voucher-msg err";
+        msg.textContent = res.status === 503
+          ? "Card checkout isn't switched on yet — use cash, Monero, or a voucher above."
+          : (res.body && res.body.error) || "Couldn't start checkout.";
+        btn.disabled = false;
+        btn.textContent = prev;
+      })
+      .catch(function () {
+        msg.className = "voucher-msg err";
+        msg.textContent = "Network error — please try again.";
+        btn.disabled = false;
+        btn.textContent = prev;
+      });
   });
 })();
 </script>
