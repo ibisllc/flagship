@@ -51,6 +51,11 @@ describe("webapp build-modes views", () => {
     expect(body).toContain("e.status === 503");
     expect(body).toContain("enterVibeCode");
     expect(body).toMatch(/starting from scratch instead/i);
+    // Parity with iOS/Android: the from-scratch fall-back routes through the
+    // AI-key step FIRST (it still drives the box's model), then opens the chat
+    // seeded with the chosen credential — not a bare enterVibeCode().
+    expect(body).toContain("enterBuildKey");
+    expect(body).toContain("onChosen: (credential) => enterVibeCode({ credential })");
   });
 
   it("git-adapt confirms an AI key first and sends it as credential", async () => {

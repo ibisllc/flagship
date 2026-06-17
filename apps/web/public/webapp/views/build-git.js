@@ -124,7 +124,17 @@ async function adapt() {
   } catch (e) {
     if (e instanceof ScreensError && e.status === 503) {
       toast("AI adapt isn't available on this server yet — starting from scratch instead", "warn");
-      enterVibeCode();
+      // Mirror iOS (ServicesTab `onFallBackToScratch`) + Android
+      // (BuildGitScreen `nav.navigate("vibe/key")`): a from-scratch build still
+      // drives the box's model, so route through the AI-key step FIRST — then
+      // open the chat seeded with the chosen credential. (Going straight to
+      // enterVibeCode() let the chat self-correct via `needsCredential`, costing
+      // an extra round-trip + a worse first impression.)
+      enterBuildKey({
+        contextLabel: "Start from scratch with AI",
+        back: "view-build-git",
+        onChosen: (credential) => enterVibeCode({ credential }),
+      });
       return;
     }
     toast(e instanceof ScreensError ? e.message : String(e), "err");
