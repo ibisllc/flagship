@@ -25,4 +25,15 @@ class DeepLinkerTest {
         val d = DeepLinker()
         assertNull(d.consume())
     }
+
+    // W10 — the `vibecode-needs-you` push enqueues a VibeCodeChat link; the
+    // APPS tab consumes it and opens vibe-code-chat/<id>. Lock the queue
+    // contract the routing depends on.
+    @Test fun vibeCodeChat_enqueueThenConsume() = runTest {
+        val d = DeepLinker()
+        d.enqueue(DeepLink.VibeCodeChat("sess-9"))
+        assertEquals(DeepLink.VibeCodeChat("sess-9"), d.pending.first())
+        assertEquals(DeepLink.VibeCodeChat("sess-9"), d.consume())
+        assertNull(d.consume())
+    }
 }

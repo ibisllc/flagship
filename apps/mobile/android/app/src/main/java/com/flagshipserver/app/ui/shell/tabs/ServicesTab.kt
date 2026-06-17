@@ -22,6 +22,7 @@ import com.flagshipserver.app.ui.screens.BuildSourceChooserScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
+import com.flagshipserver.app.ui.screens.VibeCodeChatScreen
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
@@ -38,6 +39,16 @@ fun ServicesTab() {
             is DeepLink.AppDetail -> {
                 deepLinker.consume()
                 nav.navigate("app-detail/${link.appId}")
+            }
+            // W10 — the `vibecode-needs-you` push deep-links here so the AI's
+            // mid-build question (talkToUser / requestEnvVar) opens the chat.
+            // Mirror iOS's guard: don't re-push if we're already on it.
+            is DeepLink.VibeCodeChat -> {
+                deepLinker.consume()
+                val route = "vibe-code-chat/${link.sessionId}"
+                if (nav.currentDestination?.route != "vibe-code-chat/{sessionId}") {
+                    nav.navigate(route)
+                }
             }
             else -> { /* not for this tab */ }
         }
@@ -97,6 +108,13 @@ fun ServicesTab() {
         composable("vibe/generating/{sessionId}") { entry ->
             val sid = entry.arguments?.getString("sessionId") ?: return@composable
             VibeCodeGeneratingScreen(nav, sessionId = sid)
+        }
+        // W10 — vibe-code chat surface (talkToUser / requestEnvVar replies).
+        // Reached from the `vibecode-needs-you` push deep link, and from the
+        // generating screen's Interrupt (a follow-up reply to the live build).
+        composable("vibe-code-chat/{sessionId}") { entry ->
+            val sid = entry.arguments?.getString("sessionId") ?: return@composable
+            VibeCodeChatScreen(nav, sessionId = sid)
         }
         composable("browser-tabs/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
