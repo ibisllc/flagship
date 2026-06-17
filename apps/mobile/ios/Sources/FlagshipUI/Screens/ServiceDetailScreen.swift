@@ -327,7 +327,7 @@ public struct ServiceDetailScreen: View {
             if let canonical = vm.appLinks.value?.canonicalUrl {
                 urlRow(url: canonical, style: .normal, c: c)
             } else if let user = username {
-                let fallback = "https://\(defaultLabel).\(user).flagship.services"
+                let fallback = "https://\(Endpoints.serverFqdn(server: defaultLabel, user: user))"
                 urlRow(url: fallback, style: .normal, c: c)
             }
         }
@@ -347,7 +347,7 @@ public struct ServiceDetailScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 sectionLabel("INDIVIDUAL INSTANCES", c: c)
                 ForEach(selected) { pod in
-                    let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").flagship.services"
+                    let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").\(Endpoints.dataApex)"
                     urlRow(url: url, style: .muted, c: c)
                 }
             }
@@ -459,7 +459,7 @@ public struct ServiceDetailScreen: View {
         }
     }
 
-    private var customDomainRoot: String { "\(username ?? "you").flagship.services" }
+    private var customDomainRoot: String { Endpoints.userZoneHost(username ?? "you") }
 
     private func cooldownLabel(_ remaining: TimeInterval) -> String {
         let s = max(0, Int(remaining.rounded(.up)))

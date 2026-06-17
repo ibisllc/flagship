@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phone-issued InstallBlob — the on-wire shape mirroring
 /// apps/web/public/webapp/lib/buildDraft.js `canonicalInstallBlob`.
@@ -48,7 +49,7 @@ public struct InstallBlob: Equatable, Sendable {
         username: String,
         serverName: String,
         phoneDelegatedPubKey: Data,
-        registrationUrl: String = "https://flagshipserver.com/api/server/register",
+        registrationUrl: String = Endpoints.registrationUrl,
         authCode: AuthCode,
         authCodeUserSignature: Data,
         installerGitRef: String = "main",

@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// In-app routes that can be triggered from outside the running view
 /// tree — Web Push notification tap, custom URL scheme, Universal
@@ -45,7 +46,7 @@ public enum DeepLink: Equatable, Sendable {
         // Universal link: only the /join pairing path is honored. The
         // native camera opens this straight into the app via AASA.
         if url.scheme == "https",
-           (url.host == "flagshipserver.com" || url.host == "www.flagshipserver.com"),
+           (url.host == Endpoints.controlHost || url.host == "www.\(Endpoints.controlHost)"),
            url.path == "/join" {
             let params = (URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems ?? [])

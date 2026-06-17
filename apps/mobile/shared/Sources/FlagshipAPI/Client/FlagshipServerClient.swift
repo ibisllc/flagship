@@ -2386,7 +2386,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 403, message: "bad signature")
         case .ok:
             let newLabel = body.request.newDisplayLabel
-            let canonical = "https://\(newLabel).\(username.lowercased()).flagship.services"
+            let canonical = "https://\(Endpoints.serverFqdn(server: newLabel, user: username.lowercased()))"
             appAliasByUser[username.lowercased(), default: [:]][serviceId] = (newLabel, canonical)
             return AppRenameResponse(
                 ok: true,
@@ -2421,7 +2421,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return serviceId.lowercased()
         }()
         let label = alias?.displayLabel ?? defaultLabel
-        let host = "\(username.lowercased()).flagship.services"
+        let host = Endpoints.userZoneHost(username.lowercased())
         let canonical = alias?.canonicalUrl ?? "https://\(label).\(host)"
         // V6 — Mock now mirrors the Worker's lazy-mint contract:
         // /links always returns a populated shortUrl. The code is a
@@ -2751,7 +2751,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 // MARK: - Live
 
 public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Sendable {
-    public static let defaultBaseUrl = URL(string: "https://flagshipserver.com")!
+    /// The control-plane apex. Derived from `Endpoints` (prod-default, with a
+    /// test-build override) so the gym build retargets with one knob; prod is
+    /// byte-identical.
+    public static var defaultBaseUrl: URL { Endpoints.controlBaseUrl }
 
     private let urlSession: URLSession
     private let baseUrl: URL

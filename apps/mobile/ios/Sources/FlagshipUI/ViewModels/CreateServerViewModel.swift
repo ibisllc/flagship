@@ -240,7 +240,7 @@ public final class CreateServerViewModel {
         // (UMK is present) for the auth-code + RCK signatures below; we
         // do NOT re-generate the UMK and do NOT re-claim the username.
         let serverNameSlug = SlugUtil.slugify(name)
-        let serverDomain = "\(serverNameSlug).\(username).flagship.services"
+        let serverDomain = Endpoints.serverFqdn(server: serverNameSlug, user: username)
         // ONE biometric ceremony yields the IRK AND the new box's STK
         // pubkey. The STK pub is cached in the pin registry so later
         // (biometric-free) /pods refreshes can verify the box's STK-signed

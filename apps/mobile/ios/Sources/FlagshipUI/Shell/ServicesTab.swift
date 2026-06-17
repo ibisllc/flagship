@@ -761,7 +761,7 @@ private func resolveAppShareUrl(serviceId: String, client: any ScreensClient) as
     if let url = try? await client.appDetail(serviceId: serviceId).app.url {
         return url
     }
-    return "https://\(serviceId).flagship.services"
+    return "https://\(serviceId).\(Endpoints.dataApex)"
 }
 
 // P6 — Issue container. Owns the issue ViewModel; on success the

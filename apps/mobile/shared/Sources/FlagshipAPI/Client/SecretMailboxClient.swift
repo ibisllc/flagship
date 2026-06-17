@@ -410,11 +410,13 @@ public struct LeaseRevokeWire: Codable, Equatable, Sendable {
 // MARK: - Live
 
 public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Sendable {
-    public static let defaultBaseUrl = URL(string: "https://flagshipserver.com")!
+    /// Control-plane apex + boot sub-origin, derived from `Endpoints`
+    /// (prod-default, test-build override). Prod is byte-identical.
+    public static var defaultBaseUrl: URL { Endpoints.controlBaseUrl }
     /// The dedicated boot worker — lease deposit/revoke + sealed-response
     /// post land here (identity-gated by the `bootAuth` header). Separate
     /// host so an enterprise clone can self-host boot operations.
-    public static let defaultBootBaseUrl = URL(string: "https://boot.flagshipserver.com")!
+    public static var defaultBootBaseUrl: URL { Endpoints.bootBaseUrl }
 
     private let urlSession: URLSession
     private let baseUrl: URL

@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phase 3b — the sealed payload the admin sends to the incoming device
 /// over the pairing relay. Carries the account master key seed (so the
@@ -68,7 +69,8 @@ public struct PairingBundle: Codable, Equatable, Sendable {
 /// computes the same shared secret, and both derive the SAS + AEAD key
 /// via the audited `QrRelay.deriveMaterial`.
 public enum PairingQr {
-    public static let joinHost = "flagshipserver.com"
+    /// Control apex host, via `Endpoints` (prod-default + test override).
+    public static var joinHost: String { Endpoints.controlHost }
     public static let joinPath = "/join"
 
     /// Build the universal-link QR string the admin renders.

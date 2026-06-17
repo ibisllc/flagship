@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import FlagshipAPI
 
 /// Phone-side QR relay protocol (v2). Mirrors
 /// apps/web/public/heroQr.js + apps/web/public/webapp/views/create-server.js.
@@ -20,7 +21,8 @@ import CryptoKit
 /// double-taps from bypassing the check.
 public enum QrRelay {
 
-    public static let qrUrlHost = "flagshipserver.com"
+    /// Control apex host, via `Endpoints` (prod-default + test override).
+    public static var qrUrlHost: String { Endpoints.controlHost }
     public static let relayHkdfSalt = Data("flagship/qr/v1".utf8)
     public static let encInfo = Data("flagship/qr/enc/v1".utf8)
     public static let sasInfo = Data("flagship/qr/sas/v1".utf8)

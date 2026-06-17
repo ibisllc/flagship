@@ -46,7 +46,7 @@ public final class PlatformWebAuthnProvider: NSObject, WebAuthnProvider {
     public private(set) var prfAvailable: Bool = false
 
     public init(
-        relyingPartyId: String = "flagshipserver.com",
+        relyingPartyId: String = Endpoints.controlHost,
         displayName: String = "Flagship",
         username: String? = nil
     ) {

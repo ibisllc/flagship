@@ -145,7 +145,7 @@ public struct OnboardingFlow: View {
     /// UNPAIRED and push the incoming join flow.
     private func consumePairingLink(_ link: DeepLink?) {
         guard case .joinAccount(let sid, let pk) = link else { return }
-        let joinUrl = "https://flagshipserver.com/join?sid=\(sid)&pk=\(pk)"
+        let joinUrl = "https://\(Endpoints.controlHost)/join?sid=\(sid)&pk=\(pk)"
         if path.last != .joinByPairing(joinUrl: joinUrl) {
             path.append(.joinByPairing(joinUrl: joinUrl))
         }

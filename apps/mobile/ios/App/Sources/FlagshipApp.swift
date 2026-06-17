@@ -25,6 +25,14 @@ struct FlagshipApp: App {
     private let sessionStore: any SessionStoring
 
     init() {
+        // FIRST: apply a backend-apex override from the launch args, BEFORE
+        // any client is constructed below (the live clients capture their
+        // base URL at init). The gym test build launches with
+        // `-apex-host gym.flagshipserver.com`; a prod launch passes nothing,
+        // so `Endpoints` stays on today's literal. (A persisted
+        // DeveloperSettings.apexHost — applied in its own init — is the
+        // fallback when no launch arg is present.)
+        Self.applyApexHostArgIfPresent()
         // Keychain-backed token persistence: pod base URL stays in
         // UserDefaults (non-secret), the 32-byte session token lives
         // in Keychain with WhenUnlockedThisDeviceOnly access.
@@ -82,6 +90,20 @@ struct FlagshipApp: App {
         if !app.isPaired {
             DemoFixtures.activate(app, username: "smoketest")
         }
+    }
+
+    /// Backend-apex override seam for the gym test build. When launched with
+    /// `-apex-host <host>` (e.g. `gym.flagshipserver.com`), retarget every
+    /// client at that apex via `Endpoints` BEFORE the clients are built.
+    /// Production launches pass nothing, so `Endpoints` keeps today's literal
+    /// and the live app is byte-identical. `-apex-host` is the value form
+    /// (`["-apex-host", "gym.flagshipserver.com"]`); the bare flag is ignored.
+    private static func applyApexHostArgIfPresent() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-apex-host"), i + 1 < args.count else { return }
+        let host = args[i + 1]
+        guard !host.isEmpty, !host.hasPrefix("-") else { return }
+        DeveloperSettings.applyApexOverride(host)
     }
 
     /// Wire the FlagshipUI InstallProgressBridge to the App-target
