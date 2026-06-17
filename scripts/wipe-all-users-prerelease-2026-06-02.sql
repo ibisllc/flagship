@@ -9,8 +9,12 @@
 -- Re-audited 2026-06-08 against every migration through 0046 (created-minus-
 -- dropped table set diffed vs this DELETE list): added acme_account_key_delivery
 -- (0046) + nfc_rendezvous (0040); removed build_tickets (dropped in 0033 — the
--- stale DELETE would error). Keep this list in sync as migrations land, until
--- the mass-wipe is disarmed before real users (see CLAUDE.md open-work #11).
+-- stale DELETE would error).
+-- Re-audited 2026-06-15 through 0054 (boot_nonces/0050 was already listed):
+-- added the monetization tables usage_counters (0051), vouchers (0052),
+-- stripe_events (0053), app_purchases (0054). Keep this list in sync as
+-- migrations land, until the mass-wipe is disarmed before real users (see
+-- CLAUDE.md open-work #11).
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -79,6 +83,10 @@ DELETE FROM hardware_orders;
 DELETE FROM llm_promo_issues;
 DELETE FROM llm_promo_lifetime;
 DELETE FROM llm_promo_usage;
+DELETE FROM usage_counters;
+DELETE FROM vouchers;
+DELETE FROM stripe_events;
+DELETE FROM app_purchases;
 
 -- Audit + telemetry
 DELETE FROM audit_events;
