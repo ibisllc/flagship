@@ -18,8 +18,8 @@ COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.conf
 COPY packages packages/
 # The maintainers protocol is the published npm package
 # `@ibisllc/maintainers` (exact pin in packages/server-daemon/package.json).
-# It is fetched from the registry by `npm ci`/`npm install` below — no
-# git clone or build-time pull step.
+# It is fetched from the registry by `npm ci` below — no git clone or
+# build-time pull step.
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
@@ -30,8 +30,7 @@ COPY tools tools/
 # `tsc -b` step. devDependencies are pruned out below before the runtime
 # stage copies node_modules.
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --workspaces --include-workspace-root --no-audit --no-fund \
- || npm install --workspaces --include-workspace-root --no-audit --no-fund
+    npm ci --workspaces --include-workspace-root --no-audit --no-fund
 
 RUN npx tsc -b
 
