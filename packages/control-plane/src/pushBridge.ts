@@ -29,7 +29,20 @@
  * 5MB+ each).
  */
 
-import type { FetchLike } from "@flagship/llm-providers";
+/**
+ * Minimal fetch signature this module needs. Defined locally so control-plane
+ * doesn't take a dependency on the LLM-providers package just for a fetch type
+ * (the shape happens to match `@flagship/llm-providers`'s `FetchLike`; the body
+ * union covers binary surfaces like RFC 8291 encrypted Web Push).
+ */
+export type FetchLike = (
+  input: string,
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | Uint8Array | ArrayBuffer;
+  },
+) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>;
 
 export interface PushBridgeConfig {
   apns?: {
