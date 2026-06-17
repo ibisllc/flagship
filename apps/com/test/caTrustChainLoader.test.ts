@@ -26,7 +26,11 @@ import {
   type Mandate,
 } from "@ibisllc/maintainers";
 import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
-import { workerCaTrustChain, caEnforceFromEnv } from "../src/caTrustChainLoader.js";
+import {
+  workerCaTrustChain,
+  caEnforceFromEnv,
+  caTrustChainPublicMaterial,
+} from "../src/caTrustChainLoader.js";
 
 const NOW = Date.parse("2026-06-01T00:00:00.000Z");
 
@@ -115,6 +119,37 @@ describe("workerCaTrustChain — real verifier over the committed assets", () =>
     // discriminating assertion.
     const wrongChain = verifyMandateChainFromPin("00".repeat(32), [root]);
     expect(authorizedCaKeys([endorsement], wrongChain, new Date(NOW))).toEqual([]);
+  });
+});
+
+describe("caTrustChainPublicMaterial — what /api/maintainer-blessing serves", () => {
+  // The material a client re-verifies against its OWN baked pin. It must
+  // be the SAME committed assets the Worker's own gate consults, anchored
+  // at the SAME pin — so a client's verdict can never diverge from .com's.
+  it("exposes the baked pin + the real committed ca-track chain + endorsements", () => {
+    const mat = caTrustChainPublicMaterial();
+    expect(mat.pinnedMandateHash).toBe(MAINTAINER_PINNED_MANDATE_HASH);
+    expect(mat.mandates.length).toBeGreaterThanOrEqual(1);
+    expect((mat.mandates[0] as Mandate).track).toBe("ca");
+    expect(Array.isArray(mat.caEndorsements)).toBe(true);
+  });
+
+  // A client running the REAL verifier over exactly this material reaches
+  // the SAME authorized-key set the loader's own CaTrustChain returns —
+  // proving the endpoint hands clients a sufficient, faithful basis.
+  it("client-side verify over the served material == the loader's own verdict", () => {
+    const mat = caTrustChainPublicMaterial();
+    const liveNow = Date.parse("2026-05-25T00:00:00.000Z");
+    const clientChain = verifyMandateChainFromPin(
+      mat.pinnedMandateHash,
+      mat.mandates as Mandate[],
+    );
+    const clientKeys = authorizedCaKeys(
+      mat.caEndorsements as CaEndorsement[],
+      clientChain,
+      new Date(liveNow),
+    );
+    expect(clientKeys).toEqual(workerCaTrustChain().authorizedCaKeys(liveNow));
   });
 });
 

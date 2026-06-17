@@ -146,6 +146,67 @@ export async function handleUserPubKeyCert(
   );
 }
 
+/**
+ * The public maintainer-trust material a client verifies against its own
+ * baked pin. `mandates` / `caEndorsements` are passed through verbatim as
+ * JSON (the control-plane package does not interpret them — clients do),
+ * so they are typed loosely to keep this package free of an
+ * `@ibisllc/maintainers` dependency.
+ */
+export interface MaintainerBlessingMaterial {
+  pinnedMandateHash: string;
+  /** ca-track Mandate log, oldest-first. */
+  mandates: readonly unknown[];
+  /** Committed CaEndorsement leases. */
+  caEndorsements: readonly unknown[];
+}
+
+export interface MaintainerBlessingDeps {
+  ca: CaIssuer;
+  material: MaintainerBlessingMaterial;
+  /** Optional — lets `.com` report its OWN view of whether the served
+   *  key is authorized right now (diagnostic only; clients re-verify
+   *  against their baked pin + their own clock). */
+  caTrustChain?: CaTrustChain | null;
+  now?: () => number;
+  cacheMaxAgeSec?: number;
+}
+
+/**
+ * `GET /api/maintainer-blessing` — expose the chain so a client can prove
+ * `.com` is maintainer-blessed WITHOUT trusting `.com`'s word. The client:
+ *   verifyMandateChainFromPin(BAKED_PIN, mandates) → chain
+ *   authorizedCaKeys(caEndorsements, chain, clientNow) ∋ caPubkey
+ * If the served `caPubkey` is not in that set (or the chain does not
+ * anchor to the baked pin), the client treats `.com` as untrusted.
+ *
+ * `caPubkeyAuthorizedNow` is `.com`'s self-assessment — purely advisory;
+ * a client must never substitute it for its own verification.
+ */
+export function handleMaintainerBlessing(
+  deps: MaintainerBlessingDeps,
+): HandlerResponseWithHeaders {
+  const now = (deps.now ?? (() => Date.now()))();
+  const caPubkey = bytesToHex(deps.ca.keypair.publicKey);
+  const caPubkeyAuthorizedNow = deps.caTrustChain
+    ? deps.caTrustChain.authorizedCaKeys(now).includes(caPubkey)
+    : null;
+  const cacheMaxAgeSec = deps.cacheMaxAgeSec ?? 300;
+  return ok(
+    {
+      version: 1,
+      pinnedMandateHash: deps.material.pinnedMandateHash,
+      caPubkey,
+      issuer: deps.ca.issuer,
+      mandates: deps.material.mandates,
+      caEndorsements: deps.material.caEndorsements,
+      caPubkeyAuthorizedNow,
+      now,
+    },
+    { "cache-control": `public, max-age=${cacheMaxAgeSec}` },
+  );
+}
+
 export function handleCaCert(deps: PubkeyCertDeps): HandlerResponseWithHeaders {
   const ttlMs = deps.ttlMs ?? 7 * 24 * 60 * 60_000;
   return ok({

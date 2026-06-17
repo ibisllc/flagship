@@ -99,6 +99,29 @@ export function caEnforceFromEnv(
  * + verified chain the gate consults, so it can never disagree with the
  * authority the signing path enforces.
  */
+/**
+ * The PUBLIC maintainer-trust material a client needs to verify, for
+ * itself, that `.com` is maintainer-blessed: the baked pin, the ca-track
+ * mandate log, and the committed CaEndorsement bundle. All of this is
+ * already public (it lives in the repo under `.maintainers/`); serving it
+ * is not a trust grant — a client re-derives `verifyMandateChainFromPin →
+ * authorizedCaKeys(clientNow)` against its OWN baked pin and confirms the
+ * served CA pubkey is in the resulting set. A rogue `.com` cannot forge a
+ * chain that hashes to the baked pin, so this endpoint is safe even when
+ * `.com` is the suspected party.
+ */
+export function caTrustChainPublicMaterial(): {
+  pinnedMandateHash: string;
+  mandates: readonly Mandate[];
+  caEndorsements: readonly CaEndorsement[];
+} {
+  return {
+    pinnedMandateHash: MAINTAINER_PINNED_MANDATE_HASH,
+    mandates: CA_TRACK_MANDATES,
+    caEndorsements: CA_ENDORSEMENTS,
+  };
+}
+
 export function activeCaLeaseNotAfterMs(now: number): number[] {
   const verifiedChain = verifyMandateChainFromPin(
     MAINTAINER_PINNED_MANDATE_HASH,

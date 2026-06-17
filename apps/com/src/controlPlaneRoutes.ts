@@ -22,6 +22,7 @@ import {
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
   handleCaCert,
+  handleMaintainerBlessing,
   handleCleanupApex,
   handleCompleteRePair,
   handleDeviceDisconnect,
@@ -150,6 +151,7 @@ import {
   workerCaTrustChain,
   caEnforceFromEnv,
   activeCaLeaseNotAfterMs,
+  caTrustChainPublicMaterial,
 } from "./caTrustChainLoader.js";
 import { createHetznerClient } from "./hetzner.js";
 
@@ -403,6 +405,7 @@ const ROUTE_RE = {
   SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
+  MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
@@ -874,6 +877,20 @@ export async function tryControlPlane(
   }
   if (method === "GET" && ROUTE_RE.CA_CERT.test(path)) {
     return finish(handleCaCert({ ca, usernames: storage.usernames }));
+  }
+  // Clients fetch this and verify, against their OWN baked pin + clock,
+  // that the served CA key is maintainer-authorized (the basis for the
+  // app trust gate + the box relay blessing). Safe even if `.com` is the
+  // suspected party — a rogue `.com` cannot forge a chain hashing to the
+  // baked pin.
+  if (method === "GET" && ROUTE_RE.MAINTAINER_BLESSING.test(path)) {
+    return finish(
+      handleMaintainerBlessing({
+        ca,
+        material: caTrustChainPublicMaterial(),
+        caTrustChain: caGate.caTrustChain,
+      }),
+    );
   }
 
   if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {
