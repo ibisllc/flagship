@@ -30,6 +30,7 @@ import type {
 import { hexToBytes } from "./hex.js";
 import {
   forbidden,
+  gone,
   malformed,
   notFound,
   ok,
@@ -176,7 +177,7 @@ export async function handleVoiciRedirect(
   const row = await deps.voiciLinks.get(code);
   if (!row) return notFound("short code not found");
   if (row.expiresAt !== undefined && row.expiresAt <= now) {
-    return { status: 410, body: { error: "this short link was rotated; ask the sender for a fresh one" } };
+    return gone("this short link was rotated; ask the sender for a fresh one");
   }
   return {
     status: 302,

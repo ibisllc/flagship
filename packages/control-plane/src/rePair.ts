@@ -18,7 +18,7 @@ import type {
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./usersDevices.js";
 import {
   consumeRecoveryCode,
@@ -245,13 +245,13 @@ export async function handleInitiateRePair(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   // Optional ETag fence: only fires when the client opted in AND
@@ -310,16 +310,16 @@ export async function handleInitiateRePair(
   }
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
 
   // The body's oldIrkPub MUST match the current row — otherwise an
   // attacker could initiate against a stale snapshot of the IRK.
   if (userRec.irkPubHex.toLowerCase() !== r.oldIrkPub.toLowerCase()) {
-    return { status: 403, body: { error: "oldIrkPub does not match the current registered IRK" } };
+    return forbidden("oldIrkPub does not match the current registered IRK");
   }
   // No-op when the new IRK already equals the registered one — nothing to swap.
   if (userRec.irkPubHex.toLowerCase() === r.newIrkPub.toLowerCase()) {
-    return { status: 400, body: { error: "newIrkPub equals current IRK" } };
+    return malformed("newIrkPub equals current IRK");
   }
 
   // v1.2 Phase 2 — account-type discriminator drives the grace +
@@ -494,7 +494,7 @@ export async function handleInitiateRePair(
     oldIrkPub = hexToBytes(r.oldIrkPub);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: RePairInitiate = {
     username: r.username,
@@ -508,7 +508,7 @@ export async function handleInitiateRePair(
   // canonical bytes (see RePairInitiate jsdoc) so its presence /
   // absence doesn't affect signature verification.
   if (!verifyRePairInitiate(claim, sig, newIrkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Recovery-lock release: pending_re_pairs.username is the PK, so the
@@ -563,7 +563,7 @@ export async function handleInitiateRePair(
     // here, because the bit isn't stamped if push fan-out failed.)
     alertsFiredBitmap: ALERT_BIT_T0,
   });
-  if (!insert.ok) return { status: 409, body: { error: insert.reason } };
+  if (!insert.ok) return conflict(insert.reason);
 
   // #52 follow-up — a single-device account with NO enrolled credential
   // just started a grace-only recovery on a bare new-IRK signature.
@@ -662,21 +662,21 @@ export async function handleObjectRePair(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const pending = await deps.pendingRePairs.get(r.username);
-  if (!pending) return { status: 404, body: { error: "no pending re-pair" } };
+  if (!pending) return notFound("no pending re-pair");
   // newIrkPub in the body must match the pending row's newIrkPub —
   // defends against replaying an old objection against a fresh re-pair.
   if (pending.newIrkPubHex.toLowerCase() !== r.newIrkPub.toLowerCase()) {
-    return { status: 409, body: { error: "newIrkPub does not match the pending re-pair" } };
+    return conflict("newIrkPub does not match the pending re-pair");
   }
 
   let newIrkPub: Uint8Array;
@@ -685,7 +685,7 @@ export async function handleObjectRePair(
     newIrkPub = hexToBytes(r.newIrkPub);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: RePairObject = { username: r.username, newIrkPub, issuedAt: r.issuedAt };
   // SELF-CANCEL ONLY: the NEW IRK (the recoverer's own key) signs.
@@ -707,7 +707,7 @@ export async function handleObjectRePair(
   // See docs/v1.2-security-cascade.md "Recovery threat model" for
   // the full reasoning.
   if (!verifyRePairObject(claim, sig, newIrkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.pendingRePairs.object(r.username, now());
@@ -901,7 +901,7 @@ export async function handleCompleteRePair(
   const now = deps.now ?? (() => Date.now());
   const quarantineMs = deps.quarantineMs ?? RE_PAIR_QUARANTINE_MS;
   const pending = await deps.pendingRePairs.get(username);
-  if (!pending) return { status: 404, body: { error: "no pending re-pair" } };
+  if (!pending) return notFound("no pending re-pair");
   if (pending.objectedAt) {
     return {
       status: 409,
@@ -1001,10 +1001,7 @@ export async function handleCompleteRePair(
     // The current IRK already moved (concurrent rotation, or someone
     // else completed). Drop the row to keep state tidy.
     await deps.pendingRePairs.delete(username);
-    return {
-      status: 409,
-      body: { error: "username's current IRK no longer matches the pending old IRK" },
-    };
+    return conflict("username's current IRK no longer matches the pending old IRK");
   }
 
   // v2.1 (W6) — per-cloud wipe-policy enforcement on the freshly-

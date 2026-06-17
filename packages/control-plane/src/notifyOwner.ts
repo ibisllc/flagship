@@ -30,7 +30,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, equalToken, hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
 const DEFAULT_MAILBOX_TTL = 5 * 60_000;
@@ -97,10 +97,10 @@ export async function handleNotifyOwner(
     signedRequest?: { request?: Record<string, unknown>; signature?: unknown; deviceInfo?: unknown };
   };
   if (typeof b?.serverDomain !== "string" || typeof b?.purpose !== "string") {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (!PURPOSES.has(b.purpose as SecretMailboxPurpose)) {
-    return { status: 400, body: { error: "unknown purpose" } };
+    return malformed("unknown purpose");
   }
   const sr = b.signedRequest ?? {};
   const r = sr.request ?? {};
@@ -112,36 +112,36 @@ export async function handleNotifyOwner(
     typeof r.issuedAt !== "number" ||
     typeof sr.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed signedRequest" } };
+    return malformed("malformed signedRequest");
   }
   if (r.serverDomain !== b.serverDomain) {
-    return { status: 400, body: { error: "serverDomain mismatch" } };
+    return malformed("serverDomain mismatch");
   }
   if (r.purpose !== b.purpose) {
-    return { status: 400, body: { error: "purpose mismatch" } };
+    return malformed("purpose mismatch");
   }
   if (!HEX_NONCE.test(r.nonce.toLowerCase())) {
-    return { status: 400, body: { error: "nonce must be 32 bytes hex" } };
+    return malformed("nonce must be 32 bytes hex");
   }
   if (!HEX64.test(r.stkPub.toLowerCase())) {
-    return { status: 400, body: { error: "stkPub must be 32 bytes hex" } };
+    return malformed("stkPub must be 32 bytes hex");
   }
   if (!HEX128.test(sr.signature.toLowerCase())) {
-    return { status: 400, body: { error: "signature must be 64 bytes hex" } };
+    return malformed("signature must be 64 bytes hex");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const reg = await deps.servers.get(b.serverDomain);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   // RE-VERIFY against the directory — the boot worker's echo is NOT
   // trusted. The posting STK must be the directory-bound STK for this
   // domain, and the signature must verify under it.
   if (!equalHex(r.stkPub, reg.identityPubKeyHex)) {
-    return { status: 403, body: { error: "stkPub does not match the registered server" } };
+    return forbidden("stkPub does not match the registered server");
   }
   let stkPub: Uint8Array;
   let nonce: Uint8Array;
@@ -151,7 +151,7 @@ export async function handleNotifyOwner(
     nonce = hexToBytes(r.nonce);
     sig = hexToBytes(sr.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: SecretRequest = {
     serverDomain: b.serverDomain,
@@ -161,7 +161,7 @@ export async function handleNotifyOwner(
     issuedAt: r.issuedAt,
   };
   if (!verifySecretRequest(claim, sig, stkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Per-account rate ceiling.
@@ -199,7 +199,7 @@ export async function handleNotifyOwner(
     consumedAt: null,
   });
   if (!put.ok && put.reason !== "duplicate nonce") {
-    return { status: 409, body: { error: put.reason } };
+    return conflict(put.reason);
   }
   if (!put.ok) {
     // Existing row — dedup the push by lastPushAt.

@@ -66,7 +66,7 @@ import { argon2id } from "@noble/hashes/argon2";
 import * as OTPAuth from "otpauth";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 export interface TotpDeps {
   usernames: UsernameStorage;
@@ -737,23 +737,23 @@ export async function handleTotpEnrollBegin(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: TotpEnrollBegin = {
     username: r.username,
@@ -766,7 +766,7 @@ export async function handleTotpEnrollBegin(
     return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
   }
   if (!verifyTotpEnrollBegin(claim, sig, irkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Mint a fresh 20-byte (160-bit) secret. RFC 6238 strongly
@@ -781,7 +781,7 @@ export async function handleTotpEnrollBegin(
   });
   const encrypted = await encryptTotpSecret(secretBytes, deps.kekHex);
   const ok = await deps.usernames.setTotpSecretEncrypted(r.username, encrypted);
-  if (!ok) return { status: 404, body: { error: "unknown username" } };
+  if (!ok) return notFound("unknown username");
 
   const totp = new OTPAuth.TOTP({
     issuer,
@@ -847,29 +847,26 @@ export async function handleTotpEnrollConfirm(
     typeof b?.code !== "string" ||
     b.code.length === 0
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
   if (!userRec.totpSecretEncrypted) {
-    return {
-      status: 409,
-      body: { error: "no staged TOTP secret; call enroll-begin first" },
-    };
+    return conflict("no staged TOTP secret; call enroll-begin first");
   }
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: TotpEnrollConfirm = {
     username: r.username,
@@ -882,7 +879,7 @@ export async function handleTotpEnrollConfirm(
     return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
   }
   if (!verifyTotpEnrollConfirm(claim, sig, irkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Verify the sample code against the staged secret.
@@ -915,7 +912,7 @@ export async function handleTotpEnrollConfirm(
     now(),
     hashesJson,
   );
-  if (!ok) return { status: 404, body: { error: "unknown username" } };
+  if (!ok) return notFound("unknown username");
 
   // v1.2 Plan B Phase 5 — audit emission. Two rows on a successful
   // enroll-confirm:
@@ -1090,10 +1087,10 @@ export async function handleTotpVerify(
   if (typeof b?.code !== "string" || b.code.length === 0) {
     // Don't burn an attempt on a malformed request — those are
     // client bugs, not guessing.
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   const userRec = await deps.usernames.get(username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
 
   const verdict = await validateTotpCode({
     code: b.code,
@@ -1153,25 +1150,25 @@ export async function handleTotpDisable(
     typeof b?.code !== "string" ||
     b.code.length === 0
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
   if (!userRec.totpEnrolledAt || !userRec.totpSecretEncrypted) {
-    return { status: 409, body: { error: "TOTP not enrolled" } };
+    return conflict("TOTP not enrolled");
   }
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: TotpDisable = { username: r.username, issuedAt: r.issuedAt };
   let irkPub: Uint8Array;
@@ -1181,7 +1178,7 @@ export async function handleTotpDisable(
     return { status: 500, body: { error: "stored IRK pubkey is malformed" } };
   }
   if (!verifyTotpDisable(claim, sig, irkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   const verdict = await validateTotpCode({
@@ -1216,7 +1213,7 @@ export async function handleTotpDisable(
   }
 
   const ok = await deps.usernames.clearTotp(r.username);
-  if (!ok) return { status: 404, body: { error: "unknown username" } };
+  if (!ok) return notFound("unknown username");
 
   // v1.2 Plan B Phase 5 — audit emission. The "AT_EVENT" snapshot
   // captures the OLD state ('multi') because the user WAS multi-
