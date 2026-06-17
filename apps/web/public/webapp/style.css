@@ -150,7 +150,9 @@ body {
  * body is a 640px reading column, so it reads as global chrome. */
 .ops-bar {
   position: fixed;
-  top: 0;
+  /* Tuck below the red trust sliver when it's shown (var is 0 when not), so
+     the two stack: trust sliver on top, ops bar below it, header below both. */
+  top: var(--trust-bar-h, 0px);
   left: 0;
   right: 0;
   z-index: 30;
@@ -217,11 +219,76 @@ body {
   .ops-bar-spinner { animation-duration: 1.4s; }
 }
 
+/* ── Persistent red trust sliver (maintainer-trust enforcement) ──
+ * An ALARMING-RED variant of the teal ops bar, pinned ABOVE it at top:0. One
+ * line per failing cert; NON-dismissible while untrusted; persists after the
+ * owner overrides a cert (the degraded state stays visible). --trust-bar-h
+ * pushes the ops bar + header down in lockstep. */
+.trust-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40; /* above the teal ops bar (30) */
+  display: none;
+  flex-direction: column;
+  background: linear-gradient(180deg, #e2342f, #c41f1a);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.trust-bar.is-shown {
+  display: flex;
+}
+.trust-bar-line {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 22px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+.trust-bar-line:last-child {
+  border-bottom: 0;
+}
+.trust-bar-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+.trust-bar-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trust-bar-accepted {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
 /* ── Header (app chrome) ──────────────────────────────────────────── */
 header {
   position: sticky;
-  /* Tuck below the operations sliver when it's shown (var is 0 when not). */
-  top: var(--ops-bar-h, 0px);
+  /* Tuck below the operations sliver + the trust sliver when shown (each var
+     is 0 when its bar is collapsed). */
+  top: calc(var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px));
   z-index: 10;
   padding: 18px 22px 14px;
   background: color-mix(in srgb, var(--canvas) 78%, transparent);
