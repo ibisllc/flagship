@@ -101,8 +101,56 @@ data class MarketplaceListing(
     val screenshots: List<String>,
     val installCount: Int,
     val requiresLlmKey: Boolean,
+    /** Env-var NAME a `requiresLlmKey` app reads its key from (e.g.
+     *  `OPENAI_API_KEY`); relayed by the BFF so the client can prefill
+     *  "Configure environment" after install. Null ⇒ fall back to
+     *  [MarketplaceLlmKey.DEFAULT_ENV_VAR]. */
+    val llmKeyEnvVar: String? = null,
+    /** Marketplace scanner verdict ("A".."F"), or null when not yet scanned
+     *  (the pill renders "ungraded"). MIRRORS the BFF's `scanGrade`. */
+    val scanGrade: String? = null,
     val alreadyInstalled: Boolean,
 )
+
+/**
+ * Marketplace install LLM-key UX helpers, byte-identical with the daemon BFF
+ * (`LLM_KEY_ENV_DEFAULT`), the webapp (`lib/marketplaceLlmKey.js`), and iOS
+ * (`MarketplaceLlmKey`) so the prefilled-name flow is the same everywhere.
+ */
+object MarketplaceLlmKey {
+    /** Fallback env-var name when a listing doesn't declare one. */
+    const val DEFAULT_ENV_VAR = "OPENAI_API_KEY"
+
+    /** The env-var name to prefill for [listing] — its declared name, else the
+     *  default. */
+    fun envVar(listing: MarketplaceListing): String =
+        listing.llmKeyEnvVar?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENV_VAR
+}
+
+/**
+ * Marketplace scanner-grade → display bucket, mapped identically on every
+ * surface (mirrors the webapp `scanGradePill`): A/B → OK, C/D → WARN, F → ERR,
+ * and anything else (incl. null — `scan_grade` is NULL until the scanner runs)
+ * → UNGRADED.
+ */
+enum class ScanGradeBucket {
+    OK, WARN, ERR, UNGRADED;
+
+    companion object {
+        fun from(grade: String?): ScanGradeBucket = when (grade?.uppercase()) {
+            "A", "B" -> OK
+            "C", "D" -> WARN
+            "F" -> ERR
+            else -> UNGRADED
+        }
+
+        /** Pill label: "scan A".."scan F" for a known grade, else "ungraded". */
+        fun pillLabel(grade: String?): String = when (grade?.uppercase()) {
+            "A", "B", "C", "D", "F" -> "scan ${grade!!.uppercase()}"
+            else -> "ungraded"
+        }
+    }
+}
 
 @Serializable
 data class MarketplaceBrowseResponse(val listings: List<MarketplaceListing>)
