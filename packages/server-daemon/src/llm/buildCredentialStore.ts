@@ -55,6 +55,22 @@ export interface BuildCredentialStore {
   forget(id: string): Promise<void>;
 }
 
+/**
+ * The on-disk filename for a build's credential, hardened against path
+ * traversal. `id` is a server-minted buildId (`randomBytes(8).toString("hex")`
+ * — 16 lowercase hex), but this store is reached from a URL-derived id on the
+ * adapt route, so it MUST NOT trust the caller. We reject anything that isn't
+ * the mint shape (no `..`, `/`, `\`, or NUL can match) AND `encodeURIComponent`
+ * the result — the same belt-and-suspenders the sibling `mcpKeyStore` /
+ * `buildJournal` use, so a malformed id can never escape `dir`.
+ */
+const BUILD_ID_RE = /^[0-9a-f]{16}$/;
+
+function credFilePath(dir: string, id: string): string {
+  if (!BUILD_ID_RE.test(id)) throw new Error("invalid build id");
+  return join(dir, `${encodeURIComponent(id)}.cred`);
+}
+
 function validate(obj: unknown): LlmCredential | null {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
   const o = obj as Record<string, unknown>;
@@ -125,11 +141,11 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
     const ok = validate(cred);
     if (!ok) throw new Error("invalid credential");
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
+    const file = credFilePath(this.dir, id);
     const blob = sealLlmPayload(
       new TextEncoder().encode(JSON.stringify(ok)),
       this.swk,
     );
-    const file = join(this.dir, `${id}.cred`);
     const tmp = `${file}.tmp`;
     await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
     await rename(tmp, file);
@@ -151,7 +167,11 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
 
   async forget(id: string): Promise<void> {
     this.cache.delete(id);
-    await rm(join(this.dir, `${id}.cred`), { force: true });
+    // Idempotent + traversal-safe: a non-mint-shaped id can never have been
+    // written (put rejects it), so there is nothing to remove — skip the
+    // disk op rather than interpolating an untrusted id into a path.
+    if (!BUILD_ID_RE.test(id)) return;
+    await rm(credFilePath(this.dir, id), { force: true });
   }
 
   private unseal(hex: string): LlmCredential | null {

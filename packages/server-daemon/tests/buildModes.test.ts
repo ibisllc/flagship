@@ -1,14 +1,15 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { deriveSWK } from "@flagship/protocol";
 import { BuildOrchestrator } from "../src/buildmodes/buildOrchestrator.js";
 import { buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js";
 import { GitImporter } from "../src/buildmodes/gitImport.js";
 import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
-import { InMemoryBuildCredentialStore } from "../src/llm/buildCredentialStore.js";
+import { FileBuildCredentialStore, InMemoryBuildCredentialStore } from "../src/llm/buildCredentialStore.js";
 import type { CommandRunner } from "../src/serviceRunner.js";
 import type { HttpRequest } from "../src/runtime.js";
 import type { DeployResult } from "../src/buildmodes/deployArtifact.js";
@@ -488,5 +489,77 @@ describe("buildModesHttp", () => {
     // /mcp/build still reaches the bearer check (401 for missing bearer, not the gate).
     const mcp = await handle(req({ method: "POST", path: "/mcp/build/x", body: jbody({ jsonrpc: "2.0", id: 1, method: "ping" }) }));
     expect(mcp!.status).toBe(401);
+  });
+
+  it("POST .../adapt 404s on an UNKNOWN buildId before any credential write", async () => {
+    // The adapt route derives the buildId from the URL and (before this fix)
+    // stored the delivered credential BEFORE checking the build exists — so a
+    // path-traversal id could write a `.cred` outside the store. Assert the
+    // 404 lands first and the store is never touched.
+    const credentials = new InMemoryBuildCredentialStore();
+    const { o } = makeNotFitOrchestrator({ adaptRunner: async () => ADAPT_OUTPUT });
+    const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate, credentials });
+
+    // A URL-encoded path-traversal id. The handler URL-decodes it to
+    // `../../etc/cron.d/x`; the build does not exist → 404, nothing stored.
+    const hostile = "..%2F..%2F..%2Fetc%2Fcron.d%2Fx";
+    const resp = await handle(
+      req({
+        method: "POST",
+        path: `/api/build/sessions/${hostile}/adapt`,
+        body: jbody({ credential: { provider: "anthropic", apiKey: "byok-NEVER-stored" } }),
+      }),
+    );
+    expect(resp!.status).toBe(404);
+    expect(JSON.parse(resp!.body as string).error).toBe("build not found");
+    // The credential for the decoded id was NEVER stored.
+    expect(credentials.has("../../etc/cron.d/x")).toBe(false);
+
+    // A plain unknown (never-minted) id is also rejected before storing.
+    const resp2 = await handle(
+      req({
+        method: "POST",
+        path: `/api/build/sessions/deadbeefdeadbeef/adapt`,
+        body: jbody({ credential: { provider: "anthropic", apiKey: "byok-NEVER-stored" } }),
+      }),
+    );
+    expect(resp2!.status).toBe(404);
+    expect(credentials.has("deadbeefdeadbeef")).toBe(false);
+  });
+
+  it("a traversal buildId on .../adapt writes NO file outside the FILE credential store dir", async () => {
+    // End-to-end with the real FILE store: even if the existence check were
+    // ever bypassed, the store itself refuses a non-mint id. Here the 404
+    // fires first; the escape-scan proves no `.cred` landed in the parent.
+    const parent = mkdtempSync(join(tmpdir(), "bm-cred-traversal-"));
+    try {
+      const swk = deriveSWK({ seed: new Uint8Array(32).fill(7) }, "srv-cred");
+      const credentials = new FileBuildCredentialStore(join(parent, "store"), swk);
+      const { o } = makeNotFitOrchestrator({ adaptRunner: async () => ADAPT_OUTPUT });
+      const handle = buildBuildModesHttpHandlers({ orchestrator: o, gate: allowGate, credentials });
+
+      const resp = await handle(
+        req({
+          method: "POST",
+          path: `/api/build/sessions/${"..%2F..%2Fpwned"}/adapt`,
+          body: jbody({ credential: { provider: "anthropic", apiKey: "byok-NEVER-stored" } }),
+        }),
+      );
+      expect(resp!.status).toBe(404);
+
+      // No `.cred` / `.cred.tmp` anywhere under `parent`.
+      const stray: string[] = [];
+      const walk = (d: string) => {
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+          const full = join(d, e.name);
+          if (e.isDirectory()) walk(full);
+          else if (e.name.endsWith(".cred") || e.name.endsWith(".cred.tmp")) stray.push(full);
+        }
+      };
+      walk(parent);
+      expect(stray).toEqual([]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });

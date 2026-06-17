@@ -122,6 +122,11 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
     // with the reason on any other failure; 200 {ok, fileCount} on
     // success (the owner deploys next via .../deploy).
     if (verb === "adapt" && req.method === "POST") {
+      // Reject an unknown buildId BEFORE touching the credential store: the
+      // store is keyed by this URL-derived id, so a non-existent / hostile id
+      // (e.g. a path-traversal id) must never reach `credentials.put`. A
+      // server-minted build always has state; anything else 404s here.
+      if (!o.state(buildId)) return jerr(404, "build not found");
       const body = parseJson(req.body) as
         | { instructions?: string; credential?: unknown }
         | null;
