@@ -8,20 +8,45 @@
 // worker accept a delegate signature for the boot-approval kind ONLY.
 //
 // The canonical bytes + `|`-joined field order MUST match the Worker
-// byte-for-byte or server verification fails. Scopes are sorted before the
-// comma-join — for v1 there is only "boot-approval", but the sort keeps us
-// wire-compatible if the set ever grows.
+// byte-for-byte or server verification fails. Scopes are sorted by their
+// FIXED INDEX (DELEGATE_SCOPES order, NOT alphabetical) before the comma-join
+// — for v1 there is only "boot-approval", but the index sort keeps us
+// wire-compatible if the set ever grows (an alphabetical sort would re-shuffle
+// the order when a new scope name lands and invalidate prior audit vectors —
+// see canonicalWatchDelegateKey in packages/protocol/src/auth.ts).
 
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 
+/** Canonical scope ordering shared by the capability/delegate envelopes.
+ *
+ *  Flagship canonical bytes sort scope lists by their FIXED INDEX in the
+ *  authoritative scope list (NOT alphabetically) so a future scope name can
+ *  never re-shuffle an alphabetical sort and invalidate prior audit vectors
+ *  (mirrors DEVICE_SCOPE_INDEX / DELEGATE_SCOPE_INDEX in
+ *  packages/protocol/src/auth.ts). An unknown scope (one absent from the list)
+ *  sorts as index 0 — byte-identical to the Worker's `?? 0` fallback; in
+ *  practice the envelope validators reject unknown scopes before this. */
+object ScopeOrdering {
+    fun sort(scopes: List<String>, order: List<String>): List<String> {
+        val index = order.withIndex().associate { (i, s) -> s to i }
+        // sortedBy is a STABLE sort, so equal/unknown (index 0) entries keep
+        // their input order — matching JS Array.prototype.sort on equal keys.
+        return scopes.sortedBy { index[it] ?: 0 }
+    }
+}
+
 object WatchDelegateKey {
     const val CANONICAL_TAG = "flagship/watch-delegate-key/v1"
 
     /** The single v1 scope. The cloud rejects a mint with any other scope. */
     const val BOOT_APPROVAL_SCOPE = "boot-approval"
+
+    /** Canonical scope ordering — mirrors DELEGATE_SCOPES in
+     *  packages/protocol/src/auth.ts. APPEND new scopes; never reorder. */
+    val DELEGATE_SCOPE_ORDER: List<String> = listOf("boot-approval")
 
     fun canonicalBytes(
         grantId: String,
@@ -35,7 +60,7 @@ object WatchDelegateKey {
         grantId,
         username,
         delegatePubKeyHex.lowercase(),
-        scopes.sorted().joinToString(","),
+        ScopeOrdering.sort(scopes, DELEGATE_SCOPE_ORDER).joinToString(","),
         issuedAt.toString(),
         expiresAt.toString(),
     ).joinToString("|").toByteArray(Charsets.UTF_8)
@@ -94,6 +119,76 @@ object RevokeWatchDelegate {
         issuedAt: Long,
     ): Boolean = try {
         Ed25519Verify(irkPub).verify(signature, canonicalBytes(grantId, username, issuedAt))
+        true
+    } catch (_: Throwable) {
+        false
+    }
+}
+
+/** Kotlin mirror of `canonicalDeviceCapabilityGrant` in
+ *  packages/protocol/src/auth.ts. The grant binds a per-device key to a user
+ *  under a human label with explicit capability scopes (v2 device addressing).
+ *
+ *  Grants are minted + signed by the Worker (admin path) today, so the mobile
+ *  app only RECEIVES them as the read-only DeviceCapabilityBlock wire DTO.
+ *  This canonical-bytes mirror exists so a device CAN locally recompute /
+ *  verify a grant's bytes — and, critically, so the cross-platform parity
+ *  vector pins the SAME byte layout the Worker signs. The scope list is sorted
+ *  by FIXED INDEX (DEVICE_SCOPES order, NOT alphabetical); an alphabetical
+ *  sort diverges for any set spanning add-device/admin/browse. */
+object DeviceCapabilityGrant {
+    const val CANONICAL_TAG = "flagship/device-capability-grant/v1"
+
+    /** Canonical scope ordering — mirrors DEVICE_SCOPES in
+     *  packages/protocol/src/auth.ts. APPEND new scopes; never reorder. The
+     *  index in this list is the canonical-bytes sort key (NOT alphabetical). */
+    val DEVICE_SCOPE_ORDER: List<String> = listOf(
+        "browse",
+        "install-service",
+        "vibe-code",
+        "add-device",
+        "manage-services",
+        "revoke-others",
+        "demo-provision",
+        "admin",
+    )
+
+    fun canonicalBytes(
+        grantId: String,
+        username: String,
+        deviceLabel: String,
+        devicePubKeyHex: String,
+        scopes: List<String>,
+        issuedAt: Long,
+        expiresAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        grantId,
+        username,
+        deviceLabel,
+        devicePubKeyHex.lowercase(),
+        ScopeOrdering.sort(scopes, DEVICE_SCOPE_ORDER).joinToString(","),
+        issuedAt.toString(),
+        expiresAt.toString(),
+    ).joinToString("|").toByteArray(Charsets.UTF_8)
+
+    /** Verify a signature under the account IRK public key. Returns false
+     *  (never throws) on malformed input, mirroring verifyDeviceCapabilityGrant. */
+    fun verify(
+        signature: ByteArray,
+        irkPub: ByteArray,
+        grantId: String,
+        username: String,
+        deviceLabel: String,
+        devicePubKeyHex: String,
+        scopes: List<String>,
+        issuedAt: Long,
+        expiresAt: Long,
+    ): Boolean = try {
+        Ed25519Verify(irkPub).verify(
+            signature,
+            canonicalBytes(grantId, username, deviceLabel, devicePubKeyHex, scopes, issuedAt, expiresAt),
+        )
         true
     } catch (_: Throwable) {
         false

@@ -32,9 +32,72 @@ class WatchDelegateKeyTest {
             issuedAt = 1000,
             expiresAt = 2000,
         )
+        // SINGLE-scope vector — UNCHANGED by the fixed-index sort (the common case).
         val expected = "flagship/watch-delegate-key/v1|g-1|dani|" +
             "ab".repeat(32) + "|boot-approval|1000|2000"
         assertEquals(expected, String(canon, Charsets.UTF_8))
+    }
+
+    /** AUTHORITATIVE cross-platform MULTI-SCOPE vector for DeviceCapabilityGrant
+     *  — pinned in TS (packages/protocol/tests/deviceCapabilityGrant.test.ts)
+     *  and iOS. The scopes include `add-device` + `admin` alongside `browse` —
+     *  the set where a LEXICOGRAPHIC sort (the prior mobile bug) diverges from
+     *  the DEVICE_SCOPES-index sort: alphabetical -> "add-device,admin,browse",
+     *  canonical -> "browse,add-device,admin". Mobile MUST match canonical. */
+    @Test
+    fun deviceCapabilityGrant_multiScope_canonicalBytes_matchWorker() {
+        // FIXED_DEVICE_PUB from the shared TS fixture: byte[i] = (i*3 + 11) & 0xff.
+        val pub = ByteArray(32) { i -> ((i * 3 + 11) and 0xff).toByte() }
+        val canon = DeviceCapabilityGrant.canonicalBytes(
+            grantId = "550e8400-e29b-41d4-a716-446655440000",
+            username = "trent",
+            deviceLabel = "ipad",
+            devicePubKeyHex = HexUtil.encode(pub),
+            scopes = listOf("admin", "browse", "add-device"), // scrambled input on purpose
+            issuedAt = 1_780_000_000_000,
+            expiresAt = 1_787_776_000_000,
+        )
+        val expected = "flagship/device-capability-grant/v1" +
+            "|550e8400-e29b-41d4-a716-446655440000|trent|ipad|" +
+            "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568" +
+            "|browse,add-device,admin|1780000000000|1787776000000"
+        val canonStr = String(canon, Charsets.UTF_8)
+        assertEquals(expected, canonStr)
+        // It must NOT be the alphabetical ordering.
+        assertFalse(canonStr.contains("add-device,admin,browse"))
+        // And the SHA-256 must match the pinned id shared with TS + iOS.
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(canon)
+        assertEquals(
+            "cdf24b718bec2cc7fda2d07abbdf57252b4b3f6de12ebe56a61ce65bd6ab9bf6",
+            HexUtil.encode(sha),
+        )
+    }
+
+    @Test
+    fun deviceCapabilityGrant_multiScope_signVerify_roundTrip() {
+        val (irk, irkPubHex) = key(1)
+        val pub = ByteArray(32) { i -> ((i * 3 + 11) and 0xff).toByte() }
+        val devicePubHex = HexUtil.encode(pub)
+        val sig = irk.sign(
+            DeviceCapabilityGrant.canonicalBytes(
+                "550e8400-e29b-41d4-a716-446655440000", "trent", "ipad", devicePubHex,
+                listOf("admin", "browse", "add-device"), 1_780_000_000_000, 1_787_776_000_000,
+            ),
+        )
+        val irkPub = HexUtil.decode(irkPubHex)!!
+        assertTrue(
+            DeviceCapabilityGrant.verify(
+                sig, irkPub, "550e8400-e29b-41d4-a716-446655440000", "trent", "ipad", devicePubHex,
+                listOf("admin", "browse", "add-device"), 1_780_000_000_000, 1_787_776_000_000,
+            ),
+        )
+        val (_, otherPubHex) = key(9)
+        assertFalse(
+            DeviceCapabilityGrant.verify(
+                sig, HexUtil.decode(otherPubHex)!!, "550e8400-e29b-41d4-a716-446655440000", "trent", "ipad",
+                devicePubHex, listOf("admin", "browse", "add-device"), 1_780_000_000_000, 1_787_776_000_000,
+            ),
+        )
     }
 
     @Test

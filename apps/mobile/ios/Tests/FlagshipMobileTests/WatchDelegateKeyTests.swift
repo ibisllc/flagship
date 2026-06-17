@@ -20,10 +20,63 @@ final class WatchDelegateKeyTests: XCTestCase {
             issuedAt: 1000,
             expiresAt: 2000
         )
+        // SINGLE-scope vector — UNCHANGED by the fixed-index sort (the common case).
         let expected = "flagship/watch-delegate-key/v1|g-1|dani|"
             + String(repeating: "ab", count: 32)
             + "|boot-approval|1000|2000"
         XCTAssertEqual(String(data: env.canonicalBytes(), encoding: .utf8), expected)
+    }
+
+    /// AUTHORITATIVE cross-platform MULTI-SCOPE vector for DeviceCapabilityGrant
+    /// — pinned in TS (packages/protocol/tests/deviceCapabilityGrant.test.ts)
+    /// and Kotlin. The scopes include `add-device` + `admin` alongside `browse`
+    /// — the set where a LEXICOGRAPHIC sort (the prior mobile bug) diverges
+    /// from the DEVICE_SCOPES-index sort: alphabetical → "add-device,admin,browse",
+    /// canonical → "browse,add-device,admin". Mobile MUST match canonical.
+    func test_deviceCapabilityGrant_multiScope_canonicalBytes_matchWorker() {
+        // FIXED_DEVICE_PUB from the shared TS fixture: byte[i] = (i*3 + 11) & 0xff.
+        var pub = Data(count: 32)
+        for i in 0..<32 { pub[i] = UInt8((i * 3 + 11) & 0xff) }
+        let env = DeviceCapabilityGrantEnvelope(
+            grantId: "550e8400-e29b-41d4-a716-446655440000",
+            username: "trent",
+            deviceLabel: "ipad",
+            devicePubKeyHex: HexUtil.encode(pub),
+            scopes: ["admin", "browse", "add-device"], // scrambled input on purpose
+            issuedAt: 1_780_000_000_000,
+            expiresAt: 1_787_776_000_000
+        )
+        let expected = "flagship/device-capability-grant/v1"
+            + "|550e8400-e29b-41d4-a716-446655440000|trent|ipad|"
+            + "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568"
+            + "|browse,add-device,admin|1780000000000|1787776000000"
+        let canon = String(data: env.canonicalBytes(), encoding: .utf8)
+        XCTAssertEqual(canon, expected)
+        // It must NOT be the alphabetical ordering.
+        XCTAssertFalse(canon!.contains("add-device,admin,browse"))
+        // And the SHA-256 must match the pinned id shared with TS + Kotlin.
+        let digest = SHA256.hash(data: env.canonicalBytes())
+        let idHex = digest.map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(idHex, "cdf24b718bec2cc7fda2d07abbdf57252b4b3f6de12ebe56a61ce65bd6ab9bf6")
+    }
+
+    func test_deviceCapabilityGrant_multiScope_signVerify_roundTrip() throws {
+        let irk = Curve25519.Signing.PrivateKey()
+        var pub = Data(count: 32)
+        for i in 0..<32 { pub[i] = UInt8((i * 3 + 11) & 0xff) }
+        let env = DeviceCapabilityGrantEnvelope(
+            grantId: "550e8400-e29b-41d4-a716-446655440000",
+            username: "trent",
+            deviceLabel: "ipad",
+            devicePubKeyHex: HexUtil.encode(pub),
+            scopes: ["admin", "browse", "add-device"],
+            issuedAt: 1_780_000_000_000,
+            expiresAt: 1_787_776_000_000
+        )
+        let sig = try irk.signature(for: env.canonicalBytes())
+        XCTAssertTrue(env.verify(signature: sig, irkPub: irk.publicKey.rawRepresentation))
+        let other = Curve25519.Signing.PrivateKey()
+        XCTAssertFalse(env.verify(signature: sig, irkPub: other.publicKey.rawRepresentation))
     }
 
     func test_watchDelegateEnvelope_signVerify_roundTrip() throws {

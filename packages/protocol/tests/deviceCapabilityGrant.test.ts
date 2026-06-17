@@ -141,6 +141,53 @@ describe("DeviceCapabilityGrant — sign + verify", () => {
     );
     expect(await deviceCapabilityGrantId(g)).toBe(expected);
   });
+
+  // ── AUTHORITATIVE cross-platform MULTI-SCOPE vector ────────────────────
+  // Pinned here AND mirrored byte-for-byte by the Swift + Kotlin canonical
+  // implementations (apps/mobile/.../DeviceCapabilityGrant{Tests,Test}).
+  // The scopes deliberately include `add-device` + `admin` alongside
+  // `browse` — the exact set where a LEXICOGRAPHIC sort (the prior mobile
+  // bug) diverges from the DEVICE_SCOPES-index sort: alphabetical yields
+  // "add-device,admin,browse" but the canonical order is
+  // "browse,add-device,admin". A mobile mirror that sorts alphabetically
+  // signs bytes the Worker rejects; this hex is what mobile MUST match.
+  const MULTI_SCOPE_PUB = (() => {
+    const p = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) p[i] = (i * 3 + 11) & 0xff;
+    return p;
+  })();
+  const MULTI_SCOPE_GRANT = (): DeviceCapabilityGrant => ({
+    grantId: "550e8400-e29b-41d4-a716-446655440000",
+    username: "trent",
+    deviceLabel: "ipad",
+    devicePubKey: MULTI_SCOPE_PUB,
+    scopes: ["admin", "browse", "add-device"], // scrambled input on purpose
+    issuedAt: 1_780_000_000_000,
+    expiresAt: 1_787_776_000_000,
+  });
+  const MULTI_SCOPE_CANON =
+    "flagship/device-capability-grant/v1|550e8400-e29b-41d4-a716-446655440000|trent|ipad|" +
+    "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568|" +
+    "browse,add-device,admin|1780000000000|1787776000000";
+  const MULTI_SCOPE_ID = "cdf24b718bec2cc7fda2d07abbdf57252b4b3f6de12ebe56a61ce65bd6ab9bf6";
+
+  it("multi-scope canonical bytes sort by DEVICE_SCOPES index, NOT alphabetically (pinned cross-platform vector)", async () => {
+    const g = MULTI_SCOPE_GRANT();
+    // The canonical string is the index sort, not the alphabetical one.
+    expect(MULTI_SCOPE_CANON).toContain("|browse,add-device,admin|");
+    expect(MULTI_SCOPE_CANON).not.toContain("add-device,admin,browse");
+    // The pinned id is the SHA-256 of exactly that canonical string …
+    expect(await sha256Hex(MULTI_SCOPE_CANON)).toBe(MULTI_SCOPE_ID);
+    // … and the grant produces it regardless of input scope order.
+    expect(await deviceCapabilityGrantId(g)).toBe(MULTI_SCOPE_ID);
+  });
+
+  it("the multi-scope grant signs + verifies under the issuing IRK", () => {
+    const irk = deriveIRK(umk);
+    const g = MULTI_SCOPE_GRANT();
+    const sig = signDeviceCapabilityGrant(g, irk);
+    expect(verifyDeviceCapabilityGrant(g, sig, irk.publicKey)).toBe(true);
+  });
 });
 
 describe("DeviceCapabilityGrant — separator + control-char rejection (H1 hardening)", () => {
