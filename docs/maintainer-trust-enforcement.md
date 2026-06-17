@@ -179,3 +179,82 @@ task-5 work is renewal alerts polish + the box-side lockdown wiring above.
 App "refuse to boot / halt" and box lockdown only ship AFTER 0a (live lease) +
 0b (chain exposed). Shipping enforcement against today's expired lease bricks
 every app and locks down every box immediately.
+
+## Live box↔relay wiring — what shipped + the enforce-flip rollout (task #5)
+
+The box↔relay trust path is now wired end to end, but in **OBSERVE** mode —
+the verify + lockdown/SOS MECHANISM is fully built and the enforcement is
+gated behind a flag that is OFF by default, mirroring `CA_ENDORSEMENT_ENFORCE`.
+There are real boxes on the live tunnel and **no box has a validated blessing
+flow yet**, so fail-closed-by-default would brick the fleet.
+
+### What's on the wire
+
+- **HELLO_ACK** carries an optional `serviceBlessing` (the `.com`-CA-signed
+  `ServiceBlessing` over the hub's own key) + `hubSig` (the hub's signature,
+  with the blessed key, over the box's HELLO nonce — proof-of-possession,
+  defeats blessing replay by a MITM). Both fields are OPTIONAL: an old hub
+  omits them, an old box ignores them — fully backward-compatible frame.
+- **`.services` hub** self-generates an Ed25519 key on boot (ephemeral-per-boot
+  unless `FLAGSHIP_HUB_KEY_PATH` points at a mounted Fly volume), fetches a
+  blessing from `.com POST /api/services/hub-blessing` and refreshes every ~12h
+  (TTL ~26h). If it has no blessing yet (startup race / `.com` down) it omits
+  it — OBSERVE-safe.
+- **Box daemon** verifies on every HELLO_ACK: fetch the maintainer chain
+  (`GET /api/maintainer-blessing`), build a `CaTrustChain` at the BAKED pin,
+  run `shouldRelayThroughHub` (chain + TTL), verify `hubSig` over the box
+  nonce. It emits a structured `[relay-trust]` log line. Chain fetch errors
+  yield NO verdict (never bricks on a blip).
+
+### The enforce flag
+
+- **Env flag:** `FLAGSHIP_RELAY_TRUST_ENFORCE`. **Default OFF.** ON only for
+  the exact string `"true"` (`relayTrustEnforceFromEnv`). Set on the box
+  daemon's environment.
+- **OBSERVE (default):** verify + structured-log the verdict; KEEP RELAYING
+  regardless. `RelayLockdownController.isRelayAllowed()` is always `true`. No
+  SOS. This is what deploying task #5 ships.
+- **ENFORCE (`true`):** on a concrete `verified === false` verdict with no
+  covering owner `TrustException` for the relay cert-hash, the box enters
+  LOCKDOWN — `resolveBackend` returns null so new streams are refused (the WS /
+  control channel stays UP so a fresh blessing or owner exception can lift it)
+  — and emits an SOS via the owner-notify hook (log-only by default; production
+  swaps in the `.com` push relay). A `verified === undefined` verdict (no
+  blessing presented / chain unreachable) NEVER locks down, under either flag.
+  A fresh valid blessing or a valid owner exception lifts lockdown.
+
+### Live-validation steps BEFORE flipping `FLAGSHIP_RELAY_TRUST_ENFORCE=true`
+
+Do these against the live fleet, in order; do NOT flip until all pass:
+
+1. **`.com` lease is live.** `GET /api/maintainer-blessing` returns
+   `caPubkeyAuthorizedNow: true` (the backdated CA-endorsement ceremony, task
+   0a). If the lease has lapsed, EVERY box would lock down on flip.
+2. **`.services` is serving a blessing.** After a `.services` deploy, confirm
+   the hub log shows `relay-blessing refreshed expiresAt=… signedBy=…` and that
+   the `signedBy` matches `.com`'s served `caPubkey`.
+3. **Boxes are OBSERVING a PASS.** On real boxes (rebuilt daemon), confirm the
+   journal shows `[relay-trust] verified=true reason=ok … mode=observe` on
+   connect — across a daemon restart and a hub redeploy (re-blessed key). A
+   single `verified=false` or persistent `chain-fetch-error` in the fleet means
+   DO NOT flip.
+4. **Soak.** Let the fleet run in OBSERVE for at least one full blessing-refresh
+   cycle (>26h) so a near-expiry refresh is exercised; watch for spurious
+   `artifact-expired` from clock skew or a missed refresh.
+5. **Exception sync wired.** Before flip, wire `resolveTrustExceptions` on the
+   box (read owner-signed relay `TrustException`s from `.com`'s directory +
+   the IRK-anchored device roster) and validate the owner-exception recovery
+   path on a test box: force a fail, confirm lockdown under ENFORCE, sign a
+   relay `TrustException` on the phone, confirm the box lifts lockdown. Until
+   this is wired a failing verdict under ENFORCE has no recovery but a fresh
+   valid blessing.
+6. **SOS transport.** Replace the log-only `sos` hook with the real STK-signed
+   `flagship/push-relay/v1` fan-out (category trust-alert) and confirm the
+   phone receives the SOS from a test lockdown.
+7. **Flip on ONE box first.** Set `FLAGSHIP_RELAY_TRUST_ENFORCE=true` on a
+   single canary box, exercise a real failure + recovery, THEN roll to the
+   fleet. Keep the flag flippable (no redeploy needed to revert).
+
+Rollback: unset / set the flag to anything but `"true"` and the box returns to
+OBSERVE on the next read (the lockdown controller honors the flag at
+construction; a daemon restart re-reads it).
