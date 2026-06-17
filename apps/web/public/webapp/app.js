@@ -17,6 +17,12 @@ import {
   refreshOperationsBar,
   setOperationsBarUnlockedResolver,
 } from "./lib/operationsBar.js";
+import { installComFetchGuard } from "./lib/comFetch.js";
+import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
+import { initTrustSliver, setTrustSliverTapHandler } from "./lib/trustSliver.js";
+import { grantTrustException, loadAndApplyExceptions } from "./lib/trustOverride.js";
+import { inlinePrompt } from "./lib/modal.js";
+import { verifyPin, hasPin } from "./lib/pinLock.js";
 import {
   activityIcon,
   packageIcon,
@@ -293,8 +299,71 @@ function wireServicesTabEntries() {
   wire("services-list-open-vibe-code", enterBuildSource);
 }
 
+/**
+ * The biometric/PIN-gated per-cert override. Tapping a red trust-sliver line
+ * runs this: the browser has no biometric, so the gate is the tier-1 PIN
+ * (lib/pinLock.js) — proves the owner is present, like Face ID on native.
+ * On success it signs + persists + propagates a cert-hash-scoped
+ * TrustException; calls then resume for that cert, but the red line STAYS
+ * (now flagged "accepted") so the degraded state remains visible.
+ */
+async function runTrustOverride(certHash) {
+  let session;
+  try { session = getSession(); } catch { session = null; }
+  if (!session?.umk) {
+    toast("Unlock first to accept a certificate.", "err");
+    return;
+  }
+  const cert = serverTrust.failingCerts().find((c) => c.certHash === certHash);
+  if (!cert) return;
+  if (cert.overridden) {
+    toast("You already accepted this certificate on this device.");
+    return;
+  }
+  // Gate: require the PIN when one is set; otherwise a deliberate typed
+  // confirmation (the owner is already unlocked, so this is the present-owner
+  // check the native biometric provides).
+  const pinSet = await hasPin().catch(() => false);
+  if (pinSet) {
+    const pin = await inlinePrompt({
+      title: "Accept this certificate?",
+      message:
+        "Someone may be intercepting your connection. Only accept if you understand the risk. Enter your PIN to confirm.",
+      type: "password",
+      okLabel: "Accept",
+      validate: async (v) => ((await verifyPin(v)) ? "" : "Incorrect PIN"),
+    });
+    if (pin === null) return; // cancelled
+  } else {
+    const ok = await inlinePrompt({
+      title: "Accept this certificate?",
+      message:
+        "Someone may be intercepting your connection. Only accept if you understand the risk. Type ACCEPT to confirm.",
+      okLabel: "Accept",
+      validate: (v) => (v.trim().toUpperCase() === "ACCEPT" ? "" : 'Type "ACCEPT" to confirm'),
+    });
+    if (ok === null) return;
+  }
+  let username = "";
+  try { username = session.username || ""; } catch { /* none */ }
+  try {
+    await grantTrustException(
+      { umk: session.umk, certClass: cert.certClass, certHash: cert.certHash, username },
+      {},
+    );
+    toast("Certificate accepted on this device.");
+  } catch (e) {
+    toast(String(e?.message ?? e), "err");
+  }
+}
+
 async function boot() {
   persistDebugFlagFromUrl();
+  // Maintainer-trust enforcement: install the global .com fetch guard BEFORE
+  // any backend call so that, the moment a verdict flips untrusted, every
+  // .com call short-circuits — no matter which lib makes it. (No verdict yet ⇒
+  // trusted, so this never bricks a normal boot.) The blessing probe is exempt.
+  try { installComFetchGuard(); } catch { /* best-effort */ }
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }
@@ -397,6 +466,24 @@ async function boot() {
   // Re-evaluate the bar's visibility on every navigation (the lock surfaces
   // hide it; unlocking back into the app reveals any running operations).
   document.addEventListener("flagship:view-shown", () => refreshOperationsBar());
+
+  // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
+  // The persistent ALARMING-RED top sliver: one non-dismissible line per
+  // failing cert while the control-server blessing is broken. It pins ABOVE
+  // the teal ops bar and pushes the whole shell down. Tapping a line runs the
+  // biometric/PIN-gated per-cert override.
+  initTrustSliver();
+  setTrustSliverTapHandler((certHash) => runTrustOverride(certHash));
+  // Fetch + verify the control-server blessing (CLIENT clock; a network error
+  // is NOT a verdict), then re-apply any accepted exceptions so one acceptance
+  // per cert holds fleet-wide. Best-effort + non-blocking — boot never waits
+  // on it, and a .com outage can't brick the app.
+  void (async () => {
+    let username = "";
+    try { username = getSession().username || ""; } catch { /* locked */ }
+    try { await refreshServerTrust(); } catch { /* no verdict on error */ }
+    try { await loadAndApplyExceptions(username); } catch { /* best-effort */ }
+  })();
 
   // Phase 3b — cross-device QR pairing: a /join?sid=&pk= deep-link routes
   // straight into the add-profile pairing receiver, BEFORE the normal
