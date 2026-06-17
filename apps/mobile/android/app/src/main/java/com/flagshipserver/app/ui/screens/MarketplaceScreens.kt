@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +24,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -29,6 +33,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.MarketplaceListing
+import com.flagshipserver.app.api.MarketplaceLlmKey
+import com.flagshipserver.app.api.ScanGradeBucket
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
@@ -40,6 +46,7 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.MarketplaceViewModel
+import java.net.URLEncoder
 import kotlinx.coroutines.launch
 
 /**
@@ -137,12 +144,30 @@ private fun ListingRow(l: MarketplaceListing, onClick: () -> Unit) {
                 Spacer(Modifier.height(FS.space.s2))
                 Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     FSPill(label = "${l.installCount} deploys", kind = if (l.installCount > 0) FSPillKind.Online else FSPillKind.Idle)
+                    ScanGradePill(l.scanGrade)
                     if (l.requiresLlmKey) FSPill(label = "Needs LLM key", kind = FSPillKind.Provisioning)
                     if (l.alreadyInstalled) FSPill(label = "Deployed", kind = FSPillKind.Idle)
                 }
             }
         }
     }
+}
+
+/**
+ * Marketplace scanner-grade pill. Mirrors the webapp's `scanGradePill` +
+ * iOS `ScanGradePill`: A/B → online (green), C/D → renewing (amber),
+ * F → offline (red), and null (not yet scanned — `scan_grade` is NULL today)
+ * → idle "ungraded". Buckets are identical across surfaces (ScanGradeBucket).
+ */
+@Composable
+private fun ScanGradePill(grade: String?) {
+    val kind = when (ScanGradeBucket.from(grade)) {
+        ScanGradeBucket.OK -> FSPillKind.Online
+        ScanGradeBucket.WARN -> FSPillKind.Renewing
+        ScanGradeBucket.ERR -> FSPillKind.Offline
+        ScanGradeBucket.UNGRADED -> FSPillKind.Idle
+    }
+    FSPill(label = ScanGradeBucket.pillLabel(grade), kind = kind)
 }
 
 /**
@@ -170,6 +195,8 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
     }
 
     var selectedPod by remember { mutableStateOf<String?>(null) }
+    // Pre-install confirmation (parity with the webapp's `inlineConfirm`).
+    var confirmingInstall by remember { mutableStateOf(false) }
     // v2 device-addressing — a restricted sub-identity without `install-service`
     // can't install; the CTA is disabled with an explanation. A null capability
     // (legacy single-IRK) implicitly holds every scope.
@@ -200,12 +227,11 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
             )
         }
         listing?.let { l ->
-            if (l.requiresLlmKey) {
-                Spacer(Modifier.height(FS.space.s2))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSPill(label = "${l.installCount} deploys", kind = FSPillKind.Online)
-                    FSPill(label = "Needs LLM key", kind = FSPillKind.Provisioning)
-                }
+            Spacer(Modifier.height(FS.space.s2))
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSPill(label = "${l.installCount} deploys", kind = FSPillKind.Online)
+                ScanGradePill(l.scanGrade)
+                if (l.requiresLlmKey) FSPill(label = "Needs LLM key", kind = FSPillKind.Provisioning)
             }
         }
 
@@ -246,12 +272,39 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         when (val st = installState) {
             is MarketplaceViewModel.InstallState.Succeeded -> {
                 FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column {
                         Text(
                             text = "Installed as ${st.serviceId}.",
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                         )
+                        // An app that needs an LLM key would be broken with no
+                        // next step — hand the owner straight to Configure
+                        // environment with the expected name prefilled. The
+                        // value is set on the box (sealed env store);
+                        // flagshipserver.com never sees it.
+                        val l = listing
+                        if (l?.requiresLlmKey == true) {
+                            val envVar = MarketplaceLlmKey.envVar(l)
+                            Spacer(Modifier.height(FS.space.s2))
+                            Text(
+                                text = "This app needs an AI key ($envVar) to work. Add it on your server now.",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                            Spacer(Modifier.height(FS.space.s2))
+                            FSPrimaryButton(
+                                label = "Add AI key",
+                                onClick = {
+                                    val p = URLEncoder.encode(envVar, "UTF-8")
+                                    nav.navigate(
+                                        "service-env/${st.serviceId}/${l.creator}/${l.slug}?prefill=$p",
+                                    )
+                                },
+                                block = true,
+                                modifier = Modifier.semantics { testTag = "marketplace-add-llm-key" },
+                            )
+                        }
                     }
                 }
             }
@@ -264,8 +317,7 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
                 FSPrimaryButton(
                     label = if (installing) "Installing…" else "Install",
                     onClick = {
-                        val fqdn = selectedFqdn ?: return@FSPrimaryButton
-                        scope.launch { vm.install(creator = creator, slug = slug, serverId = fqdn) }
+                        if (selectedFqdn != null) confirmingInstall = true
                     },
                     block = true,
                     enabled = selectedPod != null && canInstall && !installing,
@@ -282,5 +334,31 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
             block = true,
         )
         Spacer(Modifier.height(FS.space.s12))
+    }
+
+    // Same assurance the webapp confirm states: the signed envelope is verified
+    // against the IRK before the daemon starts the container.
+    if (confirmingInstall) {
+        val selectedFqdn = pods.firstOrNull { it.podId == selectedPod }?.fqdn
+        AlertDialog(
+            onDismissRequest = { confirmingInstall = false },
+            title = { Text("Install $creator/$slug?") },
+            text = {
+                Text("The signed app envelope is verified against your IRK before the daemon starts the container.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingInstall = false
+                        val fqdn = selectedFqdn ?: return@TextButton
+                        scope.launch { vm.install(creator = creator, slug = slug, serverId = fqdn) }
+                    },
+                    modifier = Modifier.semantics { testTag = "marketplace-install-confirm" },
+                ) { Text("Install") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingInstall = false }) { Text("Cancel") }
+            },
+        )
     }
 }

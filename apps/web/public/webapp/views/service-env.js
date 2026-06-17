@@ -24,13 +24,24 @@ let currentCreator = null;
 let currentSlug = null;
 let currentServerFqdn = null;
 
-export async function enterServiceEnv(appId, creator, slug, serverFqdn) {
+export async function enterServiceEnv(appId, creator, slug, serverFqdn, prefillName) {
   currentAppId = appId;
   currentCreator = creator;
   currentSlug = slug;
   currentServerFqdn = serverFqdn;
   show("view-service-env");
   await reload();
+  // Prefill the NAME field (never a value) when a caller knows which env var
+  // is needed — e.g. a marketplace install of an app that requires an LLM key
+  // sends the owner here with the expected name ready so they just paste the
+  // key. The value field stays empty; the owner types the secret.
+  if (prefillName) {
+    const nameEl = $("service-env-name");
+    if (nameEl) {
+      nameEl.value = prefillName;
+      $("service-env-value")?.focus();
+    }
+  }
 }
 
 export function initServiceEnvView() {
