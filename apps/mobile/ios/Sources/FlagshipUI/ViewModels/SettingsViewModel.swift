@@ -1,6 +1,9 @@
 import Foundation
 import Observation
+import CryptoKit
+import Flagship
 import FlagshipAPI
+import FlagshipCore
 
 @Observable
 @MainActor
@@ -28,15 +31,24 @@ public final class SettingsViewModel {
     /// AppState.currentUser changes (e.g. after sign-out + sign-in)
     /// without a re-init.
     private let currentUsername: @MainActor () -> String?
+    /// Owner-IRK signer for the (now-authenticated) push-token revoke —
+    /// same injectable seam as JournalViewModel. Defaults to the biometric
+    /// `Keystore.deriveIRK`; tests inject a deterministic key.
+    private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    private let now: () -> Int64
 
     public init(
         client: any ScreensClient,
         server: any FlagshipServerClient,
-        username: @MainActor @escaping () -> String?
+        username: @MainActor @escaping () -> String?,
+        signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.screens = client
         self.server = server
         self.currentUsername = username
+        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.now = now
     }
 
     public func load() async {
@@ -112,7 +124,19 @@ public final class SettingsViewModel {
         working.removeAll { $0.tokenId == device.tokenId }
         trustedDevices = .loaded(working)
         do {
-            try await server.revokePushToken(tokenId: device.tokenId)
+            // Revoke is IRK-signed (SEC): sign behind the biometric and let
+            // .com verify against the token owner's registered IRK before it
+            // deletes the tether.
+            let irk = try await signer("Disconnect \(device.label)")
+            let issuedAt = now()
+            let bytes = PushTokenRevoke.canonicalBytes(tokenId: device.tokenId, issuedAt: issuedAt)
+            let sig = try irk.signature(for: bytes)
+            try await server.revokePushToken(
+                PushTokenRevokeRequest(
+                    request: .init(tokenId: device.tokenId, issuedAt: issuedAt),
+                    signature: HexUtil.encode(Data(sig))
+                )
+            )
             // Refresh ETag + verify the row really did disappear.
             await loadTrustedDevices()
             return true

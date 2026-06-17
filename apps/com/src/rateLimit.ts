@@ -127,6 +127,12 @@ export type RateLimitEndpoint =
   // tight 10/min cap (with a 100/h ceiling) fences a spam loop while leaving
   // legitimate traffic headroom.
   | "push-relay"
+  // SEC — IRK-signed push-token REVOKE (DELETE /api/push/<token-id>). The
+  // envelope carries `request.tokenId`, not an IRK/STK pub at the edge, so
+  // we throttle per-IP only; the handler does the full IRK signature check
+  // against the token owner's registered key. A token-id-knower probing for
+  // a valid signature, or replaying captured DELETEs, is fenced here.
+  | "push-revoke"
   // SEC-3 — voi.ci short-code mint. Session-authenticated (IRK-signed body
   // keyed by `request.username`), so per-IP at the edge; conservative enough
   // that a valid session can't farm short codes into D1 in a loop.
@@ -273,6 +279,14 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // 10/min covers a box re-asking for an unlock approval across a boot; the
   // 100/h ceiling fences a sustained spam loop.
   "push-relay": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  // SEC — IRK-signed push-token revoke. Per-IP only (the IRK pub isn't on
+  // the wire at edge speed; the body carries `request.tokenId`). A human
+  // revokes a handful of devices; 10/min + 100/h fences a signature-probe
+  // or replay loop while leaving legitimate cleanup headroom.
+  "push-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "ip", limit: 100, windowSec: 3600 },
   ],
@@ -506,6 +520,12 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // SEC-2 — STK-signed push relay.
   if (m === "POST" && pathname === "/api/push/relay") {
     return "push-relay";
+  }
+  // SEC — IRK-signed push-token revoke. DELETE /api/push/<token-id>. The
+  // `relay` and `register` sub-paths are matched above / are POSTs, so a
+  // DELETE on /api/push/<id> is unambiguously the revoke.
+  if (m === "DELETE" && /^\/api\/push\/[^/]+$/.test(pathname)) {
+    return "push-revoke";
   }
   // SEC-3 — voi.ci short-code mint + LLM-promo issuance.
   if (m === "POST" && pathname === "/api/voici/shorten") {

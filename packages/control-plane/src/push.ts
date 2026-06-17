@@ -21,10 +21,12 @@ import {
   verifyDeviceAdmit,
   verifyPushRelayRequest,
   verifyPushTokenRegister,
+  verifyPushTokenRevoke,
   type DeviceAdmit,
   type PushRelayCategory,
   type PushRelayRequest,
   type PushTokenRegister,
+  type PushTokenRevoke,
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
@@ -441,15 +443,107 @@ export async function handlePushRelay(
   return ok({ ...result });
 }
 
+interface RevokeBody {
+  request?: {
+    tokenId?: string;
+    issuedAt?: number;
+  };
+  signature?: string;
+}
+
+/**
+ * SEC — `DELETE /api/push/<token-id>` is now AUTHENTICATED.
+ *
+ * Previously this discarded the body and deleted unconditionally, so any
+ * caller who learned a 16-byte hex tokenId could silently kill a device's
+ * push registration — including boot-unlock approval pushes and security
+ * alerts. Revoke now requires EITHER:
+ *
+ *   (a) an admin call (`opts.isAdmin === true`, gated by the route's
+ *       `authorizeAdmin(FLAGSHIP_ADMIN_SECRET)` check), OR
+ *   (b) a valid owner-signed `flagship/push-token-revoke/v1` envelope:
+ *       we resolve the token's owner username FROM THE STORED ROW, look
+ *       up that user's registered IRK pub, and verify the signature over
+ *       canonical bytes binding the tokenId + issuedAt (≈5-min freshness).
+ *
+ * Fail-closed: a missing/garbage signature without admin → 403. An
+ * unknown tokenId returns ok (idempotent — the device is already gone)
+ * but ONLY after the caller proved admin, since the unauthenticated path
+ * never reaches the lookup. The envelope binds the path tokenId
+ * (`request.tokenId` MUST equal the URL segment) so a captured
+ * signature can't be re-aimed at a different token.
+ */
+export interface PushRevokeOptions {
+  /** True iff the route already verified FLAGSHIP_ADMIN_SECRET. */
+  isAdmin?: boolean;
+}
+
 export async function handlePushRevoke(
   deps: PushDeps,
   tokenId: string,
-  body: { issuedAt?: number; signature?: string } | undefined,
+  body: RevokeBody | undefined,
+  opts?: PushRevokeOptions,
 ): Promise<HandlerResponse> {
-  // Revoke is intentionally lighter — we accept either an IRK-signed
-  // envelope (for "this user revokes their old token") or an admin
-  // call. v1 here just removes; v2 adds proper sig validation.
-  void body;
+  // Admin override — the operator can force-drop any token (e.g. cleanup,
+  // abuse response). Gated at the route by the shared admin secret.
+  if (opts?.isAdmin === true) {
+    await deps.pushTokens.remove(tokenId);
+    return ok({ ok: true });
+  }
+
+  // Owner-signed path. Require a well-formed envelope BEFORE any storage
+  // read so an unauthenticated caller never probes token existence.
+  const r = body?.request;
+  if (
+    !r ||
+    typeof r.tokenId !== "string" ||
+    typeof r.issuedAt !== "number" ||
+    typeof body?.signature !== "string"
+  ) {
+    return forbidden("revoke requires an owner-signed envelope");
+  }
+  // The signed tokenId MUST match the URL segment — a captured signature
+  // for token A can't be replayed against token B.
+  if (r.tokenId !== tokenId) {
+    return forbidden("tokenId does not match signed envelope");
+  }
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(body.signature);
+  } catch {
+    return forbidden("invalid signature");
+  }
+
+  // Resolve the owner FROM THE STORED ROW (the token row carries its
+  // owner username), then verify against THAT user's registered IRK.
+  const rec = await deps.pushTokens.get(tokenId);
+  if (!rec) {
+    // Unknown token: the caller is not an admin and produced an envelope
+    // for a token that doesn't exist. Treat as a no-op success — there is
+    // nothing to delete and no row to leak about. (The signature still
+    // had to be structurally well-formed to get here.)
+    return ok({ ok: true });
+  }
+  const userRec = await deps.usernames.get(rec.username);
+  if (!userRec) return forbidden("owner not found");
+
+  let irkPub: Uint8Array;
+  try {
+    irkPub = hexToBytes(userRec.irkPubHex);
+  } catch {
+    return forbidden("owner irk unavailable");
+  }
+
+  const claim: PushTokenRevoke = { tokenId, issuedAt: r.issuedAt };
+  if (!verifyPushTokenRevoke(claim, sig, irkPub)) {
+    return forbidden("invalid signature");
+  }
+
+  const freshness = deps.freshnessMs ?? 5 * 60_000;
+  const now = (deps.now ?? (() => Date.now()))();
+  if (Math.abs(now - r.issuedAt) > freshness) return forbidden("stale request");
+
   await deps.pushTokens.remove(tokenId);
   return ok({ ok: true });
 }

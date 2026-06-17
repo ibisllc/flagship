@@ -107,7 +107,7 @@ export async function unsubscribeFromWebPush() {
     const session = getSession();
     if (session.umk) {
       const issuedAt = Date.now();
-      const canonical = canonicalRevoke({ tokenId, issuedAt });
+      const canonical = canonicalPushRevoke({ tokenId, issuedAt });
       const sig = await signWithIrk(session.umk, canonical);
       await fetch(`${APEX}/api/push/${encodeURIComponent(tokenId)}`, {
         method: "DELETE",
@@ -180,7 +180,19 @@ function canonicalRegister({ username, platform, providerToken, pushX25519Pub, i
   );
 }
 
-function canonicalRevoke({ tokenId, issuedAt }) {
+/**
+ * IRK-signed push-token revoke canonical bytes — byte-identical to
+ * `canonicalPushTokenRevoke` in @flagship/protocol (pinned by
+ * packages/protocol/tests/pushTokenRevoke.test.ts) and the Swift/Kotlin
+ * mirrors. `.com` re-derives these to verify the revoke is signed by the
+ * token owner's IRK before deleting the tether.
+ *
+ *   flagship/push-token-revoke/v1|<tokenId>|<issuedAt>
+ */
+export function canonicalPushRevoke({ tokenId, issuedAt }) {
+  if (typeof tokenId !== "string" || tokenId.includes("|") || /[\x00-\x1f\x7f]/.test(tokenId)) {
+    throw new Error(`invalid revoke tokenId: ${String(tokenId)}`);
+  }
   return new TextEncoder().encode(
     ["flagship/push-token-revoke/v1", tokenId, issuedAt].join("|"),
   );

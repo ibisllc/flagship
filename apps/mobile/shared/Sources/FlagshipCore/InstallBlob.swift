@@ -371,6 +371,27 @@ public enum PushTokenRegister {
     }
 }
 
+/// Push-token REVOKE claim. Mirrors packages/protocol/src/auth.ts
+/// `TAG_PUSH_TOKEN_REVOKE` so `.com` can `verifyPushTokenRevoke` over the
+/// exact bytes the phone signed before deleting the device's push tether.
+///
+/// Revoke is IRK-signed: `.com` resolves the token's owner from the stored
+/// row, looks up that user's registered IRK pub, and verifies this
+/// signature. The envelope binds `tokenId` + `issuedAt` so a captured
+/// signature can't be re-aimed at a different token nor replayed.
+///
+///   flagship/push-token-revoke/v1|<tokenId>|<issuedAt>
+///
+/// Byte-identical to the TS generator + the Kotlin mirror + the webapp —
+/// pinned by `PushTokenRevokeCanonicalTests` here and
+/// `packages/protocol/tests/pushTokenRevoke.test.ts`.
+public enum PushTokenRevoke {
+    public static let canonicalTag = "flagship/push-token-revoke/v1"
+    public static func canonicalBytes(tokenId: String, issuedAt: Int64) -> Data {
+        Data([canonicalTag, tokenId, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}
+
 /// Helper — every byte → 2 lowercase hex chars. Matches the JS side's
 /// `bytesToHex`.
 public enum HexUtil {

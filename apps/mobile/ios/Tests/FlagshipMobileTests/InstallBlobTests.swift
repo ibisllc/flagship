@@ -229,6 +229,47 @@ final class InstallBlobTests: XCTestCase {
         )
     }
 
+    func test_pushTokenRevokeCanonicalBytes_followsV1Format() {
+        let s = String(
+            data: PushTokenRevoke.canonicalBytes(
+                tokenId: "0123456789abcdef0123456789abcdef",
+                issuedAt: 1700000000000
+            ),
+            encoding: .utf8
+        )!
+        // Field order: tag | tokenId | issuedAt. Mirrors the Worker side
+        // (canonicalPushTokenRevoke) in packages/protocol/src/auth.ts.
+        XCTAssertEqual(
+            s,
+            "flagship/push-token-revoke/v1|0123456789abcdef0123456789abcdef|1700000000000"
+        )
+    }
+
+    /// Cross-platform signature vector: a fixed Ed25519 seed signing the
+    /// revoke canonical bytes MUST produce the SAME signature the TS
+    /// (`packages/protocol/tests/pushTokenRevoke.test.ts`) and Kotlin
+    /// mirrors pin. Ed25519 is deterministic so this is exact.
+    func test_pushTokenRevoke_pinnedSignatureVector() throws {
+        let seed = Data(repeating: 0x11, count: 32)
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+        let bytes = PushTokenRevoke.canonicalBytes(
+            tokenId: "0123456789abcdef0123456789abcdef",
+            issuedAt: 1700000000000
+        )
+        let sigHex = try key.signature(for: bytes).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(
+            sigHex,
+            "46dde40edd081692a6412539bbb5e1a27f978a0bfdd27bbbd7cd4911501f5c27" +
+            "3948f78248c70199ccb27905720a5a22fe5dc9d7c4bbff2b936663a467f2980b"
+        )
+        // And the matching public key (so the verifier-side vector aligns).
+        let pubHex = key.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(
+            pubHex,
+            "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
+        )
+    }
+
     func test_authCodeRevokeCanonicalBytes_followsV1Format() {
         let s = String(
             data: AuthCodeRevoke.canonicalBytes(serial: "01ABCD", username: "harry", issuedAt: 7),

@@ -90,6 +90,16 @@ describe("rateLimit — endpoint detection", () => {
     expect(LIMITS["llm-promo-issue"]?.[0]?.limit).toBe(5);
   });
 
+  it("rate-limits the IRK-signed push-token revoke per-IP", () => {
+    expect(endpointFor("DELETE", "/api/push/0123456789abcdef")).toBe("push-revoke");
+    expect(LIMITS["push-revoke"]?.every((a) => a.axis === "ip")).toBe(true);
+    // The relay + register sub-paths are POSTs, so a DELETE there is still
+    // the revoke; and a DELETE on /api/push/relay shouldn't slip through as
+    // a "token id" of `relay` for any other endpoint.
+    expect(endpointFor("POST", "/api/push/register")).not.toBe("push-revoke");
+    expect(endpointFor("POST", "/api/push/relay")).not.toBe("push-revoke");
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("GET", "/api/username/harry")).toBeNull();

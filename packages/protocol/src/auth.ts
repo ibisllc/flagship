@@ -2723,6 +2723,51 @@ export function verifyPushTokenRegister(r: PushTokenRegister, sig: Bytes, irkPub
   }
 }
 
+/**
+ * IRK-signed push-token REVOKE — the authentication primitive for
+ * `DELETE /api/push/<token-id>`.
+ *
+ * Before this existed, the revoke handler discarded the body and deleted
+ * unconditionally, so anyone who learned a 16-byte hex tokenId could
+ * silently kill a device's push registration — including boot-unlock
+ * approval pushes and security alerts. Revoke is now proven by the
+ * account IRK: `.com` resolves the token's owner username from the row,
+ * looks up that user's registered IRK pub, and verifies this signature
+ * before removing. The envelope binds the `tokenId` + `issuedAt`, so a
+ * captured signature can't be re-aimed at a different token nor replayed
+ * outside the freshness window.
+ *
+ * Canonical bytes (byte-identical across TS/Swift/Kotlin + the webapp;
+ * pinned by tests/pushTokenRevoke.test.ts):
+ *
+ *   flagship/push-token-revoke/v1|<tokenId>|<issuedAt>
+ */
+export interface PushTokenRevoke {
+  tokenId: string;
+  issuedAt: number;
+}
+
+const TAG_PUSH_TOKEN_REVOKE = "flagship/push-token-revoke/v1";
+
+export function canonicalPushTokenRevoke(r: PushTokenRevoke): Bytes {
+  legacyFieldGuard("tokenId", r.tokenId);
+  return new TextEncoder().encode(
+    [TAG_PUSH_TOKEN_REVOKE, r.tokenId, r.issuedAt].join("|"),
+  );
+}
+
+export function signPushTokenRevoke(r: PushTokenRevoke, irk: Keypair): Bytes {
+  return ed.sign(canonicalPushTokenRevoke(r), irk.privateKey);
+}
+
+export function verifyPushTokenRevoke(r: PushTokenRevoke, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPushTokenRevoke(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Device-admit (Phase 3b — vouched cross-device pairing)
 //

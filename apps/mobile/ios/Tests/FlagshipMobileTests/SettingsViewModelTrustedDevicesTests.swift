@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import FlagshipAPI
 @testable import FlagshipUI
 
@@ -9,6 +10,13 @@ final class SettingsViewModelTrustedDevicesTests: XCTestCase {
         let s = MockFlagshipServerClient()
         s.simulatedLatency = 0
         return s
+    }
+
+    /// Deterministic IRK signer so the (now-authenticated) disconnect
+    /// doesn't hit the biometric Keystore in CI.
+    private func fakeSigner() -> @MainActor (String) async throws -> Curve25519.Signing.PrivateKey {
+        let key = Curve25519.Signing.PrivateKey()
+        return { _ in key }
     }
 
     private func makeScreens() -> MockScreensClient {
@@ -90,7 +98,7 @@ final class SettingsViewModelTrustedDevicesTests: XCTestCase {
             .init(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1),
             .init(tokenId: "tB", tokenPrefix: "tB", label: "iPad",   platform: "apns", addedAt: 2, lastSeenAt: 2),
         ]
-        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" })
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" }, signer: fakeSigner())
         await vm.loadTrustedDevices()
 
         // Pre-register an artificial Mock push token row so the Mock
@@ -113,7 +121,7 @@ final class SettingsViewModelTrustedDevicesTests: XCTestCase {
         server.devicesByUser["harry"] = [
             .init(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1),
         ]
-        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" })
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" }, signer: fakeSigner())
         await vm.loadTrustedDevices()
         // After load, flip shouldFail so disconnect's revoke call errors.
         server.shouldFail = true

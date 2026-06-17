@@ -190,7 +190,7 @@ final class RevokeServerTests: XCTestCase {
         func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope { throw error }
         func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse { throw error }
         func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse { throw error }
-        func revokePushToken(tokenId: String) async throws { throw error }
+        func revokePushToken(_ req: PushTokenRevokeRequest) async throws { throw error }
         func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse { throw error }
         func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse { throw error }
         func listDevices(username: String) async throws -> TrustedDevicesListResponse { throw error }

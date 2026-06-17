@@ -12,9 +12,11 @@ package com.flagshipserver.app.push
 import android.os.Build
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PushTokenRegisterRequest
+import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.PushTokenRegister
+import com.flagshipserver.app.core.PushTokenRevoke
 import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +122,19 @@ class PushRegistrar(
     suspend fun revoke() {
         val tokenId = Keystore.pushTokenId() ?: return
         try {
-            client.revokePushToken(tokenId)
+            // Revoke is now IRK-signed (SEC): .com verifies the envelope
+            // against the token owner's registered IRK before deleting the
+            // tether. Sign behind the biometric, exactly like register.
+            val irk = Keystore.deriveIRK(reason = "Revoke push token from Flagship")
+            val issuedAt = System.currentTimeMillis()
+            val canonical = PushTokenRevoke.canonicalBytes(tokenId = tokenId, issuedAt = issuedAt)
+            val signature = HexUtil.encode(irk.sign(canonical))
+            client.revokePushToken(
+                PushTokenRevokeRequest(
+                    request = PushTokenRevokeRequest.Inner(tokenId = tokenId, issuedAt = issuedAt),
+                    signature = signature,
+                ),
+            )
         } catch (t: Throwable) {
             _lastError.value = t
         }

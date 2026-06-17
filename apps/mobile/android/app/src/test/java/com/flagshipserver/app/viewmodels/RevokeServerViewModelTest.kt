@@ -19,6 +19,7 @@ import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.ProvisionStatusRecord
 import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.PushTokenRegisterResponse
+import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.api.RePairCompleteResponse
@@ -183,7 +184,7 @@ class RevokeServerViewModelTest {
         override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope = throw error
         override suspend fun fetchWrappedUmkWithToken(username: String, fetchTokenHex: String, issuedAt: Long): GatedRecoveryEnvelope = throw error
         override suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse = throw error
-        override suspend fun revokePushToken(tokenId: String) { throw error }
+        override suspend fun revokePushToken(req: PushTokenRevokeRequest) { throw error }
         override suspend fun listDevices(username: String): TrustedDevicesListResponse = throw error
         override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse = throw error
         override suspend fun hasCloudRecovery(username: String): Boolean = throw error

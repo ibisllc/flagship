@@ -8,7 +8,12 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.api.TrustedDevice
+import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.PushTokenRevoke
+import com.flagshipserver.app.keystore.Keystore
+import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +22,11 @@ import kotlinx.coroutines.launch
 class TrustedDevicesViewModel(
     private val server: FlagshipServerClient,
     private val username: () -> String?,
+    /** Biometric-gated owner-IRK signer for the (now-authenticated)
+     *  push-token revoke — the SAME key .com verifies against. Injectable
+     *  so tests supply a deterministic key; defaults to deriveIRK. */
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
 
     sealed interface State {
@@ -68,7 +78,18 @@ class TrustedDevicesViewModel(
         // Optimistic.
         _state.value = State.Loaded(before.devices.filter { it.tokenId != device.tokenId })
         return try {
-            server.revokePushToken(device.tokenId)
+            // Revoke is IRK-signed (SEC): sign behind the biometric so .com
+            // can verify against the token owner's registered IRK before it
+            // deletes the tether.
+            val irk = signer("Disconnect ${device.label}")
+            val issuedAt = now()
+            val canonical = PushTokenRevoke.canonicalBytes(tokenId = device.tokenId, issuedAt = issuedAt)
+            server.revokePushToken(
+                PushTokenRevokeRequest(
+                    request = PushTokenRevokeRequest.Inner(tokenId = device.tokenId, issuedAt = issuedAt),
+                    signature = HexUtil.encode(irk.sign(canonical)),
+                ),
+            )
             // Refresh to pick up the new ETag + reflect server truth.
             val user = username() ?: return true
             val refreshed = server.listDevices(user)

@@ -67,10 +67,23 @@ public final class PushRegistrar: PushRegistrarHandle {
     public func revoke() async {
         guard let tokenId = Keystore.pushTokenId() else { return }
         do {
-            try await client.revokePushToken(tokenId: tokenId)
+            // Revoke is now IRK-signed (SEC): .com verifies the envelope
+            // against the token owner's registered IRK before deleting the
+            // tether. We sign behind the biometric, exactly like register.
+            let irk = try await Keystore.deriveIRK(reason: "Revoke push token from Flagship")
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let bytes = PushTokenRevoke.canonicalBytes(tokenId: tokenId, issuedAt: issuedAt)
+            let sig = try irk.signature(for: bytes)
+            try await client.revokePushToken(
+                PushTokenRevokeRequest(
+                    request: .init(tokenId: tokenId, issuedAt: issuedAt),
+                    signature: HexUtil.encode(Data(sig))
+                )
+            )
         } catch {
-            // Network blip during sign-out is non-fatal — the daemon
-            // can garbage-collect stale tokens on its own schedule.
+            // Network blip (or a declined biometric) during sign-out is
+            // non-fatal — the daemon can garbage-collect stale tokens on
+            // its own schedule.
             self.lastError = error
         }
         try? Keystore.setPushTokenId(nil)

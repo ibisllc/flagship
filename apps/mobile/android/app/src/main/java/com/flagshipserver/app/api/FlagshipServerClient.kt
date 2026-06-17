@@ -67,9 +67,13 @@ interface FlagshipServerClient {
     /** Register an FCM device token with .com so the Worker can relay
      *  encrypted push payloads. Returns a handle to later revoke. */
     suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse
-    /** Drop a previously-registered push token. 404 is success so
-     *  sign-out doesn't surface "already cleaned up" as an error. */
-    suspend fun revokePushToken(tokenId: String)
+    /** Drop a previously-registered push token. Revoke is IRK-signed
+     *  (SEC): the caller signs a `flagship/push-token-revoke/v1` envelope
+     *  behind the biometric (deriveIRK) and `.com` verifies it against the
+     *  token owner's registered IRK before deleting the tether. 404
+     *  (already gone) is success so sign-out doesn't surface "already
+     *  cleaned up" as an error. */
+    suspend fun revokePushToken(req: PushTokenRevokeRequest)
 
     /** List the peer-class trusted devices on the user's account.
      *  Returns the ETag the Worker computed so the caller can pass
@@ -994,6 +998,24 @@ data class PushTokenRegisterResponse(
     val tokenId: String,
 )
 
+/** `{ request, signature }` body for `DELETE /api/push/<token-id>`. Revoke
+ *  is IRK-signed (SEC): `.com` resolves the token owner from the stored row
+ *  and verifies this signature over `flagship/push-token-revoke/v1` before
+ *  deleting the tether, so a tokenId-knower can't silently kill a device's
+ *  push registration. `tokenId` here MUST equal the URL segment. Mirrors
+ *  the Worker's `RevokeBody` in packages/control-plane/src/push.ts. */
+@Serializable
+data class PushTokenRevokeRequest(
+    val request: Inner,
+    val signature: String,           // hex, IRK
+) {
+    @Serializable
+    data class Inner(
+        val tokenId: String,
+        val issuedAt: Long,
+    )
+}
+
 // ── Mock ──────────────────────────────────────────────────────────
 
 class MockFlagshipServerClient(
@@ -1235,9 +1257,9 @@ class MockFlagshipServerClient(
         return PushTokenRegisterResponse(ok = true, tokenId = id)
     }
 
-    override suspend fun revokePushToken(tokenId: String) {
+    override suspend fun revokePushToken(req: PushTokenRevokeRequest) {
         tick()
-        _registeredPushTokens.remove(tokenId)
+        _registeredPushTokens.remove(req.request.tokenId)
     }
 
     /** Scripted devices listing per username for tests + dev mode. */
@@ -1919,9 +1941,21 @@ class LiveFlagshipServerClient(
             responseSerializer = PushTokenRegisterResponse.serializer(),
         )
 
-    override suspend fun revokePushToken(tokenId: String) {
-        val encoded = java.net.URLEncoder.encode(tokenId, "UTF-8")
-        transport.deleteJson("$base/api/push/$encoded", accept = setOf(200, 204, 404))
+    override suspend fun revokePushToken(req: PushTokenRevokeRequest) {
+        val encoded = java.net.URLEncoder.encode(req.request.tokenId, "UTF-8")
+        // Revoke is now IRK-signed: ship the `{ request, signature }` body on
+        // the DELETE so .com can verify against the token owner's registered
+        // IRK before deleting the tether.
+        val body = transport.json
+            .encodeToString(PushTokenRevokeRequest.serializer(), req)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "DELETE",
+            url = "$base/api/push/$encoded",
+            body = body,
+            contentType = "application/json",
+            accept = setOf(200, 204, 404),
+        )
     }
 
     override suspend fun listDevices(username: String): TrustedDevicesListResponse {

@@ -281,6 +281,27 @@ object PushTokenRegister {
     ).joinToString("|").toByteArray()
 }
 
+/**
+ * Push-token REVOKE canonical bytes — mirror of packages/protocol/src/auth.ts
+ * `TAG_PUSH_TOKEN_REVOKE`. Revoke is IRK-signed (SEC): `.com` resolves the
+ * token's owner from the stored row, looks up that user's registered IRK pub,
+ * and verifies this signature before deleting the device's push tether — a
+ * tokenId-knower can no longer silently kill a device's push registration.
+ *
+ *   flagship/push-token-revoke/v1|<tokenId>|<issuedAt>
+ *
+ * Byte-identical to the TS + Swift mirrors + the webapp — pinned by
+ * PushTokenRevokeCanonicalBytesTest here and
+ * packages/protocol/tests/pushTokenRevoke.test.ts.
+ */
+object PushTokenRevoke {
+    const val CANONICAL_TAG = "flagship/push-token-revoke/v1"
+
+    fun canonicalBytes(tokenId: String, issuedAt: Long): ByteArray = listOf(
+        CANONICAL_TAG, tokenId, issuedAt.toString()
+    ).joinToString("|").toByteArray()
+}
+
 object HexUtil {
     fun encode(data: ByteArray): String {
         val sb = StringBuilder(data.size * 2)

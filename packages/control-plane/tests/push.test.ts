@@ -7,6 +7,7 @@ import {
   ed,
   signPushRelayRequest,
   signPushTokenRegister,
+  signPushTokenRevoke,
   type Keypair,
   type PushRelayRequest,
 } from "@flagship/protocol";
@@ -560,13 +561,17 @@ describe("/api/push/relay (SEC-2 STK-signed)", () => {
   });
 });
 
-describe("/api/push/<token-id>", () => {
-  it("DELETE removes the token", async () => {
-    const usernames = new InMemoryUsernameStorage();
-    const pushTokens = new InMemoryPushTokenStorage();
+describe("/api/push/<token-id> revoke (IRK-signed)", () => {
+  const NOW = 1_700_000_000_000;
+
+  async function seedToken(
+    pushTokens: InMemoryPushTokenStorage,
+    tokenId: string,
+    username: string,
+  ) {
     await pushTokens.put({
-      tokenId: "tok1",
-      username: "alice",
+      tokenId,
+      username,
       platform: "apns",
       providerToken: "x",
       pushX25519PubHex: "01".repeat(32),
@@ -575,7 +580,119 @@ describe("/api/push/<token-id>", () => {
       registeredAt: 0,
       lastSeenAt: 0,
     });
-    await handlePushRevoke({ pushTokens, usernames }, "tok1", undefined);
+  }
+
+  it("rejects an unauthenticated DELETE (no envelope) and keeps the token", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    await seedToken(pushTokens, "tok1", "alice");
+
+    const r = await handlePushRevoke({ pushTokens, usernames }, "tok1", undefined);
+    expect(r.status).toBe(403);
+    // The vulnerability: this MUST NOT have deleted the row.
+    expect(await pushTokens.get("tok1")).toBeDefined();
+  });
+
+  it("a valid owner-signed envelope revokes the token", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    await seedToken(pushTokens, "tok1", "alice");
+
+    const claim = { tokenId: "tok1", issuedAt: NOW };
+    const sig = signPushTokenRevoke(claim, irk);
+    const r = await handlePushRevoke(
+      { pushTokens, usernames, now: () => NOW },
+      "tok1",
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
     expect(await pushTokens.get("tok1")).toBeUndefined();
+  });
+
+  it("rejects a signature from a DIFFERENT user's IRK", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const alice = makeIrk(); await seed(usernames, "alice", alice);
+    const mallory = makeIrk(); await seed(usernames, "mallory", mallory);
+    await seedToken(pushTokens, "tok1", "alice");
+
+    // Mallory signs a revoke for Alice's token with HER own IRK.
+    const claim = { tokenId: "tok1", issuedAt: NOW };
+    const sig = signPushTokenRevoke(claim, mallory);
+    const r = await handlePushRevoke(
+      { pushTokens, usernames, now: () => NOW },
+      "tok1",
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(403);
+    expect(await pushTokens.get("tok1")).toBeDefined();
+  });
+
+  it("rejects a stale issuedAt", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    await seedToken(pushTokens, "tok1", "alice");
+
+    const stale = { tokenId: "tok1", issuedAt: NOW - 10 * 60_000 };
+    const sig = signPushTokenRevoke(stale, irk);
+    const r = await handlePushRevoke(
+      { pushTokens, usernames, now: () => NOW },
+      "tok1",
+      { request: stale, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(403);
+    expect(await pushTokens.get("tok1")).toBeDefined();
+  });
+
+  it("rejects a signature aimed at a DIFFERENT token (path mismatch)", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    await seedToken(pushTokens, "tok1", "alice");
+    await seedToken(pushTokens, "tok2", "alice");
+
+    // A captured valid envelope for tok2 replayed against the tok1 URL.
+    const claim = { tokenId: "tok2", issuedAt: NOW };
+    const sig = signPushTokenRevoke(claim, irk);
+    const r = await handlePushRevoke(
+      { pushTokens, usernames, now: () => NOW },
+      "tok1",
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(403);
+    expect(await pushTokens.get("tok1")).toBeDefined();
+  });
+
+  it("admin override removes any token without a signature", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    await seedToken(pushTokens, "tok1", "alice");
+
+    const r = await handlePushRevoke(
+      { pushTokens, usernames },
+      "tok1",
+      undefined,
+      { isAdmin: true },
+    );
+    expect(r.status).toBe(200);
+    expect(await pushTokens.get("tok1")).toBeUndefined();
+  });
+
+  it("an unknown token with a well-formed envelope is an idempotent no-op", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+
+    const claim = { tokenId: "ghost", issuedAt: NOW };
+    const sig = signPushTokenRevoke(claim, irk);
+    const r = await handlePushRevoke(
+      { pushTokens, usernames, now: () => NOW },
+      "ghost",
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
   });
 });

@@ -101,12 +101,21 @@ class LiveFlagshipServerClientTest {
         assertEquals("tok_42", r.tokenId)
     }
 
-    @Test fun revokePushToken_sendsDeleteAndTolerates404() = runTest {
+    @Test fun revokePushToken_sendsSignedDeleteAndTolerates404() = runTest {
         server.enqueue(MockResponse().setResponseCode(404))
-        client.revokePushToken("tok_42")
+        client.revokePushToken(
+            PushTokenRevokeRequest(
+                request = PushTokenRevokeRequest.Inner(tokenId = "tok_42", issuedAt = 1_700_000_000_000L),
+                signature = "ab".repeat(64),
+            ),
+        )
         val rec = server.takeRequest()
         assertEquals("DELETE", rec.method)
         assertEquals("/api/push/tok_42", rec.path)
+        // The revoke now ships the signed `{ request, signature }` envelope.
+        val body = rec.body.readUtf8()
+        assertTrue(body.contains("\"tokenId\":\"tok_42\""))
+        assertTrue(body.contains("\"signature\""))
     }
 
     @Test fun http500_throwsHttpException() = runTest {

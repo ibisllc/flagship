@@ -80,11 +80,16 @@ class MockFlagshipServerClientTest {
         assertTrue(resp.ok)
         assertNotNull(c.registeredPushTokens[resp.tokenId])
         assertEquals("Pixel 8 — kitchen", c.registeredPushTokens[resp.tokenId]?.label)
-        c.revokePushToken(resp.tokenId)
+        c.revokePushToken(revokeReq(resp.tokenId))
         assertNull(c.registeredPushTokens[resp.tokenId])
         // revoking a missing tokenId is a no-op (no throw)
-        c.revokePushToken(resp.tokenId)
+        c.revokePushToken(revokeReq(resp.tokenId))
     }
+
+    private fun revokeReq(tokenId: String) = PushTokenRevokeRequest(
+        request = PushTokenRevokeRequest.Inner(tokenId = tokenId, issuedAt = 100L),
+        signature = "00",
+    )
 
     @Test fun usernameAvailable_rejectsReservedAndShort() = runTest {
         val c = make()

@@ -63,10 +63,15 @@ public protocol FlagshipServerClient: Sendable {
     /// (or retry) encrypted push payloads to this device. The returned
     /// tokenId is the handle to later revoke the registration.
     func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse
-    /// Drop a previously-registered push token. 404 (already gone) is
-    /// treated as success by both Mock + Live implementations so a
-    /// sign-out path doesn't surface "already cleaned up" as an error.
-    func revokePushToken(tokenId: String) async throws
+    /// Drop a previously-registered push token. Revoke is IRK-signed
+    /// (SEC): the caller signs a `flagship/push-token-revoke/v1` envelope
+    /// behind the biometric (deriveIRK) and `.com` verifies it against the
+    /// token owner's registered IRK before deleting the tether — a
+    /// tokenId-knower can no longer silently kill a device's push
+    /// registration. 404 (already gone) is treated as success by both Mock
+    /// + Live so a sign-out path doesn't surface "already cleaned up" as an
+    /// error.
+    func revokePushToken(_ req: PushTokenRevokeRequest) async throws
 
     /// Phase 3b — vouched cross-device admit. The incoming (collaborator)
     /// device POSTs the admin-signed `DeviceAdmit` envelope + its own
@@ -885,6 +890,26 @@ public struct PushTokenRegisterResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let tokenId: String
     public init(ok: Bool, tokenId: String) { self.ok = ok; self.tokenId = tokenId }
+}
+
+/// `{ request, signature }` body for `DELETE /api/push/<token-id>`. Revoke
+/// is IRK-signed (SEC): `.com` resolves the token owner from the stored row
+/// and verifies this signature over `flagship/push-token-revoke/v1` before
+/// deleting the tether. The `tokenId` here MUST equal the URL segment.
+/// Mirrors the Worker's `RevokeBody` in packages/control-plane/src/push.ts.
+public struct PushTokenRevokeRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let tokenId: String
+        public let issuedAt: Int64
+        public init(tokenId: String, issuedAt: Int64) {
+            self.tokenId = tokenId; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String               // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
 }
 
 /// Phase 3b — POST /api/users/<account>/devices/admit body. Carries the
@@ -2019,12 +2044,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return PushTokenRegisterResponse(ok: true, tokenId: id)
     }
 
-    public func revokePushToken(tokenId: String) async throws {
+    public func revokePushToken(_ req: PushTokenRevokeRequest) async throws {
         try await tick()
         // 404 is intentionally success: revoking an already-revoked
         // (or never-registered) token shouldn't fail the caller's
         // sign-out flow.
-        registeredPushTokens.removeValue(forKey: tokenId)
+        registeredPushTokens.removeValue(forKey: req.request.tokenId)
     }
 
     /// Phase 3b — the 14-day quarantine the Worker stamps on a vouched
@@ -2821,11 +2846,13 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try await postJsonReturning("/api/push/register", body: body)
     }
 
-    public func revokePushToken(tokenId: String) async throws {
-        let encoded = tokenId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tokenId
-        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/push/\(encoded)"))
-        req.httpMethod = "DELETE"
-        let (data, resp) = try await urlSession.data(for: req)
+    public func revokePushToken(_ req: PushTokenRevokeRequest) async throws {
+        let encoded = req.request.tokenId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.tokenId
+        var httpReq = URLRequest(url: baseUrl.appendingPathComponent("/api/push/\(encoded)"))
+        httpReq.httpMethod = "DELETE"
+        httpReq.setValue("application/json", forHTTPHeaderField: "content-type")
+        httpReq.httpBody = try JSONEncoder().encode(req)
+        let (data, resp) = try await urlSession.data(for: httpReq)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if status == 200 || status == 204 || status == 404 { return }
         let text = String(data: data, encoding: .utf8) ?? ""

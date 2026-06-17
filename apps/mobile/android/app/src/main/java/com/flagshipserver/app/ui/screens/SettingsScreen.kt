@@ -45,9 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.api.PushTokenRevokeRequest
+import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.PushTokenRevoke
 import com.flagshipserver.app.core.SignOutPolicy
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSAnnouncementCard
@@ -404,11 +407,24 @@ fun SettingsScreen(nav: NavController) {
                     TextButton(onClick = {
                         showRemoveConfirm = false
                         scope.launch {
-                            // Best-effort push revoke (network failure
-                            // tolerated — local wipe still proceeds).
+                            // Best-effort push revoke (network failure OR a
+                            // declined biometric tolerated — local wipe still
+                            // proceeds). Revoke is IRK-signed (SEC): sign the
+                            // envelope so .com verifies against the token
+                            // owner's registered IRK before deleting it.
                             val tokenId = Keystore.pushTokenId()
                             if (!tokenId.isNullOrEmpty()) {
-                                runCatching { server.revokePushToken(tokenId) }
+                                runCatching {
+                                    val irk = Keystore.deriveIRK(reason = "Remove this device from Flagship")
+                                    val issuedAt = System.currentTimeMillis()
+                                    val canonical = PushTokenRevoke.canonicalBytes(tokenId = tokenId, issuedAt = issuedAt)
+                                    server.revokePushToken(
+                                        PushTokenRevokeRequest(
+                                            request = PushTokenRevokeRequest.Inner(tokenId = tokenId, issuedAt = issuedAt),
+                                            signature = HexUtil.encode(irk.sign(canonical)),
+                                        ),
+                                    )
+                                }
                             }
                             Keystore.wipe()
                             Keystore.setPushTokenId(null)

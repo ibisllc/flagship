@@ -1957,11 +1957,20 @@ export async function tryControlPlane(
     );
   }
   if (method === "DELETE" && (m = path.match(ROUTE_RE.PUSH_REVOKE))) {
+    // Admin override: only when the x-admin-secret header is present AND
+    // matches. A present-but-wrong header is NOT admin (and is NOT a hard
+    // 401/503 here) — it simply falls through to the owner-signed path,
+    // which fails closed on its own if no valid envelope is supplied.
+    const adminHeader = request.headers.get("x-admin-secret");
+    const isAdmin =
+      adminHeader != null &&
+      authorizeAdmin({ expected: env.FLAGSHIP_ADMIN_SECRET, provided: adminHeader }) === null;
     return finish(
       await handlePushRevoke(
         { pushTokens: storage.pushTokens, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
         await readJson(request),
+        { isAdmin },
       ),
     );
   }

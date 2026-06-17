@@ -3,6 +3,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
+import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -24,6 +25,13 @@ class TrustedDevicesViewModelTest {
     @After fun tearDownDispatcher() { Dispatchers.resetMain() }
 
     private fun makeServer(): MockFlagshipServerClient = MockFlagshipServerClient(simulatedLatencyMs = 0)
+
+    /** Deterministic IRK signer so the (now-authenticated) disconnect
+     *  doesn't hit the biometric-gated Keystore in a JVM unit test. */
+    private fun fakeSigner(): suspend (String) -> Ed25519Sign {
+        val key = Ed25519Sign(ByteArray(32) { 0x11 })
+        return { _ -> key }
+    }
 
     private fun device(tokenId: String, label: String, addedAt: Long = 1L): TrustedDevice =
         TrustedDevice(
@@ -69,7 +77,7 @@ class TrustedDevicesViewModelTest {
     @Test fun disconnect_optimisticallyRemovesAndReturnsTrue() = runTest {
         val server = makeServer()
         server.devicesByUser = mapOf("harry" to listOf(device("tA", "iPhone")))
-        val vm = TrustedDevicesViewModel(server = server, username = { "harry" })
+        val vm = TrustedDevicesViewModel(server = server, username = { "harry" }, signer = fakeSigner())
         vm.load()
         advanceUntilIdle()
         // Drop the row from the Mock so the refresh confirms the
@@ -86,7 +94,7 @@ class TrustedDevicesViewModelTest {
     @Test fun disconnect_revertsListOnServerError() = runTest {
         val server = makeServer()
         server.devicesByUser = mapOf("harry" to listOf(device("tA", "iPhone")))
-        val vm = TrustedDevicesViewModel(server = server, username = { "harry" })
+        val vm = TrustedDevicesViewModel(server = server, username = { "harry" }, signer = fakeSigner())
         vm.load()
         advanceUntilIdle()
         server.shouldFail = true

@@ -10,6 +10,8 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession, unlockSession } from "../lib/state.js";
+import { bytesToHex, signWithIrk } from "../keystore.js";
+import { canonicalPushRevoke } from "../lib/push.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import {
@@ -105,13 +107,26 @@ async function fetchPendingRePairSnapshot() {
 }
 
 async function disconnectDevice(device) {
-  // Same DELETE endpoint mobile uses. Webapp doesn't sign the request
-  // body (mobile does for IRK proof) — the Worker accepts un-signed
-  // DELETE today (per packages/control-plane/src/push.ts comment).
-  // A future commit can layer an IRK signature via the umk in
-  // localStorage if available.
+  // Same DELETE endpoint mobile uses. Revoke is now AUTHENTICATED: .com
+  // verifies an IRK-signed `flagship/push-token-revoke/v1` envelope against
+  // the token owner's registered IRK before deleting the tether (so a
+  // tokenId-knower can't silently kill a device's push registration). We
+  // sign with the session's in-memory UMK-derived IRK, exactly like the
+  // webapp's other signed calls (journal / lock-and-power).
+  const session = getSession();
+  if (!session?.umk) throw new Error("unlock the webapp first");
+  const issuedAt = Date.now();
+  const sig = await signWithIrk(
+    session.umk,
+    canonicalPushRevoke({ tokenId: device.tokenId, issuedAt }),
+  );
   const r = await fetch(`${COM_BASE}/api/push/${encodeURIComponent(device.tokenId)}`, {
     method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      request: { tokenId: device.tokenId, issuedAt },
+      signature: bytesToHex(sig),
+    }),
   });
   if (!r.ok && r.status !== 404) {
     throw new Error(`Disconnect failed (${r.status})`);
