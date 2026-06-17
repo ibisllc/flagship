@@ -59,7 +59,7 @@ npx vitest run                                  # everything (~30s)
 npx tsc -b                                      # typecheck the whole tree
 
 # Deploy
-npx tsc -b && (cd apps/com && npx wrangler deploy)   # Worker — tsc -b FIRST: it bundles the BUILT control-plane dist/, so a deploy without a rebuild silently ships stale handler logic
+npx tsc -b && (cd apps/com && npm run deploy)   # Worker — tsc -b FIRST: it bundles the BUILT control-plane dist/, so a deploy without a rebuild silently ships stale handler logic. Use `npm run deploy` (NOT `wrangler deploy` directly): it runs the `predeploy` guard (scripts/predeploy-com.sh — route-safety + dist-freshness)
 export PATH="$HOME/.fly/bin:$PATH"
 flyctl deploy --remote-only --strategy=immediate --yes -a flagship-services
 
