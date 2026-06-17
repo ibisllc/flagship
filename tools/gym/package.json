@@ -1,0 +1,17 @@
+{
+  "name": "@flagship/gym",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "UI test gym harness — a deterministic gate (scripted handle-taps + assertions + screenshots) with pluggable, advisory short-AI judge/navigator hooks. See docs/ui-test-gym.md (G3).",
+  "main": "./src/cli.ts",
+  "bin": {
+    "gym": "./src/cli.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests",
+    "gym": "tsx src/cli.ts"
+  },
+  "license": "BUSL-1.1"
+}

@@ -11,7 +11,8 @@
     "apps/web/e2e",
     "apps/com",
     "apps/boot",
-    "apps/dns-broker"
+    "apps/dns-broker",
+    "tools/gym"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -21,7 +22,10 @@
     "daemon": "npm --workspace=@flagship/server-daemon run start",
     "build-image": "npm --workspace=@flagship/bootkey-builder run start --",
     "web": "npm --workspace=@flagship/web run dev",
-    "predeploy:check": "bash scripts/predeploy-com.sh"
+    "predeploy:check": "bash scripts/predeploy-com.sh",
+    "gym": "npm --workspace=@flagship/gym run gym --",
+    "gym:every-merge": "npm --workspace=@flagship/gym run gym -- every-merge",
+    "gym:total": "npm --workspace=@flagship/gym run gym -- total"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

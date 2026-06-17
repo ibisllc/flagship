@@ -15,6 +15,7 @@
     { "path": "./packages/flagship-burner" },
     { "path": "./apps/web" },
     { "path": "./tools/vps-e2e" },
-    { "path": "./tools/unseal-crosscheck" }
+    { "path": "./tools/unseal-crosscheck" },
+    { "path": "./tools/gym" }
   ]
 }

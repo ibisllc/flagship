@@ -22,6 +22,7 @@
 		52740C43DE82D908A417150D /* FlagshipAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */; };
 		598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */; };
 		6B1F3A5CBAD6B75C65A23FC8 /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
+		7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */; };
 		7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */; };
 		816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */; };
 		834D62D11BC2D886AD2C5EEB /* FlagshipWatchWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */; };
@@ -7917,6 +7918,7 @@
 		D6C547B04F6D0758C2676071 /* AccountSecurityViewModel.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = AccountSecurityViewModel.o; sourceTree = "<group>"; };
 		D6D958606E86579F7B3BBE08 /* UIGeometry.h-W5CTT1VZUPD */ = {isa = PBXFileReference; path = "UIGeometry.h-W5CTT1VZUPD"; sourceTree = "<group>"; };
 		D6FC3DE46C86FA18B6D963E8 /* HomeViewModel.dia */ = {isa = PBXFileReference; path = HomeViewModel.dia; sourceTree = "<group>"; };
+		D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSmokeTests.swift; sourceTree = "<group>"; };
 		D6FE24ACE06F446943598137 /* SettingsScreen.swift-SFXB398YKIBA */ = {isa = PBXFileReference; path = "SettingsScreen.swift-SFXB398YKIBA"; sourceTree = "<group>"; };
 		D7010FF258D09F0A491B3246 /* endpoint.h-21ENJCU6IXHUW */ = {isa = PBXFileReference; path = "endpoint.h-21ENJCU6IXHUW"; sourceTree = "<group>"; };
 		D71C654F45EB10DDE3569B0F /* BootAuth.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = BootAuth.d; sourceTree = "<group>"; };
@@ -9411,10 +9413,10 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_5A18DF0B-23B0-4468-A575-385C0A33433B" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_89223B11-7D5B-48AB-8F03-38B9B830A546" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_F59DE5F7-DD9D-42FD-8FB9-39DC7CBCA120" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_FAC2FC66-51A9-46CE-805D-9EB5B068EBD0" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_02F6E33D-0FAB-4363-B9D3-83B96526F373" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_A7F759AA-5193-411B-B136-72846F8A7686" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_C86874CF-A933-4C97-AFF7-512A282D9FB6" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_EBA25F81-A664-4308-8AB5-5A48F05DA221" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37145,6 +37147,7 @@
 		F51043E76B25BB084043EA15 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */,
 				8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */,
 			);
 			path = UITests;
@@ -38435,13 +38438,13 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_EFFFD03B-99D0-482E-82D9-469721196C5A" /* . */ = {
+		"TEMP_2373D8E4-BAA6-46CF-8600-253076A64CA3" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_89223B11-7D5B-48AB-8F03-38B9B830A546" /* project.yml */,
-				"TEMP_5A18DF0B-23B0-4468-A575-385C0A33433B" /* FlagshipApp.xcodeproj */,
-				"TEMP_FAC2FC66-51A9-46CE-805D-9EB5B068EBD0" /* FlagshipApp.entitlements */,
-				"TEMP_F59DE5F7-DD9D-42FD-8FB9-39DC7CBCA120" /* Info.plist */,
+				"TEMP_C86874CF-A933-4C97-AFF7-512A282D9FB6" /* project.yml */,
+				"TEMP_A7F759AA-5193-411B-B136-72846F8A7686" /* FlagshipApp.xcodeproj */,
+				"TEMP_EBA25F81-A664-4308-8AB5-5A48F05DA221" /* FlagshipApp.entitlements */,
+				"TEMP_02F6E33D-0FAB-4363-B9D3-83B96526F373" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -38641,6 +38644,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */,
 				E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38730,7 +38734,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Flagship uses NFC to pair a new Flagship box by tapping your phone to it.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -38934,7 +38937,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Flagship uses NFC to pair a new Flagship box by tapping your phone to it.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
