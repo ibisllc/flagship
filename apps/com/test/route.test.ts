@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { route, _internal, type RouteEnv } from "../src/route.js";
+import { handleCaLeaseStatus } from "@flagship/control-plane";
 
 interface CapturedFetch {
   url: string;
@@ -577,21 +578,58 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(body.recorded).toBe(true);
   });
 
-  it("/api/admin/ca-lease-status reports 'none' when no endorsement lease is active", async () => {
-    const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "s3cret" });
-    const r = await route(
-      new Request("https://flagshipserver.com/api/admin/ca-lease-status", {
-        headers: { "x-admin-secret": "s3cret" },
-      }),
-      env,
-    );
-    expect(r.status).toBe(200);
-    const body = JSON.parse(await r.text());
-    // The committed bundle's only endorsement lapsed 2026-06-02, so at the
-    // real `now` there is no active lease ⇒ severity "none".
-    expect(body.severity).toBe("none");
-    expect(body.hasActiveLease).toBe(false);
-    expect(body.soonestNotAfterIso).toBeNull();
+  // The handler resolves "now" and the active leases via injected deps, so
+  // these exercise it against CONTROLLED inputs — frozen now + a controlled
+  // notAfter list — rather than the real committed bundle at the wall-clock
+  // (whose only endorsement lapsed 2026-06-02, making any real-`now`/real-
+  // bundle assertion go red by calendar). Behavior of the handler is
+  // unchanged; we just feed it deterministic deps.
+  describe("/api/admin/ca-lease-status (handler logic, date-independent)", () => {
+    const NOW = Date.parse("2026-06-01T00:00:00.000Z");
+    const DAY = 24 * 60 * 60 * 1000;
+
+    async function status(activeNotAfterMs: number[]) {
+      return handleCaLeaseStatus({
+        activeLeaseNotAfterMs: () => activeNotAfterMs,
+        now: () => NOW,
+      });
+    }
+
+    it("reports 'none' when no endorsement lease is active", async () => {
+      const r = await status([]);
+      expect(r.status).toBe(200);
+      expect(r.body.severity).toBe("none");
+      expect(r.body.hasActiveLease).toBe(false);
+      expect(r.body.soonestNotAfterMs).toBeNull();
+      expect(r.body.soonestNotAfterIso).toBeNull();
+    });
+
+    it("reports 'ok' when the soonest lease is beyond the warn window", async () => {
+      const notAfter = NOW + 30 * DAY; // > 7-day threshold
+      const r = await status([notAfter, NOW + 60 * DAY]);
+      expect(r.body.severity).toBe("ok");
+      expect(r.body.hasActiveLease).toBe(true);
+      expect(r.body.soonestNotAfterMs).toBe(notAfter);
+      expect(r.body.soonestNotAfterIso).toBe(new Date(notAfter).toISOString());
+    });
+
+    it("reports 'warn' when the soonest lease lapses within the threshold", async () => {
+      const notAfter = NOW + 3 * DAY; // inside the 7-day default threshold
+      const r = await status([NOW + 60 * DAY, notAfter]);
+      expect(r.body.severity).toBe("warn");
+      expect(r.body.hasActiveLease).toBe(true);
+      expect(r.body.soonestNotAfterMs).toBe(notAfter);
+      expect(r.body.msUntilExpiry).toBe(3 * DAY);
+    });
+
+    it("reports 'expired' when the soonest lease's notAfter has passed", async () => {
+      const notAfter = NOW - DAY; // already lapsed at the frozen now
+      const r = await status([notAfter, NOW + 60 * DAY]);
+      expect(r.body.severity).toBe("expired");
+      expect(r.body.hasActiveLease).toBe(true);
+      expect(r.body.soonestNotAfterMs).toBe(notAfter);
+      expect(r.body.msUntilExpiry).toBeLessThanOrEqual(0);
+    });
   });
 });
 
