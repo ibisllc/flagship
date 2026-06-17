@@ -8,7 +8,7 @@ import {
 } from "../lib/uikit.js";
 import { tickRenewals } from "../lib/leases.js";
 import { activeOperations } from "../lib/activeOperations.js";
-import { $, registerView, show, setSubtitle } from "../lib/router.js";
+import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
@@ -803,6 +803,7 @@ export async function renderHome() {
     // first server. Otherwise we guide them to open an account / build.
     renderEmptyServersList(list, { reason: "unpaired", username: session.username });
     activeOperations.syncDeployOperations([]);
+    stopApprovalPoll();
     return;
   }
   try {
@@ -828,6 +829,7 @@ export async function renderHome() {
     if (!body.servers.length && !pendingOrders.length) {
       renderEmptyServersList(list, { reason: "no-servers", username: session.username });
       activeOperations.syncDeployOperations([]);
+      stopApprovalPoll();
       return;
     }
 
@@ -893,6 +895,11 @@ export async function renderHome() {
     // Reconcile the sliver's deploy operations against this tick's pending
     // set. Build operations (vibe-code) are untouched.
     activeOperations.syncDeployOperations(deployPods);
+    // L9 — arm the 5s account-level approval poll (parity with iOS/Android) so
+    // a box that starts waiting AFTER this paint surfaces its Approve
+    // affordance on its own. Seeded with THIS tick's set so it only repaints on
+    // a genuine change; cleared on navigation away (flagship:view-shown) + lock.
+    startApprovalPoll(awaitingApproval);
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user
@@ -911,6 +918,7 @@ export async function renderHome() {
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
     activeOperations.syncDeployOperations([]);
+    stopApprovalPoll();
   }
 }
 
@@ -1075,4 +1083,69 @@ export function stopRenewals() {
   if (renewalTimer) clearInterval(renewalTimer);
   renewalTimer = null;
   renewalLastServerList = null;
+  stopApprovalPoll();
+}
+
+// ── L9 — account-level boot-approval poll (parity with iOS/Android) ──
+//
+// iOS runs BootApprovalWatcher's ~5s `/pods`-driven loop while Home is on
+// screen (HomeTab.swift `.onAppear` start / `.onDisappear` stop); Android
+// runs the same cadence in a `LaunchedEffect` on HomeTab. The webapp used to
+// fetch the awaiting-approval set ONCE per renderHome(), so a box that started
+// waiting AFTER Home painted never surfaced its "Approve unlock" affordance
+// until the next manual refresh. This adds the matching 5s poll: while Home is
+// visible we re-fetch the awaiting set and, only when it actually changes,
+// repaint Home so a waiting box lights up (and a now-unlocked one clears) on
+// its own. The interval is cleared the moment we navigate away (and on lock).
+export const APPROVAL_POLL_MS = 5_000;
+let approvalPollTimer = null;
+// Churn-free change detection: a stable sorted-key signature of the last
+// awaiting set we acted on, so a steady re-poll never triggers a needless
+// repaint (mirrors iOS comparing the published Set before re-rendering).
+let approvalPollLastSig = null;
+
+/** A stable signature for an awaiting-approval Set (sorted, joined). */
+function approvalSetSignature(set) {
+  return [...set].sort().join("|");
+}
+
+/** Re-fetch the awaiting set; repaint Home only if it changed. Best-effort —
+ *  a failure yields an empty set from fetchAwaitingApprovalSet, which the
+ *  signature compare treats as "no waiting box" (cards fall back to the
+ *  age-based grace classification on the next paint). */
+async function pollApprovalsOnce() {
+  const set = await fetchAwaitingApprovalSet();
+  const sig = approvalSetSignature(set);
+  if (sig === approvalPollLastSig) return;
+  approvalPollLastSig = sig;
+  // Only repaint while Home is still the active view (the interval may fire
+  // once more in flight as we navigate away).
+  if (currentViewId() === "view-home") await renderHome();
+}
+
+/** Arm the 5s approval poll. Seeds the change-detection signature with the
+ *  current set so the first interval only repaints on a genuine change. */
+function startApprovalPoll(initialSet) {
+  approvalPollLastSig = approvalSetSignature(initialSet ?? new Set());
+  if (approvalPollTimer) clearInterval(approvalPollTimer);
+  approvalPollTimer = setInterval(() => {
+    void pollApprovalsOnce().catch(() => {});
+  }, APPROVAL_POLL_MS);
+}
+
+/** Disarm the approval poll (navigation away from Home, or lock). */
+export function stopApprovalPoll() {
+  if (approvalPollTimer) clearInterval(approvalPollTimer);
+  approvalPollTimer = null;
+  approvalPollLastSig = null;
+}
+
+// Clear the poll the moment any view OTHER than Home takes the stage. renderHome
+// (re-)arms it on entry, so this only needs to handle leaving Home. Guarded for
+// the headless unit environment (home.js is imported for its pure functions in
+// `node` vitest, where there's no `document`).
+if (typeof document !== "undefined") {
+  document.addEventListener("flagship:view-shown", (ev) => {
+    if (ev.detail?.id !== "view-home") stopApprovalPoll();
+  });
 }
