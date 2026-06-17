@@ -20,6 +20,7 @@
 //      we mark the draft and tear down.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { toast } from "../lib/toast.js";
@@ -202,9 +203,9 @@ function renderDraftList(drafts) {
     b.addEventListener("click", (e) => {
       const action = e.currentTarget.getAttribute("data-action");
       const id = e.currentTarget.getAttribute("data-id");
-      if (action === "resume") resumeDraft(id).catch((err) => toast(String(err), "err"));
+      if (action === "resume") resumeDraft(id).catch((err) => { console.error(err); toast(humanError(err), "err"); });
       else if (action === "cancel-server") {
-        cancelServer(id).catch((err) => toast(String(err), "err"));
+        cancelServer(id).catch((err) => { console.error(err); toast(humanError(err), "err"); });
       } else if (action === "delete") {
         (async () => {
           const { inlineConfirm } = await import("../lib/modal.js");
@@ -214,7 +215,7 @@ function renderDraftList(drafts) {
             danger: true,
           });
           if (!ok) return;
-          deleteDraft(id).then(refreshDrafts).catch((err) => toast(String(err), "err"));
+          deleteDraft(id).then(refreshDrafts).catch((err) => { console.error(err); toast(humanError(err), "err"); });
         })();
       }
     });
@@ -328,7 +329,8 @@ async function refreshDrafts() {
     if (myGen !== _refreshGen) return;
     renderDraftList(drafts);
   } catch (e) {
-    toast(String(e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -456,7 +458,8 @@ async function handleSaveDraft() {
     toast("draft saved");
     await refreshDrafts();
   } catch (e) {
-    toast(String(e.message || e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -468,7 +471,7 @@ async function handleDeliverNow() {
   }
   let inputs;
   try { inputs = readInputs(); }
-  catch (e) { return toast(String(e.message || e), "err"); }
+  catch (e) { console.error(e); return toast(humanError(e), "err"); }
 
   // Phase 2: the account is now opened FIRST (standalone username claim
   // + device bind), so by the time the user reaches "Add a server" the
@@ -481,7 +484,7 @@ async function handleDeliverNow() {
 
   let qrUrl;
   try { qrUrl = parseQrUrl($("cs-relay-session").value); }
-  catch (e) { return toast(String(e.message || e), "err"); }
+  catch (e) { console.error(e); return toast(humanError(e), "err"); }
 
   setStatus("active", "minting install blob…");
   let blobBundle;
@@ -793,7 +796,7 @@ function wireServerNameValidation() {
 export function initCreateServerView() {
   wireServerNameValidation();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
-  $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => toast(String(e), "err")));
+  $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-open-build")?.addEventListener("click", () => {
     window.open("https://flagshipserver.com/", "_blank");
   });

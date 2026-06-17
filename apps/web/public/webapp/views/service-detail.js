@@ -148,7 +148,7 @@ export async function renderServiceDetail(serviceId) {
 
     $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
     $("sd-open-browser")?.addEventListener("click", () => {
-      enterBrowserViewer(s.serviceId).catch((e) => toast(String(e), "err"));
+      enterBrowserViewer(s.serviceId).catch((e) => { console.error(e); toast(humanError(e), "err"); });
     });
     $("sd-configure-env")?.addEventListener("click", async () => {
       const { enterServiceEnv } = await import("./service-env.js");
@@ -212,7 +212,7 @@ export function initServiceDetailView() {
     await enterServicesList();
   });
   $("service-detail-refresh")?.addEventListener("click", () => {
-    if (currentServiceId) renderServiceDetail(currentServiceId).catch((e) => toast(String(e), "err"));
+    if (currentServiceId) renderServiceDetail(currentServiceId).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 
@@ -446,7 +446,7 @@ function startCooldownTicker() {
 
 function bindCustomDomainsHandlers() {
   $("sd-cd-add")?.addEventListener("click", () => {
-    submitCustomDomain().catch((e) => toast(String(e?.message ?? e), "err"));
+    submitCustomDomain().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   if (cdCooldownRemainingMs() > 0) startCooldownTicker();
 }

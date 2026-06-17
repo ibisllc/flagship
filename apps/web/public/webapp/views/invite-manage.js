@@ -12,6 +12,7 @@
 // state ("no pending invites yet" rather than "tracked locally").
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -145,7 +146,8 @@ async function onRevokeInvite(app, inviteId, tag) {
     toast("invite revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
-    toast(String(e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -159,7 +161,8 @@ async function onRevokeAccess(app, irkPubHex, tag) {
     toast("access revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
-    toast(String(e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
@@ -173,7 +176,7 @@ export function initInviteManageView() {
     }
   });
   $("invite-manage-refresh")?.addEventListener("click", () => {
-    if (currentApp) renderInviteManage(currentApp).catch((e) => toast(String(e), "err"));
+    if (currentApp) renderInviteManage(currentApp).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

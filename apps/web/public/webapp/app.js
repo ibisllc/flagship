@@ -12,6 +12,7 @@
 import { hasWrappedUmk } from "./keystore.js";
 import { setSubtitle, show, $, registerView, setViewTab, isDebug, currentViewId } from "./lib/router.js";
 import { toast } from "./lib/toast.js";
+import { humanError } from "./lib/humanError.js";
 import {
   initOperationsBar,
   refreshOperationsBar,
@@ -231,7 +232,8 @@ function wireTabBar() {
       else if (tab === "activity") await enterActivityTab();
       else if (tab === "settings") await enterSettingsTab();
     } catch (e) {
-      toast(String(e), "err");
+      console.error("tab switch failed", e);
+      toast(humanError(e), "err");
     }
   };
   for (const btn of document.querySelectorAll("[data-tab-target]")) {
@@ -241,7 +243,7 @@ function wireTabBar() {
 
 function wireSettingsTabEntries() {
   const wire = (id, fn) =>
-    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
+    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   // Account stack
   wire("settings-tab-providers", async () => {
     show("view-settings");
@@ -282,14 +284,14 @@ function wireSettingsTabEntries() {
 
 function wireActivityEntries() {
   const wire = (id, fn) =>
-    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
+    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("activity-open-install-progress", enterInstallProgress);
   wire("activity-open-boot-approval", enterBootApproval);
 }
 
 function wireServicesTabEntries() {
   const wire = (id, fn) =>
-    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
+    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("services-list-open-vibe-code", enterBuildSource);
 }
 
@@ -365,7 +367,7 @@ async function boot() {
   // Home-tab → in-tab nav (the legacy home-grid is gone; what remains
   // are the two session-row buttons "pair-with-server" + "open-pod-pair").
   const wire = (id, fn) =>
-    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
+    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("open-pod-pair", enterPodPair);
 
   // Tag every sub-view with its parent tab — `setViewTab` requires
@@ -455,6 +457,7 @@ async function boot() {
 }
 
 boot().catch((e) => {
+  console.error("boot failed", e);
   setSubtitle("startup failed");
-  toast(String(e), "err");
+  toast(humanError(e), "err");
 });

@@ -138,7 +138,7 @@ public final class AddDeviceViewModel {
             if case .invalidated = phase { return }
             phase = .failed("Pairing didn't complete. Show a new code and try again.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(HumanError.humanize(error))
         }
     }
 
@@ -182,7 +182,7 @@ public final class AddDeviceViewModel {
             phase = .admitted(deviceLabelHint: nil)
             await relay.close()
         } catch {
-            phase = .failed("Couldn't add the device: \(error.localizedDescription)")
+            phase = .failed("Couldn't add the device. \(HumanError.humanize(error))")
         }
     }
 

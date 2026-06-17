@@ -10,6 +10,7 @@
 // lives in lib/bootApproval.js.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
@@ -132,6 +133,6 @@ export async function enterBootApproval() {
 export function initBootApprovalView() {
   $("boot-approval-back")?.addEventListener("click", () => show("view-activity"));
   $("boot-approval-refresh")?.addEventListener("click", () => {
-    renderBootApproval().catch((e) => toast(String(e), "err"));
+    renderBootApproval().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }

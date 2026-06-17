@@ -11,6 +11,7 @@
 // Pods don't carry across profiles — each cloud is a separate identity.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { loadProfiles, setActiveProfile } from "../lib/profiles.js";
@@ -98,14 +99,15 @@ async function switchTo(cloudName) {
     renderProfiles();
     try { onProfileSwitch(cloudName); } catch { /* swallow */ }
   } catch (e) {
-    toast(String(e?.message ?? e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
 export function initProfilesView() {
   $("profiles-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("profiles-refresh")?.addEventListener("click", () => {
-    try { renderProfiles(); } catch (e) { toast(String(e), "err"); }
+    try { renderProfiles(); } catch (e) { console.error(e); toast(humanError(e), "err"); }
   });
 }
 

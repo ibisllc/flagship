@@ -255,6 +255,22 @@ describe("redeemCompanionAndPersist", () => {
     expect(profilesStore.getActiveCloudName()).toBeNull();
   });
 
+  it("UX-B (B3) — a 5xx with no server message surfaces humanized copy, not `HTTP 500`", async () => {
+    const { receiver } = await loadReceiverModule();
+    const fetchImpl = async () => new Response("upstream exploded", { status: 500 });
+    const result = await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
+      fetchImpl,
+      historyReplaceState: () => {},
+      locationHref: "https://web.flagshipserver.com/?companion=abc",
+    });
+    expect(result.status).toBe(500);
+    // No raw `HTTP <code>` or stack text reaches the user.
+    expect(result.error).not.toMatch(/HTTP \d/);
+    expect(result.error).not.toContain("upstream exploded");
+    // The static humanError() copy for a 5xx.
+    expect(result.error).toMatch(/unavailable/i);
+  });
+
   it("returns { error } on a malformed 200 response (missing sessionToken)", async () => {
     const { receiver, profilesStore } = await loadReceiverModule();
     const fetchImpl = async () =>

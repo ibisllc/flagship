@@ -26,6 +26,7 @@
 // graceful "audit log not yet available" empty state.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -177,7 +178,7 @@ export async function renderInlineActivityAuditLog() {
     <button class="secondary full-width mt-2" id="activity-audit-log-see-all">see all activity</button>
   `;
   $("activity-audit-log-see-all")?.addEventListener("click", () => {
-    enterAuditLog().catch((e) => toast(String(e), "err"));
+    enterAuditLog().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   bindEntryRows(root);
 }
@@ -325,7 +326,7 @@ export function initAuditLogView() {
   $("audit-log-back")?.addEventListener("click", () => show("view-activity"));
   $("audit-log-refresh")?.addEventListener("click", () => {
     activeCursor = null;
-    renderAuditLog().catch((e) => toast(String(e), "err"));
+    renderAuditLog().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("audit-entry-back")?.addEventListener("click", () => enterAuditLog().catch(() => {}));
 }

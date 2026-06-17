@@ -12,6 +12,7 @@
 // recovery.js (which kicks it off after a successful recovery bind).
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -34,7 +35,8 @@ async function pollOnce() {
       const root = $("post-recovery-content");
       if (root) root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
-      toast(String(e), "err");
+      console.error(e);
+      toast(humanError(e), "err");
     }
   }
 }

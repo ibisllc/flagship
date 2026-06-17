@@ -104,7 +104,7 @@ public final class JoinAccountViewModel {
         do {
             session = try PairingQr.parseJoinUrl(joinUrl)
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed("This invite link is invalid. Ask the admin to show a new code.")
             return
         }
 
@@ -125,7 +125,7 @@ public final class JoinAccountViewModel {
                 browserPublicKey: session.adminPublicKey
             )
         } catch {
-            phase = .failed("Couldn't establish a secure channel: \(error.localizedDescription)")
+            phase = .failed("Couldn't establish a secure channel. \(HumanError.humanize(error))")
             return
         }
 
@@ -152,7 +152,7 @@ public final class JoinAccountViewModel {
             if ttlInvalidated { return }
             phase = .failed("Pairing didn't complete. Ask the admin to show a new code.")
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(HumanError.humanize(error))
         }
     }
 
@@ -216,7 +216,7 @@ public final class JoinAccountViewModel {
         do {
             try await installUMK(SymmetricKey(data: umkData), "Join \(account) on this device")
         } catch {
-            phase = .failed("Couldn't install the account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't install the account key. \(HumanError.humanize(error))")
             return
         }
 
@@ -231,7 +231,7 @@ public final class JoinAccountViewModel {
                 pushSigningKey: pushSigningKey
             )
         } catch {
-            phase = .failed("Couldn't complete joining \(account): \(error.localizedDescription)")
+            phase = .failed("Couldn't complete joining \(account). \(HumanError.humanize(error))")
             return
         }
 

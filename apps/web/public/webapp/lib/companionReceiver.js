@@ -26,6 +26,7 @@ import {
 } from "./profilesStore.js";
 import { parseCompanionPayload } from "./companionClient.js";
 import { setPodBaseUrl, setSessionToken } from "./api.js";
+import { humanError } from "./humanError.js";
 
 /** Where to find the dock payload on the current document. Test seam. */
 export function companionPayloadFromLocation(loc = globalThis.location) {
@@ -83,21 +84,29 @@ export async function redeemCompanionAndPersist(payload, deps = defaultReceiverD
       }),
     });
   } catch (e) {
-    return { error: `redeem network error: ${e?.message ?? e}` };
+    console.error("companion redeem network error", e);
+    return { error: humanError(e) };
   }
   if (!r.ok) {
-    let msg = `HTTP ${r.status}`;
+    // UX-B — prefer the daemon's own short, plain-language error string when
+    // it supplies one (e.g. "ticket expired"); otherwise map the status to
+    // plain language via humanError — NEVER fall back to a raw `HTTP <code>`.
+    let serverMessage = null;
     try {
       const body = await r.json();
-      if (body?.error) msg = body.error;
+      if (typeof body?.error === "string" && body.error.trim()) {
+        serverMessage = body.error.trim();
+      }
     } catch { /* ignore */ }
-    return { error: `redeem failed: ${msg}`, status: r.status };
+    console.error("companion redeem failed", r.status, serverMessage);
+    return { error: serverMessage ?? humanError(r.status), status: r.status };
   }
   let body;
   try {
     body = await r.json();
   } catch (e) {
-    return { error: `bad redeem response: ${e?.message ?? e}` };
+    console.error("companion redeem: bad response body", e);
+    return { error: humanError(e) };
   }
   const {
     companionSessionToken,

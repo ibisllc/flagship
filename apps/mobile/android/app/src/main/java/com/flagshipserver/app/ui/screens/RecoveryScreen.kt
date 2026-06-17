@@ -38,6 +38,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
@@ -176,7 +177,7 @@ fun RecoveryScreen(nav: NavController) {
                             toasts.success("Cloud recovery configured.")
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
-                            error = t.message ?: "couldn't set up cloud recovery"
+                            error = NetworkErrorHumanizer.humanize(t)
                         } finally {
                             working = false
                         }
@@ -219,7 +220,7 @@ fun RecoveryScreen(nav: NavController) {
                             toasts.success("UMK recovered (${seed.size} bytes). Re-pair your servers next.")
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
-                            error = t.message ?: "recovery failed"
+                            error = NetworkErrorHumanizer.humanize(t)
                         } finally {
                             working = false
                         }

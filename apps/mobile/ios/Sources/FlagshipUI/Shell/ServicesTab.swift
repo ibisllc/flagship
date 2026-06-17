@@ -415,7 +415,7 @@ struct ServiceDetailContainer: View {
             try await vm.save()
             toasts.success("Saved \(vm.serviceId).")
         } catch {
-            toasts.error("Save failed: \(error.localizedDescription)")
+            toasts.error("Save failed. \(HumanError.humanize(error))")
         }
     }
 }

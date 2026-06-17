@@ -23,7 +23,7 @@ public final class BrowserTabsViewModel {
             let resp = try await client.browserTabsList(serviceId: serviceId)
             state = .loaded(resp.tabs)
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(HumanError.humanize(error))
         }
     }
 }

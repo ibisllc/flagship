@@ -13,6 +13,7 @@
 // MIRRORS: apps/mobile/{ios,android} PendingServerScreen.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
@@ -164,7 +165,7 @@ async function runCancel() {
 
 export function initPendingServerView() {
   $("pending-server-cancel")?.addEventListener("click", () => {
-    runCancel().catch((e) => toast(String(e), "err"));
+    runCancel().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("pending-server-back")?.addEventListener("click", () => {
     clearStatusPoll();

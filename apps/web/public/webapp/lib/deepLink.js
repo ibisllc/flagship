@@ -10,6 +10,7 @@
 // when there's no recognised alias.
 
 import { parseViewQuery, clearViewQuery } from "./router.js";
+import { humanError } from "./humanError.js";
 import { toast } from "./toast.js";
 
 export async function dispatchInitialView() {
@@ -59,7 +60,8 @@ export async function dispatchInitialView() {
       return;
     }
   } catch (e) {
-    toast(String(e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
   const { enterHome } = await import("../views/home.js");
   return enterHome();

@@ -17,6 +17,7 @@
 //   3. User picks a tab → we open a WS to P1.11 and start streaming.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -160,7 +161,7 @@ export function initBrowserViewerView() {
     show("view-home");
   });
   $("bv-refresh")?.addEventListener("click", () => {
-    renderTabs().catch((e) => toast(String(e), "err"));
+    renderTabs().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

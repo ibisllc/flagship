@@ -136,3 +136,71 @@ describe("UX-E — short vs canonical link labels", () => {
     expect(src).toMatch(/permanent, verifiable address/i);
   });
 });
+
+describe("UX-B (B3) — error-humanizer rollout: no catch site shows raw error text", () => {
+  // Every webapp file that previously did `toast(String(e), "err")` (or
+  // rendered a raw `e.message` / `HTTP ${status}`) must now route the
+  // user-facing string through the static humanError() helper. A raw
+  // `String(e)` toast leaks a stack message; humanError() never does.
+  const CONVERTED_FILES = [
+    "app.js",
+    "views/server-detail.js",
+    "views/service-detail.js",
+    "views/services-list.js",
+    "views/create-server.js",
+    "views/companion-dock.js",
+    "views/companion-requests.js",
+    "views/invite-manage.js",
+    "views/url-controller.js",
+    "views/trusted-devices.js",
+    "views/paired-sessions.js",
+    "views/peer-backup.js",
+    "views/audit-log.js",
+    "views/account-audit.js",
+    "views/boot-approval.js",
+    "views/browser-viewer.js",
+    "views/bootstrap.js",
+    "views/pending-server.js",
+    "views/post-recovery.js",
+    "views/profiles.js",
+    "views/add-device.js",
+    "views/build-key.js",
+    "lib/deepLink.js",
+    "lib/companionReceiver.js",
+  ];
+
+  it("no converted file still toasts a raw `String(...)` error", () => {
+    // Covers every variant we replaced: String(e), String(e?.message ?? e),
+    // String(err), String(e.message || e).
+    for (const rel of CONVERTED_FILES) {
+      const src = read(...rel.split("/"));
+      expect(src, `${rel} still toasts a raw String(...) error`).not.toMatch(
+        /toast\(String\(/,
+      );
+    }
+  });
+
+  it("every converted file now references humanError(", () => {
+    for (const rel of CONVERTED_FILES) {
+      const src = read(...rel.split("/"));
+      expect(src, `${rel} does not route through humanError`).toContain("humanError(");
+    }
+  });
+
+  it("companion-requests renders humanError, not a raw e.message, into the card/rows", () => {
+    const src = read("views", "companion-requests.js");
+    expect(src).not.toContain("escapeHtml(e.message)");
+    expect(src).not.toContain("`sign + post failed: ${msg}`");
+    expect(src).not.toContain("`resolve-pending failed:");
+    expect(src).toContain("escapeHtml(humanError(e))");
+    expect(src).toContain("setRowError(row.requestId, humanError(e))");
+  });
+
+  it("companionReceiver no longer surfaces a raw `HTTP ${r.status}` to the user", () => {
+    const src = read("lib", "companionReceiver.js");
+    // The user-facing return uses humanError(status); the raw `HTTP <code>`
+    // only ever appears in a console.error detail line, never the returned copy.
+    expect(src).toContain("humanError(r.status)");
+    expect(src).not.toMatch(/error:\s*`redeem failed: \$\{msg\}`/);
+  });
+});

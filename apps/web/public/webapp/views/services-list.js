@@ -6,6 +6,7 @@
 // paint snappy while the network catches up.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -265,7 +266,7 @@ function cssEscape(s) {
 export function initServicesListView() {
   $("services-list-back")?.addEventListener("click", () => show("view-home"));
   $("services-list-refresh")?.addEventListener("click", () => {
-    renderServicesList().catch((e) => toast(String(e), "err"));
+    renderServicesList().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

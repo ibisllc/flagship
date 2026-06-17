@@ -20,6 +20,7 @@
 // enterBuildKey() call.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -159,7 +160,7 @@ export function initBuildKeyView() {
     showForm(false);
   });
   $("bk-use")?.addEventListener("click", () => {
-    useDifferentKey().catch((e) => toast(String(e?.message ?? e), "err"));
+    useDifferentKey().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("build-key-back")?.addEventListener("click", () => show(backView));
 }

@@ -502,7 +502,7 @@ public final class RealAccountLoginViewModel {
         {
             return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain turned on. If you have your backup key file, use Import backup file below instead."
         }
-        return "Recovery failed: \(error.localizedDescription)"
+        return "Recovery failed. \(HumanError.humanize(error))"
     }
 
     /// String-form humanizer for the single-device path, where the failure

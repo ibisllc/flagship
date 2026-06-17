@@ -33,6 +33,7 @@
 //     in the accumulator.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -287,7 +288,7 @@ async function runToggle(nextParticipate) {
 export function initPeerBackupView() {
   $("peer-backup-back")?.addEventListener("click", () => show("view-home"));
   $("peer-backup-refresh")?.addEventListener("click", () => {
-    renderPeerBackup().catch((e) => toast(String(e), "err"));
+    renderPeerBackup().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

@@ -102,14 +102,14 @@ public final class WatchDelegateViewModel {
         do {
             delegateKey = try delegateKeyProvider()
         } catch {
-            phase = .failed("Couldn't create the Watch key: \(error.localizedDescription)")
+            phase = .failed("Couldn't create the Watch key. \(HumanError.humanize(error))")
             return
         }
         let irk: Curve25519.Signing.PrivateKey
         do {
             irk = try await signer("Allow your Watch to approve boots")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
             return
         }
         let issuedAt = now()
@@ -128,7 +128,7 @@ public final class WatchDelegateViewModel {
         do {
             sig = try env.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
             return
         }
         do {
@@ -177,7 +177,7 @@ public final class WatchDelegateViewModel {
         do {
             irk = try await signer("Stop allowing your Watch to approve boots")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
             return
         }
         let issuedAt = now()
@@ -186,7 +186,7 @@ public final class WatchDelegateViewModel {
         do {
             sig = try env.sign(with: irk)
         } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
             return
         }
         do {

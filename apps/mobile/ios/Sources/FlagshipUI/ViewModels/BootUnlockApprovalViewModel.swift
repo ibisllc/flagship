@@ -124,7 +124,7 @@ public final class BootUnlockApprovalViewModel {
             _ = try await coord.approvePendingUnlock(serverDomain: serverDomain, depositAutoLease: depositLease)
             state = .approved
         } catch {
-            state = .failed(error.localizedDescription)
+            state = .failed(HumanError.humanize(error))
         }
     }
 
