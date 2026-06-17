@@ -131,6 +131,49 @@ physically close, giving a fully `.com`-independent channel for trust decisions
 + local admin. The clean long-term answer to the "forced through `.com`"
 dilemma. Tracked separately; not required for the above.
 
+## Integration status (2026-06-17)
+
+The ceremony is LIVE (backdated 90d lease, `caPubkeyAuthorizedNow: true`,
+`CA_ENDORSEMENT_ENFORCE=true`), and the three worker branches are merged into
+`feat/maintainer-trust` (conflict-free):
+
+- **Backend (mt-core):** `ServiceBlessing`/`TrustException` envelopes + verify,
+  `verifyComBlessing`, authoritative cross-platform fixture
+  (`packages/protocol/tests/fixtures/maintainerTrust.vectors.json`), `.com`
+  `POST /api/services/hub-blessing` issuer + trust-exception sync endpoints +
+  storage migration `0055`, and a PURE `shouldRelayThroughHub` daemon gate.
+- **Webapp (mt-webapp):** browser-JS chain verify, `isServerTrusted` global
+  fetch chokepoint, red push-down sliver, PIN-gated override → signed
+  `TrustException`. Byte-identity cross-checked directly against the
+  authoritative fixture.
+- **Mobile (mt-mobile):** Swift + Kotlin `MaintainersTrust` ports
+  (`authorizedCaKeys`/`verifyComBlessing`), iOS + Android trust gates (halt +
+  red sliver + biometric override). Android 829 unit tests green; **iOS needs an
+  Xcode build by the owner.**
+
+Gates on the integrated branch: `npx tsc -b` clean · `npx vitest run` **5420
+pass / 8 skip / 413 files**.
+
+**Cross-platform reconciliation finding:** the surfaces emit *byte-identical*
+canonical bytes (each port verified against `@ibisllc/maintainers`; the webapp
+is additionally pinned to the authoritative fixture). The only divergence is the
+internal `verifyComBlessing` *reason label* ("trusted"/"pin-mismatch" in TS vs
+"ok"/"no-authorized-ca-keys" in the webapp) — the gating *verdict* and the
+user-facing sliver (driven by verdict + certClass) agree. Unifying the reason
+vocabulary + embedding the authoritative strings in the Swift/Kotlin vector
+tests is a minor owner-verifiable hygiene follow-up, not a correctness gap.
+
+**SUPERVISED — deliberately NOT in the workers (need careful live-tunnel
+integration before they ship):** wire `shouldRelayThroughHub` into the daemon
+tunnel pre-connect path + drive lockdown/SOS on failure; `.services` self-key
+generation + daily blessing refresh + HELLO presentation; the box lockdown
+runtime state machine. Per the sequencing constraint, these ship only after the
+relay-blessing path is wired + tested end to end.
+
+**Status flip already done:** `CA_ENDORSEMENT_ENFORCE=true` is live, so `.com`
+itself refuses to sign without a live lease (task 5's `.com` half). The remaining
+task-5 work is renewal alerts polish + the box-side lockdown wiring above.
+
 ## Sequencing constraint (do not violate)
 
 App "refuse to boot / halt" and box lockdown only ship AFTER 0a (live lease) +
