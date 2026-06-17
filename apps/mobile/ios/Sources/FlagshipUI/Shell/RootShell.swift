@@ -40,7 +40,13 @@ public struct RootShell: View {
             // collapses to zero height (no push) when idle. One mount covers
             // both the iPhone TabView and the iPad sidebar layout.
             .safeAreaInset(edge: .top, spacing: 0) {
-                GlobalOperationsBar()
+                // The trust sliver sits ABOVE the operations sliver: a degraded
+                // maintainer-trust state is higher priority than any running
+                // operation, and both push the shell down from the top.
+                VStack(spacing: 0) {
+                    GlobalTrustBar()
+                    GlobalOperationsBar()
+                }
             }
             // B12 — top overlay. The lock screen renders ABOVE the
             // shell whenever the runtime unlock latch is false. Putting

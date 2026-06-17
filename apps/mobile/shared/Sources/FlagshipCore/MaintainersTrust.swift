@@ -32,6 +32,11 @@ public enum MaintainersTrust {
     /// constant is the default pin the iOS verify-forward consumer uses.
     public static let pinnedMandateHash =
         "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae"
+
+    /// Shared-contract alias for `pinnedMandateHash` (the BAKED_PIN the
+    /// maintainer-trust-enforcement feature names across all surfaces). Same
+    /// literal; one name to grep for.
+    public static let bakedPin = pinnedMandateHash
 }
 
 // MARK: - Envelope models
@@ -776,5 +781,79 @@ public enum MaintainersCaVerifier {
 
         return VerifiedCaEndorsements(validEndorsements: valid, rejections: rejections,
                                       currentCaPubkey: current?.caPubkey)
+    }
+
+    /// §9 link-3: the operational CA keys a consumer may currently accept
+    /// CA-signed artifacts under (deduped, insertion order preserved). Empty
+    /// ⇒ fail closed (reject all). Mirrors `authorizedCaKeys`.
+    public static func authorizedCaKeys(
+        _ endorsements: [CaEndorsement],
+        caChain: VerifiedChain,
+        now: Date,
+        clockSkewMs: Double? = nil
+    ) -> [String] {
+        let result = verifyCaEndorsements(endorsements, caChain: caChain, now: now,
+                                          clockSkewMs: clockSkewMs)
+        var seen = Set<String>()
+        var out: [String] = []
+        for e in result.validEndorsements where !seen.contains(e.caPubkey) {
+            seen.insert(e.caPubkey)
+            out.append(e.caPubkey)
+        }
+        return out
+    }
+}
+
+// MARK: - Control-server blessing (the feature's top-level verdict)
+
+/// The `GET /api/maintainer-blessing` payload `.com` serves so a client can run
+/// the full `pin → chain → authorizedCaKeys(now)` check itself.
+public struct MaintainerBlessing: Sendable, Equatable {
+    public let pinnedMandateHash: String
+    public let caPubkey: String
+    public let mandates: [Mandate]
+    public let caEndorsements: [CaEndorsement]
+
+    public init(
+        pinnedMandateHash: String,
+        caPubkey: String,
+        mandates: [Mandate],
+        caEndorsements: [CaEndorsement]
+    ) {
+        self.pinnedMandateHash = pinnedMandateHash
+        self.caPubkey = caPubkey
+        self.mandates = mandates
+        self.caEndorsements = caEndorsements
+    }
+}
+
+extension MaintainersTrust {
+    /// Run the full control-server-trust check on a fetched blessing using the
+    /// CALLER's clock (never the response's `now`). Returns true iff the CA
+    /// pubkey `.com` actually serves is in `authorizedCaKeys` live now.
+    ///
+    /// The baked pin is the FLOOR: a `.com`-asserted `pinnedMandateHash` that
+    /// disagrees with our baked pin is rejected outright — we never let `.com`
+    /// re-anchor the chain. An empty baked pin ⇒ fail closed.
+    ///
+    /// IMPORTANT: this is the "valid response → verdict" half only. A NETWORK
+    /// failure must NOT call this with a fabricated blessing; the caller leaves
+    /// the trust verdict UNKNOWN on a network error (never untrusted).
+    public static func verifyComBlessing(
+        _ blessing: MaintainerBlessing,
+        now: Date,
+        bakedPinOverride: String? = nil
+    ) -> Bool {
+        let pin = bakedPinOverride ?? bakedPin
+        guard !pin.isEmpty else { return false }
+        // `.com` cannot lower the floor: its asserted pin must equal ours.
+        guard blessing.pinnedMandateHash == pin else { return false }
+        let chain = MaintainersVerifier.verifyMandateChainFromPin(
+            pinnedHash: pin, mandates: blessing.mandates
+        )
+        let keys = MaintainersCaVerifier.authorizedCaKeys(
+            blessing.caEndorsements, caChain: chain, now: now
+        )
+        return keys.contains(blessing.caPubkey)
     }
 }

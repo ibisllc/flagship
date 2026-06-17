@@ -58,6 +58,11 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.OkHttpJsonTransport
+import com.flagshipserver.app.core.LocalTrustCenter
+import com.flagshipserver.app.core.TrustCenter
+import com.flagshipserver.app.core.TrustChecker
+import com.flagshipserver.app.core.TrustGatedTransport
+import com.flagshipserver.app.ui.components.GlobalTrustBar
 import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.PrivacySettings
 import com.flagshipserver.app.core.ThemeMode
@@ -115,6 +120,9 @@ class MainActivity : FragmentActivity() {
         // Deploy ops are kept in sync from the pod list in AppRoot; build ops
         // are registered by the build lifecycle (BuildGitViewModel).
         val operations = ActiveOperationsCenter()
+        // App-wide maintainer-trust verdict + failing-cert registry feeding the
+        // red persistent trust sliver + the `.com` backend short-circuit.
+        val trustCenter = TrustCenter()
         deepLinker = DeepLinker()
         val devSettings = DeveloperSettings.create(applicationContext)
         AiKeyStore.attach(applicationContext)
@@ -126,7 +134,13 @@ class MainActivity : FragmentActivity() {
         // Pivoted on the developer toggle below — previously this was hardwired
         // to the mock, so a shipped build never reached the real backend.
         val mockFlagshipServer = MockFlagshipServerClient()
-        val liveFlagshipServer = LiveFlagshipServerClient(OkHttpJsonTransport(okHttp))
+        // Maintainer-trust short-circuit: the live `.com` transport refuses to
+        // send when the control server is positively untrusted (and the owner
+        // hasn't overridden). UNKNOWN/TRUSTED + any network-error no-verdict
+        // all let traffic through (we never brick on the absence of a verdict).
+        val liveFlagshipServer = LiveFlagshipServerClient(
+            TrustGatedTransport(OkHttpJsonTransport(okHttp)) { trustCenter.isServerTrusted },
+        )
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
@@ -188,6 +202,19 @@ class MainActivity : FragmentActivity() {
             val effectiveFlagshipServer: FlagshipServerClient =
                 if (useLive) liveFlagshipServer else mockFlagshipServer
 
+            // Maintainer-trust check on launch (live only — the Mock control
+            // server has no blessing to verify). Uses a NON-gated transport so
+            // a re-check can still fetch to RECOVER out of an untrusted state.
+            // A network/parse failure is a NON-verdict (never bricks offline).
+            LaunchedEffect(useLive) {
+                if (!useLive) return@LaunchedEffect
+                when (val outcome = TrustChecker(OkHttpJsonTransport(okHttp)).check()) {
+                    is TrustChecker.Outcome.Trusted -> trustCenter.markTrusted()
+                    is TrustChecker.Outcome.Untrusted -> trustCenter.markUntrusted(listOf(outcome.failure))
+                    is TrustChecker.Outcome.NoVerdict -> trustCenter.markNoVerdict()
+                }
+            }
+
             val sizeClass = calculateWindowSizeClass(this)
 
             // Appearance override (Settings → Appearance). AUTO follows the
@@ -209,6 +236,7 @@ class MainActivity : FragmentActivity() {
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
+                    LocalTrustCenter provides trustCenter,
                     LocalDeepLinker provides deepLinker,
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
@@ -300,6 +328,10 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
             // physically pushes the whole shell down (it animates its own
             // height), exactly like WhatsApp's active-call bar.
             Column(Modifier.fillMaxSize()) {
+                // The trust sliver sits ABOVE the operations sliver: a degraded
+                // maintainer-trust state is higher priority than any running
+                // operation, and both push the shell down from the top.
+                GlobalTrustBar()
                 GlobalOperationsBar()
                 RootShell(widthSizeClass = widthSizeClass)
             }

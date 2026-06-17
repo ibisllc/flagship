@@ -158,6 +158,11 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
     /// ordinary network failure: it means an active interceptor, not bad
     /// signal. `host` is the box / service host that failed to pin.
     case certPinMismatch(host: String)
+    /// The control server (`.com`) failed maintainer-trust verification and the
+    /// owner has not granted an exception — every backend call is short-
+    /// circuited until the blessing verifies or the owner overrides. Distinct
+    /// from a network error (we never halt on the absence of a verdict).
+    case controlServerUntrusted
 
     /// A short, NON-technical sentence safe to show a normal person. Never
     /// leaks a raw status code or a server-supplied message string (UX-B).
@@ -177,6 +182,9 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
             return "This box's security certificate doesn't match what we expected — "
                 + "someone may be intercepting the connection. Reinstall the box, or "
                 + "contact whoever runs it before continuing."
+        case .controlServerUntrusted:
+            return "We can't currently verify the Flagship control server. Connecting "
+                + "is paused until it checks out — or you can choose to continue anyway."
         }
     }
 
