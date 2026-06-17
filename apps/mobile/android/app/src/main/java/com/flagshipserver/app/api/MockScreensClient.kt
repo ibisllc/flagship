@@ -104,15 +104,25 @@ class MockScreensClient(
         tick()
         return MarketplaceBrowseResponse(
             listings = listOf(
-                MarketplaceListing("trent", "scratchpad", "Scratchpad",
-                    "A markdown notes app with offline-first sync.",
-                    emptyList(), 412, false, true),
-                MarketplaceListing("wendy", "wishlist", "Family Wishlist",
-                    "Shared birthday + holiday lists for the household.",
-                    emptyList(), 188, false, false),
-                MarketplaceListing("peggy", "feed-reader", "Tiny Feed Reader",
-                    "Atom + RSS in a clean reader. Optional AI summaries.",
-                    emptyList(), 974, true, false),
+                MarketplaceListing(
+                    creator = "trent", slug = "scratchpad", title = "Scratchpad",
+                    summary = "A markdown notes app with offline-first sync.",
+                    screenshots = emptyList(), installCount = 412,
+                    requiresLlmKey = false, scanGrade = "A", alreadyInstalled = true,
+                ),
+                MarketplaceListing(
+                    creator = "wendy", slug = "wishlist", title = "Family Wishlist",
+                    summary = "Shared birthday + holiday lists for the household.",
+                    screenshots = emptyList(), installCount = 188,
+                    requiresLlmKey = false, scanGrade = null, alreadyInstalled = false,
+                ),
+                MarketplaceListing(
+                    creator = "peggy", slug = "feed-reader", title = "Tiny Feed Reader",
+                    summary = "Atom + RSS in a clean reader. Optional AI summaries.",
+                    screenshots = emptyList(), installCount = 974,
+                    requiresLlmKey = true, llmKeyEnvVar = "OPENAI_API_KEY",
+                    scanGrade = "C", alreadyInstalled = false,
+                ),
             )
         )
     }

@@ -172,6 +172,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 screenshots: [],
                 installCount: 412,
                 requiresLlmKey: false,
+                scanGrade: "A",
                 alreadyInstalled: true
             ),
             MarketplaceListing(
@@ -182,6 +183,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 screenshots: [],
                 installCount: 188,
                 requiresLlmKey: false,
+                scanGrade: nil,   // unscanned → "ungraded" pill
                 alreadyInstalled: false
             ),
             MarketplaceListing(
@@ -192,6 +194,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 screenshots: [],
                 installCount: 974,
                 requiresLlmKey: true,
+                llmKeyEnvVar: "OPENAI_API_KEY",
+                scanGrade: "C",
                 alreadyInstalled: false
             )
         ])

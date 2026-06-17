@@ -123,7 +123,84 @@ public struct MarketplaceListing: Codable, Equatable, Sendable {
     public let screenshots: [String]
     public let installCount: Int
     public let requiresLlmKey: Bool
+    /// Env-var NAME a `requiresLlmKey` app reads its key from (e.g.
+    /// `OPENAI_API_KEY`); relayed by the BFF so the client can prefill
+    /// "Configure environment" after install. Nil ⇒ fall back to
+    /// `MarketplaceLlmKey.defaultEnvVar`.
+    public let llmKeyEnvVar: String?
+    /// Marketplace scanner verdict ("A"/"B"/"C"/"D"/"F"), or nil when not yet
+    /// scanned (the pill renders "ungraded"). MIRRORS the BFF's `scanGrade`.
+    public let scanGrade: String?
     public let alreadyInstalled: Bool
+
+    public init(
+        creator: String,
+        slug: String,
+        title: String,
+        summary: String,
+        screenshots: [String],
+        installCount: Int,
+        requiresLlmKey: Bool,
+        llmKeyEnvVar: String? = nil,
+        scanGrade: String? = nil,
+        alreadyInstalled: Bool
+    ) {
+        self.creator = creator
+        self.slug = slug
+        self.title = title
+        self.summary = summary
+        self.screenshots = screenshots
+        self.installCount = installCount
+        self.requiresLlmKey = requiresLlmKey
+        self.llmKeyEnvVar = llmKeyEnvVar
+        self.scanGrade = scanGrade
+        self.alreadyInstalled = alreadyInstalled
+    }
+}
+
+/// Marketplace scanner-grade → display bucket. Pure + testable so the pill on
+/// each surface maps grades identically: A/B → ok, C/D → warn, F → err, and
+/// anything else (incl. nil — `scan_grade` is NULL until the scanner runs) →
+/// ungraded. Mirrors the webapp `scanGradePill` buckets.
+public enum ScanGradeBucket: Equatable, Sendable {
+    case ok       // A, B
+    case warn     // C, D
+    case err      // F
+    case ungraded // not yet scanned / unknown
+
+    /// Map a raw grade (any casing, possibly nil) to a bucket.
+    public static func from(_ grade: String?) -> ScanGradeBucket {
+        switch grade?.uppercased() {
+        case "A", "B": return .ok
+        case "C", "D": return .warn
+        case "F":      return .err
+        default:       return .ungraded
+        }
+    }
+
+    /// The full pill label for a raw grade — "scan A".."scan F" or "ungraded".
+    public static func pillLabel(_ grade: String?) -> String {
+        switch grade?.uppercased() {
+        case "A", "B", "C", "D", "F": return "scan \(grade!.uppercased())"
+        default:                      return "ungraded"
+        }
+    }
+}
+
+/// Marketplace install LLM-key UX helpers, shared so the prefilled-name flow
+/// and the default name stay byte-identical with the daemon BFF
+/// (`LLM_KEY_ENV_DEFAULT`), the webapp (`lib/marketplaceLlmKey.js`), and
+/// Android (`MarketplaceLlmKey`).
+public enum MarketplaceLlmKey {
+    /// Fallback env-var name when a listing doesn't declare one.
+    public static let defaultEnvVar = "OPENAI_API_KEY"
+
+    /// The env-var name to prefill for `listing` — its declared name, else the
+    /// default.
+    public static func envVar(for listing: MarketplaceListing) -> String {
+        if let n = listing.llmKeyEnvVar, !n.isEmpty { return n }
+        return defaultEnvVar
+    }
 }
 
 public struct MarketplaceBrowseResponse: Codable, Equatable, Sendable {

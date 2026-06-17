@@ -143,7 +143,7 @@ public struct ServicesTab: View {
         case .marketplace:
             MarketplaceContainer(path: $path)
         case .marketplaceDetail(let creator, let slug):
-            MarketplaceDetailContainer(creator: creator, slug: slug)
+            MarketplaceDetailContainer(creator: creator, slug: slug, path: $path)
         case .buildSource:
             BuildSourceChooserContainer(path: $path)
         case .buildGit:
@@ -165,8 +165,8 @@ public struct ServicesTab: View {
             VibeCodeGeneratingContainer(sessionId: sessionId, path: $path)
         case .vibeCodeChat(let sessionId):
             VibeCodeChatContainer(sessionId: sessionId)
-        case .serviceEnv(let appId, let creator, let slug):
-            ServiceEnvContainer(appId: appId, creator: creator, slug: slug)
+        case .serviceEnv(let appId, let creator, let slug, let prefillName):
+            ServiceEnvContainer(appId: appId, creator: creator, slug: slug, prefillName: prefillName)
         case .browserTabs(let serviceId):
             BrowserTabsContainer(serviceId: serviceId, path: $path)
         case .browserViewer(_, let tabId):
@@ -526,6 +526,9 @@ struct ServiceEnvContainer: View {
     let appId: String
     let creator: String
     let slug: String
+    /// When set (a marketplace install of an app that needs an LLM key), the
+    /// env editor auto-opens the add-sheet with this NAME prefilled.
+    var prefillName: String? = nil
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
     @Environment(\.vibeCodeEnvelopeSigner) private var signer
@@ -537,7 +540,8 @@ struct ServiceEnvContainer: View {
             creator: creator,
             slug: slug,
             client: client,
-            signEnvelope: signer
+            signEnvelope: signer,
+            prefillName: prefillName
         )
     }
 }
@@ -603,6 +607,7 @@ struct MarketplaceContainer: View {
                 Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 HStack(spacing: FS.space.s2) {
                     FSPill("\(listing.installCount) deploys", kind: listing.installCount > 0 ? .online : .idle)
+                    ScanGradePill(grade: listing.scanGrade)
                     if listing.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
                     if listing.alreadyInstalled { FSPill("Deployed", kind: .idle) }
                 }
@@ -611,14 +616,35 @@ struct MarketplaceContainer: View {
     }
 }
 
+/// Marketplace scanner-grade pill. Mirrors the webapp's `scanGradePill`
+/// (`views/marketplace.js`): A/B → ok (green), C/D → warn (amber), F → err
+/// (red), and `nil` (not yet scanned — `scan_grade` is NULL today) → a neutral
+/// "ungraded" pill. The label + colour buckets are identical across surfaces.
+struct ScanGradePill: View {
+    let grade: String?
+    var body: some View {
+        let label = ScanGradeBucket.pillLabel(grade)
+        switch ScanGradeBucket.from(grade) {
+        case .ok:       FSPill(label, kind: .online)
+        case .warn:     FSPill(label, kind: .renewing)
+        case .err:      FSPill(label, kind: .offline)
+        case .ungraded: FSPill(label, kind: .idle)
+        }
+    }
+}
+
 struct MarketplaceDetailContainer: View {
     let creator: String
     let slug: String
+    @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @State private var listing: MarketplaceListing?
     @State private var installState: InstallState = .idle
+    /// Drives the pre-install confirmation alert (parity with the webapp's
+    /// `inlineConfirm`).
+    @State private var confirmingInstall = false
 
     enum InstallState: Equatable {
         case idle
@@ -637,6 +663,7 @@ struct MarketplaceDetailContainer: View {
                     FSCard { Text(l.summary).foregroundColor(c.text) }
                     HStack {
                         FSPill("\(l.installCount) deploys", kind: .online)
+                        ScanGradePill(grade: l.scanGrade)
                         if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
                     }
                     installControls(listing: l, c: c)
@@ -654,6 +681,21 @@ struct MarketplaceDetailContainer: View {
             let resp = (try? await client.marketplaceBrowse())?.listings ?? []
             listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
         }
+        // Same assurance the webapp confirm states: the signed envelope is
+        // verified against the IRK before the daemon starts the container.
+        .confirmationDialog(
+            "Install \(creator)/\(slug)?",
+            isPresented: $confirmingInstall,
+            titleVisibility: .visible
+        ) {
+            Button("Install") {
+                if let l = listing { Task { await runInstall(listing: l) } }
+            }
+            .accessibilityIdentifier("marketplace-install-confirm")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The signed app envelope is verified against your IRK before the daemon starts the container.")
+        }
     }
 
     @ViewBuilder
@@ -666,7 +708,7 @@ struct MarketplaceDetailContainer: View {
                 block: true,
                 large: true
             ) {
-                Task { await runInstall(creator: l.creator, slug: l.slug) }
+                confirmingInstall = true
             }
             .accessibilityIdentifier("marketplace-deploy-button")
         case .installing:
@@ -675,11 +717,31 @@ struct MarketplaceDetailContainer: View {
             ProgressView().padding(.top, FS.space.s2)
         case .succeeded(let serviceId):
             FSCard {
-                HStack(spacing: FS.space.s2) {
-                    Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
-                    Text("Installed as \(serviceId).")
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.text)
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                        Text("Installed as \(serviceId).")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                    }
+                    // An app that needs an LLM key would be broken with no next
+                    // step — hand the owner straight to Configure environment
+                    // with the expected name prefilled. The value is set on the
+                    // box (sealed env store); flagshipserver.com never sees it.
+                    if l.requiresLlmKey {
+                        Text("This app needs an AI key (\(MarketplaceLlmKey.envVar(for: l))) to work. Add it on your server now.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                        FSPrimaryButton("Add AI key", block: true) {
+                            path.append(.serviceEnv(
+                                appId: serviceId,
+                                creator: l.creator,
+                                slug: l.slug,
+                                prefillName: MarketplaceLlmKey.envVar(for: l)
+                            ))
+                        }
+                        .accessibilityIdentifier("marketplace-add-llm-key")
+                    }
                 }
             }
             .accessibilityIdentifier("marketplace-deploy-success")
@@ -692,7 +754,9 @@ struct MarketplaceDetailContainer: View {
         }
     }
 
-    private func runInstall(creator: String, slug: String) async {
+    private func runInstall(listing l: MarketplaceListing) async {
+        let creator = l.creator
+        let slug = l.slug
         installState = .installing
         do {
             // Fetch the full listing (manifestJson lives only on the
