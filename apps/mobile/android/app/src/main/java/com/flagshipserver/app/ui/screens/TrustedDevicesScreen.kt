@@ -62,14 +62,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -97,6 +101,7 @@ fun TrustedDevicesScreen(nav: NavController) {
         },
     )
     val state = vm.state.collectAsState().value
+    val pendingRePair = vm.pendingRePair.collectAsState().value
     val scope = rememberCoroutineScope()
     var sheetTarget by remember { mutableStateOf<TrustedDevice?>(null) }
     var confirmDisconnect by remember { mutableStateOf<TrustedDevice?>(null) }
@@ -152,6 +157,13 @@ fun TrustedDevicesScreen(nav: NavController) {
             style = TextStyle(fontSize = 14.sp),
         )
         Spacer(Modifier.height(FS.space.s2))
+        // M4 — pending re-pair banner. A replace started on THIS or ANY
+        // other device surfaces here with a grace countdown and a
+        // "Finalize now" entry into the finalize screen.
+        PendingRePairBanner(
+            snapshot = pendingRePair,
+            onFinalize = { completesAt -> nav.navigate("replace-finalize/$completesAt") },
+        )
         // Phase 3b — admin entry to the cross-device pairing QR. Adds a
         // collaborator's OWN phone (no shared iCloud); the added device
         // lands quarantined + non-admin.
@@ -350,8 +362,11 @@ fun TrustedDevicesScreen(nav: NavController) {
                         replaceVm.initiate(currentEtag = vm.etag.value)
                         when (val phase = replaceVm.phase.value) {
                             is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Pending -> {
-                                val hours = ((phase.completesAt - System.currentTimeMillis()) / 3_600_000).coerceAtLeast(1)
-                                snackbarMsg = "Replace initiated. Takes effect in ~${hours}h unless another device objects."
+                                // H5 — push the dedicated FINALIZE screen (24h
+                                // grace countdown + Complete) instead of leaving
+                                // the ceremony at a transient snackbar. Carries
+                                // the server-reported deadline on the route.
+                                nav.navigate("replace-finalize/${phase.completesAt}")
                             }
                             is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Failed ->
                                 snackbarMsg = phase.message
@@ -397,6 +412,64 @@ private fun EmptyRow() {
         }
     }
 }
+
+/** M4 — the "Replace pending" banner. Renders only when the GET /re-pair
+ *  snapshot carries an un-objected pending row (mirrors the webapp's
+ *  shouldRenderBanner + iOS). The countdown ticks live; "Finalize now" is
+ *  gated on the grace having elapsed and routes into the finalize screen. */
+@Composable
+private fun PendingRePairBanner(
+    snapshot: PendingRePairSnapshot?,
+    onFinalize: (Long) -> Unit,
+) {
+    if (!ReplaceDeviceViewModel.shouldRenderPendingBanner(snapshot)) return
+    val pending = snapshot?.pending ?: return
+
+    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowTick = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val elapsed = ReplaceDeviceViewModel.graceElapsed(pending.completesAt, nowTick)
+
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Replace pending",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner" },
+            )
+            Text(
+                if (elapsed) {
+                    "The grace window has elapsed — finalize the device replacement now."
+                } else {
+                    "Replace pending — finalize when the 3-day grace elapses " +
+                        "(${formatCompletesAt(pending.completesAt)})."
+                },
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+                modifier = Modifier.semantics { contentDescription = "pending-re-pair-banner-body" },
+            )
+            FSPrimaryButton(
+                label = "Finalize now",
+                onClick = { onFinalize(pending.completesAt) },
+                enabled = elapsed,
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "pending-re-pair-finalize-btn" },
+            )
+        }
+    }
+    Spacer(Modifier.height(FS.space.s2))
+}
+
+/** Absolute locale timestamp for the pending-re-pair banner's unlock time
+ *  (mirrors the webapp's formatCompletesAt). Kept top-level so a test can
+ *  assert the exact shape without Compose scaffolding. */
+internal fun formatCompletesAt(ms: Long): String =
+    SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault()).format(Date(ms))
 
 @Composable
 private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {

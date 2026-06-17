@@ -109,6 +109,14 @@ interface FlagshipServerClient {
      *  Public read; 425 = grace not elapsed, 409 = objected, 200 = swap done. */
     suspend fun completeRePair(username: String): RePairCompleteResponse
 
+    /** M4 — read the pending re-pair row (GET /api/users/:u/re-pair).
+     *  Powers the Trusted-devices "Replace pending" banner so a replace
+     *  started on ANY device surfaces with a grace countdown + a
+     *  "Finalize now" entry into the finalize screen. 404/405 →
+     *  `unavailable` (older Worker) so the caller just hides the banner.
+     *  Mirrors the webapp's `fetchPendingRePair` + the iOS client. */
+    suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot
+
     /** E4 — atomic Wipe & restart. Rotates IRK + recovery envelope
      *  in one server transaction. Body carries OLD-IRK signature
      *  over canonical flagship/wipe-restart/v1 bytes. */
@@ -489,6 +497,23 @@ data class RePairCompleteResponse(
     val newIrkPub: String,
     val swappedAt: Long,
 )
+
+/** M4 — the GET /api/users/:u/re-pair result. `pending == null` means
+ *  nothing is in flight; `unavailable == true` means an older Worker
+ *  (404/405) doesn't wire the endpoint — the caller hides the banner
+ *  gracefully, exactly like the webapp's `{ pending: null, unavailable }`
+ *  and the iOS `PendingRePairSnapshot`. `PendingRePair` itself lives in
+ *  ScreensModels.kt (byte-identical to the Worker's handleGetRePair row). */
+data class PendingRePairSnapshot(
+    val pending: PendingRePair?,
+    val unavailable: Boolean = false,
+)
+
+/** On-wire body for GET /re-pair — the Worker wraps the row (or null)
+ *  under `pending`. Private so the public surface is the flattened
+ *  PendingRePairSnapshot. */
+@Serializable
+private data class PendingRePairWireBody(val pending: PendingRePair? = null)
 
 @Serializable
 data class AuditEvent(
@@ -1375,6 +1400,21 @@ class MockFlagshipServerClient(
         )
     }
 
+    /** M4 — scripted pending re-pair snapshot per username. Tests set
+     *  this to drive the Trusted-devices banner. Unconfigured users
+     *  default to `{ pending = null }`. Flip `pendingRePairUnavailable`
+     *  to model an older Worker (404). */
+    var pendingRePairByUser: Map<String, PendingRePair> = emptyMap()
+    var pendingRePairUnavailable: Boolean = false
+
+    override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot {
+        tick()
+        if (pendingRePairUnavailable) {
+            return PendingRePairSnapshot(pending = null, unavailable = true)
+        }
+        return PendingRePairSnapshot(pending = pendingRePairByUser[username.lowercase()])
+    }
+
     sealed interface WipeRestartBehavior {
         data object Ok : WipeRestartBehavior
         data object RateLimited : WipeRestartBehavior
@@ -2025,6 +2065,26 @@ class LiveFlagshipServerClient(
             RePairCompleteResponse.serializer(),
             resp.body.decodeToString(),
         )
+    }
+
+    override suspend fun fetchPendingRePair(username: String): PendingRePairSnapshot {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        // accept 404/405 so an older Worker (no GET wired) is surfaced as
+        // `unavailable` rather than thrown — the caller just hides the
+        // banner. Mirrors the webapp's `unavailable` fallback.
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/users/$encoded/re-pair",
+            accept = setOf(200, 404, 405),
+        )
+        if (resp.status == 404 || resp.status == 405) {
+            return PendingRePairSnapshot(pending = null, unavailable = true)
+        }
+        val body = transport.json.decodeFromString(
+            PendingRePairWireBody.serializer(),
+            resp.body.decodeToString(),
+        )
+        return PendingRePairSnapshot(pending = body.pending)
     }
 
     override suspend fun wipeRestart(

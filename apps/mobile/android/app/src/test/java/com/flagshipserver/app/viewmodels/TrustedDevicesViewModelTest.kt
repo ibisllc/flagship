@@ -1,6 +1,7 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockFlagshipServerClient
+import com.flagshipserver.app.api.PendingRePair
 import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -109,5 +110,48 @@ class TrustedDevicesViewModelTest {
         val vm = TrustedDevicesViewModel(server = makeServer(), username = { "harry" })
         val ok = vm.disconnect(device("tA", "iPhone"))
         assertEquals(false, ok)
+    }
+
+    // M4 — pending re-pair fetch.
+
+    private fun pending(completesAt: Long = 200L, objectedAt: Long? = null): PendingRePair =
+        PendingRePair(
+            newIrkPub = "aa", oldIrkPub = "bb",
+            initiatedAt = 100L, completesAt = completesAt, objectedAt = objectedAt,
+        )
+
+    @Test fun loadPendingRePair_nilWhenUsernameMissing() = runTest {
+        val vm = TrustedDevicesViewModel(server = makeServer(), username = { null })
+        vm.loadPendingRePair()
+        advanceUntilIdle()
+        assertEquals(null, vm.pendingRePair.value)
+    }
+
+    @Test fun loadPendingRePair_populatesSnapshot() = runTest {
+        val server = makeServer()
+        server.pendingRePairByUser = mapOf("harry" to pending(completesAt = 200L))
+        val vm = TrustedDevicesViewModel(server = server, username = { "harry" }, signer = fakeSigner())
+        vm.loadPendingRePair()
+        advanceUntilIdle()
+        assertEquals(200L, vm.pendingRePair.value?.pending?.completesAt)
+    }
+
+    @Test fun load_alsoLoadsPendingRePair() = runTest {
+        val server = makeServer()
+        server.devicesByUser = mapOf("harry" to listOf(device("t1", "Pixel")))
+        server.pendingRePairByUser = mapOf("harry" to pending())
+        val vm = TrustedDevicesViewModel(server = server, username = { "harry" }, signer = fakeSigner())
+        vm.load()
+        advanceUntilIdle()
+        assertNotNull(vm.pendingRePair.value?.pending)
+    }
+
+    @Test fun loadPendingRePair_unavailableLeavesSnapshotFlagged() = runTest {
+        val server = makeServer().apply { pendingRePairUnavailable = true }
+        val vm = TrustedDevicesViewModel(server = server, username = { "harry" }, signer = fakeSigner())
+        vm.loadPendingRePair()
+        advanceUntilIdle()
+        assertEquals(null, vm.pendingRePair.value?.pending)
+        assertTrue(vm.pendingRePair.value?.unavailable == true)
     }
 }

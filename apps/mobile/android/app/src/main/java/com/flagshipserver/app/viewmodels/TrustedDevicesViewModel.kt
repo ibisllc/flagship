@@ -8,6 +8,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.core.HexUtil
@@ -45,12 +46,21 @@ class TrustedDevicesViewModel(
     private val _etag = MutableStateFlow<String?>(null)
     val etag: StateFlow<String?> = _etag.asStateFlow()
 
+    /** M4 — the pending re-pair snapshot (GET /api/users/:u/re-pair),
+     *  mirroring the webapp + iOS. Drives the "Replace pending" banner so
+     *  a device replacement started on ANY device surfaces here with a
+     *  grace countdown + a "Finalize now" entry into the finalize screen.
+     *  null while loading / nothing pending / endpoint unavailable. */
+    private val _pendingRePair = MutableStateFlow<PendingRePairSnapshot?>(null)
+    val pendingRePair: StateFlow<PendingRePairSnapshot?> = _pendingRePair.asStateFlow()
+
     fun load() {
         viewModelScope.launch {
             val user = username()
             if (user.isNullOrEmpty()) {
                 _state.value = State.Loaded(emptyList())
                 _etag.value = null
+                _pendingRePair.value = null
                 return@launch
             }
             _state.value = State.Loading
@@ -61,6 +71,24 @@ class TrustedDevicesViewModel(
             } catch (t: Throwable) {
                 _state.value = State.Failed(t.message ?: "Couldn't load trusted devices")
             }
+            loadPendingRePair()
+        }
+    }
+
+    /** M4 — read the pending re-pair snapshot. Best-effort: a network /
+     *  decode failure (or an older Worker, surfaced as `unavailable`) just
+     *  leaves the banner hidden rather than erroring the section. Mirrors
+     *  the webapp's try/catch-to-null + iOS `loadPendingRePair`. */
+    suspend fun loadPendingRePair() {
+        val user = username()
+        if (user.isNullOrEmpty()) {
+            _pendingRePair.value = null
+            return
+        }
+        _pendingRePair.value = try {
+            server.fetchPendingRePair(user)
+        } catch (_: Throwable) {
+            null
         }
     }
 

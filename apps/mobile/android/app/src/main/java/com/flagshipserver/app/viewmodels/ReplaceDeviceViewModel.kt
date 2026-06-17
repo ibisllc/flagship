@@ -11,6 +11,7 @@ package com.flagshipserver.app.viewmodels
 
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.RePairInitiateClaim
@@ -36,6 +37,40 @@ class ReplaceDeviceViewModel(
 ) : ViewModel() {
     private val _phase = MutableStateFlow<ReplaceDevicePhase>(ReplaceDevicePhase.Idle)
     val phase: StateFlow<ReplaceDevicePhase> = _phase.asStateFlow()
+
+    /** H5 — re-seat the VM into [ReplaceDevicePhase.Pending] from a known
+     *  deadline, used when the finalize screen is (re)opened for an
+     *  already-initiated rotation (straight after `initiate`, or from the
+     *  M4 banner's "Finalize now"). Pure local state; touches no network.
+     *  No-op once a terminal/active phase is in progress so an in-flight
+     *  `complete` is never clobbered. Mirrors iOS `resume`. */
+    fun resume(completesAt: Long) {
+        when (_phase.value) {
+            is ReplaceDevicePhase.Idle,
+            is ReplaceDevicePhase.Pending,
+            is ReplaceDevicePhase.Failed,
+            -> _phase.value = ReplaceDevicePhase.Pending(completesAt)
+            else -> Unit
+        }
+    }
+
+    companion object {
+        /** H5 — whether the 24-hour grace window has elapsed relative to
+         *  [now]. Pure + injectable so the finalize screen's countdown +
+         *  button-gate are unit-testable. Mirrors iOS `graceElapsed`. */
+        fun graceElapsed(completesAt: Long, now: Long = System.currentTimeMillis()): Boolean =
+            now >= completesAt
+
+        /** M4 — should the Trusted-devices "Replace pending" banner render
+         *  for this snapshot? Mirrors the webapp's `shouldRenderBanner` +
+         *  iOS `shouldRenderPendingBanner`: a missing snapshot, a missing
+         *  row, or an OBJECTED row (cancelled by another device) all mean
+         *  "no banner". Pure so the gate is unit-tested without Compose. */
+        fun shouldRenderPendingBanner(snapshot: PendingRePairSnapshot?): Boolean {
+            val pending = snapshot?.pending ?: return false
+            return pending.objectedAt == null
+        }
+    }
 
     suspend fun initiate(currentEtag: String?) {
         val user = username()

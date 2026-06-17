@@ -31,6 +31,7 @@ import com.flagshipserver.app.ui.screens.PrivacyScreen
 import com.flagshipserver.app.ui.screens.ProfilesScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
+import com.flagshipserver.app.ui.screens.ReplaceDeviceFinalizeScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
 import com.flagshipserver.app.ui.screens.TrustedDevicesScreen
 
@@ -62,6 +63,16 @@ fun SettingsTab() {
     NavHost(navController = nav, startDestination = "settings-root") {
         composable("settings-root") { SettingsScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
+        // H5 — Replace-device FINALIZE (24h grace countdown + Complete).
+        // Reached when initiate returns Pending OR from the M4 banner's
+        // "Finalize now"; carries the server-reported completesAt (Unix ms).
+        composable(
+            route = "replace-finalize/{completesAt}",
+            arguments = listOf(navArgument("completesAt") { type = NavType.LongType }),
+        ) { entry ->
+            val completesAt = entry.arguments?.getLong("completesAt") ?: 0L
+            ReplaceDeviceFinalizeScreen(nav, completesAt = completesAt)
+        }
         // Phase 3b — admin cross-device pairing (Add device).
         composable("add-device") {
             AddDeviceScreen(
