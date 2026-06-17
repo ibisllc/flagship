@@ -133,6 +133,7 @@ public struct SettingsTab: View {
                     onOpenAiKeys: { path.append(.aiKeys) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
+                    onOpenAccountSecurity: { path.append(.accountSecurity) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
@@ -301,6 +302,8 @@ public struct SettingsTab: View {
             AiKeysScreen(vm: AiKeysViewModel())
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
+        case .accountSecurity:
+            AccountSecurityContainer()
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")
@@ -622,6 +625,33 @@ struct RecoveryContainer: View {
                 vm = RecoveryViewModel(
                     client: serverClient,
                     webAuthn: PlatformWebAuthnProvider(),
+                    username: { [app] in app.currentUser }
+                )
+            }
+        }
+    }
+}
+
+/// Account security — TOTP enroll/disable, recovery codes, and the Watch
+/// delegate. A container (mirrors `RecoveryContainer`) so the
+/// `AccountSecurityViewModel` — which holds the in-progress enroll state —
+/// is built ONCE in `.task`, not re-created on each body evaluation.
+struct AccountSecurityContainer: View {
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @State private var vm: AccountSecurityViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                AccountSecurityScreen(viewModel: vm)
+            } else { ProgressView() }
+        }
+        .task {
+            if vm == nil {
+                vm = AccountSecurityViewModel(
+                    server: server,
                     username: { [app] in app.currentUser }
                 )
             }

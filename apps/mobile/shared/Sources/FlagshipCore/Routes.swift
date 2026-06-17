@@ -85,6 +85,12 @@ public enum SettingsRoute: Hashable, Sendable {
     /// Device-local; never shows a full key.
     case aiKeys
     case recovery
+    /// Settings → Account security. TOTP enroll/disable, recovery codes, and
+    /// the Watch delegate. Reached via the account-security row — previously
+    /// unwired (the row fired a no-op handler and there was no route case, so
+    /// `AccountSecurityScreen` was unreachable from iOS Settings: a parity gap
+    /// with web + Android, surfaced by the UI gym).
+    case accountSecurity
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.

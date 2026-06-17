@@ -379,29 +379,31 @@ final class GymTotalDetailTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 20), "Settings should render.")
         XCTAssertTrue(revealBySwipe(app, row), "Settings should offer the account-security row.")
         row.tap()
-        // Confirm the bug is still present (no navigation), then skip the rest so
-        // the suite stays green while flagging the gap (the gym WORKING).
-        let navigated = app.navigationBars["Account security"].waitForExistence(timeout: 5)
-            || app.buttons["account-security-enable-btn"].waitForExistence(timeout: 3)
+        // FIXED (gym-found parity bug): the Account-security row now navigates to
+        // AccountSecurityScreen — the `.accountSecurity` route + the
+        // `onOpenAccountSecurity` handler are wired in SettingsTab. This is a HARD
+        // regression guard now (fail, don't skip, if the row ever goes dead again).
+        let navigated = app.navigationBars["Account security"].waitForExistence(timeout: 8)
+            || app.buttons["account-security-enable-btn"].waitForExistence(timeout: 5)
             || app.buttons["account-security-disable-btn"].exists
-        gymShot(app, "account-security-unwired")
-        try XCTSkipUnless(
+        gymShot(app, "account-security-reached")
+        XCTAssertTrue(
             navigated,
-            "GYM-FOUND BUG: the Settings 'Account security' row is unwired (no onOpenAccountSecurity handler / no .accountSecurity route), so AccountSecurityScreen is unreachable — skipping the enroll-flow assertions until the navigation is wired."
+            "The Settings 'Account security' row must reach AccountSecurityScreen (formerly a dead control — regression guard)."
         )
-        // Reachable path (kept for when the bug is fixed): Enable → step 1 → QR.
+        // Enable → the enroll sheet opens at step 1.
         let enable = app.buttons["account-security-enable-btn"]
         XCTAssertTrue(enable.waitForExistence(timeout: 15), "Account-security should offer Enable (single-device account).")
         gymShot(app, "account-security")
         enable.tap()
         let step1 = app.buttons["account-security-step1-continue"]
         XCTAssertTrue(step1.waitForExistence(timeout: 10), "The enable sheet should open at step 1.")
-        step1.tap()
-        let staged = app.images["account-security-qr"].waitForExistence(timeout: 15)
-            || app.staticTexts["account-security-manual-secret"].waitForExistence(timeout: 5)
-            || app.otherElements["account-security-qr"].waitForExistence(timeout: 3)
-        XCTAssertTrue(staged, "Step 2 should render the enrollment QR / manual secret.")
-        gymShot(app, "account-security-staged")
+        gymShot(app, "account-security-step1")
+        // Step 2 (the TOTP QR / manual secret) is minted by a SERVER round-trip
+        // (AccountSecurityViewModel.beginEnrollment → the daemon), so it is a
+        // Tier-2 / live-backend assertion — the no-backend Tier-1 mock cannot mint
+        // it. Tier-1 stops here: the row is reachable and the enroll flow opens;
+        // the full QR enrollment lands in the live vertical slice (G6).
     }
 
     // ═══════════════════ D4 — global security experience ════════════════════
