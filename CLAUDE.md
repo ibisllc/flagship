@@ -121,9 +121,61 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-15**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-17**.
 
-### 2026-06-15 (latest) — `feat/marketplace` brought up to speed + `main` shed marketplace/monetization
+### 2026-06-17 (latest) — maintainer-trust enforcement landed (apps + boxes verify the blessing)
+
+**The maintainer→CA blessing is now load-bearing end to end** (spec:
+`docs/maintainer-trust-enforcement.md`). Previously the whole `@ibisllc/maintainers`
+authority chain existed but nothing at the edges verified it, and the `.com`
+lease had lapsed (2026-06-02). All on `main`, green (`tsc -b` clean · vitest
+**5520**):
+- **Authority re-established + enforced:** a backdated 90d `CaEndorsement`
+  (gap-free `2026-06-02`→`2026-08-31`, re-blessing hot key `230ad9ed…`) is
+  committed + deployed; `CA_ENDORSEMENT_ENFORCE=true` is live so `.com` refuses
+  to sign directory attestations without a live lease. Also fixed the
+  `ca-lease-status` expired-sibling false-alarm.
+- **`GET /api/maintainer-blessing`** exposes the ca-track mandate chain +
+  endorsement bundle so any client verifies `pin → authorizedCaKeys(now) ∋
+  servedKey` against its OWN baked `MAINTAINER_PINNED_MANDATE_HASH` (safe even
+  if `.com` is rogue). Shared verify primitive ported byte-identically to TS ·
+  browser-JS · Swift · Kotlin (one authoritative fixture).
+- **App trust gate (webapp · iOS · Android):** `isServerTrusted` halts ALL
+  backend calls when unverified; visible non-dismissible **red top sliver** (one
+  line per failing cert-hash slug); biometric/PIN-gated override records a
+  device-key-signed `TrustException` synced via `.com` (one acceptance per cert,
+  fleet-wide).
+- **Box↔relay (deploy-safe OBSERVE):** `.services` self-keys + fetches a daily
+  `.com` `ServiceBlessing` (`POST /api/services/hub-blessing`) presented on the
+  tunnel HELLO_ACK + a hub proof-of-possession; the daemon verifies it and has a
+  lockdown + owner-SOS mechanism — all behind **`FLAGSHIP_RELAY_TRUST_ENFORCE`
+  (default OFF)**, so the live fleet is never bricked; flip per the rollout doc
+  after on-hardware validation.
+
+**Open / follow-ups (this feature):**
+- **Ceremony app — DEFERRED (not started):** a native **iOS NFC** app driving
+  YubiKey PIV-Ed25519 over Core NFC ISO7816 (PIV AID `A000000308…`) to run
+  CA-lease/mandate ceremonies tap-to-sign, with the §10.2 keyless commit-writer
+  (spec `docs/maintainer-ca-endorsement.md` §11–12; canonical home = the
+  `maintainers` repo). Confirmed feasible on iPhone (needs a YubiKey 5 **NFC**,
+  fw ≥ 5.7). The **CLI covers ceremonies meanwhile**, so this is usability/
+  successor-onboarding value, sequenced after enforcement.
+- **Direct LAN / box-AP channel — FUTURE (not started):** a physical-LAN or
+  box-hosted-Wi-Fi path between box and owner-phone when physically close, for a
+  fully `.com`-independent channel for trust decisions (SOS / exception grants) +
+  local admin. The clean long-term answer to the "forced through `.com`" dilemma.
+- **Operational (owner):** deploy `main`; **iOS Xcode build** (the Swift trust
+  gate + vector tests are the one unrun gate — Android/webapp/backend green);
+  flip `FLAGSHIP_RELAY_TRUST_ENFORCE` on a canary box then fleet-wide after the
+  rollout-doc validation; wire `resolveTrustExceptions` (needs a box-side
+  IRK-anchored device-roster accessor) + replace the log-only SOS with the real
+  `flagship/push-relay/v1` fan-out; re-mint the lease before `2026-08-31`.
+- **`maintainers` repo:** a `ca-endorsement --not-before/--issued-at` backdate
+  flag was built (used once to mint the gap-free lease) but **intentionally NOT
+  merged** — backdating attestations is a hopefully-never tool; it's parked
+  unmerged on a branch. The repo's `main` is otherwise untouched.
+
+### 2026-06-15 — `feat/marketplace` brought up to speed + `main` shed marketplace/monetization
 
 **`main` is now clean of ALL marketplace + monetization app code** (commit
 `390e92fb`): the build-a-service chooser's "Get from the marketplace" tile and
