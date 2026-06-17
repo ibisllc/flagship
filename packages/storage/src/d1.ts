@@ -64,6 +64,8 @@ import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
   CtAlertStorage,
+  TrustExceptionRecord,
+  TrustExceptionStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -2645,6 +2647,7 @@ export class D1Storage implements Storage {
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   ctAlerts: CtAlertStorage;
+  trustExceptions: TrustExceptionStorage;
   namespace: NamespaceStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
@@ -2680,6 +2683,7 @@ export class D1Storage implements Storage {
     this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);
     this.acmeAccountKeyDelivery = new D1AcmeAccountKeyDeliveryStorage(db);
     this.ctAlerts = new D1CtAlertStorage(db);
+    this.trustExceptions = new D1TrustExceptionStorage(db);
     this.namespace = new D1NamespaceStorage(db);
   }
 }
@@ -2753,6 +2757,96 @@ export class D1CtAlertStorage implements CtAlertStorage {
       .bind(username.toLowerCase(), certSha256.toLowerCase())
       .first();
     return !!r;
+  }
+}
+
+interface TrustExceptionRow {
+  username: string;
+  cert_hash: string;
+  cert_class: string;
+  granted_at: number;
+  granted_by_device_pub: string;
+  envelope_json: string;
+  stored_at: number;
+}
+function rowToTrustException(r: TrustExceptionRow): TrustExceptionRecord {
+  return {
+    username: r.username,
+    certHash: r.cert_hash,
+    certClass: r.cert_class,
+    grantedAt: r.granted_at,
+    grantedByDevicePub: r.granted_by_device_pub,
+    envelopeJson: r.envelope_json,
+    storedAt: r.stored_at,
+  };
+}
+
+/** D1 TrustExceptionStorage — owner-signed per-cert maintainer-trust
+ *  overrides, synced through `.com`. PRIMARY KEY (username, cert_hash);
+ *  `put` is a REPLACE (last-writer; replay-safe). */
+export class D1TrustExceptionStorage implements TrustExceptionStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(
+    username: string,
+    exc: {
+      kind: string;
+      certClass: string;
+      certHash: string;
+      grantedAt: number;
+      grantedByDevicePub: string;
+      signatures: { pubkey: string; sig: string }[];
+    },
+    now: number = Date.now(),
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO trust_exceptions
+           (username, cert_hash, cert_class, granted_at,
+            granted_by_device_pub, envelope_json, stored_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(username, cert_hash) DO UPDATE SET
+           cert_class = excluded.cert_class,
+           granted_at = excluded.granted_at,
+           granted_by_device_pub = excluded.granted_by_device_pub,
+           envelope_json = excluded.envelope_json,
+           stored_at = excluded.stored_at`,
+      )
+      .bind(
+        username.toLowerCase(),
+        exc.certHash.toLowerCase(),
+        exc.certClass,
+        exc.grantedAt,
+        exc.grantedByDevicePub.toLowerCase(),
+        JSON.stringify(exc),
+        now,
+      )
+      .run();
+  }
+  async listForUser(username: string): Promise<TrustExceptionRecord[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT username, cert_hash, cert_class, granted_at,
+                granted_by_device_pub, envelope_json, stored_at
+           FROM trust_exceptions WHERE username = ?1
+           ORDER BY granted_at DESC`,
+      )
+      .bind(username.toLowerCase())
+      .all<TrustExceptionRow>();
+    return (rs.results ?? []).map(rowToTrustException);
+  }
+  async get(
+    username: string,
+    certHash: string,
+  ): Promise<TrustExceptionRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT username, cert_hash, cert_class, granted_at,
+                granted_by_device_pub, envelope_json, stored_at
+           FROM trust_exceptions WHERE username = ?1 AND cert_hash = ?2 LIMIT 1`,
+      )
+      .bind(username.toLowerCase(), certHash.toLowerCase())
+      .first<TrustExceptionRow>();
+    return r ? rowToTrustException(r) : undefined;
   }
 }
 
