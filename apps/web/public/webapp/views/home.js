@@ -315,6 +315,14 @@ export function renderServerCard(server, pod, opts = {}) {
   const deadDelete = c.kind === "never-seen"
     ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-dead-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server (free name)</button></div>`
     : "";
+  // L3 — a box waiting for the owner to approve its boot/unlock is ACTIONABLE:
+  // iOS/Android approve straight from the card, so the webapp card gets an
+  // "Approve unlock" button that deep-links into the boot-approval screen
+  // (the IRK-signed mailbox read + approve lives there). Without this the card
+  // was a dead-end status pill.
+  const approveUnlock = c.kind === "waiting-for-approval"
+    ? `<div class="row mt-2"><button class="full-width js-approve-unlock">Approve unlock</button></div>`
+    : "";
   const row = listRow({
     leading: { kind: "icon", svg: serverIcon, tone },
     title: String(server.serverId),
@@ -328,6 +336,7 @@ export function renderServerCard(server, pod, opts = {}) {
   return `
     ${row}
     ${deadDelete}
+    ${approveUnlock}
   `;
 }
 
@@ -706,6 +715,16 @@ function wireHomeListControls(list) {
       e.stopPropagation();
       const fqdn = btn.getAttribute("data-fqdn") || "";
       void deleteDeadServer(fqdn, btn);
+    });
+  });
+  // L3 — "Approve unlock" on a waiting-for-approval card deep-links into the
+  // boot-approval screen (the biometric/IRK-gated mailbox read + approve),
+  // matching iOS/Android approving from the card.
+  list.querySelectorAll(".js-approve-unlock").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const { enterBootApproval } = await import("./boot-approval.js");
+      await enterBootApproval();
     });
   });
   // Collapsing-header reveal: show the compact sticky title once the large

@@ -247,6 +247,11 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     expect(c.kind).toBe("waiting-for-approval");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: true, now });
     expect(html).not.toContain("js-delete-dead-server");
+    // L3 — the waiting card is actionable: an "Approve unlock" affordance that
+    // deep-links into boot-approval, mirroring iOS/Android approving from the
+    // card (not a dead-end status pill).
+    expect(html).toContain("js-approve-unlock");
+    expect(html).toContain("Approve unlock");
   });
 
   it("coming-online: registered within the grace window, no live request", () => {
@@ -255,6 +260,8 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     expect(c.kind).toBe("coming-online");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
     expect(html).not.toContain("js-delete-dead-server");
+    // Not waiting on the owner → no approve affordance.
+    expect(html).not.toContain("js-approve-unlock");
   });
 
   it("never-seen (dead): no live request + past the grace window", () => {
@@ -263,5 +270,6 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     expect(c.kind).toBe("never-seen");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
     expect(html).toContain("js-delete-dead-server");
+    expect(html).not.toContain("js-approve-unlock");
   });
 });
