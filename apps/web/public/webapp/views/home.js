@@ -307,7 +307,7 @@ export function renderServerCard(server, pod, opts = {}) {
     : "phone-tap only";
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
-  const subtitle = `${serviceCount} app${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  const subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
   // A box that registered during install but whose daemon never checked in
   // (`never-seen`) is a dead install — offer the decommission / free-the-name
   // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is

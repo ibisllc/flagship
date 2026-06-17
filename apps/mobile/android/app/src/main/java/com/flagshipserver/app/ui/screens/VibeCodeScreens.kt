@@ -173,7 +173,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
     ) {
         Spacer(Modifier.height(FS.space.s12))
         Text(
-            text = "New app",
+            text = "New service",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )

@@ -173,7 +173,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
   it("faq covers the major topic groups", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/faq.html" });
-    const groups = ["Setup", "Privacy", "Apps", "money", "company"];
+    const groups = ["Setup", "Privacy", "Services", "money", "company"];
     const hits = groups.filter((g) => r.body.toLowerCase().includes(g.toLowerCase()));
     expect(hits.length).toBeGreaterThanOrEqual(3);
   });
@@ -189,7 +189,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
   it("disambiguation page is a static fallback (no client-side resolver call)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/disambiguate.html" });
-    expect(r.body).toContain("No app here");
+    expect(r.body).toContain("No service here");
     expect(r.body).not.toContain("/api/aliases/");
   });
 });

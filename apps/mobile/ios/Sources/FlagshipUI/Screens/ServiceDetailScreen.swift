@@ -76,7 +76,7 @@ public struct ServiceDetailScreen: View {
             .padding(.top, FS.space.s4)
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle(vm.detail.value?.app.slug.capitalized ?? "App")
+        .navigationTitle(vm.detail.value?.app.slug.capitalized ?? "Service")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -600,7 +600,7 @@ public struct ServiceDetailScreen: View {
     private func saveAndRemove(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             FSPrimaryButton("Save changes", block: true, large: true, action: onSave)
-            FSDangerButton("Remove app", block: true, action: onRemove)
+            FSDangerButton("Remove service", block: true, action: onRemove)
         }
         .padding(.top, FS.space.s4)
     }

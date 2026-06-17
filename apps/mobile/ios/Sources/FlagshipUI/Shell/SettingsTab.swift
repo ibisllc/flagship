@@ -500,7 +500,7 @@ struct PrivacyScreen: View {
                         .foregroundColor(c.text)
                 }
                 .tint(c.primary)
-                Text("On by default. Flagship asks for Face ID each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your apps keep running and your pods stay reachable — this only controls who can see and tap.")
+                Text("On by default. Flagship asks for Face ID each time the app launches or returns from the background, so you stay signed in without re-entering your passphrase. Turn it off to open straight in. Either way your services keep running and your pods stay reachable — this only controls who can see and tap.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                 if let msg = pendingError {

@@ -158,7 +158,7 @@ public struct BuildGitScreen: View {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Spacer().frame(height: FS.space.s6)
                     Text("Import from a Git repo").font(FS.font.h2())
-                    Text("Paste a repo URL. We clone it on your box and check whether it's ready to run as a Flagship app.")
+                    Text("Paste a repo URL. We clone it on your box and check whether it's ready to run as a Flagship service.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
 
                     FSField(value: $vm.gitUrl, label: "Repository URL",
@@ -220,7 +220,7 @@ public struct BuildGitScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                     FSSecondaryButton("Build with AI instead", block: true) { onBuildWithAI() }
                         .accessibilityIdentifier("build-git-adapt")
-                    Text("The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.")
+                    Text("The AI rewrites this repo into a Flagship service — adds the manifest, removes its own login, and wires it to your box's data layer.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     journalLink(c: c)
@@ -239,7 +239,7 @@ public struct BuildGitScreen: View {
                     Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
                     Text("Adapted").font(FS.font.h4()).foregroundColor(c.text)
                 }
-                Text("The AI rewrote this repo into a Flagship app\(n > 0 ? " (\(n) file\(n == 1 ? "" : "s"))" : "").")
+                Text("The AI rewrote this repo into a Flagship service\(n > 0 ? " (\(n) file\(n == 1 ? "" : "s"))" : "").")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 FSPrimaryButton("Install it", block: true) { Task { await vm.deploy() } }
                     .accessibilityIdentifier("build-git-deploy")

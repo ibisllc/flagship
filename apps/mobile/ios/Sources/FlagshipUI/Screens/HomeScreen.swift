@@ -351,7 +351,7 @@ public struct HomeScreen: View {
                                 Text("Your account is ready")
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(c.text)
-                                Text("You don't have any servers yet. Add your first server to start running your own apps — or come back to it whenever you like.")
+                                Text("You don't have any servers yet. Add your first server to start running your own services — or come back to it whenever you like.")
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.textMuted)
                                     .fixedSize(horizontal: false, vertical: true)

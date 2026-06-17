@@ -92,7 +92,7 @@ public struct VibeCodeDescribeScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s6) {
                     Spacer().frame(height: FS.space.s12)
-                    Text("New app").font(FS.font.h2())
+                    Text("New service").font(FS.font.h2())
                     FSColorReader { c in
                         Text("Describe what you want. Your Flagship will build it and run it at \(name).harry.flagship.services.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)

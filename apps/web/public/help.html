@@ -156,12 +156,12 @@
     </article>
 
     <article class="card help-card">
-      <span class="label">App not loading</span>
-      <h3>An app isn't loading.</h3>
+      <span class="label">Service not loading</span>
+      <h3>A service isn't loading.</h3>
       <ol>
         <li><strong>Browser shows "DNS error"</strong> — your subdomain is propagating. Wait 60 seconds; check <a href="/status/">/status</a>.</li>
         <li><strong>"Cert invalid" / no green padlock</strong> — the daemon is renewing. Check the dashboard for "Renewing" pill; usually clears in 90 seconds.</li>
-        <li><strong>"403 not a member"</strong> — the app is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
+        <li><strong>"403 not a member"</strong> — the service is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
       </ol>
       <p class="next">Logs live on your box at <code>journalctl -u flagshipd</code>.</p>
     </article>
@@ -201,12 +201,12 @@
     </div>
 
     <div class="symptom">
-      <h3>"403 not a member" or "App locked"</h3>
-      <p>Apps default to identity-gated — only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:</p>
+      <h3>"403 not a member" or "Service locked"</h3>
+      <p>Services default to identity-gated — only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:</p>
       <ol>
         <li>Confirm you're signed in on this device. Open the dashboard at <code>https://you.flagship.services/.flagship/</code>; if it asks for pairing, pair.</li>
-        <li>If you're a guest someone shared the app with: ask them to re-issue the invite. Invite tokens expire after first use.</li>
-        <li>If the app is supposed to be public, check its manifest's <code>access</code> field. Owner can change it from the dashboard.</li>
+        <li>If you're a guest someone shared the service with: ask them to re-issue the invite. Invite tokens expire after first use.</li>
+        <li>If the service is supposed to be public, check its manifest's <code>access</code> field. Owner can change it from the dashboard.</li>
       </ol>
     </div>
   </section>

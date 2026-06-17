@@ -605,7 +605,7 @@ private fun ServerOverviewCard(detail: ServerDetailResponse, onRefresh: () -> Un
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
             )
             Text(
-                "${detail.serviceCount} apps · daemon ${detail.daemonVersion}",
+                "${detail.serviceCount} services · daemon ${detail.daemonVersion}",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )

@@ -288,7 +288,7 @@ fun BuildGitScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s4))
         when (val p = phase) {
             is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav)
-            is BuildGitViewModel.GitPhase.Adapting -> InfoCard("Adapting…", "The AI is rewriting this repo into a Flagship app.")
+            is BuildGitViewModel.GitPhase.Adapting -> InfoCard("Adapting…", "The AI is rewriting this repo into a Flagship service.")
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
             is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url)
@@ -332,7 +332,7 @@ private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewM
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text("Adapted ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s2))
-        Text("The AI rewrote this repo into a Flagship app (${p.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text("The AI rewrote this repo into a Flagship service (${p.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
         Spacer(Modifier.height(FS.space.s4))
         FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
         Spacer(Modifier.height(FS.space.s2))
