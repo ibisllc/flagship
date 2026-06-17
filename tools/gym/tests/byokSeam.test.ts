@@ -35,6 +35,15 @@ function okFetchWithText(text: string): GymFetch {
   });
 }
 
+/** A mock fetch returning a 200 OpenAI Chat Completions body wrapping `text`. */
+function okOpenAiFetch(text: string): GymFetch {
+  return async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ choices: [{ message: { role: "assistant", content: text } }] }),
+  });
+}
+
 /** A mock fetch that returns a non-2xx (e.g. 500). */
 function statusFetch(status: number): GymFetch {
   return async () => ({ ok: false, status, text: async () => "boom" });
@@ -141,6 +150,55 @@ describe("ByokJudge — happy path maps a well-formed reply to findings", () => 
     } finally {
       logSpy.mockRestore();
       errSpy.mockRestore();
+      shot.cleanup();
+    }
+  });
+});
+
+describe("ByokJudge — OpenAI provider (Chat Completions shape)", () => {
+  const OPENAI: ByokConfig = { provider: "openai", apiKey: "sk-openai-NOT-REAL" };
+
+  it("maps an OpenAI choices[].message.content reply to findings", async () => {
+    const shot = makeScreenshot();
+    try {
+      const reply = JSON.stringify([{ severity: "warn", message: "The teal accent looks washed out here." }]);
+      const judge = new ByokJudge(OPENAI, okOpenAiFetch(reply));
+      const findings = await judge.judge(judgeCtx(shot.path));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toMatchObject({ role: "judge", severity: "warn" });
+      expect(findings[0]!.message).toContain("teal");
+    } finally {
+      shot.cleanup();
+    }
+  });
+
+  it("posts to <base>/v1/chat/completions with Authorization: Bearer (not x-api-key), vision as image_url", async () => {
+    const shot = makeScreenshot();
+    const seen: { url: string; headers: Record<string, string>; body: string }[] = [];
+    const spyFetch: GymFetch = async (url, init) => {
+      seen.push({ url, headers: init.headers, body: init.body });
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "[]" } }] }) };
+    };
+    try {
+      const judge = new ByokJudge({ ...OPENAI, baseUrl: "https://oai.example.com/" }, spyFetch);
+      await judge.judge(judgeCtx(shot.path));
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.url).toBe("https://oai.example.com/v1/chat/completions");
+      expect(seen[0]!.headers["authorization"]).toBe(`Bearer ${OPENAI.apiKey}`);
+      expect(seen[0]!.headers["x-api-key"]).toBeUndefined();
+      expect(seen[0]!.body).toContain("image_url");
+      expect(seen[0]!.body).toContain("data:image/png;base64,");
+    } finally {
+      shot.cleanup();
+    }
+  });
+
+  it("an OpenAI 401 (wrong/expired key) still degrades to [] (IRON RULE)", async () => {
+    const shot = makeScreenshot();
+    try {
+      const judge = new ByokJudge(OPENAI, statusFetch(401));
+      await expect(judge.judge(judgeCtx(shot.path))).resolves.toEqual([]);
+    } finally {
       shot.cleanup();
     }
   });
@@ -269,6 +327,11 @@ describe("byokConfigFromEnv — null without a key, a config with one", () => {
       baseUrl: "https://proxy.example.com",
       model: "claude-opus-4-1",
     });
+  });
+
+  it("threads GYM_AI_PROVIDER=openai through", () => {
+    const cfg = byokConfigFromEnv({ GYM_AI_API_KEY: "sk-o", GYM_AI_PROVIDER: "openai" });
+    expect(cfg).toMatchObject({ provider: "openai", apiKey: "sk-o" });
   });
 });
 

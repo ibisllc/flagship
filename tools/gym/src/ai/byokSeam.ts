@@ -20,12 +20,18 @@
  * An AI outage, a 500, a refusal, or a malformed reply must NEVER throw into the
  * gate or redden a deterministic-green run. The API key is NEVER logged.
  *
- * Wire shape = the Anthropic Messages API (POST <base>/v1/messages, `x-api-key`,
- * `anthropic-version`, content-block messages with base64 image blocks), called
- * directly via the injected fetch — kept independent of the provider registry's
- * types so the fetch can be mocked in a no-network test (see the `fetchImpl`
- * constructor seam). `baseUrl` is honored, so an Anthropic-compatible proxy or a
- * self-hosted endpoint that speaks this shape works too.
+ * PROVIDERS (BYOK — pick yours with `GYM_AI_PROVIDER`):
+ *   - "anthropic" (default) — POST <base>/v1/messages, `x-api-key` +
+ *     `anthropic-version`, content-block messages with base64 image blocks;
+ *     default base https://api.anthropic.com, default model claude-sonnet-4-6.
+ *   - "openai" — POST <base>/v1/chat/completions, `Authorization: Bearer`,
+ *     chat messages with an `image_url` data-URI for vision; default base
+ *     https://api.openai.com, default model gpt-4o. Any OpenAI-compatible
+ *     endpoint (vLLM / Ollama / a gateway) works via `GYM_AI_BASE_URL`.
+ * Both are called via the injected fetch — kept independent of the provider
+ * registry's types so the fetch can be mocked in a no-network test (see the
+ * `fetchImpl` constructor seam). `GYM_AI_BASE_URL` / `GYM_AI_MODEL` override the
+ * per-provider defaults.
  */
 
 import { readFile } from "node:fs/promises";
@@ -52,10 +58,14 @@ export interface ByokConfig {
   readonly model?: string;
 }
 
-/** The Anthropic Messages API default base + a current vision-capable model. */
+/** Anthropic Messages API defaults. */
 const ANTHROPIC_DEFAULT_BASE = "https://api.anthropic.com";
 const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6";
+
+/** OpenAI Chat Completions API defaults (a current vision-capable model). */
+const OPENAI_DEFAULT_BASE = "https://api.openai.com";
+const OPENAI_DEFAULT_MODEL = "gpt-4o";
 
 /** Keep the calls SHORT (low $, this is a review aid, not an agent). */
 const JUDGE_MAX_TOKENS = 512;
@@ -95,7 +105,13 @@ export function byokConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ByokCon
   };
 }
 
-/** Map a file extension to an image media type Anthropic accepts; null if not an image. */
+/** True for the OpenAI (Chat Completions) wire shape; everything else → Anthropic. */
+function isOpenAiProvider(provider: string): boolean {
+  const p = provider.trim().toLowerCase();
+  return p === "openai" || p === "azure-openai" || p === "openai-compatible";
+}
+
+/** Map a file extension to an image media type; null if not an image. */
 function imageMediaType(path: string): string | null {
   switch (extname(path).toLowerCase()) {
     case ".png":
@@ -115,27 +131,6 @@ function imageMediaType(path: string): string | null {
 /** Coerce an arbitrary parsed severity to the AiSeverity enum (default "warn"). */
 function coerceSeverity(v: unknown): AiSeverity {
   return v === "info" ? "info" : "warn";
-}
-
-/**
- * Pull the assistant TEXT out of an Anthropic Messages response body. Returns ""
- * on any shape it doesn't recognise (caller then yields no findings — never
- * throws). Tolerant on purpose: a model/proxy variance must degrade to empty.
- */
-function extractText(parsedBody: unknown): string {
-  if (!parsedBody || typeof parsedBody !== "object") return "";
-  const content = (parsedBody as { content?: unknown }).content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter(
-      (b): b is { type: string; text: string } =>
-        !!b &&
-        typeof b === "object" &&
-        (b as { type?: unknown }).type === "text" &&
-        typeof (b as { text?: unknown }).text === "string",
-    )
-    .map((b) => b.text)
-    .join("");
 }
 
 /**
@@ -165,6 +160,12 @@ function extractJson(text: string): unknown {
     }
   }
   return null;
+}
+
+/** A provider-neutral one-turn request: a prompt + an optional inline image. */
+interface UserTurn {
+  readonly text: string;
+  readonly image?: { readonly mediaType: string; readonly base64: string };
 }
 
 const JUDGE_SYSTEM_PROMPT =
@@ -199,21 +200,18 @@ export class ByokJudge implements AiJudge {
         return [];
       }
 
-      const userContent = [
-        {
-          type: "text",
-          text:
-            `Scenario goal: ${ctx.goal}\nScreenshot point: ${ctx.point}\n` +
-            "Review this captured screen against the rubric and reply with the JSON findings array only.",
-        },
-        { type: "image", source: { type: "base64", media_type: media, data: dataBase64 } },
-      ];
+      const turn: UserTurn = {
+        text:
+          `Scenario goal: ${ctx.goal}\nScreenshot point: ${ctx.point}\n` +
+          "Review this captured screen against the rubric and reply with the JSON findings array only.",
+        image: { mediaType: media, base64: dataBase64 },
+      };
 
-      const text = await callAnthropicMessages(
+      const text = await callModel(
         this.config,
         this.fetchImpl,
         JUDGE_SYSTEM_PROMPT,
-        userContent,
+        turn,
         JUDGE_MAX_TOKENS,
         JUDGE_TIMEOUT_MS,
       );
@@ -266,20 +264,17 @@ export class ByokNavigator implements AiNavigator {
       const treeBlurb = ctx.currentTree
         ? `\nCurrent a11y tree / DOM (truncated):\n${ctx.currentTree.slice(0, 6000)}`
         : "\n(No current tree available.)";
-      const userContent = [
-        {
-          type: "text",
-          text:
-            `Scenario goal: ${ctx.goal}\nMissing handle: ${ctx.missingHandle}${treeBlurb}\n` +
-            "Reply with the JSON suggestion object only.",
-        },
-      ];
+      const turn: UserTurn = {
+        text:
+          `Scenario goal: ${ctx.goal}\nMissing handle: ${ctx.missingHandle}${treeBlurb}\n` +
+          "Reply with the JSON suggestion object only.",
+      };
 
-      const text = await callAnthropicMessages(
+      const text = await callModel(
         this.config,
         this.fetchImpl,
         NAVIGATE_SYSTEM_PROMPT,
-        userContent,
+        turn,
         NAVIGATE_MAX_TOKENS,
         NAVIGATE_TIMEOUT_MS,
       );
@@ -312,53 +307,161 @@ export class ByokNavigator implements AiNavigator {
 }
 
 /**
- * Issue ONE bounded Anthropic-shaped Messages call and return the assistant
- * text. Returns "" on ANY failure (network throw, non-2xx, unparseable body,
- * timeout) — callers map "" to no findings. The API key rides only in the
- * `x-api-key` header and is never logged.
+ * Dispatch ONE bounded call to the configured provider and return the assistant
+ * text. Returns "" on ANY failure — callers map "" to no findings, never throw.
+ */
+async function callModel(
+  config: ByokConfig,
+  fetchImpl: GymFetch,
+  system: string,
+  turn: UserTurn,
+  maxTokens: number,
+  timeoutMs: number,
+): Promise<string> {
+  return isOpenAiProvider(config.provider)
+    ? callOpenAiChat(config, fetchImpl, system, turn, maxTokens, timeoutMs)
+    : callAnthropicMessages(config, fetchImpl, system, turn, maxTokens, timeoutMs);
+}
+
+/** Pull the assistant TEXT out of an Anthropic Messages response body ("" if unrecognised). */
+function extractAnthropicText(parsedBody: unknown): string {
+  if (!parsedBody || typeof parsedBody !== "object") return "";
+  const content = (parsedBody as { content?: unknown }).content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter(
+      (b): b is { type: string; text: string } =>
+        !!b &&
+        typeof b === "object" &&
+        (b as { type?: unknown }).type === "text" &&
+        typeof (b as { text?: unknown }).text === "string",
+    )
+    .map((b) => b.text)
+    .join("");
+}
+
+/** Pull the assistant TEXT out of an OpenAI Chat Completions body ("" if unrecognised). */
+function extractOpenAiText(parsedBody: unknown): string {
+  if (!parsedBody || typeof parsedBody !== "object") return "";
+  const choices = (parsedBody as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return "";
+  const msg = (choices[0] as { message?: unknown } | undefined)?.message;
+  const content = (msg as { content?: unknown } | undefined)?.content;
+  return typeof content === "string" ? content : "";
+}
+
+/**
+ * One bounded fetch with a timeout. Returns the raw response text, or "" on any
+ * transport failure / non-2xx / timeout. The caller parses + tolerates.
+ */
+async function fetchText(
+  fetchImpl: GymFetch,
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  timeoutMs: number,
+): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      signal: controller.signal,
+    });
+    if (!res.ok) return "";
+    return await res.text();
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Anthropic Messages call. The API key rides only in `x-api-key` and is never
+ * logged. Returns "" on any failure.
  */
 async function callAnthropicMessages(
   config: ByokConfig,
   fetchImpl: GymFetch,
   system: string,
-  userContent: unknown,
+  turn: UserTurn,
   maxTokens: number,
   timeoutMs: number,
 ): Promise<string> {
   const base = (config.baseUrl ?? ANTHROPIC_DEFAULT_BASE).replace(/\/+$/, "");
+  const content: unknown[] = [{ type: "text", text: turn.text }];
+  if (turn.image) {
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: turn.image.mediaType, data: turn.image.base64 },
+    });
+  }
   const body = JSON.stringify({
-    model: config.model ?? DEFAULT_MODEL,
+    model: config.model ?? ANTHROPIC_DEFAULT_MODEL,
     max_tokens: maxTokens,
     system,
-    messages: [{ role: "user", content: userContent }],
+    messages: [{ role: "user", content }],
   });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const raw = await fetchText(
+    fetchImpl,
+    `${base}/v1/messages`,
+    { "x-api-key": config.apiKey, "anthropic-version": ANTHROPIC_VERSION },
+    body,
+    timeoutMs,
+  );
+  if (!raw) return "";
   try {
-    const res = await fetchImpl(`${base}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body,
-      signal: controller.signal,
-    });
-    if (!res.ok) return "";
-    const raw = await res.text();
-    let parsedBody: unknown;
-    try {
-      parsedBody = JSON.parse(raw) as unknown;
-    } catch {
-      return "";
-    }
-    return extractText(parsedBody);
+    return extractAnthropicText(JSON.parse(raw) as unknown);
   } catch {
     return "";
-  } finally {
-    clearTimeout(timer);
+  }
+}
+
+/**
+ * OpenAI Chat Completions call (works against any OpenAI-compatible endpoint via
+ * `baseUrl`). The key rides only in `Authorization: Bearer` and is never logged.
+ * Vision is the standard `image_url` data-URI content part. Returns "" on any
+ * failure.
+ */
+async function callOpenAiChat(
+  config: ByokConfig,
+  fetchImpl: GymFetch,
+  system: string,
+  turn: UserTurn,
+  maxTokens: number,
+  timeoutMs: number,
+): Promise<string> {
+  const base = (config.baseUrl ?? OPENAI_DEFAULT_BASE).replace(/\/+$/, "");
+  const userContent: unknown[] = [{ type: "text", text: turn.text }];
+  if (turn.image) {
+    userContent.push({
+      type: "image_url",
+      image_url: { url: `data:${turn.image.mediaType};base64,${turn.image.base64}` },
+    });
+  }
+  const body = JSON.stringify({
+    model: config.model ?? OPENAI_DEFAULT_MODEL,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userContent },
+    ],
+  });
+  const raw = await fetchText(
+    fetchImpl,
+    `${base}/v1/chat/completions`,
+    { authorization: `Bearer ${config.apiKey}` },
+    body,
+    timeoutMs,
+  );
+  if (!raw) return "";
+  try {
+    return extractOpenAiText(JSON.parse(raw) as unknown);
+  } catch {
+    return "";
   }
 }
 
