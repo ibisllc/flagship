@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ModalBottomSheet
@@ -76,6 +78,8 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
+import com.flagshipserver.app.viewmodels.BootUnlockApprovalViewModel
+import com.flagshipserver.app.viewmodels.CoordinatorApprovalSource
 import com.flagshipserver.app.viewmodels.DeadManPhase
 import com.flagshipserver.app.viewmodels.DeadManViewModel
 import com.flagshipserver.app.viewmodels.FrontPagePhase
@@ -96,7 +100,18 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
+fun ServerDetailScreen(
+    podId: String,
+    onBack: () -> Unit,
+    // The directory's cheap `awaitingUnlock` flag for this box. When true the
+    // box is definitely waiting for a boot-unlock approval, so the inline
+    // approval card must be offered REGARDLESS of whether the daemon BFF loaded
+    // (a locked box never answers its BFF — that's the whole point).
+    awaitingUnlock: Boolean = false,
+    // The pod's FQDN, available even when the daemon BFF load fails — drives the
+    // approval card. The loaded detail path prefers its own serverFqdn.
+    serverFqdn: String? = null,
+) {
     val client = LocalScreensClient.current
     val detailVm = remember(podId) { HomeViewModel(client) }
     val metricsVm = remember(podId) { ServerMetricsViewModel(podId = podId, client = client) }
@@ -127,6 +142,19 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
         )
 
         Spacer(Modifier.height(FS.space.s6))
+
+        // Boot-unlock approval — hoisted ABOVE the load-state branch so a box
+        // waiting for the owner to release its disk key is always actionable
+        // here, even when the daemon BFF can't load. Prefer the loaded detail's
+        // FQDN, else the pod FQDN the caller always passes. Renders nothing
+        // until the directory says this box is waiting (`awaitingUnlock`).
+        val approvalFqdn = (detail as? LoadingState.Loaded)?.value?.serverFqdn
+            ?.takeIf { it.isNotEmpty() }
+            ?: serverFqdn?.takeIf { it.isNotEmpty() }
+        approvalFqdn?.let { fqdn ->
+            BootUnlockApprovalCard(serverDomain = fqdn, awaitingUnlock = awaitingUnlock)
+            Spacer(Modifier.height(FS.space.s6))
+        }
 
         when (val d = detail) {
             is LoadingState.Loaded -> ServerInfoCard(d.value)
@@ -255,6 +283,129 @@ private fun BootUnlockCard(serverDomain: String) {
             }
         }
     }
+}
+
+// Inline "Approve unlock" card. DIRECTORY-DRIVEN: the box's pending request is
+// detected by the pod's cheap `awaitingUnlock` flag (no biometric), so the
+// Approve/Deny prompt surfaces directly when it's set and renders nothing
+// otherwise. The biometric fires ONCE, only when the owner taps Approve (the
+// whole ceremony — mailbox fetch, unseal, response, lease — runs behind it).
+// Mirror of iOS ServerDetailScreen.BootUnlockApprovalCard.
+@Composable
+private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean) {
+    val mailbox = LocalSecretMailboxClient.current
+    val app = LocalAppState.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val username by app.currentUser.collectAsState()
+    val store = remember { ServerSettingsStore.from(context) }
+
+    val vm = remember(serverDomain) {
+        BootUnlockApprovalViewModel(
+            serverDomain = serverDomain,
+            makeSource = {
+                username?.let { user ->
+                    CoordinatorApprovalSource(
+                        SecretRequestCoordinator(
+                            mailbox = mailbox,
+                            username = user,
+                            irk = KeystoreIrkAccess(),
+                        ),
+                    )
+                }
+            },
+            // "auto" servers (default; absent ⇒ auto) deposit a self-unlock
+            // lease on approve — matching the create-time choice.
+            depositAutoLease = {
+                store.effectiveMode(serverDomain) == ServerSettingsStore.Mode.AUTO
+            },
+        )
+    }
+    val state by vm.state.collectAsState()
+
+    // Directory-driven surfacing — no biometric, no network. Arms/clears the
+    // prompt on entry + whenever the flag changes.
+    LaunchedEffect(awaitingUnlock) { vm.setAwaitingUnlock(awaitingUnlock) }
+
+    when (val s = state) {
+        is BootUnlockApprovalViewModel.State.Idle -> Unit
+        is BootUnlockApprovalViewModel.State.RequestPending -> {
+            SectionLabel("Box waiting")
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text(
+                        "Your box is waiting for your approval to unlock",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                    FSPrimaryButton(
+                        label = "Approve unlock",
+                        onClick = { scope.launch { vm.approve() } },
+                        block = true,
+                        large = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-approve-unlock" },
+                    )
+                    FSGhostButton(
+                        label = "Deny",
+                        onClick = { vm.deny() },
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-deny-unlock" },
+                    )
+                }
+            }
+        }
+        is BootUnlockApprovalViewModel.State.Approving -> {
+            SectionLabel("Boot unlock")
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.height(18.dp).width(18.dp))
+                    Text("Sending approval…", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                }
+            }
+        }
+        is BootUnlockApprovalViewModel.State.Approved -> {
+            SectionLabel("Boot unlock")
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Text(
+                    "Unlock approved — your box should come online shortly.",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp),
+                )
+            }
+        }
+        is BootUnlockApprovalViewModel.State.Failed -> {
+            SectionLabel("Boot unlock")
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text(s.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+                    FSGhostButton(
+                        label = "Retry",
+                        onClick = { vm.retry() },
+                        block = true,
+                        modifier = Modifier.semantics { contentDescription = "sd-approve-unlock-retry" },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
 }
 
 @Composable
@@ -608,7 +759,7 @@ private fun JournalCard(serverDomain: String) {
         )
     }
     val phase by vm.phase.collectAsState()
-    val unit = JournalUnits.DEFAULT_UNIT
+    var unit by remember { mutableStateOf(JournalUnits.DEFAULT_UNIT) }
     val busy = phase is JournalPhase.Loading
 
     Text(
@@ -626,6 +777,24 @@ private fun JournalCard(serverDomain: String) {
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
+            // Unit picker — which systemd unit's journal to fetch (mirror of the
+            // iOS segmented Picker over JournalUnits.all + the webapp <select>).
+            if (JournalUnits.ALL.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    for (u in JournalUnits.ALL) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = unit == u, enabled = !busy, onClick = { unit = u })
+                                .semantics { contentDescription = "sd-journal-unit-$u" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = unit == u, onClick = { if (!busy) unit = u })
+                            Text(u, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                        }
+                    }
+                }
+            }
             (phase as? JournalPhase.Failed)?.let { f ->
                 Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
             }
@@ -679,6 +848,7 @@ private fun DeadManCard(serverDomain: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
+    val store = remember { ServerSettingsStore.from(context) }
 
     val vm = remember(serverDomain) {
         DeadManViewModel(
@@ -691,10 +861,29 @@ private fun DeadManCard(serverDomain: String) {
     val phase by vm.phase.collectAsState()
     val busy = phase is DeadManPhase.Signing || phase is DeadManPhase.Posting
 
-    var enabled by remember(serverDomain) { mutableStateOf(false) }
-    var window by remember(serverDomain) { mutableStateOf(DeadManWindow.DEFAULT) }
-    var lockout by remember(serverDomain) { mutableStateOf(PowerMode.OFF) }
-    var leaseExpiry by remember(serverDomain) { mutableStateOf<Long?>(null) }
+    // Hydrate from the per-server store so a return visit restores the armed
+    // state + window + lockout + the last lease deadline (mirror of iOS
+    // DeadManViewModel.init reading DeadManStore).
+    var enabled by remember(serverDomain) { mutableStateOf(store.deadManEnabled(serverDomain)) }
+    var window by remember(serverDomain) {
+        mutableStateOf(
+            DeadManWindow.fromMs(store.deadManWindowMs(serverDomain)) ?: DeadManWindow.DEFAULT,
+        )
+    }
+    var lockout by remember(serverDomain) {
+        mutableStateOf(PowerMode.fromWire(store.deadManLockoutMode(serverDomain)) ?: PowerMode.OFF)
+    }
+    var leaseExpiry by remember(serverDomain) { mutableStateOf(store.deadManLeaseExpiry(serverDomain)) }
+
+    // 1s ticker so the "Locks in …" countdown re-renders each second while
+    // armed (mirror of iOS LockPowerViews ticker + webapp startDeadManCountdown).
+    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(enabled, leaseExpiry) {
+        while (enabled) {
+            nowTick = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     fun applyPolicy(targetEnabled: Boolean, targetWindow: DeadManWindow, targetLockout: PowerMode) {
         scope.launch {
@@ -703,8 +892,16 @@ private fun DeadManCard(serverDomain: String) {
                 enabled = targetEnabled
                 window = targetWindow
                 lockout = targetLockout
+                store.saveDeadManPolicy(
+                    serverDomain = serverDomain,
+                    enabled = targetEnabled,
+                    windowMs = targetWindow.windowMs,
+                    graceMs = vm.graceMs,
+                    lockoutMode = targetLockout.wire,
+                )
                 if (!targetEnabled) {
                     leaseExpiry = null
+                    store.setDeadManLeaseExpiry(serverDomain, null)
                     DeadManReminderScheduler.cancel(context, serverDomain)
                     toasts.success("Dead-man lock disarmed.")
                 } else {
@@ -777,11 +974,26 @@ private fun DeadManCard(serverDomain: String) {
                     }
                 }
 
-                leaseExpiry?.let { exp ->
+                // Live countdown — re-renders each second off `nowTick`. Three
+                // states mirror iOS LockPowerViews.leaseSection + webapp:
+                // "Locks in …" while time remains, "Window lapsed" once it does,
+                // and a "not affirmed yet" prompt when no lease exists.
+                val exp = leaseExpiry
+                if (exp != null) {
+                    val remaining = exp - nowTick
                     Text(
-                        DeadManReminders.remainingLabel(exp, System.currentTimeMillis()),
+                        if (remaining > 0) "Locks in ${DeadManReminders.remainingLabel(exp, nowTick)}"
+                        else "Window lapsed — affirm now",
+                        color = if (remaining > 0) FS.colors.textMuted else FS.colors.danger,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
+                    )
+                } else {
+                    Text(
+                        "Not affirmed yet — affirm to start the window.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { contentDescription = "sd-deadman-remaining" },
                     )
                 }
 
@@ -791,12 +1003,15 @@ private fun DeadManCard(serverDomain: String) {
                     block = true,
                 )
                 FSPrimaryButton(
-                    label = if (busy) "Working…" else "Affirm now",
+                    // "Keep <server> unlocked" mirrors iOS LockPowerViews +
+                    // the webapp affirm CTA; busy reads "Affirming…".
+                    label = if (busy) "Affirming…" else "Keep ${serverDomain.substringBefore('.')} unlocked",
                     onClick = {
                         scope.launch {
                             val exp = vm.affirm()
                             if (exp != null) {
                                 leaseExpiry = exp
+                                store.setDeadManLeaseExpiry(serverDomain, exp)
                                 DeadManReminderScheduler.schedule(context, serverDomain, exp)
                                 toasts.success("Stay confirmed.")
                             } else {

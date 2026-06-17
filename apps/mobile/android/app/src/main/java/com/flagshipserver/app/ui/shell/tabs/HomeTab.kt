@@ -230,7 +230,17 @@ fun HomeTab() {
                     )
                 }
             } else {
-                ServerDetailScreen(podId = podId, onBack = { nav.popBackStack() })
+                ServerDetailScreen(
+                    podId = podId,
+                    // The directory's cheap `awaitingUnlock` flag (no biometric)
+                    // arms the inline Approve-unlock card so a rebooted box
+                    // waiting to release its disk key is actionable from its own
+                    // page even when its BFF can't load (a locked box can't
+                    // answer its daemon).
+                    awaitingUnlock = pod.awaitingUnlock,
+                    serverFqdn = pod.fqdn,
+                    onBack = { nav.popBackStack() },
+                )
             }
         }
         composable("add-server-chooser") {

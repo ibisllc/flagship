@@ -70,6 +70,8 @@ class SecretRequestCoordinator(
             CoordinatorException("This box ($domain) isn't registered to your account.")
         class PurposeUnsupported(purpose: String) :
             CoordinatorException("Unsupported secret request type: $purpose.")
+        class NoPendingRequest(domain: String) :
+            CoordinatorException("This box ($domain) isn't waiting for an unlock right now.")
     }
 
     /** A request that PASSED directory re-verification, ready to show the
@@ -190,6 +192,29 @@ class SecretRequestCoordinator(
             return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material)
         }
         return null
+    }
+
+    /** One-tap approval for the directory-driven server card: fetch + verify
+     *  the live unlock-key request for [serverDomain] and respond, all under a
+     *  SINGLE biometric (the IRK is resolved twice inside fetch + respond, but
+     *  the same Keystore-gated derive backs both). No separate "check" step —
+     *  the directory's `awaitingUnlock` flag already told the UI a request is
+     *  pending. Throws [CoordinatorException.NoPendingRequest] if the box gave
+     *  up between the directory refresh and the tap. Mirror of iOS
+     *  SecretRequestCoordinator.approvePendingUnlock. */
+    suspend fun approvePendingUnlock(
+        serverDomain: String,
+        depositAutoLease: Boolean = false,
+    ): String? {
+        val mine = fetchVerifiedRequests()
+            .filter {
+                it.serverDomain.equals(serverDomain, ignoreCase = true) &&
+                    it.purpose == SecretPurpose.UNLOCK_KEY
+            }
+            .sortedByDescending { it.pending.postedAt }
+        val live = mine.firstOrNull { now() <= it.pending.expiresAt }
+            ?: throw CoordinatorException.NoPendingRequest(serverDomain)
+        return confirmAndRespond(live, depositAutoLease = depositAutoLease)
     }
 
     /** Kill switch — revoke a server's auto-unlock lease. The box can no
