@@ -1,17 +1,42 @@
 # UI test gym — design doc (every-merge gym + the total gym)
 
-> **Status: PROPOSAL, owner approval pending. Nothing built yet.** This is the
-> plan for an automated UI "gym": drive the ACTUAL app — iOS, iPad, Android,
-> webapp — through every flow we have built, asserting on-screen state, the real
-> backend effect, server-event propagation, and a structured aesthetic review,
-> with two backend postures (fast local fixtures + a real Hetzner demo box).
-> Last updated 2026-06-17.
+> **Status: PROPOSAL, owner approval pending — rev3 (execution decisions
+> integrated). Nothing built yet.** This is the plan for an automated UI "gym":
+> drive the ACTUAL app — iOS, iPad, Android, webapp — through every flow we have
+> built, asserting on-screen state, the real backend effect, server-event
+> propagation, and a structured aesthetic review, with two backend postures (fast
+> local fixtures + a real Hetzner demo box). Last updated 2026-06-17.
 >
 > Why now: the metal-install path is proven (encrypted box → green padlock on
 > real hardware, 2026-06-10/12) and a Hetzner demo VPS runs the **same daemon a
 > real box does** (`scripts/sample-user.mjs` / `packages/control-plane/src/demoUsers*.ts`),
 > so a true end-to-end UI exercise against a real backend is now feasible without
 > shipping hardware to a CI runner.
+>
+> **rev3 — what the owner decided (the framing this revision integrates):**
+> - **The runner is the owner's physical Mac (this machine).** The heavy
+>   iOS/iPad/Android UI tiers + the total gym + the live-Hetzner runs execute
+>   LOCALLY here (Simulators / emulator local; it provisions ephemeral Hetzner via
+>   the Worker; it judges via short AI). This RESOLVES the old "hosted-macOS CI
+>   runner budget" question — there is no hosted-macOS cost. The cheap
+>   every-merge gym stays in GitHub-Linux CI; the rest runs on this Mac on a
+>   nightly / monthly / on-demand cadence (§7, §9, §10).
+> - **Tier-2 Hetzner is ephemeral** — every live run creates a fresh demo server,
+>   tests, then deletes it (guaranteed teardown). RESOLVES the §6 "fresh vs
+>   shared" question in favor of fresh-per-run; cost stays ~cents/run (§6, §11).
+> - **The harness is a deterministic gate + a short-AI judge/navigator** — the
+>   pass/fail oracle is scripted element-handle taps + state assertions + diffable
+>   screenshots; short-running AI plays two BOUNDED, advisory roles (judge the
+>   screenshots for "does this look right / beautiful", and navigate / self-heal
+>   when a control moves). The AI is **not** the pass/fail oracle. NEW §2
+>   subsection; owner-recommended, pending final confirm of how much AI drives.
+> - **Pre-GA, the D5 server-side states are induced via this box's own admin
+>   access** (`FLAGSHIP_ADMIN_SECRET` + the demo/Hetzner control surface) against
+>   DEMO entities — so **no new production hooks are needed pre-GA** (§6, §7-A).
+> - **Post-GA, a dedicated internet-real isolated TEST environment** (its own
+>   test `.com` Worker + test `.flagship.services` Fly app + a SEPARATE test DNS
+>   zone + a test Hetzner project) carries the clean state-induction hooks, so the
+>   monthly GA-era gym never touches prod (NEW §6.5).
 
 ---
 
@@ -72,12 +97,15 @@ boundaries.
 - Not a replacement for the unit suites (vitest / XCTest / Robolectric). Those
   stay the bulk of coverage; the gym is the thin top of the pyramid that proves
   the screens actually wire together end to end.
-- Not real-time human-like exploration / fuzzing. This is **deterministic,
-  scripted UI testing**: a script taps a known element by its accessibility id /
-  test-tag and asserts a known next state. (No AI-driven "click around and see";
-  no `appium`/`idb` record-and-replay — see §2.) The one exception is the D7
-  *aesthetic* pass, which is a **vision review of captured screenshots**, framed
-  explicitly as a structured review aid, not a pass/fail oracle.
+- Not real-time human-like exploration / fuzzing, and **not an AI free to decide
+  outcomes**. The pass/fail oracle is **deterministic, scripted UI testing**: a
+  script taps a known element by its accessibility id / test-tag and asserts a
+  known next state (no `appium`/`idb` record-and-replay — see §2). Short-running
+  AI is layered on top in two **bounded, advisory** roles only — a screenshot
+  **judge** (D7 aesthetic / "does this look right") and a goal-directed
+  **navigator / self-healer** — but the AI **never** decides whether a scenario
+  passes. See "Harness model" (§2.1) for the precise split; letting AI freely
+  decide outcomes would undermine determinism.
 - Not load/perf testing, not the hardware-install / LUKS-unlock kernel path
   (that needs real metal — see `docs/cert-model-A-prime-migration.md` test list).
 - **Not a security boundary, and never run against a real account.** The gym uses
@@ -123,10 +151,73 @@ Properties the gym must have on every surface:
   instrumentation requires **an emulator (AVD)** — heavier than the existing
   Robolectric JVM tests (see §3). The webapp needs only Node + a chromium
   download.
+- **The heavy tiers run on the owner's Mac, not on hosted CI.** XCUITest needs
+  macOS; the Android emulator needs nested-virt; the AI judge/navigator needs an
+  API key + budget. All three live comfortably on this dev Mac (it already runs
+  the XCTest + Robolectric suites and provisions Hetzner via the Worker), so the
+  iOS/iPad/Android tiers + the total gym + every live-Hetzner run execute LOCALLY
+  here. Only the cheap Tier-1 every-merge subset stays in GitHub-Linux CI (§7,
+  §9). This is what makes the AI-in-the-loop harness practical: short AI calls
+  run on the owner's machine on a nightly/monthly cadence, not per-PR on metered
+  runners.
 
----
+### 2.1. Harness model: deterministic gate + short-AI judge/navigator
 
-## 3. Current state / head start
+> **owner-recommended, pending final confirm** — the owner is still deciding *how
+> much* to let AI drive (see §11). This subsection states the model the gym is
+> designed around. The principle is fixed even if the AI share is dialed up or
+> down: **determinism is the source of truth; AI adds judgment and flexibility.**
+
+The gym is an **agentic driver over a deterministic substrate**. Two layers,
+deliberately separated so that AI variance can never change a verdict:
+
+**Layer 1 — the deterministic gate (the source of truth, pass/fail).**
+- **Scripted element-handle taps** — every action targets a stable handle
+  (iOS/iPad `accessibilityIdentifier`, Android `Modifier.testTag` /
+  content-description, webapp `id` / role+text), never a pixel coordinate (§8).
+- **Expected-state assertions** — after each step the script asserts a known next
+  state on the a11y tree / DOM (a screen is shown, a row exists, a button is
+  enabled/disabled, a field holds a value), plus the D6 backend-effect assertion
+  at Tier-2.
+- **Diffable captured screenshots** — captured at every step (§7-B) and compared
+  against a committed baseline / token-conformance sample where applicable.
+- This layer is **reproducible**: a green run means green because the assertions
+  passed, full stop. It is the only thing that gates anything.
+
+**Layer 2 — short-running AI, two BOUNDED roles (a few short calls per scenario,
+not a long agent; low-cost).**
+- **(a) JUDGE — qualitative screenshot review (ADVISORY, not a gate).** A short
+  vision call reviews the captured screenshots of a scenario for clarity,
+  ergonomics, contrast/spacing/layout, and the subjective "is this beautiful /
+  does this look right" question (the D7-beautiful pass — §6 D7). It emits a
+  **findings list a human triages**. It explicitly does **not** produce a
+  pass/fail verdict, and we **acknowledge run-to-run variance** in its output
+  (the same screen may draw slightly different remarks across runs — that is fine
+  for a review aid, fatal for a gate, which is exactly why it is not one).
+- **(b) NAVIGATE / SELF-HEAL — goal-directed driving + churn recovery.** Each
+  scenario carries a **deterministic goal** (the assertions of Layer 1). When the
+  scripted path can't reach a handle because the UI shifted — a control was moved,
+  renamed, or re-nested between builds — a short AI call reasons over the current
+  a11y tree to drive toward the same goal and/or proposes the handle delta, so the
+  suite stays robust to UI churn instead of failing on every cosmetic move. The
+  **goal and the final assertion stay deterministic**; AI only finds the path to
+  them. (A self-heal is surfaced as a warning + a suggested script patch, so drift
+  is visible and the script is kept honest rather than silently papered over.)
+
+**Why the split (stated plainly).** Letting the AI freely decide outcomes would
+make the gym non-reproducible and untrustworthy as a gate — a flaky judge would
+flip green/red on identical code. So: **determinism = the assertions (the
+verdict); AI = judgment (D7 review) + flexibility (navigate/heal)**. The AI is
+**never the pass/fail oracle.**
+
+**Cost model.** Both AI roles are *short* calls, not a long agent loop: roughly
+**one judge call per captured screen** (a handful per scenario) plus an
+**occasional navigate/heal call** only when a handle misses. At a few short
+multimodal calls per scenario this is **low $** even across the full total-gym
+matrix; it runs on the owner's Mac under the owner's own provider key (the same
+BYOK posture the build paths use), and the cheap every-merge gym (Layer 1 only,
+no AI) carries zero AI cost. Note the judge cadence is itself tunable (per-step
+vs per-scenario-summary) to trade coverage for spend.
 
 We are **not** starting from zero. Per-surface reality, with file paths:
 
@@ -267,11 +358,22 @@ the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
 - **Cost/speed:** seconds per test; no infra; safe to gate every PR. This is the
   home of the **every-merge gym**.
 
-### Tier 2 — live Hetzner demo server (true e2e, nightly/on-demand)
+### Tier 2 — live Hetzner demo server (true e2e, EPHEMERAL, nightly/on-demand)
 - **What it is:** a real demo account on the live control plane + a real Hetzner
   VPS running the production daemon; the app in **live mode** drives the real
   flow end-to-end (real signed envelopes, real `/pods`, real daemon endpoints,
   real green-padlock pod URL).
+- **Ephemeral by decision (rev3):** every Tier-2 run **creates a fresh demo
+  server, tests against it, then deletes it** — there is no shared long-lived
+  box. Teardown is guaranteed two ways: the run's own
+  `scripts/sample-user.mjs delete <user>` in a `finally` (so a failed assertion
+  still tears down), backstopped by the `*/10` Worker reaper that destroys any
+  idle/orphaned demo VPS (`apps/com/wrangler.toml [triggers]` + the
+  `demoUsers.ts` reaper). This RESOLVES the old §11 "fresh vs shared" question in
+  favor of **fresh-per-run** — it also means the provision path itself is
+  exercised every run, and there is no cross-run state to corrupt. (Shared-box is
+  kept only as a noted fallback if Hetzner provisioning ever gets too slow for the
+  cadence — see §11.)
 - **How each surface enters it:**
   - iOS/iPad: a Release-config build (or DEBUG with the harness pre-seeding the
     `flagship.dev.useLiveClient` UserDefault) so `activeClient = liveClient`,
@@ -287,10 +389,12 @@ the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
   is where D6 action→effect is asserted **for real** (the apex actually 302s, the
   box actually powers off, the container actually runs) and where the **D5
   test-control hooks** (§7-A) force the live box/account into each event state.
-- **Cost/speed:** minutes (VPS boot ~1–3 min + flow time); consumes Hetzner €
-  and an operator-secret-gated provision. Nightly + `workflow_dispatch`, not per
-  PR. This is the home of the total gym's **vertical slice + live-contract**
-  scenarios.
+- **Cost/speed:** minutes (VPS boot ~1–3 min + flow time + teardown); consumes
+  Hetzner € and an admin-secret-gated provision. Because the box is destroyed at
+  the end of each run, **cost stays ~cents per run** (a CX-class VPS billed by the
+  hour, alive for minutes). Runs on the owner's Mac on a **nightly / monthly /
+  on-demand** cadence, not per PR. This is the home of the total gym's **vertical
+  slice + live-contract** scenarios.
 
 **Rule of thumb:** Tier 1 answers "does the UI work, and does it show the right
 thing for a given state?"; Tier 2 answers "does the UI talk to a real box
@@ -720,6 +824,84 @@ single-composable tests — everything else in the matrix is new.
 
 ---
 
+## 6.5. Backend posture over time — pre-GA admin-induction vs post-GA test-env
+
+The total gym needs to put the **live backend** into each D5 server-side state
+(force a box dead, bump usage past allowance, age a cert toward expiry, seed a CT
+rogue-cert alert, …) without mocks and without touching real users. The owner's
+decision splits this cleanly across the launch boundary.
+
+### Pre-GA — induce state via THIS box's admin access (no new prod hooks)
+Before GA there are no real users to protect from, and this Mac already holds
+**`FLAGSHIP_ADMIN_SECRET`** (the same secret `scripts/sample-user.mjs` and
+`scripts/wipe-demo-users.mjs` use; `apps/com/src/controlPlaneRoutes.ts` gates the
+`/api/dev/sample-user/*` admin surface on it) plus the full demo/Hetzner control
+surface. So **pre-GA the gym induces D5 states by using that admin access against
+the DEMO account / DEMO box DIRECTLY** — e.g. delete/stop the demo VPS or age its
+last-report to force "dead/offline" (F3), drive the demo account's `metering` row
+to force over-allowance (F4), and so on — operating on demo-classified entities
+only (the §7-G guardrail still applies). **No new production endpoints are needed
+pre-GA**: the clean per-event "test-control hooks" (the §7-A wishlist) are
+explicitly **deferred to the post-GA test-env below**, not added to prod. (Where
+a state can't be reached with today's admin verbs, the pre-GA path is a thin
+admin-secret-gated helper that runs on the owner's Mac against the demo account —
+still not a prod feature surface.)
+
+### Post-GA — a dedicated, internet-real, isolated TEST environment
+Once real users exist, the gym must stop touching prod entirely. The plan is a
+**parallel TEST deployment of BOTH planes**, internet-real (real certs, real DNS,
+real Hetzner — no mocks) and **fully isolated from production** (its own
+everything, zero shared state). The D5 state-induction hooks live IN this
+test-env, against test endpoints — so the post-GA monthly gym never needs prod
+admin access at all.
+
+**What a parallel test-env needs — scoped against the real prod deploy (paths
+verified this survey):**
+
+| Plane / resource | Prod today (cite) | Test-env mirror needed |
+|---|---|---|
+| **`.com` Worker** | `apps/com/wrangler.toml` — `name = "flagship-com"`, `main = src/index.ts` | a SECOND Worker, e.g. `flagship-com-test` (separate `wrangler.test.toml` or `--name`) |
+| **D1 database** | binding `DB` → `flagship-state` (`database_id = d6f3bc03-…`), `migrations_dir = ../../packages/storage/migrations` | its OWN D1 (`flagship-state-test`, new `database_id`); apply the SAME migrations dir |
+| **R2 buckets** | three: `flagship-iso` (`ISO_BUCKET`), `flagship-iso-temp` (`ISO_TEMP_BUCKET`, public dev-url), `flagship-backups` (`BACKUPS_BUCKET`) | three test buckets (`-test` suffix); re-enable the temp bucket's public dev-url + re-pin `FLAGSHIP_R2_TEMP_PUBLIC_BASE` (the `pub-…r2.dev` host changes per bucket) |
+| **Durable Object** | `BUILD_RELAY` → `BuildRelaySession` (`new_sqlite_classes`) | same class, auto-created in the test Worker (no shared state) |
+| **Rate-limit namespaces** | `RATE_LIMITER` (ns 1001), `RATE_LIMITER_QR_PIPE` (ns 1002) | distinct namespace ids for the test Worker |
+| **KV** | *(none today — prod `.com` uses D1 + R2 + DO, no `kv_namespaces` binding)* | none required to match prod; add only if the test-env grows one |
+| **`[vars]`** | `SERVICES_BASE_URL`, `TUNNEL_HUB_URL`, base-ISO + `FLAGSHIP_ISO_MANIFEST`, passthrough IPs, zone id, `CA_ENDORSEMENT_ENFORCE`, … | test copies pointing at the test Fly app + the test DNS zone; **`CA_ENDORSEMENT_ENFORCE` left OFF in test** (or a test CA) so the chokepoint doesn't gate the test directory |
+| **Secrets / KEKs** | `FLAGSHIP_ADMIN_SECRET`, `HCLOUD_TOKEN`, `DEMO_IRK_KEK`, `SERVICES_HMAC_KEY`, `CLOUDFLARE_DNS_API_TOKEN`/broker, VAPID, APNS/FCM, `FLAGSHIP_CA_PRIV_HEX` | a SEPARATE set for the test Worker (`wrangler secret put` against the test Worker); a **test Hetzner project token** (see below); test-only VAPID/CA |
+| **Routes / custom domains** | zone routes `flagshipserver.com/*`, `www.`, `web.`; custom domains `recovery.`, `boot.` | the equivalents on the **test DNS zone** (`web-test.<zone>`, `recovery.<zone>`, `boot.<zone>`) |
+| **`.services` data plane** | `fly.toml` (repo ROOT, not `apps/web/fly.toml`) — `app = "flagship-services"`, `primary_region = "iad"`, SNI passthrough :443 + tunnel hub :8443, `[env] FLAGSHIP_SURFACE = "services"`, `Dockerfile` builds it | a SECOND Fly app, e.g. `flagship-services-test` (its own `fly.test.toml` / `flyctl -a`), same Dockerfile/image, its own anycast IPs + `flagship-services-test.fly.dev` |
+| **Worker→Fly wiring** | `SERVICES_BASE_URL = https://flagship-services.fly.dev:8443`, `TUNNEL_HUB_URL = wss://…:8443/tunnel`, `SERVICES_PASSTHROUGH_IPV4/6` | repoint all three at the test Fly app + its anycast IPs |
+| **DNS / zone** | `flagshipserver.com` (identity) + `flagship.services` (`CLOUDFLARE_SERVICES_ZONE_ID = 51f3…`); per-box `<server>.<user>.flagship.services` A/AAAA published by the Worker | a **SEPARATE test domain / zone** — see the hard prereq below |
+| **Demo / Hetzner provisioning** | `apps/com/src/hetzner.ts` (pure-fetch REST), state machine `packages/control-plane/src/demoUsers*.ts`, routes `/api/dev/sample-user/*` in `controlPlaneRoutes.ts`, CLIs `scripts/sample-user.mjs` + `scripts/demo-account.mjs`, `MAX_CONCURRENT_DEMO_VPS` + `*/10` reaper | a **test Hetzner project** with its own `HCLOUD_TOKEN` + budget (so test boxes never count against prod's demo cap or bill) |
+| **D5 test-control hooks** | n/a (pre-GA = admin-induction) | the clean per-event hooks (§7-A: force-dead, bump-usage, cert-mismatch, near-expiry, CT-alert, generic set-state) live HERE, gated on the **test** admin secret, against **test** endpoints |
+
+> **HARD PREREQUISITE — a test DOMAIN separate from prod.** The test-env **cannot
+> reuse `flagshipserver.com` / `flagship.services`.** Test runs mint **real Let's
+> Encrypt certs** and emit **real Certificate-Transparency log entries** for
+> whatever names they use, and publish **real DNS records** for the ephemeral test
+> boxes. Pointing those at the prod zones would: (1) pollute prod CT history with
+> throwaway test certs, (2) confuse the **cert-pin + CT-monitor** machinery
+> (`ctMonitor.ts` flags any cert whose SAN set doesn't fit a registered box — test
+> certs would trip prod owners' alerts), and (3) leave test DNS records under the
+> prod zone. So a spare domain (or an explicitly-approved new zone) is a blocker
+> for the post-GA test-env. **Open decision (§11): owner to provide a spare domain
+> or approve a new test zone.**
+
+**Effort & isolation — honest.** This is **bounded but real**: it is "deploy the
+two planes again with test-namespaced resources" — a `wrangler.test.toml` + a
+`fly.test.toml` + a fresh D1/R2/DO/secret set + the test DNS zone + a test Hetzner
+project. No new application code beyond the §7-A hooks (which the test-env hosts
+anyway); the same `Dockerfile`, the same Worker source, the same migrations. The
+payoff: it **isolates cleanly from prod** (a separate Worker, DB, Fly app, zone,
+and Hetzner project — zero risk to real users or their data, no shared blast
+radius) and makes a **sustainable monthly GA-era total-gym run** possible without
+ever pointing automation at production. **When to build it is an open decision
+(§11):** stand it up now (and run the pre-GA gym against admin-induction in the
+meantime), or defer the build until GA approaches. Either way, pre-GA the gym does
+**not** depend on it — admin-induction covers the interim.
+
+---
+
 ## 7. Mechanisms (concrete + honest — what exists vs what must be built)
 
 ### 7-A. D5 event induction (the biggest prerequisite)
@@ -730,18 +912,30 @@ single-composable tests — everything else in the matrix is new.
   re-pair, an untrusted trust verdict, an active deploy + build. **BUILD:** the
   seed-variant catalog (iOS `DemoFixtures.swift`, Android `DemoFixtures.kt`,
   webapp `pod-sim` + `page.route` payloads).
-- **Tier-2 (mostly to build):** forcing a *live* demo box/account into a state.
-  **BUILD these test-control hooks** (admin-secret-gated, demo-only):
-  - **F3** stop/age the demo daemon (or age `lastReported`) → "dead/offline".
-  - **F4** bump the demo account's `metering` usage counter → over-allowance.
-  - **F5** make daemon-status report a mismatched cert SHA → pin-mismatch alert.
-  - **F6** seed a `ct-unexpected-cert` audit row for the demo user.
-  - **F8** force a near-expiry cert SHA/validUntil on the demo box.
-  - a **generic "set demo state"** admin verb so the gym doesn't grow one
-    endpoint per event. These live behind `FLAGSHIP_ADMIN_SECRET`, accept a
-    demo-classified username only, and are wired through `controlPlaneRoutes.ts`
-    (mirroring the existing `/api/dev/sample-user/*` admin surface). **Owner call
-    in §10** — these are new endpoints touching prod control-plane (demo-gated).
+- **Tier-2 — forcing a *live* demo box/account into a state. Two postures by
+  launch boundary (see §6.5):**
+  - **Pre-GA = admin-access induction, NO new prod hooks.** The owner's Mac holds
+    `FLAGSHIP_ADMIN_SECRET` + the demo/Hetzner control surface, so the gym induces
+    these states by acting on the DEMO entities directly with the admin powers
+    that already exist (delete/stop the demo VPS or age `lastReported` for F3,
+    drive the demo `metering` row for F4, etc.), demo-classified only (§7-G).
+    Where a state needs more than today's admin verbs, the pre-GA path is a thin
+    admin-secret-gated helper run from the owner's Mac against the demo
+    account — **not** a prod feature surface. This is the interim posture; it adds
+    nothing to production.
+  - **Post-GA = the clean test-control hooks, living in the TEST-ENV (§6.5), not
+    prod.** Build these per-event hooks against the **test** endpoints (test admin
+    secret, demo-only), so the GA-era monthly gym never touches prod:
+    - **F3** stop/age the demo daemon (or age `lastReported`) → "dead/offline".
+    - **F4** bump the demo account's `metering` usage counter → over-allowance.
+    - **F5** make daemon-status report a mismatched cert SHA → pin-mismatch alert.
+    - **F6** seed a `ct-unexpected-cert` audit row for the demo user.
+    - **F8** force a near-expiry cert SHA/validUntil on the demo box.
+    - a **generic "set demo state"** admin verb so the gym doesn't grow one
+      endpoint per event. They mirror the existing `/api/dev/sample-user/*` admin
+      surface (`controlPlaneRoutes.ts`) but are deployed to the **test** Worker.
+  **Owner calls in §11:** the per-event hooks are now scoped to the test-env (so
+  they never touch prod control-plane); pre-GA needs only admin-induction.
 
 ### 7-B. Visual / aesthetic review pipeline
 1. **Capture** — on every total-gym scenario step, capture a screenshot per
@@ -805,35 +999,53 @@ scenario, red) if not. At Tier-2 this rides the existing demo-classification
 
 ---
 
-## 9. CI wiring
+## 9. CI wiring — Linux CI for the cheap gate, the owner's Mac for the heavy tiers
 
-| Surface | Runner | Job |
+**The runner split is now a decision (rev3), not an open question.** Two homes:
+
+1. **GitHub-Linux CI — the every-merge gym only** (cheap, deterministic, per-PR).
+2. **The owner's physical Mac — the heavy iOS/iPad/Android UI tiers + the total
+   gym + every live-Hetzner run** (nightly / monthly / on-demand). There is **no
+   hosted-macOS spend** — the prior "macOS CI runner budget" constraint is
+   resolved by running locally.
+
+| Tier / surface | Runs where | Job |
 |---|---|---|
-| webapp | `ubuntu-22.04` | already wired — `.github/workflows/e2e.yml` (wrangler-dev miniflare) |
-| iOS + iPad | **macOS runner** (`macos-14`+, Xcode + Simulator) | `xcodebuild test -scheme FlagshipApp` with iPhone **and** iPad `-destination`s, `-only-testing:FlagshipAppUITests` |
-| Android | `ubuntu` + **emulator** (`reactivecircus/android-emulator-runner` or AVD) | `:app:connectedDebugAndroidTest` (the net-new `androidTest` suite) |
+| **every-merge: TS gate** | GitHub-Linux | `npx tsc -b` + `npx vitest run` (the existing per-merge gate) |
+| **every-merge: webapp UI** | GitHub-Linux | already wired — `.github/workflows/e2e.yml` (wrangler-dev miniflare, the Tier-1 Playwright subset) |
+| **total gym: iOS + iPad** | **owner's Mac** (local Xcode + Simulator) | `xcodebuild test -scheme FlagshipApp` with iPhone **and** iPad `-destination`s, `-only-testing:FlagshipAppUITests` |
+| **total gym: Android** | **owner's Mac** (local AVD; JDK17 at `/opt/homebrew/opt/openjdk@17`) | `:app:connectedDebugAndroidTest` (the net-new `androidTest` suite) |
+| **total gym: webapp broad + Tier-2 + aesthetic** | **owner's Mac** | full Playwright matrix + the live-Hetzner vertical slice + the AI judge/navigator (BYOK key, local budget) |
 
-- **The every-merge gym** runs on **PR + push** (fast, free-ish, Tier-1 subset).
-  The webapp every-merge subset already runs. iOS adds a UI-test step; Android
-  adds an emulator job (heavier — see capacity).
-- **The total gym** runs **nightly (`schedule`) + `workflow_dispatch` +
-  pre-release**, never on every PR — its Tier-2 slice provisions a Hetzner box and
-  uses live secrets; its aesthetic pass is heavy. Keep it off `push:main` until it
-  has a proven green run (same posture `e2e.yml` already takes).
-- **Artifacts:** Playwright report + traces/video (configured); the iOS
-  `.xcresult`; Android Compose failure bitmaps + view-hierarchy dumps; **the
-  total gym's full screenshot set** (success + failure) for the D7 review. Upload
-  on `always()`, ~14-day retention.
+- **The every-merge gym** runs on **PR + push** in **GitHub-Linux CI** (fast,
+  Layer-1-only / no AI, Tier-1 subset): the TS `tsc -b`+`vitest` gate plus the
+  webapp Playwright subset (`e2e.yml`). This is the merge gate. The iOS/Android UI
+  tiers are **not** in this gate — they run on the Mac (heavier + need
+  Simulator/AVD), so the per-PR gate stays Linux-cheap.
+- **The total gym** runs on the **owner's Mac** on a **nightly / monthly /
+  on-demand** cadence (a local script / launchd job, not a hosted runner), never
+  on every PR — its Tier-2 slice provisions+destroys an ephemeral Hetzner box
+  (§6) and its judge/navigator + aesthetic pass need the AI key + local budget.
+  The post-GA monthly run points at the test-env (§6.5), not prod.
+- **Artifacts (local on the Mac, archived where the owner chooses):** Playwright
+  report + traces/video (configured); the iOS `.xcresult`; Android Compose failure
+  bitmaps + view-hierarchy dumps; **the total gym's full screenshot set** (success
+  + failure) for the D7 review + the AI judge's findings list. The Linux
+  every-merge job still uploads its Playwright artifacts as CI artifacts on
+  `always()`, ~14-day retention.
 
-**Runner capacity required (be honest):**
-- **macOS runners are the expensive constraint** — GitHub bills them ~10× a Linux
-  minute, an Xcode UI-test boot is slow, and the iPad destination roughly doubles
-  the iOS run. Budget deliberately; consider a self-hosted Mac (this dev Mac
-  already runs the XCTest suite) for the nightly total-gym iOS+iPad slice.
-- **Android emulator** jobs need KVM/nested-virt; standard GitHub `ubuntu`
-  runners support `android-emulator-runner` but a cold-boot AVD adds minutes.
-  Robolectric stays the fast path; reserve the emulator for genuine
-  launch-and-drive scenarios.
+**Capacity (be honest — the constraint moved, it didn't vanish):**
+- **The expensive constraint is no longer hosted-macOS minutes — it's the owner's
+  Mac's wall-clock** (and the AI judge/navigator's API spend). An Xcode UI-test
+  boot is slow and the iPad destination roughly doubles the iOS run, so the
+  iOS+iPad+Android tiers + the aesthetic pass are a **nightly/monthly** job on this
+  machine, not a per-PR one. This is exactly why the every-merge gate is kept
+  Linux-only and AI-free.
+- **The Android emulator** runs locally on the Mac (an AVD; nested-virt is native
+  on Apple silicon). Robolectric stays the fast per-merge path; reserve the
+  on-device emulator for the genuine launch-and-drive total-gym scenarios.
+- **AI cost** is the short judge/navigator calls (§2.1) — low $, on the owner's
+  BYOK key — and is incurred only on the Mac total-gym runs, never per PR.
 
 ---
 
@@ -843,19 +1055,28 @@ The every-merge gym and the total gym build on different cadences. The every-mer
 subset grows *continuously* (each new screen adds its render+nav+button check); the
 total gym is built **cluster-by-cluster** (D1…D8).
 
-**Phase 1 — one live vertical slice on iOS (prove the harness + live wiring).**
-On **iOS** (it has the XCUITest target + ~217 ids already, the shortest path),
-script the slice **onboarding → create a demo server → online → approve unlock →
-install a service** and run it **Tier-2 against a freshly-provisioned Hetzner box**,
-asserting the D6 effects for real (G8/G12). This proves end-to-end that the harness
-drives the real app against a real backend, and shakes out the launch-seam +
-provisioning + teardown + demo-guardrail plumbing. *Effort: ~2–4 days.*
+**Phase 1 — one live vertical slice on iOS, on the owner's Mac (prove the harness
++ live wiring).** On **iOS** (it has the XCUITest target + ~217 ids already, the
+shortest path), script the slice **onboarding → create a demo server → online →
+approve unlock → install a service** and run it **Tier-2 against a freshly-
+provisioned, then-deleted Hetzner box** (the ephemeral create→test→`finally`-delete
+loop, §6), on this Mac's local Simulator, asserting the D6 effects for real
+(G8/G12). This proves end-to-end that the harness drives the real app against a
+real backend, and shakes out the launch-seam + ephemeral provision/teardown +
+demo-guardrail plumbing. (Pre-GA this runs against prod's demo surface with
+admin-induction, §6.5; the AI judge/navigator can be added here or deferred to
+Phase 6.) *Effort: ~2–4 days.*
 
-**Phase 2 — stand up the every-merge gym (Tier-1 core, all PRs).**
+**Phase 2 — stand up the every-merge gym (Tier-1 core, all PRs, GitHub-Linux).**
 Curate the cheap deterministic subset — onboarding, create-server (form→QR),
 home + status filters, the build chooser, settings landing, the slivers render —
-in demo-fixture mode on iOS + webapp (webapp already has 16 specs). Wire it as the
-**merge gate**. Expand `DemoFixtures` for the subset states. *Effort: ~1 week.*
+in demo-fixture mode. The **per-PR Linux gate** is the TS `tsc -b`+`vitest` gate +
+the **webapp** Playwright subset (the iOS/Android UI tiers stay on the Mac — §9 —
+because they need a Simulator/AVD; their demo-fixture subset runs in the
+nightly/local job, not the per-PR gate). Wire the Linux subset as the **merge
+gate**; expand `DemoFixtures` (iOS/Android) + the `pod-sim` payloads (webapp) for
+the subset states so the Mac-side iOS/Android subset is ready when the local job
+runs. *Effort: ~1 week.*
 
 **Phase 3 — total-gym D1/D2/D6 (lifecycle + build modes + action→effect).**
 Fill D1 (incl. the demo-only deletes), D2 (all five modes), and the D6 pairs on
@@ -864,56 +1085,90 @@ weeks.*
 
 **Phase 4 — total-gym D3/D4/D5 (settings edge cases + security + event induction).**
 Multi-device + lost-device flows, the global security experience, and the D5 event
-surfacing — including **building the §7-A test-control hooks**. The hooks + the
-fixture seed-variant catalog dominate. *Effort: ~2–3 weeks.*
+surfacing. **Pre-GA this uses admin-access induction** against the demo entities
+(§6.5) — the fixture seed-variant catalog (Tier-1) dominates and the clean
+per-event hooks are deferred to the test-env. The fixture catalog is the main lift
+here. *Effort: ~2–3 weeks.*
 
 **Phase 5 — the Android harness + test-tag sweep.**
 Stand up `src/androidTest/`, add `testTag`s across ~43 screens, port the D1–D5
 matrix to Compose UI Test + Espresso on an emulator. The test-tag sweep dominates.
 *Effort: ~2–3 weeks.*
 
-**Phase 6 — D7 quality + iPad + Tier-2 nightly CI.**
-The every-button sweep, nav-graph + copy lints, the **screenshot-capture +
-vision-review + token-conformance** pipeline, the **iPad destination**, and the
-nightly `schedule`/`workflow_dispatch` total-gym job (fresh-box vertical slice +
-shared-box broad set + aesthetic pass). Decide which subset stays a required PR
-gate vs advisory. *Effort: ~2–3 weeks* (CI YAML + secret plumbing + the capture
-harness + flake quarantine).
+**Phase 6 — D7 quality + iPad + the AI judge/navigator + the nightly local total-gym
+job.** The every-button sweep, nav-graph + copy lints, the **screenshot-capture +
+token-conformance** gate (Layer 1), the **iPad destination**, the **short-AI judge
+(D7-beautiful review aid) + navigator/self-healer** (§2.1), and the **nightly /
+monthly local total-gym driver on the owner's Mac** (a launchd job / script — the
+ephemeral-Hetzner vertical slice + the broad Tier-1 set + the aesthetic pass; no
+hosted runner). The Linux every-merge gate stays as-is; decide which Tier-1 subset
+of the total gym (if any) is promoted into it. *Effort: ~2–3 weeks* (local
+orchestration + the AI judge/navigator wiring + the capture harness + flake
+quarantine).
+
+**Phase 7 (post-GA, gated on the test-env decision) — the isolated test
+environment.** Stand up the parallel test `.com` + test `.flagship.services` +
+test DNS zone + test Hetzner project (§6.5), move the clean per-event D5 hooks
+into it, and repoint the monthly total-gym run at the test endpoints so GA-era
+runs never touch prod. *Effort: bounded-but-real — a `wrangler.test.toml` +
+`fly.test.toml` + a fresh D1/R2/DO/secret set + the test zone + the hooks; no new
+app code beyond the hooks. Blocked on the test-domain decision (§11).*
 
 > **Total-gym honest sizing:** roughly **8–12 focused weeks** to full coverage
-> across four surfaces, dominated by the Android test-tag sweep, the D5 hooks +
-> fixture catalog, and the D7 capture/review pipeline. The every-merge gym is a
-> ~1-week stand-up (Phase 2) and then grows incrementally.
+> across four surfaces, dominated by the Android test-tag sweep, the fixture
+> seed-variant catalog, and the D7 capture/review pipeline. The every-merge gym is
+> a ~1-week stand-up (Phase 2) and then grows incrementally. The post-GA test-env
+> (Phase 7) is a separate bounded-but-real chunk (a parallel deploy, not new app
+> code) gated on the test-domain decision — pre-GA the gym does not need it.
 
 ---
 
 ## 11. Open decisions for the owner
 
-1. **Backend posture (total-gym Tier-2):** fresh-VPS-per-run vs shared-long-lived
-   box, or the recommended hybrid (a nightly fresh-provision of the vertical slice
-   + a shared warm box reset between the broad scenarios)? Drives cost, flake, and
-   whether the provision path itself is tested.
-2. **Credentials in CI:** put `FLAGSHIP_ADMIN_SECRET` in CI as a runner secret for
-   unattended Tier-2? (The operator-key `demo-account.mjs` path stays human-only.)
-   Confirm the demo Worker secrets (`HCLOUD_TOKEN`, `DEMO_IRK_KEK`) are live.
-3. **CI runner budget (the gating cost):** approve hosted macOS minutes for the
-   iOS **+ iPad** UI tests, or run them nightly on a self-hosted Mac (this dev
-   machine)? Same call for the Android emulator job.
-4. **Which subset gates merges:** confirm the every-merge gym = vertical slice +
-   onboarding/create-server/home + slivers-render as **required PR gates**, with
-   the rest of the total gym advisory until stable.
-5. **Aesthetic pass cadence:** is the D7 screenshot + vision-review pass
-   **per-release** (recommended — it's heavy and partly subjective) or per-PR? The
-   token-conformance gate can run per-PR even if the vision review is per-release.
-6. **D5 test-control hooks (build or skip):** approve building the demo-gated
-   admin hooks in §7-A (force-dead, bump-usage, cert-mismatch, near-expiry, CT
-   alert, generic set-state)? Without them, D5 Tier-2 live propagation can't be
-   exercised — only the Tier-1 fixture path covers those events.
-7. **Branch-gated surfaces:** the marketplace UI (D2-B11) and the usage/tier-status
+### RESOLVED (rev3 — folded into the doc above)
+- **Runner = the owner's physical Mac.** The iOS/iPad/Android UI tiers + the
+  total gym + every live-Hetzner run execute LOCALLY on this Mac; only the cheap
+  every-merge gym stays in GitHub-Linux CI. **There is no hosted-macOS cost** —
+  this retires the old "CI runner budget (macOS)" gating question (§7, §9, §10).
+- **Tier-2 Hetzner is ephemeral** — fresh-per-run create→test→delete, guaranteed
+  teardown (`sample-user.mjs delete` in `finally` + the `*/10` reaper), ~cents/run.
+  This retires the old "fresh vs shared" question; shared-box is a noted fallback
+  only (§6).
+- **Harness = deterministic gate + short-AI judge/navigator.** The pass/fail
+  oracle is scripted handle-taps + assertions + diffable screenshots; short AI is
+  bounded + advisory (judge the screenshots, navigate/self-heal) and is **never**
+  the pass/fail oracle (§2.1).
+- **Pre-GA D5 state induction = this box's admin access** against demo entities —
+  **no new prod hooks pre-GA**; the clean per-event hooks move into the post-GA
+  test-env (§6.5, §7-A).
+
+### REMAINING (need an owner call)
+1. **Test DOMAIN for the post-GA test-env (a hard PREREQUISITE).** The test-env
+   cannot reuse `flagshipserver.com` / `flagship.services` (test certs + CT-log
+   entries + DNS records would pollute prod and confuse cert-pin/CT — §6.5).
+   **Owner to provide a spare domain or approve a new test zone.** This blocks
+   Phase 7 (nothing pre-GA).
+2. **WHEN to build the test-env.** Stand it up now (and run pre-GA against
+   admin-induction in the meantime), or defer the build until GA approaches?
+   Pre-GA the gym does not depend on it; the cost is a parallel deploy (§6.5,
+   Phase 7).
+3. **Final confirm of the AI-driver split (how much AI drives).** §2.1 is
+   owner-recommended pending confirm: keep AI strictly to judge + navigate/heal
+   with determinism as the verdict, or widen/narrow the AI's role? (Also: the
+   judge cadence — per-step vs per-scenario-summary — trades coverage for spend.)
+4. **Which subset gates merges.** Confirm the every-merge gate = the TS
+   `tsc -b`+`vitest` gate + the webapp Playwright subset on GitHub-Linux as
+   **required PR gates**, with the Mac iOS/Android tiers + the rest of the total
+   gym advisory/nightly (§9, §10).
+5. **Aesthetic-pass cadence.** Is the D7 judge (screenshot vision-review) a
+   **per-release / monthly** pass (recommended — heavy + partly subjective + costs
+   AI $) or more frequent? The token-conformance gate (Layer 1) can run more often
+   even if the judge runs monthly.
+6. **Branch-gated surfaces.** The marketplace UI (D2-B11) and the usage/tier-status
    dashboard (D5-F4 front-end) live on `feat/marketplace` — confirm their gym
-   scripts ship on that branch (branch-is-the-gate), while the every-merge gym on
-   `main` simply omits them.
-8. **Surface order:** confirm iOS-first for Phase 1 (most head start), or
+   scripts ship on that branch (branch-is-the-gate), while the gym on `main` omits
+   them.
+7. **Surface order.** Confirm iOS-first for Phase 1 (most head start), or
    prioritize a different surface.
 
 ---
@@ -931,10 +1186,17 @@ every-merge subset continuously and the total gym cluster-by-cluster. iOS and th
 webapp have a real head start (an XCUITest target + ~217 a11y ids; a 16-spec
 Playwright gym in CI; the iPad adaptive layout is already built); Android is the
 largest net-new lift (an emulator instrumentation harness + a ~43-screen test-tag
-sweep). The biggest *new* prerequisites are the **D5 test-control hooks** (to force
-live event states) and the **D7 screenshot-capture + vision-review + token-conformance**
-pipeline. The gating *cost* remains **CI runner budget (macOS, now ×iPad)**, not
-the test code. Honest scope: the total gym is ~8–12 focused weeks to full
-four-surface coverage; the every-merge gym is a ~1-week stand-up that then grows
-incrementally. **Hard rule throughout: destructive lifecycle scenarios run on demo
-entities only — never a real account.**
+sweep). **The harness is a deterministic gate (handle-taps + assertions + diffable
+screenshots — the verdict) with a short, bounded, advisory AI layer on top (a
+screenshot judge + a navigate/self-healer); the AI is never the pass/fail oracle.**
+The heavy tiers + the total gym + the ephemeral-Hetzner runs execute **locally on
+the owner's Mac** (nightly/monthly), so there is **no hosted-macOS cost** — the
+cheap every-merge gate stays on GitHub-Linux. Pre-GA, D5 server-side states are
+induced via this box's own admin access against demo entities; **post-GA, a
+dedicated isolated test-env** (test `.com` + test `.flagship.services` + a separate
+test DNS zone + a test Hetzner project) carries the clean state-induction hooks so
+the monthly GA-era gym never touches prod. Honest scope: the total gym is ~8–12
+focused weeks to full four-surface coverage; the every-merge gym is a ~1-week
+stand-up that then grows incrementally; the test-env is a separate bounded-but-real
+parallel deploy gated on the owner providing a test domain. **Hard rule throughout:
+destructive lifecycle scenarios run on demo entities only — never a real account.**
