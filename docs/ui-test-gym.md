@@ -1,7 +1,8 @@
 # UI test gym — design doc (every-merge gym + the total gym)
 
-> **Status: PROPOSAL, owner approval pending — rev3 (execution decisions
-> integrated). Nothing built yet.** This is the plan for an automated UI "gym":
+> **Status: APPROVED — rev4 (final decisions locked + an executable build plan
+> added). Build targets G1–G4 + a start on G5/G6 this run; the rest fills in
+> incrementally on the harness.** This is the plan for an automated UI "gym":
 > drive the ACTUAL app — iOS, iPad, Android, webapp — through every flow we have
 > built, asserting on-screen state, the real backend effect, server-event
 > propagation, and a structured aesthetic review, with two backend postures (fast
@@ -13,7 +14,44 @@
 > so a true end-to-end UI exercise against a real backend is now feasible without
 > shipping hardware to a CI runner.
 >
-> **rev3 — what the owner decided (the framing this revision integrates):**
+> **rev4 — what the owner LOCKED (final, supersedes the rev3 "remaining"
+> questions; the §11 items are now RESOLVED and §12 carries the executable build
+> plan):**
+> - **Test env = `gym.` SUBDOMAINS on the EXISTING zones — no new domain.** The
+>   isolated test env is **`gym.flagshipserver.com`** (control plane / the `.com`
+>   Worker) + **`gym.flagship.services`** (data plane / the Fly app), reusing the
+>   two Cloudflare zones we already own. Test boxes are
+>   `<server>.<user>.gym.flagship.services`. This RETIRES the rev3 "hard
+>   prerequisite: a spare domain" — there is no new domain to acquire (§6.5, §11).
+> - **The `gym.` domain is public/knowable — isolation is by ZEROING the backend
+>   between runs (D1 wipe), not by secrecy.** A knowable test apex is fine; the
+>   test env runs against its OWN D1/R2 and is wiped clean between runs with the
+>   existing wipe script, so there is no cross-run state and no real-user data in
+>   it. Secrecy was never the isolation mechanism (§4, §6.5).
+> - **Ban the username `gym` (prod AND test).** One reserved-name ban closes BOTH
+>   the namespace collision (a prod user `gym` would own `gym.flagshipserver.com`'s
+>   identity / `gym.flagship.services`'s zone) AND the CT-monitor false-positive
+>   (prod's CT monitor only matches a test cert when a prod user equals the apex
+>   label — so banning `gym` means a test cert under `*.gym.flagship.services` can
+>   never collide with a registered prod user). Also extend the reserved set to
+>   `test`/`e2e`/`qa`/`ci`/`staging`. The chokepoint is
+>   `validateUserLabel` / `RESERVED_USER_LABELS` in
+>   `packages/control-plane/src/labels.ts` (mirrored in
+>   `packages/services-zone/src/validation.ts`) — see §6.5 + §12-G1.
+> - **Exact-same-code via a prod-default apex variable.** Introduce ONE apex /
+>   base-URL variable per surface whose **default is today's literal**
+>   (`flagship.services` / `flagshipserver.com`), so prod behavior is
+>   byte-identical and the SAME code runs for tests and for users' live
+>   experience; only the test env sets the var to the `gym.` apex. This is a
+>   behavior-preserving, gated refactor (prod default unchanged → the full suite +
+>   the canonical-byte vectors stay green) — and it incidentally fixes the latent
+>   SNI-allocator/zone misparse by parsing **apex-RELATIVE**, not fixed-depth (§3,
+>   §6.5, §12-G1/G2).
+> - **One-command-then-wait runner.** Each gym is invoked by a SINGLE command and
+>   produces a pass/fail summary + screenshots; the engine is the deterministic
+>   gate + the short-AI judge/navigator already specified in §2.1 (§9, §12-G3).
+>
+> **rev3 — what the owner decided (still in force; the framing this doc carries):**
 > - **The runner is the owner's physical Mac (this machine).** The heavy
 >   iOS/iPad/Android UI tiers + the total gym + the live-Hetzner runs execute
 >   LOCALLY here (Simulators / emulator local; it provisions ephemeral Hetzner via
@@ -33,10 +71,11 @@
 > - **Pre-GA, the D5 server-side states are induced via this box's own admin
 >   access** (`FLAGSHIP_ADMIN_SECRET` + the demo/Hetzner control surface) against
 >   DEMO entities — so **no new production hooks are needed pre-GA** (§6, §7-A).
-> - **Post-GA, a dedicated internet-real isolated TEST environment** (its own
->   test `.com` Worker + test `.flagship.services` Fly app + a SEPARATE test DNS
->   zone + a test Hetzner project) carries the clean state-induction hooks, so the
->   monthly GA-era gym never touches prod (NEW §6.5).
+> - **Post-GA, a dedicated internet-real isolated TEST environment** — rev4 puts
+>   it on **`gym.` subdomains of the existing zones** (`gym.flagshipserver.com` +
+>   `gym.flagship.services`, its own D1/R2/Hetzner, wiped between runs); it carries
+>   the clean state-induction hooks, so the monthly GA-era gym never touches prod
+>   (§6.5).
 
 ---
 
@@ -334,6 +373,16 @@ We are **not** starting from zero. Per-surface reality, with file paths:
 The gym runs the **same scripts** in two backend postures. A tag/annotation on
 each test selects its tier. **Tier ≠ gym:** the every-merge gym is *all Tier-1*;
 the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
+
+> **Isolation is by zeroing, not secrecy (rev4).** The Tier-2 backend — the
+> `gym.flagshipserver.com` / `gym.flagship.services` test env (§6.5) — has a
+> **public, knowable domain**; that is fine. Isolation comes from the test env
+> running against its **own D1/R2** and being **wiped clean between runs** with the
+> existing wipe script (`scripts/wipe-all-users.sh` against the test D1), so there
+> is no cross-run state and no real-user data anywhere in it. The username `gym`
+> is banned in prod so the test apex can never collide with a real user's identity
+> or zone (§6.5). Don't reach for secrecy as a control — zeroing the backend is
+> the control.
 
 ### Tier 1 — demo-fixture mode (fast, $0 backend)
 - **What it is:** the app launched against **seeded local state / a mock client**
@@ -847,58 +896,105 @@ a state can't be reached with today's admin verbs, the pre-GA path is a thin
 admin-secret-gated helper that runs on the owner's Mac against the demo account —
 still not a prod feature surface.)
 
-### Post-GA — a dedicated, internet-real, isolated TEST environment
+### Post-GA — a dedicated, internet-real, isolated TEST environment on `gym.` subdomains
 Once real users exist, the gym must stop touching prod entirely. The plan is a
 **parallel TEST deployment of BOTH planes**, internet-real (real certs, real DNS,
 real Hetzner — no mocks) and **fully isolated from production** (its own
-everything, zero shared state). The D5 state-induction hooks live IN this
+D1/R2/DO/secrets, zero shared state). The D5 state-induction hooks live IN this
 test-env, against test endpoints — so the post-GA monthly gym never needs prod
 admin access at all.
+
+> **LOCKED (rev4) — the test env lives on `gym.` SUBDOMAINS of the EXISTING
+> zones; no new domain.** The control plane is **`gym.flagshipserver.com`** (the
+> test `.com` Worker), the data plane is **`gym.flagship.services`** (the test Fly
+> app), and test boxes are **`<server>.<user>.gym.flagship.services`**. Both reuse
+> the two Cloudflare zones we already own — there is no spare domain to acquire and
+> no new zone to add. This RETIRES the rev3 "hard prerequisite: a separate test
+> domain". The three concerns that callout raised are each handled WITHOUT a new
+> domain:
+> 1. **CT-log / cert-pin collision → closed by banning the username `gym`.** Prod's
+>    CT monitor (`ctMonitor.ts`) only treats a cert as unexpected for a prod user
+>    when a registered user equals the relevant apex label. With `gym` banned as a
+>    username (below + §12-G1), **no prod user can ever own the `gym` label**, so a
+>    real test cert minted under `*.gym.flagship.services` can never match a
+>    registered prod box's SAN set and can never trip a prod owner's alert. (Test
+>    certs DO still land in public CT — that is inherent to using a real LE cert on
+>    a real subdomain, and is harmless: they advertise only that test boxes exist
+>    under `gym.`, which is already public/knowable. Isolation is by zeroing, §4,
+>    not by hiding the names.)
+> 2. **DNS records → naturally namespaced under `gym.`.** Per-box A/AAAA for test
+>    boxes are published under `*.gym.flagship.services` (and the test Worker's
+>    routes/custom domains under `gym.flagshipserver.com`), so they never sit at the
+>    prod apex and never shadow a prod record.
+> 3. **State pollution → the test env has its OWN D1/R2** and is **wiped between
+>    runs** (`scripts/wipe-all-users.sh` against the test D1), so prod data is never
+>    touched and there is no cross-run leakage.
+
+**Ban the username `gym` (prod AND test) — the single change that makes `gym.`
+safe.** Add `gym` to `RESERVED_USER_LABELS` in
+`packages/control-plane/src/labels.ts` (the chokepoint `validateUserLabel`,
+lines ~20–27 + ~56–65; both `/api/users/check` via `usersCheck.ts` and
+`/api/users/claim` via `usernameClaim.ts` flow through it) and mirror it in
+`packages/services-zone/src/validation.ts`. While there, extend the set to also
+cover `test`/`e2e`/`qa`/`ci`/`staging` (none are reserved today; `gym` isn't
+either — verified this survey). Note: prod also folds an off-git `TEST_ACCOUNTS`
+Worker secret into the reject list at request time (`usersCheck.ts`); the `gym`
+ban is in-repo because it is a permanent product invariant, not a rotating sandbox
+list. See §12-G1 for the exact edit.
 
 **What a parallel test-env needs — scoped against the real prod deploy (paths
 verified this survey):**
 
 | Plane / resource | Prod today (cite) | Test-env mirror needed |
 |---|---|---|
-| **`.com` Worker** | `apps/com/wrangler.toml` — `name = "flagship-com"`, `main = src/index.ts` | a SECOND Worker, e.g. `flagship-com-test` (separate `wrangler.test.toml` or `--name`) |
-| **D1 database** | binding `DB` → `flagship-state` (`database_id = d6f3bc03-…`), `migrations_dir = ../../packages/storage/migrations` | its OWN D1 (`flagship-state-test`, new `database_id`); apply the SAME migrations dir |
+| **`.com` Worker** | `apps/com/wrangler.toml` — `name = "flagship-com"`, `main = src/index.ts` | a SECOND Worker, e.g. `flagship-com-gym` (separate `wrangler.gym.toml` or `--name`), served at the **`gym.flagshipserver.com`** custom domain; its `[vars]` set the apex var to the `gym.` apex (§12-G1) |
+| **D1 database** | binding `DB` → `flagship-state` (`database_id = d6f3bc03-…`), `migrations_dir = ../../packages/storage/migrations` | its OWN D1 (`flagship-state-gym`, new `database_id`); apply the SAME migrations dir; **wiped between runs** (`scripts/wipe-all-users.sh` against this D1) |
 | **R2 buckets** | three: `flagship-iso` (`ISO_BUCKET`), `flagship-iso-temp` (`ISO_TEMP_BUCKET`, public dev-url), `flagship-backups` (`BACKUPS_BUCKET`) | three test buckets (`-test` suffix); re-enable the temp bucket's public dev-url + re-pin `FLAGSHIP_R2_TEMP_PUBLIC_BASE` (the `pub-…r2.dev` host changes per bucket) |
 | **Durable Object** | `BUILD_RELAY` → `BuildRelaySession` (`new_sqlite_classes`) | same class, auto-created in the test Worker (no shared state) |
 | **Rate-limit namespaces** | `RATE_LIMITER` (ns 1001), `RATE_LIMITER_QR_PIPE` (ns 1002) | distinct namespace ids for the test Worker |
 | **KV** | *(none today — prod `.com` uses D1 + R2 + DO, no `kv_namespaces` binding)* | none required to match prod; add only if the test-env grows one |
-| **`[vars]`** | `SERVICES_BASE_URL`, `TUNNEL_HUB_URL`, base-ISO + `FLAGSHIP_ISO_MANIFEST`, passthrough IPs, zone id, `CA_ENDORSEMENT_ENFORCE`, … | test copies pointing at the test Fly app + the test DNS zone; **`CA_ENDORSEMENT_ENFORCE` left OFF in test** (or a test CA) so the chokepoint doesn't gate the test directory |
+| **`[vars]`** | `SERVICES_BASE_URL`, `TUNNEL_HUB_URL`, base-ISO + `FLAGSHIP_ISO_MANIFEST`, passthrough IPs, zone id, `CA_ENDORSEMENT_ENFORCE`, … | test copies pointing at the test Fly app; the **new apex var set to the `gym.` apex** (default stays the prod literal everywhere else — §12-G1); **`CA_ENDORSEMENT_ENFORCE` left OFF in test** (or a test CA) so the chokepoint doesn't gate the test directory |
 | **Secrets / KEKs** | `FLAGSHIP_ADMIN_SECRET`, `HCLOUD_TOKEN`, `DEMO_IRK_KEK`, `SERVICES_HMAC_KEY`, `CLOUDFLARE_DNS_API_TOKEN`/broker, VAPID, APNS/FCM, `FLAGSHIP_CA_PRIV_HEX` | a SEPARATE set for the test Worker (`wrangler secret put` against the test Worker); a **test Hetzner project token** (see below); test-only VAPID/CA |
-| **Routes / custom domains** | zone routes `flagshipserver.com/*`, `www.`, `web.`; custom domains `recovery.`, `boot.` | the equivalents on the **test DNS zone** (`web-test.<zone>`, `recovery.<zone>`, `boot.<zone>`) |
-| **`.services` data plane** | `fly.toml` (repo ROOT, not `apps/web/fly.toml`) — `app = "flagship-services"`, `primary_region = "iad"`, SNI passthrough :443 + tunnel hub :8443, `[env] FLAGSHIP_SURFACE = "services"`, `Dockerfile` builds it | a SECOND Fly app, e.g. `flagship-services-test` (its own `fly.test.toml` / `flyctl -a`), same Dockerfile/image, its own anycast IPs + `flagship-services-test.fly.dev` |
+| **Routes / custom domains** | zone routes `flagshipserver.com/*`, `www.`, `web.`; custom domains `recovery.`, `boot.` | the equivalents on **`gym.` subdomains of the SAME zone**: custom domain `gym.flagshipserver.com` for the test Worker, plus `web.gym.`, `recovery.gym.`, `boot.gym.` (wrangler self-provisions DNS+cert for custom domains, the boot. mechanism we already use) |
+| **`.services` data plane** | `fly.toml` (repo ROOT, not `apps/web/fly.toml`) — `app = "flagship-services"`, `primary_region = "iad"`, SNI passthrough :443 + tunnel hub :8443, `[env] FLAGSHIP_SURFACE = "services"`, `Dockerfile` builds it | a SECOND Fly app, e.g. `flagship-services-gym` (its own `fly.gym.toml` / `flyctl -a`), same Dockerfile/image, its own anycast IPs; its `[env]` sets the apex var to **`gym.flagship.services`** (§12-G1) |
 | **Worker→Fly wiring** | `SERVICES_BASE_URL = https://flagship-services.fly.dev:8443`, `TUNNEL_HUB_URL = wss://…:8443/tunnel`, `SERVICES_PASSTHROUGH_IPV4/6` | repoint all three at the test Fly app + its anycast IPs |
-| **DNS / zone** | `flagshipserver.com` (identity) + `flagship.services` (`CLOUDFLARE_SERVICES_ZONE_ID = 51f3…`); per-box `<server>.<user>.flagship.services` A/AAAA published by the Worker | a **SEPARATE test domain / zone** — see the hard prereq below |
+| **DNS / zone** | `flagshipserver.com` (identity) + `flagship.services` (`CLOUDFLARE_SERVICES_ZONE_ID = 51f3…`); per-box `<server>.<user>.flagship.services` A/AAAA published by the Worker | **the SAME two zones** — the test env lives under the `gym.` label: identity at `gym.flagshipserver.com`, data at `gym.flagship.services`, per-box `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into the existing services zone. No new zone (rev4). |
 | **Demo / Hetzner provisioning** | `apps/com/src/hetzner.ts` (pure-fetch REST), state machine `packages/control-plane/src/demoUsers*.ts`, routes `/api/dev/sample-user/*` in `controlPlaneRoutes.ts`, CLIs `scripts/sample-user.mjs` + `scripts/demo-account.mjs`, `MAX_CONCURRENT_DEMO_VPS` + `*/10` reaper | a **test Hetzner project** with its own `HCLOUD_TOKEN` + budget (so test boxes never count against prod's demo cap or bill) |
 | **D5 test-control hooks** | n/a (pre-GA = admin-induction) | the clean per-event hooks (§7-A: force-dead, bump-usage, cert-mismatch, near-expiry, CT-alert, generic set-state) live HERE, gated on the **test** admin secret, against **test** endpoints |
 
-> **HARD PREREQUISITE — a test DOMAIN separate from prod.** The test-env **cannot
-> reuse `flagshipserver.com` / `flagship.services`.** Test runs mint **real Let's
-> Encrypt certs** and emit **real Certificate-Transparency log entries** for
-> whatever names they use, and publish **real DNS records** for the ephemeral test
-> boxes. Pointing those at the prod zones would: (1) pollute prod CT history with
-> throwaway test certs, (2) confuse the **cert-pin + CT-monitor** machinery
-> (`ctMonitor.ts` flags any cert whose SAN set doesn't fit a registered box — test
-> certs would trip prod owners' alerts), and (3) leave test DNS records under the
-> prod zone. So a spare domain (or an explicitly-approved new zone) is a blocker
-> for the post-GA test-env. **Open decision (§11): owner to provide a spare domain
-> or approve a new test zone.**
+> **RESOLVED (rev4) — reuse the existing zones under `gym.`; the "separate
+> domain" prerequisite is RETIRED.** Earlier revisions called a spare domain a hard
+> blocker because test runs mint real LE certs, emit real CT-log entries, and
+> publish real DNS records. The locked decision keeps all of that on the EXISTING
+> zones under the `gym.` label and neutralizes each concern without a new domain:
+> CT/cert-pin collisions are closed by **banning the username `gym`** (no prod user
+> can own the apex label, so a test cert can never match a registered box — see the
+> three-point breakdown above); DNS records are **namespaced under `gym.`** and
+> never shadow prod; state pollution is impossible because the test env has its
+> **own D1/R2** and is **wiped between runs**. Test certs still appear in public CT
+> (inherent to a real cert on a real subdomain) but that is harmless — they reveal
+> only that `gym.` test boxes exist, which is already public/knowable, and
+> isolation is by zeroing the backend, not by hiding the names (§4). **No owner
+> domain decision is needed.**
 
 **Effort & isolation — honest.** This is **bounded but real**: it is "deploy the
-two planes again with test-namespaced resources" — a `wrangler.test.toml` + a
-`fly.test.toml` + a fresh D1/R2/DO/secret set + the test DNS zone + a test Hetzner
-project. No new application code beyond the §7-A hooks (which the test-env hosts
-anyway); the same `Dockerfile`, the same Worker source, the same migrations. The
-payoff: it **isolates cleanly from prod** (a separate Worker, DB, Fly app, zone,
-and Hetzner project — zero risk to real users or their data, no shared blast
-radius) and makes a **sustainable monthly GA-era total-gym run** possible without
-ever pointing automation at production. **When to build it is an open decision
-(§11):** stand it up now (and run the pre-GA gym against admin-induction in the
-meantime), or defer the build until GA approaches. Either way, pre-GA the gym does
-**not** depend on it — admin-induction covers the interim.
+two planes again with test-namespaced resources under `gym.`" — a
+`wrangler.gym.toml` + a `fly.gym.toml` + a fresh D1/R2/DO/secret set + the `gym.`
+custom-domain records on the existing zones + a test Hetzner project. **The
+app-code prerequisite is now the apex-var refactor (§12-G1/G2) plus the §7-A
+hooks** — once the apex is a variable, standing up the test env is "set the var to
+`gym.` + deploy", and the SAME code runs in both places (the rev4 exact-same-code
+guarantee). The `Dockerfile`, the Worker source, and the migrations are all
+identical. The payoff: it **isolates cleanly from prod** (a separate Worker, DB,
+Fly app, and Hetzner project, on `gym.` subdomains, wiped between runs — zero risk
+to real users or their data, no shared blast radius) and makes a **sustainable
+monthly GA-era total-gym run** possible without ever pointing automation at
+production. **When to build it is an open decision (§11):** stand it up now (and
+run the pre-GA gym against admin-induction in the meantime), or defer the build
+until GA approaches. Either way, pre-GA the gym does **not** depend on it —
+admin-induction covers the interim. Note the apex-var refactor (G1/G2) is worth
+landing regardless, because it also fixes the latent fixed-depth SNI/zone parse
+(§3).
 
 ---
 
@@ -1106,26 +1202,51 @@ of the total gym (if any) is promoted into it. *Effort: ~2–3 weeks* (local
 orchestration + the AI judge/navigator wiring + the capture harness + flake
 quarantine).
 
-**Phase 7 (post-GA, gated on the test-env decision) — the isolated test
-environment.** Stand up the parallel test `.com` + test `.flagship.services` +
-test DNS zone + test Hetzner project (§6.5), move the clean per-event D5 hooks
-into it, and repoint the monthly total-gym run at the test endpoints so GA-era
-runs never touch prod. *Effort: bounded-but-real — a `wrangler.test.toml` +
-`fly.test.toml` + a fresh D1/R2/DO/secret set + the test zone + the hooks; no new
-app code beyond the hooks. Blocked on the test-domain decision (§11).*
+**Phase 7 (post-GA) — the isolated `gym.` test environment (= §12-G6).** Stand up
+the parallel test `.com` + test `.flagship.services` on **`gym.` subdomains of the
+existing zones** + a test Hetzner project (§6.5), move the clean per-event D5 hooks
+into it, and repoint the monthly total-gym run at the `gym.` endpoints so GA-era
+runs never touch prod. *Effort: bounded-but-real — a `wrangler.gym.toml` +
+`fly.gym.toml` + a fresh D1/R2/DO/secret set + the `gym.` custom-domain records +
+the hooks. The only app-code prerequisite is the apex-var refactor (§12-G1/G2),
+worth landing regardless; no new domain (rev4) — the test-domain blocker is
+retired.*
 
 > **Total-gym honest sizing:** roughly **8–12 focused weeks** to full coverage
 > across four surfaces, dominated by the Android test-tag sweep, the fixture
 > seed-variant catalog, and the D7 capture/review pipeline. The every-merge gym is
-> a ~1-week stand-up (Phase 2) and then grows incrementally. The post-GA test-env
-> (Phase 7) is a separate bounded-but-real chunk (a parallel deploy, not new app
-> code) gated on the test-domain decision — pre-GA the gym does not need it.
+> a ~1-week stand-up (Phase 2) and then grows incrementally. The post-GA `gym.`
+> test-env (Phase 7 / §12-G6) is a separate bounded-but-real chunk (a parallel
+> `gym.` deploy + the apex-var refactor, not a new domain) — pre-GA the gym does
+> not need it.
 
 ---
 
 ## 11. Open decisions for the owner
 
-### RESOLVED (rev3 — folded into the doc above)
+### RESOLVED (folded into the doc above)
+**rev4 — the final locks:**
+- **Test env = `gym.` subdomains on the EXISTING zones.** `gym.flagshipserver.com`
+  (control plane) + `gym.flagship.services` (data plane); test boxes
+  `<server>.<user>.gym.flagship.services`. **No new domain / zone.** This RETIRES
+  the rev3 "test DOMAIN" prerequisite entirely (§6.5, §4, §12-G6).
+- **Ban the username `gym` (prod + test).** One reserved-name ban closes both the
+  namespace collision and the prod CT-monitor false-positive. Extend the set to
+  `test`/`e2e`/`qa`/`ci`/`staging`. Chokepoint: `RESERVED_USER_LABELS` /
+  `validateUserLabel` in `packages/control-plane/src/labels.ts` (mirror
+  `packages/services-zone/src/validation.ts`) (§6.5, §12-G1).
+- **Exact-same-code via a prod-default apex var.** One apex/base-URL var per
+  surface, default = today's literal, so prod is byte-identical and the SAME code
+  serves tests and users; only the test env sets it to `gym.`. Behavior-preserving,
+  gated (full suite + canonical-byte vectors stay green); also fixes the latent
+  fixed-depth SNI/zone misparse by parsing apex-relative (§6.5, §12-G1/G2).
+- **Isolation by zeroing, not secrecy.** The `gym.` domain is public/knowable;
+  isolation is the test env's own D1/R2 + a wipe between runs (§4, §6.5).
+- **One-command-then-wait runner.** Each gym = a single command → pass/fail +
+  screenshots; engine is the §2.1 deterministic gate + short-AI judge/navigator
+  (§9, §12-G3).
+
+**rev3 — still in force:**
 - **Runner = the owner's physical Mac.** The iOS/iPad/Android UI tiers + the
   total gym + every live-Hetzner run execute LOCALLY on this Mac; only the cheap
   every-merge gym stays in GitHub-Linux CI. **There is no hosted-macOS cost** —
@@ -1140,36 +1261,240 @@ app code beyond the hooks. Blocked on the test-domain decision (§11).*
   the pass/fail oracle (§2.1).
 - **Pre-GA D5 state induction = this box's admin access** against demo entities —
   **no new prod hooks pre-GA**; the clean per-event hooks move into the post-GA
-  test-env (§6.5, §7-A).
+  `gym.` test-env (§6.5, §7-A).
 
-### REMAINING (need an owner call)
-1. **Test DOMAIN for the post-GA test-env (a hard PREREQUISITE).** The test-env
-   cannot reuse `flagshipserver.com` / `flagship.services` (test certs + CT-log
-   entries + DNS records would pollute prod and confuse cert-pin/CT — §6.5).
-   **Owner to provide a spare domain or approve a new test zone.** This blocks
-   Phase 7 (nothing pre-GA).
-2. **WHEN to build the test-env.** Stand it up now (and run pre-GA against
-   admin-induction in the meantime), or defer the build until GA approaches?
-   Pre-GA the gym does not depend on it; the cost is a parallel deploy (§6.5,
-   Phase 7).
-3. **Final confirm of the AI-driver split (how much AI drives).** §2.1 is
+### REMAINING (need an owner call — none block this run; G1–G6 proceed)
+1. **WHEN to stand up the `gym.` test-env.** Build it now (and run pre-GA against
+   admin-induction in the meantime), or defer to GA-approach? Pre-GA the gym does
+   not depend on it; the cost is the apex-var refactor (G1/G2, worth doing anyway)
+   + a parallel `gym.` deploy (§6.5, §12-G6). *This run does the apex-var refactor
+   and stages the deploy commands; the actual `gym.` deploy is owner-gated on
+   tokens.*
+2. **Final confirm of the AI-driver split (how much AI drives).** §2.1 is
    owner-recommended pending confirm: keep AI strictly to judge + navigate/heal
    with determinism as the verdict, or widen/narrow the AI's role? (Also: the
    judge cadence — per-step vs per-scenario-summary — trades coverage for spend.)
-4. **Which subset gates merges.** Confirm the every-merge gate = the TS
+3. **Which subset gates merges.** Confirm the every-merge gate = the TS
    `tsc -b`+`vitest` gate + the webapp Playwright subset on GitHub-Linux as
    **required PR gates**, with the Mac iOS/Android tiers + the rest of the total
-   gym advisory/nightly (§9, §10).
-5. **Aesthetic-pass cadence.** Is the D7 judge (screenshot vision-review) a
+   gym advisory/nightly (§9, §10, §12-G4).
+4. **Aesthetic-pass cadence.** Is the D7 judge (screenshot vision-review) a
    **per-release / monthly** pass (recommended — heavy + partly subjective + costs
    AI $) or more frequent? The token-conformance gate (Layer 1) can run more often
    even if the judge runs monthly.
-6. **Branch-gated surfaces.** The marketplace UI (D2-B11) and the usage/tier-status
+5. **Branch-gated surfaces.** The marketplace UI (D2-B11) and the usage/tier-status
    dashboard (D5-F4 front-end) live on `feat/marketplace` — confirm their gym
    scripts ship on that branch (branch-is-the-gate), while the gym on `main` omits
    them.
-7. **Surface order.** Confirm iOS-first for Phase 1 (most head start), or
-   prioritize a different surface.
+6. **Surface order.** Confirm iOS-first for the live vertical slice (most head
+   start), or prioritize a different surface (§12-G5).
+
+---
+
+## 12. Build plan (this run + incremental)
+
+> **Why this section exists:** the build must survive context compaction. A
+> fresh-context worker should be able to resume the gym from THIS doc alone —
+> below are the executable phases, in dependency order, each with the concrete
+> files to touch and the gate to run. **This run targets G1–G4 + a start on
+> G5/G6.** The full 70×4 §6 matrix is NOT built in one pass — after the harness
+> exists (G3), each remaining scenario is a small additive spec, filled in
+> incrementally (each scenario = a new spec). The §10 phased rollout is the
+> coverage-growth story; this §12 is the executable bring-up story. They agree:
+> G1–G2 are the apex-var prerequisite; G3 ≈ §10 Phase-1/2 harness; G4 ≈ §10
+> Phase-2 gate; G5 ≈ §10 Phase-1/3 first tranche; G6 ≈ §10 Phase-7 (now on
+> `gym.`).
+
+**Conventions for every phase:** the gate is `npx tsc -b` clean + `npx vitest run`
+fully green with the **prod defaults unchanged** (so the refactors are
+behavior-preserving), plus the surface-native suites where touched (iOS
+`xcodebuild test`, Android `:app:testDebugUnitTest`). Branch is `main` unless a
+phase says otherwise; the marketplace/usage-dashboard gym scripts ship on
+`feat/marketplace` (branch-is-the-gate, §11-REMAINING-5).
+
+### G1 — Apex-threading (backend): one apex var, default = prod literal
+**Goal.** Replace the hardcoded backend apex literals with ONE variable per
+boundary whose **default is `flagship.services` / `flagshipserver.com`**, so prod
+is byte-identical and the test env sets it to `gym.flagship.services` /
+`gym.flagshipserver.com`. Parse **apex-RELATIVE** (strip the configured apex
+suffix, then split), never fixed-depth — this also fixes the latent SNI/zone
+misparse. **Plus: ban the username `gym`.**
+
+**Thread the apex through these load-bearing sites (paths verified this survey):**
+- `packages/control-plane/src/authCode.ts` (~line 73) — `expectedDomain =
+  \`${server}.${user}.flagship.services\`` serverDomain validation. Make the apex a
+  parameter (default `"flagship.services"`).
+- `apps/web/src/tunnel/allocator.ts` (~lines 487–488, 516–517, 561–562) —
+  `const APEX = "flagship.services"` + `APEX_SUFFIX`. **Already apex-relative**
+  (`endsWith(APEX_SUFFIX)` + dynamic slice) — make `APEX` injectable, keep the
+  relative parse.
+- `apps/web/src/tunnel/tunnelHub.ts` (~lines 629, 896–897, 905–906) —
+  `podCanonicalShapeOk()` / `extractMiddleLabel()` use the literal
+  `".flagship.services"` with `.length` slicing. **This is the fixed-depth-ish
+  site**: derive the apex from config and keep the relative strip.
+- `apps/web/src/tunnel/lazyRedirection.ts` (~line 83) — the
+  `fqdn === "flagship.services" || fqdn.endsWith(".flagship.services")` first-party
+  guard. Drive off the configured apex.
+- `packages/control-plane/src/dns01.ts` (~lines 164, 264, 200/282/319) — already
+  has `deps.apex ?? "flagship.services"`; ensure every DNS-01 path takes the apex
+  (it mostly does) and the test deploy passes the `gym.` apex.
+- `packages/control-plane/src/serverRegister.ts` — `userZoneOf(podApex)` (~lines
+  294, 367–376) strips the literal `".flagship.services"`. Make the apex a
+  parameter; keep the apex-relative `head.split(".")` → last-label-as-user logic.
+- `apps/com/src/controlPlaneRoutes.ts` (~line 1837) — `handleCleanupApex({ dns,
+  apex: "flagship.services" })`. Source the apex from the Worker `[vars]`.
+- `packages/bootkey-builder/src/caddyfile.ts` (~lines 32, 41, 51) — `serverFqdn`
+  / wildcard SAN helpers compose `…flagship.services`. Make the apex an arg
+  (default prod).
+- `apps/com/wrangler.toml [vars]` — add the apex var (prod value = the literal);
+  the `gym.flagshipserver.com` test Worker (G6) overrides it. The control-plane
+  `comBaseUrl` default (`packages/server-daemon/src/runtime.ts` ~line 1052,
+  `?? "https://flagshipserver.com"`) is already a parameter — leave the default.
+
+> **Honest count.** rev3 said "~20 backend sites"; the broad grep finds the
+> literal `flagship.services` in ~120 source files and `flagshipserver.com` in
+> ~90 (incl. tests/fixtures/comments/sibling apps). The **load-bearing
+> parse/validate/compose sites** that must change are the ones listed above (~8
+> modules); the long tail is mostly tests, generated `dist/`, comments, and the
+> already-parameterized `?? "…"` defaults that need no change. Thread the named
+> sites; grep the rest and change only those that actually parse or compose the
+> apex.
+
+**Ban the username `gym` (+ test labels).**
+- `packages/control-plane/src/labels.ts` — add `"gym"`, `"test"`, `"e2e"`,
+  `"qa"`, `"ci"`, `"staging"` to `RESERVED_USER_LABELS` (~lines 20–27). Both
+  `/api/users/check` (`usersCheck.ts`) and `/api/users/claim` (`usernameClaim.ts`)
+  flow through `validateUserLabel`, so this one edit bans them everywhere.
+- `packages/services-zone/src/validation.ts` — mirror the same additions (the
+  zero-dep copy, ~lines 35–75).
+- Add a test asserting `validateUserLabel("gym").ok === false` (and the others).
+
+**Gate:** `npx tsc -b` clean + `npx vitest run` green **with prod defaults**
+(byte-identical behavior; canonical-byte / serverDomain vectors unchanged because
+the default apex is the same literal). The reserved-name additions add a few
+assertions; nothing else moves.
+
+### G2 — Apex-threading (clients): one base-URL/apex constant per surface
+**Goal.** Mirror G1 on the three clients: ONE base-URL/apex constant per surface,
+default = prod, routed through the ~45 literal occurrences the survey found
+(~150 client source files mention a prod literal, but most are tests/comments;
+change the live base-URL/host-derivation sites). Plus handle cert-pinning for the
+test build.
+- **webapp** — derive the apex from `window.location.origin` where possible (the
+  webapp is served from the same host it talks to), with an explicit
+  `APEX_BASE_URL` / `WEBAPP_BASE_URL` override already supported (§4 Tier-2). Route
+  the hardcoded host literals under `apps/web/public/webapp/lib` + `views` through
+  it. A webapp served from `gym.flagshipserver.com` then "just works" against the
+  `gym.` apex.
+- **iOS** — one apex/base-URL constant in `apps/mobile/shared/Sources/FlagshipCore`
+  (alongside `DeveloperSettings` / the live-client base), default = prod; the
+  Tier-2 launch seam (G3, §7-F) can point it at `gym.`.
+- **Android** — one constant mirroring iOS in `core/`; default = prod.
+- **Cert-pinning for the test build (REQUIRED).** Android
+  `apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt`
+  (~lines 43, 46) hardcodes two prod SPKI pins (`sha256/3GwlKvse…`,
+  `sha256/V8/g9Sny…`) via `CertPinInterceptor.kt`; iOS pins per-box via the
+  STK-signed daemon-status (§ Phase-4 cert work). For the `gym.` test build, either
+  **add a test pin set** (the `gym.` LE chain's SPKI) **or disable pinning in the
+  test/debug build** (a debug-only flag gating `HttpClientFactory`'s pinner). Prod
+  pins stay unchanged. (webapp can't pin — no change.)
+
+**Gate:** `npx tsc -b` clean + `npx vitest run` green; iOS `xcodebuild test` +
+Android `:app:testDebugUnitTest` green with **prod defaults** (the
+`HttpClientFactory` pin test stays green for prod; add a test for the test-build
+pin/disable path).
+
+### G3 — Gym harness + one-command runner
+**Goal.** The engine from §2.1 (deterministic gate + short-AI judge/navigator) +
+screenshot capture + a single command per gym that prints pass/fail + writes a
+screenshots dir. **One command, then wait.**
+- **Engine (Layer 1):** the scripted handle-tap + expected-state-assert + diffable
+  screenshot loop (§2.1), per surface: **XCUITest** (iOS/iPad, building on
+  `FlagshipAppUITests` + `OnboardingSmokeTests.swift`), **Compose UI Test +
+  Espresso** (Android — needs the net-new `src/androidTest/` dir, §3/§7-D),
+  **Playwright** (webapp — extend `apps/web/e2e/`).
+- **Short-AI layer (Layer 2):** the bounded judge (screenshot review, advisory)
+  + navigate/self-healer (§2.1), BYOK key, run on the Mac only. Can be stubbed in
+  G3 and lit up in G5/Phase-6.
+- **Screenshot capture:** capture-on-success + on-failure, named
+  `<scenario>-<step>-<surface>.png` (§7-B); Playwright already has on-failure.
+- **The `gym` runner / npm scripts:** a `gym` CLI (or npm scripts) exposing at
+  least `gym:every-merge` (the fast Tier-1 subset, Layer-1 only, no backend) and
+  `gym:total` (the full local run incl. Tier-2 + the AI passes) → a **pass/fail
+  summary + a screenshots dir**. Per-surface drivers wired underneath (XCUITest /
+  Compose-UI-Test / Playwright). Wire the demo-only guardrail (§7-G) into the
+  harness base class.
+
+**Gate:** the runner executes end-to-end on at least one surface (webapp, the
+cheapest) and emits the summary + screenshots; `npx tsc -b` clean.
+
+### G4 — Every-merge gym (fast Tier-1 subset, no backend)
+**Goal.** The curated cheap deterministic subset (§10 Phase-2): onboarding,
+create-server (form→QR), home + status filters, the build chooser, settings
+landing, the slivers render — **demo-fixture mode, no backend**, wired as the
+merge gate.
+- **webapp** in GitHub-Linux CI — extend `.github/workflows/e2e.yml` (already
+  wrangler-dev miniflare + the Playwright subset).
+- **iOS** on this Mac — the demo-fixture XCUITest subset (`-smoke-mode`
+  launch-args, §ios-launch-modes); runs in the local nightly job, not the per-PR
+  Linux gate (§9).
+- Expand `DemoFixtures` (iOS `DemoFixtures.swift`) + the `pod-sim`/`page.route`
+  payloads (webapp) for the subset states.
+
+**Gate:** the every-merge subset is green and fast (Linux webapp subset as the
+required PR gate; the Mac iOS subset in the local job); `npx tsc -b` + `npx vitest
+run` green.
+
+### G5 — Total-gym Tier-1 tranche + iOS live vertical slice (start this run)
+**Goal.** Begin filling the real §6 matrix.
+- **Tier-1 tranche (demo-fixture):** a real first batch of §6 scenarios in
+  demo-fixture mode (lifecycle A1/A4/A5, the build chooser B1, session tiers C1,
+  the slivers F11/F12 + E7) on iOS + webapp, asserting on-screen state.
+- **iOS live vertical slice (Tier-2):** script **onboarding → create a demo
+  server → online → approve unlock → install a service** and run it Tier-2 against
+  a **freshly-provisioned, then-deleted** Hetzner box (the ephemeral
+  create→test→`finally`-delete loop, §6), asserting the D6 effects for real
+  (G8/G12). Pre-GA this runs against prod's demo surface with admin-induction
+  (§6.5); the AI judge/navigator can be added here or deferred to Phase-6.
+
+**Gate:** the iOS slice drives the real app against a real backend end-to-end with
+guaranteed teardown; the Tier-1 tranche is green in the harness.
+
+### G6 — Test-env stand-up (`gym.` subdomains)
+**Goal.** Stand up the isolated test env on the existing zones (§6.5):
+- **Control plane:** a `flagship-com-gym` Worker (a `wrangler.gym.toml` or
+  `--name`), served at the **`gym.flagshipserver.com`** custom domain; its `[vars]`
+  set the apex var (G1) to the `gym.` apex; its own D1 (`flagship-state-gym`,
+  same migrations dir), R2 (`-gym` buckets), DO, rate-limit namespaces, secrets,
+  and a **test Hetzner project token**.
+- **Data plane:** a `flagship-services-gym` Fly app (a `fly.gym.toml` / `flyctl
+  -a`), same `Dockerfile`/image, its own anycast IPs; `[env]` sets the apex var
+  to `gym.flagship.services`. Repoint the Worker→Fly wiring (`SERVICES_BASE_URL` /
+  `TUNNEL_HUB_URL` / passthrough IPs) at it.
+- **DNS:** `gym.flagshipserver.com` (+ `web.gym.`, `recovery.gym.`, `boot.gym.`)
+  custom domains (wrangler self-provisions DNS+cert); per-box
+  `<server>.<user>.gym.flagship.services` A/AAAA published by the test Worker into
+  the existing services zone.
+- **Wipe-between-runs:** run `scripts/wipe-all-users.sh` against the **test** D1
+  before each run (isolation by zeroing — §4).
+- **Deploy posture:** if Cloudflare/Fly/Hetzner tokens are present in the
+  environment, deploy; **otherwise this phase ships the exact commands** (the
+  `wrangler.gym.toml` / `fly.gym.toml` + the `wrangler deploy --name …` /
+  `flyctl deploy -a flagship-services-gym` invocations) for the owner to run. The
+  D5 clean per-event hooks (§7-A) live here, gated on the **test** admin secret.
+
+**Gate:** `gym.flagshipserver.com/api/health` + `gym.flagship.services/api/health`
+return 200 (when deployed); the apex-var refactor keeps prod green throughout.
+
+### This run vs. incremental
+**This run:** G1 + G2 (apex var + reserved-name ban + client pins) → G3 (harness +
+one-command runner) → G4 (every-merge gym) → **start** G5 (the first Tier-1 tranche
++ the iOS live vertical slice) and **stage** G6 (the `gym.` configs/commands;
+deploy if tokens present). **Afterward, incrementally:** the rest of the §6 70×4
+matrix fills in on the harness one spec at a time (§10 Phases 3–6), the Android
+test-tag sweep (§10 Phase-5) unblocks Android's D7-usable sweep, and the `gym.`
+test-env's per-event D5 hooks (§7-A) light up the live propagation tests once GA
+approaches.
 
 ---
 
@@ -1193,10 +1518,17 @@ The heavy tiers + the total gym + the ephemeral-Hetzner runs execute **locally o
 the owner's Mac** (nightly/monthly), so there is **no hosted-macOS cost** — the
 cheap every-merge gate stays on GitHub-Linux. Pre-GA, D5 server-side states are
 induced via this box's own admin access against demo entities; **post-GA, a
-dedicated isolated test-env** (test `.com` + test `.flagship.services` + a separate
-test DNS zone + a test Hetzner project) carries the clean state-induction hooks so
-the monthly GA-era gym never touches prod. Honest scope: the total gym is ~8–12
-focused weeks to full four-surface coverage; the every-merge gym is a ~1-week
-stand-up that then grows incrementally; the test-env is a separate bounded-but-real
-parallel deploy gated on the owner providing a test domain. **Hard rule throughout:
+dedicated isolated test-env on `gym.` subdomains of the existing zones**
+(`gym.flagshipserver.com` + `gym.flagship.services`, its own D1/R2/Hetzner, wiped
+between runs) carries the clean state-induction hooks so the monthly GA-era gym
+never touches prod. The same code runs in both places: **one apex/base-URL
+variable per surface, default = the prod literal**, so prod behavior is
+byte-identical and only the test env points at `gym.`; the username `gym` is banned
+so the test apex can never collide with a real user or trip the prod CT monitor.
+Honest scope: the total gym is ~8–12 focused weeks to full four-surface coverage;
+the every-merge gym is a ~1-week stand-up that then grows incrementally; the
+test-env is a parallel `gym.` deploy whose only app-code prerequisite is the
+apex-var refactor (worth landing regardless — it also fixes the latent fixed-depth
+SNI/zone parse). **This run targets G1–G4 + a start on G5/G6 (§12); the full 70×4
+matrix fills in incrementally on the harness afterward.** **Hard rule throughout:
 destructive lifecycle scenarios run on demo entities only — never a real account.**
