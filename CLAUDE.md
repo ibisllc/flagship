@@ -123,7 +123,148 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-17**.
 
-### 2026-06-17 (latest) — maintainer-trust enforcement landed (apps + boxes verify the blessing)
+### 2026-06-17 (latest) — security/ops gap-closures + cross-surface parity build-out
+
+**Large `main` session: closed the agent-doable security/ops gaps from the
+full-repo audit, did a UX/refactor pass, and raised Android (and the webapp)
+toward iOS parity across the new feature surfaces.** All work is **local on
+`main`, NOT yet pushed**; `npx tsc -b` clean and all four surfaces validated
+green (see the per-area gates below). A second worker's maintainer-trust feature
+landed in parallel (entry below) — at integration its iOS compile breaks were
+fixed here too (see "Maintainer-trust").
+
+**Security / ops gap-closures (`main`):**
+- **SSRF guard hardened** on both the BYOK provider `baseUrl` and the git-clone
+  path — now also blocks **redirect-to-private** and **DNS-resolves-to-private**
+  (the residual rebinding hole the audit flagged), not just literal RFC1918/
+  loopback/metadata IPs.
+- **Push-revoke authenticated** — the device-revoke/push path now requires a
+  signed envelope (was a gap alongside the already-fixed push-relay auth); the
+  3 clients (webapp/iOS/Android) carry the matching signer (parity).
+- **Tunnel-hub `irkLookup` fail-closed** — a missing/failed IRK lookup no longer
+  falls open; closes a cross-tenant claim path on the relay.
+- **Credential-store path-traversal fix** — the per-session/build `.cred` key is
+  sanitized so a crafted session/build id can't escape the store dir.
+- **CI gate workflow** added (typecheck + vitest + the canonical-byte freshness
+  check below) so a red tree/divergence fails in CI, not just locally.
+- **Shared canonical-byte vectors + freshness check** — the cross-platform
+  signed-message vectors are now a single shared fixture with a CI check that
+  fails if TS/Swift/Kotlin drift (previously pinned per-surface, drift-prone).
+- **Storage parity-harness expansion** — broadened the D1↔InMemory harness; it
+  **caught one more real D1 divergence** (fixed).
+- **Crypto exact-pinning** — tightened loose crypto assertions to exact-match
+  pins.
+- **Wipe / migration-ledger de-drift** — reconciled the wipe-script table list
+  and the migration ledger so they no longer drift from the live schema.
+- **Deploy-rollback runbook** added; **ca-lease-status test made deterministic**
+  (was time-flaky → CI greenness).
+
+**UX + refactors (`main`):**
+- **Truthful recovery-lockout copy** — the lockout/lapse messaging no longer
+  overstates what happens; and the **single-device grace 7→3-day migration was
+  actually finished**, fixing two real bugs found mid-change: a
+  notification-ladder regression (the T+0/+1d/+3d alert cadence had drifted off
+  the shortened window) and a `graceModel` rename that hadn't propagated.
+- **"Services" terminology unified** across surfaces (the Apps→Services rename
+  finished where it had been left half-applied).
+- **Static error-humanizer** rolled out (raw `HTTP <code>`/stack strings →
+  plain language) — **deterministic string mapping, NO AI** in the path.
+- **Control-plane typed-error sweep** — handlers return typed errors instead of
+  ad-hoc throws/strings.
+- **Daemon `index.ts` decomposed** into focused `wire*()` builders (it had grown
+  into one giant boot function); behavior identical.
+- **`packages/protocol` `auth.ts` split** into per-domain modules — **canonical
+  bytes are byte-identical** (the cross-platform vectors above prove it), so no
+  signature break.
+- **Marketplace install AI-key flow + scan-grade/Confirm parity** — the install
+  surfaces now share the AI-key recall/confirm step and the scan-grade display
+  (mobile brought level with the webapp).
+
+**Android → iOS parity build-out (+ a few webapp items) (`main`):**
+- **Android server-detail:** inline **boot-unlock Approve card** (was iOS-only),
+  **dead-man** persisted state + live countdown, **journal unit picker**, and a
+  **real service-detail VM** (real load + env editor + Save/Uninstall, replacing
+  the stub).
+- **Replace-device finalize screen** (countdown + Complete) + the
+  **pending-re-pair banner** — on **iOS and Android** (mobile had lacked the
+  webapp's finalize ceremony).
+- **Android create-server backup-policy picker**, **Settings real account-type**,
+  **AI-keys "Make default"** affordance, neutral Home empty-state copy.
+- **Android live vibe-code stream VM** (replaced the static `sampleStream` mock)
+  + **chat-screen routing** (consume the `VibeCodeChat` deep-link) + the **ops
+  sliver** now feeds from real scratch builds with corrected tap targets.
+- **Webapp:** keyfile-import takeover re-pair (the security path), trust-sliver
+  lock-gating, vibecode deep-link, toast queue, and the matching smaller items.
+
+**Maintainer-trust (other worker, merged into `main`):** the feature (entry
+below) arrived with **iOS compile errors** — a non-exhaustive `HumanError`
+switch (the new `controlServerUntrusted`/trust cases) + missing `public` inits
+on a couple of the new shared types. Both fixed here; afterwards **`main` and
+both feature branches (`feat/marketplace`, `feat/retail`) build green on all
+four surfaces**.
+
+**Gates:** `npx tsc -b` clean · `npx vitest run` green (web/daemon/control-
+plane/protocol/storage) · iOS xcodebuild XCTests + app build green · Android
+`:app:testDebugUnitTest` green. **All local — NOT pushed.** Feature branches were
+re-rebased onto refactored `main` and re-validated.
+
+### GA close-out TODO (do NOT do in dev) — dev-mode disablements ("Bucket C")
+
+> **We are still in dev. These are capabilities that are intentionally LEFT
+> ENABLED for bring-up and MUST be disabled/removed (and gate-enforced) only
+> when going to GA.** This is the single consolidated list — the previously
+> scattered mentions in the dated security notes and the Ship/launch list now
+> point here. Cross-cutting CI gate (item 4) is what keeps the others from
+> silently regressing into a release.
+>
+> 1. **Guard/disarm the prod-wipe script** (`scripts/wipe-all-users*.sh` /
+>    `*.sql`). Today it deletes every user + server in one idempotent command —
+>    fine for the pre-release slate, a footgun once we serve real accounts. Add a
+>    per-env confirmation token + a prod row-count safety/dry-run + an
+>    audit-logged admin-only path, OR remove the blanket script from the
+>    deployable surface so no one can nuke prod in one command. Keep its table
+>    list in sync with new migrations until then.
+> 2. **Remove the `debug` / `flagship` console user** (the burner-installed sudo
+>    bring-up backdoor — `flagship` is SSH-key-only; `/etc/issue` warns loudly).
+>    Burner change → needs a reburn to take.
+> 3. **Remove the burn-time LUKS recovery passphrase**
+>    (`flagship-burn-time-luks-rekey-me-immediately`, a kept known constant in
+>    `packages/flagship-burner/src/userdata.ts` + the Swift
+>    `UserData.swift` mirror) **and re-enable the `luksRemoveKey` guard** (it is
+>    deliberately guarded OFF, not deleted, so the slot survives bring-up).
+> 4. **Add a CI grep-gate that FAILS a RELEASE build** if the `debug`-user or
+>    burn-time-passphrase constants (items 2–3) are present — so a forgotten
+>    backdoor can never ship. (The dev/non-release path keeps them.)
+> 5. **Remove the demo/dev flips in the burner + apps** — demo-mode and the
+>    3-tap live/mock toggle (iOS `DeveloperSettings`/`DemoFixtures` + the
+>    Welcome-box 3-tap; the burner's demo path).
+> 6. **Fill the `pro.html` payment placeholders** — Monero (XMR) address +
+>    mailing address (`apps/web/public/pro.html` carries `[ your Monero
+>    address — fill in before publishing ]` / `[ your mailing address … ]`).
+>    **Needs the owner's real addresses.** NOTE: `pro.html` lives on
+>    **`feat/marketplace`** (the monetization page is extracted there, not on
+>    `main`) — fill it on that branch as part of the marketplace launch.
+> 7. **Remove the `DEV_LATE_LOG` / W12 debug endpoints** — the unauthenticated
+>    late-command log-exfil (`/api/dev/late-log/:label`) + the admin-gated
+>    Hetzner rescue/destroy/ISO-upload debug routes in
+>    `apps/com/src/controlPlaneRoutes.ts` (all tagged `W12 debug`).
+
+### Parity follow-ups (deferred, beyond polish)
+
+> Cross-surface gaps that remain after the parity build-out above — deliberately
+> deferred (not blocking), beyond cosmetic polish:
+> - **Webapp post-recovery keep/replace/wipe choice screen (L4)** — mobile has
+>   the post-recovery device-disposition choice; the webapp doesn't yet.
+> - **Companion-requests background poll on mobile (L8)** — the webapp polls
+>   companion/secret requests in the background; iOS/Android surface them only on
+>   a user-initiated read.
+> - **Net-new cross-surface items:** **Android `PodSwitcher`** (iOS has the
+>   multi-pod switcher), a **webapp "add a server" chooser** (Provision a new box
+>   vs. Pair an existing one — mobile distinguishes these), and **Android
+>   `AddControlDevice` order-send wiring** (the screen exists; the signed
+>   order-send is not wired).
+
+### 2026-06-17 — maintainer-trust enforcement landed (apps + boxes verify the blessing)
 
 **The maintainer→CA blessing is now load-bearing end to end** (spec:
 `docs/maintainer-trust-enforcement.md`). Previously the whole `@ibisllc/maintainers`
@@ -1047,10 +1188,9 @@ Gates (2026-06-10): `npx vitest run` 4517 (351 files) · iOS 824 · Android 620 
 **App server-list — CONSOLIDATED (#56, LIVE):** one unauthenticated `GET /api/users/:u/pods` now returns registered `pods` (`state:"online"`) + active `pending` orders (`state:"pending"`, with `serial`/fqdn/phase) — **no more biometric Face ID on a list refresh**, and a just-created server appears instantly. Server `bae3537` (deployed via tsc -b + wrangler, verified `pending` key live), webapp `792a620`. Replaces the split-brain (registered `/pods` + biometric-signed `outstanding-orders` whose silent per-order `provision_status` failure swallowed the whole list) that caused the entire "server doesn't appear / Face ID on refresh" saga. iOS done; webapp done; Android done (`f0acd5d`). Wire note: `pending[].serial` was replaced by `orderRef` in `aa78e2b` (see SECURITY below) — deploy before judging client pending behavior against prod.
 
 **SECURITY — pre-production cleanup (track to GA):**
-- **Remove the `debug` user.** The burner now installs a sudo `debug` / `flagship` console user (a deliberate backdoor for bring-up — `flagship` is SSH-key-only, so on-box log reading was impossible; `/etc/issue` warns loudly). REMOVE before production.
+- **`debug`/`flagship` user, burn-time LUKS passphrase, mass-wipe → see the "GA close-out TODO" subsection** (top of this status section). Those dev-mode disablements are now consolidated there (items 1–4); this note recorded their discovery.
 - **#52 — DONE (`8f9c9c0`).** Tier-2 sign-out is blocked on all three surfaces when `hasCloudRecovery` is false (action-layer `SignOutPolicy` gate; blocked dialog routes to recovery enrollment; demo exempt). Audit verdict: the rotation rode the DESIGNED single-device re-pair-by-grace path (no credential to initiate, no old-key veto) — see the evening-sweep note above. Possible follow-up: require a credential on the single-device re-pair initiate, and check why the live rotation beat the 3d grace.
 - **/pods serial exposure — HARDENED (`aa78e2b`, not yet deployed).** The unauthenticated `/pods` `pending[]` no longer carries the auth-code `serial` (a provision-status write capability); it ships an opaque `orderRef = hex(sha256("flagship/order-ref/v1|" + serial))` (`orderRefForSerial`, control-plane `podInventory.ts`; byte-identical mirrors in iOS `FlagshipCore.OrderRef` + Android `core.OrderRef`, pinned cross-platform vector). The creating device reconciles by hashing its locally-stored serial; a non-creating device reconciles by fqdn and shows list-level phase only (it never learns the serial, so no deep-progress poll / cancel-revoke there). All surfaces + tests updated in lockstep. Deploy needs the usual `npx tsc -b && cd apps/com && npx wrangler deploy`.
-- Remove the **burn-time LUKS recovery passphrase** (`flagship-burn-time-luks-rekey-me-immediately`, a kept known constant) + disarm the mass-wipe (#35) — before GA.
 - **/pods unauthenticated server-list enumeration (track to GA).** `GET /api/users/:u/pods` is unauthenticated (a deliberate #56 tradeoff to avoid a biometric Face ID on every list refresh, and because the boot worker's directory client reads it). It leaks METADATA to any knower-of-a-username: the user's server domains, identity pubkeys, registered timestamps, apps-served (NO secrets/keys/content; the serial is already opaque-`orderRef`'d). Pre-GA decision needed: require auth (re-introduces the refresh-biometric problem #56 solved), OR rate-limit + make usernames non-guessable, OR accept-with-rationale. Currently UNTRACKED-until-now.
 - **CAA pinning + CT monitoring — SPEC'd, NOT deployed (track to GA).** Because `.com` controls the `flagship.services` DNS zone, it could in principle satisfy a DNS-01 challenge and mint a ROGUE per-user cert (it never sees the box's cert private key — that's generated + held box-local and never transmitted — but it controls the name). Defenses are designed in `docs/per-user-cert-and-addressing.md` (CAA pinned to the user's ACME account so LE refuses out-of-account issuance; CT monitoring on the phone to alert on any cert the owner didn't mint) but NOT implemented. Mitigating factor today: a cert is NOT the access-control primitive — routing authority (RCK/STK, phone-held) is, so a rogue cert can't redirect traffic. Deploy CAA+CT before GA.
 - **Daemon liveness/cert reporting — DONE (2026-06-10 late).** The daemon sends the 5-minutely STK-signed daemon-status heartbeat (wired in server-daemon index); `/pods` now relays the VERBATIM signed report (`signedStatus`, migration 0048) so phones verify the cert fingerprint against the locally-derived STK and hard-fail-pin on it. The provision-status liveness bridge remains as the fallback for boxes that haven't reported yet.
@@ -1094,7 +1234,8 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 >   best-effort + wall-clock bounded so it can never hang boot. Only on the
 >   encrypted Wi-Fi path; wired burns byte-identical. **Also keeps the burn-time
 >   LUKS passphrase as a bring-up recovery slot** (`luksRemoveKey` guarded off, not
->   deleted) — a KNOWN CONSTANT; flip the guard back on before GA.
+>   deleted) — a KNOWN CONSTANT; the GA flip-the-guard-back-on action is tracked in
+>   the "GA close-out TODO" subsection (item 3).
 > - ✅ **No-LUKS server option** (`dad6bf0`+`f4231a2`): phone-signed
 >   `InstallBlob.diskEncryption` ("luks"|"none"), appended last in canonical bytes
 >   as `de=<mode>` (absent ⇒ encrypted; a relay can't downgrade luks→none without
@@ -1132,7 +1273,7 @@ Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx
 8. **Stores.** iOS TestFlight (Associated Domains capability, Xcode Archive + ASC upload, metadata, 5 external testers); Android Play (signed AAB via `./gradlew :app:bundleRelease`, internal track, 5 testers). Neither app is on a store yet, so push / Live-Activity timelines can't be received on a real device.
 9. **Marketplace security scanner** — `marketplace_listings.scan_grade` ships NULL; needs the Trivy + custom-checks service that posts grade + R2 report. MVP gate before public marketplace.
 10. **v1-alpha live exercises** (multi-day, observational): recovery / rotation / update-pack over 7 days × 2 pods; peer-backup at scale; marketplace MVP; public disclosure + bounty path.
-11. **Disarm the mass-wipe before real users.** `scripts/wipe-all-users-prerelease-2026-06-02.sql` is a single idempotent file that deletes every user + server. Fine for the pre-release slate, a footgun once we serve real accounts. Before GA: gate it (per-env confirmation token, prod row-count safety/dry-run, audit-logged admin-only path) or remove the blanket script from the deployable surface so no one can nuke prod in one command. Keep the wipe script's table list in sync with new migrations until then.
+11. **Disarm the mass-wipe + the other dev-mode disablements before real users → see the "GA close-out TODO" subsection** (top of this status section). The wipe-script guard/removal, the `debug` user, the burn-time LUKS passphrase, the demo/dev flips, the `pro.html` payment placeholders, the `DEV_LATE_LOG`/W12 debug endpoints, and the release-build CI grep-gate are all consolidated there.
 12. **In-house AI inference server (build-modes follow-on).** Today the AI-authoring paths (scratch chat, git-adapt) run on **BYOK** — the box calls the user's chosen provider directly; no inference infra needed. When we stand up our own model server, wire it as a third posture (in addition to BYOK + a possible Flagship-promo tier): run an OpenAI-compatible endpoint (Ollama / vLLM / TGI) on the box or a LAN/datacenter host, point a provider at its `baseUrl`, and flip the `LlmHarness` `baseUrlGuard` (`allowPrivate`/`allowHttp` or `hostAllowlist`) — the guard is built for exactly this (see `llmHarness.ts` + `docs/build-modes.md` "in-house inference server"). No bespoke inference code; the adapter (`ollama`/`openai`) already exists. Also decide the default-provider UX once it's hosted (auto-select the in-house server vs. keep BYOK primary).
 
 **NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol + daemon state machine + cloud activation API are built & partly live; **C3 — iOS + Android NFC read flow** is the remaining agent-doable chunk. Hardware bring-up waits on the hardware-shipping business decision.
