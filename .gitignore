@@ -42,6 +42,10 @@ apps/mobile/android/keystore/keystore.properties
 apps/mobile/android/keystore/*.jks
 apps/mobile/android/keystore/*.keystore
 
+# Xcode per-user IDE state — rewritten on every build/launch, never shared
+**/xcuserdata/
+*.xcuserstate
+
 # bootkey artifacts (large, regenerable)
 build-artifacts/
 build-out/
