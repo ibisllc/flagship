@@ -53,6 +53,10 @@ public struct MaintainersSignature: Sendable, Equatable {
 public struct MaintainersApprovalRule: Sendable, Equatable {
     public let kind: String
     public let threshold: Int
+    public init(kind: String, threshold: Int) {
+        self.kind = kind
+        self.threshold = threshold
+    }
 }
 
 public struct MaintainersProject: Sendable, Equatable {
@@ -60,6 +64,12 @@ public struct MaintainersProject: Sendable, Equatable {
     public let contact: String?
     public let homepage: String?
     public let tracks: [String]?
+    public init(name: String?, contact: String?, homepage: String?, tracks: [String]?) {
+        self.name = name
+        self.contact = contact
+        self.homepage = homepage
+        self.tracks = tracks
+    }
 }
 
 public struct Mandate: Sendable, Equatable {
@@ -78,6 +88,39 @@ public struct Mandate: Sendable, Equatable {
     public let project: MaintainersProject?
     public let signedBy: String
     public let signatures: [MaintainersSignature]
+    public init(
+        kind: String,
+        version: Int,
+        mandateId: String,
+        track: String,
+        holder: String,
+        issuedAt: String,
+        expiresAt: String,
+        successors: [String],
+        approvalRule: MaintainersApprovalRule,
+        minSuccessors: Int,
+        maxDurationSeconds: Int,
+        defaultDurationSeconds: Int,
+        project: MaintainersProject?,
+        signedBy: String,
+        signatures: [MaintainersSignature]
+    ) {
+        self.kind = kind
+        self.version = version
+        self.mandateId = mandateId
+        self.track = track
+        self.holder = holder
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+        self.successors = successors
+        self.approvalRule = approvalRule
+        self.minSuccessors = minSuccessors
+        self.maxDurationSeconds = maxDurationSeconds
+        self.defaultDurationSeconds = defaultDurationSeconds
+        self.project = project
+        self.signedBy = signedBy
+        self.signatures = signatures
+    }
 }
 
 public struct ReleaseEndorsement: Sendable, Equatable {
@@ -108,6 +151,31 @@ public struct CaEndorsement: Sendable, Equatable {
     public let issuedAt: String
     public let signedBy: String
     public let signatures: [MaintainersSignature]
+    public init(
+        kind: String,
+        version: Int,
+        endorsementId: String,
+        track: String,
+        caPubkey: String,
+        scope: String,
+        notBefore: String,
+        notAfter: String,
+        issuedAt: String,
+        signedBy: String,
+        signatures: [MaintainersSignature]
+    ) {
+        self.kind = kind
+        self.version = version
+        self.endorsementId = endorsementId
+        self.track = track
+        self.caPubkey = caPubkey
+        self.scope = scope
+        self.notBefore = notBefore
+        self.notAfter = notAfter
+        self.issuedAt = issuedAt
+        self.signedBy = signedBy
+        self.signatures = signatures
+    }
 }
 
 // MARK: - Canonical-bytes derivation
