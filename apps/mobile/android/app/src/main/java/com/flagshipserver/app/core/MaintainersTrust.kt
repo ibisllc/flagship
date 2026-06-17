@@ -41,6 +41,11 @@ object MaintainersTrust {
      *  uses. */
     const val pinnedMandateHash =
         "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae"
+
+    /** Shared-contract alias for [pinnedMandateHash] (the BAKED_PIN the
+     *  maintainer-trust-enforcement feature names across all surfaces). Same
+     *  literal; one name to grep for. */
+    const val bakedPin = pinnedMandateHash
 }
 
 // ---------------------------------------------------------------------------
@@ -786,5 +791,63 @@ object MaintainersCaVerifier {
         }
 
         return VerifiedCaEndorsements(valid, rejections, current?.caPubkey)
+    }
+
+    /** §9 link-3: the operational CA keys a consumer may currently accept
+     *  CA-signed artifacts under (deduped, insertion order preserved). Empty
+     *  ⇒ fail closed (reject all). Mirrors `authorizedCaKeys`. */
+    fun authorizedCaKeys(
+        endorsements: List<CaEndorsement>,
+        caChain: VerifiedChain,
+        nowMs: Long,
+        clockSkewMs: Long? = null,
+    ): List<String> {
+        val result = verifyCaEndorsements(endorsements, caChain, nowMs, clockSkewMs)
+        val seen = HashSet<String>()
+        val out = ArrayList<String>()
+        for (e in result.validEndorsements) {
+            if (seen.add(e.caPubkey)) out.add(e.caPubkey)
+        }
+        return out
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Control-server blessing (the feature's top-level verdict)
+// ---------------------------------------------------------------------------
+
+/** The `GET /api/maintainer-blessing` payload `.com` serves so a client can
+ *  run the full `pin → chain → authorizedCaKeys(now)` check itself. */
+data class MaintainerBlessing(
+    val pinnedMandateHash: String,
+    val caPubkey: String,
+    val mandates: List<Mandate>,
+    val caEndorsements: List<CaEndorsement>,
+)
+
+object MaintainersComTrust {
+    /** Run the full control-server-trust check on a fetched blessing using the
+     *  CALLER's clock `nowMs` (never the response's `now`). Returns true iff
+     *  the CA pubkey `.com` actually serves is in `authorizedCaKeys` live now.
+     *
+     *  The baked pin is the FLOOR: a `.com`-asserted `pinnedMandateHash` that
+     *  disagrees with our baked pin is rejected outright — we never let `.com`
+     *  re-anchor the chain. An empty baked pin ⇒ fail closed.
+     *
+     *  IMPORTANT: this is the "valid response → verdict" half only. A NETWORK
+     *  failure must NOT call this with a fabricated blessing; the caller leaves
+     *  the trust verdict UNKNOWN on a network error (never untrusted). */
+    fun verifyComBlessing(
+        blessing: MaintainerBlessing,
+        nowMs: Long,
+        bakedPinOverride: String? = null,
+    ): Boolean {
+        val pin = bakedPinOverride ?: MaintainersTrust.bakedPin
+        if (pin.isEmpty()) return false
+        // `.com` cannot lower the floor: its asserted pin must equal ours.
+        if (blessing.pinnedMandateHash != pin) return false
+        val chain = MaintainersVerifier.verifyMandateChainFromPin(pin, blessing.mandates)
+        val keys = MaintainersCaVerifier.authorizedCaKeys(blessing.caEndorsements, chain, nowMs)
+        return keys.contains(blessing.caPubkey)
     }
 }
