@@ -1,0 +1,75 @@
+# flagship-services-GYM — the isolated TEST data plane (docs/ui-test-gym.md §6.5,
+# §12-G6). A SECOND Fly app alongside prod's `flagship-services` (root fly.toml),
+# built from the SAME Dockerfile/image, with its OWN anycast IPs. Stateless pipe,
+# exactly like prod: raw-TCP SNI passthrough on :443 + tunnel-hub WS at :8443.
+# Persistent state: NONE (all state is in the gym `.com` Worker + its D1).
+#
+# DEPLOY (turnkey runbook): docs/runbooks/gym-test-env.md.
+#   flyctl deploy -c fly.gym.toml -a flagship-services-gym
+# Prod is `flyctl deploy` against the DEFAULT root fly.toml, which this file does
+# NOT touch — so prod stays byte-identical.
+#
+# ⭐ THE FLIP (§12-G1/G2): [env] sets FLAGSHIP_SERVICES_APEX = "gym.flagship.services"
+# so the SAME server code (apps/web/src/server.ts: `process.env.FLAGSHIP_SERVICES_APEX
+# ?? "flagship.services"`) parses pod canonicals apex-RELATIVE against the gym apex.
+# Prod's root fly.toml has NO FLAGSHIP_SERVICES_APEX → it keeps the literal default.
+
+app = "flagship-services-gym"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+# Rolling, min 2 — same #10 rationale as prod (never kill the only machine before
+# the new one is healthy, or every tunnel WS drops). The gym carries no real
+# users, but matching prod here keeps the gym a faithful mirror of prod behavior.
+[deploy]
+  strategy = "rolling"
+  wait_timeout = "60s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  TUNNEL_TCP_PORT = "8443"
+  FLAGSHIP_SURFACE = "services"
+  # ⭐ The gym apex. This is the one line that distinguishes the gym data plane
+  # from prod — it makes pod-canonical parsing + first-party guards resolve
+  # against `gym.flagship.services` (test boxes = `<server>.<user>.gym.flagship.services`).
+  FLAGSHIP_SERVICES_APEX = "gym.flagship.services"
+
+# External :443 → internal :8443 (raw TCP, SNI passthrough). Identical to prod.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8443
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 443
+    handlers = []
+
+# External :8443 → internal :3000 (TLS-terminated by Fly with the auto-issued
+# cert for flagship-services-gym.fly.dev). Tunnel-hub WS at /tunnel + /api/health.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

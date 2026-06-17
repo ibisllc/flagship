@@ -6,10 +6,13 @@
  *
  *   gym every-merge [--surface web|ios|android] [--tier every-merge|total]
  *   gym total       [--surface ...]
+ *   gym live        [--surface ...]   # ONLY the live Tier-2 slice (§12-G6)
  *
- * `every-merge` / `total` select the suite (the tier). `--surface` narrows to
- * one (or more, comma-separated) surface; default = all surfaces with a
- * scenario. `--tier` can override the suite's implied tier.
+ * `every-merge` / `total` select the suite (the tier). `total` also folds in the
+ * LIVE Tier-2 slice, which SKIPS cleanly when the `gym.` env isn't reachable
+ * (`gym:total` stays green with no env). `live` runs ONLY the live slice.
+ * `--surface` narrows to one (or more, comma-separated) surface; default = all
+ * surfaces with a scenario. `--tier` can override the suite's implied tier.
  *
  * Exit code = the DETERMINISTIC verdict (0 = gate green, 1 = a scenario failed
  * or nothing ran). AI findings are advisory and never affect the exit code.
@@ -18,8 +21,9 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
-import type { Surface, Tier } from "./scenario.js";
+import type { Scenario, Surface, Tier } from "./scenario.js";
 import { ALL_SCENARIOS } from "./suites.js";
+import { LIVE_SCENARIOS, liveEnvReachable } from "./live.js";
 import { runGym } from "./runner.js";
 import { WebAdapter } from "./adapters/web.js";
 import { IosAdapter } from "./adapters/ios.js";
@@ -47,7 +51,9 @@ interface ParsedArgs {
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const positional = argv.filter((a) => !a.startsWith("--"));
   const suite = positional[0] ?? "every-merge";
-  let tier: Tier = suite === "total" ? "total" : "every-merge";
+  // `live` and `total` both imply the `total` tier (the live slice is tier:total);
+  // `live` additionally narrows the SELECTION to live-only (see main()).
+  let tier: Tier = suite === "total" || suite === "live" ? "total" : "every-merge";
   let surfaces: Surface[] | undefined;
 
   for (let i = 0; i < argv.length; i++) {
@@ -81,7 +87,14 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = findRepoRoot();
 
-  const summary = await runGym(ALL_SCENARIOS, {
+  // Scenario set per suite:
+  //  - every-merge / total: the fixture tranches (ALL_SCENARIOS) + the live slice,
+  //    which the runner SKIPS cleanly when the `gym.` env is unreachable (§12-G6).
+  //  - live: ONLY the live slice.
+  const scenarios: readonly Scenario[] =
+    args.suite === "live" ? LIVE_SCENARIOS : [...ALL_SCENARIOS, ...LIVE_SCENARIOS];
+
+  const summary = await runGym(scenarios, {
     repoRoot,
     suite: args.suite,
     tier: args.tier,
@@ -92,6 +105,12 @@ async function main(): Promise<void> {
       android: new AndroidAdapter(),
     },
     aiHooks: resolveAiHooks(),
+    // The live-env gate: ping <control-apex>/api/health (default gym.flagshipserver.com).
+    // Resolved at most once, only when a live scenario is selected.
+    liveEnvCheck: async () => {
+      const probe = await liveEnvReachable();
+      return { reachable: probe.reachable, reason: probe.reason };
+    },
   });
 
   // One command, then wait → the summary + the artifact path.

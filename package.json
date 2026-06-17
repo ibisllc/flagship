@@ -25,7 +25,8 @@
     "predeploy:check": "bash scripts/predeploy-com.sh",
     "gym": "npm --workspace=@flagship/gym run gym --",
     "gym:every-merge": "npm --workspace=@flagship/gym run gym -- every-merge",
-    "gym:total": "npm --workspace=@flagship/gym run gym -- total"
+    "gym:total": "npm --workspace=@flagship/gym run gym -- total",
+    "gym:live": "npm --workspace=@flagship/gym run gym -- live"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

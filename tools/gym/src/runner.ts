@@ -22,6 +22,17 @@ import type { SurfaceAdapter, AdapterContext } from "./adapters/types.js";
 import type { AiHooks, AiFinding } from "./ai/hooks.js";
 import { defaultAiHooks } from "./ai/hooks.js";
 
+/**
+ * Result of the live-env reachability check (§12-G6). When the `gym.` test env
+ * isn't deployed, `reachable` is false and every `backend:"live"` scenario is
+ * SKIPPED (never failed) — so a `total` run stays green on a machine that never
+ * stood up the env. Only evaluated when the selection contains a live scenario.
+ */
+export interface LiveEnvCheck {
+  reachable: boolean;
+  reason: string;
+}
+
 export interface RunnerOptions {
   readonly repoRoot: string;
   readonly suite: string;
@@ -33,6 +44,14 @@ export interface RunnerOptions {
   readonly aiHooks?: AiHooks;
   /** Sink for progress lines; defaults to console.log. */
   readonly log?: (line: string) => void;
+  /**
+   * Gate for `backend:"live"` scenarios (§12-G6). Called at most ONCE per run,
+   * and ONLY when the selection contains a live scenario. When it resolves
+   * `reachable:false`, every live scenario is SKIPPED cleanly with the reason —
+   * the deterministic gate never sees a failure for an absent env. Omit it and
+   * any live scenario is skipped as "no live-env check configured".
+   */
+  readonly liveEnvCheck?: () => Promise<LiveEnvCheck>;
 }
 
 /** Select the scenarios for this run by tier + surface filter. */
@@ -136,8 +155,38 @@ export async function runGym(
     availability.set(surface, await adapter.available(ctx));
   }
 
+  // Resolve the live-env gate ONCE, lazily, and ONLY if a live scenario is in the
+  // selection (so a pure-fixture run never makes a network call). An absent env
+  // → every live scenario SKIPS cleanly (§12-G6).
+  let liveGate: LiveEnvCheck | undefined;
+  const hasLive = selected.some((s) => s.backend === "live");
+  if (hasLive) {
+    liveGate = opts.liveEnvCheck
+      ? await opts.liveEnvCheck()
+      : { reachable: false, reason: "no live-env check configured (gym env detect-and-skip)" };
+    log(`[LIVE] ${liveGate.reachable ? "env reachable" : "env unreachable → live scenarios skip"}: ${liveGate.reason}`);
+  }
+
   const results: ScenarioResult[] = [];
   for (const scenario of selected) {
+    // Live scenarios are gated on env reachability — SKIP (never fail) when down.
+    if (scenario.backend === "live" && liveGate && !liveGate.reachable) {
+      log(`[SKIP] ${scenario.surface}/${scenario.id}: ${liveGate.reason}`);
+      results.push({
+        id: scenario.id,
+        surface: scenario.surface,
+        tier: scenario.tier,
+        goal: scenario.goal,
+        passed: false,
+        skipped: true,
+        skipReason: liveGate.reason,
+        durationMs: 0,
+        screenshots: [],
+        aiFindings: [],
+      });
+      continue;
+    }
+
     const adapter = opts.adapters[scenario.surface];
     const avail = availability.get(scenario.surface)!;
     if (!avail.ok) {

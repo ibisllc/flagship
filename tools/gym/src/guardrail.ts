@@ -21,6 +21,11 @@ export const ALLOWED_DEMO_USERNAMES: ReadonlySet<string> = new Set([
   "smoketest",
   "smoketest-demo",
   "demouser734759",
+  // The live `gym.` test-env demo user the Tier-2 vertical slice creates +
+  // installs against (tools/gym/src/live.ts, §12-G6). Demo-classified by
+  // construction (a `gym.flagship.services` box; `gym` is a banned real
+  // username), so its destructive create/install ops are permitted here.
+  "gymdemo",
 ]);
 
 export interface GuardVerdict {

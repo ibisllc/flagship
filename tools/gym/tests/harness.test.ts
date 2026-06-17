@@ -9,6 +9,14 @@ import { selectScenarios, runGym } from "../src/runner.js";
 import { guardScenario, ALLOWED_DEMO_USERNAMES } from "../src/guardrail.js";
 import { summarize, renderText, runDirName } from "../src/results.js";
 import { ALL_SCENARIOS } from "../src/suites.js";
+import {
+  LIVE_SCENARIOS,
+  liveEnvReachable,
+  liveTarget,
+  GYM_LIVE_DEMO_USERNAME,
+  DEFAULT_GYM_CONTROL_APEX,
+  DEFAULT_GYM_SERVICES_APEX,
+} from "../src/live.js";
 import { defaultAiHooks, type AiFinding } from "../src/ai/hooks.js";
 import { byokConfigFromEnv, resolveAiHooks } from "../src/ai/byokSeam.js";
 import type { SurfaceAdapter, AdapterContext, AdapterOutcome } from "../src/adapters/types.js";
@@ -343,5 +351,157 @@ describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", 
     // (the sheet opens), never running a backend delete — so none is flagged
     // destructive. Real demo-only destructive ops land in the live slice (G6).
     expect(ALL_SCENARIOS.some(isDestructive)).toBe(false);
+  });
+});
+
+describe("the live Tier-2 vertical slice (§12-G6) — separate registry, detect-and-skip", () => {
+  it("is NOT in ALL_SCENARIOS (the fixture tranches stay entirely no-backend)", () => {
+    const liveIds = new Set(LIVE_SCENARIOS.map((s) => s.id));
+    for (const s of ALL_SCENARIOS) expect(liveIds.has(s.id)).toBe(false);
+    // And every live scenario is genuinely backend:"live" + demo-guarded.
+    expect(LIVE_SCENARIOS.length).toBeGreaterThan(0);
+    for (const s of LIVE_SCENARIOS) {
+      expect(s.backend).toBe("live");
+      expect(s.tier).toBe("total");
+      // The slice creates/installs against a demo box → must be guarded (§7-G).
+      expect(isDestructive(s)).toBe(true);
+    }
+  });
+
+  it("the live slice's destructive target is the ALLOWED gym demo user (guardrail passes)", () => {
+    expect(ALLOWED_DEMO_USERNAMES.has(GYM_LIVE_DEMO_USERNAME)).toBe(true);
+    for (const s of LIVE_SCENARIOS) {
+      expect(guardScenario(s).allowed).toBe(true);
+    }
+  });
+
+  it("the iOS live scenario binds into its own GymLiveTests XCUITest class", () => {
+    const iosLive = LIVE_SCENARIOS.filter((s) => s.surface === "ios");
+    expect(iosLive.length).toBeGreaterThan(0);
+    for (const s of iosLive) {
+      expect(s.harness.startsWith("FlagshipAppUITests/GymLiveTests")).toBe(true);
+      // Never collides with the fixture iOS tranches (Smoke/EveryMerge/Total).
+      expect(ALL_SCENARIOS.some((f) => f.harness === s.harness)).toBe(false);
+    }
+  });
+
+  it("liveTarget defaults to the gym apex, env-overridable", () => {
+    const def = liveTarget({});
+    expect(def.controlApex).toBe(DEFAULT_GYM_CONTROL_APEX);
+    expect(def.servicesApex).toBe(DEFAULT_GYM_SERVICES_APEX);
+    expect(def.healthUrl).toBe(`https://${DEFAULT_GYM_CONTROL_APEX}/api/health`);
+    const overridden = liveTarget({ GYM_LIVE_CONTROL_APEX: "gym2.example.com" });
+    expect(overridden.healthUrl).toBe("https://gym2.example.com/api/health");
+  });
+});
+
+describe("liveEnvReachable — SKIPS cleanly when the env is absent (never throws)", () => {
+  it("reports unreachable (not an exception) on a network error", async () => {
+    const probe = await liveEnvReachable({
+      timeoutMs: 50,
+      fetchImpl: (async () => {
+        throw new Error("getaddrinfo ENOTFOUND gym.flagshipserver.com");
+      }) as unknown as typeof fetch,
+    });
+    expect(probe.reachable).toBe(false);
+    expect(probe.reason).toContain("unreachable");
+  });
+
+  it("reports unreachable on a non-2xx health response", async () => {
+    const probe = await liveEnvReachable({
+      fetchImpl: (async () => ({ ok: false, status: 502 })) as unknown as typeof fetch,
+    });
+    expect(probe.reachable).toBe(false);
+    expect(probe.reason).toContain("502");
+  });
+
+  it("reports reachable on a 2xx health response", async () => {
+    const probe = await liveEnvReachable({
+      fetchImpl: (async () => ({ ok: true, status: 200 })) as unknown as typeof fetch,
+    });
+    expect(probe.reachable).toBe(true);
+  });
+});
+
+describe("runGym gates live scenarios on the live-env check (§12-G6)", () => {
+  const liveScenario: Scenario = {
+    ...baseScenario,
+    id: "live-x",
+    surface: "web",
+    tier: "total",
+    backend: "live",
+    destructive: { destructive: true, demoUsername: "gymdemo" },
+  };
+
+  it("SKIPS (never fails) a live scenario when the env is unreachable, and a fixture pass keeps the run green", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    try {
+      const summary = await runGym(
+        [{ ...baseScenario, id: "fix", surface: "web" }, liveScenario],
+        {
+          repoRoot,
+          suite: "total",
+          tier: "total",
+          adapters: { web: fakeAdapter("web"), ios: fakeAdapter("ios"), android: fakeAdapter("android") },
+          liveEnvCheck: async () => ({ reachable: false, reason: "gym env unreachable (test)" }),
+          log: () => {},
+        },
+      );
+      const live = summary.results.find((r) => r.id === "live-x")!;
+      const fix = summary.results.find((r) => r.id === "fix")!;
+      expect(live.skipped).toBe(true);
+      expect(live.passed).toBe(false);
+      expect(live.skipReason).toContain("unreachable");
+      // The fixture scenario still ran + passed → the run is OK (green today).
+      expect(fix.passed).toBe(true);
+      expect(summary.ok).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("RUNS the live scenario when the env IS reachable", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    try {
+      let checked = 0;
+      const summary = await runGym([liveScenario], {
+        repoRoot,
+        suite: "live",
+        tier: "total",
+        adapters: { web: fakeAdapter("web"), ios: fakeAdapter("ios"), android: fakeAdapter("android") },
+        liveEnvCheck: async () => {
+          checked++;
+          return { reachable: true, reason: "gym env healthy (test)" };
+        },
+        log: () => {},
+      });
+      expect(checked).toBe(1); // resolved once
+      expect(summary.results[0]!.skipped).toBe(false);
+      expect(summary.results[0]!.passed).toBe(true);
+      expect(summary.ok).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT call the live-env check when no live scenario is selected (pure-fixture run makes no network call)", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    try {
+      let checked = 0;
+      await runGym([{ ...baseScenario, id: "fix", surface: "web" }], {
+        repoRoot,
+        suite: "every-merge",
+        tier: "every-merge",
+        adapters: { web: fakeAdapter("web"), ios: fakeAdapter("ios"), android: fakeAdapter("android") },
+        liveEnvCheck: async () => {
+          checked++;
+          return { reachable: true, reason: "should not be called" };
+        },
+        log: () => {},
+      });
+      expect(checked).toBe(0);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 });

@@ -33,7 +33,8 @@ in incrementally on top of it — each scenario is a small additive entry.
 ```sh
 # From the repo root:
 npm run gym:every-merge            # the fast Tier-1 subset (no backend)
-npm run gym:total                  # the full local run (incl. live + AI passes)
+npm run gym:total                  # the full local run (incl. the live slice + AI passes)
+npm run gym:live                   # ONLY the live Tier-2 slice (§12-G6)
 
 # Narrow to a surface (web | ios | android), or override the tier:
 npm run gym -- every-merge --surface web
@@ -43,6 +44,11 @@ npm run gym -- every-merge --surface web,ios
 # Or directly via the CLI:
 npx tsx tools/gym/src/cli.ts every-merge --surface web
 ```
+
+`gym:total` folds in the **live Tier-2 slice**, which **detects** whether the
+`gym.` test env is deployed (pings `<control-apex>/api/health`) and **SKIPS
+cleanly** (never fails) when it isn't — so `npm run gym:total` is **green today**
+on a machine that never stood up the env. See "Live Tier-2 slice" below.
 
 The command runs the selected suite, then **waits** and prints a pass/fail
 summary + the path to the results artifact. Exit code = the deterministic
@@ -106,16 +112,49 @@ must name the demo username it targets (`Scenario.destructive`). The runner
 fixed demo-fixture identities (`src/guardrail.ts`). No real account is ever a
 destructive target. (None of the shipped smoke scenarios are destructive.)
 
+## Live Tier-2 slice (§12-G6)
+
+The one end-to-end scenario the gym runs against a REAL backend — the isolated
+`gym.` test env (`docs/ui-test-gym.md` §6.5; stand it up via
+`docs/runbooks/gym-test-env.md`):
+
+> onboarding → create a demo server (gym `.com` + the test Hetzner project) →
+> it comes online → approve the boot-unlock → install a service → assert the
+> **real** effect (the service runs / appears on the live `/pods` — D6 G8/G12).
+
+It lives in `src/live.ts` (`LIVE_SCENARIOS`), **separate from `ALL_SCENARIOS`**
+so the every-merge + total Tier-1 tranches stay entirely no-backend. It is
+`backend:"live"`, `total` tier, and demo-guarded (it creates/installs against the
+`gymdemo` demo user only — §7-G).
+
+**Detect-and-skip — why `gym:total` stays green today.** `liveEnvReachable()`
+pings `<control-apex>/api/health` (default `gym.flagshipserver.com`, override with
+`GYM_LIVE_CONTROL_APEX` / `GYM_LIVE_SERVICES_APEX`). The runner gates every
+`backend:"live"` scenario on it and **SKIPS** (never **FAILS**) when the env is
+unreachable — DNS miss, refused, timeout, or non-2xx all read as "not deployed".
+The fixture scenarios carry the verdict, so a `total` run is green with no env.
+The check is resolved **once**, and **only** when a live scenario is selected, so
+a pure-fixture run makes no network call.
+
+**Launch in live mode** (once the env is up):
+- **iOS** — `-apex-host gym.flagshipserver.com` launch arg points the live client
+  at the gym apex (the G2 seam: live-client base + `flagship.dev.useLiveClient`);
+  the cert-pinning test build carries the `gym.` SPKI pin or disables pinning in
+  debug (§12-G2). XCUITest class: `GymLiveTests`.
+- **webapp** — serve Playwright from the gym origin (`web.gym.flagshipserver.com`);
+  the webapp derives its apex from `window.location.origin` (§12-G2).
+
 ## Layout
 
 ```
 tools/gym/
   src/
     scenario.ts          # the Scenario model (deterministic steps/assertions/screenshotPoints)
-    runner.ts            # selects + guards + drives adapters + layers advisory AI + writes the artifact
+    runner.ts            # selects + guards + gates live on env-reachability + drives adapters + layers advisory AI + writes the artifact
     results.ts           # artifact shape (GymRunSummary) + JSON/text writers
     guardrail.ts         # the §7-G demo-only destructive guard
-    suites.ts            # the scenario registry (every-merge subset + the total Tier-1 tranche)
+    suites.ts            # the fixture scenario registry (every-merge subset + the total Tier-1 tranche)
+    live.ts              # the live Tier-2 slice + the gym-env detect-and-skip probe (§12-G6)
     cli.ts               # the `gym` CLI (one command, then wait)
     adapters/
       types.ts           # the SurfaceAdapter interface
