@@ -248,24 +248,48 @@ describe("runGym end-to-end (fake adapters) writes a real artifact", () => {
   });
 });
 
-describe("the shipped every-merge suite (§12-G4)", () => {
+describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", () => {
   const web = ALL_SCENARIOS.filter((s) => s.surface === "web");
   const ios = ALL_SCENARIOS.filter((s) => s.surface === "ios");
   const android = ALL_SCENARIOS.filter((s) => s.surface === "android");
+  const everyMerge = ALL_SCENARIOS.filter((s) => s.tier === "every-merge");
+  const total = ALL_SCENARIOS.filter((s) => s.tier === "total");
 
-  it("is entirely every-merge + fixture (the no-backend merge gate)", () => {
+  it("is entirely fixture-backed (NO-backend; the live Tier-2 slice is G6, not here)", () => {
     expect(ALL_SCENARIOS.length).toBeGreaterThan(0);
     for (const s of ALL_SCENARIOS) {
-      expect(s.tier).toBe("every-merge");
       expect(s.backend).toBe("fixture");
+      expect(s.tier === "every-merge" || s.tier === "total").toBe(true);
     }
   });
 
-  it("covers real breadth on the two proven surfaces (web + iOS, ~10+ each)", () => {
-    // G4 expands the G3 seed (1 each) to a curated subset: core launch +
-    // per-tab render + create-server + validation + the slivers.
-    expect(web.length).toBeGreaterThanOrEqual(10);
-    expect(ios.length).toBeGreaterThanOrEqual(6);
+  it("the every-merge tranche is the curated cheap subset (web + iOS, ~10+ / ~6+)", () => {
+    // G4: core launch + per-tab render + create-server + validation + slivers.
+    const emWeb = everyMerge.filter((s) => s.surface === "web");
+    const emIos = everyMerge.filter((s) => s.surface === "ios");
+    expect(emWeb.length).toBeGreaterThanOrEqual(10);
+    expect(emIos.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("the total tranche adds a substantial higher-value batch (§12-G5: 15+ across web + iOS)", () => {
+    // G5: the §6 D1/D2/D3/D4/D5 rows a fixture can seed + assert (NO backend).
+    const tWeb = total.filter((s) => s.surface === "web");
+    const tIos = total.filter((s) => s.surface === "ios");
+    expect(tWeb.length).toBeGreaterThanOrEqual(8);
+    expect(tIos.length).toBeGreaterThanOrEqual(8);
+    expect(total.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("every-merge is a STRICT subset of total (a total run includes every every-merge scenario)", () => {
+    // The runner selects every-merge ⊆ total (selectScenarios); the registry
+    // must therefore carry every every-merge scenario AND the total-only ones.
+    const totalRun = selectScenarios(ALL_SCENARIOS, "total");
+    const everyMergeRun = selectScenarios(ALL_SCENARIOS, "every-merge");
+    for (const s of everyMergeRun) {
+      expect(totalRun.some((t) => t.id === s.id)).toBe(true);
+    }
+    expect(totalRun.length).toBe(ALL_SCENARIOS.length);
+    expect(everyMergeRun.length).toBe(everyMerge.length);
   });
 
   it("leaves Android stubbed (Phase-5; the adapter SKIPS it, never fails it)", () => {
@@ -275,10 +299,15 @@ describe("the shipped every-merge suite (§12-G4)", () => {
   it("every scenario id is unique + every web harness grep title is unique", () => {
     const ids = ALL_SCENARIOS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
-    // The web adapter selects a Playwright spec by its grep title, so each web
-    // scenario's harness must be a unique title (else the grep matches several).
+    // The web adapter selects a Playwright spec by its grep title (anchored,
+    // escaped), so each web scenario's harness must be a unique title (else the
+    // grep matches several). This holds ACROSS both tranches (smoke + total
+    // specs share the one gym config's testMatch).
     const webTitles = web.map((s) => s.harness);
     expect(new Set(webTitles).size).toBe(webTitles.length);
+    // iOS `-only-testing:` ids must also be unique across tranches.
+    const iosIds = ios.map((s) => s.harness);
+    expect(new Set(iosIds).size).toBe(iosIds.length);
   });
 
   it("binds each scenario to a real driver (web grep title / iOS -only-testing id)", () => {
@@ -291,6 +320,15 @@ describe("the shipped every-merge suite (§12-G4)", () => {
       // Target/Class or Target/Class/method.
       expect(s.harness.startsWith("FlagshipAppUITests/")).toBe(true);
     }
+    // The total iOS tranche binds specifically into GymTotalTests; the total
+    // web tranche binds into the gym-total spec (its titles are prefixed
+    // "gym total"), so the adapter never confuses a tranche's specs.
+    for (const s of total.filter((x) => x.surface === "ios")) {
+      expect(s.harness.startsWith("FlagshipAppUITests/GymTotalTests/")).toBe(true);
+    }
+    for (const s of total.filter((x) => x.surface === "web")) {
+      expect(s.harness.startsWith("gym total ")).toBe(true);
+    }
   });
 
   it("carries deterministic assertions + screenshot points on every scenario", () => {
@@ -300,7 +338,10 @@ describe("the shipped every-merge suite (§12-G4)", () => {
     }
   });
 
-  it("no every-merge scenario is destructive — none needs the guardrail to run", () => {
+  it("no scenario is destructive — none needs the guardrail to run (Tier-1, fixture-only)", () => {
+    // The total tranche's D1 'delete/revoke' rows assert the CONFIRM UI only
+    // (the sheet opens), never running a backend delete — so none is flagged
+    // destructive. Real demo-only destructive ops land in the live slice (G6).
     expect(ALL_SCENARIOS.some(isDestructive)).toBe(false);
   });
 });

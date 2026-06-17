@@ -87,12 +87,31 @@ struct FlagshipApp: App {
     private static func applySmokeModeIfRequested(
         _ app: AppState,
         linker: DeepLinker,
-        operations: ActiveOperationsCenter
+        operations: ActiveOperationsCenter,
+        trust: TrustCenter
     ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
         if !app.isPaired {
-            DemoFixtures.activate(app, username: "smoketest")
+            // The total-gym D5 seed variants pick a different fixture pod set so
+            // a server-event state (awaiting-unlock / dead) renders
+            // deterministically with no backend. Mutually exclusive; default =
+            // the three legacy sample pods. Gym-only.
+            if args.contains("-smoke-awaiting-unlock") {
+                DemoFixtures.activate(
+                    app,
+                    username: "smoketest",
+                    pods: DemoFixtures.samplePodsWithAwaitingUnlock(username: "smoketest")
+                )
+            } else if args.contains("-smoke-dead") {
+                DemoFixtures.activate(
+                    app,
+                    username: "smoketest",
+                    pods: DemoFixtures.samplePodsWithDeadServer(username: "smoketest")
+                )
+            } else {
+                DemoFixtures.activate(app, username: "smoketest")
+            }
         }
         // `-smoke-ops` seeds ONE in-flight build so the global operations
         // sliver (`global-operations-bar`) renders deterministically for the
@@ -106,6 +125,21 @@ struct FlagshipApp: App {
                 onServer: "Home",
                 target: .vibeCodeChat(sessionId: "gym-smoke")
             )
+        }
+        // `-smoke-trust-untrusted` seeds a positively-untrusted maintainer-trust
+        // verdict so the red GlobalTrustBar (`global-trust-bar`) renders (D4-E7).
+        // The live path derives this from a real `.com` blessing check
+        // (ContentView.runTrustCheck, live-client only); the gym injects a fixed
+        // failure so the degraded-trust experience is exercisable offline.
+        if args.contains("-smoke-trust-untrusted") {
+            trust.markUntrusted([
+                TrustFailure(
+                    certClass: .control,
+                    // A fixed, obviously-fake 64-hex cert-hash slug; never a real cert.
+                    certHash: String(repeating: "ab", count: 32),
+                    caPubkey: String(repeating: "cd", count: 32)
+                )
+            ])
         }
     }
 
@@ -293,7 +327,7 @@ struct FlagshipApp: App {
                 .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
-                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations)
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust)
                     // Restore a previously paired session: if the Keystore
                     // still holds a wrapped UMK (a real account that
                     // survives restarts) and we know which cloud was

@@ -1,16 +1,26 @@
 /**
- * The scenario registry — the every-merge gym's curated, fast, DETERMINISTIC,
- * NO-BACKEND Tier-1 subset (§12-G4 / §0): "does the app still launch, render
- * its core screens, and navigate without a broken edge." Every scenario here
- * is `every-merge` + `fixture` (so it runs in BOTH gyms) and non-destructive.
+ * The scenario registry — TWO tranches sharing one harness (§0):
+ *
+ *  1. The every-merge gym's curated, fast, DETERMINISTIC, NO-BACKEND Tier-1
+ *     subset (§12-G4): "does the app still launch, render its core screens, and
+ *     navigate without a broken edge." Every such scenario is `every-merge` +
+ *     `fixture` (so it runs in BOTH gyms) and non-destructive.
+ *  2. The total-gym Tier-1 TRANCHE (§12-G5 / §6 matrix) — the higher-value,
+ *     fixture-feasible, NO-BACKEND scenarios that go beyond the every-merge
+ *     subset into the §6 dimensions a demo fixture can seed + assert (D1
+ *     render/confirm, D2 build-modes, D3 settings, D4 security, D5 server-event
+ *     seed-states, D7-light). These are `total` + `fixture` (they run ONLY in
+ *     `gym:total`, not the every-merge gate). The LIVE vertical slice (Tier-2,
+ *     D6 action→effect against a real box) is G6 — NOT in this registry.
  *
  * Each scenario is a registry entry whose `harness` binds it to a REAL
  * per-surface driver spec:
- *   - web: a Playwright `test(...)` in apps/web/e2e/gym/gym-smoke.spec.ts,
- *     selected by its (unique) grep TITLE.
+ *   - web: a Playwright `test(...)` in apps/web/e2e/gym/gym-smoke.spec.ts
+ *     (every-merge) or gym-total.spec.ts (total), selected by its (unique)
+ *     grep TITLE.
  *   - iOS: an `-only-testing:` identifier (Target/Class[/method]) into the
- *     XCUITest target — GymSmokeTests (the cold-launch smoke) +
- *     GymEveryMergeTests (the breadth).
+ *     XCUITest target — GymSmokeTests + GymEveryMergeTests (every-merge) and
+ *     GymTotalTests (the total tranche).
  * Android is intentionally stubbed (the adapter reports unavailable + the
  * runner SKIPS it) — the on-device instrumentation harness + the ~43-screen
  * testTag sweep are §10 Phase-5, not this run.
@@ -19,23 +29,20 @@
  * small additive entry pointing at a new spec.
  */
 
-import type { Scenario, ScenarioStep, ScenarioAssertion, ScreenshotPoint } from "./scenario.js";
+import type { Scenario, Tier, ScenarioStep, ScenarioAssertion, ScreenshotPoint } from "./scenario.js";
 
-/** Shorthand: a fixture/every-merge web scenario bound to a Playwright grep title. */
-function web(
-  id: string,
-  goal: string,
-  grepTitle: string,
-  parts: {
-    steps: readonly ScenarioStep[];
-    assertions: readonly ScenarioAssertion[];
-    screenshots: readonly ScreenshotPoint[];
-  },
-): Scenario {
+interface ScenarioParts {
+  steps: readonly ScenarioStep[];
+  assertions: readonly ScenarioAssertion[];
+  screenshots: readonly ScreenshotPoint[];
+}
+
+/** Shorthand: a fixture web scenario bound to a Playwright grep title. */
+function webT(tier: Tier, id: string, goal: string, grepTitle: string, parts: ScenarioParts): Scenario {
   return {
     id,
     surface: "web",
-    tier: "every-merge",
+    tier,
     backend: "fixture",
     goal,
     steps: parts.steps,
@@ -45,21 +52,12 @@ function web(
   };
 }
 
-/** Shorthand: a fixture/every-merge iOS scenario bound to an `-only-testing:` id. */
-function ios(
-  id: string,
-  goal: string,
-  onlyTesting: string,
-  parts: {
-    steps: readonly ScenarioStep[];
-    assertions: readonly ScenarioAssertion[];
-    screenshots: readonly ScreenshotPoint[];
-  },
-): Scenario {
+/** Shorthand: a fixture iOS scenario bound to an `-only-testing:` id. */
+function iosT(tier: Tier, id: string, goal: string, onlyTesting: string, parts: ScenarioParts): Scenario {
   return {
     id,
     surface: "ios",
-    tier: "every-merge",
+    tier,
     backend: "fixture",
     goal,
     steps: parts.steps,
@@ -67,6 +65,26 @@ function ios(
     screenshotPoints: parts.screenshots,
     harness: onlyTesting,
   };
+}
+
+/** Every-merge web scenario (runs in both gyms). */
+function web(id: string, goal: string, grepTitle: string, parts: ScenarioParts): Scenario {
+  return webT("every-merge", id, goal, grepTitle, parts);
+}
+
+/** Every-merge iOS scenario (runs in both gyms). */
+function ios(id: string, goal: string, onlyTesting: string, parts: ScenarioParts): Scenario {
+  return iosT("every-merge", id, goal, onlyTesting, parts);
+}
+
+/** Total-gym-only web scenario (the Tier-1 tranche; runs in `gym:total`). */
+function webTotal(id: string, goal: string, grepTitle: string, parts: ScenarioParts): Scenario {
+  return webT("total", id, goal, grepTitle, parts);
+}
+
+/** Total-gym-only iOS scenario (the Tier-1 tranche; runs in `gym:total`). */
+function iosTotal(id: string, goal: string, onlyTesting: string, parts: ScenarioParts): Scenario {
+  return iosT("total", id, goal, onlyTesting, parts);
 }
 
 const shot = (id: string, describe: string): ScreenshotPoint => ({ id, describe });
@@ -385,5 +403,359 @@ const IOS_SCENARIOS: readonly Scenario[] = [
   ),
 ];
 
-/** Every scenario known to the gym. */
-export const ALL_SCENARIOS: readonly Scenario[] = [...WEB_SCENARIOS, ...IOS_SCENARIOS];
+// ───────────────────── TOTAL-gym Tier-1 tranche (§12-G5) ────────────────────
+// Higher-value §6 matrix rows a demo fixture can seed + assert with NO backend.
+// `total` tier → these run ONLY in `gym:total`, never the every-merge gate.
+// Grep titles match apps/web/e2e/gym/gym-total.spec.ts EXACTLY; iOS ids match
+// GymTotalTests methods.
+
+const TOTAL_WEB_SCENARIOS: readonly Scenario[] = [
+  // D2 — build modes (render client-side).
+  webTotal(
+    "web-total-build-chooser",
+    "D2-B1: the build-a-service chooser renders the on-main source tiles (scratch/git/mcp).",
+    "gym total webapp build chooser shows the on-main source tiles",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home → Services tab → build affordance." },
+        { kind: "tap", describe: "Open the chooser.", handle: "#services-list-open-vibe-code" },
+        { kind: "assert", describe: "Scratch tile.", handle: "#build-src-scratch" },
+      ],
+      assertions: [
+        { describe: "Build-source view present", handle: "#view-build-source", expect: "present" },
+        { describe: "Scratch tile present", handle: "#build-src-scratch", expect: "present" },
+        { describe: "Git tile present", handle: "#build-src-git", expect: "present" },
+        { describe: "MCP tile present", handle: "#build-src-mcp", expect: "present" },
+      ],
+      screenshots: [shot("build-chooser", "The build-a-service chooser.")],
+    },
+  ),
+  webTotal(
+    "web-total-ai-key-step",
+    "D2-B2: scratch routes through the AI-key step (renders backendless; device-local keys).",
+    "gym total webapp scratch routes through the AI-key step",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the chooser." },
+        { kind: "tap", describe: "Scratch → AI-key step.", handle: "#build-src-scratch" },
+        { kind: "assert", describe: "AI-key step + no-saved-keys placeholder.", handle: "#build-key-saved" },
+      ],
+      assertions: [
+        { describe: "AI-key view present", handle: "#view-build-key", expect: "present" },
+        { describe: "No-saved-keys placeholder", handle: "#build-key-saved", expect: "text", text: "no saved keys" },
+        { describe: "Use-a-different-key affordance", handle: "#build-key-different", expect: "present" },
+      ],
+      screenshots: [shot("build-key", "The AI-key step.")],
+    },
+  ),
+  // D3 — settings: session tiers + grey-out gating.
+  webTotal(
+    "web-total-session-tiers-gated",
+    "D3-C1: the recovery-gated session actions (passkey-lock, remove-device) are greyed until recovery is enrolled.",
+    "gym total webapp settings greys the recovery-gated session actions",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings." },
+        { kind: "assert", describe: "Tier-1 PIN lock present.", handle: "#settings-pin-lock" },
+        { kind: "assert", describe: "Tier-2 greyed.", handle: "#settings-signout" },
+      ],
+      assertions: [
+        { describe: "PIN-lock present", handle: "#settings-pin-lock", expect: "present" },
+        { describe: "Passkey-lock greyed", handle: "#settings-signout", expect: "present" },
+        { describe: "Remove-device greyed", handle: "#settings-reset", expect: "present" },
+      ],
+      screenshots: [shot("session-tiers-gated", "The greyed session-tier cluster.")],
+    },
+  ),
+  webTotal(
+    "web-total-greyed-action-toast",
+    "D3-C1: tapping a greyed session action shows the set-up-recovery toast and does NOT run the destructive path.",
+    "gym total webapp a greyed session action shows the set-up-recovery toast",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings." },
+        { kind: "tap", describe: "Tap the greyed tier-2 action.", handle: "#settings-signout" },
+        { kind: "assert", describe: "Recovery toast + stays on settings.", handle: "#toast" },
+      ],
+      assertions: [
+        { describe: "Recovery toast", handle: "#toast", expect: "text", text: "Set up account recovery" },
+        { describe: "Still on settings detail (no wipe)", handle: "#view-settings", expect: "present" },
+      ],
+      screenshots: [shot("recovery-toast", "The set-up-recovery toast.")],
+    },
+  ),
+  // D3 — AI-keys manager + recovery screen.
+  webTotal(
+    "web-total-ai-keys-manager",
+    "D3-C2: the AI-keys manager (providers) renders the list + the add-key affordance (never the full key).",
+    "gym total webapp settings renders the AI-keys manager",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings." },
+        { kind: "assert", describe: "Providers list + add affordance.", handle: "#providers-list" },
+      ],
+      assertions: [
+        { describe: "Providers list present", handle: "#providers-list", expect: "present" },
+        { describe: "Add-provider affordance present", handle: "#add-provider-go", expect: "present" },
+      ],
+      screenshots: [shot("ai-keys", "The AI-keys manager.")],
+    },
+  ),
+  webTotal(
+    "web-total-recovery-screen",
+    "D3-C4/C17: the recovery screen renders backendless (keyfile export + cloud setup).",
+    "gym total webapp settings opens the recovery screen",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings." },
+        { kind: "tap", describe: "Recovery row.", handle: "#settings-tab-recovery" },
+        { kind: "assert", describe: "Recovery view + keyfile export.", handle: "#recovery-keyfile-export" },
+      ],
+      assertions: [
+        { describe: "Recovery view present", handle: "#view-recovery", expect: "present" },
+        { describe: "Keyfile-export affordance present", handle: "#recovery-keyfile-export", expect: "present" },
+      ],
+      screenshots: [shot("recovery", "The recovery screen.")],
+    },
+  ),
+  // D4 — the webapp PIN lock (E3).
+  webTotal(
+    "web-total-pin-set-validation",
+    "D4-E3 + D7-light: PIN-set rejects a mismatch (inline error, stays on the screen) then accepts a valid PIN.",
+    "gym total webapp PIN-set rejects a mismatch then accepts a valid PIN",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings → PIN lock." },
+        { kind: "type", describe: "Mismatched PINs.", handle: "#pin-set-confirm" },
+        { kind: "tap", describe: "Save.", handle: "#pin-set-go" },
+        { kind: "assert", describe: "Inline error + stays.", handle: "#pin-set-error" },
+        { kind: "tap", describe: "Save a matching PIN → locks.", handle: "#pin-set-go" },
+      ],
+      assertions: [
+        { describe: "PIN-set error present on mismatch", handle: "#pin-set-error", expect: "present" },
+        { describe: "Locks to PIN-unlock on match", handle: "#view-pin-unlock", expect: "present" },
+      ],
+      screenshots: [shot("pin-set-mismatch", "The PIN mismatch error."), shot("pin-locked", "Locked to the PIN screen.")],
+    },
+  ),
+  webTotal(
+    "web-total-pin-roundtrip",
+    "D4-E3: a PIN set + unlock roundtrip returns to the shell (the PIN-unlock screen leaves).",
+    "gym total webapp PIN set then unlock returns to the shell",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings → PIN lock → set a valid PIN." },
+        { kind: "type", describe: "Enter the PIN.", handle: "#pin-unlock-input" },
+        { kind: "tap", describe: "Unlock.", handle: "#pin-unlock-go" },
+        { kind: "assert", describe: "Lock screen left.", handle: "#view-pin-unlock" },
+      ],
+      assertions: [{ describe: "PIN-unlock screen hidden after unlock", handle: "#view-pin-unlock", expect: "absent" }],
+      screenshots: [shot("pin-unlocked", "Back in the shell after PIN unlock.")],
+    },
+  ),
+  // D4/D5 — the global slivers (seeded client-side).
+  webTotal(
+    "web-total-trust-sliver",
+    "D4-E7: a seeded untrusted maintainer-trust verdict renders the red trust sliver (one failure line).",
+    "gym total webapp the maintainer-trust red sliver renders an untrusted verdict",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home; seed an untrusted verdict on the trust store." },
+        { kind: "assert", describe: "Red sliver + one line.", handle: "#trust-sliver" },
+      ],
+      assertions: [
+        { describe: "Trust sliver present", handle: "#trust-sliver", expect: "present" },
+        { describe: "One failure line", handle: "#trust-sliver .trust-bar-line", expect: "present" },
+      ],
+      screenshots: [shot("trust-sliver", "The red maintainer-trust sliver.")],
+    },
+  ),
+  webTotal(
+    "web-total-operations-sliver",
+    "D5-F12: a seeded in-flight build renders the teal active-operations sliver.",
+    "gym total webapp the active-operations teal sliver shows a seeded build",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home; seed a build op on the operations center." },
+        { kind: "assert", describe: "Teal sliver shows 'building'.", handle: "#global-operations-bar" },
+      ],
+      assertions: [
+        { describe: "Operations sliver present", handle: "#global-operations-bar", expect: "present" },
+        { describe: "Building label", handle: "#global-operations-bar", expect: "text", text: "building" },
+      ],
+      screenshots: [shot("operations-sliver", "The teal active-operations sliver.")],
+    },
+  ),
+];
+
+const TOTAL_IOS_SCENARIOS: readonly Scenario[] = [
+  // D1 — server-detail cards + the revoke confirm sheet.
+  iosTotal(
+    "ios-total-server-detail-cards",
+    "D1: tapping the seeded online pod renders its server-detail cards (lock/power, front-page, journal).",
+    "FlagshipAppUITests/GymTotalTests/test_serverDetailRendersCards",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home." },
+        { kind: "tap", describe: "Open the Home pod's detail.", handle: "Home" },
+        { kind: "assert", describe: "Power-off control.", handle: "sd-power-off" },
+      ],
+      assertions: [
+        { describe: "Lock/power control present", handle: "sd-power-off", expect: "present" },
+        { describe: "Front-page picker present", handle: "sd-front-page-picker", expect: "present" },
+        { describe: "Journal action present", handle: "sd-journal-fetch", expect: "present" },
+      ],
+      screenshots: [shot("server-detail", "The server-detail screen."), shot("server-detail-cards", "Its loaded cards.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-revoke-confirm",
+    "D1: the danger-zone revoke opens the hold-to-confirm sheet (the confirm UI — NOT a backend delete).",
+    "FlagshipAppUITests/GymTotalTests/test_revokeServerSheetConfirm",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail." },
+        { kind: "tap", describe: "Revoke.", handle: "sd-revoke-server" },
+        { kind: "assert", describe: "Hold-to-confirm sheet.", handle: "revoke-confirm-hold" },
+      ],
+      assertions: [{ describe: "Hold-to-confirm control present", handle: "revoke-confirm-hold", expect: "present" }],
+      screenshots: [shot("danger-zone", "The danger zone."), shot("revoke-confirm", "The hold-to-confirm sheet.")],
+    },
+  ),
+  // D2 — build modes.
+  iosTotal(
+    "ios-total-build-chooser",
+    "D2-B1: the build chooser renders the on-main source tiles (scratch/git/mcp).",
+    "FlagshipAppUITests/GymTotalTests/test_buildChooserRenders",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab apps." },
+        { kind: "tap", describe: "Build another service.", handle: "Build another service" },
+        { kind: "assert", describe: "Scratch tile.", handle: "build-src-scratch" },
+      ],
+      assertions: [
+        { describe: "Scratch tile present", handle: "build-src-scratch", expect: "present" },
+        { describe: "Git tile present", handle: "build-src-git", expect: "present" },
+        { describe: "MCP tile present", handle: "build-src-mcp", expect: "present" },
+      ],
+      screenshots: [shot("services-ready", "Services tab."), shot("build-chooser", "The build chooser.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-build-git",
+    "D2-B5: the git import (fitness-verdict) screen renders its Check-repo control.",
+    "FlagshipAppUITests/GymTotalTests/test_buildGitFitnessScreen",
+    {
+      steps: [
+        { kind: "launch", describe: "Chooser → git." },
+        { kind: "assert", describe: "Check-repo control.", handle: "build-git-check" },
+      ],
+      assertions: [{ describe: "Check-repo control present", handle: "build-git-check", expect: "present" }],
+      screenshots: [shot("build-git", "The git import screen.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-build-mcp",
+    "D2-B8: the MCP IDE-connect screen renders its Create-connection control.",
+    "FlagshipAppUITests/GymTotalTests/test_buildMcpConnectScreen",
+    {
+      steps: [
+        { kind: "launch", describe: "Chooser → mcp." },
+        { kind: "assert", describe: "Create-connection control.", handle: "build-mcp-create" },
+      ],
+      assertions: [{ describe: "Create-connection control present", handle: "build-mcp-create", expect: "present" }],
+      screenshots: [shot("build-mcp", "The MCP connect screen.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-ai-key-step",
+    "D2-B2 + D7-light: scratch routes through the AI-key step (the use-a-different-key affordance is present).",
+    "FlagshipAppUITests/GymTotalTests/test_buildKeyAiStepRenders",
+    {
+      steps: [
+        { kind: "launch", describe: "Chooser → scratch." },
+        { kind: "assert", describe: "AI-key step.", handle: "build-key-different" },
+      ],
+      assertions: [{ describe: "Use-a-different-key affordance present", handle: "build-key-different", expect: "present" }],
+      screenshots: [shot("build-key", "The AI-key step.")],
+    },
+  ),
+  // D3 — AI-keys manager.
+  iosTotal(
+    "ios-total-ai-keys-manager",
+    "D3-C2: Settings → AI keys opens the device-local key manager (the Add-a-key affordance renders).",
+    "FlagshipAppUITests/GymTotalTests/test_aiKeysManagerRenders",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab settings." },
+        { kind: "tap", describe: "AI keys row.", handle: "AI keys" },
+        { kind: "assert", describe: "Add-a-key affordance.", handle: "ai-key-add" },
+      ],
+      assertions: [{ describe: "Add-a-key affordance present", handle: "ai-key-add", expect: "present" }],
+      screenshots: [shot("ai-keys", "The AI-keys manager.")],
+    },
+  ),
+  // D4 — security: lock screen + trust sliver.
+  iosTotal(
+    "ios-total-lock-screen",
+    "D4-E1: tapping the tier-1 Lock action in Settings re-gates the shell behind the biometric lock screen.",
+    "FlagshipAppUITests/GymTotalTests/test_biometricLockScreenTraps",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab settings." },
+        { kind: "tap", describe: "Tier-1 Lock action.", handle: "settings-lock-btn" },
+        { kind: "assert", describe: "Lock screen.", handle: "biometric-lock-screen" },
+      ],
+      assertions: [{ describe: "Biometric lock screen present", handle: "biometric-lock-screen", expect: "present" }],
+      screenshots: [shot("lock-screen", "The biometric lock screen.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-trust-sliver",
+    "D4-E7: with -smoke-trust-untrusted a seeded untrusted verdict renders the red trust sliver.",
+    "FlagshipAppUITests/GymTotalTests/test_trustSliverRendersUntrusted",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-trust-untrusted." },
+        { kind: "assert", describe: "Red trust sliver.", handle: "global-trust-bar" },
+      ],
+      assertions: [{ describe: "Trust sliver present", handle: "global-trust-bar", expect: "present" }],
+      screenshots: [shot("trust-sliver", "The red maintainer-trust sliver.")],
+    },
+  ),
+  // D5 — server-event seed states.
+  iosTotal(
+    "ios-total-awaiting-unlock",
+    "D5-F1: with -smoke-awaiting-unlock a box awaiting boot-unlock carries the waiting-for-approval pill on Home.",
+    "FlagshipAppUITests/GymTotalTests/test_awaitingUnlockApproveCard",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-awaiting-unlock." },
+        { kind: "assert", describe: "Waiting-for-approval pill on the Cabin row.", handle: "pod-card-waiting-approval" },
+      ],
+      assertions: [{ describe: "Waiting-for-approval pill present", handle: "pod-card-waiting-approval", expect: "present" }],
+      screenshots: [shot("home-awaiting", "Home with a waiting box.")],
+    },
+  ),
+  iosTotal(
+    "ios-total-dead-server",
+    "D5-F3: with -smoke-dead a box that never came online surfaces the never-online status pill on Home.",
+    "FlagshipAppUITests/GymTotalTests/test_deadServerSurfacesOnHome",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-dead." },
+        { kind: "assert", describe: "Never-online pill.", handle: "pod-card-never-online" },
+      ],
+      assertions: [{ describe: "Never-online pill present", handle: "pod-card-never-online", expect: "present" }],
+      screenshots: [shot("dead-server", "The dead server on Home.")],
+    },
+  ),
+];
+
+/** Every scenario known to the gym (every-merge subset + the total tranche). */
+export const ALL_SCENARIOS: readonly Scenario[] = [
+  ...WEB_SCENARIOS,
+  ...IOS_SCENARIOS,
+  ...TOTAL_WEB_SCENARIOS,
+  ...TOTAL_IOS_SCENARIOS,
+];

@@ -86,4 +86,48 @@ final class DemoFixturesTests: XCTestCase {
         XCTAssertEqual(r.available, true)
         XCTAssertNil(r.testAccount)
     }
+
+    // ─── GYM total-gym Tier-1 D5 seed variants (§12-G5) ──────────────────────
+
+    func test_samplePodsWithAwaitingUnlock_appendsAWaitingBox() {
+        let pods = DemoFixtures.samplePodsWithAwaitingUnlock(username: "smoketest")
+        // The three legacy pods + one waiting box.
+        XCTAssertEqual(pods.count, 4)
+        XCTAssertEqual(pods.prefix(3).map(\.name), ["Home", "Office", "Music"])
+        guard let waiting = pods.first(where: { $0.name == "Cabin" }) else {
+            return XCTFail("expected a 'Cabin' awaiting-unlock pod")
+        }
+        // The directory `awaitingUnlock` flag drives the F1 approve card.
+        XCTAssertTrue(waiting.awaitingUnlock)
+        XCTAssertFalse(waiting.cameOnline)
+        // Liveness classifies it as waitingForApproval (NOT dead) once the
+        // account-level signal mirrors the cheap flag.
+        XCTAssertEqual(
+            waiting.livenessState(hasLiveUnlockRequest: true),
+            .waitingForApproval
+        )
+    }
+
+    func test_samplePodsWithDeadServer_appendsADeadBox() {
+        let pods = DemoFixtures.samplePodsWithDeadServer(username: "smoketest")
+        XCTAssertEqual(pods.count, 4)
+        guard let dead = pods.first(where: { $0.name == "Attic" }) else {
+            return XCTFail("expected an 'Attic' dead pod")
+        }
+        XCTAssertFalse(dead.cameOnline)
+        XCTAssertFalse(dead.awaitingUnlock)
+        // Registered well past the coming-online grace + no live unlock request
+        // ⇒ classified `.dead` (so Home shows the never-online pill).
+        XCTAssertGreaterThan(dead.registeredAt, 0)
+        XCTAssertEqual(dead.livenessState(hasLiveUnlockRequest: false), .dead)
+    }
+
+    func test_activateWithExplicitPods_seedsThatSet() {
+        let app = AppState()
+        let pods = DemoFixtures.samplePodsWithAwaitingUnlock(username: "smoketest")
+        DemoFixtures.activate(app, username: "smoketest", pods: pods)
+        XCTAssertTrue(app.isPaired)
+        XCTAssertEqual(app.pods.count, 4)
+        XCTAssertTrue(app.pods.contains { $0.awaitingUnlock })
+    }
 }

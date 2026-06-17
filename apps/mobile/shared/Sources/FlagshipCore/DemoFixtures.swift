@@ -73,6 +73,56 @@ public enum DemoFixtures {
         ]
     }
 
+    /// GYM seed variant (Tier-1 total gym, §6 D5) — the three sample pods
+    /// PLUS one box that is waiting for a boot-unlock approval (`awaitingUnlock`
+    /// = true, offline + never-came-online). Seeds the F1 "awaiting-unlock"
+    /// event state deterministically: its Home row reads "waiting for approval"
+    /// (`pod-card-waiting-approval`) and its server-detail surfaces the
+    /// `sd-approve-unlock` card. Gym-only — the live app never seeds this.
+    public static func samplePodsWithAwaitingUnlock(username: String) -> [PodInfo] {
+        let suffix = { UUID().uuidString.prefix(6).lowercased() }
+        var pods = samplePods(username: username)
+        pods.append(
+            PodInfo(
+                podId: "demo-cabin-\(suffix())",
+                name: "Cabin",
+                description: "Remote box, waiting to unlock",
+                fqdn: "cabin.\(username).flagship.services",
+                status: .offline,
+                cameOnline: false,
+                awaitingUnlock: true
+            )
+        )
+        return pods
+    }
+
+    /// GYM seed variant (Tier-1 total gym, §6 D5) — the three sample pods PLUS
+    /// one box that registered long ago but never checked in and has no live
+    /// unlock request: the liveness classifier lands it on `.dead`. Seeds the
+    /// F3 "dead/offline" event state deterministically — its Home row carries
+    /// the `pod-card-never-online` pill. `registeredAt` is set well past the
+    /// coming-online grace so the classification is stable. Gym-only.
+    public static func samplePodsWithDeadServer(username: String) -> [PodInfo] {
+        let suffix = { UUID().uuidString.prefix(6).lowercased() }
+        var pods = samplePods(username: username)
+        // Registered ~7 days ago (far past the coming-online grace window) with
+        // no check-in and no live unlock request ⇒ classified `.dead`.
+        let sevenDaysAgoMs = Int64(Date().timeIntervalSince1970 * 1000) - 7 * 24 * 60 * 60 * 1000
+        pods.append(
+            PodInfo(
+                podId: "demo-attic-\(suffix())",
+                name: "Attic",
+                description: "Old box that never came online",
+                fqdn: "attic.\(username).flagship.services",
+                status: .offline,
+                cameOnline: false,
+                registeredAt: sevenDaysAgoMs,
+                awaitingUnlock: false
+            )
+        )
+        return pods
+    }
+
     /// Plan A — build ONE pod from a server-supplied demoServer
     /// block. Used by the live demo flow: `/api/users/check` returned
     /// a `demoServer` and we render that single device instead of the
@@ -144,6 +194,21 @@ public enum DemoFixtures {
         // the state mutation (completeOnboarding does NOT touch
         // deviceCapability — it's session-scoped not pod-scoped).
         appState.deviceCapability = deviceCapability
+    }
+
+    /// GYM activate (Tier-1 total gym) — seed the paired shell with an
+    /// EXPLICIT pod set, for the D5 seed-state variants (awaiting-unlock /
+    /// dead). Mirrors `activate(_:username:)` but lets the caller hand in the
+    /// pods (e.g. `samplePodsWithAwaitingUnlock` / `samplePodsWithDeadServer`)
+    /// so a gym scenario can render a specific server-event state without a
+    /// backend. Gym-only — the live app uses the username-driven overload.
+    @MainActor
+    public static func activate(
+        _ appState: AppState,
+        username: String,
+        pods: [PodInfo]
+    ) {
+        appState.completeOnboarding(username: username, pods: pods)
     }
 
     // Internal helper — first label of the FQDN ("home" from

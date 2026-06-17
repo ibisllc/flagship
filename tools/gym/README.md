@@ -9,6 +9,25 @@ short-AI layer (judge / navigate-self-heal) that **never** decides pass/fail.
 This package is the harness home from **§12-G3**. The full §6 70×4 matrix fills
 in incrementally on top of it — each scenario is a small additive entry.
 
+**Two tranches share the harness** (`src/suites.ts`):
+
+- **every-merge** (§12-G4) — the curated cheap subset (cold launch, per-tab
+  render, create-server, validation, the slivers). Runs in BOTH gyms.
+- **total** Tier-1 tranche (§12-G5) — the higher-value, fixture-feasible,
+  NO-BACKEND §6 rows: D1 server-detail cards + the revoke/decommission
+  CONFIRM UI, D2 build modes (chooser / git / mcp / AI-key step), D3 settings
+  (session-tiers grey-out + the recovery toast, AI-keys manager, recovery
+  screen, the webapp PIN lock), D4 security (the biometric lock screen, the
+  red maintainer-trust sliver), D5 server-event seed states (awaiting-unlock
+  approve card, a dead server's never-online pill, the active-operations
+  sliver), and a D7-light "primary action enabled/disabled per state" check.
+  These are `total` + `fixture` → they run ONLY in `gym:total`, never the
+  every-merge gate. The fixture seed states are seeded with NO backend (iOS
+  via `DemoFixtures` variants + `-smoke-*` launch args; webapp via the
+  client-side stores reached through the served ES modules). The LIVE
+  action→effect slice (Tier-2, against a real box) is **G6 — not in this
+  registry**.
+
 ## One-command runner
 
 ```sh
@@ -55,7 +74,7 @@ surfaces, totals:{total,passed,failed,skipped}, results:[ScenarioResult], ok }`.
 | Surface | Engine | How the adapter drives it |
 |---|---|---|
 | **web** | Playwright (chromium) | WRAPS `apps/web/e2e` via `apps/web/e2e/gym/playwright.gym.config.ts` — a self-contained static webapp server (no wrangler, no pod-sim, no backend). Maps Playwright's JSON report + `gym-screenshot:` attachments into the artifact. |
-| **ios** | XCUITest | Shells `xcodebuild test -scheme FlagshipApp -only-testing:FlagshipAppUITests/GymSmokeTests`, launching in `-smoke-mode` (seeded `DemoFixtures`, no backend). Extracts screenshots from the `.xcresult`. **Building this also builds the App + UITest target.** |
+| **ios** | XCUITest | Shells `xcodebuild test -scheme FlagshipApp -only-testing:FlagshipAppUITests/<Class>[/method]`, launching in `-smoke-mode` (seeded `DemoFixtures`, no backend). The every-merge legs are `GymSmokeTests` + `GymEveryMergeTests`; the total tranche is `GymTotalTests`. Extracts screenshots from the `.xcresult`. **Building this also builds the App + UITest target.** |
 | **android** | (stub) | Adapter **interface + TODO only**. The full Compose-UI-Test/emulator harness + the ~43-screen `testTag` sweep is a later phase (§10 Phase-5). The runner cleanly SKIPS Android. |
 
 The runner **skips** (never fails) a surface whose toolchain is absent — so
@@ -96,7 +115,7 @@ tools/gym/
     runner.ts            # selects + guards + drives adapters + layers advisory AI + writes the artifact
     results.ts           # artifact shape (GymRunSummary) + JSON/text writers
     guardrail.ts         # the §7-G demo-only destructive guard
-    suites.ts            # the scenario registry (one web + one iOS smoke this run)
+    suites.ts            # the scenario registry (every-merge subset + the total Tier-1 tranche)
     cli.ts               # the `gym` CLI (one command, then wait)
     adapters/
       types.ts           # the SurfaceAdapter interface
@@ -109,7 +128,11 @@ tools/gym/
   tests/harness.test.ts  # vitest coverage of the deterministic logic
 apps/web/e2e/gym/        # the webapp gym leg (wraps the existing Playwright rig)
   playwright.gym.config.ts
-  gym-smoke.spec.ts
+  gym-smoke.spec.ts      # the every-merge subset
+  gym-total.spec.ts      # the total Tier-1 tranche
   static-server.ts
-apps/mobile/ios/App/UITests/GymSmokeTests.swift   # the iOS gym leg (XCUITest)
+apps/mobile/ios/App/UITests/
+  GymSmokeTests.swift       # the iOS every-merge cold-launch smoke
+  GymEveryMergeTests.swift  # the iOS every-merge breadth
+  GymTotalTests.swift       # the iOS total Tier-1 tranche
 ```

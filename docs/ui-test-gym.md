@@ -1445,20 +1445,45 @@ merge gate.
 required PR gate; the Mac iOS subset in the local job); `npx tsc -b` + `npx vitest
 run` green.
 
-### G5 — Total-gym Tier-1 tranche + iOS live vertical slice (start this run)
+### G5 — Total-gym Tier-1 tranche + iOS live vertical slice
 **Goal.** Begin filling the real §6 matrix.
-- **Tier-1 tranche (demo-fixture):** a real first batch of §6 scenarios in
-  demo-fixture mode (lifecycle A1/A4/A5, the build chooser B1, session tiers C1,
-  the slivers F11/F12 + E7) on iOS + webapp, asserting on-screen state.
-- **iOS live vertical slice (Tier-2):** script **onboarding → create a demo
-  server → online → approve unlock → install a service** and run it Tier-2 against
-  a **freshly-provisioned, then-deleted** Hetzner box (the ephemeral
+- **Tier-1 tranche (demo-fixture) — DONE (this run).** A substantial first batch
+  of higher-value §6 rows in demo-fixture mode (NO backend), tagged `total`, on
+  **web + iOS** (Android stays stubbed). They run only in `gym:total`, never the
+  every-merge gate. Shipped (≈21 scenarios — 10 web + 11 iOS):
+  - **D1 (render/confirm):** iOS server-detail cards (lock/power, front-page,
+    journal); the revoke CONFIRM sheet (the hold-to-confirm UI, NOT a backend
+    delete).
+  - **D2 (build modes):** the chooser (scratch/git/mcp tiles) + the git
+    fitness-verdict screen + the mcp connect screen + the AI-key step — web + iOS.
+  - **D3 (settings):** session-tiers grey-out gating + the "set up recovery" toast
+    on a greyed tap (web); the AI-keys manager (web + iOS); the recovery screen
+    (web); the webapp PIN lock set/validate/roundtrip (web, E3).
+  - **D4 (security):** the biometric lock screen via the tier-1 Lock action (iOS,
+    E1); the red maintainer-trust sliver from a seeded untrusted verdict (web +
+    iOS, E7).
+  - **D5 (server-event seed states):** awaiting-unlock → the waiting-for-approval
+    Home pill (iOS, F1); a dead server → the never-online Home pill (iOS, F3); the
+    active-operations teal sliver from a seeded build (web, F12).
+  - **D7 (light):** the PIN-set form's primary action validates a mismatch (web).
+  - Seeded with NO backend: iOS via new `DemoFixtures` variants
+    (`samplePodsWithAwaitingUnlock` / `samplePodsWithDeadServer`) + smoke-mode
+    launch args (`-smoke-awaiting-unlock` / `-smoke-dead` / `-smoke-trust-untrusted`);
+    webapp via the client-side stores (`serverTrust.setVerdict`,
+    `activeOperations.upsertBuild`) reached through the served ES modules, plus
+    the existing device-local IndexedDB/WebCrypto paths.
+- **iOS live vertical slice (Tier-2) — DEFERRED to G6.** Script **onboarding →
+  create a demo server → online → approve unlock → install a service** and run it
+  Tier-2 against a **freshly-provisioned, then-deleted** Hetzner box (the ephemeral
   create→test→`finally`-delete loop, §6), asserting the D6 effects for real
-  (G8/G12). Pre-GA this runs against prod's demo surface with admin-induction
-  (§6.5); the AI judge/navigator can be added here or deferred to Phase-6.
+  (G8/G12). This is the live action→effect path; it is gated on the test-env /
+  admin-induction (§6.5) and is **NOT** part of the Tier-1 tranche above. (The
+  approve-unlock CARD and the revoke/decommission EFFECT specifically need a live
+  mailbox/box, so the Tier-1 tranche asserts their fixture-seeded SURFACING/CONFIRM
+  UI only, and the action→effect lands here.)
 
-**Gate:** the iOS slice drives the real app against a real backend end-to-end with
-guaranteed teardown; the Tier-1 tranche is green in the harness.
+**Gate:** the Tier-1 tranche is green in the harness (`gym:total` web + iOS,
+demo-fixture, no backend); the live slice is G6.
 
 ### G6 — Test-env stand-up (`gym.` subdomains)
 **Goal.** Stand up the isolated test env on the existing zones (§6.5):
