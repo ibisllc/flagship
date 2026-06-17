@@ -55,6 +55,7 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.CreateServerDraftStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
 import com.flagshipserver.app.core.InstallBlobBundle
@@ -95,6 +96,9 @@ fun CreateServerScreen(
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // Draft-only metadata store (backup policy) — device-local, NOT signed
+    // into the InstallBlob; reset on delivery. Mirror of iOS's draftStore.
+    val draftStore = remember { CreateServerDraftStore.from(context) }
 
     var phase by remember { mutableStateOf(Phase.Design) }
     var name by remember { mutableStateOf("") }
@@ -113,6 +117,10 @@ fun CreateServerScreen(
     // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
     // "none": plaintext disk, for boxes that can't keep network at boot.
     var encryptDisk by remember { mutableStateOf(true) }
+    // Backup policy — draft-only metadata (phone-only default). Hydrated from
+    // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
+    // the wire (applied later via an owner-signed set-backup-policy order).
+    var backupPolicy by remember { mutableStateOf(draftStore.backupPolicy()) }
 
     val scroll = rememberScrollState()
     Column(
@@ -144,6 +152,11 @@ fun CreateServerScreen(
                 onBootUnlockMode = { bootUnlockMode = it },
                 encryptDisk = encryptDisk,
                 onEncryptDisk = { encryptDisk = it },
+                backupPolicy = backupPolicy,
+                onBackupPolicy = {
+                    backupPolicy = it
+                    draftStore.setBackupPolicy(it)
+                },
                 error = error,
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
@@ -218,6 +231,10 @@ fun CreateServerScreen(
                             ServerSettingsStore.from(context).setMode(
                                 delivery.bundle.blob.serverDomain, bootUnlockMode,
                             )
+                            // Clear the draft-only metadata so a fresh "Add a
+                            // server" starts at the defaults rather than ghost-
+                            // restoring this build's pick (mirrors iOS).
+                            draftStore.reset()
                             toasts.success("Delivered. Watch Home for the new server.")
                             onDelivered(
                                 delivery.bundle.blob.serverDomain,
@@ -264,6 +281,8 @@ private fun DesignPhase(
     onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
     encryptDisk: Boolean,
     onEncryptDisk: (Boolean) -> Unit,
+    backupPolicy: CreateServerDraftStore.BackupPolicy,
+    onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
@@ -291,6 +310,8 @@ private fun DesignPhase(
             BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
             Spacer(Modifier.height(FS.space.s4))
             DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
+            Spacer(Modifier.height(FS.space.s4))
+            BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
 }
     }
     if (error != null) {
@@ -397,6 +418,43 @@ private fun DiskEncryptionPicker(
         title = "Don't encrypt my disk",
         subtitle = "Less safe — anyone with the disk can read it. Choose this only for a box that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
         onClick = { onEncryptDisk(false) },
+    )
+}
+
+// Backup policy — draft-only metadata, three tiers, default "phone-only".
+// Mirrors iOS's backupPolicyPicker + the webapp's #cs-backup-policy dropdown.
+// NOT carried in the signed InstallBlob; applied later via an owner-signed
+// set-backup-policy order.
+@Composable
+private fun BackupPolicyPicker(
+    policy: CreateServerDraftStore.BackupPolicy,
+    onPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
+) {
+    Text(
+        "Backup policy",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = policy == CreateServerDraftStore.BackupPolicy.PHONE_ONLY,
+        title = "Phone-side backups",
+        subtitle = "The default. Your phone pulls an encrypted backup of each app on a schedule. Restores need this device. Because the backup lives on your phone, your server's data can't grow larger than your phone's free space.",
+        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.PHONE_ONLY) },
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = policy == CreateServerDraftStore.BackupPolicy.PEER,
+        title = "Peer-distributed backups",
+        subtitle = "Your encrypted shards are stored across other Flagship users (and theirs on you). Recoverable from any device with your account.",
+        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.PEER) },
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = policy == CreateServerDraftStore.BackupPolicy.NONE,
+        title = "No backups",
+        subtitle = "Power-user opt-out. If the box dies before you back up manually, the data is gone.",
+        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.NONE) },
     )
 }
 
