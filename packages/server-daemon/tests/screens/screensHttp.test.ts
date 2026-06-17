@@ -527,8 +527,11 @@ describe("screens HTTP — P1.4 marketplace-browse (proxy)", () => {
   it("proxies to .com and tags installed apps", async () => {
     const upstream = {
       listings: [
-        { creator: "alice", slug: "habits", title: "Habits", summary: "x", installCount: 5, requiresLlmKey: false, screenshots: ["s1"] },
-        { creator: "bob", slug: "game1", title: "Game", summary: "y", installCount: 1, requiresLlmKey: true, screenshots: [] },
+        // habits: scanned (B), no LLM key.
+        { creator: "alice", slug: "habits", title: "Habits", summary: "x", installCount: 5, requiresLlmKey: false, screenshots: ["s1"], scan_grade: "B" },
+        // game1: needs an LLM key with an explicit env var name; unscanned
+        // (scan_grade absent → null today).
+        { creator: "bob", slug: "game1", title: "Game", summary: "y", installCount: 1, requiresLlmKey: true, screenshots: [], llm_key_env_var: "ANTHROPIC_API_KEY" },
       ],
     };
     const calls: string[] = [];
@@ -556,6 +559,13 @@ describe("screens HTTP — P1.4 marketplace-browse (proxy)", () => {
     const game = body.listings.find((l: { slug: string }) => l.slug === "game1");
     expect(game.alreadyInstalled).toBe(false);
     expect(game.requiresLlmKey).toBe(true);
+    // scan grade flows through verbatim; absent ⇒ omitted (client shows
+    // "ungraded"). The LLM env-var name is relayed so the client can prefill
+    // "Configure environment" after install.
+    expect(habit.scanGrade).toBe("B");
+    expect(game.scanGrade).toBeUndefined();
+    expect(game.llmKeyEnvVar).toBe("ANTHROPIC_API_KEY");
+    expect(habit.llmKeyEnvVar).toBeUndefined();
   });
 
   it("returns 503 when no control plane is configured", async () => {

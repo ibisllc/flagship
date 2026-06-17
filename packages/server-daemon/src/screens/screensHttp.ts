@@ -1380,8 +1380,18 @@ function parseListing(
       : [],
     installCount: typeof r.installCount === "number" ? r.installCount : 0,
     requiresLlmKey: !!r.requiresLlmKey,
+    // `.com` exposes the scan verdict as `scan_grade` (snake_case) and the
+    // LLM env-var name as `llm_key_env_var`; accept either casing so a future
+    // camelCase upstream still flows through. Absent ⇒ omitted (client shows
+    // "ungraded" / falls back to the default env name).
+    scanGrade: pickString(r.scanGrade) ?? pickString(r.scan_grade),
+    llmKeyEnvVar: pickString(r.llmKeyEnvVar) ?? pickString(r.llm_key_env_var),
     alreadyInstalled: installed.has(`${creator}/${slug}`),
   };
+}
+
+function pickString(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
 function trimSlash(s: string): string {
