@@ -79,6 +79,45 @@ describe("maintainerTrust — forward chain + authorizedCaKeys", () => {
   });
 });
 
+describe("maintainerTrust — byte-identity vs the AUTHORITATIVE cross-platform fixture", () => {
+  // The single source of truth (Worker A) lives in @flagship/protocol. The
+  // guarantee that matters across TS/JS/Swift/Kotlin is *identical canonical
+  // bytes*: assert the webapp port emits EXACTLY the authoritative strings for
+  // the same envelopes. (Per-surface verdict labels are internal diagnostics
+  // and need not match; the canonical bytes — what gets signed — must.)
+  const AUTH = JSON.parse(
+    readFileSync(
+      resolve(__dirname, "../../../packages/protocol/tests/fixtures/maintainerTrust.vectors.json"),
+      "utf8",
+    ),
+  );
+
+  it("canonicalMandate matches the authoritative bytes", async () => {
+    const t = await loadTrust();
+    const bytes = t.canonicalMandate(AUTH.rootMandate);
+    expect(new TextDecoder().decode(bytes)).toBe(AUTH.canonical.mandate);
+  });
+
+  it("canonicalCaEndorsement matches the authoritative bytes", async () => {
+    const t = await loadTrust();
+    const bytes = t.canonicalCaEndorsement(AUTH.caEndorsement);
+    expect(new TextDecoder().decode(bytes)).toBe(AUTH.canonical.caEndorsement);
+  });
+
+  it("verifyComBlessing agrees with the authoritative verdict on every case", async () => {
+    const t = await loadTrust();
+    // trusted case
+    const good = await t.verifyComBlessing(AUTH.blessingResponse, AUTH.epochsMs.NOW, AUTH.pinnedMandateHash);
+    expect(good.trusted).toBe(AUTH.expectedVerdict.trusted);
+    expect(good.caPubkey).toBe(AUTH.expectedVerdict.caPubkey);
+    // every negative case (each carries its own nowMs + baked pin)
+    for (const c of AUTH.negativeCases) {
+      const r = await t.verifyComBlessing(c.response, c.nowMs, c.pin);
+      expect(r.trusted).toBe(c.expectedVerdict.trusted); // verdict parity (label may differ)
+    }
+  });
+});
+
 describe("maintainerTrust — verifyComBlessing (the full verdict)", () => {
   for (const c of VECTORS.cases) {
     it(c.name, async () => {
