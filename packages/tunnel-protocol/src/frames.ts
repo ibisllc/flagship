@@ -188,12 +188,84 @@ export function helloFrame(payload: {
   };
 }
 
-export function helloAckFrame(ok: boolean, reason?: string): Frame {
+/**
+ * Optional maintainer-trust attachment carried on HELLO_ACK (relay-trust
+ * wiring, docs/maintainer-trust-enforcement.md § "The relay blessing").
+ *
+ * The hub attaches:
+ *   - `serviceBlessing` — the `.com`-CA-signed ServiceBlessing over the
+ *     hub's self-generated key (opaque envelope JSON; the box verifies it
+ *     against the baked maintainer pin).
+ *   - `hubSig` — the hub's Ed25519 signature, made with the blessed key,
+ *     over the box's HELLO nonce. Proof-of-possession: it shows the hub
+ *     actually holds the blessed key, so a MITM cannot replay a blessing
+ *     it merely observed.
+ *
+ * BACKWARD COMPATIBLE: both fields are optional. An old hub omits them and
+ * an old box ignores them; a new box treats their absence as "no verdict"
+ * (OBSERVE-safe — never bricks the relay).
+ */
+export interface HelloAckTrust {
+  /** The ServiceBlessing envelope, verbatim JSON (lower-hex fields). */
+  serviceBlessing?: unknown;
+  /**
+   * lower-hex Ed25519 signature over the box's HELLO nonce, signed with
+   * the blessing's `hubKeyPub`.
+   */
+  hubSig?: string;
+}
+
+export function helloAckFrame(
+  ok: boolean,
+  reason?: string,
+  trust?: HelloAckTrust,
+): Frame {
+  const body: {
+    ok: boolean;
+    reason?: string;
+    serviceBlessing?: unknown;
+    hubSig?: string;
+  } = { ok, reason };
+  if (trust?.serviceBlessing !== undefined) body.serviceBlessing = trust.serviceBlessing;
+  if (trust?.hubSig !== undefined) body.hubSig = trust.hubSig;
   return {
     streamId: 0,
     type: FRAME_HELLO_ACK,
-    payload: new TextEncoder().encode(JSON.stringify({ ok, reason })),
+    payload: new TextEncoder().encode(JSON.stringify(body)),
   };
+}
+
+export interface ParsedHelloAck {
+  ok: boolean;
+  reason?: string;
+  /** Present only when the hub attached one (new hubs). */
+  serviceBlessing?: unknown;
+  /** Present only when the hub attached one (new hubs). */
+  hubSig?: string;
+}
+
+/**
+ * Parse a HELLO_ACK payload. Returns `null` when the payload is not JSON.
+ * The optional trust fields decode to `undefined` when absent — a box on
+ * the new code talking to an old hub sees no blessing and stays in OBSERVE
+ * (keep relaying).
+ */
+export function parseHelloAck(payload: Uint8Array): ParsedHelloAck | null {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(new TextDecoder().decode(payload));
+  } catch {
+    return null;
+  }
+  if (typeof obj !== "object" || obj === null) return null;
+  const o = obj as Record<string, unknown>;
+  const out: ParsedHelloAck = { ok: o.ok === true };
+  if (typeof o.reason === "string") out.reason = o.reason;
+  if (o.serviceBlessing !== undefined && o.serviceBlessing !== null) {
+    out.serviceBlessing = o.serviceBlessing;
+  }
+  if (typeof o.hubSig === "string") out.hubSig = o.hubSig;
+  return out;
 }
 
 export interface DomainGrantedPayload {
