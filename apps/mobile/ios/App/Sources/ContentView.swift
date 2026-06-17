@@ -9,6 +9,8 @@ struct ContentView: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
     @Environment(ActiveOperationsCenter.self) private var operations
+    @Environment(TrustCenter.self) private var trust
+    @Environment(DeveloperSettings.self) private var dev
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.sessionStore) private var sessionStore
     @State private var pendingWatchers: PendingPodWatcherRegistry?
@@ -34,6 +36,7 @@ struct ContentView: View {
                 .environment(app)
                 .environment(linker)
                 .environment(toasts)
+                .environment(trust)
         }
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
@@ -64,6 +67,21 @@ struct ContentView: View {
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
             syncPodSession()
+            await runTrustCheck()
+        }
+    }
+
+    /// Run the maintainer-trust check against `.com` and feed the verdict to
+    /// the `TrustCenter`. Live-client only (the Mock control server is for
+    /// dev/demo and has no blessing to verify); a network/parse failure is a
+    /// NON-verdict and leaves the center untouched (never bricks offline).
+    @MainActor
+    private func runTrustCheck() async {
+        guard dev.useLiveClient else { return }
+        switch await TrustChecker().check() {
+        case .trusted:                 trust.markTrusted()
+        case .untrusted(let failure):  trust.markUntrusted([failure])
+        case .noVerdict:               trust.markNoVerdict()
         }
     }
 

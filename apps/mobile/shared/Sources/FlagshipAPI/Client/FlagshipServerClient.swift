@@ -2686,10 +2686,33 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     private let urlSession: URLSession
     private let baseUrl: URL
+    /// Maintainer-trust short-circuit. Returns the app's current
+    /// `isServerTrusted` foundation boolean; when it returns false EVERY
+    /// backend call throws `controlServerUntrusted` BEFORE any bytes leave the
+    /// device. nil ⇒ no gate installed (every call proceeds — the default, so
+    /// existing call sites + tests are unaffected). `.unknown`/`.trusted`
+    /// verdicts and a network-error "no verdict" all return true here (we never
+    /// halt on the absence of a positive-untrusted verdict).
+    private let trustGate: (@Sendable () async -> Bool)?
 
-    public init(urlSession: URLSession = .shared, baseUrl: URL = defaultBaseUrl) {
+    public init(
+        urlSession: URLSession = .shared,
+        baseUrl: URL = defaultBaseUrl,
+        trustGate: (@Sendable () async -> Bool)? = nil
+    ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl
+        self.trustGate = trustGate
+    }
+
+    /// The single gate-checked transport every request routes through. The
+    /// trust gate is consulted FIRST so an untrusted control server halts the
+    /// call before it touches the network.
+    private func send(_ req: URLRequest) async throws -> (Data, URLResponse) {
+        if let trustGate, await trustGate() == false {
+            throw ScreensClientError.controlServerUntrusted
+        }
+        return try await urlSession.data(for: req)
     }
 
     private func postJson(_ path: String, body: Data, acceptStatuses: Set<Int> = [200, 201, 204]) async throws {
@@ -2697,7 +2720,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if acceptStatuses.contains(status) { return }
         let text = String(data: data, encoding: .utf8) ?? ""
@@ -2709,7 +2732,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = body
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2777,7 +2800,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/account/resolve/\(encoded)"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2801,7 +2824,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         comps.queryItems = [URLQueryItem(name: "credentialId", value: credentialId)]
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2822,7 +2845,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         req.httpBody = try JSONEncoder().encode(RecoveryFetchTokenBody(fetchToken: fetchTokenHex, issuedAt: issuedAt))
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         switch status {
         case 200..<300:
@@ -2852,7 +2875,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         httpReq.httpMethod = "DELETE"
         httpReq.setValue("application/json", forHTTPHeaderField: "content-type")
         httpReq.httpBody = try JSONEncoder().encode(req)
-        let (data, resp) = try await urlSession.data(for: httpReq)
+        let (data, resp) = try await send(httpReq)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if status == 200 || status == 204 || status == 404 { return }
         let text = String(data: data, encoding: .utf8) ?? ""
@@ -2875,7 +2898,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/watch-delegates"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2896,7 +2919,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         comps.queryItems = [URLQueryItem(name: "since", value: String(since))]
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2909,7 +2932,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/devices"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let http = resp as? HTTPURLResponse
         let status = http?.statusCode ?? 0
         guard (200..<300).contains(status) else {
@@ -2930,7 +2953,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/recovery/by-username/\(encoded)"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if status == 200 { return true }
         if status == 404 { return false }
@@ -2949,7 +2972,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2962,7 +2985,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair/complete"))
         req.httpMethod = "POST"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -2982,7 +3005,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3002,7 +3025,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3019,7 +3042,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/links"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3039,7 +3062,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             // .com returns { "error": "…" } on the synchronous denials
@@ -3069,7 +3092,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         ]
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3082,7 +3105,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3100,7 +3123,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3118,7 +3141,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3136,7 +3159,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -3149,7 +3172,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = serial.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serial
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/order/\(encoded)/status"))
         req.httpMethod = "GET"
-        let (data, resp) = try await urlSession.data(for: req)
+        let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         // 404 = no checkpoint has arrived yet ("no status"). A STATE, not
         // an error — map it to nil so the caller renders "waiting for the

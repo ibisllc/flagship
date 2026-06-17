@@ -1,0 +1,16 @@
+{
+  "_comment": "Worker C (mobile) cross-platform vectors for the maintainer-trust enforcement feature, generated from @ibisllc/maintainers with the caEndorsement.test.ts seeds (maintainer=keypair(1) seed[0]=1, hotCa=keypair(9) seed[0]=9). RECONCILE with Worker A's maintainerTrust.vectors.json (authoritative). If A used different seeds, A's values win and the Swift/Kotlin literals + this file must be regenerated to match.",
+  "pin": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+  "maintainerPub": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+  "hotCaPub": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+  "roguePub": "d523845a249f6994b019cbb33057d352237858ff79a98cb2359d805ee45044d6",
+  "now": "2026-05-17T12:00:00.000Z",
+  "withinMs": 1779235200000,
+  "afterMs": 1782777600000,
+  "beforeMs": 1777593600000,
+  "rootCanonical": "maintainers/mandate/v1|ca-root-0000-4000-8000-000000000000|ca|cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc|2026-01-01T00:00:00.000Z|2027-01-01T00:00:00.000Z|cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc|1|1|31536000|31536000|flagship|harry@flagship.services||ca|cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+  "rootSig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402",
+  "endCanonical": "maintainers/ca-endorsement/v1|ca-e1-0000-0000-0000-000000000000|ca|bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a|flagship/directory-attestation|2026-05-17T12:00:00.000Z|2026-05-24T12:00:00.000Z|2026-05-17T12:00:00.000Z|cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+  "endorsementSig": "1702e3497ea944eff9586b5f596787715fa3f37431fbe381adac87d6ed440da38d62bee536d701f9b76326ea1823b6244271ef27e18fd062b51ca8843f178102",
+  "verdicts": { "withinAuthorized": ["bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a"], "lapsed": [], "notyet": [] }
+}

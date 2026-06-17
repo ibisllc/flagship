@@ -12,6 +12,7 @@ struct FlagshipApp: App {
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var operations = ActiveOperationsCenter()
+    @State private var trust = TrustCenter()
     @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
@@ -48,6 +49,15 @@ struct FlagshipApp: App {
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
+        // Maintainer-trust short-circuit: the live `.com` client refuses to
+        // send when the control server is positively untrusted (and the owner
+        // hasn't overridden). `.unknown`/`.trusted` + any network-error
+        // "no verdict" all let traffic through — we never brick on the absence
+        // of a verdict, only on a valid blessing that fails verification.
+        let trustCenter = _trust.wrappedValue
+        self.liveServerClient = LiveFlagshipServerClient(
+            trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } }
+        )
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
@@ -178,7 +188,7 @@ struct FlagshipApp: App {
         ]
         return m
     }()
-    private let liveServerClient: any FlagshipServerClient = LiveFlagshipServerClient()
+    private let liveServerClient: any FlagshipServerClient
     private let mockRelay = MockQrRelayClient()
     private let liveRelay: any QrRelayClient = LiveQrRelayClient()
     // Phase 3b — cross-device pairing relay seam. The live bidirectional
@@ -231,6 +241,7 @@ struct FlagshipApp: App {
                 .environment(linker)
                 .environment(toasts)
                 .environment(operations)
+                .environment(trust)
                 .environment(dev)
                 .environment(privacy)
                 .environment(\.screensClient, activeClient)
