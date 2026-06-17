@@ -577,7 +577,7 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(body.recorded).toBe(true);
   });
 
-  it("/api/admin/ca-lease-status reports 'none' when no endorsement lease is active", async () => {
+  it("/api/admin/ca-lease-status reports the live committed CaEndorsement lease", async () => {
     const env = makeEnv({ DB: opsD1(), FLAGSHIP_ADMIN_SECRET: "s3cret" });
     const r = await route(
       new Request("https://flagshipserver.com/api/admin/ca-lease-status", {
@@ -587,11 +587,14 @@ describe(".com control-plane routes (Worker + D1)", () => {
     );
     expect(r.status).toBe(200);
     const body = JSON.parse(await r.text());
-    // The committed bundle's only endorsement lapsed 2026-06-02, so at the
-    // real `now` there is no active lease ⇒ severity "none".
-    expect(body.severity).toBe("none");
-    expect(body.hasActiveLease).toBe(false);
-    expect(body.soonestNotAfterIso).toBeNull();
+    // The committed bundle carries the backdated CA lease minted 2026-06-16
+    // (notBefore 2026-06-02 → notAfter 2026-08-31), so authority is live and
+    // the soonest-expiry is that lease's notAfter — never the lapsed sibling
+    // it overlaps (the activeCaLeaseNotAfterMs expired-skip fix). When this
+    // lease nears/passes 2026-08-31 a renewal ceremony refreshes the bundle.
+    expect(body.hasActiveLease).toBe(true);
+    expect(body.soonestNotAfterIso).toBe("2026-08-31T22:40:29.858Z");
+    expect(["ok", "warn"]).toContain(body.severity); // not "none"/"expired"
   });
 });
 
