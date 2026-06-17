@@ -90,6 +90,11 @@ class MainActivity : FragmentActivity() {
     private lateinit var appState: AppState
     private lateinit var biometric: BiometricAuthority
 
+    /** GYM smoke-mode (§10 Phase-5) — the tab the shell should open on when
+     *  launched with `flagship.smokeTab`. Null in production / a normal launch
+     *  ⇒ RootShell defaults to Home. */
+    private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,6 +139,27 @@ class MainActivity : FragmentActivity() {
         // red persistent trust sliver + the `.com` backend short-circuit.
         val trustCenter = TrustCenter()
         deepLinker = DeepLinker()
+
+        // GYM smoke-mode seam (§10 Phase-5) — DEBUG-ONLY, mirror of iOS
+        // FlagshipApp.applySmokeModeIfRequested. When the app is debuggable AND
+        // the launch intent carries `flagship.smokeMode`, seed DemoFixtures (no
+        // backend) + an optional ops/trust/server-event state and land on the
+        // requested tab. A RELEASE build skips this branch entirely, so an
+        // intent extra can never seed fixtures in production. The resulting
+        // initial tab is threaded into RootShell below.
+        val isDebuggable =
+            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (isDebuggable) {
+            com.flagshipserver.app.core.SmokeModeConfig.from(intent)?.let { cfg ->
+                smokeInitialTab = com.flagshipserver.app.core.SmokeMode.apply(
+                    config = cfg,
+                    appState = appState,
+                    operations = operations,
+                    trust = trustCenter,
+                )
+            }
+        }
+
         val devSettings = DeveloperSettings.create(applicationContext)
         AiKeyStore.attach(applicationContext)
         val okHttp = buildOkHttp()
@@ -260,7 +286,10 @@ class MainActivity : FragmentActivity() {
                     },
                 ) {
                     Surface(color = FS.colors.bg, modifier = Modifier.fillMaxSize()) {
-                        AppRoot(widthSizeClass = mapWidth(sizeClass.widthSizeClass))
+                        AppRoot(
+                            widthSizeClass = mapWidth(sizeClass.widthSizeClass),
+                            initialTab = smokeInitialTab,
+                        )
                     }
                 }
             }
@@ -314,7 +343,13 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
+private fun AppRoot(
+    widthSizeClass: WindowWidthSizeClass,
+    /** GYM smoke-mode (§10 Phase-5) — opens the shell on this tab on first paint
+     *  when set (the `flagship.smokeTab` selector). Null ⇒ Home, the production
+     *  default. */
+    initialTab: com.flagshipserver.app.core.RootDestination? = null,
+) {
     val app = LocalAppState.current
     val isPaired by app.isPaired.collectAsState()
     val isUnlocked by app.isUnlocked.collectAsState()
@@ -343,7 +378,7 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
                 // operation, and both push the shell down from the top.
                 GlobalTrustBar()
                 GlobalOperationsBar()
-                RootShell(widthSizeClass = widthSizeClass)
+                RootShell(widthSizeClass = widthSizeClass, initialTab = initialTab)
             }
         } else {
             OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })

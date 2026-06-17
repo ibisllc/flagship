@@ -75,6 +75,7 @@ import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
 import com.flagshipserver.app.keystore.Keystore
+import androidx.compose.ui.platform.testTag
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -296,7 +297,12 @@ private fun DesignPhase(
     Spacer(Modifier.height(FS.space.s4))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
-            FSField(value = name, onValueChange = onName, label = "Name")
+            FSField(
+                value = name,
+                onValueChange = onName,
+                label = "Name",
+                modifier = Modifier.testTag("cs-name-field"),
+            )
             Spacer(Modifier.height(FS.space.s2))
             FSField(value = description, onValueChange = onDescription, label = "Description")
             Spacer(Modifier.height(FS.space.s2))
@@ -320,7 +326,12 @@ private fun DesignPhase(
         Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
     }
     Spacer(Modifier.height(FS.space.s4))
-    FSPrimaryButton(label = "Continue", onClick = onContinue, block = true)
+    FSPrimaryButton(
+        label = "Continue",
+        onClick = onContinue,
+        block = true,
+        modifier = Modifier.testTag("cs-continue-button"),
+    )
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
@@ -405,6 +416,7 @@ private fun DiskEncryptionPicker(
         "Encrypt disk",
         color = FS.colors.text,
         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        modifier = Modifier.testTag("cs-encrypt-disk-toggle"),
     )
     Spacer(Modifier.height(FS.space.s2))
     BootUnlockOption(

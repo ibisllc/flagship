@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -337,6 +338,10 @@ data class FSSettingsRowData(
     val badge: Int? = null,
     val showsChevron: Boolean = true,
     val onClick: () -> Unit = {},
+    /** Optional stable element handle for the UI gym (§10 Phase-5). When set,
+     *  the rendered row carries `Modifier.testTag(testTag)` so an instrumentation
+     *  test can tap/assert this row deterministically. Null ⇒ untagged. */
+    val testTag: String? = null,
 )
 
 /**
@@ -370,7 +375,10 @@ fun FSSettingsGroup(
                 .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.lg)),
         ) {
             rows.forEachIndexed { idx, row ->
-                FSSettingsRow(row)
+                FSSettingsRow(
+                    row,
+                    modifier = if (row.testTag != null) Modifier.testTag(row.testTag) else Modifier,
+                )
                 if (idx < rows.size - 1) {
                     Box(
                         modifier = Modifier

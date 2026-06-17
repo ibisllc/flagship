@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -294,6 +295,7 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
             "AI keys",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.testTag("ai-keys-title"),
         )
         Spacer(Modifier.height(FS.space.s2))
         Text(
@@ -360,6 +362,7 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
                 label = "Add a key",
                 onClick = { showForm = true },
                 block = true,
+                modifier = Modifier.testTag("ai-key-add"),
             )
         }
 

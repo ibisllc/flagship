@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +75,7 @@ fun AddServerChooserScreen(
             body = "Mint a build code, then use the Flagship burner to write it to a USB stick and boot commodity hardware. Cert + tunnel come up automatically.",
             cta = "Provision →",
             onClick = onProvision,
+            testTag = "chooser-provision",
         )
         Spacer(Modifier.height(FS.space.s3))
         ChooserCard(
@@ -83,6 +85,7 @@ fun AddServerChooserScreen(
             body = "Already have a Flagship server running somewhere? Scan its pairing QR or paste the 6-character code.",
             cta = "Pair →",
             onClick = onPair,
+            testTag = "chooser-pair",
         )
         if (onCancel != null) {
             Spacer(Modifier.height(FS.space.s4))
@@ -100,8 +103,12 @@ private fun ChooserCard(
     body: String,
     cta: String,
     onClick: () -> Unit,
+    testTag: String? = null,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s6)) {
+    FSCard(
+        padding = PaddingValues(FS.space.s6),
+        modifier = if (testTag != null) Modifier.testTag(testTag) else Modifier,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Box(
                 modifier = Modifier

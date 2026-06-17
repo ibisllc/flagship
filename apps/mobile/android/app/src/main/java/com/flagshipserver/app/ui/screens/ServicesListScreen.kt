@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -136,6 +137,7 @@ fun ServicesListScreen(nav: NavController) {
             text = "Services",
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.testTag("services-title"),
         )
         Text(
             text = subtitle,
@@ -161,6 +163,7 @@ fun ServicesListScreen(nav: NavController) {
                         label = "Build a service",
                         onClick = { nav.navigate("build/source") },
                         block = true,
+                        modifier = Modifier.testTag("services-build-cta"),
                     )
                 }
             }
@@ -231,7 +234,8 @@ private fun BuildAnotherAppRow(onClick: () -> Unit) {
             .background(FS.colors.primary.copy(alpha = 0.08f))
             .border(1.dp, FS.colors.primary.copy(alpha = 0.25f), RoundedCornerShape(FS.radius.md))
             .clickable(onClick = onClick)
-            .padding(horizontal = FS.space.s4, vertical = FS.space.s3),
+            .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
+            .testTag("services-build-cta"),
     ) {
         Text("✨", color = FS.colors.primary, style = TextStyle(fontSize = 15.sp))
         Text(

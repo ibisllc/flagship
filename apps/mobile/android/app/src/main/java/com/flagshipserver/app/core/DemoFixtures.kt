@@ -67,6 +67,41 @@ object DemoFixtures {
         ),
     )
 
+    /** GYM (§10 Phase-5) — sample pods with the "Cabin" box awaiting a
+     *  boot-unlock approval. Mirror of iOS DemoFixtures.samplePodsWithAwaitingUnlock:
+     *  the legacy three plus a fourth box that registered + came online before
+     *  but is now offline AND has a live unlock request, so its row classifies
+     *  WAITING_FOR_APPROVAL and renders the `pod-card-waiting-approval` pill.
+     *  Drives the D5 server-event seed scenario with NO backend. */
+    fun samplePodsWithAwaitingUnlock(username: String): List<PodInfo> =
+        samplePods(username) + PodInfo(
+            podId = "demo-cabin-${UUID.randomUUID().toString().take(6)}",
+            name = "Cabin",
+            description = "Cabin mini-PC, just rebooted",
+            fqdn = "cabin.$username.flagship.services",
+            status = PodInfo.Status.OFFLINE,
+            cameOnline = true,
+            registeredAt = System.currentTimeMillis() - 60L * 60L * 1000L,
+            awaitingUnlock = true,
+        )
+
+    /** GYM (§10 Phase-5) — sample pods with a "Cabin" box that registered but
+     *  NEVER came online (no check-in, past the coming-online grace), so its row
+     *  classifies DEAD and renders the `pod-card-never-online` pill. Mirror of
+     *  iOS DemoFixtures.samplePodsWithDeadServer. Drives the D5 dead-server seed
+     *  scenario with NO backend. */
+    fun samplePodsWithDeadServer(username: String): List<PodInfo> =
+        samplePods(username) + PodInfo(
+            podId = "demo-cabin-${UUID.randomUUID().toString().take(6)}",
+            name = "Cabin",
+            description = "Cabin mini-PC, install stalled",
+            fqdn = "cabin.$username.flagship.services",
+            status = PodInfo.Status.OFFLINE,
+            cameOnline = false,
+            registeredAt = System.currentTimeMillis() - 24L * 60L * 60L * 1000L,
+            awaitingUnlock = false,
+        )
+
     /** Plan A — build ONE pod from a server-supplied [block]. Used by
      *  the live demo flow: `/api/users/check` returned a `demoServer`
      *  block and we render that single device instead of the three

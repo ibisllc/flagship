@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -168,6 +169,7 @@ fun SettingsScreen(nav: NavController) {
             name = username,
             subtitle = profileSubtitle,
             onClick = { nav.navigate("account-security") },
+            modifier = Modifier.testTag("settings-title"),
         )
 
         // Optional promo slot (empty unless flipped on).
@@ -192,6 +194,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "AI keys",
                     subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
                     onClick = { nav.navigate("ai-keys") },
+                    testTag = "settings-ai-keys",
                 ),
                 // v1.2 Phase 4 — Account security badge + drill-down. Title +
                 // subtitle reflect the live account type (mirror of iOS's
@@ -210,6 +213,7 @@ fun SettingsScreen(nav: NavController) {
                         else -> "Single-device vs multi-device + 2FA."
                     },
                     onClick = { nav.navigate("account-security") },
+                    testTag = "settings-open-account-security",
                 ),
             ),
         )
@@ -391,6 +395,7 @@ fun SettingsScreen(nav: NavController) {
                 app.lock()
             },
             block = true,
+            modifier = Modifier.testTag("settings-lock-btn"),
         )
         Spacer(Modifier.height(FS.space.s4))
         Text(
@@ -406,6 +411,7 @@ fun SettingsScreen(nav: NavController) {
                 if (sessionGated) showRecoveryRequiredToast() else showSignOutConfirm = true
             },
             block = true,
+            modifier = Modifier.testTag("settings-sign-out-btn"),
         )
 
         Spacer(Modifier.height(FS.space.s6))
@@ -433,6 +439,7 @@ fun SettingsScreen(nav: NavController) {
                 if (sessionGated) showRecoveryRequiredToast() else showRemoveConfirm = true
             },
             block = true,
+            modifier = Modifier.testTag("settings-remove-device-btn"),
         )
 
         if (showRemoveConfirm) {

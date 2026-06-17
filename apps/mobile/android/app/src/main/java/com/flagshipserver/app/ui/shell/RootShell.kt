@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.RootDestination
 import com.flagshipserver.app.ui.shell.tabs.ActivityTab
@@ -51,8 +52,14 @@ enum class WindowWidthSizeClass { COMPACT, MEDIUM, EXPANDED }
  *  DeepLinker queue and rebalances tab selection so an incoming push
  *  or app-link lands on the right surface. */
 @Composable
-fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPACT) {
-    var selected by remember { mutableStateOf(RootDestination.HOME) }
+fun RootShell(
+    widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPACT,
+    /** GYM smoke-mode (§10 Phase-5) — open the shell on this tab on first paint
+     *  (the `flagship.smokeTab` selector, mirror of iOS `-smoke-tab`). Null ⇒
+     *  Home, the production default. */
+    initialTab: RootDestination? = null,
+) {
+    var selected by remember { mutableStateOf(initialTab ?: RootDestination.HOME) }
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
 
@@ -97,6 +104,7 @@ private fun CompactShell(
                         onClick = { onSelect(dest) },
                         icon = { Icon(iconFor(dest), contentDescription = dest.label) },
                         label = { Text(dest.label) },
+                        modifier = Modifier.testTag("tab-${dest.key}"),
                     )
                 }
             }
@@ -119,6 +127,7 @@ private fun ExpandedShell(
                     onClick = { onSelect(dest) },
                     icon = { Icon(iconFor(dest), contentDescription = dest.label) },
                     label = { Text(dest.label) },
+                    modifier = Modifier.testTag("tab-${dest.key}"),
                 )
             }
         }

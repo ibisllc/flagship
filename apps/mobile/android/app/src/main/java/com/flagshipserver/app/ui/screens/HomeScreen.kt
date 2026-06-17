@@ -162,6 +162,7 @@ fun HomeScreen(
             text = "Home",
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold),
+            modifier = Modifier.testTag("home-title"),
         )
         Text(
             text = if (username.isEmpty()) "Welcome back." else "Welcome back, $username.",
@@ -229,6 +230,7 @@ fun HomeScreen(
                     label = "Add a server",
                     onClick = onAddServer,
                     block = true,
+                    modifier = Modifier.testTag("home-add-server"),
                 )
             }
         }
@@ -351,7 +353,12 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )
             Spacer(Modifier.height(FS.space.s2))
-            FSPrimaryButton(label = "Add your first server", onClick = onAddServer, block = true)
+            FSPrimaryButton(
+                label = "Add your first server",
+                onClick = onAddServer,
+                block = true,
+                modifier = Modifier.testTag("home-add-server"),
+            )
         }
     }
 }
