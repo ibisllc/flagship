@@ -21,6 +21,10 @@ public struct ServiceEnvScreen: View {
     public let serverFqdn: String
     public let creator: String
     public let slug: String
+    /// When set, the add-sheet auto-opens with this NAME prefilled — the
+    /// marketplace install of an app that needs an LLM key sends the owner
+    /// here with the expected env-var name ready (value still typed by them).
+    public let prefillName: String?
     /// Async hook that signs the SetServiceEnvRequest envelope under the
     /// owner's IRK. The view never holds the IRK private bytes; it
     /// delegates signing to the platform Keystore (via this closure).
@@ -33,7 +37,8 @@ public struct ServiceEnvScreen: View {
         creator: String,
         slug: String,
         client: any ScreensClient,
-        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String
+        signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
+        prefillName: String? = nil
     ) {
         self.appId = appId
         self.serverFqdn = serverFqdn
@@ -41,6 +46,7 @@ public struct ServiceEnvScreen: View {
         self.slug = slug
         self.client = client
         self.signEnvelope = signEnvelope
+        self.prefillName = prefillName
     }
 
     public var body: some View {
@@ -70,7 +76,13 @@ public struct ServiceEnvScreen: View {
                 .accessibilityIdentifier("service-env-add-btn")
             }
         }
-        .task { await reload() }
+        .task {
+            await reload()
+            // Marketplace-install deep link: open the add-sheet straight away
+            // with the expected env-var name prefilled so the owner just
+            // pastes the key.
+            if prefillName?.isEmpty == false { showAddSheet = true }
+        }
         .sheet(isPresented: $showAddSheet) {
             AddEnvVarSheet(
                 appId: appId,
@@ -78,6 +90,7 @@ public struct ServiceEnvScreen: View {
                 creator: creator,
                 slug: slug,
                 existingNames: names,
+                prefillName: prefillName,
                 client: client,
                 signEnvelope: signEnvelope,
                 onCommitted: {
@@ -220,6 +233,9 @@ private struct AddEnvVarSheet: View {
     let creator: String
     let slug: String
     let existingNames: [String]
+    /// Prefilled NAME (never a value) — set when the sheet is opened from a
+    /// marketplace install that needs an LLM key.
+    var prefillName: String? = nil
     let client: any ScreensClient
     let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
     let onCommitted: () -> Void
@@ -280,6 +296,12 @@ private struct AddEnvVarSheet: View {
             .background(c.bg.ignoresSafeArea())
             .navigationTitle("New environment variable")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Seed the NAME from the deep link (a marketplace app that needs
+                // an LLM key). Only the name — the value stays empty for the
+                // owner to paste.
+                if name.isEmpty, let p = prefillName, !p.isEmpty { name = p }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", role: .cancel) { onCancel() }
