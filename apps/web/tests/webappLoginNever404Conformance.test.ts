@@ -18,7 +18,7 @@
 // login decision tree"):
 //   demo                       → activateDemoAccount (NO passkey/popup)
 //   unknown                    → clean STATE (not a 404)
-//   single (recovery present)  → takeover, 7-day grace
+//   single (recovery present)  → takeover, 3-day grace
 //   multi  (recovery present)  → takeover, 24h grace, TOTP-gated
 //   recovery.present == false  → clean STATE, single vs multi copy
 //   quarantined (added device) → countdown + disabled-disconnect
@@ -89,7 +89,7 @@ function singleResolution(username = "harry", withRecovery = true) {
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
     trustedDeviceCount: 1,
-    graceModel: "7d" as const,
+    graceModel: "3d" as const,
   };
 }
 function multiResolution(username = "hilton", withRecovery = true) {
@@ -179,10 +179,10 @@ describe("Phase 5 conformance — AccountResolution decision matrix", () => {
   it("graceModel in each fixture matches the kind-derived server projection", async () => {
     // The webapp NEVER re-derives the matrix — it renders graceModel as
     // the server sent it. Pin that the fixtures stay wire-faithful so a
-    // drift in the doc's "instant|7d|24h-totp|none" mapping is caught.
+    // drift in the doc's "instant|3d|24h-totp|none" mapping is caught.
     expect(demoResolution().graceModel).toBe("instant");
     expect(unknownResolution().graceModel).toBe("none");
-    expect(singleResolution().graceModel).toBe("7d");
+    expect(singleResolution().graceModel).toBe("3d");
     expect(multiResolution().graceModel).toBe("24h-totp");
   });
 });
@@ -294,7 +294,7 @@ describe("Phase 5 conformance — no-recovery renders a STATE, never a 404", () 
 });
 
 /* ════════════════════════════════════════════════════════════════════
- * 5. single → 7-day-grace takeover; multi → 24h-grace, TOTP-gated.
+ * 5. single → 3-day-grace takeover; multi → 24h-grace, TOTP-gated.
  *    Asserted as one matrix over the credentialed branch.
  * ════════════════════════════════════════════════════════════════════ */
 

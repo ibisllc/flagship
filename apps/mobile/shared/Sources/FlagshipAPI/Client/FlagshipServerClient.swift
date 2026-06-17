@@ -1518,7 +1518,7 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
     /// Unknown future values parse to `.none`.
     public enum GraceModel: String, Codable, Equatable, Hashable, Sendable {
         case instant
-        case sevenDay = "7d"
+        case threeDay = "3d"
         case twentyFourHourTotp = "24h-totp"
         case none
 
@@ -1955,7 +1955,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             totpEnrolled: totpEnrolledAtByUser[u] != nil,
             trustedDeviceCount: deviceCount,
             demoServer: nil,
-            graceModel: kind == .multi ? .twentyFourHourTotp : .sevenDay
+            graceModel: kind == .multi ? .twentyFourHourTotp : .threeDay
         )
     }
 

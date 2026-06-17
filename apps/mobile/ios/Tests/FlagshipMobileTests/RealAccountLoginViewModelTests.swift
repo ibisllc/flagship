@@ -102,7 +102,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
     // MARK: - Branch derivation (the matrix, never re-derived)
 
     func test_branch_singleNoRecovery_isNoRecoveryState() {
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: false, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: false, grace: .threeDay)
         XCTAssertEqual(RealAccountLoginViewModel.deriveBranch(r), .noRecovery(multi: false))
     }
 
@@ -112,7 +112,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
     }
 
     func test_branch_singleWithRecovery_isSingleTakeover() {
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         XCTAssertEqual(RealAccountLoginViewModel.deriveBranch(r), .singleTakeover)
     }
 
@@ -126,7 +126,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
     func test_noRecovery_startTakeover_isNoOp_noRePair() async {
         let server = makeServer()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: false, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: false, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         await vm.startTakeover()
         // Stays idle: there's no ceremony for a no-recovery account.
@@ -160,7 +160,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         }
 
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         vm.passphraseInput = "correct horse battery staple"
 
@@ -205,7 +205,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         // Simulate the wiped device (Tier-2 sign out erased the key).
         Keystore.wipe()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         vm.passphraseInput = "correct horse battery staple"
 
@@ -246,7 +246,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
 
         Keystore.wipe()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         vm.passphraseInput = "correct horse battery staple"
 
@@ -292,7 +292,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
 
         Keystore.wipe()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         vm.passphraseInput = "correct horse battery staple"
         return (vm, server, rotatedPubHex)
@@ -392,7 +392,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
 
         Keystore.wipe()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         vm.passphraseInput = "correct horse battery staple"
         await vm.startTakeover()
@@ -406,7 +406,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
     func test_singleRecovery_emptyPassphrase_failsBeforeUnwrap() async {
         let server = makeServer()
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
 
         await vm.startTakeover()   // passphraseInput is empty
@@ -576,7 +576,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
             request: .init(username: "harry", irkPub: "ab", issuedAt: 1), signature: "s"
         ))
         let spy = InstallSpy()
-        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .threeDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
         await vm.startTakeover()
         guard case .failed = vm.phase else {

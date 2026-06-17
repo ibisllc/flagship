@@ -65,7 +65,7 @@ function singleResolution(username = "harry", withRecovery = true) {
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
     trustedDeviceCount: 1,
-    graceModel: "7d",
+    graceModel: "3d",
   };
 }
 
@@ -130,7 +130,7 @@ describe("webapp resolveAccount — login preflight wire", () => {
     });
     expect(single.kind).toBe("single");
     expect(single.recovery.present).toBe(true);
-    expect(single.graceModel).toBe("7d");
+    expect(single.graceModel).toBe("3d");
 
     const noRec = await resolveAccount("harry", {
       fetch: vi.fn().mockResolvedValue(jsonResponse(200, singleResolution("harry", false))) as any,

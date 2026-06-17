@@ -93,7 +93,7 @@ final class LoginViewModelTests: XCTestCase {
         let r = try await server.resolveAccount(username: "harry")
         XCTAssertTrue(r.exists)
         XCTAssertEqual(r.kind, .single)
-        XCTAssertEqual(r.graceModel, .sevenDay)
+        XCTAssertEqual(r.graceModel, .threeDay)
     }
 
     func test_mockResolve_claimedMulti_returnsMultiWith24hTotp() async throws {

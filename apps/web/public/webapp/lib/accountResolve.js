@@ -23,7 +23,7 @@
 
 /** Server-derived recovery-speed hint so every client renders identical
  *  copy without re-deriving the account-type matrix.
- *  @typedef {"instant"|"7d"|"24h-totp"|"none"} GraceModel
+ *  @typedef {"instant"|"3d"|"24h-totp"|"none"} GraceModel
  */
 
 /** @typedef {Object} AccountRecoveryFactor

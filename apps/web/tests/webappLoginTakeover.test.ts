@@ -6,7 +6,7 @@
 // guarantee" + "Recovery TOTP"):
 //   - recovery.present == false → a clean inline STATE (not a 404), with
 //     distinct single vs multi copy.
-//   - single (recovery.present) → cloud-recovery unwrap → 7-day-grace
+//   - single (recovery.present) → cloud-recovery unwrap → 3-day-grace
 //     TAKEOVER → INITIATE re-pair (POST /api/users/:u/re-pair) → this
 //     device labelled "admin".
 //   - multi (recovery.present) → unwrap + a recovery TOTP (6-digit) OR a
@@ -56,7 +56,7 @@ function singleResolution(username = "harry", withRecovery = true) {
       : { present: false, hasFetchGate: false },
     totpEnrolled: false,
     trustedDeviceCount: 1,
-    graceModel: "7d",
+    graceModel: "3d",
   };
 }
 

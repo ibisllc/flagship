@@ -17,7 +17,7 @@
 //       multi  → "Use another device, or one of your recovery codes."
 //
 //   single (recovery.present)  → passkey-PRF unwrap (Mock) → TAKEOVER:
-//       7-day-grace explainer → on confirm: installUmk(seed),
+//       3-day-grace explainer → on confirm: installUmk(seed),
 //       INITIATE re-pair (POST /api/users/:u/re-pair), label this
 //       device "admin", complete onboarding with the RESOLVED username
 //       (no "recovered-user" placeholder) + empty pods.

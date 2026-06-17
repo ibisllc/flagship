@@ -22,8 +22,11 @@ import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
 export type AccountKind = "demo" | "single" | "multi" | "unknown";
 
 /** Server-derived recovery-speed hint so every client renders identical
- *  copy without re-deriving the account-type matrix. */
-export type GraceModel = "instant" | "7d" | "24h-totp" | "none";
+ *  copy without re-deriving the account-type matrix. `"3d"` is the
+ *  single-device grace (shrank from 7d → 3d; see RE_PAIR_SINGLE_GRACE_MS).
+ *  The authoritative deadline is always the server's `completesAt` — this
+ *  is a copy hint only. */
+export type GraceModel = "instant" | "3d" | "24h-totp" | "none";
 
 export interface AccountResolution {
   /** Normalized handle the lookup ran against. */
@@ -112,6 +115,6 @@ export async function handleAccountResolve(
       : { present: false, hasFetchGate: false },
     totpEnrolled: !!user.totpEnrolledAt,
     trustedDeviceCount: tokens.length,
-    graceModel: kind === "multi" ? "24h-totp" : "7d",
+    graceModel: kind === "multi" ? "24h-totp" : "3d",
   });
 }

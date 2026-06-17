@@ -319,7 +319,7 @@ data class AccountResolution(
     /** Present only for demo accounts — the single sandbox device. */
     val demoServer: DemoServerBlock? = null,
     /** Server-derived recovery-speed hint:
-     *  "instant" | "7d" | "24h-totp" | "none". Use [grace] for the
+     *  "instant" | "3d" | "24h-totp" | "none". Use [grace] for the
      *  typed parse. */
     val graceModel: String,
     /** Recovery Phase A vs B — the account's CURRENTLY registered IRK
@@ -353,13 +353,13 @@ data class AccountResolution(
     /** Forward-compat typed view over [graceModel]. */
     val grace: GraceModel get() = when (graceModel) {
         "instant" -> GraceModel.Instant
-        "7d" -> GraceModel.SevenDay
+        "3d" -> GraceModel.ThreeDay
         "24h-totp" -> GraceModel.TwentyFourHourTotp
         else -> GraceModel.None
     }
 
     enum class AccountKind { Demo, Single, Multi, Unknown }
-    enum class GraceModel { Instant, SevenDay, TwentyFourHourTotp, None }
+    enum class GraceModel { Instant, ThreeDay, TwentyFourHourTotp, None }
 }
 
 @Serializable
@@ -1711,7 +1711,7 @@ class MockFlagshipServerClient(
             ),
             totpEnrolled = totpEnrolledAtByUser[u] != null,
             trustedDeviceCount = devices,
-            graceModel = if (kind == "multi") "24h-totp" else "7d",
+            graceModel = if (kind == "multi") "24h-totp" else "3d",
             // Recovery Phase A vs B — surface the account's currently
             // registered IRK so the single-device takeover can tell a
             // wiped-but-valid device (same key ⇒ instant pair) from a

@@ -453,7 +453,7 @@ export async function loginRealAccount(resolution, deps) {
  *  Pure: no DOM, no timers. The host re-calls this on each tick with a
  *  fresh `now` to repaint the label + flip the "Take over now" button.
  *
- *  `graceModel` ("7d" single / "24h-totp" multi) only colours the copy;
+ *  `graceModel` ("3d" single / "24h-totp" multi) only colours the copy;
  *  the authoritative deadline is always `completesAt` from the server.
  *
  *  @param {{completesAt?: number, graceMs?: number, accountType?: string}} rePair
@@ -462,7 +462,7 @@ export async function loginRealAccount(resolution, deps) {
  *    ready: boolean,             now >= completesAt — "Take over now" armed
  *    remainingMs: number,        clamped at 0
  *    completesAt: number,
- *    graceModel: "7d"|"24h-totp",
+ *    graceModel: "3d"|"24h-totp",
  *    label: string,              human countdown line
  *    actionEnabled: boolean,     alias of `ready` (button disabled state)
  *  }}
@@ -470,7 +470,7 @@ export async function loginRealAccount(resolution, deps) {
 export function graceTimeline(rePair, now = Date.now()) {
   const completesAt = Number(rePair?.completesAt ?? 0);
   const accountType = rePair?.accountType === "multi" ? "multi" : "single";
-  const graceModel = accountType === "multi" ? "24h-totp" : "7d";
+  const graceModel = accountType === "multi" ? "24h-totp" : "3d";
   const remainingMs = Math.max(0, completesAt - now);
   const ready = now >= completesAt;
   const label = ready

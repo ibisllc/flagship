@@ -9,7 +9,7 @@ import FlagshipCore
 ///
 ///   - `.noRecovery`     → a clean STATE (single vs multi copy), NOT a
 ///                         404/error card. The only action is Back.
-///   - `.singleTakeover` → the 7-day-grace explainer + a takeover CTA.
+///   - `.singleTakeover` → the 3-day-grace explainer + a takeover CTA.
 ///   - `.multiTakeover`  → a recovery-TOTP / recovery-code field + the
 ///                         24h-grace explainer + a takeover CTA.
 ///
@@ -268,7 +268,7 @@ public struct RealAccountLoginScreen: View {
         FSGhostButton("Back", block: true, action: onBack)
     }
 
-    // MARK: - Takeover (single 7-day / multi 24h)
+    // MARK: - Takeover (single 3-day / multi 24h)
 
     @ViewBuilder
     private func takeover(vm: RealAccountLoginViewModel, multi: Bool, c: FSColors) -> some View {
