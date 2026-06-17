@@ -28,6 +28,12 @@ describe("webapp invite views (#82)", () => {
     expect(r.body).toContain("navigator.clipboard");
     // Hits the daemon's app-invite/issue BFF
     expect(r.body).toContain("/api/screens/app-invite/issue");
+    // L6 — guards a double-submit (an invite is single-use): the button is
+    // disabled + relabelled while the POST is in flight, then restored in a
+    // finally. Mirrors iOS/Android.
+    expect(r.body).toContain("goBtn.disabled = true");
+    expect(r.body).toContain('"Issuing…"');
+    expect(r.body).toContain("if (goBtn?.disabled) return");
   });
 
   it("/views/invite-manage.js registers a view, lists pending + active, and revokes", async () => {

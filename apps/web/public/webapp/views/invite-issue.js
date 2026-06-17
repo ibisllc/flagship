@@ -90,6 +90,12 @@ export async function renderInviteIssue(app) {
 
 async function onIssue(app) {
   const status = $("ii-status");
+  const goBtn = $("ii-go");
+  // L6 — guard against a double-submit: an invite is a single-use bearer
+  // credential, so a double-tap while the POST is in flight would mint TWO.
+  // iOS/Android disable + relabel the button; do the same. The disabled check
+  // also short-circuits a programmatic re-entry.
+  if (goBtn?.disabled) return;
   const labelEl = $("ii-label");
   const roleEl = $("ii-role");
   const channelEl = $("ii-channel");
@@ -111,6 +117,10 @@ async function onIssue(app) {
   const sentTo = sentToEl?.value ?? "";
   const contextNote = contextEl?.value ?? "";
 
+  if (goBtn) {
+    goBtn.disabled = true;
+    goBtn.textContent = "Issuing…";
+  }
   try {
     // Issue via the screens BFF. The pod-side IssueInvite signing
     // happens daemon-side off the paired-session token (the daemon
@@ -147,6 +157,11 @@ async function onIssue(app) {
   } catch (e) {
     status.className = "mt-2 text-sm err-text";
     status.textContent = e instanceof ScreensError ? e.message : String(e);
+  } finally {
+    if (goBtn) {
+      goBtn.disabled = false;
+      goBtn.textContent = "Issue invite";
+    }
   }
 }
 
