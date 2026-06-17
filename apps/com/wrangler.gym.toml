@@ -100,7 +100,7 @@ simple = { limit = 30, period = 60 }
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state-gym"
-database_id = "REPLACE_WITH_flagship-state-gym_DATABASE_ID"
+database_id = "b017db24-3be4-40c7-8690-a91f0964c2ff"
 migrations_dir = "../../packages/storage/migrations"
 
 # --- Durable Object: same class, auto-created in THIS Worker (no shared state) -
@@ -149,7 +149,7 @@ FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
 # PLACEHOLDER — the gym temp bucket's public dev-url host (PER-BUCKET, differs
 # from prod). After `wrangler r2 bucket dev-url enable flagship-iso-temp-gym`,
 # paste the resulting `pub-…r2.dev` host here.
-FLAGSHIP_R2_TEMP_PUBLIC_BASE = "REPLACE_WITH_GYM_iso-temp_PUBLIC_DEV_URL"
+FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-023a8bc99ad045939af943fd4663ce76.r2.dev"
 
 # Cloudflare zone ID for flagship.services (the SAME zone — the gym lives under
 # its `gym.` label, no new zone). Per-box `<server>.<user>.gym.flagship.services`

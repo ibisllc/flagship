@@ -89,7 +89,14 @@ EOF
 fi
 # Owner-supplied secrets: env-var → else prompt → else warn+skip.
 GYM_HCLOUD_TOKEN="${GYM_HCLOUD_TOKEN:-}"; GYM_DNS_TOKEN="${GYM_DNS_TOKEN:-}"; GYM_SSH_PUBKEY="${GYM_SSH_PUBKEY:-}"
-prompt_secret() { local var="$1" desc="$2" cur="${!var}"; if [ -z "$cur" ] && [ -t 0 ]; then read -rsp "    $desc (blank to skip): " cur; echo; printf -v "$var" '%s' "$cur"; fi; }
+prompt_secret() {
+  local var="$1" desc="$2"
+  local cur="${!var-}"
+  if [ -z "$cur" ] && [ -t 0 ]; then
+    read -rsp "    $desc (blank to skip): " cur; echo
+    printf -v "$var" '%s' "$cur"
+  fi
+}
 prompt_secret GYM_HCLOUD_TOKEN "test Hetzner project API token (HCLOUD_TOKEN)"
 prompt_secret GYM_DNS_TOKEN     "Cloudflare Zone:DNS:Edit token for flagship.services"
 prompt_secret GYM_SSH_PUBKEY    "test project SSH PUBLIC key (ssh-ed25519 …)"
@@ -98,7 +105,9 @@ prompt_secret GYM_SSH_PUBKEY    "test project SSH PUBLIC key (ssh-ed25519 …)"
 log "Phase 2 — Cloudflare D1 + R2"
 # D1: create iff absent, capture id, patch the placeholder.
 if wr d1 info "$D1_NAME" >/dev/null 2>&1; then ok "D1 $D1_NAME exists"; else log "creating D1 $D1_NAME"; wr d1 create "$D1_NAME" || die "d1 create failed"; fi
-D1_ID="$(wr d1 info "$D1_NAME" 2>/dev/null | grep -iE 'uuid|database_id' | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)"
+# `wrangler d1 info` prints the database_id as a bare UUID in an UNLABELED row,
+# so match the first UUID anywhere in the output (not a `uuid:`-prefixed line).
+D1_ID="$(wr d1 info "$D1_NAME" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)"
 if [ -n "$D1_ID" ] && grep -q 'REPLACE_WITH_flagship-state-gym_DATABASE_ID' "$WRANGLER_CFG_ABS"; then
   sed -i '' "s/REPLACE_WITH_flagship-state-gym_DATABASE_ID/$D1_ID/" "$WRANGLER_CFG_ABS" 2>/dev/null \
     || sed -i "s/REPLACE_WITH_flagship-state-gym_DATABASE_ID/$D1_ID/" "$WRANGLER_CFG_ABS"
@@ -117,8 +126,18 @@ if [ -n "$DEVURL" ] && grep -q 'REPLACE_WITH_GYM_iso-temp_PUBLIC_DEV_URL' "$WRAN
   ok "patched temp-bucket public base → $DEVURL  [commit this]"
 fi
 
-# ── Phase 3: secrets onto the gym Worker ─────────────────────────────────────
-log "Phase 3 — gym Worker secrets"
+# ── Phase 3: build + deploy the gym Worker FIRST ─────────────────────────────
+# A brand-new Worker must EXIST before `wrangler secret put` can target it, so
+# deploy precedes the secret-set (Phase 4). The Worker boots fine without the
+# secrets (they're read at request time, not module load), so this ordering is
+# safe; secrets land immediately after, no re-deploy needed.
+log "Phase 3 — tsc -b + deploy the gym Worker (custom domains self-provision DNS+cert)"
+( cd "$REPO" && npx tsc -b ) || die "tsc -b failed — fix before deploying (the Worker bundles the BUILT control-plane dist/)"
+wr deploy --config "$WRANGLER_CFG" || die "wrangler deploy failed"
+if curl -fsS "https://gym.flagshipserver.com/api/health" >/dev/null 2>&1; then ok "control plane healthy: https://gym.flagshipserver.com/api/health"; else warn "control-plane health not 200 yet (custom-domain cert can take a few minutes)"; fi
+
+# ── Phase 4: secrets onto the (now-existing) gym Worker ──────────────────────
+log "Phase 4 — gym Worker secrets"
 put_secret() { local name="$1" val="$2"; [ -n "$val" ] || { warn "skip $name (no value supplied)"; return; }; printf '%s' "$val" | wr secret put "$name" --config "$WRANGLER_CFG" >/dev/null 2>&1 && ok "set $name" || warn "could not set $name"; }
 put_secret FLAGSHIP_ADMIN_SECRET "$GYM_ADMIN_SECRET"
 put_secret DEMO_IRK_KEK          "$GYM_DEMO_IRK_KEK"
@@ -128,12 +147,6 @@ put_secret CLOUDFLARE_DNS_API_TOKEN "$GYM_DNS_TOKEN"
 put_secret DEMO_PUBLIC_SSH_KEY   "$GYM_SSH_PUBKEY"
 [ -n "${GYM_VAPID_PUBLIC:-}" ] && put_secret WEBPUSH_VAPID_PUBLIC_KEY_B64URL "$GYM_VAPID_PUBLIC"
 [ -n "${GYM_VAPID_PRIVATE_PEM:-}" ] && put_secret WEBPUSH_VAPID_PRIVATE_KEY_PEM "$(printf '%s' "$GYM_VAPID_PRIVATE_PEM" | tr '|' '\n')"
-
-# ── Phase 4: build + deploy the gym Worker ───────────────────────────────────
-log "Phase 4 — tsc -b + deploy the gym Worker (custom domains self-provision DNS+cert)"
-( cd "$REPO" && npx tsc -b ) || die "tsc -b failed — fix before deploying (the Worker bundles the BUILT control-plane dist/)"
-wr deploy --config "$WRANGLER_CFG" || die "wrangler deploy failed"
-if curl -fsS "https://gym.flagshipserver.com/api/health" >/dev/null 2>&1; then ok "control plane healthy: https://gym.flagshipserver.com/api/health"; else warn "control-plane health not 200 yet (custom-domain cert can take a few minutes)"; fi
 
 # ── Phase 5: Fly data plane (gated on auth) ──────────────────────────────────
 if [ "${GYM_SKIP_FLY:-}" = "1" ]; then warn "GYM_SKIP_FLY=1 → skipping the Fly data plane"; else
