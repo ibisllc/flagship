@@ -13,6 +13,7 @@
 // (currentPeriodEnd in the past) falls back to free.
 
 import type { TierName, TierStorage, UsageStorage } from "@flagship/storage";
+import { malformed } from "./types.js";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -154,12 +155,12 @@ export async function handleUsageReport(
     return { status: 401, body: { error: "unauthorized" } };
   }
   const items = (body as { items?: unknown })?.items;
-  if (!Array.isArray(items)) return { status: 400, body: { error: "items[] required" } };
+  if (!Array.isArray(items)) return malformed("items[] required");
   const results: Array<{ username: string; admit: boolean; usedBytes: number; quotaBytes: number }> = [];
   for (const raw of items) {
     const it = raw as { username?: unknown; bytes?: unknown };
     if (typeof it.username !== "string" || typeof it.bytes !== "number" || !Number.isFinite(it.bytes)) {
-      return { status: 400, body: { error: "each item needs { username: string, bytes: number }" } };
+      return malformed("each item needs { username: string, bytes: number }");
     }
     const s = await recordEgress(deps, it.username, it.bytes);
     results.push({ username: it.username.toLowerCase(), admit: s.admit, usedBytes: s.usedBytes, quotaBytes: s.quotaBytes });
@@ -182,7 +183,7 @@ export async function handleUsageStatus(
   if (!presentedSecret || !secretsEqual(presentedSecret, expectedSecret)) {
     return { status: 401, body: { error: "unauthorized" } };
   }
-  if (!username) return { status: 400, body: { error: "username required" } };
+  if (!username) return malformed("username required");
   const s = await quotaStatus(deps, username);
   return { status: 200, body: { ok: true, ...s } };
 }
