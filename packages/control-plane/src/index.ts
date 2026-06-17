@@ -59,3 +59,4 @@ export * from "./demoUsersAdminCloudInit.js";
 export * from "./personalizeIso.js";
 export * from "./outstandingOrders.js";
 export * from "./ctMonitor.js";
+export * from "./serviceBlessing.js";
