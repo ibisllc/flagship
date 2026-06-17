@@ -10,6 +10,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { installFromMarketplace } from "../lib/installService.js";
+import { llmKeyEnvVarFor } from "../lib/marketplaceLlmKey.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
@@ -79,14 +80,15 @@ export async function renderMarketplace() {
         </div>
       `;
     }).join("");
+    const byKey = new Map(
+      body.listings.map((l) => [`${l.creator}/${l.slug}`, l]),
+    );
     root.querySelectorAll('[data-action="install"]').forEach((b) => {
-      b.addEventListener("click", () =>
-        runInstall(
-          b.getAttribute("data-creator"),
-          b.getAttribute("data-slug"),
-          b,
-        ),
-      );
+      b.addEventListener("click", () => {
+        const creator = b.getAttribute("data-creator");
+        const slug = b.getAttribute("data-slug");
+        runInstall(byKey.get(`${creator}/${slug}`) ?? { creator, slug }, b);
+      });
     });
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -97,7 +99,8 @@ export async function renderMarketplace() {
   }
 }
 
-async function runInstall(creator, slug, btn) {
+async function runInstall(listing, btn) {
+  const { creator, slug } = listing;
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
     title: `Install ${creator}/${slug}?`,
@@ -110,6 +113,20 @@ async function runInstall(creator, slug, btn) {
   try {
     await installFromMarketplace({ creator, slug });
     toast(`installed ${creator}/${slug}`);
+    // An app that needs an LLM key would otherwise install broken with no
+    // visible next step: send the owner straight to "Configure environment"
+    // with the expected env-var name prefilled so they can paste the key.
+    // The value is set on the box (sealed env store); .com never sees it.
+    if (listing.requiresLlmKey) {
+      const envVar = llmKeyEnvVarFor(listing);
+      const serverFqdn = (getPodBaseUrl() ?? "")
+        .replace(/^https?:\/\//, "")
+        .replace(/\/+$/, "");
+      const { enterServiceEnv } = await import("./service-env.js");
+      // serviceId mirrors the daemon's `<creator>--<slug>` (installService).
+      await enterServiceEnv(`${creator}--${slug}`, creator, slug, serverFqdn, envVar);
+      return;
+    }
     await renderMarketplace();
   } catch (e) {
     toast(e.message, "err");
