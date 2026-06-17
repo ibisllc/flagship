@@ -15,7 +15,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 /**
  * LUKS unlock-on-boot endpoints (RELAY + box-sealed-lease model).
@@ -65,16 +65,16 @@ export async function handlePutSealedLuksKey(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
+    return forbidden("serverId / host mismatch");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   let sealedKey: Uint8Array;
@@ -83,7 +83,7 @@ export async function handlePutSealedLuksKey(
     sealedKey = hexToBytes(r.sealedKey);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: PutSealedLuksKey = {
     serverId: host,
@@ -91,7 +91,7 @@ export async function handlePutSealedLuksKey(
     issuedAt: r.issuedAt,
   };
   if (!verifyPutSealedLuksKey(claim, sig, hexToBytes(reg.identityPubKeyHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.luksKeys.putSealed({
@@ -136,7 +136,7 @@ export async function handleGetSealedLuksKey(
   host: string,
 ): Promise<HandlerResponse> {
   const rec = await deps.luksKeys.getSealed(host);
-  if (!rec) return { status: 404, body: { error: "no sealed key on file" } };
+  if (!rec) return notFound("no sealed key on file");
   return {
     status: 200,
     body: {
@@ -163,16 +163,16 @@ export async function handleConsumeUnlockKey(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
+    return forbidden("serverId / host mismatch");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   let nonce: Uint8Array;
@@ -181,10 +181,10 @@ export async function handleConsumeUnlockKey(
     nonce = hexToBytes(r.nonce);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   if (nonce.length !== 32) {
-    return { status: 400, body: { error: "nonce must be 32 bytes" } };
+    return malformed("nonce must be 32 bytes");
   }
   const claim: ConsumeUnlockKey = {
     serverId: host,
@@ -192,7 +192,7 @@ export async function handleConsumeUnlockKey(
     issuedAt: r.issuedAt,
   };
   if (!verifyConsumeUnlockKey(claim, sig, hexToBytes(reg.identityPubKeyHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Serve from the lease store — covers both the one-shot reactive
@@ -216,7 +216,7 @@ export async function handleConsumeUnlockKey(
     }
   }
 
-  return { status: 404, body: { error: "no unlock-key lease available" } };
+  return notFound("no unlock-key lease available");
 }
 
 /**
@@ -251,26 +251,26 @@ export async function handleDepositAutoUnlockLease(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
+    return forbidden("serverId / host mismatch");
   }
   if (!/^[0-9a-fA-F]{16,128}$/.test(r.leaseId)) {
-    return { status: 400, body: { error: "leaseId must be 16-128 hex chars" } };
+    return malformed("leaseId must be 16-128 hex chars");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   if (r.expiresAt <= now()) {
-    return { status: 400, body: { error: "expiresAt already past" } };
+    return malformed("expiresAt already past");
   }
 
   const userRec = await deps.usernames.get(reg.username);
-  if (!userRec) return { status: 404, body: { error: "unknown user" } };
+  if (!userRec) return notFound("unknown user");
 
   let unlockKey: Uint8Array;
   let sig: Uint8Array;
@@ -278,7 +278,7 @@ export async function handleDepositAutoUnlockLease(
     unlockKey = hexToBytes(r.unlockKey);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: AutoUnlockLease = {
     serverId: host,
@@ -289,7 +289,7 @@ export async function handleDepositAutoUnlockLease(
     issuedAt: r.issuedAt,
   };
   if (!verifyAutoUnlockLease(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.autoUnlockLeases.put({
@@ -329,27 +329,27 @@ export async function handleRevokeAutoUnlockLease(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
+    return forbidden("serverId / host mismatch");
   }
   if (r.leaseId !== leaseId) {
-    return { status: 403, body: { error: "leaseId / url mismatch" } };
+    return forbidden("leaseId / url mismatch");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   const userRec = await deps.usernames.get(reg.username);
-  if (!userRec) return { status: 404, body: { error: "unknown user" } };
+  if (!userRec) return notFound("unknown user");
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: RevokeAutoUnlockLease = {
     serverId: host,
@@ -357,7 +357,7 @@ export async function handleRevokeAutoUnlockLease(
     issuedAt: r.issuedAt,
   };
   if (!verifyRevokeAutoUnlockLease(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   const removed = await deps.autoUnlockLeases.revoke(host, leaseId);
@@ -402,7 +402,7 @@ export async function handleListAutoUnlockLeases(
   }
   const now = deps.now ?? (() => Date.now());
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
   const rows = await deps.autoUnlockLeases.list(host, now());
   return {
     status: 200,

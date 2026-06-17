@@ -7,7 +7,7 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 /**
  * Webapp cloud-shard recovery (WebAuthn PRF).
@@ -85,13 +85,13 @@ export async function handleUploadWebauthnRecovery(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(r.username)) {
-    return { status: 400, body: { error: "invalid username" } };
+    return malformed("invalid username");
   }
   if (!/^[0-9a-fA-F]{16,512}$/.test(r.credentialId)) {
-    return { status: 400, body: { error: "credentialId must be 8-256 hex bytes" } };
+    return malformed("credentialId must be 8-256 hex bytes");
   }
   // Task #74: passphrase-derived hashes — optional on the wire to keep
   // the canonical-bytes type stable (the protocol hashes only the
@@ -101,36 +101,36 @@ export async function handleUploadWebauthnRecovery(
   // serve out the ciphertext through the new gated POST.
   if (r.fetchTokenHash !== undefined && r.fetchTokenHash !== null) {
     if (typeof r.fetchTokenHash !== "string" || !/^[0-9a-f]{64}$/.test(r.fetchTokenHash)) {
-      return { status: 400, body: { error: "fetchTokenHash must be 64 hex chars (SHA-256)" } };
+      return malformed("fetchTokenHash must be 64 hex chars (SHA-256)");
     }
   }
   if (r.prfSaltHash !== undefined && r.prfSaltHash !== null) {
     if (typeof r.prfSaltHash !== "string" || !/^[0-9a-f]{64}$/.test(r.prfSaltHash)) {
-      return { status: 400, body: { error: "prfSaltHash must be 64 hex chars (SHA-256)" } };
+      return malformed("prfSaltHash must be 64 hex chars (SHA-256)");
     }
   }
   // Wrapped UMK is base64; decode to recompute the signed hash, then
   // store as base64. Cap at 16 KiB ciphertext to keep D1 row size sane.
   const wrappedBytes = base64DecodeBytes(r.wrappedUmk);
   if (!wrappedBytes) {
-    return { status: 400, body: { error: "wrappedUmk must be valid base64" } };
+    return malformed("wrappedUmk must be valid base64");
   }
   if (wrappedBytes.length === 0 || wrappedBytes.length > 16 * 1024) {
-    return { status: 400, body: { error: "wrappedUmk must be 1..16384 bytes" } };
+    return malformed("wrappedUmk must be 1..16384 bytes");
   }
 
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid signature hex" } };
+    return malformed("invalid signature hex");
   }
   const wrappedUmkHashHex = await sha256Hex(wrappedBytes);
   const claim: UploadRecoveryRecord = {
@@ -140,7 +140,7 @@ export async function handleUploadWebauthnRecovery(
     issuedAt: r.issuedAt,
   };
   if (!verifyUploadRecoveryRecord(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   const t = now();
@@ -189,7 +189,7 @@ export async function handleFetchWebauthnRecovery(
   username: string,
 ): Promise<HandlerResponse> {
   const rec = await deps.webauthnRecovery.get(username);
-  if (!rec) return { status: 404, body: { error: "no recovery record" } };
+  if (!rec) return notFound("no recovery record");
   const wrappedBytes = base64DecodeBytes(rec.wrappedUmkB64) ?? new Uint8Array();
   const wrappedUmkHash = await sha256Hex(wrappedBytes);
   return {
@@ -233,29 +233,26 @@ export async function handleFetchWrappedUmkWithToken(
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
   const b = body as Record<string, unknown> | null;
   if (!b || typeof b !== "object") {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (typeof b.fetchToken !== "string" || !/^[0-9a-fA-F]{32,512}$/.test(b.fetchToken)) {
-    return { status: 400, body: { error: "fetchToken must be hex" } };
+    return malformed("fetchToken must be hex");
   }
   if (typeof b.issuedAt !== "number" || Math.abs(now() - b.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   const rec = await deps.webauthnRecovery.get(username);
-  if (!rec) return { status: 404, body: { error: "no recovery record" } };
+  if (!rec) return notFound("no recovery record");
   if (!rec.fetchTokenHashHex) {
     // Legacy row uploaded before the migration. Refuse the gated fetch
     // — the user must re-enrol via the recovery sub-origin to acquire
     // a fetchToken hash on the stored row.
-    return {
-      status: 409,
-      body: { error: "record predates passphrase gate — re-enrol cloud recovery" },
-    };
+    return conflict("record predates passphrase gate — re-enrol cloud recovery");
   }
   const fetchTokenBytes = hexToBytes(b.fetchToken.toLowerCase());
   const presentedHashHex = await sha256Hex(fetchTokenBytes);
   if (presentedHashHex !== rec.fetchTokenHashHex.toLowerCase()) {
-    return { status: 403, body: { error: "invalid fetch token" } };
+    return forbidden("invalid fetch token");
   }
   // Recovery Phase B — surface the CURRENTLY registered IRK so the recovering
   // client can detect whether the account's key was rotated since this recovery
@@ -312,33 +309,33 @@ export async function handleDeleteWebauthnRecovery(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return { status: 404, body: { error: "unknown username" } };
+  if (!userRec) return notFound("unknown username");
   const existing = await deps.webauthnRecovery.get(r.username);
-  if (!existing) return { status: 404, body: { error: "no recovery record" } };
+  if (!existing) return notFound("no recovery record");
 
   // Pin the delete to the *current* record's bytes — old leaked sigs
   // can't replay against a freshly-uploaded record (wrappedUmkHash will
   // differ).
   const expectedHash = await sha256Hex(base64DecodeBytes(existing.wrappedUmkB64) ?? new Uint8Array());
   if (r.wrappedUmkHash !== expectedHash) {
-    return { status: 409, body: { error: "stored record changed since signature" } };
+    return conflict("stored record changed since signature");
   }
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid signature hex" } };
+    return malformed("invalid signature hex");
   }
   const claim: UploadRecoveryRecord = {
     username: r.username,
@@ -347,7 +344,7 @@ export async function handleDeleteWebauthnRecovery(
     issuedAt: r.issuedAt,
   };
   if (!verifyUploadRecoveryRecord(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.webauthnRecovery.delete(r.username);

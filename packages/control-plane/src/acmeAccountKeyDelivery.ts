@@ -51,7 +51,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, equalHex, hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 export interface AcmeAccountKeyDeliveryDeps {
   servers: ServerStorage;
@@ -118,13 +118,13 @@ export async function handleDepositAcmeAccountKey(
     typeof body?.signature !== "string" ||
     !HEX128.test(body.signature.toLowerCase())
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
 
   // The box this delivery is for must be a registered, non-revoked server.
   const reg = await deps.servers.get(serverDomain);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   // I2 — the sealed key's recipient MUST be the directory-bound box STK for
   // THIS server. A grant sealed to some OTHER key is rejected here, so .com is
@@ -132,10 +132,7 @@ export async function handleDepositAcmeAccountKey(
   // is the analogue of the box-sealed-lease "stkPub matches the registered
   // server" check.
   if (!equalHex(g.recipientPubKey, reg.identityPubKeyHex)) {
-    return {
-      status: 403,
-      body: { error: "recipientPubKey does not match the registered server" },
-    };
+    return forbidden("recipientPubKey does not match the registered server");
   }
 
   // The grant MUST name the account that owns this server, and it MUST be
@@ -144,10 +141,10 @@ export async function handleDepositAcmeAccountKey(
   // lease deposit and closes any cross-account deposit ambiguity.
   const usernameNorm = g.username.toLowerCase();
   if (usernameNorm !== reg.username.toLowerCase()) {
-    return { status: 403, body: { error: "username does not own this server" } };
+    return forbidden("username does not own this server");
   }
   const userRec = await deps.usernames.get(usernameNorm);
-  if (!userRec) return { status: 404, body: { error: "username not registered" } };
+  if (!userRec) return notFound("username not registered");
 
   let recipientPub: Uint8Array;
   let sealedAccountKey: Uint8Array;
@@ -159,7 +156,7 @@ export async function handleDepositAcmeAccountKey(
     irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
 
   const grant: AcmeAccountKeyGrant = {
@@ -177,10 +174,10 @@ export async function handleDepositAcmeAccountKey(
   // A single 403 either way — the caller can't distinguish "bad signature"
   // from "bad envelope".
   if (!verifyAcmeAccountKeyGrant(grant, sig, irkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
   if (grant.expiresAt <= now) {
-    return { status: 400, body: { error: "grant already expired" } };
+    return malformed("grant already expired");
   }
 
   const recipientHex = bytesToHex(recipientPub).toLowerCase();
@@ -233,7 +230,7 @@ export async function handleReleaseAcmeAccountKey(
   const now = (deps.now ?? (() => Date.now()))();
   const row = await deps.delivery.getByDomain(serverDomain);
   if (!row || row.revokedAt !== null || row.expiresAt <= now) {
-    return { status: 404, body: { error: "no acme account key ready" } };
+    return notFound("no acme account key ready");
   }
   return {
     status: 200,
@@ -283,20 +280,20 @@ export async function handleRevokeAcmeAccountKeyDelivery(
     typeof body?.signature !== "string" ||
     !HEX128.test(body.signature.toLowerCase())
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
 
   // The box must be a registered server, and the revoke must be signed by THAT
   // server's account IRK (not just any account that names the same key).
   const reg = await deps.servers.get(serverDomain);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
 
   const usernameNorm = r.username.toLowerCase();
   if (usernameNorm !== reg.username.toLowerCase()) {
-    return { status: 403, body: { error: "username does not own this server" } };
+    return forbidden("username does not own this server");
   }
   const userRec = await deps.usernames.get(usernameNorm);
-  if (!userRec) return { status: 404, body: { error: "username not registered" } };
+  if (!userRec) return notFound("username not registered");
 
   let irkPub: Uint8Array;
   let sig: Uint8Array;
@@ -304,7 +301,7 @@ export async function handleRevokeAcmeAccountKeyDelivery(
     irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
 
   const envelope: RevokeAcmeAccountKey = {
@@ -314,7 +311,7 @@ export async function handleRevokeAcmeAccountKeyDelivery(
     issuedAt: r.issuedAt,
   };
   if (!verifyRevokeAcmeAccountKey(envelope, sig, irkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.delivery.deleteByDomain(serverDomain);
