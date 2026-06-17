@@ -32,8 +32,14 @@ import com.flagshipserver.app.core.Profile
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -49,13 +55,19 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
+@OptIn(ExperimentalCoroutinesApi::class)
 class DevicePairingFlowTest {
 
     private val account = "acme"
     private lateinit var ctx: Context
+    // viewModelScope (Dispatchers.Main) backs the L10 anti-double-tap gate's
+    // delayed un-gate; route it through a test dispatcher so advanceUntilIdle()
+    // drives that timer under virtual time.
+    private val dispatcher = StandardTestDispatcher()
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(dispatcher)
         ctx = ApplicationProvider.getApplicationContext()
         Keystore.attachForTest(ctx.getSharedPreferences("device-pairing-test", Context.MODE_PRIVATE))
         Keystore.wipeAllProfiles()
@@ -64,6 +76,7 @@ class DevicePairingFlowTest {
     @After
     fun tearDown() {
         Keystore.wipeAllProfiles()
+        Dispatchers.resetMain()
     }
 
     /** Seed an admin identity: a per-profile UMK + IRK for [account] in
@@ -148,6 +161,19 @@ class DevicePairingFlowTest {
         // SAS must match on both screens (the anti-MitM check).
         val incomingSas = (incomingVm.phase.first() as JoinDevicePhase.VerifySas).matchCode
         assertEquals((adminPhase as AddDevicePhase.ConfirmSas).matchCode, incomingSas)
+
+        // L10 — Confirm is gated for the anti-double-tap window right after the
+        // SAS appears: a confirm now is a no-op (still ConfirmSas, not yet
+        // delivered). Mirrors iOS confirmMatch ignoring a pre-gate tap.
+        adminVm.confirmAndSeal()
+        assertTrue(
+            "confirm before the gate elapses must be ignored",
+            adminVm.phase.first() is AddDevicePhase.ConfirmSas,
+        )
+
+        // Elapse the gate (virtual time) → gateExpired flips true.
+        advanceUntilIdle()
+        assertTrue((adminVm.phase.first() as AddDevicePhase.ConfirmSas).gateExpired)
 
         adminVm.confirmAndSeal()                 // signs admit + seals + delivers
         assertEquals(AddDevicePhase.Delivered, adminVm.phase.first())
@@ -239,5 +265,64 @@ class DevicePairingFlowTest {
         assertTrue("forged admit must fail closed: $phase", phase is JoinDevicePhase.Failed)
         assertFalse("a rejected join must NOT open the account", incomingApp.isPaired.first())
         assertNull("a forged admit must never reach .com", server.lastDeviceAdmit)
+    }
+
+    /** L10 — the "codes match" Confirm is gated for the anti-double-tap window
+     *  right after the SAS appears (parity with iOS AddDeviceViewModel's 600ms
+     *  `gateExpired`). A confirm fired inside the window is ignored; once the
+     *  window elapses, `gateExpired` flips true and confirm proceeds. */
+    @Test fun confirmIsGatedForTheAntiDoubleTapWindow() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val adminUmk = seedAdmin(server)
+        val relay = MockDevicePairingRelay()
+
+        // Drive an incoming side just far enough to buffer a valid hello so the
+        // admin's awaitPeerHello resolves into ConfirmSas.
+        val incomingApp = AppState()
+        Keystore.setActiveProfile("$account-admin")
+        val adminVm = AddDeviceViewModel(
+            relay = relay.admin,
+            username = account,
+            umkSeed = { adminUmk },
+            signAdmit = { admit ->
+                Keystore.setActiveProfile("$account-admin")
+                DeviceAdmitClaim.sign(admit, Keystore.deriveIRK("vouch"))
+            },
+            sessionIdGen = { "sid-gate" },
+            now = { 1_000L },
+        )
+        val incomingVm = JoinDeviceViewModel(
+            joinLink = JoinLink.parse(adminVm.joinUrl)!!,
+            relay = relay.incoming,
+            server = server,
+            app = incomingApp,
+            providerToken = "fcm-gate",
+            now = { 2_000L },
+        )
+
+        incomingVm.start()            // buffers hello
+        adminVm.start()               // reads hello → ConfirmSas(gateExpired=false)
+
+        // (a) The SAS panel is shown but Confirm is still gated.
+        val gated = adminVm.phase.first()
+        assertTrue(gated is AddDevicePhase.ConfirmSas)
+        assertFalse(
+            "Confirm must be gated immediately after the SAS appears",
+            (gated as AddDevicePhase.ConfirmSas).gateExpired,
+        )
+
+        // (b) A confirm DURING the gate is a no-op — still ConfirmSas.
+        adminVm.confirmAndSeal()
+        assertTrue(
+            "a pre-gate confirm must be ignored",
+            adminVm.phase.first() is AddDevicePhase.ConfirmSas,
+        )
+        assertNull("a gated confirm must not deliver to .com", server.lastDeviceAdmit)
+
+        // (c) Elapse the 600ms window → gateExpired flips, confirm proceeds.
+        advanceUntilIdle()
+        assertTrue((adminVm.phase.first() as AddDevicePhase.ConfirmSas).gateExpired)
+        adminVm.confirmAndSeal()
+        assertEquals(AddDevicePhase.Delivered, adminVm.phase.first())
     }
 }

@@ -25,6 +25,7 @@
 package com.flagshipserver.app.viewmodels
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AdminPairingRelay
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
@@ -33,9 +34,15 @@ import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.PairingBundle
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.keystore.Keystore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/** L10 — anti-double-tap window (ms) before the "codes match" Confirm un-gates.
+ *  Mirrors the iOS AddDeviceViewModel 600ms `gateExpired` window. */
+const val SAS_CONFIRM_GATE_MS: Long = 600
 
 /** Admin add-device state machine. */
 sealed interface AddDevicePhase {
@@ -43,8 +50,11 @@ sealed interface AddDevicePhase {
     data class ShowingQr(val joinUrl: String) : AddDevicePhase
 
     /** The incoming device connected; SAS derived. Admin verbally
-     *  confirms it matches the other screen, then calls [confirmAndSeal]. */
-    data class ConfirmSas(val matchCode: String) : AddDevicePhase
+     *  confirms it matches the other screen, then calls [confirmAndSeal].
+     *  [gateExpired] flips true after the [SAS_CONFIRM_GATE_MS] anti-double-tap
+     *  window so a reflexive double-tap can't confirm a code the human hasn't
+     *  compared (parity with iOS AddDeviceViewModel.Phase.confirmMatch). */
+    data class ConfirmSas(val matchCode: String, val gateExpired: Boolean = false) : AddDevicePhase
 
     /** Sealing + delivering the key bundle. */
     data object Delivering : AddDevicePhase
@@ -81,6 +91,9 @@ class AddDeviceViewModel(
      *  deterministic tests. */
     private val sessionIdGen: () -> String = { com.flagshipserver.app.core.SerialGen.random() },
     private val now: () -> Long = { System.currentTimeMillis() },
+    /** Anti-double-tap window (ms) before Confirm un-gates. Injectable so
+     *  tests can drive the gate without a real 600ms wait. */
+    private val confirmGateMs: Long = SAS_CONFIRM_GATE_MS,
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow<AddDevicePhase>(
@@ -122,7 +135,16 @@ class AddDeviceViewModel(
             val peerDevicePub = helloBytes.copyOfRange(32, 64)
             incomingDevicePubHex = HexUtil.encode(peerDevicePub)
             val matchCode = session.pair(peerX25519)
-            _phase.value = AddDevicePhase.ConfirmSas(matchCode)
+            _phase.value = AddDevicePhase.ConfirmSas(matchCode, gateExpired = false)
+            // Un-gate Confirm after the anti-double-tap window (parity with
+            // iOS). Don't clobber a phase that has already moved on.
+            viewModelScope.launch {
+                delay(confirmGateMs)
+                val p = _phase.value
+                if (p is AddDevicePhase.ConfirmSas && !p.gateExpired) {
+                    _phase.value = p.copy(gateExpired = true)
+                }
+            }
         } catch (t: Throwable) {
             _phase.value = AddDevicePhase.Failed(humanize(t))
         }
@@ -135,6 +157,11 @@ class AddDeviceViewModel(
      * deliver it.
      */
     suspend fun confirmAndSeal() {
+        // Anti-double-tap gate (parity with iOS confirmMatch): ignore a confirm
+        // that arrives before the SAS-compare window elapses, or one fired from
+        // any state other than ConfirmSas.
+        val current = _phase.value
+        if (current !is AddDevicePhase.ConfirmSas || !current.gateExpired) return
         val devicePubHex = incomingDevicePubHex ?: run {
             _phase.value = AddDevicePhase.Failed("Incoming device key missing — start over.")
             return

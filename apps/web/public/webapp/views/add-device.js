@@ -34,6 +34,12 @@ import { makeAdminRelay } from "../lib/pairingRelay.js";
 
 registerView("view-add-device");
 
+// L10 — anti-double-tap gate (ms) for the "codes match" confirm. Mirrors the
+// iOS AddDeviceViewModel 600ms `gateExpired` window: hold Confirm disabled for a
+// beat after the SAS appears so a reflexive double-tap can't confirm a code the
+// human hasn't compared. Belt-and-suspenders on top of the SAS compare itself.
+export const SAS_CONFIRM_GATE_MS = 600;
+
 let activePairing = null; // { abort: () => void }
 
 function setStatus(kind, text) {
@@ -92,8 +98,18 @@ async function startPairing() {
       setStatus("active", "compare the code on both screens, then confirm");
       const btn = $("add-device-confirm");
       if (btn) {
-        btn.disabled = false;
+        // L10 anti-double-tap gate (parity with iOS AddDeviceViewModel's 600ms
+        // `gateExpired` window): the SAS just appeared, so hold Confirm disabled
+        // briefly. A reflexive double-tap from the previous screen can't confirm
+        // a code the human hasn't actually compared. The wire-up (onclick) is
+        // set now; only the enabled state is delayed.
+        btn.disabled = true;
         btn.onclick = () => { btn.disabled = true; relay._confirm(true); };
+        setTimeout(() => {
+          // Only un-gate if we're still awaiting this confirmation (the SAS
+          // panel hasn't been torn down / superseded).
+          if ($("add-device-confirm") === btn) btn.disabled = false;
+        }, SAS_CONFIRM_GATE_MS);
       }
     },
     onPeerWaiting: () => setStatus("active", "waiting for the other device to connect…"),

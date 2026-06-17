@@ -115,6 +115,9 @@ fun AddDeviceScreen(
             is AddDevicePhase.ShowingQr -> QrPanel(joinUrl = p.joinUrl)
             is AddDevicePhase.ConfirmSas -> ConfirmPanel(
                 matchCode = p.matchCode,
+                // L10 — Confirm stays disabled for the anti-double-tap window
+                // after the SAS appears (parity with iOS `gateExpired`).
+                confirmEnabled = p.gateExpired,
                 onConfirm = { scope.launch { vm.confirmAndSeal() } },
                 onCancel = { vm.cancel(); onCancel() },
             )
@@ -158,7 +161,12 @@ private fun QrPanel(joinUrl: String) {
 }
 
 @Composable
-private fun ConfirmPanel(matchCode: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun ConfirmPanel(
+    matchCode: String,
+    confirmEnabled: Boolean,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -184,7 +192,13 @@ private fun ConfirmPanel(matchCode: String, onConfirm: () -> Unit, onCancel: () 
         }
     }
     Spacer(Modifier.height(FS.space.s2))
-    FSPrimaryButton(label = "Codes match — add device", onClick = onConfirm, block = true, large = true)
+    FSPrimaryButton(
+        label = "Codes match — add device",
+        onClick = onConfirm,
+        enabled = confirmEnabled,
+        block = true,
+        large = true,
+    )
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
