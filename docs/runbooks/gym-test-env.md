@@ -29,6 +29,33 @@
 
 ---
 
+## TL;DR — one command
+
+`scripts/gym-setup-live-env.sh` wraps this entire runbook: it generates the
+gym's own test-only secrets (cached, gitignored, in `.gym-secrets.env`), creates
+the D1 + R2, **patches the `REPLACE_WITH_…` placeholders** in
+`apps/com/wrangler.gym.toml`, sets the Worker secrets, builds + deploys the gym
+Worker, then (if Fly is authed) stands up the `flagship-services-gym` app + IPs
+and re-deploys. It is **idempotent** — run it, `flyctl auth login`, run it again;
+the second pass resumes at the Fly phase.
+
+```sh
+# interactive (prompts for the test Hetzner / DNS / SSH-pubkey secrets):
+bash scripts/gym-setup-live-env.sh
+# non-interactive:
+GYM_HCLOUD_TOKEN=… GYM_DNS_TOKEN=… GYM_SSH_PUBKEY="ssh-ed25519 …" bash scripts/gym-setup-live-env.sh
+# Cloudflare half only (before you've done flyctl auth login):
+GYM_SKIP_FLY=1 bash scripts/gym-setup-live-env.sh
+```
+
+The script does only the GYM-named resources (never opens prod's `wrangler.toml`
+/ root `fly.toml`). The remaining HAND steps it can't do for you: `flyctl auth
+login`, creating the test Hetzner project, and the one manual
+`gym.flagship.services` A/AAAA DNS record (step 3). The detailed, do-it-yourself
+version of every phase follows — read it to understand or to deviate.
+
+---
+
 ## Prerequisites (operator hand — agent cannot do these)
 
 - A shell authenticated to **Cloudflare** (`wrangler whoami` succeeds) on the
@@ -192,10 +219,11 @@ The gym admin surface mirrors prod's `/api/dev/sample-user/*`, gated on the gym
 
 ```sh
 cd /Users/harrywinner/flagship
-export FLAGSHIP_ADMIN_SECRET="<the gym Worker's admin secret>"
-# Point the CLI at the gym control plane. (sample-user.mjs talks to the apex;
-# override the base URL for the gym — see the CLI's --help / FLAGSHIP_COM_BASE.)
-export FLAGSHIP_COM_BASE="https://gym.flagshipserver.com"
+export FLAGSHIP_ADMIN_SECRET="<the gym Worker's admin secret>"   # cached in .gym-secrets.env (GYM_ADMIN_SECRET)
+# Point the CLI at the gym control plane. sample-user.mjs already honours the
+# FLAGSHIP_BASE_URL env var (apps/com talks to whatever it's set to; default
+# https://flagshipserver.com), so no new flag is needed — just set it:
+export FLAGSHIP_BASE_URL="https://gym.flagshipserver.com"
 
 node scripts/sample-user.mjs create gymdemo --display "Gym Demo"
 # → {"username":"gymdemo","ready":true,...}  (a TEST box under gym.flagship.services)
@@ -204,11 +232,11 @@ curl -s https://gymdemo.gym.flagship.services/api/health 2>/dev/null || true
 node scripts/sample-user.mjs delete gymdemo     # tear the demo box down
 ```
 
-> If `sample-user.mjs` has no base-URL override flag yet, that is the one small
-> CLI follow-up to point it at the gym apex (the Worker holds HCLOUD_TOKEN +
-> DEMO_IRK_KEK, so the laptop needs only the gym admin secret). Until then, the
-> live gym slice in the harness detects the env and SKIPS cleanly (see "the
-> harness live slice" below) — `gym:total` stays green regardless.
+> `sample-user.mjs` honours `FLAGSHIP_BASE_URL` (set above) — no CLI change is
+> needed to point it at the gym apex (the Worker holds HCLOUD_TOKEN + DEMO_IRK_KEK,
+> so the laptop needs only the gym admin secret). Until the env is up, the live
+> gym slice in the harness detects it and SKIPS cleanly (see "the harness live
+> slice" below) — `gym:total` stays green regardless.
 
 ---
 
@@ -273,13 +301,42 @@ npm run gym:total
 
 ---
 
+## Android instrumentation — provision an AVD (one-time, optional)
+
+The Android gym leg (`npm run gym -- total --surface android`) runs Compose UI
+Test + Espresso on an emulator. The harness adapter **detects-and-skips** when no
+emulator is reachable, so `gym:total` is green without one — but to actually RUN
+the Android UI scenarios you need an AVD. This machine has `sdkmanager` +
+`avdmanager` (Homebrew) and the SDK at `~/Library/Android/sdk` but no emulator
+image yet. Provision one (the app targets API 35 / arm64):
+
+```sh
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+sdkmanager --sdk_root="$ANDROID_HOME" "emulator" "platform-tools" \
+  "system-images;android-35;google_apis;arm64-v8a"
+avdmanager create avd -n flagship_gym -k "system-images;android-35;google_apis;arm64-v8a" --device pixel_7
+# boot headless, wait for it, then run the Android leg:
+"$ANDROID_HOME/emulator/emulator" -avd flagship_gym -no-window -no-audio -no-snapshot &
+"$ANDROID_HOME/platform-tools/adb" wait-for-device
+npm run gym -- total --surface android      # now RUNS (was a clean skip)
+```
+
+> **Disk caveat:** the emulator + a system image are ~2 GB. This Mac was ~95 %
+> full (~10 GB free) at gym build-out time — free space first (old Xcode
+> DerivedData, `gym-results/`, stale git worktrees) or the install/boot will
+> ENOSPC. The Robolectric JVM suite (`:app:testDebugUnitTest`) needs no emulator
+> and stays the fast per-merge Android path.
+
+---
+
 ## Teardown
 
 Tear the gym down when not in use (it bills Hetzner + Fly while up):
 
 ```sh
 # Demo boxes (each run tears its own down in a finally; sweep any orphans):
-export FLAGSHIP_ADMIN_SECRET="<gym admin secret>" FLAGSHIP_COM_BASE="https://gym.flagshipserver.com"
+export FLAGSHIP_ADMIN_SECRET="<gym admin secret>" FLAGSHIP_BASE_URL="https://gym.flagshipserver.com"
 node scripts/sample-user.mjs list                 # any lingering gym demo users
 node scripts/sample-user.mjs delete <username>    # … delete each
 
