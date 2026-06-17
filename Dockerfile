@@ -8,7 +8,7 @@
 # override FLAGSHIP_SURFACE to "com" or "both" for other shapes.
 ################################################################################
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Workspaces: copy package.json files only first, install with cache-friendly
@@ -54,7 +54,7 @@ RUN find packages -type d \( -name src -o -name tests \) -prune -exec rm -rf {} 
 
 ################################################################################
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
