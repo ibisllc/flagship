@@ -295,5 +295,333 @@ const TOTAL: readonly Scenario[] = [
   ),
 ];
 
+// ───────────────────── total-gym Tier-1: the iPad surface (§7-C, D8) ─────────
+// These scenarios bind to GymIPadTests, which the iOS adapter routes to the
+// iPad `-destination` (every other iOS scenario runs on the iPhone). The
+// adaptive iPad shell already exists (RootShell.iPadShell); these ASSERT it
+// renders — the 280pt sidebar (not the iPhone TabView), the reading-column
+// width clamp, and inline (not large) nav titles.
+
+const IPAD: readonly Scenario[] = [
+  iosTotal(
+    "ios-ipad-sidebar-not-tabview",
+    "D8/iPad: the regular-size-class shell renders the 280pt sidebar and NOT the iPhone TabView (no tab bar).",
+    "FlagshipAppUITests/GymIPadTests/test_iPadRendersSidebarNotTabView",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on the iPad destination." },
+        { kind: "assert", describe: "The seeded Home shell.", handle: "home-add-server" },
+        { kind: "assert", describe: "The iPad sidebar.", handle: "ipad-sidebar" },
+      ],
+      assertions: [
+        { describe: "iPad sidebar present", handle: "ipad-sidebar", expect: "present" },
+        { describe: "No iPhone TabView tab bar", expect: "absent" },
+      ],
+      screenshots: [shot("ipad-home", "Home on iPad."), shot("ipad-sidebar", "The 280pt sidebar.")],
+      dimension: "D8",
+    },
+  ),
+  iosTotal(
+    "ios-ipad-sidebar-navigates",
+    "D8/iPad: tapping a sidebar destination row swaps the content pane (sidebar is the live navigator).",
+    "FlagshipAppUITests/GymIPadTests/test_iPadSidebarNavigatesContentPane",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on iPad." },
+        { kind: "tap", describe: "The Services sidebar row.", handle: "ipad-sidebar" },
+        { kind: "assert", describe: "The Services content pane.", handle: "Services" },
+      ],
+      assertions: [{ describe: "Services content pane shown", handle: "Services", expect: "present" }],
+      screenshots: [shot("ipad-services-pane", "The Services pane via the sidebar.")],
+      dimension: "D8",
+    },
+  ),
+  iosTotal(
+    "ios-ipad-reading-column",
+    "D8/iPad: the hero screens clamp their content to the ~640pt reading column on the wide iPad pane.",
+    "FlagshipAppUITests/GymIPadTests/test_iPadReadingColumnConstrainsWidth",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on iPad." },
+        { kind: "assert", describe: "A reading-column-bounded control.", handle: "home-add-server" },
+      ],
+      assertions: [{ describe: "Content clamped below the iPad pane width", handle: "home-add-server", expect: "present" }],
+      screenshots: [shot("ipad-reading-column", "The clamped reading column.")],
+      dimension: "D8",
+    },
+  ),
+  iosTotal(
+    "ios-ipad-inline-titles",
+    "D8/iPad: hero screens use inline (not large) nav titles in the regular size class.",
+    "FlagshipAppUITests/GymIPadTests/test_iPadUsesInlineNavTitles",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on iPad." },
+        { kind: "assert", describe: "The Home nav bar (inline title).", handle: "Home" },
+      ],
+      assertions: [{ describe: "Inline nav title (no large out-of-bar title)", handle: "Home", expect: "present" }],
+      screenshots: [shot("ipad-inline-title", "The inline Home title.")],
+      dimension: "D8",
+    },
+  ),
+];
+
+// ───────── total-gym Tier-1: deeper D1–D6 coverage (GymTotalDetailTests) ─────
+// Beyond the "screen renders" tranche above into control sweeps + multi-step
+// flows the demo fixtures can drive with NO backend. Destructive controls are
+// asserted at the CONFIRM stage only (never fired — Tier-1; §7-G).
+
+const TOTAL_DETAIL: readonly Scenario[] = [
+  // D1 — server-detail control sweep + the full create-server step flow.
+  iosTotal(
+    "ios-total-detail-deadman-screen",
+    "D1: the dead-man (auto lock-down) card opens its screen; the enable toggle renders.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadManScreenOpens",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail." },
+        { kind: "tap", describe: "Auto lock-down card.", handle: "sd-deadman-open" },
+        { kind: "assert", describe: "Dead-man enable toggle.", handle: "deadman-toggle" },
+      ],
+      assertions: [{ describe: "Dead-man enable toggle present", handle: "deadman-toggle", expect: "present" }],
+      screenshots: [shot("server-detail-deadman-card", "The card."), shot("deadman-screen", "The lock-down screen.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-detail-journal-controls",
+    "D1: the Diagnostics journal card renders the unit picker + View-journal control.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailJournalControls",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail." },
+        { kind: "assert", describe: "View-journal control.", handle: "sd-journal-fetch" },
+      ],
+      assertions: [{ describe: "View-journal control present", handle: "sd-journal-fetch", expect: "present" }],
+      screenshots: [shot("server-detail-journal", "The journal diagnostics card.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-detail-frontpage-picker",
+    "D1: the front-page (owner-assignable apex) picker renders on server-detail.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailFrontPagePicker",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail." },
+        { kind: "assert", describe: "Front-page picker.", handle: "sd-front-page-picker" },
+      ],
+      assertions: [{ describe: "Front-page picker present", handle: "sd-front-page-picker", expect: "present" }],
+      screenshots: [shot("server-detail-frontpage", "The front-page picker.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-detail-decommission",
+    "D1/D5: a dead box's detail offers the decommission (free-the-name) card.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadServerDecommissionCard",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the dead box (Attic) detail (-smoke-dead)." },
+        { kind: "assert", describe: "Decommission card.", handle: "sd-decommission-dead-server" },
+      ],
+      assertions: [{ describe: "Decommission card present", handle: "sd-decommission-dead-server", expect: "present" }],
+      screenshots: [shot("server-detail-decommission", "The decommission card.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-create-server-full-flow",
+    "D1-A4: walk the create-server wizard — name → boot-unlock + encryption → backup policy.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_createServerFullStepFlow",
+    {
+      steps: [
+        { kind: "tap", describe: "Add server.", handle: "home-add-server" },
+        { kind: "type", describe: "Name (step 0).", handle: "cs-name-field" },
+        { kind: "tap", describe: "Next → step 1.", handle: "cs-next-button" },
+        { kind: "assert", describe: "Disk-encryption toggle (step 1).", handle: "cs-encrypt-disk-toggle" },
+        { kind: "tap", describe: "Next → step 2.", handle: "cs-next-button" },
+        { kind: "assert", describe: "Backup-policy radio (step 2).", handle: "cs-backup-policy-none" },
+      ],
+      assertions: [
+        { describe: "Disk-encryption toggle present", handle: "cs-encrypt-disk-toggle", expect: "present" },
+        { describe: "Backup-policy radio present", handle: "cs-backup-policy-none", expect: "present" },
+        { describe: "Continue (→ scan) present", handle: "cs-continue-button", expect: "present" },
+      ],
+      screenshots: [
+        shot("create-step0-name", "Step 0 name."),
+        shot("create-step1-bootunlock", "Step 1 boot-unlock."),
+        shot("create-step2-backup", "Step 2 backup policy."),
+      ],
+      dimension: "D1",
+    },
+  ),
+  // D2 — build modes, deeper.
+  iosTotal(
+    "ios-total-build-git-verdict",
+    "D2-B5: paste a Flagship-ready git URL → Check → the fitness verdict resolves (Install/Build-with-AI).",
+    "FlagshipAppUITests/GymTotalDetailTests/test_buildGitFitnessVerdict",
+    {
+      steps: [
+        { kind: "tap", describe: "Chooser → git.", handle: "build-src-git" },
+        { kind: "type", describe: "A Flagship-ready repo URL." },
+        { kind: "tap", describe: "Check repo.", handle: "build-git-check" },
+        { kind: "assert", describe: "Verdict CTA.", handle: "build-git-deploy" },
+      ],
+      assertions: [{ describe: "Fitness verdict resolved", handle: "build-git-deploy", expect: "present" }],
+      screenshots: [shot("build-git-verdict", "The fitness verdict.")],
+      dimension: "D2",
+    },
+  ),
+  iosTotal(
+    "ios-total-build-mcp-connect",
+    "D2-B8: MCP create-connection → the copyable IDE config + rotate controls render.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_buildMcpConnect",
+    {
+      steps: [
+        { kind: "tap", describe: "Chooser → mcp.", handle: "build-src-mcp" },
+        { kind: "tap", describe: "Create a connection.", handle: "build-mcp-create" },
+        { kind: "assert", describe: "Copy IDE config.", handle: "build-mcp-copy-config" },
+      ],
+      assertions: [{ describe: "Post-connection controls present", handle: "build-mcp-copy-config", expect: "present" }],
+      screenshots: [shot("build-mcp-pre", "Before connect."), shot("build-mcp-connected", "After connect.")],
+      dimension: "D2",
+    },
+  ),
+  iosTotal(
+    "ios-total-build-journal-list",
+    "D2-B10: the build journal opens from the chooser's View-past-builds link.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_buildJournalList",
+    {
+      steps: [
+        { kind: "tap", describe: "Chooser → View past builds.", handle: "build-source-journal-link" },
+        { kind: "assert", describe: "Build journal screen.", handle: "Build journal" },
+      ],
+      assertions: [{ describe: "Build journal screen shown", handle: "Build journal", expect: "present" }],
+      screenshots: [shot("build-journal", "The build journal.")],
+      dimension: "D2",
+    },
+  ),
+  iosTotal(
+    "ios-total-vibecode-chat",
+    "D2-B3: the scratch vibe-code chat screen (reached via the seeded build op) renders its composer.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_vibeCodeChatScreenRenders",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab apps -smoke-ops." },
+        { kind: "tap", describe: "The build operation sliver.", handle: "global-operations-bar" },
+        { kind: "assert", describe: "The vibe-code chat composer.", handle: "vibecode-reply-field" },
+      ],
+      assertions: [{ describe: "Vibe-code chat composer present", handle: "vibecode-reply-field", expect: "present" }],
+      screenshots: [shot("ops-sliver-apps", "The ops sliver."), shot("vibecode-chat", "The chat screen.")],
+      dimension: "D2",
+    },
+  ),
+  // D3 — settings: gating, AI keys, security.
+  iosTotal(
+    "ios-total-session-tiers-gate",
+    "D3-C1: with no recovery (-smoke-no-recovery), tapping the greyed tier-2 button shows the recovery toast — not the destructive path.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_sessionTiersRecoveryGate",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab settings -smoke-no-recovery." },
+        { kind: "tap", describe: "The greyed tier-2 lock-with-passkey.", handle: "settings-sign-out-btn" },
+        { kind: "assert", describe: "The recovery-required toast.", handle: "Set up account recovery to use this." },
+      ],
+      assertions: [
+        { describe: "Recovery toast shown", handle: "Set up account recovery to use this.", expect: "present" },
+        { describe: "No destructive confirm dialog", expect: "absent" },
+      ],
+      screenshots: [shot("settings-tiers-gated", "The gated tiers."), shot("settings-recovery-toast", "The toast.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-ai-keys-add-form",
+    "D3-C2: AI-keys manager Add-a-key reveals the provider picker + the secure key field.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_aiKeysManagerAddForm",
+    {
+      steps: [
+        { kind: "tap", describe: "Settings → AI keys.", handle: "AI keys" },
+        { kind: "tap", describe: "Add a key.", handle: "ai-key-add" },
+        { kind: "assert", describe: "The provider picker.", handle: "ai-key-provider" },
+      ],
+      assertions: [{ describe: "Provider picker present", handle: "ai-key-provider", expect: "present" }],
+      screenshots: [shot("ai-keys-add-form", "The add-key form.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-account-security-enroll",
+    "D3-C3: account-security TOTP enroll (QR + manual secret). SKIPPED — GYM-FOUND: the Settings row is unwired (no .accountSecurity route), so the screen is unreachable.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_accountSecurityTotpEnrollStages",
+    {
+      steps: [
+        { kind: "tap", describe: "Settings → Account security (currently a no-op — see the skip).", handle: "settings-open-account-security" },
+        { kind: "assert", describe: "Enrollment QR (when reachable).", handle: "account-security-qr" },
+      ],
+      assertions: [{ describe: "Enrollment QR present (when the nav is wired)", handle: "account-security-qr", expect: "present" }],
+      screenshots: [shot("account-security-unwired", "The unwired row (bug).")],
+      dimension: "D3",
+    },
+  ),
+  // D4 — global security experience.
+  iosTotal(
+    "ios-total-lock-trap-launch",
+    "D4-E1: launching with -smoke-locked traps the shell behind the biometric lock screen.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_lockScreenTrapsOnLaunch",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-locked." },
+        { kind: "assert", describe: "The biometric lock screen.", handle: "biometric-lock-screen" },
+      ],
+      assertions: [
+        { describe: "Lock screen present", handle: "biometric-lock-screen", expect: "present" },
+        { describe: "Home controls gated (not hittable)", handle: "home-add-server", expect: "disabled" },
+      ],
+      screenshots: [shot("lock-screen-launch", "The launch lock screen.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-trust-override-sheet",
+    "D4-E8: tapping the red trust sliver (-smoke-trust-untrusted) opens the Continue-anyway override sheet.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_trustOverrideSheetOpens",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-trust-untrusted." },
+        { kind: "tap", describe: "The red trust sliver.", handle: "global-trust-bar" },
+        { kind: "assert", describe: "The override sheet.", handle: "Continue anyway?" },
+      ],
+      assertions: [{ describe: "Override sheet shown", handle: "Continue anyway?", expect: "present" }],
+      screenshots: [shot("trust-sliver-detail", "The sliver."), shot("trust-override-sheet", "The override sheet.")],
+      dimension: "D4",
+    },
+  ),
+  // D5 — server-event → server-detail.
+  iosTotal(
+    "ios-total-detail-awaiting-unlock",
+    "D5-F1: a box awaiting unlock (-smoke-awaiting-unlock) opens its detail with boot-unlock controls and no dead-box decommission.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailAwaitingUnlockSurfaces",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the waiting box (Cabin) detail (-smoke-awaiting-unlock)." },
+        { kind: "assert", describe: "A boot-unlock / power control.", handle: "sd-power-off" },
+      ],
+      assertions: [
+        { describe: "Boot-unlock controls surface", handle: "sd-power-off", expect: "present" },
+        { describe: "No dead-box decommission card", handle: "sd-decommission-dead-server", expect: "absent" },
+      ],
+      screenshots: [shot("server-detail-awaiting", "The waiting box's detail.")],
+      dimension: "D5",
+    },
+  ),
+];
+
 /** The iOS/iPad lane of the gym registry (every-merge subset + total tranche). */
-export const IOS_GYM_SCENARIOS: readonly Scenario[] = [...EVERY_MERGE, ...TOTAL];
+export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
+  ...EVERY_MERGE,
+  ...TOTAL,
+  ...IPAD,
+  ...TOTAL_DETAIL,
+];

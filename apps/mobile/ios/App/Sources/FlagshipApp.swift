@@ -88,10 +88,34 @@ struct FlagshipApp: App {
         _ app: AppState,
         linker: DeepLinker,
         operations: ActiveOperationsCenter,
-        trust: TrustCenter
+        trust: TrustCenter,
+        privacy: PrivacySettings
     ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
+        // Determinism: a simulator can carry a persisted `requireBiometricAtLaunch`
+        // from prior manual use, which would drop the gym into the biometric lock
+        // screen on launch (and the Simulator has no enrolled biometric to clear
+        // it). Force the launch-lock OFF + the unlock latch ON for the gym so the
+        // shell is reachable on ANY simulator — UNLESS `-smoke-locked` is passed,
+        // which deliberately lands on the lock screen to test the trap (D4-E1).
+        // Gym-only; production never passes `-smoke-mode`.
+        let wantLocked = args.contains("-smoke-locked")
+        privacy.requireBiometricAtLaunch = wantLocked
+        app.requireBiometricAtLaunch = wantLocked
+        app.isUnlocked = !wantLocked
+        // `-smoke-no-recovery` seeds an account with NO cloud recovery so the
+        // session-tiers grey-out + recovery-required toast (D3-C1) is exercisable.
+        // A demo session is normally recovery-exempt, so we also force the
+        // SignOutPolicy block (the override is gym-only — see SignOutPolicy).
+        if args.contains("-smoke-no-recovery") {
+            app.hasCloudRecovery = false
+            SignOutPolicy.gymForceBlockNoRecovery = true
+        } else {
+            // Default the override off so a same-process re-evaluation can't leak
+            // a prior launch's block into a non-flagged run.
+            SignOutPolicy.gymForceBlockNoRecovery = false
+        }
         if !app.isPaired {
             // The total-gym D5 seed variants pick a different fixture pod set so
             // a server-event state (awaiting-unlock / dead) renders
@@ -327,7 +351,7 @@ struct FlagshipApp: App {
                 .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
-                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust)
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
                     // Restore a previously paired session: if the Keystore
                     // still holds a wrapped UMK (a real account that
                     // survives restarts) and we know which cloud was
