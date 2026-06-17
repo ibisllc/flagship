@@ -53,6 +53,12 @@ val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
  *  one instance; previews + tests get the default empty center. */
 val LocalActiveOperationsCenter = staticCompositionLocalOf<ActiveOperationsCenter> { ActiveOperationsCenter() }
 
+/** App-wide maintainer-trust verdict + failing-cert registry feeding the red
+ *  persistent trust sliver + the `.com` backend short-circuit. Production
+ *  MainActivity installs one instance; previews + tests get the default
+ *  (UNKNOWN ⇒ trusted, no halt). */
+val LocalTrustCenter = staticCompositionLocalOf<TrustCenter> { TrustCenter() }
+
 val LocalDeveloperSettings = staticCompositionLocalOf<DeveloperSettings?> { null }
 
 /** C12 — PrivacySettings persistence handle. Null on previews and in
