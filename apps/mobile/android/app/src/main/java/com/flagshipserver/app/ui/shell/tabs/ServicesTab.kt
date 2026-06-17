@@ -50,6 +50,12 @@ fun ServicesTab() {
                     nav.navigate(route)
                 }
             }
+            // A tap on the ops sliver for a git/mcp build opens its journal —
+            // the build's own surface (it has no vibe-code chat session).
+            is DeepLink.BuildJournal -> {
+                deepLinker.consume()
+                nav.navigate("build/journal/${link.buildId}")
+            }
             else -> { /* not for this tab */ }
         }
     }

@@ -30,6 +30,12 @@ sealed interface DeepLink {
      *  env-var or talkToUser response. */
     data class VibeCodeChat(val sessionId: String) : DeepLink
 
+    /** A git/mcp build's own surface — its journal timeline. Used as the
+     *  global-operations-sliver tap target for a non-scratch build (which,
+     *  unlike scratch, has no vibe-code session/chat). Internal-only — not
+     *  parsed from a URI (like [RecoverySetup]). */
+    data class BuildJournal(val buildId: String) : DeepLink
+
     /** Phase 3b — cross-device pairing. Opened when the collaborator's
      *  NATIVE camera (or the in-app scanner) follows the admin's pairing
      *  QR / App-Links URL (https://flagshipserver.com/join?sid=…&pk=…).

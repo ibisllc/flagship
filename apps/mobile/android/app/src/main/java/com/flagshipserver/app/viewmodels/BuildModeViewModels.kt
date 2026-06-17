@@ -114,15 +114,15 @@ class BuildGitViewModel(
         val id = buildId ?: return@launch
         _phase.value = GitPhase.Deploying
         // Surface this build in the global operations sliver while it runs.
-        val target = operationTarget
-        if (target != null) {
-            operations?.upsertBuild(
-                id = id,
-                subject = serviceLabel ?: "a service",
-                onServer = serverLabel,
-                target = target,
-            )
-        }
+        // The tap target is the build's OWN surface — its journal timeline —
+        // not the server detail (mirrors how scratch points at its chat).
+        // [operationTarget] is an optional override; default to the journal.
+        operations?.upsertBuild(
+            id = id,
+            subject = serviceLabel ?: "a service",
+            onServer = serverLabel,
+            target = operationTarget ?: com.flagshipserver.app.core.DeepLink.BuildJournal(id),
+        )
         try {
             val r = client.deploy(id)
             _phase.value = GitPhase.Deployed(url = r.url)

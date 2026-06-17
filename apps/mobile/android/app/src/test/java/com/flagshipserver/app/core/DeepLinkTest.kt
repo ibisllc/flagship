@@ -36,4 +36,14 @@ class DeepLinkerTest {
         assertEquals(DeepLink.VibeCodeChat("sess-9"), d.consume())
         assertNull(d.consume())
     }
+
+    // M8 — a git/mcp build's sliver tap target is its journal, carried as the
+    // internal-only BuildJournal link (not URI-parsed), routed on the APPS tab.
+    @Test fun buildJournal_enqueueThenConsume() = runTest {
+        val d = DeepLinker()
+        d.enqueue(DeepLink.BuildJournal("build-7"))
+        assertEquals(DeepLink.BuildJournal("build-7"), d.pending.first())
+        assertEquals(DeepLink.BuildJournal("build-7"), d.consume())
+        assertNull(d.consume())
+    }
 }
