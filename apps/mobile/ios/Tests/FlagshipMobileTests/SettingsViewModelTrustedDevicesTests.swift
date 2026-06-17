@@ -142,6 +142,32 @@ final class SettingsViewModelTrustedDevicesTests: XCTestCase {
         XCTAssertFalse(ok)
     }
 
+    // MARK: - M4 pending re-pair
+
+    func test_loadPendingRePair_nilWhenUsernameMissing() async {
+        let vm = SettingsViewModel(client: makeScreens(), server: makeServer(), username: { nil })
+        await vm.loadPendingRePair()
+        XCTAssertNil(vm.pendingRePair)
+    }
+
+    func test_loadPendingRePair_populatesSnapshot() async {
+        let server = makeServer()
+        server.pendingRePairByUser["harry"] = .init(
+            newIrkPub: "aa", oldIrkPub: "bb", initiatedAt: 1, completesAt: 2, objectedAt: nil)
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" }, signer: fakeSigner())
+        await vm.loadPendingRePair()
+        XCTAssertEqual(vm.pendingRePair?.pending?.completesAt, 2)
+    }
+
+    func test_loadTrustedDevices_alsoLoadsPendingRePair() async {
+        let server = makeServer()
+        server.pendingRePairByUser["harry"] = .init(
+            newIrkPub: "aa", oldIrkPub: "bb", initiatedAt: 1, completesAt: 2, objectedAt: nil)
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" }, signer: fakeSigner())
+        await vm.loadTrustedDevices()
+        XCTAssertNotNil(vm.pendingRePair?.pending)
+    }
+
     // MARK: - Legacy alias
 
     func test_legacyControlDevices_aliasesBrowserSessions() async {

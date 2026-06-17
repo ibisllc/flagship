@@ -76,6 +76,16 @@ public final class ReplaceDeviceViewModel {
         Int64(now.timeIntervalSince1970 * 1000) >= completesAt
     }
 
+    /// M4 — should the Trusted-devices "Replace pending" banner render
+    /// for this snapshot? Mirrors the webapp's `shouldRenderBanner`: a
+    /// missing snapshot, a missing row, or an OBJECTED row (the rotation
+    /// was cancelled by another device) all mean "no banner". Pure so the
+    /// banner-gate is unit-tested independent of SwiftUI.
+    public static func shouldRenderPendingBanner(_ snapshot: PendingRePairSnapshot?) -> Bool {
+        guard let pending = snapshot?.pending else { return false }
+        return pending.objectedAt == nil
+    }
+
     /// Kick off the ceremony. `currentEtag` is the value the caller
     /// captured from its most recent `listDevices` call — passing it
     /// fences the device-list-shifted race. Pass nil to skip the

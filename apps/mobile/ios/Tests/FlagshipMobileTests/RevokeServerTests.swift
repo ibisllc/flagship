@@ -201,6 +201,7 @@ final class RevokeServerTests: XCTestCase {
         func hasCloudRecovery(username: String) async throws -> Bool { throw error }
         func initiateRePair(username: String, body: RePairInitiateRequest, ifMatch: String?) async throws -> RePairInitiateResponse { throw error }
         func completeRePair(username: String) async throws -> RePairCompleteResponse { throw error }
+        func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot { throw error }
         func wipeRestart(username: String, body: WipeRestartRequest, ifMatch: String?) async throws -> WipeRestartResponse { throw error }
         func renameApp(username: String, serviceId: String, body: AppRenameRequest) async throws -> AppRenameResponse { throw error }
         func getAppLinks(username: String, serviceId: String) async throws -> AppLinksResponse { throw error }

@@ -49,6 +49,12 @@ public struct SettingsScreen: View {
     /// The new "Trusted devices" section. Empty list renders an
     /// explainer; .failed renders an error card.
     let trustedDevices: LoadingState<[TrustedDevice]>
+    /// M4 — the pending re-pair snapshot (GET /re-pair). When a row is
+    /// present + un-objected, the Trusted-devices section shows a
+    /// grace-gated "Replace pending" banner; a "Finalize now" tap routes
+    /// into the existing finalize screen via `onFinalizeReplace`. Mirrors
+    /// the webapp banner. nil → no banner.
+    var pendingRePair: PendingRePairSnapshot? = nil
     var onDisconnectTrustedDevice: (TrustedDevice) async -> Bool = { _ in false }
     let showDeveloper: Bool
     /// v1.2 Phase 4 — "Multi-device + 2FA" badge state read out of the
@@ -104,6 +110,12 @@ public struct SettingsScreen: View {
     /// sheet. The container drives ReplaceDeviceViewModel.initiate
     /// with the captured devices ETag.
     var onReplaceDevice: () async -> Void = {}
+    /// M4 — fired when "Finalize now" on the pending-re-pair banner is
+    /// tapped (the grace has elapsed). Carries the snapshot's
+    /// `completesAt` so the container can push the finalize screen with
+    /// the right deadline. Complements onReplaceDevice: this finishes a
+    /// replace that may have been started on ANOTHER device.
+    var onFinalizeReplace: (Int64) -> Void = { _ in }
     /// E2/E3 — fired after the user confirms the Wipe scare sheet.
     /// The container runs WipeRestartViewModel.run.
     var onWipeRestart: () async -> Void = {}
@@ -128,6 +140,7 @@ public struct SettingsScreen: View {
         username: String,
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
+        pendingRePair: PendingRePairSnapshot? = nil,
         showDeveloper: Bool = false,
         accountType: String? = nil,
         onAddDevice: @escaping () -> Void = {},
@@ -152,6 +165,7 @@ public struct SettingsScreen: View {
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
         onReplaceDevice: @escaping () async -> Void = {},
+        onFinalizeReplace: @escaping (Int64) -> Void = { _ in },
         onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
@@ -160,6 +174,7 @@ public struct SettingsScreen: View {
         self.username = username
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
+        self.pendingRePair = pendingRePair
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
         self.showDeveloper = showDeveloper
         self.accountType = accountType
@@ -184,6 +199,7 @@ public struct SettingsScreen: View {
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
         self.onReplaceDevice = onReplaceDevice
+        self.onFinalizeReplace = onFinalizeReplace
         self.onWipeRestart = onWipeRestart
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
@@ -357,6 +373,10 @@ public struct SettingsScreen: View {
     private func trustedDevicesSection(c: FSColors) -> some View {
         section("TRUSTED DEVICES", c: c) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
+                // M4 — pending re-pair banner. A replace started on THIS or
+                // ANY other device surfaces here with a grace countdown and
+                // a "Finalize now" entry into the finalize screen.
+                pendingRePairBanner(c: c)
                 Text("Phones and tablets that hold your account keys.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 switch trustedDevices {
@@ -416,6 +436,47 @@ public struct SettingsScreen: View {
                     .accessibilityIdentifier("settings-scan-pairing-code")
                 }
                 .padding(.top, FS.space.s2)
+            }
+        }
+    }
+
+    /// M4 — the "Replace pending" banner. Renders only when the GET
+    /// /re-pair snapshot carries an un-objected pending row (mirrors the
+    /// webapp's `shouldRenderBanner`). The countdown ticks live via a
+    /// TimelineView; "Finalize now" is gated on the grace having elapsed
+    /// and routes into the existing finalize screen via onFinalizeReplace.
+    @ViewBuilder
+    private func pendingRePairBanner(c: FSColors) -> some View {
+        if ReplaceDeviceViewModel.shouldRenderPendingBanner(pendingRePair),
+           let pending = pendingRePair?.pending {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let elapsed = ReplaceDeviceViewModel.graceElapsed(
+                    completesAt: pending.completesAt, now: ctx.date)
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s2) {
+                        HStack(spacing: FS.space.s2) {
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .foregroundColor(c.primary)
+                            Text("Replace pending")
+                                .font(FS.font.h4()).foregroundColor(c.text)
+                            Spacer()
+                        }
+                        Text(elapsed
+                            ? "The grace window has elapsed — finalize the device replacement now."
+                            : "Replace pending — finalize when the 3-day grace elapses (\(absolute(ms: pending.completesAt))).")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .accessibilityIdentifier("pending-re-pair-banner-body")
+                        FSPrimaryButton(
+                            "Finalize now",
+                            enabled: elapsed,
+                            block: true
+                        ) {
+                            onFinalizeReplace(pending.completesAt)
+                        }
+                        .accessibilityIdentifier("pending-re-pair-finalize-btn")
+                    }
+                }
+                .accessibilityIdentifier("pending-re-pair-banner")
             }
         }
     }
@@ -760,6 +821,16 @@ public struct SettingsScreen: View {
         let fmt = RelativeDateTimeFormatter()
         fmt.unitsStyle = .abbreviated
         return fmt.localizedString(for: date, relativeTo: Date())
+    }
+
+    /// M4 — absolute locale timestamp for the pending-re-pair banner's
+    /// unlock time (mirrors the webapp's `formatCompletesAt`).
+    private func absolute(ms: Int64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt.string(from: date)
     }
 }
 

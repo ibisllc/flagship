@@ -191,6 +191,36 @@ final class ReplaceDeviceViewModelTests: XCTestCase {
         XCTAssertFalse(ReplaceDeviceViewModel.graceElapsed(completesAt: 2_001_000, now: now))
     }
 
+    // MARK: - M4 pending-re-pair banner gate (parity with webapp shouldRenderBanner)
+
+    func test_shouldRenderPendingBanner_nilSnapshot_false() {
+        XCTAssertFalse(ReplaceDeviceViewModel.shouldRenderPendingBanner(nil))
+    }
+
+    func test_shouldRenderPendingBanner_nilPending_false() {
+        let snap = PendingRePairSnapshot(pending: nil)
+        XCTAssertFalse(ReplaceDeviceViewModel.shouldRenderPendingBanner(snap))
+    }
+
+    func test_shouldRenderPendingBanner_unavailable_false() {
+        // An older Worker (404) returns unavailable + nil pending → no banner.
+        let snap = PendingRePairSnapshot(pending: nil, unavailable: true)
+        XCTAssertFalse(ReplaceDeviceViewModel.shouldRenderPendingBanner(snap))
+    }
+
+    func test_shouldRenderPendingBanner_pendingRow_true() {
+        let snap = PendingRePairSnapshot(pending: .init(
+            newIrkPub: "aa", oldIrkPub: "bb", initiatedAt: 1, completesAt: 2, objectedAt: nil))
+        XCTAssertTrue(ReplaceDeviceViewModel.shouldRenderPendingBanner(snap))
+    }
+
+    func test_shouldRenderPendingBanner_objectedRow_false() {
+        // An objected row means the rotation was cancelled — hide the banner.
+        let snap = PendingRePairSnapshot(pending: .init(
+            newIrkPub: "aa", oldIrkPub: "bb", initiatedAt: 1, completesAt: 2, objectedAt: 99))
+        XCTAssertFalse(ReplaceDeviceViewModel.shouldRenderPendingBanner(snap))
+    }
+
     func test_initiate_thenResumePreservesDeadline() async throws {
         try await makeUMK()
         let server = MockFlagshipServerClient()

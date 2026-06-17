@@ -24,6 +24,13 @@ public final class SettingsViewModel {
     /// the existing "Browser sessions" surface; a separate section
     /// from the peer trusted devices.
     public private(set) var browserSessions: LoadingState<[PairedSessionSummary]> = .idle
+    /// M4 — the pending re-pair snapshot (GET /api/users/:u/re-pair),
+    /// mirroring the webapp. Drives the Trusted-devices "Replace pending"
+    /// banner so a device replacement started on ANY device surfaces here
+    /// with a grace countdown + a "Finalize now" entry into the existing
+    /// finalize screen. nil while loading / when nothing is pending /
+    /// when the endpoint is unavailable (older Worker).
+    public private(set) var pendingRePair: PendingRePairSnapshot?
 
     private let screens: any ScreensClient
     private let server: any FlagshipServerClient
@@ -87,6 +94,7 @@ public final class SettingsViewModel {
         guard let username = currentUsername(), !username.isEmpty else {
             trustedDevices = .loaded([])
             devicesEtag = nil
+            pendingRePair = nil
             return
         }
         do {
@@ -95,6 +103,23 @@ public final class SettingsViewModel {
             devicesEtag = resp.etag
         } catch {
             trustedDevices = .failed(error.localizedDescription)
+        }
+        await loadPendingRePair()
+    }
+
+    /// M4 — read the pending re-pair snapshot. Best-effort: a network /
+    /// decode failure (or an older Worker, surfaced as `unavailable`)
+    /// just leaves the banner hidden rather than erroring the whole
+    /// section. Mirrors the webapp's try/catch-to-null.
+    public func loadPendingRePair() async {
+        guard let username = currentUsername(), !username.isEmpty else {
+            pendingRePair = nil
+            return
+        }
+        do {
+            pendingRePair = try await server.fetchPendingRePair(username: username)
+        } catch {
+            pendingRePair = nil
         }
     }
 

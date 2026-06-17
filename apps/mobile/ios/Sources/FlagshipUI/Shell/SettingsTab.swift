@@ -74,6 +74,7 @@ public struct SettingsTab: View {
                     username: app.currentUser ?? "",
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
+                    pendingRePair: vm.pendingRePair,
                     // Developer tools are a mock-mode concern: a shipped
                     // live build never surfaces them. The only way in is the
                     // deliberate pre-login 3-tap on the Welcome box, which
@@ -192,6 +193,16 @@ public struct SettingsTab: View {
                         default:
                             replaceToast = nil
                         }
+                    },
+                    onFinalizeReplace: { completesAt in
+                        // M4 — "Finalize now" on the pending-re-pair banner.
+                        // Routes into the SAME finalize screen as a freshly-
+                        // initiated replace, carrying the snapshot's deadline
+                        // so the countdown + Complete gate are correct. This
+                        // is the entry point to finish a replace that may have
+                        // been started here OR on another device. The
+                        // container reconstructs replaceVm on cold entry.
+                        path.append(.replaceDeviceFinalize(completesAt: completesAt))
                     },
                     onWipeRestart: {
                         // E2/E3 — drive the wipe ceremony. Uses

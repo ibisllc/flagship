@@ -136,6 +136,15 @@ public protocol FlagshipServerClient: Sendable {
     /// objected; 200 = swap succeeded.
     func completeRePair(username: String) async throws -> RePairCompleteResponse
 
+    /// M4 — read the pending re-pair row, if any. Public GET (no
+    /// signature gate), maps to GET /api/users/:u/re-pair. Powers the
+    /// Trusted-devices "Replace pending" banner so a replace started on
+    /// ANY device surfaces here with a grace countdown + a "Finalize now"
+    /// entry into the existing finalize screen. 404/405 → `unavailable`
+    /// (older Worker) so the caller just hides the banner. Mirrors the
+    /// webapp's `fetchPendingRePair`.
+    func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot
+
     /// E2 — atomic Wipe & restart. Rotates IRK + recovery envelope in
     /// one server transaction. Body carries OLD-IRK signature over
     /// canonical flagship/wipe-restart/v1 bytes + the new envelope.
@@ -432,6 +441,44 @@ public struct RePairCompleteResponse: Decodable, Equatable, Sendable {
     public let swappedAt: Int64
 }
 
+/// M4 — the pending re-pair row as returned by GET /api/users/:u/re-pair.
+/// Mirrors the Worker's `handleGetRePair` body (`{ pending }`) and the
+/// webapp's `fetchPendingRePair` parse. `objectedAt` non-nil means the
+/// rotation was cancelled by another device — the banner hides it.
+public struct PendingRePairInfo: Decodable, Equatable, Sendable {
+    public let newIrkPub: String
+    public let oldIrkPub: String
+    public let initiatedAt: Int64
+    public let completesAt: Int64
+    public let objectedAt: Int64?
+    public init(
+        newIrkPub: String,
+        oldIrkPub: String,
+        initiatedAt: Int64,
+        completesAt: Int64,
+        objectedAt: Int64? = nil
+    ) {
+        self.newIrkPub = newIrkPub; self.oldIrkPub = oldIrkPub
+        self.initiatedAt = initiatedAt; self.completesAt = completesAt
+        self.objectedAt = objectedAt
+    }
+}
+
+/// M4 — the GET /re-pair snapshot. `pending == nil` means nothing is in
+/// flight; `unavailable == true` means an older Worker doesn't implement
+/// the endpoint (404/405) — the caller hides the banner gracefully,
+/// exactly like the webapp's `{ pending: null, unavailable: true }`.
+/// Built in code from the wire body (PendingRePairWireBody), never
+/// decoded directly, so it isn't `Decodable`.
+public struct PendingRePairSnapshot: Equatable, Sendable {
+    public let pending: PendingRePairInfo?
+    public let unavailable: Bool
+    public init(pending: PendingRePairInfo?, unavailable: Bool = false) {
+        self.pending = pending
+        self.unavailable = unavailable
+    }
+}
+
 public struct AuditEvent: Codable, Equatable, Sendable, Identifiable {
     public let seq: Int
     public let eventKind: String   // "device-disconnected" | "device-replaced" | …
@@ -636,6 +683,13 @@ public struct TrustedDevicesListResponse: Equatable, Sendable {
 /// the ETag (header, not body) doesn't leak into Codable.
 private struct TrustedDevicesWireBody: Codable {
     let devices: [TrustedDevice]
+}
+
+/// On-wire body for GET /api/users/:u/re-pair — the Worker wraps the
+/// row (or null) under `pending`. Kept private so the public surface is
+/// the flattened `PendingRePairSnapshot`.
+private struct PendingRePairWireBody: Decodable {
+    let pending: PendingRePairInfo?
 }
 
 /// Worker-side install-event row. The daemon (and the Alpine
@@ -2237,6 +2291,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return RePairCompleteResponse(ok: true, newIrkPub: "00", swappedAt: Int64(Date().timeIntervalSince1970 * 1000))
     }
 
+    /// M4 — scripted pending re-pair snapshot per username. Tests set
+    /// this to drive the Trusted-devices banner. Unconfigured users
+    /// default to `{ pending: nil }` (nothing in flight). Set
+    /// `pendingRePairUnavailable` to model an older Worker (404).
+    public var pendingRePairByUser: [String: PendingRePairInfo] = [:]
+    public var pendingRePairUnavailable: Bool = false
+
+    public func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot {
+        try await tick()
+        if pendingRePairUnavailable {
+            return PendingRePairSnapshot(pending: nil, unavailable: true)
+        }
+        return PendingRePairSnapshot(pending: pendingRePairByUser[username.lowercased()])
+    }
+
     /// Drives wipe-restart outcomes in tests.
     public enum WipeRestartBehavior: Sendable {
         case ok
@@ -2992,6 +3061,27 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(RePairCompleteResponse.self, from: data)
+    }
+
+    public func fetchPendingRePair(username: String) async throws -> PendingRePairSnapshot {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        // 404/405 = an older Worker that doesn't wire the GET; treat it
+        // the same as "no pending row" but flag it so the caller hides
+        // the banner gracefully (mirrors the webapp's `unavailable`).
+        if status == 404 || status == 405 {
+            return PendingRePairSnapshot(pending: nil, unavailable: true)
+        }
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        // The Worker wraps the row as `{ pending: {...} | null }`.
+        let body = try JSONDecoder().decode(PendingRePairWireBody.self, from: data)
+        return PendingRePairSnapshot(pending: body.pending)
     }
 
     public func wipeRestart(

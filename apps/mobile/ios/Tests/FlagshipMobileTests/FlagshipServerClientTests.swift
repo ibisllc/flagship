@@ -342,6 +342,101 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(resp.tokenId, "tok_real_123")
         StubURLProtocol.handler = nil
     }
+
+    // MARK: - M4 pending re-pair (GET /re-pair)
+
+    func test_fetchPendingRePair_noRow_returnsNilPending() async throws {
+        let c = makeClient()
+        let snap = try await c.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertFalse(snap.unavailable)
+    }
+
+    func test_fetchPendingRePair_returnsScriptedRow() async throws {
+        let c = makeClient()
+        c.pendingRePairByUser["harry"] = .init(
+            newIrkPub: "aa", oldIrkPub: "bb",
+            initiatedAt: 100, completesAt: 200, objectedAt: nil
+        )
+        let snap = try await c.fetchPendingRePair(username: "HARRY")  // case-insensitive
+        XCTAssertEqual(snap.pending?.completesAt, 200)
+        XCTAssertEqual(snap.pending?.newIrkPub, "aa")
+        XCTAssertNil(snap.pending?.objectedAt)
+    }
+
+    func test_fetchPendingRePair_unavailableFlag() async throws {
+        let c = makeClient()
+        c.pendingRePairUnavailable = true
+        let snap = try await c.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertTrue(snap.unavailable)
+    }
+
+    func test_liveClient_fetchPendingRePair_decodesWrappedRow() async throws {
+        StubURLProtocol.handler = { req in
+            XCTAssertEqual(req.httpMethod, "GET")
+            XCTAssertEqual(req.url?.path, "/api/users/harry/re-pair")
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: "HTTP/2",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            // Byte-for-byte the Worker's handleGetRePair body shape.
+            let body = """
+            {"pending":{"newIrkPub":"aa","oldIrkPub":"bb","initiatedAt":100,"completesAt":200,"objectedAt":null}}
+            """.data(using: .utf8)!
+            return (resp, body)
+        }
+        defer { StubURLProtocol.handler = nil }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let client = LiveFlagshipServerClient(
+            urlSession: URLSession(configuration: cfg),
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let snap = try await client.fetchPendingRePair(username: "harry")
+        XCTAssertEqual(snap.pending?.completesAt, 200)
+        XCTAssertEqual(snap.pending?.oldIrkPub, "bb")
+        XCTAssertFalse(snap.unavailable)
+    }
+
+    func test_liveClient_fetchPendingRePair_nullPending() async throws {
+        StubURLProtocol.handler = { req in
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: "HTTP/2",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (resp, "{\"pending\":null}".data(using: .utf8)!)
+        }
+        defer { StubURLProtocol.handler = nil }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let client = LiveFlagshipServerClient(
+            urlSession: URLSession(configuration: cfg),
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let snap = try await client.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertFalse(snap.unavailable)
+    }
+
+    func test_liveClient_fetchPendingRePair_404_isUnavailableNotError() async throws {
+        StubURLProtocol.handler = { req in
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 404, httpVersion: "HTTP/2", headerFields: nil
+            )!
+            return (resp, Data())
+        }
+        defer { StubURLProtocol.handler = nil }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let client = LiveFlagshipServerClient(
+            urlSession: URLSession(configuration: cfg),
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let snap = try await client.fetchPendingRePair(username: "harry")
+        XCTAssertNil(snap.pending)
+        XCTAssertTrue(snap.unavailable)
+    }
 }
 
 // MARK: - URLProtocol stub
