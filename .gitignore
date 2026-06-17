@@ -69,3 +69,6 @@ test-results/
 out/
 apps/burner-mac/.build/
 __pycache__/
+
+# Snapshot of the previous website — a build artifact, not source.
+old_website.zip
