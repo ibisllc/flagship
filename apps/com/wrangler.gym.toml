@@ -132,8 +132,8 @@ TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
 # fill in after `flyctl ips allocate-v4/-v6 -a flagship-services-gym`
 # (see the runbook). The Worker writes A/AAAA for each registered
 # `<server>.<user>.gym.flagship.services` pointing at these.
-SERVICES_PASSTHROUGH_IPV4 = "REPLACE_WITH_GYM_FLY_ANYCAST_IPV4"
-SERVICES_PASSTHROUGH_IPV6 = "REPLACE_WITH_GYM_FLY_ANYCAST_IPV6"
+SERVICES_PASSTHROUGH_IPV4 = "137.66.62.214"
+SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::12d:5999:0"
 
 # Base-ISO + manifest vars — REUSE prod's values verbatim (the base OS is the
 # same Debian/Alpine; the gym personalizes the same bytes). Only the temp-bucket
