@@ -53,6 +53,14 @@ export interface IrkLookup {
 
 export interface TunnelHubOptions {
   /**
+   * Which surface the host process is serving. When "services" (the
+   * production data plane) the hub FAILS CLOSED if `irkLookup` is
+   * absent — an unverified entitlement signature would let a box claim
+   * routing for another user's zone. Dev/test harnesses leave this
+   * unset (or "both") and the missing-lookup case only warns.
+   */
+  surface?: "com" | "services" | "both";
+  /**
    * Required in production: lets the hub verify the STK signature on
    * the HELLO envelope against .com's registered server identity.
    * Tests may pass a closure mapping serverIds → STK pubkeys.
@@ -92,6 +100,16 @@ export function startTunnelHub(
   opts: TunnelHubOptions = {},
 ): () => Promise<void> {
   const wss = new WebSocketServer({ noServer: true });
+  if (!opts.irkLookup && opts.surface === "services") {
+    // Production data plane MUST verify entitlement-IRK signatures.
+    // Without irkLookup the entitlement-cert check is skipped entirely,
+    // so any registered box could claim routing for FQDNs in another
+    // user's zone. Refuse to start rather than run wide open.
+    throw new Error(
+      "[flagship tunnel hub] refusing to start on surface=services without irkLookup — " +
+        "entitlement-cert signatures would not be verified (a box could hijack another user's routing).",
+    );
+  }
   if (!opts.authLookup) {
     console.warn(
       "[flagship tunnel hub] no authLookup — STK signatures will not be verified. v0 dev only.",
@@ -214,6 +232,7 @@ function attachTunnel(
         helloOk.rootEntitlement.podCanonical,
         helloOk.serviceEntitlement,
         auth.validatedGrants,
+        helloOk.rootEntitlement.username,
       );
       if (!built.ok) {
         send(helloAckFrame(false, built.reason));
@@ -269,6 +288,7 @@ function attachTunnel(
         helloOk.rootEntitlement.podCanonical,
         helloOk.serviceEntitlement,
         auth.validatedGrants,
+        helloOk.rootEntitlement.username,
       );
       if (!built.ok) {
         send(helloAckFrame(false, built.reason));
@@ -757,13 +777,25 @@ function broadcastSnapshot(registry: TunnelRegistry, key: import("./allocator.js
  * BE the IRK+STK-verified pod identity, mirroring the rigor applied
  * to podCanonical itself, so a box can never widen its routing past
  * its own name.
+ *
+ * Defense-in-depth (cross-zone hijack): every non-wildcard claim must
+ * live in the SAME user zone as the IRK-verified root entitlement — its
+ * `<server>.<user>.flagship.services` user-zone label must equal
+ * `username`. The IRK signature already binds an entitlement to one
+ * user, but this guard is a belt-and-suspenders check that no claimed
+ * canonical names a FQDN in ANOTHER user's zone even if a signature
+ * gate is ever weakened or bypassed. `username` is the verified
+ * `rootEntitlement.username` from `authenticateHello`; callers MUST
+ * pass it, never an attacker-controlled field.
  */
 export function buildClaimedCanonicals(
   podCanonical: string,
   serviceEntitlement: ServiceEntitlement | null,
   validatedGrants: ServiceGrant[],
+  username: string,
 ): { ok: true; canonicals: string[] } | { ok: false; reason: string } {
   const pc = podCanonical.toLowerCase();
+  const user = username.toLowerCase();
   const claims: string[] = [];
   if (serviceEntitlement) claims.push(...serviceEntitlement.canonicals);
   claims.push(...appGrantHosts(validatedGrants));
@@ -783,6 +815,16 @@ export function buildClaimedCanonicals(
       return {
         ok: false,
         reason: `claim ${c} rejected — '*' is only valid as the leading label of *.${pc}`,
+      };
+    }
+    // Cross-zone guard: a claim must name a FQDN in this user's own
+    // zone. The user-zone label is the label immediately left of the
+    // `.flagship.services` suffix.
+    const claimUser = extractMiddleLabel(c);
+    if (!claimUser || claimUser !== user) {
+      return {
+        ok: false,
+        reason: `claim ${c} rejected — outside user zone '${user}' (foreign-zone canonical)`,
       };
     }
     canonicals.push(c);

@@ -61,23 +61,28 @@ describe("buildClaimedCanonicals — A′ wildcard claim validation", () => {
   }
 
   it("accepts and consumes the pod's own per-box wildcard", () => {
-    const r = buildClaimedCanonicals(PC, entitlement([APP_HOME, HOME_WILDCARD]), []);
+    const r = buildClaimedCanonicals(PC, entitlement([APP_HOME, HOME_WILDCARD]), [], "alice");
     expect(r).toEqual({ ok: true, canonicals: [PC, APP_HOME] });
   });
 
   it("rejects the user-zone wildcard", () => {
-    const r = buildClaimedCanonicals(PC, entitlement([USER_WILDCARD]), []);
+    const r = buildClaimedCanonicals(PC, entitlement([USER_WILDCARD]), [], "alice");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/wildcard claim/);
   });
 
   it("rejects another box's per-box wildcard", () => {
-    const r = buildClaimedCanonicals(PC, entitlement([`*.${OFFICE_FQDN}`]), []);
+    const r = buildClaimedCanonicals(PC, entitlement([`*.${OFFICE_FQDN}`]), [], "alice");
     expect(r.ok).toBe(false);
   });
 
   it("rejects a non-leading '*' anywhere in a claim", () => {
-    const r = buildClaimedCanonicals(PC, entitlement(["notes.*.alice.flagship.services"]), []);
+    const r = buildClaimedCanonicals(
+      PC,
+      entitlement(["notes.*.alice.flagship.services"]),
+      [],
+      "alice",
+    );
     expect(r.ok).toBe(false);
   });
 
@@ -95,8 +100,32 @@ describe("buildClaimedCanonicals — A′ wildcard claim validation", () => {
       issuedAt: 0,
       expiresAt: Number.MAX_SAFE_INTEGER,
     };
-    const r = buildClaimedCanonicals(PC, null, [grant]);
+    const r = buildClaimedCanonicals(PC, null, [grant], "alice");
     expect(r).toEqual({ ok: true, canonicals: [PC, APP_HOME] });
+  });
+
+  it("rejects a non-wildcard canonical in another user's zone (cross-zone hijack)", () => {
+    // A self-consistent service entitlement that names a FQDN in
+    // bob's zone must be rejected: alice's box may never claim
+    // routing for bob.
+    const r = buildClaimedCanonicals(
+      PC,
+      entitlement(["photos.bob.flagship.services"]),
+      [],
+      "alice",
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/foreign-zone/);
+  });
+
+  it("accepts both the hierarchical and the tier-2 canonical in the pod's own zone", () => {
+    const r = buildClaimedCanonicals(
+      PC,
+      entitlement([APP_HOME, SHORTENED]),
+      [],
+      "alice",
+    );
+    expect(r).toEqual({ ok: true, canonicals: [PC, APP_HOME, SHORTENED] });
   });
 });
 

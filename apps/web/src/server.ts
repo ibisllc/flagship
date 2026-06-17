@@ -70,6 +70,8 @@ import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
+import { RemoteUsernameResolver } from "./lib/remoteUsernameResolver.js";
+import { RevocationCache } from "./tunnel/revocationCache.js";
 import {
   registerControlRedirections,
   coldStartRedirections,
@@ -397,8 +399,29 @@ export async function start(opts: {
       return null;
     }
   };
+  // Resolve username → IRK pubkey from .com so the hub can verify the
+  // Ed25519 signatures on each root/service entitlement (and on the
+  // signed revocation list). Without this the hub would accept any
+  // self-consistent entitlement, letting a registered box claim routing
+  // for FQDNs in OTHER users' zones. Cached with a short TTL.
+  const irkResolver = new RemoteUsernameResolver({ comBaseUrl });
+  const irkLookup = (username: string): Promise<Uint8Array | null> =>
+    irkResolver.lookup(username);
+  // Per-user revoked-entitlement-cert set, pulled from .com's
+  // phone-signed list and re-verified locally (the cache trusts the
+  // IRK signature, not the Worker). Fail-open on a transient fetch
+  // failure (returns null) so a .com blip can't brick live pods.
+  const revocationCache = new RevocationCache({
+    controlPlaneBaseUrl: comBaseUrl,
+    irkLookup,
+  });
+  const revocationLookup = (username: string): Promise<Set<string> | null> =>
+    revocationCache.lookup(username);
   const stopHub = startTunnelHub(app.server, registry, {
+    surface,
     authLookup: remoteAuthLookup,
+    irkLookup,
+    revocationLookup,
   });
 
   // Public-egress metering (feat/metering). OFF unless USAGE_REPORT_SECRET is

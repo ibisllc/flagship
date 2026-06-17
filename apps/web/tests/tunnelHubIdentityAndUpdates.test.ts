@@ -115,6 +115,26 @@ describe("tunnel hub: per-pod identity + entitlement validation", () => {
     expect(s.registry.findBySni("notes.alice.flagship.services")).toBeDefined();
     await t.close();
   });
+
+  it("rejects a foreign-zone canonical even with a self-consistent IRK signature", async () => {
+    // alice's box presents a service entitlement signed by alice's own
+    // IRK but naming a FQDN in BOB's zone. The signature verifies, yet
+    // the cross-zone guard must refuse it so alice can never claim
+    // routing for bob.flagship.services.
+    const stk = deriveStkFor(HOME_FQDN, 1);
+    const t = startClient({
+      hubPort: s.hubPort,
+      podFqdn: HOME_FQDN,
+      stk,
+      irk: s.irk, // correct IRK for "alice" — signature is valid
+      serviceCanonicals: ["photos.bob.flagship.services"],
+    });
+    await expect(t.ready()).rejects.toThrow(/foreign-zone/);
+    // The pod's own canonical never registered, and bob's FQDN is unclaimed.
+    expect(s.registry.findBySni("photos.bob.flagship.services")).toBeUndefined();
+    expect(s.registry.size()).toBe(0);
+    await t.close();
+  });
 });
 
 describe("tunnel hub: FCFS allocation", () => {
@@ -172,6 +192,62 @@ describe("tunnel hub: FCFS allocation", () => {
       () => s.registry.findBySni("notes.alice.flagship.services")?.podCanonical === OFFICE_FQDN,
     );
     await office.close();
+  });
+});
+
+describe("tunnel hub: fail-closed on the production surface", () => {
+  it("refuses to start on surface=services without irkLookup", async () => {
+    const app = Fastify({ logger: false });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const registry = new TunnelRegistry();
+    try {
+      expect(() =>
+        startTunnelHub(app.server, registry, {
+          surface: "services",
+          authLookup: () => null,
+          // irkLookup deliberately omitted — the prod data plane must
+          // verify entitlement signatures or refuse to run.
+        }),
+      ).toThrow(/irkLookup/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("starts on surface=services WITH irkLookup", async () => {
+    const app = Fastify({ logger: false });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const registry = new TunnelRegistry();
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      expect(() => {
+        stop = startTunnelHub(app.server, registry, {
+          surface: "services",
+          authLookup: () => null,
+          irkLookup: () => null,
+        });
+      }).not.toThrow();
+    } finally {
+      if (stop) await (stop as () => Promise<void>)();
+      await app.close();
+    }
+  });
+
+  it("only warns (does not throw) on dev surfaces without irkLookup", async () => {
+    const app = Fastify({ logger: false });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const registry = new TunnelRegistry();
+    let stop: (() => Promise<void>) | null = null;
+    try {
+      // "both" (and unset) are dev/single-machine — missing irkLookup
+      // is tolerated so existing dev harnesses keep working.
+      expect(() => {
+        stop = startTunnelHub(app.server, registry, { surface: "both" });
+      }).not.toThrow();
+    } finally {
+      if (stop) await (stop as () => Promise<void>)();
+      await app.close();
+    }
   });
 });
 
