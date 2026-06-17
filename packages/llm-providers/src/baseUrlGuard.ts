@@ -8,12 +8,26 @@
  * defense-in-depth layer that blocks a base URL from pointing at anything
  * internal.
  *
- * RESIDUAL RISK: this is pure string/literal-IP parsing. It cannot stop a
- * DNS-rebinding attack where a hostname resolves to a public IP at check
- * time and an internal IP at fetch time. Blocking literal internal IPs +
- * offering a host allowlist is the right pragmatic layer; closing the
- * rebinding gap would require pinning the resolved IP through to connect
- * time (socket-level), which the FetchLike abstraction doesn't expose.
+ * `assertSafeProviderBaseUrl` is the SYNC fast pre-check: pure string /
+ * literal-IP parsing. It cannot, on its own, stop a hostname with a public
+ * spelling that *resolves* to an internal address (e.g. localtest.me →
+ * 127.0.0.1, *.nip.io). `assertSafeResolvedUrl` closes that gap: it runs
+ * the sync guard first, then resolves the host and classifies EVERY
+ * resolved address through the same IP classifier. The fetch layer
+ * (`guardedFetch` / `guardedStreamingFetch`) calls the resolving guard at
+ * connect time and re-validates every redirect `Location`, so a public
+ * URL can't `302 → http://169.254.169.254/` or a DNS name can't smuggle
+ * an internal A record past the check.
+ *
+ * RESIDUAL RISK: a narrow time-of-check / time-of-use DNS-rebinding window
+ * survives between resolve-and-classify and the actual socket connect (the
+ * `FetchLike` abstraction carries only method/headers/body — it exposes no
+ * dispatcher/connect hook to pin the resolved IP through to connect). The
+ * window is bounded by the resolver TTL and the gap is far narrower than a
+ * pure string guard; fully closing it would require an `undici` connect-
+ * time check, a dependency this deliberately dependency-free package does
+ * not take. Blocking literal internal IPs, resolving + classifying every
+ * address, and re-validating redirects is the pragmatic layer.
  */
 
 export interface BaseUrlGuardOptions {
@@ -91,16 +105,154 @@ export function assertSafeProviderBaseUrl(
 
   if (allowlisted) return url;
 
-  if (ip) {
-    const cls = classifyIp(ip);
-    if (cls === "loopback") throw new UnsafeBaseUrlError(raw, "loopback IP");
-    if (cls === "link-local") throw new UnsafeBaseUrlError(raw, "link-local IP");
-    if (cls === "private" && !opts.allowPrivate) {
-      throw new UnsafeBaseUrlError(raw, "private IP");
+  if (ip) assertIpAllowed(raw, ip, opts);
+
+  return url;
+}
+
+/**
+ * Reject a resolved IP that lands in an internal range. The metadata IP
+ * is checked by the caller (it must be blocked even on the allowlist);
+ * here we enforce loopback / link-local / private per the override flags.
+ */
+function assertIpAllowed(raw: string, ip: ParsedIp, opts: BaseUrlGuardOptions): void {
+  const cls = classifyIp(ip);
+  if (cls === "loopback") throw new UnsafeBaseUrlError(raw, "loopback IP");
+  if (cls === "link-local") throw new UnsafeBaseUrlError(raw, "link-local IP");
+  if (cls === "private" && !opts.allowPrivate) {
+    throw new UnsafeBaseUrlError(raw, "private IP");
+  }
+}
+
+/**
+ * A name resolver injected for testability. Returns the IP-literal
+ * strings a hostname resolves to (mixed v4/v6). Production wires Node's
+ * `dns.promises.lookup({ all: true })`; tests pass a stub so no real
+ * network is touched.
+ */
+export type HostResolver = (host: string) => Promise<string[]>;
+
+/**
+ * The resolving SSRF guard. Runs the sync string/literal guard first
+ * (preserving every scheme / allowlist / private-range rule), then — for
+ * a hostname that is NOT an allowlisted host and NOT already an IP literal
+ * — resolves it and classifies EVERY resolved address. Rejects if any
+ * resolved address is internal (loopback / link-local / metadata /
+ * private), closing the "public name → internal A record" bypass.
+ *
+ * Allowlisted hosts skip resolution (the operator vouched for the name —
+ * the same semantics as the sync guard). Literal-IP hosts were already
+ * fully classified by the sync guard, so they skip resolution too.
+ *
+ * The metadata IP is rejected for ANY resolved address regardless of
+ * `allowPrivate`, matching the sync guard's unconditional block.
+ */
+export async function assertSafeResolvedUrl(
+  raw: string,
+  opts: BaseUrlGuardOptions = {},
+  resolve?: HostResolver,
+): Promise<URL> {
+  const url = assertSafeProviderBaseUrl(raw, opts);
+
+  const host = url.hostname.toLowerCase();
+  const allowlist = (opts.hostAllowlist ?? []).map((h) => h.toLowerCase());
+  if (allowlist.includes(host)) return url;
+
+  // Already a literal IP — the sync guard classified it exactly; resolving
+  // would only re-derive the same address.
+  if (parseIpLiteral(host)) return url;
+
+  const resolver = resolve ?? defaultHostResolver;
+  let addrs: string[];
+  try {
+    addrs = await resolver(host);
+  } catch {
+    throw new UnsafeBaseUrlError(raw, "DNS resolution failed");
+  }
+  if (addrs.length === 0) throw new UnsafeBaseUrlError(raw, "host did not resolve");
+
+  for (const addr of addrs) {
+    const ip = parseIpLiteral(addr);
+    if (!ip) {
+      // A resolver that hands back a non-IP string is unexpected; fail closed.
+      throw new UnsafeBaseUrlError(raw, "unparseable resolved address");
     }
+    if (ipEquals(ip, METADATA_IPV4)) {
+      throw new UnsafeBaseUrlError(raw, "resolves to cloud metadata IP");
+    }
+    assertIpAllowed(raw, ip, opts);
   }
 
   return url;
+}
+
+/**
+ * Production host resolver over Node's DNS. Lives behind a dynamic import
+ * so this package stays runnable in a non-Node runtime (the resolving
+ * guard is only ever reached on the daemon, which is Node).
+ */
+const defaultHostResolver: HostResolver = async (host) => {
+  const dns = await import("node:dns");
+  const records = await dns.promises.lookup(host, { all: true });
+  return records.map((r) => r.address);
+};
+
+/**
+ * Resolve + classify a bare HOST (no scheme/URL) against the internal-range
+ * policy. The git-clone SSRF guard reuses this so a clone URL can't point
+ * at the box's loopback data plane (Redis/Postgres/Forgejo) or the cloud
+ * metadata endpoint via either a literal internal IP or a name with an
+ * internal A record. Mirrors `assertSafeResolvedUrl`'s classification (incl.
+ * the unconditional metadata block + the allowlist / allowPrivate
+ * overrides) but takes a host string and a free-form `subject` for the
+ * error message rather than a parsed URL. Returns the (lowercased) host on
+ * success.
+ */
+export async function assertResolvedHostSafe(
+  host: string,
+  subject: string,
+  opts: BaseUrlGuardOptions = {},
+  resolve?: HostResolver,
+): Promise<string> {
+  const h = host.toLowerCase();
+  if (h.length === 0) throw new UnsafeBaseUrlError(subject, "empty host");
+
+  const allowlist = (opts.hostAllowlist ?? []).map((x) => x.toLowerCase());
+  const allowlisted = allowlist.includes(h);
+
+  if (!allowlisted && (h === "localhost" || h.endsWith(".localhost"))) {
+    throw new UnsafeBaseUrlError(subject, "loopback host");
+  }
+
+  const literal = parseIpLiteral(h);
+  if (literal) {
+    if (ipEquals(literal, METADATA_IPV4)) {
+      throw new UnsafeBaseUrlError(subject, "cloud metadata IP");
+    }
+    if (!allowlisted) assertIpAllowed(subject, literal, opts);
+    return h;
+  }
+
+  if (allowlisted) return h;
+
+  const resolver = resolve ?? defaultHostResolver;
+  let addrs: string[];
+  try {
+    addrs = await resolver(h);
+  } catch {
+    throw new UnsafeBaseUrlError(subject, "DNS resolution failed");
+  }
+  if (addrs.length === 0) throw new UnsafeBaseUrlError(subject, "host did not resolve");
+
+  for (const addr of addrs) {
+    const ip = parseIpLiteral(addr);
+    if (!ip) throw new UnsafeBaseUrlError(subject, "unparseable resolved address");
+    if (ipEquals(ip, METADATA_IPV4)) {
+      throw new UnsafeBaseUrlError(subject, "resolves to cloud metadata IP");
+    }
+    assertIpAllowed(subject, ip, opts);
+  }
+  return h;
 }
 
 type IpKind = "loopback" | "link-local" | "private" | "public";

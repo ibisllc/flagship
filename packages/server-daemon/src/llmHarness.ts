@@ -7,8 +7,9 @@ import {
 import {
   assertSafeProviderBaseUrl,
   defaultRegistry,
-  defaultStreamingFetch,
   defaultStreamingRegistry,
+  guardedFetch,
+  guardedStreamingFetch,
   ProviderError,
   ProviderRegistry,
   StreamingProviderRegistry,
@@ -91,7 +92,7 @@ interface SealedError {
 export class LlmHarness {
   private readonly registry: ProviderRegistry;
   private readonly streamingRegistry: StreamingProviderRegistry;
-  private readonly fetchImpl?: FetchLike;
+  private readonly fetchImpl: FetchLike;
   private readonly streamingFetchImpl: StreamingFetchLike;
   private readonly swk: Bytes;
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
@@ -100,9 +101,15 @@ export class LlmHarness {
     this.swk = opts.swk;
     this.registry = opts.registry ?? defaultRegistry;
     this.streamingRegistry = opts.streamingRegistry ?? defaultStreamingRegistry;
-    this.fetchImpl = opts.fetchImpl;
-    this.streamingFetchImpl = opts.streamingFetchImpl ?? defaultStreamingFetch;
     this.baseUrlGuard = opts.baseUrlGuard;
+    // Default both fetchers to the SSRF-guarded production fetch bound to
+    // the SAME posture as the up-front baseUrl string check, so the actual
+    // connect (and every redirect hop) re-resolves + re-classifies the host
+    // — closing the redirect-bypass and DNS-record bypass. The string guard
+    // above stays as a fast pre-check. Tests inject their own impls.
+    this.fetchImpl = opts.fetchImpl ?? guardedFetch({ guard: this.baseUrlGuard });
+    this.streamingFetchImpl =
+      opts.streamingFetchImpl ?? guardedStreamingFetch({ guard: this.baseUrlGuard });
   }
 
   listProviders(): string[] {

@@ -9,6 +9,7 @@ import type {
   StreamingLLMProvider,
 } from "../types.js";
 import { ProviderError } from "../types.js";
+import { defaultStreamingFetch } from "../streamingFetch.js";
 
 const DEFAULT_BASE = "https://api.anthropic.com";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -130,7 +131,7 @@ export const anthropicStreaming: StreamingLLMProvider = {
     onEvent: (e: ChatStreamEvent) => void,
     fetchImpl?: StreamingFetchLike,
   ): Promise<void> {
-    const f = fetchImpl ?? (defaultStreamingFetch as StreamingFetchLike);
+    const f = fetchImpl ?? defaultStreamingFetch;
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const { system, conv } = splitSystem(req.messages);
     const body: Record<string, unknown> = {
@@ -299,44 +300,3 @@ export const anthropicStreaming: StreamingLLMProvider = {
   },
 };
 
-/**
- * Default streaming-fetch built on Node's global fetch. Splits the
- * response body into UTF-8 lines and yields them via async iteration.
- */
-const defaultStreamingFetch: StreamingFetchLike = async (input, init) => {
-  const f = globalThis.fetch as typeof globalThis.fetch;
-  const r = await f(input, {
-    method: init?.method,
-    headers: init?.headers,
-    body: init?.body,
-  });
-  return {
-    ok: r.ok,
-    status: r.status,
-    text: () => r.text(),
-    lines: () => readLines(r.body),
-  };
-};
-
-async function* readLines(
-  body: ReadableStream<Uint8Array> | null,
-): AsyncIterable<string> {
-  if (!body) return;
-  const reader = body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      if (buf.length > 0) yield buf;
-      return;
-    }
-    buf += decoder.decode(value, { stream: true });
-    let nl = buf.indexOf("\n");
-    while (nl !== -1) {
-      yield buf.slice(0, nl);
-      buf = buf.slice(nl + 1);
-      nl = buf.indexOf("\n");
-    }
-  }
-}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertResolvedHostSafe,
   assertSafeProviderBaseUrl,
+  assertSafeResolvedUrl,
   UnsafeBaseUrlError,
 } from "../src/baseUrlGuard.js";
 
@@ -138,5 +140,171 @@ describe("assertSafeProviderBaseUrl", () => {
         rejects("https://169.254.169.254", { hostAllowlist: ["169.254.169.254"] }),
       ).toBe("cloud metadata IP");
     });
+  });
+});
+
+describe("assertSafeResolvedUrl — DNS-record bypass", () => {
+  async function rejectsResolved(
+    url: string,
+    resolve: (h: string) => Promise<string[]>,
+    opts?: Parameters<typeof assertSafeResolvedUrl>[1],
+  ): Promise<string> {
+    try {
+      await assertSafeResolvedUrl(url, opts, resolve);
+    } catch (e) {
+      expect(e).toBeInstanceOf(UnsafeBaseUrlError);
+      return (e as UnsafeBaseUrlError).reason;
+    }
+    throw new Error(`expected ${url} to be rejected`);
+  }
+
+  it("rejects a public hostname that RESOLVES to loopback", async () => {
+    // The string guard passes (localtest.me looks public); the resolving
+    // guard must catch the 127.0.0.1 A record.
+    expect(() => assertSafeProviderBaseUrl("https://localtest.me/v1")).not.toThrow();
+    expect(await rejectsResolved("https://localtest.me/v1", async () => ["127.0.0.1"])).toBe(
+      "loopback IP",
+    );
+  });
+
+  it("rejects a public hostname that RESOLVES to the cloud metadata IP", async () => {
+    expect(
+      await rejectsResolved("https://evil.example.com", async () => ["169.254.169.254"]),
+    ).toBe("resolves to cloud metadata IP");
+  });
+
+  it("rejects metadata-on-resolve EVEN with allowPrivate", async () => {
+    expect(
+      await rejectsResolved("https://evil.example.com", async () => ["169.254.169.254"], {
+        allowPrivate: true,
+      }),
+    ).toBe("resolves to cloud metadata IP");
+  });
+
+  it("rejects a public hostname that RESOLVES to an RFC1918 address", async () => {
+    expect(await rejectsResolved("https://sneaky.example.com", async () => ["10.0.0.5"])).toBe(
+      "private IP",
+    );
+  });
+
+  it("rejects when a name resolves to a MIX of public + internal (any internal fails)", async () => {
+    expect(
+      await rejectsResolved("https://mix.example.com", async () => ["8.8.8.8", "127.0.0.1"]),
+    ).toBe("loopback IP");
+  });
+
+  it("rejects when the name does not resolve", async () => {
+    expect(await rejectsResolved("https://nope.example.com", async () => [])).toBe(
+      "host did not resolve",
+    );
+  });
+
+  it("rejects when the resolver throws", async () => {
+    expect(
+      await rejectsResolved("https://nope.example.com", async () => {
+        throw new Error("ENOTFOUND");
+      }),
+    ).toBe("DNS resolution failed");
+  });
+
+  it("accepts a public hostname that resolves to a public address", async () => {
+    const u = await assertSafeResolvedUrl("https://api.anthropic.com", {}, async () => ["1.2.3.4"]);
+    expect(u.hostname).toBe("api.anthropic.com");
+  });
+
+  it("permits a resolved-internal address when allowPrivate is set", async () => {
+    const u = await assertSafeResolvedUrl(
+      "https://ollama.lan:11434",
+      { allowPrivate: true },
+      async () => ["192.168.1.50"],
+    );
+    expect(u.hostname).toBe("ollama.lan");
+  });
+
+  it("skips resolution for an allowlisted host (resolver never called)", async () => {
+    let called = false;
+    const u = await assertSafeResolvedUrl(
+      "https://ollama.internal",
+      { hostAllowlist: ["ollama.internal"] },
+      async () => {
+        called = true;
+        return ["127.0.0.1"];
+      },
+    );
+    expect(u.hostname).toBe("ollama.internal");
+    expect(called).toBe(false);
+  });
+
+  it("skips resolution for a literal IP host (already classified)", async () => {
+    let called = false;
+    await assertSafeResolvedUrl("https://8.8.8.8", {}, async () => {
+      called = true;
+      return ["8.8.8.8"];
+    });
+    expect(called).toBe(false);
+  });
+});
+
+describe("assertResolvedHostSafe — bare host (git-clone path)", () => {
+  async function rejectsHost(
+    host: string,
+    resolve: (h: string) => Promise<string[]>,
+    opts?: Parameters<typeof assertResolvedHostSafe>[2],
+  ): Promise<string> {
+    try {
+      await assertResolvedHostSafe(host, `https://${host}/x`, opts, resolve);
+    } catch (e) {
+      expect(e).toBeInstanceOf(UnsafeBaseUrlError);
+      return (e as UnsafeBaseUrlError).reason;
+    }
+    throw new Error(`expected host ${host} to be rejected`);
+  }
+
+  it("rejects a literal loopback IP host", async () => {
+    expect(await rejectsHost("127.0.0.1", async () => ["127.0.0.1"])).toBe("loopback IP");
+  });
+
+  it("rejects the literal metadata IP host", async () => {
+    expect(await rejectsHost("169.254.169.254", async () => [])).toBe("cloud metadata IP");
+  });
+
+  it("rejects localhost", async () => {
+    expect(await rejectsHost("localhost", async () => [])).toBe("loopback host");
+  });
+
+  it("rejects a public name that resolves internal", async () => {
+    expect(await rejectsHost("git.example.com", async () => ["127.0.0.1"])).toBe("loopback IP");
+  });
+
+  it("accepts a public name that resolves public", async () => {
+    const h = await assertResolvedHostSafe("github.com", "https://github.com/x", {}, async () => [
+      "140.82.112.3",
+    ]);
+    expect(h).toBe("github.com");
+  });
+
+  it("permits an allowlisted internal host without resolving", async () => {
+    let called = false;
+    const h = await assertResolvedHostSafe(
+      "forgejo.lan",
+      "https://forgejo.lan/x",
+      { hostAllowlist: ["forgejo.lan"] },
+      async () => {
+        called = true;
+        return ["127.0.0.1"];
+      },
+    );
+    expect(h).toBe("forgejo.lan");
+    expect(called).toBe(false);
+  });
+
+  it("permits a resolved RFC1918 host when allowPrivate is set", async () => {
+    const h = await assertResolvedHostSafe(
+      "forgejo.lan",
+      "https://forgejo.lan/x",
+      { allowPrivate: true },
+      async () => ["192.168.1.20"],
+    );
+    expect(h).toBe("forgejo.lan");
   });
 });
