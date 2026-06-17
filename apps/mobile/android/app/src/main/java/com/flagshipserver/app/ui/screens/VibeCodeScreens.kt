@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,13 +39,15 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.VibeCodeStartRequest
+import com.flagshipserver.app.core.LocalActiveOperationsCenter
+import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
+import com.flagshipserver.app.viewmodels.VibeCodeStreamViewModel
 import kotlinx.coroutines.launch
 
 /**
@@ -321,28 +326,68 @@ private fun LabelRow(label: String, value: String) {
 /**
  * D.6.4 — VibeCodeGeneratingScreen.
  *
- * Live stream from /api/llm/sessions/<id>/stream WS. Renders chat-with-
- * thinking events: "thinking" lines as faint, file-start as separators,
- * each file's content streamed monospace. User can interject mid-stream
- * (sends a follow-up message).
+ * Live stream from /api/screens/vibe-code/<id>/stream (WebSocket). Owns a
+ * [VibeCodeStreamViewModel] that accumulates the streamed transcript +
+ * build logs and surfaces the final deploy URL — the same frame stream the
+ * iOS VibeCodeGeneratingScreen consumes. While the build runs it shows up
+ * in the global operations sliver via the VM's ActiveOperationsCenter
+ * bridge. "Interrupt" opens the chat surface, where a follow-up reply to
+ * the live session is sent.
+ *
+ * MIRRORS: apps/mobile/ios/.../VibeCodeScreens.swift VibeCodeGeneratingScreen
+ * (+ its VibeCodeGeneratingContainer wiring).
  */
 @Composable
 fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
-    @Suppress("UNUSED_VARIABLE") val _sid = sessionId
-    val events by remember { mutableStateOf(sampleStream()) }
+    val client = LocalScreensClient.current
+    val operations = LocalActiveOperationsCenter.current
+    val appState = LocalAppState.current
+    // The build runs on the currently-selected box; its name fills the
+    // sliver's "building … on <server>" clause (mirror iOS's currentPod).
+    val serverLabel = remember(appState) { (appState.currentPod ?: appState.leaderPod)?.name }
+
+    val vm = remember(sessionId) {
+        VibeCodeStreamViewModel(
+            sessionId = sessionId,
+            client = client,
+            operations = operations,
+            serverLabel = serverLabel,
+        )
+    }
+    val status by vm.status.collectAsState()
+    val transcript by vm.transcript.collectAsState()
+    val buildLogs by vm.buildLogs.collectAsState()
+    val deployedUrl by vm.deployedUrl.collectAsState()
+    val deployedServiceId by vm.deployedServiceId.collectAsState()
+    val errorMessage by vm.errorMessage.collectAsState()
+
+    // Start the stream on first composition; tear it down (and drop the
+    // sliver op) when we leave the screen.
+    DisposableEffect(sessionId) {
+        vm.start()
+        onDispose { vm.cancel() }
+    }
+
+    val headline = when (status) {
+        VibeCodeStreamViewModel.Status.STREAMING -> "Generating…"
+        VibeCodeStreamViewModel.Status.BUILDING -> "Building…"
+        VibeCodeStreamViewModel.Status.DEPLOYED -> "Live."
+        VibeCodeStreamViewModel.Status.DONE -> "Done."
+        VibeCodeStreamViewModel.Status.FAILED -> "Stopped."
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6)) {
         Spacer(Modifier.height(FS.space.s12))
         Text(
-            text = "Building plants…",
+            text = headline,
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
-        Spacer(Modifier.height(FS.space.s3))
+        Spacer(Modifier.height(FS.space.s2))
         Text(
-            text = "Streaming live. You can interrupt with a follow-up at any time.",
+            text = "Session $sessionId",
             color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
+            style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
         )
 
         Spacer(Modifier.height(FS.space.s6))
@@ -357,24 +402,56 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
                 .padding(FS.space.s4),
         ) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                items(events) { e ->
-                    when (e) {
-                        is StreamEvent.Thinking -> Text(
-                            text = e.text,
+                item {
+                    Text(
+                        text = "ASSISTANT",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        text = transcript.ifEmpty { "…" },
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+                    )
+                }
+                if (buildLogs.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(FS.space.s2))
+                        Text(
+                            text = "BUILD LOGS",
                             color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 14.sp),
+                            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                         )
-                        is StreamEvent.FileStart -> Text(
-                            text = "── ${e.filename} ──",
-                            color = FS.colors.primary,
-                            style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium),
-                            modifier = Modifier.padding(top = FS.space.s2),
-                        )
-                        is StreamEvent.Chunk -> Text(
-                            text = e.text,
+                    }
+                    items(buildLogs) { line ->
+                        Text(
+                            text = line,
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, fontFamily = FontFamily.Monospace),
                         )
+                    }
+                }
+                val url = deployedUrl
+                val sid = deployedServiceId
+                if (url != null && sid != null) {
+                    item {
+                        Spacer(Modifier.height(FS.space.s2))
+                        Text(
+                            text = "Deployed ✓",
+                            color = FS.colors.success,
+                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                        )
+                        Text(
+                            text = url,
+                            color = FS.colors.primary,
+                            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                        )
+                    }
+                }
+                errorMessage?.let { msg ->
+                    item {
+                        Spacer(Modifier.height(FS.space.s2))
+                        ErrorCard(message = msg)
                     }
                 }
             }
@@ -382,25 +459,12 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
 
         Spacer(Modifier.height(FS.space.s4))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSGhostButton("Interrupt", onClick = { /* TODO */ })
-            FSSecondaryButton("Save & continue later", onClick = { /* TODO */ }, block = true)
-        }
+        // Interrupt routes to the chat surface — the live reply path for the
+        // running session (talkToUser / follow-up turns POST to /reply there).
+        FSSecondaryButton(
+            "Interrupt with a follow-up",
+            onClick = { nav.navigate("vibe-code-chat/$sessionId") },
+            block = true,
+        )
     }
 }
-
-private sealed class StreamEvent {
-    data class Thinking(val text: String) : StreamEvent()
-    data class FileStart(val filename: String) : StreamEvent()
-    data class Chunk(val text: String) : StreamEvent()
-}
-
-private fun sampleStream(): List<StreamEvent> = listOf(
-    StreamEvent.Thinking("Sketching the schema. One table for plants, one for waterings."),
-    StreamEvent.FileStart("flagship.app.json"),
-    StreamEvent.Chunk("{\n  \"schema_version\": 1,\n  \"name\": \"plants\",\n  \"version\": \"0.1.0\",\n  \"data\": { \"stores\": { \"postgres\": true, \"objects\": true } },\n  \"network\": { \"subdomain\": \"plants\" }\n}"),
-    StreamEvent.FileStart("Dockerfile"),
-    StreamEvent.Chunk("FROM node:20-alpine\nWORKDIR /app\nCOPY package.json .\nRUN npm ci\nCOPY src ./src\nCMD [\"node\", \"src/index.js\"]"),
-    StreamEvent.FileStart("src/index.ts"),
-    StreamEvent.Chunk("import express from 'express';\nconst app = express();\napp.get('/', (req, res) => { ... });"),
-)
