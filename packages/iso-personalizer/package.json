@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@flagship/protocol": "*",
-    "@noble/ed25519": "^2.1.0",
-    "@noble/hashes": "^1.5.0"
+    "@noble/ed25519": "2.3.0",
+    "@noble/hashes": "1.8.0"
   },
   "license": "BUSL-1.1"
 }
