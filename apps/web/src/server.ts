@@ -69,6 +69,10 @@ import {
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { UsageMeter } from "./tunnel/usageMeter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
+import {
+  HubBlessingProvider,
+  loadOrCreateHubKeypair,
+} from "./tunnel/hubBlessingProvider.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
 import { RemoteUsernameResolver } from "./lib/remoteUsernameResolver.js";
 import { RevocationCache } from "./tunnel/revocationCache.js";
@@ -417,11 +421,35 @@ export async function start(opts: {
   });
   const revocationLookup = (username: string): Promise<Set<string> | null> =>
     revocationCache.lookup(username);
+
+  // Relay blessing (docs/maintainer-trust-enforcement.md): on the data
+  // plane, self-generate a hub key and fetch a `.com`-CA-signed
+  // ServiceBlessing daily so each HELLO_ACK can prove the relay holds a
+  // blessed key. OBSERVE-safe: if the blessing isn't fetched yet (startup
+  // race / `.com` down) the hub omits it and the box keeps relaying. Set
+  // FLAGSHIP_HUB_HOST to the served host (default flagship.services);
+  // FLAGSHIP_HUB_KEY_PATH persists the key to a Fly volume if mounted.
+  let blessingProvider: HubBlessingProvider | undefined;
+  if (surface === "services" || surface === "both") {
+    const hubHost = process.env.FLAGSHIP_HUB_HOST ?? "flagship.services";
+    const keyPath = process.env.FLAGSHIP_HUB_KEY_PATH;
+    const keypair = loadOrCreateHubKeypair(keyPath);
+    blessingProvider = new HubBlessingProvider({
+      keypair,
+      hubHost,
+      comBaseUrl,
+    });
+    // Best-effort: don't block listen() on the first fetch.
+    void blessingProvider.start();
+    console.log(`relay-blessing provider started hubKey=${keypair.publicKey.length === 32 ? "ok" : "bad"} host=${hubHost}`);
+  }
+
   const stopHub = startTunnelHub(app.server, registry, {
     surface,
     authLookup: remoteAuthLookup,
     irkLookup,
     revocationLookup,
+    ...(blessingProvider ? { blessingSource: blessingProvider } : {}),
   });
 
   // Public-egress metering (feat/metering). OFF unless USAGE_REPORT_SECRET is
@@ -457,6 +485,7 @@ export async function start(opts: {
     stopHub,
     async close() {
       meter?.stop();
+      blessingProvider?.stop();
       if (router) await router.close();
       await stopHub();
       await app.close();

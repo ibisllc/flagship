@@ -12,6 +12,7 @@ import {
   FRAME_REQUEST_TRANSFER,
   helloAckFrame,
   type Frame,
+  type HelloAckTrust,
 } from "@flagship/tunnel-protocol";
 import {
   serviceEntitlementCertId,
@@ -33,6 +34,19 @@ import {
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
 
 const TUNNEL_PATH = "/tunnel";
+
+/**
+ * Source of the current relay blessing + nonce-signer
+ * (docs/maintainer-trust-enforcement.md). When present, the hub attaches
+ * its `.com`-CA-signed ServiceBlessing + a proof-of-possession `hubSig`
+ * over the box's HELLO nonce on every accepting HELLO_ACK. Absent ⇒ the
+ * hub sends a plain ack (OBSERVE-safe: the box keeps relaying).
+ */
+export interface RelayBlessingSource {
+  currentBlessing(): import("@flagship/protocol").ServiceBlessing | null;
+  /** lower-hex Ed25519 signature over `nonce`, signed with the blessed key. */
+  signNonce(nonce: Uint8Array): string;
+}
 
 export interface TunnelAuthLookup {
   /**
@@ -83,6 +97,12 @@ export interface TunnelHubOptions {
    * an empty Set means "definitely empty list."
    */
   revocationLookup?: (username: string) => Promise<Set<string> | null>;
+  /**
+   * Optional relay-blessing source. When set, every accepting HELLO_ACK
+   * carries the hub's `.com`-CA-signed ServiceBlessing + a `hubSig` over
+   * the box's HELLO nonce. Omitted ⇒ a plain ack (old behavior).
+   */
+  blessingSource?: RelayBlessingSource;
   /** Reject HELLOs whose issuedAt is older than this. Default 5 min. */
   maxHelloAgeMs?: number;
   /** Idle close: empty state on hello → close after this many ms. Default 60s. */
@@ -150,6 +170,25 @@ function attachTunnel(
 
   const send = (frame: Frame) => {
     if (ws.readyState === ws.OPEN) ws.send(encodeFrame(frame), { binary: true });
+  };
+
+  /**
+   * Build the relay-trust attachment for an accepting HELLO_ACK: the
+   * current blessing + a hub signature over the box's HELLO nonce. Returns
+   * undefined when no blessing source is wired or no blessing is held yet
+   * (OBSERVE-safe — the box keeps relaying). The hubSig is over the SAME
+   * nonce bytes the box signed in its HELLO, defeating blessing replay.
+   */
+  const buildTrust = (nonce: Uint8Array): HelloAckTrust | undefined => {
+    const src = opts.blessingSource;
+    if (!src) return undefined;
+    const blessing = src.currentBlessing();
+    if (!blessing) return undefined;
+    try {
+      return { serviceBlessing: blessing, hubSig: src.signNonce(nonce) };
+    } catch {
+      return undefined;
+    }
   };
 
   const armIdleClose = () => {
@@ -250,7 +289,7 @@ function attachTunnel(
       const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce)));
       // Broadcast a fresh snapshot to every affected set so all
       // currently-connected pods learn about the new arrival.
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
@@ -297,7 +336,7 @@ function attachTunnel(
       const canonicals = built.canonicals;
       const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
-      send(helloAckFrame(true));
+      send(helloAckFrame(true, undefined, buildTrust(helloOk.nonce)));
       for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
       if (canonicals.length === 0) armIdleClose();
       else cancelIdleClose();
