@@ -25,6 +25,7 @@ import com.flagshipserver.app.ui.screens.ServicesListScreen
 import com.flagshipserver.app.ui.screens.MarketplaceListScreen
 import com.flagshipserver.app.ui.screens.MarketplaceDetailScreen
 import com.flagshipserver.app.ui.screens.AiKeyStepScreen
+import java.net.URLDecoder
 import com.flagshipserver.app.ui.screens.BuildGitScreen
 import com.flagshipserver.app.ui.screens.BuildJournalScreen
 import com.flagshipserver.app.ui.screens.BuildMcpScreen
@@ -229,6 +230,32 @@ fun ServicesTab() {
             val slug = entry.arguments?.getString("slug") ?: return@composable
             PodScoped(nav, placement, entry, creation = true) {
                 MarketplaceDetailScreen(nav, creator = creator, slug = slug)
+            }
+        }
+        // W10 — per-app env-var editor. Reachable from a marketplace install of
+        // an app that needs an LLM key (deep-linked with the expected env-var
+        // name in `prefill` so the add-dialog opens with it filled in). The
+        // value is set on the box; flagshipserver.com is never in the path.
+        composable(
+            route = "service-env/{appId}/{creator}/{slug}?prefill={prefill}",
+            arguments = listOf(
+                navArgument("appId") { type = NavType.StringType },
+                navArgument("creator") { type = NavType.StringType },
+                navArgument("slug") { type = NavType.StringType },
+                navArgument("prefill") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
+            val appId = entry.arguments?.getString("appId") ?: return@composable
+            val creator = entry.arguments?.getString("creator") ?: return@composable
+            val slug = entry.arguments?.getString("slug") ?: return@composable
+            val prefill = entry.arguments?.getString("prefill")
+                ?.let { URLDecoder.decode(it, "UTF-8") }
+            PodScoped(nav, placement, entry, creation = false) {
+                ServiceEnvScreen(nav, appId = appId, creator = creator, slug = slug, prefillName = prefill)
             }
         }
         // AI-key step for the git-adapt path. On confirm it stows the chosen
