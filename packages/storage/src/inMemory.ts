@@ -1166,7 +1166,15 @@ export class InMemoryMintReservationStorage implements MintReservationStorage {
       const rec: MintReservationRecord = {
         username: u,
         holderPubHex: holder,
-        acquiredAt: live ? existing!.acquiredAt : args.now,
+        // Stamp acquiredAt to `now` on EVERY win — including a same-holder
+        // re-acquire of a live lease. The D1 adapter's `ON CONFLICT … DO
+        // UPDATE SET acquired_at = excluded.acquired_at` rewrites it
+        // unconditionally when the WHERE matches (which it does on a
+        // same-holder re-acquire), so InMemory must mirror that or the two
+        // adapters diverge on the acquiredAt observable. (`expiresAt` is the
+        // lease's lifetime/reclaim clock; `acquiredAt` is observational
+        // metadata for "when the current holder last took it".)
+        acquiredAt: args.now,
         expiresAt: args.expiresAt,
       };
       this.byUser.set(u, rec);
