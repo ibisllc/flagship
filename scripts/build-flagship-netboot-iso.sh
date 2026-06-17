@@ -75,6 +75,21 @@ OUT_PATH="${1:?usage: build-flagship-netboot-iso.sh <out.iso>}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
 export SOURCE_DATE_EPOCH
 
+# Locate the source files we'll inject into the ISO. The script lives in
+# scripts/; the inject sources live in packages/installer-netboot/. Check
+# these FIRST — it's a local, network-free, tool-free validation, so a
+# missing checkout fails fast with the most actionable error rather than
+# tripping the xorriso probe below on a box that happens to lack it.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INJECT_DIR="$REPO_ROOT/packages/installer-netboot"
+for f in preseed.cfg install.sh parse-trailer.sh late-command.sh early-scan.sh post-log.sh; do
+  if [[ ! -f "$INJECT_DIR/$f" ]]; then
+    echo "error: missing inject source $INJECT_DIR/$f" >&2
+    exit 2
+  fi
+done
+
 # Verify required tools exist before doing any network fetch — fail fast
 # on a fresh box that's missing xorriso (the only non-coreutils dep).
 for t in curl sha256sum xorriso; do
@@ -92,18 +107,6 @@ if [[ -z "$EXPECTED_SHA" ]]; then
   echo "error: no pinned sha256 for Debian ${DEBIAN_RELEASE}-${DEBIAN_ARCH}; update DEBIAN_SHA256 in $0" >&2
   exit 2
 fi
-
-# Locate the source files we'll inject into the ISO. The script lives in
-# scripts/; the inject sources live in packages/installer-netboot/.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INJECT_DIR="$REPO_ROOT/packages/installer-netboot"
-for f in preseed.cfg install.sh parse-trailer.sh late-command.sh early-scan.sh post-log.sh; do
-  if [[ ! -f "$INJECT_DIR/$f" ]]; then
-    echo "error: missing inject source $INJECT_DIR/$f" >&2
-    exit 2
-  fi
-done
 
 echo "[netboot-iso] Debian ${DEBIAN_RELEASE} (${DEBIAN_ARCH}-mini.iso)"
 echo "[netboot-iso] SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
