@@ -1,0 +1,377 @@
+{
+  "_note": "Webapp-local maintainer-trust vectors. Seeds match the maintainers CLI test convention (keypair(byte)). Reconcile with packages/protocol/tests/fixtures/maintainerTrust.vectors.json at integration.",
+  "pin": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+  "clientNow": "2026-06-16T00:00:00.000Z",
+  "keys": {
+    "maintainerPub": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+    "hotCaPub": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+    "otherPub": "d523845a249f6994b019cbb33057d352237858ff79a98cb2359d805ee45044d6"
+  },
+  "mandates": [
+    {
+      "kind": "Mandate",
+      "version": 1,
+      "mandateId": "ca-root-0000-4000-8000-000000000000",
+      "track": "ca",
+      "holder": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+      "issuedAt": "2026-01-01T00:00:00.000Z",
+      "expiresAt": "2027-01-01T00:00:00.000Z",
+      "successors": [
+        "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
+      ],
+      "approvalRule": {
+        "kind": "threshold",
+        "threshold": 1
+      },
+      "minSuccessors": 1,
+      "maxDurationSeconds": 31536000,
+      "defaultDurationSeconds": 31536000,
+      "project": {
+        "name": "flagship",
+        "contact": "harry@flagship.services",
+        "tracks": [
+          "ca"
+        ]
+      },
+      "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+      "signatures": [
+        {
+          "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+          "sig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402"
+        }
+      ]
+    }
+  ],
+  "caEndorsements": [
+    {
+      "kind": "CaEndorsement",
+      "version": 1,
+      "endorsementId": "ca-e-live-0000-0000-000000000000",
+      "track": "ca",
+      "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+      "scope": "flagship/directory-attestation",
+      "notBefore": "2026-06-01T00:00:00.000Z",
+      "notAfter": "2026-12-01T00:00:00.000Z",
+      "issuedAt": "2026-06-01T00:00:00.000Z",
+      "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+      "signatures": [
+        {
+          "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+          "sig": "038505b6279a47895838575b2c540379da98d613b269fb3b1f1e0cc69c625050ab2b4817e659df63a4d22a34b6e56b6c4f6949f1b988cd6d48c44b4a8aec0909"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "name": "trusted: served key is the live-authorized hot CA key",
+      "blessing": {
+        "version": 1,
+        "pinnedMandateHash": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+        "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+        "issuer": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+        "mandates": [
+          {
+            "kind": "Mandate",
+            "version": 1,
+            "mandateId": "ca-root-0000-4000-8000-000000000000",
+            "track": "ca",
+            "holder": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "issuedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": "2027-01-01T00:00:00.000Z",
+            "successors": [
+              "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
+            ],
+            "approvalRule": {
+              "kind": "threshold",
+              "threshold": 1
+            },
+            "minSuccessors": 1,
+            "maxDurationSeconds": 31536000,
+            "defaultDurationSeconds": 31536000,
+            "project": {
+              "name": "flagship",
+              "contact": "harry@flagship.services",
+              "tracks": [
+                "ca"
+              ]
+            },
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402"
+              }
+            ]
+          }
+        ],
+        "caEndorsements": [
+          {
+            "kind": "CaEndorsement",
+            "version": 1,
+            "endorsementId": "ca-e-live-0000-0000-000000000000",
+            "track": "ca",
+            "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+            "scope": "flagship/directory-attestation",
+            "notBefore": "2026-06-01T00:00:00.000Z",
+            "notAfter": "2026-12-01T00:00:00.000Z",
+            "issuedAt": "2026-06-01T00:00:00.000Z",
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "038505b6279a47895838575b2c540379da98d613b269fb3b1f1e0cc69c625050ab2b4817e659df63a4d22a34b6e56b6c4f6949f1b988cd6d48c44b4a8aec0909"
+              }
+            ]
+          }
+        ],
+        "now": "2026-06-16T00:00:00.000Z"
+      },
+      "expect": {
+        "trusted": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "name": "untrusted: served key is NOT the authorized key",
+      "blessing": {
+        "version": 1,
+        "pinnedMandateHash": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+        "caPubkey": "d523845a249f6994b019cbb33057d352237858ff79a98cb2359d805ee45044d6",
+        "issuer": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+        "mandates": [
+          {
+            "kind": "Mandate",
+            "version": 1,
+            "mandateId": "ca-root-0000-4000-8000-000000000000",
+            "track": "ca",
+            "holder": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "issuedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": "2027-01-01T00:00:00.000Z",
+            "successors": [
+              "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
+            ],
+            "approvalRule": {
+              "kind": "threshold",
+              "threshold": 1
+            },
+            "minSuccessors": 1,
+            "maxDurationSeconds": 31536000,
+            "defaultDurationSeconds": 31536000,
+            "project": {
+              "name": "flagship",
+              "contact": "harry@flagship.services",
+              "tracks": [
+                "ca"
+              ]
+            },
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402"
+              }
+            ]
+          }
+        ],
+        "caEndorsements": [
+          {
+            "kind": "CaEndorsement",
+            "version": 1,
+            "endorsementId": "ca-e-live-0000-0000-000000000000",
+            "track": "ca",
+            "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+            "scope": "flagship/directory-attestation",
+            "notBefore": "2026-06-01T00:00:00.000Z",
+            "notAfter": "2026-12-01T00:00:00.000Z",
+            "issuedAt": "2026-06-01T00:00:00.000Z",
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "038505b6279a47895838575b2c540379da98d613b269fb3b1f1e0cc69c625050ab2b4817e659df63a4d22a34b6e56b6c4f6949f1b988cd6d48c44b4a8aec0909"
+              }
+            ]
+          }
+        ],
+        "now": "2026-06-16T00:00:00.000Z"
+      },
+      "expect": {
+        "trusted": false,
+        "reason": "served-key-not-authorized"
+      }
+    },
+    {
+      "name": "untrusted: lease lapsed at client clock",
+      "blessing": {
+        "version": 1,
+        "pinnedMandateHash": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+        "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+        "issuer": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+        "mandates": [
+          {
+            "kind": "Mandate",
+            "version": 1,
+            "mandateId": "ca-root-0000-4000-8000-000000000000",
+            "track": "ca",
+            "holder": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "issuedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": "2027-01-01T00:00:00.000Z",
+            "successors": [
+              "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
+            ],
+            "approvalRule": {
+              "kind": "threshold",
+              "threshold": 1
+            },
+            "minSuccessors": 1,
+            "maxDurationSeconds": 31536000,
+            "defaultDurationSeconds": 31536000,
+            "project": {
+              "name": "flagship",
+              "contact": "harry@flagship.services",
+              "tracks": [
+                "ca"
+              ]
+            },
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402"
+              }
+            ]
+          }
+        ],
+        "caEndorsements": [
+          {
+            "kind": "CaEndorsement",
+            "version": 1,
+            "endorsementId": "ca-e-lapsed-0000-0000-00000000000",
+            "track": "ca",
+            "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+            "scope": "flagship/directory-attestation",
+            "notBefore": "2026-01-01T00:00:00.000Z",
+            "notAfter": "2026-02-01T00:00:00.000Z",
+            "issuedAt": "2026-01-01T00:00:00.000Z",
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "7170a2dcd383238040ec3845e9a4e739086e8df279f37f39d8d7a766e5f3d536a63465bb2e225b8f2a388f0c23eb90a46b185ebac46576fa903833d6a2a61e07"
+              }
+            ]
+          }
+        ],
+        "now": "2026-06-16T00:00:00.000Z"
+      },
+      "expect": {
+        "trusted": false,
+        "reason": "no-authorized-ca-keys"
+      }
+    },
+    {
+      "name": "untrusted: pin not in mandate log (forked/tampered)",
+      "blessing": {
+        "version": 1,
+        "pinnedMandateHash": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+        "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+        "issuer": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+        "mandates": [],
+        "caEndorsements": [
+          {
+            "kind": "CaEndorsement",
+            "version": 1,
+            "endorsementId": "ca-e-live-0000-0000-000000000000",
+            "track": "ca",
+            "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+            "scope": "flagship/directory-attestation",
+            "notBefore": "2026-06-01T00:00:00.000Z",
+            "notAfter": "2026-12-01T00:00:00.000Z",
+            "issuedAt": "2026-06-01T00:00:00.000Z",
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "038505b6279a47895838575b2c540379da98d613b269fb3b1f1e0cc69c625050ab2b4817e659df63a4d22a34b6e56b6c4f6949f1b988cd6d48c44b4a8aec0909"
+              }
+            ]
+          }
+        ],
+        "now": "2026-06-16T00:00:00.000Z"
+      },
+      "expect": {
+        "trusted": false,
+        "reason": "no-authorized-ca-keys"
+      }
+    },
+    {
+      "name": "untrusted: blessing missing caPubkey",
+      "blessing": {
+        "version": 1,
+        "pinnedMandateHash": "a170c80dcf3b6d1d42fcc196c8d5f2dbec7a87db6a3d5d2692773442af4a62ee",
+        "issuer": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+        "mandates": [
+          {
+            "kind": "Mandate",
+            "version": 1,
+            "mandateId": "ca-root-0000-4000-8000-000000000000",
+            "track": "ca",
+            "holder": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "issuedAt": "2026-01-01T00:00:00.000Z",
+            "expiresAt": "2027-01-01T00:00:00.000Z",
+            "successors": [
+              "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc"
+            ],
+            "approvalRule": {
+              "kind": "threshold",
+              "threshold": 1
+            },
+            "minSuccessors": 1,
+            "maxDurationSeconds": 31536000,
+            "defaultDurationSeconds": 31536000,
+            "project": {
+              "name": "flagship",
+              "contact": "harry@flagship.services",
+              "tracks": [
+                "ca"
+              ]
+            },
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "5a72395870ce102c85eadec3c5927aeb28f02a90e2d56eea59773b60a7ea5dd596c1c5ba70965fba939d6f558afcb222ddffc50dc8856f2e7fe1c5e8792fa402"
+              }
+            ]
+          }
+        ],
+        "caEndorsements": [
+          {
+            "kind": "CaEndorsement",
+            "version": 1,
+            "endorsementId": "ca-e-live-0000-0000-000000000000",
+            "track": "ca",
+            "caPubkey": "bb5c672482b0dcca91a21a4ed63b15afde8aa1378da72cd01b349589d6e7dd6a",
+            "scope": "flagship/directory-attestation",
+            "notBefore": "2026-06-01T00:00:00.000Z",
+            "notAfter": "2026-12-01T00:00:00.000Z",
+            "issuedAt": "2026-06-01T00:00:00.000Z",
+            "signedBy": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+            "signatures": [
+              {
+                "pubkey": "cecc1507dc1ddd7295951c290888f095adb9044d1b73d696e6df065d683bd4fc",
+                "sig": "038505b6279a47895838575b2c540379da98d613b269fb3b1f1e0cc69c625050ab2b4817e659df63a4d22a34b6e56b6c4f6949f1b988cd6d48c44b4a8aec0909"
+              }
+            ]
+          }
+        ],
+        "now": "2026-06-16T00:00:00.000Z"
+      },
+      "expect": {
+        "trusted": false,
+        "reason": "no-served-key"
+      }
+    }
+  ]
+}
