@@ -27,6 +27,7 @@
 //   POST /api/screens/companion/resolve-pending
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -144,6 +145,7 @@ export async function renderCompanionRequests(deps = {}) {
   try {
     body = await listPendingWrites(deps);
   } catch (e) {
+    console.error("companion pending-writes load failed", e);
     if (e instanceof ScreensError) {
       if (e.status === 503 || e.status === 404) {
         root.innerHTML = `
@@ -155,10 +157,10 @@ export async function renderCompanionRequests(deps = {}) {
         setBadge(0);
         return;
       }
-      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
       return;
     }
-    root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e?.message ?? e))}</p></div>`;
+    root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
     return;
   }
 
@@ -259,15 +261,17 @@ export async function runApprove(row, deps = {}) {
       return { ok: false, error: "unknown-kind" };
     }
   } catch (e) {
+    console.error("companion approve: sign + post failed", e);
     const msg = e?.message ?? String(e);
-    setRowError(row.requestId, `sign + post failed: ${msg}`);
+    setRowError(row.requestId, humanError(e));
     return { ok: false, error: msg };
   }
 
   try {
     await resolve({ requestId: row.requestId, outcome: "approved" });
   } catch (e) {
-    setRowError(row.requestId, `resolve-pending failed: ${e?.message ?? e}`);
+    console.error("companion approve: resolve-pending failed", e);
+    setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
   toast(`approved ${row.kind}`, "ok");
@@ -288,7 +292,8 @@ export async function runDeny(row, deps = {}) {
   try {
     await resolve({ requestId: row.requestId, outcome: "denied" });
   } catch (e) {
-    setRowError(row.requestId, `resolve-pending failed: ${e?.message ?? e}`);
+    console.error("companion deny: resolve-pending failed", e);
+    setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
   toast(`denied`, "ok");
@@ -301,7 +306,7 @@ export async function runDeny(row, deps = {}) {
 export function initCompanionRequestsView() {
   $("companion-requests-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("companion-requests-refresh")?.addEventListener("click", () => {
-    renderCompanionRequests().catch((e) => toast(String(e), "err"));
+    renderCompanionRequests().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

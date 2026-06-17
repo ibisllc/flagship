@@ -63,6 +63,7 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
@@ -185,7 +186,7 @@ fun CreateServerScreen(
                             phase = Phase.Match
                             error = null
                         } catch (t: Throwable) {
-                            error = t.message ?: "couldn't pair"
+                            error = NetworkErrorHumanizer.humanize(t)
                         } finally {
                             working = false
                         }
@@ -225,7 +226,7 @@ fun CreateServerScreen(
                                 description,
                             )
                         } catch (t: Throwable) {
-                            error = t.message ?: "deliver failed"
+                            error = NetworkErrorHumanizer.humanize(t)
                         } finally {
                             qrRelay.close()
                             working = false

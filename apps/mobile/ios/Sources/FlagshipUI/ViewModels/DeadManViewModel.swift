@@ -95,7 +95,7 @@ public final class DeadManViewModel {
         do {
             key = try await signer(enabled ? "Enable lock-down for \(serverDomain)" : "Disable lock-down for \(serverDomain)")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
             return
         }
         let policy = DeadManPolicy(
@@ -108,7 +108,7 @@ public final class DeadManViewModel {
         )
         let sig: Data
         do { sig = try policy.sign(with: key) } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
             return
         }
         do {
@@ -150,7 +150,7 @@ public final class DeadManViewModel {
         do {
             key = try await signer("Keep \(serverDomain) unlocked")
         } catch {
-            phase = .failed("Couldn't access your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't access your account key. \(HumanError.humanize(error))")
             return
         }
         let affirmation = DeadManAffirmation(
@@ -160,7 +160,7 @@ public final class DeadManViewModel {
         )
         let sig: Data
         do { sig = try affirmation.sign(with: key) } catch {
-            phase = .failed("Couldn't sign: \(error.localizedDescription)")
+            phase = .failed("Couldn't sign. \(HumanError.humanize(error))")
             return
         }
         do {

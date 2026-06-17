@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricGate
 import com.flagshipserver.app.keystore.Keystore
@@ -204,6 +205,7 @@ private suspend fun tryUnlock(
     } catch (_: BiometricCancelled) {
         setStatus(Status.Failed("Cancelled. Tap above to try again."))
     } catch (e: Throwable) {
-        setStatus(Status.Failed("Couldn't authenticate: ${e.message ?: "unknown error"}"))
+        // UX-B — never leak the raw exception text to the user.
+        setStatus(Status.Failed(NetworkErrorHumanizer.humanize(e)))
     }
 }

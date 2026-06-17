@@ -54,13 +54,13 @@ export async function handleServerRevokeBySelf(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
+    return forbidden("serverId / host mismatch");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
   // Idempotent: a daemon retrying after a network blip should not see 4xx.
   if (reg.revokedAt) {
     return {
@@ -69,14 +69,14 @@ export async function handleServerRevokeBySelf(
     };
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: ServerRevokeBySelf = {
     serverId: host,
@@ -84,7 +84,7 @@ export async function handleServerRevokeBySelf(
     issuedAt: r.issuedAt,
   };
   if (!verifyServerRevokeBySelf(claim, sig, hexToBytes(reg.identityPubKeyHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   const revokedAt = now();

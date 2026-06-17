@@ -907,7 +907,7 @@ function reasonLabel(r) {
 export function initServerDetailView() {
   $("server-detail-back")?.addEventListener("click", () => show("view-home"));
   $("server-detail-refresh")?.addEventListener("click", () => {
-    renderServerDetail().catch((e) => toast(String(e), "err"));
+    renderServerDetail().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

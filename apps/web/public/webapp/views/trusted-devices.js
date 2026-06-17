@@ -9,6 +9,7 @@
 //   DELETE /api/push/<tokenId>      → revoke push tether (soft revoke)
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { getSession, unlockSession } from "../lib/state.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { canonicalPushRevoke } from "../lib/push.js";
@@ -623,7 +624,8 @@ export function initTrustedDevicesView() {
       const { enterAddDevice } = await import("./add-device.js");
       await enterAddDevice();
     } catch (e) {
-      toast(String(e), "err");
+      console.error(e);
+      toast(humanError(e), "err");
     }
   });
 }

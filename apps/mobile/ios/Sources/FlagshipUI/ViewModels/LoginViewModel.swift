@@ -86,7 +86,7 @@ public final class LoginViewModel {
             resolution = try await server.resolveAccount(username: username)
         } catch {
             if Task.isCancelled { return }
-            phase = .failed(humanizedError(error))
+            phase = .failed(HumanError.humanize(error))
             return
         }
         if Task.isCancelled { return }
@@ -107,15 +107,5 @@ public final class LoginViewModel {
     /// a failure or after viewing the unknown state.
     public func reset() {
         phase = .idle
-    }
-
-    private func humanizedError(_ error: Error) -> String {
-        // UX-B — never show a raw status code. The shared ScreensClientError
-        // already maps to plain language (incl. the UX-A cert-pin case).
-        if case let pinError as ScreensClientError = error,
-           pinError.errorDescription != nil {
-            return pinError.errorDescription!
-        }
-        return "Couldn't reach Flagship. Check your connection and try again."
     }
 }

@@ -6,6 +6,7 @@ import {
   signWithIrkVersioned,
   setActiveKeystoreProfile,
 } from "../keystore.js";
+import { humanError } from "../lib/humanError.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
@@ -48,7 +49,8 @@ async function handleBootstrap() {
       await dispatchInitialView();
     }
   } catch (e) {
-    toast(String(e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 

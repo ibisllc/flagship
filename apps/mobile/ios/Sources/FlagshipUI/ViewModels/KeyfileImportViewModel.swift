@@ -87,7 +87,7 @@ public final class KeyfileImportViewModel {
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
         } catch {
-            phase = .failed("Couldn't install your account key: \(error.localizedDescription)")
+            phase = .failed("Couldn't install your account key. \(HumanError.humanize(error))")
             return
         }
 
@@ -106,7 +106,7 @@ public final class KeyfileImportViewModel {
             // for it.
             phase = .failed("This account has a second factor enrolled. Use \"I already have an account\" to sign in — it will ask for your authenticator or recovery code.")
         } catch {
-            phase = .failed("Couldn't start bringing this device in: \(error.localizedDescription)")
+            phase = .failed("Couldn't start bringing this device in. \(HumanError.humanize(error))")
         }
     }
 
@@ -130,7 +130,7 @@ public final class KeyfileImportViewModel {
             // #52 — completion window elapsed; the cloud swept the row.
             phase = .failed("This expired before it was completed. Start again.")
         } catch {
-            phase = .failed("Couldn't finish bringing this device in: \(error.localizedDescription)")
+            phase = .failed("Couldn't finish bringing this device in. \(HumanError.humanize(error))")
         }
     }
 

@@ -12,7 +12,7 @@ import {
 import type { ServerStorage, UsernameStorage } from "@flagship/storage";
 import type { CloudflareDnsClient, CloudflareDnsRecord } from "./cloudflareDns.js";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 /**
  * ACME DNS-01 publish/delete handlers. Each Flagship daemon runs ACME
@@ -175,12 +175,12 @@ export async function handleDns01Publish(
     typeof b.signature !== "string" ||
     typeof b.recordValue !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
 
   const reg = await deps.servers.get(r.serverId);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   // recordName must be the DNS-01 challenge record for the requesting
   // box's OWN subdomain. Under cert model A′ a box mints exactly
@@ -198,7 +198,7 @@ export async function handleDns01Publish(
   // that authority belongs to the trust root, not the box, so it is verified
   // as a separate authorization, never a relaxation of the own-name rule.
   if (!r.serverId.endsWith(`.${apex}`)) {
-    return { status: 403, body: { error: "serverId outside managed apex" } };
+    return forbidden("serverId outside managed apex");
   }
   const expectedName = `_acme-challenge.${r.serverId}`;
   if (r.recordName !== expectedName) {
@@ -210,20 +210,14 @@ export async function handleDns01Publish(
       now: now(),
     });
     if (!svc.ok) {
-      return {
-        status: 403,
-        body: {
-          error: b.serviceCertAuthority
-            ? svc.error
-            : `recordName must be ${JSON.stringify(expectedName)}`,
-        },
-      };
+      return forbidden(
+        b.serviceCertAuthority
+          ? svc.error
+          : `recordName must be ${JSON.stringify(expectedName)}`,
+      );
     }
     if (r.recordName !== `_acme-challenge.${svc.authority.serviceFqdn}`) {
-      return {
-        status: 403,
-        body: { error: "recordName does not match the authorized serviceFqdn" },
-      };
+      return forbidden("recordName does not match the authorized serviceFqdn");
     }
   }
 
@@ -233,11 +227,11 @@ export async function handleDns01Publish(
     valueHash = hexToBytes(r.recordValueHash);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const expectedValueHash = sha256(new TextEncoder().encode(b.recordValue));
   if (!equalBytes(expectedValueHash, valueHash)) {
-    return { status: 400, body: { error: "recordValue does not match recordValueHash" } };
+    return malformed("recordValue does not match recordValueHash");
   }
 
   const claim: Dns01PublishRequest = {
@@ -248,10 +242,10 @@ export async function handleDns01Publish(
   };
   const stkPub = hexToBytes(reg.identityPubKeyHex);
   if (!verifyDns01Publish(claim, sig, stkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   let record: CloudflareDnsRecord;
@@ -279,21 +273,21 @@ export async function handleDns01Delete(
     typeof r.issuedAt !== "number" ||
     typeof b.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
 
   const reg = await deps.servers.get(r.serverId);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
   if (!r.serverId.endsWith(`.${apex}`)) {
-    return { status: 403, body: { error: "serverId outside managed apex" } };
+    return forbidden("serverId outside managed apex");
   }
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: Dns01DeleteRequest = {
     serverId: r.serverId,
@@ -302,10 +296,10 @@ export async function handleDns01Delete(
   };
   const stkPub = hexToBytes(reg.identityPubKeyHex);
   if (!verifyDns01Delete(claim, sig, stkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   // Defense-in-depth: confirm the record we're about to delete actually
@@ -318,9 +312,9 @@ export async function handleDns01Delete(
   } catch (e) {
     return { status: 502, body: { error: "lookup failed", message: errMsg(e) } };
   }
-  if (!rec) return { status: 404, body: { error: "unknown recordId" } };
+  if (!rec) return notFound("unknown recordId");
   if (rec.type !== "TXT") {
-    return { status: 403, body: { error: "recordId is not a TXT record" } };
+    return forbidden("recordId is not a TXT record");
   }
   if (rec.name !== `_acme-challenge.${r.serverId}`) {
     // Tier-2 service-cert challenge cleanup: the publishing box may delete
@@ -334,7 +328,7 @@ export async function handleDns01Delete(
       now: now(),
     });
     if (!svc.ok || rec.name !== `_acme-challenge.${svc.authority.serviceFqdn}`) {
-      return { status: 403, body: { error: "recordId not owned by this server" } };
+      return forbidden("recordId not owned by this server");
     }
   }
 

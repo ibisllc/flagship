@@ -16,7 +16,7 @@
 // right weight here.
 
 import type { CustomDomainOrderStorage } from "@flagship/storage";
-import { ok, type HandlerResponseWithHeaders } from "./types.js";
+import { malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /** Length-checked, then XOR-accumulated constant-time compare. The
  *  length of a high-entropy shared secret is not itself sensitive. */
@@ -91,7 +91,7 @@ export async function handleRedirectionLookup(
   }
   const f = (fqdn ?? "").trim().toLowerCase();
   if (f.length === 0 || f.length > 253 || f.includes("/") || f.includes(":")) {
-    return { status: 400, body: { error: "fqdn required" } };
+    return malformed("fqdn required");
   }
   const active = await deps.customDomainOrders.listActive();
   const hit = active.find((r) => r.fqdn.toLowerCase() === f && !!r.podCanonical);

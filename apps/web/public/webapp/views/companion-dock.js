@@ -19,6 +19,7 @@
 //   POST /api/screens/companion/revoke       { tokenPrefix }
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -241,7 +242,7 @@ async function runRevoke(prefix) {
 export function initCompanionDockView() {
   $("companion-dock-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("companion-dock-refresh")?.addEventListener("click", () => {
-    renderCompanionDock().catch((e) => toast(String(e), "err"));
+    renderCompanionDock().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

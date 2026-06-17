@@ -35,7 +35,7 @@ public final class HomeViewModel {
             // failure; only fall back to the "Connecting…" state when we never
             // had detail to begin with.
             if case .loaded = detail { return }
-            detail = .failed(error.localizedDescription)
+            detail = .failed(HumanError.humanize(error))
         }
     }
 }

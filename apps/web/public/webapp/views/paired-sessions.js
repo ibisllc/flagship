@@ -1,6 +1,7 @@
 // P2.8 — paired-sessions list + revoke. Calls P1.12 / P1.13.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -66,7 +67,7 @@ async function revoke(prefix) {
 export function initPairedSessionsView() {
   $("paired-sessions-back")?.addEventListener("click", () => show("view-home"));
   $("paired-sessions-refresh")?.addEventListener("click", () => {
-    renderPairedSessions().catch((e) => toast(String(e), "err"));
+    renderPairedSessions().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }
 

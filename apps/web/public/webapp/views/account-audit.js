@@ -13,6 +13,7 @@
 // webapp ↔ mobile parity gap.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { get as profileGet } from "../lib/profilesStore.js";
@@ -106,7 +107,8 @@ function paint(root) {
       await model.loadMore();
       paint(root);
     } catch (e) {
-      toast(String(e?.message ?? e), "err");
+      console.error(e);
+      toast(humanError(e), "err");
     }
   });
 }
@@ -119,6 +121,6 @@ export async function enterAccountAudit() {
 export function initAccountAuditView() {
   $("account-audit-back")?.addEventListener("click", () => show("view-activity"));
   $("account-audit-refresh")?.addEventListener("click", () => {
-    renderAccountAudit().catch((e) => toast(String(e), "err"));
+    renderAccountAudit().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 }

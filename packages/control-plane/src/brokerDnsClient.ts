@@ -21,6 +21,7 @@
  */
 
 import type { CloudflareDnsRecord } from "./cloudflareDns.js";
+import { malformed } from "./types.js";
 
 export interface BrokerDnsClientConfig {
   brokerUrl: string;
@@ -222,7 +223,7 @@ export async function proxyDns01PublishToBroker(args: {
     typeof args.body.signature !== "string" ||
     typeof args.body.recordValue !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   const svc = serviceCertWire(args.body.serviceCertAuthority);
   const rpc = {
@@ -284,7 +285,7 @@ export async function proxyDns01DeleteToBroker(args: {
     typeof r.issuedAt !== "number" ||
     typeof args.body.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   const svc = serviceCertWire(args.body.serviceCertAuthority);
   const rpc = {

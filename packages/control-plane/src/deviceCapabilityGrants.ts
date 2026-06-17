@@ -40,6 +40,7 @@ import type {
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import {
+  conflict,
   forbidden,
   malformed,
   notFound,
@@ -209,7 +210,7 @@ export async function handleMintDeviceGrant(
     revokedAt: null,
   });
   if (!putResult.ok) {
-    return { status: 409, body: { error: putResult.reason } };
+    return conflict(putResult.reason);
   }
 
   return ok({

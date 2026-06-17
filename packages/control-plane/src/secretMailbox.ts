@@ -46,7 +46,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 export interface SecretMailboxDeps {
   servers: ServerStorage;
@@ -124,38 +124,38 @@ export async function handlePostSecretRequest(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverDomain !== host) {
-    return { status: 403, body: { error: "serverDomain / host mismatch" } };
+    return forbidden("serverDomain / host mismatch");
   }
   if (!PURPOSES.has(r.purpose as SecretMailboxPurpose)) {
-    return { status: 400, body: { error: "unknown purpose" } };
+    return malformed("unknown purpose");
   }
   if (!HEX_NONCE.test(r.nonce)) {
-    return { status: 400, body: { error: "nonce must be 32 bytes hex" } };
+    return malformed("nonce must be 32 bytes hex");
   }
   if (!HEX64.test(r.stkPub.toLowerCase())) {
-    return { status: 400, body: { error: "stkPub must be 32 bytes hex" } };
+    return malformed("stkPub must be 32 bytes hex");
   }
   if (!HEX128.test(b.signature.toLowerCase())) {
-    return { status: 400, body: { error: "signature must be 64 bytes hex" } };
+    return malformed("signature must be 64 bytes hex");
   }
   // Freshness window — a stale request can't be parked (replay bound).
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
 
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   // I2 — the posting STK MUST be the directory-bound STK for this
   // domain. A foreign STK (an attacker's box, a stolen recipe used to
   // register a different identity) is rejected here, so the phone is
   // only ever asked to seal for the registered box.
   if (!equalHex(r.stkPub, reg.identityPubKeyHex)) {
-    return { status: 403, body: { error: "stkPub does not match the registered server" } };
+    return forbidden("stkPub does not match the registered server");
   }
 
   let stkPub: Uint8Array;
@@ -166,7 +166,7 @@ export async function handlePostSecretRequest(
     nonce = hexToBytes(r.nonce);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
 
   const claim: SecretRequest = {
@@ -177,7 +177,7 @@ export async function handlePostSecretRequest(
     issuedAt: r.issuedAt,
   };
   if (!verifySecretRequest(claim, sig, stkPub)) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Device-info is a display hint only (NOT signed, NOT the boundary).
@@ -185,7 +185,7 @@ export async function handlePostSecretRequest(
   let deviceInfoJson: string | null = null;
   if (b.deviceInfo !== undefined && b.deviceInfo !== null) {
     if (typeof b.deviceInfo !== "object" || jsonByteLen(b.deviceInfo) > 4096) {
-      return { status: 400, body: { error: "deviceInfo too large" } };
+      return malformed("deviceInfo too large");
     }
     deviceInfoJson = JSON.stringify(b.deviceInfo);
   }
@@ -209,7 +209,7 @@ export async function handlePostSecretRequest(
   });
   if (!put.ok) {
     // Single-use nonce — a re-post of the same nonce is rejected.
-    return { status: 409, body: { error: put.reason } };
+    return conflict(put.reason);
   }
 
   // Fire-and-forget push so the box's poll isn't held back by APNs/FCM.
@@ -304,18 +304,18 @@ export async function handlePostSecretResponse(
     typeof resp.sealed !== "string" ||
     typeof resp.issuedAt !== "number"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (!PURPOSES.has(resp.purpose as SecretMailboxPurpose)) {
-    return { status: 400, body: { error: "unknown purpose" } };
+    return malformed("unknown purpose");
   }
   if (!HEX_NONCE.test(resp.requestNonceHex.toLowerCase())) {
-    return { status: 400, body: { error: "requestNonceHex must be 32 bytes hex" } };
+    return malformed("requestNonceHex must be 32 bytes hex");
   }
   // The sealed payload is opaque hex; cap its size defensively.
   const sealedHex = resp.sealed.toLowerCase();
   if (!/^[0-9a-f]*$/.test(sealedHex) || sealedHex.length === 0 || sealedHex.length > 65536) {
-    return { status: 400, body: { error: "sealed must be non-empty hex within bounds" } };
+    return malformed("sealed must be non-empty hex within bounds");
   }
 
   // The pending row must exist, belong to THIS user's account (so a
@@ -325,13 +325,13 @@ export async function handlePostSecretResponse(
     resp.requestNonceHex.toLowerCase(),
   );
   if (!reqRow || reqRow.expiresAt <= now()) {
-    return { status: 404, body: { error: "unknown or expired request" } };
+    return notFound("unknown or expired request");
   }
   if (reqRow.username.toLowerCase() !== auth.username) {
-    return { status: 403, body: { error: "request belongs to a different account" } };
+    return forbidden("request belongs to a different account");
   }
   if (reqRow.purpose !== resp.purpose) {
-    return { status: 400, body: { error: "purpose mismatch" } };
+    return malformed("purpose mismatch");
   }
 
   const put = await deps.secretMailbox.putResponse(
@@ -365,7 +365,7 @@ export async function handleGetSecretResponse(
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   if (!nonceHex || !HEX_NONCE.test(nonceHex.toLowerCase())) {
-    return { status: 400, body: { error: "nonce query param must be 32 bytes hex" } };
+    return malformed("nonce query param must be 32 bytes hex");
   }
   // Public read (the box has no session at boot) — but bound to the
   // server_domain + nonce, so it only reveals the reply to a caller that
@@ -373,7 +373,7 @@ export async function handleGetSecretResponse(
   // sealed for the STK regardless, so disclosure is harmless.
   const row = await deps.secretMailbox.consumeResponse(host, nonceHex.toLowerCase(), now());
   if (!row || row.responseSealedHex === null) {
-    return { status: 404, body: { error: "no reply ready" } };
+    return notFound("no reply ready");
   }
   return {
     status: 200,
@@ -417,46 +417,46 @@ export async function handlePostBoxSealedLease(
     typeof b?.signature !== "string" ||
     (l.maxUses !== undefined && typeof l.maxUses !== "number")
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (l.serverDomain !== host) {
-    return { status: 403, body: { error: "serverDomain / host mismatch" } };
+    return forbidden("serverDomain / host mismatch");
   }
   if (!/^[0-9a-fA-F]{16,128}$/.test(l.leaseId)) {
-    return { status: 400, body: { error: "leaseId must be 16-128 hex chars" } };
+    return malformed("leaseId must be 16-128 hex chars");
   }
   if (!HEX64.test(l.stkPub.toLowerCase())) {
-    return { status: 400, body: { error: "stkPub must be 32 bytes hex" } };
+    return malformed("stkPub must be 32 bytes hex");
   }
   const sealedKeyHex = l.sealedKey.toLowerCase();
   if (!/^[0-9a-f]+$/.test(sealedKeyHex) || sealedKeyHex.length > 65536) {
-    return { status: 400, body: { error: "sealedKey must be hex within bounds" } };
+    return malformed("sealedKey must be hex within bounds");
   }
   if (!HEX128.test(b.signature.toLowerCase())) {
-    return { status: 400, body: { error: "signature must be 64 bytes hex" } };
+    return malformed("signature must be 64 bytes hex");
   }
   if (Math.abs(now() - l.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   if (l.expiresAt <= now()) {
-    return { status: 400, body: { error: "expiresAt already past" } };
+    return malformed("expiresAt already past");
   }
   if (l.maxUses !== undefined && (!Number.isInteger(l.maxUses) || l.maxUses < 1)) {
-    return { status: 400, body: { error: "maxUses must be a positive integer" } };
+    return malformed("maxUses must be a positive integer");
   }
 
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   // I2 — the pinned recipient MUST be the directory-bound STK. `.com`
   // cannot accept a lease that seals for some other box.
   if (!equalHex(l.stkPub, reg.identityPubKeyHex)) {
-    return { status: 403, body: { error: "stkPub does not match the registered server" } };
+    return forbidden("stkPub does not match the registered server");
   }
 
   const userRec = await deps.usernames.get(reg.username);
-  if (!userRec) return { status: 404, body: { error: "unknown user" } };
+  if (!userRec) return notFound("unknown user");
 
   let stkPub: Uint8Array;
   let sealedKey: Uint8Array;
@@ -466,7 +466,7 @@ export async function handlePostBoxSealedLease(
     sealedKey = hexToBytes(l.sealedKey);
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
 
   const lease: AutoUnlockLeaseV2 = {
@@ -481,7 +481,7 @@ export async function handlePostBoxSealedLease(
   // The lease is signed by the user IRK (the pinning of stkPub is part
   // of the canonical bytes — a `.com` retarget would fail verify, I2).
   if (!verifyAutoUnlockLeaseV2(lease, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   await deps.boxSealedLeases.put({
@@ -514,11 +514,11 @@ export async function handleReleaseBoxSealedLease(
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
 
   const row = await deps.boxSealedLeases.release(host, now());
-  if (!row) return { status: 404, body: { error: "no active lease" } };
+  if (!row) return notFound("no active lease");
   return {
     status: 200,
     body: {
@@ -560,30 +560,30 @@ export async function handleRevokeBoxSealedLease(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.serverDomain !== host) {
-    return { status: 403, body: { error: "serverDomain / host mismatch" } };
+    return forbidden("serverDomain / host mismatch");
   }
   if (r.leaseId !== leaseId) {
-    return { status: 403, body: { error: "leaseId / url mismatch" } };
+    return forbidden("leaseId / url mismatch");
   }
   if (!HEX128.test(b.signature.toLowerCase())) {
-    return { status: 400, body: { error: "signature must be 64 bytes hex" } };
+    return malformed("signature must be 64 bytes hex");
   }
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   const userRec = await deps.usernames.get(reg.username);
-  if (!userRec) return { status: 404, body: { error: "unknown user" } };
+  if (!userRec) return notFound("unknown user");
 
   let sig: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
   } catch {
-    return { status: 400, body: { error: "invalid hex" } };
+    return malformed("invalid hex");
   }
   const claim: LeaseRevocation = {
     serverDomain: host,
@@ -591,7 +591,7 @@ export async function handleRevokeBoxSealedLease(
     issuedAt: r.issuedAt,
   };
   if (!verifyLeaseRevocation(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   const removed = await deps.boxSealedLeases.revoke(host, leaseId);
@@ -611,7 +611,7 @@ export async function handleListBoxSealedLeases(
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
+  if (!reg) return notFound("unknown server");
   const rows = await deps.boxSealedLeases.list(host, now());
   return {
     status: 200,
@@ -659,34 +659,34 @@ async function authPhoneMailbox(deps: SecretMailboxDeps, body: unknown): Promise
     typeof a.nonce !== "string" ||
     typeof b?.authSignature !== "string"
   ) {
-    return { ok: false, response: { status: 400, body: { error: "malformed mailbox auth" } } };
+    return { ok: false, response: malformed("malformed mailbox auth") };
   }
   if (!HEX64.test(a.phoneIrkPub.toLowerCase())) {
-    return { ok: false, response: { status: 400, body: { error: "phoneIrkPub must be 32 bytes hex" } } };
+    return { ok: false, response: malformed("phoneIrkPub must be 32 bytes hex") };
   }
   if (!HEX_NONCE.test(a.nonce.toLowerCase())) {
-    return { ok: false, response: { status: 400, body: { error: "auth nonce must be 32 bytes hex" } } };
+    return { ok: false, response: malformed("auth nonce must be 32 bytes hex") };
   }
   if (!HEX128.test(b.authSignature.toLowerCase())) {
-    return { ok: false, response: { status: 400, body: { error: "authSignature must be 64 bytes hex" } } };
+    return { ok: false, response: malformed("authSignature must be 64 bytes hex") };
   }
   // Freshness — the claim must be recent and not yet expired.
   if (Math.abs(now() - a.issuedAt) > maxAgeMs) {
-    return { ok: false, response: { status: 403, body: { error: "stale mailbox auth" } } };
+    return { ok: false, response: forbidden("stale mailbox auth") };
   }
   if (a.expiresAt <= now()) {
-    return { ok: false, response: { status: 403, body: { error: "mailbox auth expired" } } };
+    return { ok: false, response: forbidden("mailbox auth expired") };
   }
 
   const usernameNorm = a.username.toLowerCase();
   const userRec = await deps.usernames.get(usernameNorm);
   if (!userRec) {
-    return { ok: false, response: { status: 404, body: { error: "unknown user" } } };
+    return { ok: false, response: notFound("unknown user") };
   }
   // The claimed phoneIrkPub MUST be the account's registered IRK — the
   // mailbox is served only to the user's own identity key.
   if (!equalHex(a.phoneIrkPub, userRec.irkPubHex)) {
-    return { ok: false, response: { status: 403, body: { error: "phoneIrkPub does not match account IRK" } } };
+    return { ok: false, response: forbidden("phoneIrkPub does not match account IRK") };
   }
 
   let phoneIrkPub: Uint8Array;
@@ -697,7 +697,7 @@ async function authPhoneMailbox(deps: SecretMailboxDeps, body: unknown): Promise
     nonce = hexToBytes(a.nonce);
     sig = hexToBytes(b.authSignature);
   } catch {
-    return { ok: false, response: { status: 400, body: { error: "invalid hex" } } };
+    return { ok: false, response: malformed("invalid hex") };
   }
   const claim: DeviceEndpointClaim = {
     username: a.username,
@@ -708,7 +708,7 @@ async function authPhoneMailbox(deps: SecretMailboxDeps, body: unknown): Promise
     nonce,
   };
   if (!verifyDeviceEndpointClaim(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { ok: false, response: { status: 403, body: { error: "invalid mailbox auth signature" } } };
+    return { ok: false, response: forbidden("invalid mailbox auth signature") };
   }
   return { ok: true, username: usernameNorm };
 }

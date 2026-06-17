@@ -18,6 +18,7 @@
 // this view stays a thin DOM shell.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { toast } from "../lib/toast.js";
@@ -146,12 +147,12 @@ export function renderAddDevice() {
       <button class="secondary" id="add-device-back">← Back</button>
     </div>
   `;
-  $("add-device-restart")?.addEventListener("click", () => startPairing().catch((e) => toast(String(e), "err")));
+  $("add-device-restart")?.addEventListener("click", () => startPairing().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("add-device-back")?.addEventListener("click", () => {
     if (activePairing) { try { activePairing.abort(); } catch { /* ignore */ } activePairing = null; }
     show("view-trusted-devices");
   });
-  void startPairing().catch((e) => toast(String(e), "err"));
+  void startPairing().catch((e) => { console.error(e); toast(humanError(e), "err"); });
 }
 
 export async function enterAddDevice() {

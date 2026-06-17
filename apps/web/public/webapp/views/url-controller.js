@@ -26,6 +26,7 @@
 // are limited to this one.
 
 import { $, registerView, show } from "../lib/router.js";
+import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -177,7 +178,7 @@ function scheduleSiblingPoll() {
   clearSiblingPoll();
   siblingPollTimer = setTimeout(() => {
     renderLiveSiblings()
-      .catch((e) => toast(String(e), "err"))
+      .catch((e) => { console.error(e); toast(humanError(e), "err"); })
       .finally(() => {
         const visible = !$("view-url-controller")?.classList.contains("hidden");
         if (visible) scheduleSiblingPoll();
@@ -299,8 +300,8 @@ export function initUrlControllerView() {
     show("view-home");
   });
   $("url-controller-refresh")?.addEventListener("click", () => {
-    renderOwned().catch((e) => toast(String(e), "err"));
-    renderLiveSiblings().catch((e) => toast(String(e), "err"));
+    renderOwned().catch((e) => { console.error(e); toast(humanError(e), "err"); });
+    renderLiveSiblings().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("url-controller-claim-go")?.addEventListener("click", runClaim);
 }

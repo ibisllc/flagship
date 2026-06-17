@@ -45,7 +45,7 @@ import type {
 import { verifyDeviceDisconnect } from "@flagship/protocol";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
-import type { HandlerResponse } from "./types.js";
+import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 import type { V12PushFanout } from "./totp.js";
 
 export interface DeviceDisconnectDeps {
@@ -87,16 +87,16 @@ export async function handleDeviceDisconnect(
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
   ) {
-    return { status: 400, body: { error: "malformed body" } };
+    return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== username.toLowerCase()) {
-    return { status: 403, body: { error: "username / url mismatch" } };
+    return forbidden("username / url mismatch");
   }
   if (r.targetTokenId !== targetTokenId) {
-    return { status: 400, body: { error: "targetTokenId / url mismatch" } };
+    return malformed("targetTokenId / url mismatch");
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
+    return forbidden("stale request");
   }
   // Real IRK proof (task #39 — closes the SEV-HIGH fail-open gap that
   // previously accepted ANY non-empty signature string). The request
@@ -106,7 +106,7 @@ export async function handleDeviceDisconnect(
   // matches `userRec.irkPubHex` cannot silence push on a sibling.
   const signerRec = await deps.usernames.get(r.username);
   if (!signerRec) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
   let sigBytes: Uint8Array;
   let irkPub: Uint8Array;
@@ -114,7 +114,7 @@ export async function handleDeviceDisconnect(
     sigBytes = hexToBytes(b.signature);
     irkPub = hexToBytes(signerRec.irkPubHex);
   } catch {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
   const verified = verifyDeviceDisconnect(
     {
@@ -127,7 +127,7 @@ export async function handleDeviceDisconnect(
     irkPub,
   );
   if (!verified) {
-    return { status: 403, body: { error: "invalid signature" } };
+    return forbidden("invalid signature");
   }
 
   // Quarantine gate on the caller.
@@ -206,10 +206,10 @@ export async function handleDeviceDisconnect(
   // UI is unambiguous.
   const targetRow = await deps.pushTokens.get(r.targetTokenId);
   if (!targetRow) {
-    return { status: 404, body: { error: "unknown targetTokenId" } };
+    return notFound("unknown targetTokenId");
   }
   if (targetRow.username.toLowerCase() !== r.username.toLowerCase()) {
-    return { status: 403, body: { error: "targetTokenId does not belong to this user" } };
+    return forbidden("targetTokenId does not belong to this user");
   }
 
   await deps.pushTokens.remove(r.targetTokenId);

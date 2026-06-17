@@ -1,6 +1,6 @@
 import type { ServerStorage } from "@flagship/storage";
 import type { CloudflareDnsClient } from "./cloudflareDns.js";
-import type { HandlerResponse } from "./types.js";
+import { forbidden, type HandlerResponse } from "./types.js";
 
 /**
  * Operational admin handlers — gated by a shared secret carried in the
@@ -28,7 +28,7 @@ export function authorizeAdmin(auth: AdminAuth): HandlerResponse | null {
     return { status: 401, body: { error: "x-admin-secret header required" } };
   }
   if (!constantTimeEqual(auth.provided, auth.expected)) {
-    return { status: 403, body: { error: "x-admin-secret rejected" } };
+    return forbidden("x-admin-secret rejected");
   }
   return null;
 }
