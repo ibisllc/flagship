@@ -546,12 +546,12 @@ export interface PendingRePairRecord {
   objectedAt?: number;
   /**
    * v1.2 — grace duration captured EXPLICITLY on the row in seconds.
-   * Phase 2 sets this to 7 days (604_800) for single-device accounts
-   * and 24h (86_400) for multi-device. Stored on the row (rather
-   * than recomputed from account_type at completion time) so a row
-   * that crossed the migration boundary keeps its original grace
-   * even if the account's type changes mid-flow. Defaults to 86_400
-   * on legacy rows.
+   * Set to 3 days (259_200) for single-device accounts and 24h
+   * (86_400) for multi-device. Stored on the row (rather than
+   * recomputed from account_type at completion time) so a row that
+   * crossed the migration boundary keeps its original grace even if
+   * the account's type changes mid-flow. Defaults to 86_400 on legacy
+   * rows.
    */
   graceSeconds?: number;
   /**
@@ -576,11 +576,16 @@ export interface PendingRePairRecord {
    * (OR-in a single bit); repeated fires of the same offset are
    * no-ops (the bit's already set). Absent / 0 = nothing fired yet.
    *
-   *   bit 0 = T+0  (fired on initiate)
-   *   bit 1 = T+1d
-   *   bit 2 = T+3d
-   *   bit 3 = T+6d
-   *   bit 4 = T+7d (~1h before completesAt; single-device only)
+   *   bit 0 = T+0       (fired on initiate)
+   *   bit 1 = ~⅓-grace  (first intermediate objection reminder, single-device)
+   *   bit 2 = ~⅔-grace  (second intermediate objection reminder, single-device)
+   *   bit 3 = (reserved; retired 7d-only rung, kept for bitmap stability)
+   *   bit 4 = urgent    (~1h before completesAt; both flows)
+   *
+   * The intermediate rungs are now FRACTIONS of the row's grace
+   * window (the single-device grace shrank 7d→3d) rather than fixed
+   * day offsets; the numeric bit values are unchanged. See
+   * rePairAlerts.ts.
    */
   alertsFiredBitmap?: number;
 }

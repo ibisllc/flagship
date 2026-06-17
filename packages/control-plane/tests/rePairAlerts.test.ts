@@ -1,11 +1,13 @@
 /**
  * v1.2 Plan B Phase 2 — pending-re-pair alert scheduler tests.
  *
- * Exercises the bit-OR ladder: T+0 / T+1d / T+3d / T+6d / urgent
- * fire at the documented offsets, the bitmap monotonically grows
- * by the OR-in, and an objected row is skipped. The push-bridge is
- * stubbed via a recording firePush; Phase 5 will wire the real
- * APNs/FCM/Web Push fan-out and these tests stay green because
+ * Exercises the bit-OR ladder: T+0 / the two grace-relative
+ * intermediate reminders (~⅓ + ~⅔ of the window) / urgent fire at the
+ * documented offsets, the bitmap monotonically grows by the OR-in, and
+ * an objected row is skipped. Single-device grace is 3 days
+ * (RE_PAIR_SINGLE_GRACE_MS), so ~⅓ ≈ day-1 and ~⅔ ≈ day-2. The
+ * push-bridge is stubbed via a recording firePush; Phase 5 wires the
+ * real APNs/FCM/Web Push fan-out and these tests stay green because
  * the contract is firePush(args) — no specific transport here.
  */
 
@@ -15,7 +17,6 @@ import {
   ALERT_BIT_T0,
   ALERT_BIT_T1D,
   ALERT_BIT_T3D,
-  ALERT_BIT_T6D,
   ALERT_BIT_URGENT,
   schedulePendingRePairAlerts,
 } from "../src/rePairAlerts.js";
@@ -24,14 +25,18 @@ const USERNAME = "alice";
 
 const FIXED_NOW = 1_700_000_000_000;
 
+const DAY_MS = 86_400_000;
+/** Single-device grace = 3 days (RE_PAIR_SINGLE_GRACE_MS). */
+const SINGLE_GRACE_MS = 3 * DAY_MS;
+
 function pending(overrides: Partial<PendingRePairRecord> = {}): PendingRePairRecord {
   return {
     username: USERNAME,
     newIrkPubHex: "aa".repeat(32),
     oldIrkPubHex: "bb".repeat(32),
     initiatedAt: FIXED_NOW,
-    completesAt: FIXED_NOW + 7 * 86_400_000,
-    graceSeconds: 604_800,
+    completesAt: FIXED_NOW + SINGLE_GRACE_MS,
+    graceSeconds: SINGLE_GRACE_MS / 1000,
     totpRequired: false,
     totpProofConsumed: false,
     alertsFiredBitmap: 0,
@@ -63,7 +68,7 @@ async function seed(
   if (!r.ok) throw new Error(r.reason);
 }
 
-describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () => {
+describe("schedulePendingRePairAlerts — single-device 3-day grace ladder", () => {
   it("fires T+0 when the row's bitmap is 0 (cron tick caught the row before the initiate stamped bit 0)", async () => {
     const s = new InMemoryStorage();
     await seed(s, pending({ alertsFiredBitmap: 0 }));
@@ -74,7 +79,7 @@ describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () 
       now: () => FIXED_NOW,
     });
     expect(res.scanned).toBe(1);
-    // T+0 fires; urgent is too far away (7 days out).
+    // Only T+0 fires; the ⅓-grace rung (~day-1) and urgent are far off.
     expect(rec.fires.map((f) => f.bit)).toEqual([ALERT_BIT_T0]);
     const after = await s.pendingRePairs.get(USERNAME);
     expect(after?.alertsFiredBitmap).toBe(ALERT_BIT_T0);
@@ -92,29 +97,63 @@ describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () 
     expect(rec.fires).toHaveLength(0);
   });
 
-  it("fires T+1d at exactly initiatedAt + 1 day", async () => {
+  it("fires the first intermediate reminder at ~⅓ of the grace (~day-1 of 3)", async () => {
     const s = new InMemoryStorage();
     await seed(s, pending({ alertsFiredBitmap: ALERT_BIT_T0 }));
     const rec = recordingFirePush();
+    // ⅓ of a 3-day window = exactly 1 day in.
     await schedulePendingRePairAlerts({
       pendingRePairs: s.pendingRePairs,
       firePush: rec.fn,
-      now: () => FIXED_NOW + 86_400_000,
+      now: () => FIXED_NOW + SINGLE_GRACE_MS / 3,
     });
     expect(rec.fires.map((f) => f.bit)).toEqual([ALERT_BIT_T1D]);
     const after = await s.pendingRePairs.get(USERNAME);
     expect(after?.alertsFiredBitmap).toBe(ALERT_BIT_T0 | ALERT_BIT_T1D);
   });
 
-  it("fires every overdue bit at once when the cron skips a window (catch-up)", async () => {
+  it("BUG-1 REGRESSION: a 3-day single-device grace still gets BOTH intermediate objection reminders", async () => {
+    // Before the 7→3 migration the ladder was hard-coded to T+1d/T+3d/
+    // T+6d gated on `grace >= 7d`, so a 3-day window fired ONLY T+0 +
+    // urgent — the intermediate objection nudges (the real defense in
+    // the takeover window) never landed. Now the rungs are grace-
+    // relative, so both fire well inside the 3-day window.
+    const s = new InMemoryStorage();
+    await seed(s, pending({ alertsFiredBitmap: ALERT_BIT_T0 }));
+
+    // Just past ⅓ (day-1) — first reminder.
+    const rec1 = recordingFirePush();
+    await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      firePush: rec1.fn,
+      now: () => FIXED_NOW + SINGLE_GRACE_MS / 3 + 60_000,
+    });
+    expect(rec1.fires.map((f) => f.bit)).toEqual([ALERT_BIT_T1D]);
+
+    // Just past ⅔ (day-2) — second reminder (first already stamped).
+    const rec2 = recordingFirePush();
+    await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      firePush: rec2.fn,
+      now: () => FIXED_NOW + (2 * SINGLE_GRACE_MS) / 3 + 60_000,
+    });
+    expect(rec2.fires.map((f) => f.bit)).toEqual([ALERT_BIT_T3D]);
+
+    const after = await s.pendingRePairs.get(USERNAME);
+    expect(after?.alertsFiredBitmap).toBe(
+      ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D,
+    );
+  });
+
+  it("fires every overdue intermediate bit at once when the cron skips a window (catch-up)", async () => {
     const s = new InMemoryStorage();
     await seed(s, pending({ alertsFiredBitmap: ALERT_BIT_T0 }));
     const rec = recordingFirePush();
-    // 4 days in — both T+1d and T+3d should fire.
+    // 2.5 days in (past both ⅓ and ⅔) — both intermediates should fire.
     await schedulePendingRePairAlerts({
       pendingRePairs: s.pendingRePairs,
       firePush: rec.fn,
-      now: () => FIXED_NOW + 4 * 86_400_000,
+      now: () => FIXED_NOW + Math.floor(2.5 * DAY_MS),
     });
     expect(new Set(rec.fires.map((f) => f.bit))).toEqual(
       new Set([ALERT_BIT_T1D, ALERT_BIT_T3D]),
@@ -130,15 +169,15 @@ describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () 
     await seed(
       s,
       pending({
-        alertsFiredBitmap: ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D | ALERT_BIT_T6D,
+        alertsFiredBitmap: ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D,
       }),
     );
     const rec = recordingFirePush();
-    // 30 minutes before completion.
+    // 30 minutes before completion (3-day window).
     await schedulePendingRePairAlerts({
       pendingRePairs: s.pendingRePairs,
       firePush: rec.fn,
-      now: () => FIXED_NOW + 7 * 86_400_000 - 30 * 60_000,
+      now: () => FIXED_NOW + SINGLE_GRACE_MS - 30 * 60_000,
     });
     expect(rec.fires.map((f) => f.bit)).toEqual([ALERT_BIT_URGENT]);
   });
@@ -148,7 +187,7 @@ describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () 
     await seed(
       s,
       pending({
-        alertsFiredBitmap: ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D | ALERT_BIT_T6D,
+        alertsFiredBitmap: ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D,
       }),
     );
     const rec = recordingFirePush();
@@ -156,7 +195,7 @@ describe("schedulePendingRePairAlerts — single-device 7-day grace ladder", () 
     await schedulePendingRePairAlerts({
       pendingRePairs: s.pendingRePairs,
       firePush: rec.fn,
-      now: () => FIXED_NOW + 7 * 86_400_000 + 5 * 60_000,
+      now: () => FIXED_NOW + SINGLE_GRACE_MS + 5 * 60_000,
     });
     expect(rec.fires).toHaveLength(0);
   });
@@ -191,12 +230,12 @@ describe("schedulePendingRePairAlerts — multi-device 24h grace", () => {
     expect(rec.fires.map((f) => f.bit)).toEqual([ALERT_BIT_URGENT]);
   });
 
-  it("does NOT fire T+1d/T+3d/T+6d on a multi-device row even when those would be due in absolute time", async () => {
+  it("does NOT fire any intermediate reminder on a multi-device row (ladder is gated on grace length)", async () => {
     const s = new InMemoryStorage();
-    // Multi-device row with grace=24h. Even though 1d into the
-    // grace would overshoot completesAt, simulate a stale row to
-    // confirm the scheduler honors the grace-based ladder choice
-    // rather than the elapsed time.
+    // Multi-device row with grace=24h. The intermediate ⅓/⅔ rungs are
+    // single-device-only; the discriminator is the grace LENGTH
+    // (> 24h ⇒ single), so a 24h row never gets them no matter how much
+    // wall-clock has elapsed.
     await seed(
       s,
       pending({
@@ -206,9 +245,9 @@ describe("schedulePendingRePairAlerts — multi-device 24h grace", () => {
       }),
     );
     const rec = recordingFirePush();
-    // 30 minutes past initiation — well before completion. T+0 is
-    // set, urgent isn't due yet, and the 1d ladder rung MUST NOT
-    // fire because the row is multi-device.
+    // 30 minutes past initiation — well before completion. T+0 is set,
+    // urgent isn't due yet, and no intermediate rung may fire because
+    // the row is multi-device.
     await schedulePendingRePairAlerts({
       pendingRePairs: s.pendingRePairs,
       firePush: rec.fn,
@@ -293,8 +332,7 @@ describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
     await seed(
       s,
       pending({
-        alertsFiredBitmap:
-          ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D | ALERT_BIT_T6D,
+        alertsFiredBitmap: ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D,
       }),
     );
     const fires: Array<{ category: string; body: string }> = [];
@@ -305,7 +343,7 @@ describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
       pushFanout: async ({ payload }) => {
         fires.push({ category: payload.category, body: payload.body });
       },
-      now: () => FIXED_NOW + 7 * 86_400_000 - 30 * 60_000,
+      now: () => FIXED_NOW + SINGLE_GRACE_MS - 30 * 60_000,
     });
     expect(fires).toHaveLength(1);
     expect(fires[0]!.category).toBe("re-pair-urgent");

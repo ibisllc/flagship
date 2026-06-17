@@ -5,18 +5,31 @@
  * and OR-s in the next-due bit + fires a push when the row crosses
  * one of the documented offsets relative to its `initiatedAt`.
  *
- *   bit 0 = T+0   — fired on initiate (the initiator handler stamps
- *                   this synchronously; the cron picks it up if a
- *                   row somehow lands without it).
- *   bit 1 = T+1d  — single-device 7-day grace reminder #1
- *   bit 2 = T+3d  — single-device 7-day grace reminder #2
- *   bit 3 = T+6d  — single-device 7-day grace reminder #3
- *   bit 4 = T+7d  — last-chance urgent ping (~1h before completesAt)
+ *   bit 0 = T+0      — fired on initiate (the initiator handler stamps
+ *                      this synchronously; the cron picks it up if a
+ *                      row somehow lands without it).
+ *   bit 1 = ~⅓-grace — single-device objection reminder #1
+ *   bit 2 = ~⅔-grace — single-device objection reminder #2
+ *   bit 3 = (reserved) — historical T+6d rung, retired when the grace
+ *                      shrank 7d→3d; the constant is kept so persisted
+ *                      bitmaps stay stable but no rung fires it now.
+ *   bit 4 = urgent   — last-chance ping (~1h before completesAt)
  *
- * Multi-device flows (24h grace) skip bits 1-3 by construction
- * because their `initiatedAt + 1d` is already past `completesAt`,
- * but the urgent T-1h ping (bit 4 here, repurposed as
- * "completesAt - 1h" for both flows) still fires.
+ * **Grace-relative, not day-pinned.** The single-device grace shrank
+ * from 7 days to 3 (`RE_PAIR_SINGLE_GRACE_MS`), and the takeover window
+ * IS the objection window — a stranger who knows the username can
+ * initiate with no second factor, so the owner's other devices must be
+ * nudged to object DURING the grace. A 7-day-pinned ladder (T+1d/T+3d/
+ * T+6d) fired zero intermediate reminders inside a 3-day window. The
+ * rungs are now FRACTIONS of the row's own grace (⅓ + ⅔), so they land
+ * meaningfully whatever the grace length: ~day-1 and ~day-2 for the
+ * 3-day single-device window, and they'd still space correctly if the
+ * grace were ever retuned.
+ *
+ * Multi-device flows (24h grace) skip the fractional rungs by
+ * construction (the window is too short for intermediate nudges and a
+ * TOTP proof is required before the grace even starts), but the urgent
+ * "completesAt - 1h" ping (bit 4) still fires for both flows.
  *
  * Phase 2 fires fire-and-forget pushes with a stub-friendly
  * forwarder: callers wire the real APNs/FCM/Web Push bridge via
@@ -38,28 +51,48 @@ import type {
 import { recordAuditEvent } from "./auditEvents.js";
 import type { V12PushFanout } from "./totp.js";
 
+// NOTE: these numeric values are a PERSISTED bitfield
+// (`pending_re_pairs.alerts_fired_bitmap` in D1 / InMemory). Never
+// renumber them — a deploy that shifted a bit would re-fire (or skip)
+// alerts on in-flight rows. The SEMANTICS of bits 1/2 changed from
+// day-pinned offsets to grace fractions; the bit VALUES did not.
+/**
+ * Multi-device grace (24h). Mirrors `RE_PAIR_GRACE_MS` in rePair.ts but
+ * declared locally to avoid a module cycle (rePair.ts already imports
+ * ALERT_BIT_T0 from here). The single-device ladder fires only for rows
+ * whose grace EXCEEDS this; the 24h multi window gets T+0 + urgent only.
+ */
+const MULTI_DEVICE_GRACE_MS = 24 * 60 * 60_000;
+
 export const ALERT_BIT_T0 = 1;
-export const ALERT_BIT_T1D = 2;
-export const ALERT_BIT_T3D = 4;
-export const ALERT_BIT_T6D = 8;
+export const ALERT_BIT_T1D = 2; // first intermediate reminder (~⅓ grace)
+export const ALERT_BIT_T3D = 4; // second intermediate reminder (~⅔ grace)
+export const ALERT_BIT_T6D = 8; // reserved — retired 7d-only rung (kept for bitmap stability)
 export const ALERT_BIT_URGENT = 16; // ~1h before completesAt
 
 interface AlertOffset {
   bit: number;
-  /** Wall-clock ms since `initiatedAt` after which the bit becomes due. */
-  msSinceInitiated: number;
+  /**
+   * Fraction of the row's OWN grace window (initiatedAt → completesAt)
+   * after which the bit becomes due. Grace-relative so the ladder
+   * spaces correctly whatever the grace length (3d single-device today;
+   * resilient if it's ever retuned). T+0 is fraction 0.
+   */
+  graceFraction: number;
   /** Friendly label that ends up in the push category / audit detail. */
   label: string;
 }
 
-/** Single-device 7-day grace alert ladder. Multi-device skips the
- *  intermediate 1d/3d/6d rungs (the 24h window is too short for
- *  intermediate reminders) but still uses T+0 and the urgent ping. */
+/** Single-device grace alert ladder, grace-RELATIVE (see the file
+ *  header). T+0 plus two intermediate objection reminders at ~⅓ and ~⅔
+ *  of the window; the urgent ping (handled separately, below) covers
+ *  the ~1h-before-completesAt slot. Multi-device skips the intermediate
+ *  rungs (the 24h window is too short, and a second factor already
+ *  gated the initiate) but still uses T+0 and the urgent ping. */
 const SINGLE_DEVICE_OFFSETS: readonly AlertOffset[] = [
-  { bit: ALERT_BIT_T0, msSinceInitiated: 0, label: "re-pair-initiated" },
-  { bit: ALERT_BIT_T1D, msSinceInitiated: 1 * 86_400_000, label: "re-pair-1d-reminder" },
-  { bit: ALERT_BIT_T3D, msSinceInitiated: 3 * 86_400_000, label: "re-pair-3d-reminder" },
-  { bit: ALERT_BIT_T6D, msSinceInitiated: 6 * 86_400_000, label: "re-pair-6d-reminder" },
+  { bit: ALERT_BIT_T0, graceFraction: 0, label: "re-pair-initiated" },
+  { bit: ALERT_BIT_T1D, graceFraction: 1 / 3, label: "re-pair-reminder-1" },
+  { bit: ALERT_BIT_T3D, graceFraction: 2 / 3, label: "re-pair-reminder-2" },
 ];
 
 export interface PushFireRequest {
@@ -146,15 +179,25 @@ export async function schedulePendingRePairAlerts(
   for (const row of rows) {
     const bits = row.alertsFiredBitmap ?? 0;
     const grace = (row.graceSeconds ?? 86_400) * 1000;
-    // Single-device gets the 1d/3d/6d ladder; multi only T+0.
-    // The urgent ping fires for BOTH (single + multi) when the row
-    // is within `urgentLeadMs` of completesAt.
-    const isSingle = grace >= 7 * 86_400_000;
+    // Single-device gets the full grace-relative ladder (T+0 + the ⅓/⅔
+    // intermediate reminders); multi gets only T+0. The discriminator
+    // is the grace LENGTH, not a 7-day assumption: anything longer than
+    // the multi-device 24h grace (MULTI_DEVICE_GRACE_MS) is single-
+    // device (single is 3 days; a `>` keeps the boundary off the exact
+    // 24h multi value). The urgent
+    // ping below fires for BOTH when the row is within `urgentLeadMs`
+    // of completesAt.
+    const isSingle = grace > MULTI_DEVICE_GRACE_MS;
     const ladder = isSingle ? SINGLE_DEVICE_OFFSETS : [SINGLE_DEVICE_OFFSETS[0]!];
 
     for (const off of ladder) {
       if (bits & off.bit) continue;
-      if (now - row.initiatedAt < off.msSinceInitiated) continue;
+      // Grace-relative due-time: initiatedAt + fraction × grace. T+0
+      // (fraction 0) is due immediately. Using `grace` rather than
+      // (completesAt - initiatedAt) keeps the rungs stable even if the
+      // two ever drift; they're equal by construction at initiate.
+      const dueAt = row.initiatedAt + off.graceFraction * grace;
+      if (now < dueAt) continue;
       await firePushAndStamp(deps, firePush, row, off.bit, off.label);
       fired.push({ username: row.username, bit: off.bit, category: off.label });
     }
@@ -193,14 +236,17 @@ function buildDefaultFirePush(
       // still captures the timeline.
       if (rows.length > 0) {
         const isUrgent = req.bit === ALERT_BIT_URGENT;
-        const dayLabel = labelForBit(req.bit);
+        const isInitial = req.bit === ALERT_BIT_T0;
         let body: string;
         if (isUrgent) {
           body = "Your account is about to be taken over in 1 hour. Object now if this isn't you.";
-        } else if (dayLabel === "T+0") {
+        } else if (isInitial) {
           body = "A new device is trying to take over your account. Tap to review or object.";
         } else {
-          body = `Account recovery still pending (${dayLabel}). Tap to review or object.`;
+          // Intermediate objection reminder. Deliberately grace-length-
+          // agnostic copy (no day count) — the rungs are now fractions
+          // of the grace window, not fixed days.
+          body = "Account recovery still pending. Tap to review or object before the window closes.";
         }
         await deps.pushFanout({
           username: req.username.toLowerCase(),
@@ -234,10 +280,10 @@ function buildDefaultFirePush(
       // of how many nudges the user received before the
       // grace window closed. accountTypeAtEvent we don't have on
       // the row directly; infer from grace duration as a pragmatic
-      // approximation (multi grace = 24h ⇒ 'multi'; otherwise
-      // 'single'). The completion-time audit captures the real
-      // type read-through from the username row.
-      const isSingle = (req.graceSeconds ?? 86_400) >= 7 * 86_400;
+      // approximation (multi grace = 24h ⇒ 'multi'; anything longer ⇒
+      // 'single', which is 3 days). The completion-time audit captures
+      // the real type read-through from the username row.
+      const isSingle = (req.graceSeconds ?? 86_400) * 1000 > MULTI_DEVICE_GRACE_MS;
       await recordAuditEvent(
         { auditEvents: deps.auditEvents },
         {
@@ -251,17 +297,6 @@ function buildDefaultFirePush(
       );
     }
   };
-}
-
-function labelForBit(bit: number): string {
-  switch (bit) {
-    case ALERT_BIT_T0: return "T+0";
-    case ALERT_BIT_T1D: return "T+1d";
-    case ALERT_BIT_T3D: return "T+3d";
-    case ALERT_BIT_T6D: return "T+6d";
-    case ALERT_BIT_URGENT: return "urgent";
-    default: return `bit ${bit}`;
-  }
 }
 
 async function firePushAndStamp(
