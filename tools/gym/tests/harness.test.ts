@@ -248,15 +248,59 @@ describe("runGym end-to-end (fake adapters) writes a real artifact", () => {
   });
 });
 
-describe("the shipped smoke suite", () => {
-  it("has one every-merge fixture scenario per proven surface (web + iOS)", () => {
-    const web = ALL_SCENARIOS.find((s) => s.surface === "web");
-    const ios = ALL_SCENARIOS.find((s) => s.surface === "ios");
-    expect(web?.tier).toBe("every-merge");
-    expect(web?.backend).toBe("fixture");
-    expect(ios?.tier).toBe("every-merge");
-    expect(ios?.backend).toBe("fixture");
-    // No smoke scenario is destructive — none needs the guardrail to run.
+describe("the shipped every-merge suite (§12-G4)", () => {
+  const web = ALL_SCENARIOS.filter((s) => s.surface === "web");
+  const ios = ALL_SCENARIOS.filter((s) => s.surface === "ios");
+  const android = ALL_SCENARIOS.filter((s) => s.surface === "android");
+
+  it("is entirely every-merge + fixture (the no-backend merge gate)", () => {
+    expect(ALL_SCENARIOS.length).toBeGreaterThan(0);
+    for (const s of ALL_SCENARIOS) {
+      expect(s.tier).toBe("every-merge");
+      expect(s.backend).toBe("fixture");
+    }
+  });
+
+  it("covers real breadth on the two proven surfaces (web + iOS, ~10+ each)", () => {
+    // G4 expands the G3 seed (1 each) to a curated subset: core launch +
+    // per-tab render + create-server + validation + the slivers.
+    expect(web.length).toBeGreaterThanOrEqual(10);
+    expect(ios.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("leaves Android stubbed (Phase-5; the adapter SKIPS it, never fails it)", () => {
+    expect(android.length).toBe(0);
+  });
+
+  it("every scenario id is unique + every web harness grep title is unique", () => {
+    const ids = ALL_SCENARIOS.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // The web adapter selects a Playwright spec by its grep title, so each web
+    // scenario's harness must be a unique title (else the grep matches several).
+    const webTitles = web.map((s) => s.harness);
+    expect(new Set(webTitles).size).toBe(webTitles.length);
+  });
+
+  it("binds each scenario to a real driver (web grep title / iOS -only-testing id)", () => {
+    for (const s of web) {
+      expect(s.harness.length).toBeGreaterThan(0);
+      // Grep title, not a path — the adapter passes it to `--grep`.
+      expect(s.harness).not.toContain("/");
+    }
+    for (const s of ios) {
+      // Target/Class or Target/Class/method.
+      expect(s.harness.startsWith("FlagshipAppUITests/")).toBe(true);
+    }
+  });
+
+  it("carries deterministic assertions + screenshot points on every scenario", () => {
+    for (const s of ALL_SCENARIOS) {
+      expect(s.assertions.length).toBeGreaterThan(0);
+      expect(s.screenshotPoints.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("no every-merge scenario is destructive — none needs the guardrail to run", () => {
     expect(ALL_SCENARIOS.some(isDestructive)).toBe(false);
   });
 });

@@ -19,6 +19,11 @@ import type { AdapterContext, AdapterOutcome, SurfaceAdapter } from "./types.js"
 
 const GYM_CONFIG_REL = "apps/web/e2e/gym/playwright.gym.config.ts";
 
+/** Escape a literal string for safe use inside a Playwright `--grep` regex. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Minimal shape of the Playwright JSON reporter output we consume. */
 interface PwAttachment {
   name: string;
@@ -70,7 +75,11 @@ export class WebAdapter implements SurfaceAdapter {
     const jsonPath = join(pwOutput, "report.json");
 
     // Invoke Playwright against the gym config. `scenario.harness` selects the
-    // spec by grep title so a single config can host many gym specs later.
+    // spec by its test TITLE. Playwright's `--grep` is a REGEX, so a title with
+    // a metacharacter (`+`, `(`, `.`, …) would silently mismatch ("No tests
+    // found") — escape it to a literal, anchored to end-of-line so one title
+    // never prefix-matches another's longer title.
+    const grep = escapeRegex(scenario.harness) + "$";
     const res = spawnSync(
       "npx",
       [
@@ -79,7 +88,7 @@ export class WebAdapter implements SurfaceAdapter {
         "--config",
         GYM_CONFIG_REL,
         "--grep",
-        scenario.harness,
+        grep,
       ],
       {
         cwd: ctx.repoRoot,

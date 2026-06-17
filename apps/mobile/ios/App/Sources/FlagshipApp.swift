@@ -84,11 +84,28 @@ struct FlagshipApp: App {
     /// builds ignore the flag — `ProcessInfo.arguments` is only
     /// populated when the launcher sets it.
     @MainActor
-    private static func applySmokeModeIfRequested(_ app: AppState, linker: DeepLinker) {
+    private static func applySmokeModeIfRequested(
+        _ app: AppState,
+        linker: DeepLinker,
+        operations: ActiveOperationsCenter
+    ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
         if !app.isPaired {
             DemoFixtures.activate(app, username: "smoketest")
+        }
+        // `-smoke-ops` seeds ONE in-flight build so the global operations
+        // sliver (`global-operations-bar`) renders deterministically for the
+        // gym's sliver scenario. The default DemoFixtures pods are all
+        // online/offline (no pending), so without this the sliver — correctly
+        // — stays hidden. Gym-only; production never passes the arg.
+        if args.contains("-smoke-ops") {
+            operations.upsertBuild(
+                id: "build:gym-smoke",
+                subject: "blog",
+                onServer: "Home",
+                target: .vibeCodeChat(sessionId: "gym-smoke")
+            )
         }
     }
 
@@ -276,7 +293,7 @@ struct FlagshipApp: App {
                 .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
-                    Self.applySmokeModeIfRequested(appState, linker: linker)
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations)
                     // Restore a previously paired session: if the Keystore
                     // still holds a wrapped UMK (a real account that
                     // survives restarts) and we know which cloud was

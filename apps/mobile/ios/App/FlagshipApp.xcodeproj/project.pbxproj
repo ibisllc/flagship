@@ -27,6 +27,7 @@
 		816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */; };
 		834D62D11BC2D886AD2C5EEB /* FlagshipWatchWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */; };
 		8C738115140ACB707212DE1C /* FlagshipWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */; };
 		8D1ECF1BA1D4441C3439B988 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		96F743F46295DACB52910AA8 /* InstallProgressLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 378E57D6EA8CCCF38A83A0D3 /* InstallProgressLiveActivity.swift */; };
 		AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
@@ -5451,6 +5452,7 @@
 		92ECEAF36CCCE03148F12E62 /* if_types.h-1ITWCUH63WPNX */ = {isa = PBXFileReference; path = "if_types.h-1ITWCUH63WPNX"; sourceTree = "<group>"; };
 		92F912E965D4A4C207A5DA69 /* os_object-6FT8ABWLFP7DELM6J2BVD9R6Y.pcm */ = {isa = PBXFileReference; path = "os_object-6FT8ABWLFP7DELM6J2BVD9R6Y.pcm"; sourceTree = "<group>"; };
 		92FC67B7EB639860221B086D /* CGDataProvider.h-2PAP357O4LS70 */ = {isa = PBXFileReference; path = "CGDataProvider.h-2PAP357O4LS70"; sourceTree = "<group>"; };
+		9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymEveryMergeTests.swift; sourceTree = "<group>"; };
 		932B385F14A4B177C03674A4 /* PushRegistrar.swiftconstvalues */ = {isa = PBXFileReference; path = PushRegistrar.swiftconstvalues; sourceTree = "<group>"; };
 		9346CB52560BEEA1A671E37D /* ServiceDetailViewModel.swiftconstvalues */ = {isa = PBXFileReference; path = ServiceDetailViewModel.swiftconstvalues; sourceTree = "<group>"; };
 		93483A034D71F32AF03EDF49 /* ScreensClient.swift-3J6A8LI21X4B8 */ = {isa = PBXFileReference; path = "ScreensClient.swift-3J6A8LI21X4B8"; sourceTree = "<group>"; };
@@ -9413,10 +9415,10 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_02F6E33D-0FAB-4363-B9D3-83B96526F373" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_A7F759AA-5193-411B-B136-72846F8A7686" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_C86874CF-A933-4C97-AFF7-512A282D9FB6" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_EBA25F81-A664-4308-8AB5-5A48F05DA221" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_1E00EA65-E399-460B-9A9C-08510B41CD35" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_44372DA9-4792-425A-B4DC-8ED0E18678B0" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_CEC8073F-0028-41BC-818D-41954D0B62A3" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_D794D1FE-96B4-45AE-9BA4-9C63764983CC" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37147,6 +37149,7 @@
 		F51043E76B25BB084043EA15 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */,
 				8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */,
 			);
@@ -38438,13 +38441,13 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_2373D8E4-BAA6-46CF-8600-253076A64CA3" /* . */ = {
+		"TEMP_30CD000B-CA0B-4C61-B2CC-6CCE747A471D" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_C86874CF-A933-4C97-AFF7-512A282D9FB6" /* project.yml */,
-				"TEMP_A7F759AA-5193-411B-B136-72846F8A7686" /* FlagshipApp.xcodeproj */,
-				"TEMP_EBA25F81-A664-4308-8AB5-5A48F05DA221" /* FlagshipApp.entitlements */,
-				"TEMP_02F6E33D-0FAB-4363-B9D3-83B96526F373" /* Info.plist */,
+				"TEMP_CEC8073F-0028-41BC-818D-41954D0B62A3" /* project.yml */,
+				"TEMP_1E00EA65-E399-460B-9A9C-08510B41CD35" /* FlagshipApp.xcodeproj */,
+				"TEMP_44372DA9-4792-425A-B4DC-8ED0E18678B0" /* FlagshipApp.entitlements */,
+				"TEMP_D794D1FE-96B4-45AE-9BA4-9C63764983CC" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -38644,6 +38647,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */,
 				E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */,
 			);

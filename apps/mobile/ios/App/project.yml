@@ -33,7 +33,7 @@ schemes:
     run:
       config: Debug
     # The UITest action runs the XCUITest target (OnboardingSmokeTests +
-    # GymSmokeTests). The gym's iOS adapter drives this via
+    # GymSmokeTests + GymEveryMergeTests). The gym's iOS adapter drives this via
     # `xcodebuild test -scheme FlagshipApp -only-testing:FlagshipAppUITests/...`;
     # without a test action the scheme rejects the test action entirely.
     test:
