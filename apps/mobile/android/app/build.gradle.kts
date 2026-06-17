@@ -31,6 +31,10 @@ android {
         vectorDrawables { useSupportLibrary = true }
         // Keep APK lean (English only); reproducible-build prerequisite.
         resourceConfigurations += setOf("en")
+        // GYM (§10 Phase-5) — the on-device instrumentation runner the UI gym
+        // drives via `connectedDebugAndroidTest`. AndroidJUnitRunner hosts the
+        // Compose UI Test + Espresso `androidTest` suite (app/src/androidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -173,6 +177,14 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // GYM (§10 Phase-5) on-device harness deps: AndroidJUnitRunner +
+    // ActivityScenario (androidx.test:core) + Espresso for the instrumentation
+    // suite that launches MainActivity on an AVD.
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
