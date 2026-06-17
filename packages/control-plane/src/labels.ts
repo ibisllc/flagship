@@ -24,6 +24,13 @@ const RESERVED_USER_LABELS = new Set([
   "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
   "static", "cdn", "assets", "files", "git", "tunnel", "control",
   "control-plane", "console", "dashboard", "blog", "docs",
+  // Test-environment apex labels (docs/ui-test-gym.md §6.5). Banning
+  // these as usernames is what makes the `gym.` test env safe to share
+  // the prod zones: no prod user can ever own the `gym` label, so a test
+  // cert under `*.gym.flagship.services` can never collide with a
+  // registered prod box's SAN set (closes the CT-monitor false-positive)
+  // nor shadow `gym.flagshipserver.com`'s identity / zone.
+  "gym", "test", "e2e", "qa", "ci", "staging",
 ]);
 
 // Server (pod) labels are the leftmost segment of

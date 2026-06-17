@@ -63,6 +63,26 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("flagship").ok).toBe(false);
     expect(validateUserLabel("support").ok).toBe(false);
   });
+
+  it("bans the test-environment apex labels (docs/ui-test-gym.md §6.5)", () => {
+    // `gym` is the load-bearing one: banning it as a username is what makes
+    // sharing the prod zones with the `gym.` test env safe — no prod user can
+    // ever own the `gym` apex label (closes the CT-monitor false-positive and
+    // the gym.flagshipserver.com identity collision). The rest harden the set.
+    // ALL must be rejected and ALL must be in the authoritative set; the
+    // ≥3-char ones (`gym`/`test`/`staging`) are rejected specifically as
+    // RESERVED (the 2-char `e2e`/`qa`/`ci` fail the length shape first — still
+    // banned, just via a different gate).
+    for (const reserved of ["gym", "test", "e2e", "qa", "ci", "staging"]) {
+      expect(validateUserLabel(reserved).ok).toBe(false);
+      expect(_labelInternal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
+    }
+    for (const reserved of ["gym", "test", "e2e", "staging"]) {
+      const r = validateUserLabel(reserved);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/reserved/);
+    }
+  });
 });
 
 describe("validateServerLabel — loose RFC-1123 DNS label", () => {

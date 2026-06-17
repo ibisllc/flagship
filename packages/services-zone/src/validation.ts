@@ -72,6 +72,15 @@ const RESERVED_USER_LABELS = new Set([
   "dashboard",
   "blog",
   "docs",
+  // Test-environment apex labels (docs/ui-test-gym.md §6.5) — mirror of
+  // control-plane labels.ts. Banning these as usernames keeps the `gym.`
+  // test env from ever colliding with a real user's identity or zone.
+  "gym",
+  "test",
+  "e2e",
+  "qa",
+  "ci",
+  "staging",
 ]);
 
 export type LabelValidation =

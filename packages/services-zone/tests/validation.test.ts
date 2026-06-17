@@ -50,6 +50,13 @@ describe("validateUserLabel", () => {
       expect(validateUserLabel(reserved).ok).toBe(false);
     }
   });
+
+  it("bans the test-environment apex labels in lock-step with control-plane labels.ts (docs/ui-test-gym.md §6.5)", () => {
+    for (const reserved of ["gym", "test", "e2e", "qa", "ci", "staging"]) {
+      expect(validateUserLabel(reserved).ok).toBe(false);
+      expect(_internal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
+    }
+  });
 });
 
 describe("validateAppLabel", () => {
