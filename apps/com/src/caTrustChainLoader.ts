@@ -141,6 +141,13 @@ export function activeCaLeaseNotAfterMs(now: number): number[] {
     const notBefore = Date.parse(e.notBefore);
     if (Number.isNaN(notAfter)) continue;
     if (!Number.isNaN(notBefore) && now < notBefore) continue;
+    // Skip a lease past its OWN window. A still-live sibling lease can
+    // re-authorize the same caPubkey (e.g. a backdated renewal committed
+    // alongside the lapsed original) — so the key is in `liveKeys` — but
+    // the EXPIRED lease's notAfter must not be reported, or the soonest-
+    // expiry is the past date and the status/cron false-alarm "expired"
+    // while the authority is actually live.
+    if (now >= notAfter) continue;
     out.push(notAfter);
   }
   return out;

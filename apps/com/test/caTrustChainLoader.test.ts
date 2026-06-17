@@ -30,6 +30,7 @@ import {
   workerCaTrustChain,
   caEnforceFromEnv,
   caTrustChainPublicMaterial,
+  activeCaLeaseNotAfterMs,
 } from "../src/caTrustChainLoader.js";
 
 const NOW = Date.parse("2026-06-01T00:00:00.000Z");
@@ -150,6 +151,20 @@ describe("caTrustChainPublicMaterial — what /api/maintainer-blessing serves", 
       new Date(liveNow),
     );
     expect(clientKeys).toEqual(workerCaTrustChain().authorizedCaKeys(liveNow));
+  });
+});
+
+describe("activeCaLeaseNotAfterMs — never reports an expired sibling lease", () => {
+  // Regression: after a backdated renewal, the bundle holds TWO leases for
+  // the SAME caPubkey — the lapsed original + the live backfill. The key is
+  // authorized (via the live one), so a naive filter that only checks
+  // "is the key authorized?" leaks the EXPIRED lease's past notAfter and the
+  // status/cron falsely reports "expired" while authority is actually live.
+  it("every reported expiry is in the future, and authority is live now", () => {
+    const now = Date.parse("2026-06-17T00:00:00.000Z"); // within the backdated lease
+    const out = activeCaLeaseNotAfterMs(now);
+    expect(out.length).toBeGreaterThan(0); // authority IS live at now
+    for (const ms of out) expect(ms).toBeGreaterThan(now); // no expired lease leaks
   });
 });
 
