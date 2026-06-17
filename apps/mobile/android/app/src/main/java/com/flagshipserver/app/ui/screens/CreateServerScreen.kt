@@ -70,6 +70,7 @@ import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
 import com.flagshipserver.app.core.SerialGen
 import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
@@ -300,7 +301,7 @@ private fun DesignPhase(
             FSField(value = description, onValueChange = onDescription, label = "Description")
             Spacer(Modifier.height(FS.space.s2))
             Text(
-                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.flagship.services",
+                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.${Endpoints.dataApex}",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
@@ -585,7 +586,7 @@ private suspend fun prepareDelivery(
     val matchCode = session.pair(parsed.browserPublicKey)
 
     val slug = SlugUtil.slugify(serverName)
-    val serverDomain = "$slug.$username.flagship.services"
+    val serverDomain = Endpoints.serverFqdn(server = slug, user = username)
     val serial = SerialGen.random()
     val now = System.currentTimeMillis()
     val expiresAt = now + recipeTtlMs.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)

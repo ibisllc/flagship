@@ -22,7 +22,7 @@ data class WireBlob(
     val username: String,
     val serverName: String,
     val phoneDelegatedPubKey: String,    // hex
-    val registrationUrl: String = "https://flagshipserver.com/api/server/register",
+    val registrationUrl: String = Endpoints.registrationUrl,
     val authCode: WireAuthCode,
     val authCodeUserSignature: String,   // hex
     val installerGitRef: String = "main",

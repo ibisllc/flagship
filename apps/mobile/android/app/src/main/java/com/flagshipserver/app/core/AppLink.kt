@@ -24,7 +24,7 @@ object AppLink {
      */
     fun resolve(uri: Uri): DeepLink? {
         DeepLink.parse(uri)?.let { return it }
-        if (uri.scheme in setOf("http", "https") && uri.host == "flagshipserver.com") {
+        if (uri.scheme in setOf("http", "https") && uri.host == Endpoints.controlHost) {
             val segments = uri.pathSegments
             if (segments.size >= 2 && segments[0] == "app") {
                 val translated = Uri.Builder()

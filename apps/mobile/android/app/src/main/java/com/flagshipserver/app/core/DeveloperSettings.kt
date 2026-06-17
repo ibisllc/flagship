@@ -22,6 +22,19 @@ class DeveloperSettings(prefs: SharedPreferences) {
         private const val KEY_LIVE = "useLiveClient"
         private const val KEY_UNLOCKED = "unlocked"
         private const val KEY_MOCK_LATENCY = "mockLatencyMs"
+        private const val KEY_APEX_HOST = "apexHost"
+
+        /** Install (or clear) the [Endpoints] override from an apex host.
+         *  Empty / the prod host ⇒ clear (prod default). Shared by the
+         *  launch-intent reader and the persisted-field path. */
+        fun applyApexOverride(host: String) {
+            val trimmed = host.trim().lowercase()
+            if (trimmed.isEmpty() || trimmed == Endpoints.PROD_CONTROL_HOST) {
+                Endpoints.setOverride(null)
+            } else {
+                Endpoints.setOverride(trimmed)
+            }
+        }
 
         fun create(context: Context): DeveloperSettings {
             val masterKey = MasterKey.Builder(context)
@@ -48,6 +61,33 @@ class DeveloperSettings(prefs: SharedPreferences) {
 
     private val _mockLatencyMs = MutableStateFlow(store.getInt(KEY_MOCK_LATENCY, 180))
     val mockLatencyMs: StateFlow<Int> = _mockLatencyMs.asStateFlow()
+
+    /**
+     * Backend apex-host OVERRIDE (the gym test-build seam). Empty ⇒ prod
+     * default (`flagshipserver.com`). When set to e.g. `gym.flagshipserver.com`,
+     * every client retargets at the gym backend (and the data plane mirrors
+     * the `gym.` prefix). Persisted so a test build stays pointed at the gym
+     * across launches; PROD ships empty so [Endpoints] resolves to today's
+     * literal byte-for-byte. The launch-intent extra `flagship.apexHost` (read
+     * in MainActivity) sets this before clients build.
+     */
+    private val _apexHost = MutableStateFlow(store.getString(KEY_APEX_HOST, "") ?: "")
+    val apexHost: StateFlow<String> = _apexHost.asStateFlow()
+
+    init {
+        // Apply a persisted override at construction so a test build is pointed
+        // at the gym backend before the first client is built. A prod build has
+        // no persisted value ⇒ leave Endpoints alone (prod default). We do NOT
+        // CLEAR on empty here, so an override already installed by the launch
+        // intent (read in MainActivity before this) survives.
+        if (_apexHost.value.isNotBlank()) applyApexOverride(_apexHost.value)
+    }
+
+    fun setApexHost(value: String) {
+        _apexHost.value = value
+        store.edit().putString(KEY_APEX_HOST, value).apply()
+        applyApexOverride(value)
+    }
 
     fun setUseLiveClient(value: Boolean) {
         _useLiveClient.value = value

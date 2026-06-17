@@ -93,6 +93,16 @@ class MainActivity : FragmentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // FIRST: apply a backend-apex override from the launch intent, BEFORE
+        // the OkHttp client / clients are built below (the pinner + the live
+        // clients read Endpoints at construction). The gym test build launches
+        // with `--es flagship.apexHost gym.flagshipserver.com`; a prod launch
+        // passes nothing, so Endpoints stays on today's literal (and the prod
+        // SPKI pins still apply). A persisted DeveloperSettings.apexHost is the
+        // fallback when no intent extra is present.
+        intent?.getStringExtra("flagship.apexHost")?.let { host ->
+            if (host.isNotBlank()) DeveloperSettings.applyApexOverride(host)
+        }
         Keystore.attach(applicationContext)
         FlagshipFcmService.ensureChannel(applicationContext)
         biometric = BiometricAuthority(this)

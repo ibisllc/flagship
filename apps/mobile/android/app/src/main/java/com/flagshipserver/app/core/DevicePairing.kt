@@ -41,7 +41,8 @@ data class JoinLink(val sid: String, val adminPubKey: ByteArray) {
     override fun hashCode(): Int = sid.hashCode() * 31 + adminPubKey.contentHashCode()
 
     companion object {
-        const val HOST = "flagshipserver.com"
+        /** Control apex host, via [Endpoints] (prod-default + test override). */
+        val HOST: String get() = Endpoints.controlHost
         const val PATH = "/join"
 
         /** Build the universal/app link the admin renders as a QR. The

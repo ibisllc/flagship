@@ -11,12 +11,15 @@
 
 package com.flagshipserver.app.core
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HttpClientFactoryTest {
+
+    @After fun reset() = Endpoints.setOverride(null) // never leak a gym override
 
     @Test fun flagshipserverComHasExactlyTwoPins() {
         // Two pins: the Cloudflare ECC CA-3 intermediate + the RSA
@@ -75,5 +78,18 @@ class HttpClientFactoryTest {
         // default during a refactor.
         val client = HttpClientFactory.build()
         assertNotEquals(okhttp3.CertificatePinner.DEFAULT, client.certificatePinner)
+    }
+
+    @Test fun gymApexSkipsTheProdSpkiPins() {
+        // G2 — a gym test build points Endpoints at a non-prod apex served
+        // behind a different LE chain; the prod Cloudflare-intermediate pins
+        // would HARD-FAIL TLS there, so the pinner must NOT pin the gym apex.
+        // (Box hostnames still get dynamic pins via the registry — unaffected.)
+        Endpoints.setOverride(controlHost = "gym.flagshipserver.com")
+        val client = HttpClientFactory.build()
+        assertTrue(client.certificatePinner.findMatchingPins("gym.flagshipserver.com").isEmpty())
+        // And the prod apex isn't pinned either while overridden (it's not the
+        // configured host) — no stray prod pin leaks into a gym build.
+        assertTrue(client.certificatePinner.findMatchingPins("flagshipserver.com").isEmpty())
     }
 }

@@ -295,7 +295,8 @@ fun HomeTab() {
                     // it pending (no more fake-ONLINE random-id pod) and
                     // the reconciler flips it when the box registers.
                     val final = (resolvedFqdn ?: fqdn).ifEmpty {
-                        com.flagshipserver.app.core.SlugUtil.slugify(name) + ".flagship.services"
+                        com.flagshipserver.app.core.SlugUtil.slugify(name) +
+                            ".${com.flagshipserver.app.core.Endpoints.dataApex}"
                     }
                     if (live) {
                         app.upsertRegisteredPod(fqdn = final, name = name)

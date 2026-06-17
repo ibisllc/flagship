@@ -295,4 +295,4 @@ private suspend fun resolveAppShareUrl(
     client: com.flagshipserver.app.api.ScreensClient,
 ): String =
     runCatching { client.appDetail(serviceId).app.url }
-        .getOrElse { "https://$serviceId.flagship.services" }
+        .getOrElse { "https://$serviceId.${com.flagshipserver.app.core.Endpoints.dataApex}" }

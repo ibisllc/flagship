@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
@@ -1462,7 +1463,7 @@ class MockFlagshipServerClient(
             AppRenameBehavior.StaleSignature -> throw IllegalStateException("403 bad signature")
             AppRenameBehavior.Ok -> {
                 val newLabel = body.request.newDisplayLabel
-                val canonical = "https://$newLabel.${username.lowercase()}.flagship.services"
+                val canonical = "https://${Endpoints.serverFqdn(newLabel, username.lowercase())}"
                 appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[serviceId] = newLabel to canonical
                 AppRenameResponse(
                     ok = true,
@@ -1497,7 +1498,7 @@ class MockFlagshipServerClient(
             }
         }
         val label = alias?.first ?: defaultLabel
-        val host = "${username.lowercase()}.flagship.services"
+        val host = Endpoints.userZoneHost(username.lowercase())
         val canonical = alias?.second ?: "https://$label.$host"
         val u = username.lowercase()
         val lastChanged = customDomainLastChangedByUser[u]?.get(serviceId)
@@ -1866,7 +1867,8 @@ class LiveFlagshipServerClient(
     private val base = baseUrl.trimEnd('/')
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://flagshipserver.com"
+        /** Control-plane apex, via [Endpoints] (prod-default + test override). */
+        val DEFAULT_BASE_URL: String get() = Endpoints.controlBaseUrl
     }
 
     override suspend fun claimUsername(req: UsernameClaimRequest) {

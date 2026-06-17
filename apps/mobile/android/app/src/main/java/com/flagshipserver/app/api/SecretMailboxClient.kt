@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import kotlinx.serialization.Serializable
@@ -267,10 +268,12 @@ class LiveSecretMailboxClient(
     private val bootBase = bootBaseUrl.trimEnd('/')
 
     companion object {
-        const val DEFAULT_BASE_URL = "https://flagshipserver.com"
-        // The dedicated boot worker — lease deposit/revoke + sealed-response
-        // post land here (separate host so an enterprise clone can self-host).
-        const val DEFAULT_BOOT_BASE_URL = "https://boot.flagshipserver.com"
+        /** Control-plane apex + boot sub-origin, via [Endpoints] (prod-default
+         *  + test override). The dedicated boot worker — lease deposit/revoke
+         *  + sealed-response post land there (separate host so an enterprise
+         *  clone can self-host). */
+        val DEFAULT_BASE_URL: String get() = Endpoints.controlBaseUrl
+        val DEFAULT_BOOT_BASE_URL: String get() = Endpoints.bootBaseUrl
     }
 
     override suspend fun fetchPendingRequests(auth: MailboxAuthEnvelope): SecretRequestsResponse =

@@ -13,7 +13,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
 object QrRelay {
-    const val QR_HOST = "flagshipserver.com"
+    /** Control apex host, via [Endpoints] (prod-default + test override). */
+    val QR_HOST: String get() = Endpoints.controlHost
     val HKDF_SALT: ByteArray = "flagship/qr/v1".toByteArray()
     val ENC_INFO: ByteArray = "flagship/qr/enc/v1".toByteArray()
     val SAS_INFO: ByteArray = "flagship/qr/sas/v1".toByteArray()
