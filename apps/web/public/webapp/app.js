@@ -355,7 +355,8 @@ async function runTrustOverride(certHash) {
     );
     toast("Certificate accepted on this device.");
   } catch (e) {
-    toast(String(e?.message ?? e), "err");
+    console.error(e);
+    toast(humanError(e), "err");
   }
 }
 
