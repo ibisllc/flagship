@@ -1554,6 +1554,15 @@ export type {
   TunnelWebSocketLike,
   WebSocketFactory,
 } from "./tunnel/tunnelClient.js";
+export {
+  RelayTrustVerifier,
+} from "./relayTrustVerifier.js";
+export type {
+  RelayTrustVerdict,
+  RelayTrustVerdictReason,
+  RelayTrustVerifierOptions,
+  MaintainerChainMaterial,
+} from "./relayTrustVerifier.js";
 export { MembershipStore, InviteStore, AppMembership } from "./membership.js";
 export type {
   MembershipEntry,

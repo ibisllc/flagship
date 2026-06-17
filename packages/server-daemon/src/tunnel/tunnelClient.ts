@@ -13,6 +13,7 @@ import {
   FRAME_HELLO,
   FRAME_HELLO_ACK,
   FRAME_OPEN,
+  parseHelloAck,
   requestTransferFrame,
   type Frame,
 } from "@flagship/tunnel-protocol";
@@ -104,6 +105,21 @@ export interface TunnelClientOptions {
    */
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
   /**
+   * Relay-trust hook (docs/maintainer-trust-enforcement.md, task #5).
+   * Fires on every accepting HELLO_ACK with the hub's presented
+   * ServiceBlessing + hubSig (either may be undefined when the hub is on
+   * old code) and the box's HELLO nonce that the hub signed. The daemon
+   * verifies the blessing + proof-of-possession and, under ENFORCE,
+   * drives lockdown/SOS. This client itself NEVER refuses to relay —
+   * enforcement is the callback's job. Errors thrown by the callback are
+   * swallowed (best-effort, must never wedge the tunnel).
+   */
+  onHelloAckTrust?: (e: {
+    serviceBlessing: unknown;
+    hubSig: string | undefined;
+    nonce: Uint8Array;
+  }) => void;
+  /**
    * Fires when the underlying WS closes (clean shutdown, network drop,
    * keep-alive timeout). The supervisor listens to this to schedule a
    * reconnect. Single-shot.
@@ -161,6 +177,9 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     rejectReady = rej;
   });
   let lastIssuedAt = 0;
+  // The nonce of the most recently sent HELLO — the hub signs THIS in the
+  // HELLO_ACK's hubSig, so the relay-trust verifier checks against it.
+  let lastHelloNonce: Uint8Array = new Uint8Array(0);
   let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   let missedPongs = 0;
   let onCloseFired = false;
@@ -191,6 +210,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     const bundle = await opts.getEntitlements();
     const nonce = new Uint8Array(32);
     crypto.getRandomValues(nonce);
+    lastHelloNonce = nonce;
     let issuedAt = Date.now();
     if (issuedAt <= lastIssuedAt) issuedAt = lastIssuedAt + 1;
     lastIssuedAt = issuedAt;
@@ -324,12 +344,24 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       return;
     }
     if (f.type === FRAME_HELLO_ACK) {
-      let body: { ok?: boolean; reason?: string };
-      try {
-        body = JSON.parse(new TextDecoder().decode(f.payload));
-      } catch {
+      const body = parseHelloAck(f.payload);
+      if (!body) {
         rejectReady(new Error("HELLO_ACK payload not JSON"));
         return;
+      }
+      // Relay-trust (OBSERVE): hand the presented blessing + hubSig + the
+      // nonce we signed in HELLO to the daemon. Best-effort + never wedges
+      // the tunnel — the box keeps relaying regardless of the verdict.
+      if (body.ok && opts.onHelloAckTrust) {
+        try {
+          opts.onHelloAckTrust({
+            serviceBlessing: body.serviceBlessing,
+            hubSig: body.hubSig,
+            nonce: lastHelloNonce,
+          });
+        } catch {
+          /* swallow — relay-trust observation must never break the tunnel */
+        }
       }
       if (body.ok) resolveReady();
       else rejectReady(new Error(body.reason ?? "HELLO_ACK rejected"));
@@ -563,6 +595,7 @@ export function superviseTunnelClient(
         getEntitlements: opts.getEntitlements,
         resolveBackend: opts.resolveBackend,
         onDomainGranted: opts.onDomainGranted,
+        onHelloAckTrust: opts.onHelloAckTrust,
         keepAlive: { intervalMs: keepAliveIntervalMs, maxMissedPongs },
         wsFactory: opts.wsFactory,
         setIntervalImpl: opts.setIntervalImpl,
