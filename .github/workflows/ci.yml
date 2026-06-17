@@ -1,0 +1,44 @@
+name: CI (tsc + vitest)
+
+# The core monorepo gate. Until now the two gates that actually decide
+# whether the tree is healthy — `npx tsc -b` over the whole workspace and
+# the full `npx vitest run` suite (~5000 tests) — only ran by hand. A
+# regression could land on main with both green-looking workflows
+# (predeploy-check.yml guards routes; e2e.yml runs Playwright) yet a broken
+# typecheck or unit suite. This runs them automatically on every PR and on
+# pushes to main.
+#
+# Scope is the TypeScript monorepo only. iOS (xcodebuild) and Android
+# (gradle) gates are a deliberate follow-up — they need macOS/JDK runners
+# and are run on the owner's machine today.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install workspace deps
+        run: npm ci
+
+      - name: Typecheck the whole tree
+        run: npx tsc -b
+
+      - name: Run the unit suite
+        run: npx vitest run
