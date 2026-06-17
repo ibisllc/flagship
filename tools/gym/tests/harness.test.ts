@@ -300,8 +300,14 @@ describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", 
     expect(everyMergeRun.length).toBe(everyMerge.length);
   });
 
-  it("leaves Android stubbed (Phase-5; the adapter SKIPS it, never fails it)", () => {
-    expect(android.length).toBe(0);
+  it("Android scenarios (once the §10 Phase-5 harness lands) bind to a real Compose-UI-Test class", () => {
+    // Android starts empty (the adapter reports unavailable → the runner SKIPS
+    // it). As the instrumentation harness comes up, rows appear here; each must
+    // bind to a non-empty test-class identifier (no path), mirroring iOS.
+    for (const s of android) {
+      expect(s.harness.length).toBeGreaterThan(0);
+      expect(s.harness).not.toContain("/");
+    }
   });
 
   it("every scenario id is unique + every web harness grep title is unique", () => {
@@ -328,14 +334,13 @@ describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", 
       // Target/Class or Target/Class/method.
       expect(s.harness.startsWith("FlagshipAppUITests/")).toBe(true);
     }
-    // The total iOS tranche binds specifically into GymTotalTests; the total
-    // web tranche binds into the gym-total spec (its titles are prefixed
-    // "gym total"), so the adapter never confuses a tranche's specs.
-    for (const s of total.filter((x) => x.surface === "ios")) {
-      expect(s.harness.startsWith("FlagshipAppUITests/GymTotalTests/")).toBe(true);
-    }
-    for (const s of total.filter((x) => x.surface === "web")) {
-      expect(s.harness.startsWith("gym total ")).toBe(true);
+    // Tranche separation: no total scenario reuses an every-merge scenario's
+    // harness handle, so the adapter never confuses the tranches. This is the
+    // durable invariant; the exact spec file / XCUITest class is free to vary as
+    // the matrix grows (new specs, new test classes).
+    const everyMergeHandles = new Set(everyMerge.map((s) => s.harness));
+    for (const s of total) {
+      expect(everyMergeHandles.has(s.harness)).toBe(false);
     }
   });
 
@@ -346,11 +351,15 @@ describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", 
     }
   });
 
-  it("no scenario is destructive — none needs the guardrail to run (Tier-1, fixture-only)", () => {
-    // The total tranche's D1 'delete/revoke' rows assert the CONFIRM UI only
-    // (the sheet opens), never running a backend delete — so none is flagged
-    // destructive. Real demo-only destructive ops land in the live slice (G6).
-    expect(ALL_SCENARIOS.some(isDestructive)).toBe(false);
+  it("every destructive scenario is demo-guarded (the §7-G guardrail permits it)", () => {
+    // Tier-1 confirm-UI rows are non-destructive (opening a sheet deletes
+    // nothing). A scenario that DOES drive a delete/revoke/uninstall must name a
+    // demo-classified username so guardScenario() allows it — never a real
+    // account (§7-G). Today the fixture tranche is non-destructive, so this is
+    // vacuously true; it stays true as demo-guarded delete rows land.
+    for (const s of ALL_SCENARIOS.filter(isDestructive)) {
+      expect(guardScenario(s).allowed).toBe(true);
+    }
   });
 });
 

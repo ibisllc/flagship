@@ -27,6 +27,13 @@ export type Tier = "every-merge" | "total";
 export type BackendPosture = "fixture" | "live";
 
 /**
+ * The §6 coverage cluster a scenario belongs to (D1 lifecycle … D8 every-surface).
+ * Optional + advisory — used only for coverage reporting/grouping, never for the
+ * verdict. Lets the runner/results tally which dimensions a run actually touched.
+ */
+export type Dimension = "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7" | "D8";
+
+/**
  * One deterministic step: tap/assert a stable handle. `kind` documents intent;
  * `handle` is the surface's stable element id (iOS accessibilityIdentifier,
  * webapp id/role+text, Android testTag). These are descriptive — the binding
@@ -97,6 +104,8 @@ export interface Scenario {
   readonly harness: string;
   /** Present iff the scenario performs a destructive op (§7-G). */
   readonly destructive?: DestructiveTarget;
+  /** Optional §6 coverage cluster (advisory; for coverage reporting only). */
+  readonly dimension?: Dimension;
 }
 
 /** True when a scenario performs a destructive op and must be guarded. */
