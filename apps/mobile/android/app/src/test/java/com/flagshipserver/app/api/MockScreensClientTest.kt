@@ -46,6 +46,32 @@ class MockScreensClientTest {
         }
     }
 
+    @Test fun appDetail_matchesLiveWireShape() = runTest {
+        // The Mock must return the SAME AppDetailResponse shape the live
+        // daemon serves (screensHttp app-detail → BFF types.ts), so the
+        // ServiceDetailViewModel renders identically against either client.
+        val r = makeClient().appDetail("harry-plants")
+        // app summary — the tier-1 url is the live `https://<urlLabel>.<fqdn>` form.
+        assertEquals("harry-plants", r.app.serviceId)
+        assertEquals("harry", r.app.creator)
+        assertEquals("plants", r.app.slug)
+        assertTrue(r.app.url.startsWith("https://plants."))
+        assertTrue(r.app.url.endsWith("/"))
+        assertEquals("running", r.app.status)
+        // detail body — every field the BFF promises is present.
+        assertTrue(r.manifest.isNotEmpty())
+        assertTrue(r.dataLayerInstances.isNotEmpty())
+        assertEquals("postgres", r.dataLayerInstances.first().store)
+        assertTrue(r.members.isNotEmpty())
+        assertEquals("owner", r.members.first().role)
+        // browserTabs present (empty is a valid steady state), lastBackup +
+        // recentLogs populated.
+        assertNotNull(r.browserTabs)
+        assertNotNull(r.lastBackup)
+        assertTrue(r.lastBackup!!.bytes > 0)
+        assertTrue(r.recentLogs.isNotEmpty())
+    }
+
     @Test fun serverMetrics_returnsSixtySamples() = runTest {
         val m = makeClient().serverMetrics("home")
         assertEquals(60, m.cpuHistory.size)

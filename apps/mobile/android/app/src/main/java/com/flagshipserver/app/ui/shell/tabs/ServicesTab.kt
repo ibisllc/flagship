@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ServiceDetailScreen
+import com.flagshipserver.app.ui.screens.ServiceEnvScreen
 import com.flagshipserver.app.ui.screens.ServicesListScreen
 import com.flagshipserver.app.ui.screens.AiKeyStepScreen
 import com.flagshipserver.app.ui.screens.BuildGitScreen
@@ -46,6 +47,16 @@ fun ServicesTab() {
         composable("app-detail/{appId}") { entry ->
             val id = entry.arguments?.getString("appId") ?: return@composable
             ServiceDetailScreen(nav, serviceId = id)
+        }
+        // W10 — per-app env-var KV editor, reachable from the detail screen's
+        // "Configure environment" row. serviceId = "<creator>-<slug>"; split at
+        // the FIRST '-' (creator is hyphen-free) for the ServiceEnvScreen args.
+        composable("service-env/{serviceId}") { entry ->
+            val id = entry.arguments?.getString("serviceId") ?: return@composable
+            val dashIdx = id.indexOf('-')
+            val creator = if (dashIdx > 0) id.substring(0, dashIdx) else ""
+            val slug = if (dashIdx > 0) id.substring(dashIdx + 1) else id
+            ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
         composable("build/source") { BuildSourceChooserScreen(nav) }
         composable("build/git") { BuildGitScreen(nav) }

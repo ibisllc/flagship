@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
@@ -31,17 +33,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.AppDetailResponse
 import com.flagshipserver.app.api.AppLinksResponse
+import com.flagshipserver.app.api.AppSummary
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.PodInfo
+import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -51,46 +61,58 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
 import com.flagshipserver.app.viewmodels.CustomDomainPrompt
+import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.RenameServicePhase
 import com.flagshipserver.app.viewmodels.RenameServiceViewModel
+import com.flagshipserver.app.viewmodels.ServiceDetailViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Service detail — the canonical surface for the FINAL DESIGN UX:
+ * Service detail — the per-app management surface. Kotlin mirror of
+ * FlagshipUI's ServiceDetailScreen, driven by a real [ServiceDetailViewModel]
+ * (loads app-detail off the box; no more sample data). Sections:
  *
- *   Where should it run?
- *     ☑ home box
- *     ☑ office box
- *     ☐ garage box
- *     ☐ run on all current and future boxes
+ *   1. Header — slug, creator, status pill, version + immutable package id.
+ *   2. WHERE IT RUNS — per-pod run toggle + a "Lead" radio designating the
+ *      pod that holds the canonical short domain.
+ *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + custom domain +
+ *      Replace stem (RenameServiceViewModel, unchanged).
+ *   4. Browser viewer (conditional), Collaborators, recent logs, last backup.
+ *   5. Save (run-policy) + Uninstall, both real orders/send client calls.
  *
- *   Let instances talk to each other?
- *     ● Yes  ○ No
- *
- *   [ Save ]
- *
- * Plus a URL section listing each FQDN's kind / owner / claim controls.
- *
- * Toggling "let them talk" on a previously-deployed multi-pod service
- * triggers a vibe-code-session re-open with the existing files
- * preloaded plus the N0k system-prompt chapter — that is NOT a
- * runtime config change; it's a regenerate workflow.
+ * "Configure environment" is reachable from the toolbar overflow → the
+ * service-env route (see ServicesTab).
  */
 @Composable
 fun ServiceDetailScreen(nav: NavController, serviceId: String) {
-    val app = remember { sampleApp(serviceId) }
-    val pods = remember { samplePods() }
-    val urls = remember { sampleUrls() }
-    var policy by remember { mutableStateOf(app.policy) }
-    var siblingsEnabled by remember { mutableStateOf(app.siblingsEnabled) }
-    // V3 — Replace ceremony VM. Stored in the composition so the
-    // phase StateFlow survives recompositions of the WEB DOMAINS
-    // section.
     val appState = LocalAppState.current
+    val client = LocalScreensClient.current
     val server = LocalFlagshipServerClient.current
+    val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val pods = appState.pods.collectAsState().value
+    val leaderId = appState.leaderPodId.collectAsState().value
+
+    val detailVm: ServiceDetailViewModel = viewModel(
+        key = "service-detail-$serviceId",
+        factory = viewModelFactory {
+            initializer {
+                ServiceDetailViewModel(
+                    serviceId = serviceId,
+                    client = client,
+                    allPods = pods,
+                    globalLeaderPodId = leaderId,
+                )
+            }
+        },
+    )
+    // Replace ceremony VM. Stored in the composition so the phase StateFlow
+    // survives recompositions of the WEB DOMAINS section.
     val renameVm: RenameServiceViewModel = viewModel(
+        key = "rename-service-$serviceId",
         factory = viewModelFactory {
             initializer {
                 RenameServiceViewModel(
@@ -102,308 +124,428 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             }
         },
     )
-    var showReplaceDialog by remember { mutableStateOf(false) }
-    var replaceDraft by remember { mutableStateOf("") }
+
+    val detail by detailVm.detail.collectAsState()
+    val certMismatch by detailVm.certMismatch.collectAsState()
+    val runOnPodIds by detailVm.runOnPodIds.collectAsState()
+    val leadPodId by detailVm.leadPodId.collectAsState()
     val phase by renameVm.phase.collectAsState()
     val appLinks by renameVm.links.collectAsState()
-    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(serviceId) { renameVm.loadLinks() }
+    var showReplaceDialog by remember { mutableStateOf(false) }
+    var replaceDraft by remember { mutableStateOf("") }
+    var showUninstallDialog by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var uninstalling by remember { mutableStateOf(false) }
 
+    LaunchedEffect(serviceId) {
+        detailVm.load()
+        renameVm.loadLinks()
+    }
+
+    val scroll = rememberScrollState()
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scroll)
+            .padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s10))
-        Text(
-            text = app.name,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            text = "by ${app.creator}",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
-        )
-        // `id:` is the IMMUTABLE composite package id (`<creator>-<slug>`,
-        // single dash). It never changes — Replace only rotates the
-        // user-facing URL stem, not this. `ver:` rides on the same line
-        // with a middle-dot separator (design-system convention).
-        Text(
-            text = buildString {
-                app.version?.let { append("ver: ").append(it).append("  ·  ") }
-                append("id: ").append(app.serviceId)
-            },
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-            modifier = Modifier.padding(top = FS.space.s1),
-        )
-
-        Spacer(Modifier.height(FS.space.s8))
-
-        // ── Where should it run?
-        SectionHeader("Where should it run?")
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                pods.forEach { pod ->
-                    val checked = policy.specificPods.contains(pod.podId)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = checked || policy.allCurrentAndFuture,
-                            enabled = !policy.allCurrentAndFuture,
-                            onCheckedChange = { on ->
-                                policy = policy.copy(
-                                    specificPods = if (on) policy.specificPods + pod.podId
-                                    else policy.specificPods - pod.podId,
-                                )
-                            },
-                        )
-                        Spacer(Modifier.padding(start = FS.space.s2))
+        when (val d = detail) {
+            is LoadingState.Idle, is LoadingState.Loading -> {
+                ServerCardSkeleton()
+            }
+            is LoadingState.Failed -> {
+                if (certMismatch) {
+                    FSCard(modifier = Modifier.semantics { testTag = "service-detail-cert-warning" }) {
                         Column {
-                            Text(text = pod.label, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
                             Text(
-                                text = pod.fqdn,
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp),
+                                "Connection not trusted",
+                                color = FS.colors.danger,
+                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                             )
+                            Spacer(Modifier.height(FS.space.s1))
+                            Text(d.message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                        }
+                    }
+                } else {
+                    ErrorCard(message = d.message, onRetry = { scope.launch { detailVm.load() } })
+                }
+            }
+            is LoadingState.Loaded -> {
+                val resp = d.value
+                Header(app = resp.app)
+                Spacer(Modifier.height(FS.space.s8))
+
+                // ── WHERE IT RUNS ──────────────────────────────────────
+                WhereItRunsSection(
+                    pods = pods,
+                    runOnPodIds = runOnPodIds,
+                    effectiveLeadPodId = leadPodId ?: leaderId,
+                    globalLeaderPodId = leaderId,
+                    onToggle = { detailVm.togglePod(it) },
+                    onSetLead = { detailVm.setLead(it) },
+                )
+
+                Spacer(Modifier.height(FS.space.s6))
+
+                // ── WEB DOMAINS (Replace + custom-domain) ──────────────
+                val selectedPods = pods.filter { runOnPodIds.contains(it.podId) }
+                WebDomainsSection(
+                    fallbackLabel = resp.app.urlLabel,
+                    username = appState.currentUser.collectAsState().value,
+                    links = appLinks,
+                    selectedPods = selectedPods,
+                    onReplaceTap = {
+                        replaceDraft = appLinks?.displayLabel ?: resp.app.urlLabel
+                        showReplaceDialog = true
+                    },
+                )
+
+                Spacer(Modifier.height(FS.space.s3))
+                SetCustomDomainSection(
+                    rootDomain = "${appState.currentUser.value ?: "you"}.flagship.services",
+                    cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
+                    onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
+                )
+
+                val cdPrompt by renameVm.customDomainPrompt.collectAsState()
+                cdPrompt?.let { p ->
+                    CustomDomainPromptDialog(
+                        prompt = p,
+                        onConfirm = {
+                            scope.launch {
+                                renameVm.dismissCustomDomainPrompt()
+                                p.onConfirm?.invoke()
+                            }
+                        },
+                        onDismiss = { renameVm.dismissCustomDomainPrompt() },
+                    )
+                }
+
+                // ── Browser viewer — only when the daemon reports tabs ──
+                if (resp.browserTabs.isNotEmpty()) {
+                    Spacer(Modifier.height(FS.space.s6))
+                    SectionHeader("Browser")
+                    FSCard(
+                        padding = PaddingValues(FS.space.s4),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { nav.navigate("browser-tabs/$serviceId") },
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Open browser viewer", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                                Text(
+                                    "${resp.browserTabs.size} tab${if (resp.browserTabs.size == 1) "" else "s"} running server-side",
+                                    color = FS.colors.textMuted,
+                                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                                )
+                            }
+                            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
                         }
                     }
                 }
-                Spacer(Modifier.height(FS.space.s2))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = policy.allCurrentAndFuture,
-                        onCheckedChange = { policy = policy.copy(allCurrentAndFuture = it) },
-                    )
-                    Spacer(Modifier.padding(start = FS.space.s2))
-                    Text(
-                        text = "Run on all current and future boxes",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp),
-                    )
+
+                // ── Collaborators (unconditional) ──────────────────────
+                Spacer(Modifier.height(FS.space.s4))
+                SectionHeader("Collaborators")
+                FSCard(
+                    padding = PaddingValues(FS.space.s4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { nav.navigate("invite-manage/$serviceId") },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Manage collaborators", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                            Text(
+                                "Issue invites + revoke active access",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                        }
+                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+                    }
                 }
+
+                // ── Configure environment ──────────────────────────────
+                Spacer(Modifier.height(FS.space.s4))
+                SectionHeader("Environment")
+                FSCard(
+                    padding = PaddingValues(FS.space.s4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { testTag = "service-detail-env-row" }
+                        .clickable { nav.navigate("service-env/$serviceId") },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Configure environment", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                            Text(
+                                "Set API keys + secrets. Values stay on your server.",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                        }
+                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+                    }
+                }
+
+                // ── Recent logs ────────────────────────────────────────
+                if (resp.recentLogs.isNotEmpty()) {
+                    Spacer(Modifier.height(FS.space.s6))
+                    SectionHeader("Recent logs")
+                    FSCard(padding = PaddingValues(FS.space.s4)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                            resp.recentLogs.forEach { line ->
+                                Text(
+                                    line,
+                                    color = FS.colors.text,
+                                    style = TextStyle(fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── Last backup ────────────────────────────────────────
+                resp.lastBackup?.let { backup ->
+                    Spacer(Modifier.height(FS.space.s4))
+                    SectionHeader("Backup")
+                    FSCard(padding = PaddingValues(FS.space.s4)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Last backup", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                                Text(
+                                    "${backup.bytes / 1024 / 1024} MB · ${relativeTime(backup.createdAt)}",
+                                    color = FS.colors.textMuted,
+                                    style = TextStyle(fontSize = 13.sp),
+                                )
+                            }
+                            FSGhostButton(label = "Back up now", onClick = { /* P1.19 — wired separately */ })
+                        }
+                    }
+                }
+
+                // ── Save + Uninstall ───────────────────────────────────
+                Spacer(Modifier.height(FS.space.s8))
+                FSPrimaryButton(
+                    label = if (saving) "Saving…" else "Save changes",
+                    onClick = {
+                        scope.launch {
+                            saving = true
+                            try {
+                                detailVm.save()
+                                toasts.success("Saved ${detailVm.serviceId}.")
+                            } catch (t: Throwable) {
+                                toasts.error("Save failed. ${com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t)}")
+                            } finally {
+                                saving = false
+                            }
+                        }
+                    },
+                    enabled = !saving && !uninstalling,
+                    block = true,
+                    modifier = Modifier.semantics { testTag = "service-detail-save-btn" },
+                )
+                Spacer(Modifier.height(FS.space.s4))
+                FSDangerButton(
+                    label = "Uninstall",
+                    onClick = { showUninstallDialog = true },
+                    enabled = !saving && !uninstalling,
+                    block = true,
+                    modifier = Modifier.semantics { testTag = "service-detail-uninstall-btn" },
+                )
+                Spacer(Modifier.height(FS.space.s12))
             }
         }
+    }
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        // ── Let instances talk?
-        SectionHeader("Let instances talk to each other?")
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = siblingsEnabled,
-                    onClick = { siblingsEnabled = true },
-                )
-                Spacer(Modifier.padding(start = FS.space.s2))
-                Text(text = "Yes", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                Spacer(Modifier.padding(start = FS.space.s6))
-                RadioButton(
-                    selected = !siblingsEnabled,
-                    onClick = { siblingsEnabled = false },
-                )
-                Spacer(Modifier.padding(start = FS.space.s2))
-                Text(text = "No", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-            }
-            if (app.siblingsEnabled != siblingsEnabled) {
-                Spacer(Modifier.height(FS.space.s2))
-                Text(
-                    text = if (siblingsEnabled)
-                        "Saving will re-open vibe-code with this app's files. The AI will rewrite it to be sibling-aware."
-                    else
-                        "Saving will re-open vibe-code. The AI will rewrite it as per-pod independent state.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(FS.space.s6))
-
-        // ── V3 — WEB DOMAINS section (shared space; replaces tabs).
-        // V6 — the INDIVIDUAL INSTANCES list reflects the pods the user
-        // has ticked in "Where should it run?" above, not .com's view.
-        val selectedPods = pods.filter {
-            policy.allCurrentAndFuture || policy.specificPods.contains(it.podId)
-        }
-        WebDomainsSection(
-            fallbackLabel = app.name.lowercase().replace(" ", "-"),
-            links = appLinks,
-            selectedPods = selectedPods,
-            onReplaceTap = {
-                replaceDraft = appLinks?.displayLabel ?: app.name.lowercase().replace(" ", "-")
-                showReplaceDialog = true
+    if (showReplaceDialog) {
+        ReplaceStemDialog(
+            draft = replaceDraft,
+            currentStem = appLinks?.displayLabel ?: (detail.loadedValue()?.app?.urlLabel ?: ""),
+            onDraftChange = { replaceDraft = it },
+            phase = phase,
+            onCancel = { showReplaceDialog = false },
+            onConfirm = {
+                scope.launch {
+                    val ok = renameVm.rename(replaceDraft)
+                    if (ok) showReplaceDialog = false
+                }
             },
         )
+    }
 
-        Spacer(Modifier.height(FS.space.s3))
-        SetCustomDomainSection(
-            rootDomain = "${appState.currentUser.value ?: "you"}.flagship.services",
-            cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
-            onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
+    if (showUninstallDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!uninstalling) showUninstallDialog = false },
+            title = { Text("Uninstall service?") },
+            text = {
+                Text(
+                    "This removes the service from your server and frees its data layer. " +
+                        "Existing links stop working immediately. This can't be undone.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !uninstalling,
+                    onClick = {
+                        scope.launch {
+                            uninstalling = true
+                            try {
+                                detailVm.uninstall()
+                                showUninstallDialog = false
+                                toasts.success("Uninstalled ${detailVm.serviceId}.")
+                                nav.popBackStack()
+                            } catch (t: Throwable) {
+                                toasts.error("Uninstall failed. ${com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t)}")
+                            } finally {
+                                uninstalling = false
+                            }
+                        }
+                    },
+                ) { Text(if (uninstalling) "Uninstalling…" else "Uninstall", color = FS.colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!uninstalling) showUninstallDialog = false }) { Text("Cancel") }
+            },
         )
+    }
+}
 
-        val cdPrompt by renameVm.customDomainPrompt.collectAsState()
-        cdPrompt?.let { p ->
-            CustomDomainPromptDialog(
-                prompt = p,
-                onConfirm = {
-                    scope.launch {
-                        renameVm.dismissCustomDomainPrompt()
-                        p.onConfirm?.invoke()
-                    }
-                },
-                onDismiss = { renameVm.dismissCustomDomainPrompt() },
-            )
-        }
+private fun LoadingState<AppDetailResponse>.loadedValue(): AppDetailResponse? =
+    (this as? LoadingState.Loaded)?.value
 
-        if (showReplaceDialog) {
-            ReplaceStemDialog(
-                draft = replaceDraft,
-                currentStem = appLinks?.displayLabel ?: app.name.lowercase().replace(" ", "-"),
-                onDraftChange = { replaceDraft = it },
-                phase = phase,
-                onCancel = { showReplaceDialog = false },
-                onConfirm = {
-                    scope.launch {
-                        val ok = renameVm.rename(replaceDraft)
-                        if (ok) showReplaceDialog = false
-                    }
-                },
-            )
-        }
+@Composable
+private fun Header(app: AppSummary) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = app.slug.replaceFirstChar { it.uppercase() },
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.weight(1f),
+        )
+        FSPill(
+            label = if (app.status == "running") "Running" else "Stopped",
+            kind = if (app.status == "running") FSPillKind.Online else FSPillKind.Idle,
+        )
+    }
+    Text(
+        text = "by ${app.creator}",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
+    )
+    // `id:` is the IMMUTABLE composite package id (`<creator>-<slug>`, single
+    // dash). It never changes — Replace only rotates the user-facing URL stem.
+    Text(
+        text = buildString {
+            app.version?.let { append("ver: ").append(it).append("  ·  ") }
+            append("id: ").append(app.serviceId)
+        },
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+        modifier = Modifier.padding(top = FS.space.s1),
+    )
+    app.summary?.takeIf { it.isNotEmpty() }?.let {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(it, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+    }
+}
 
-        // P8 — browser viewer entry. The daemon advertises open tabs
-        // via P1.3 app-detail (AppDetailResponse.browserTabs). When the
-        // detail screen migrates off sample data this row becomes
-        // conditional on `detail.browserTabs.isNotEmpty()`; until then
-        // the BrowserTabsScreen handles the empty case gracefully.
-        Spacer(Modifier.height(FS.space.s6))
-        SectionHeader("Browser")
-        FSCard(
-            padding = PaddingValues(FS.space.s4),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { nav.navigate("browser-tabs/$serviceId") },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Open browser viewer",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp),
+@Composable
+private fun WhereItRunsSection(
+    pods: List<PodInfo>,
+    runOnPodIds: Set<String>,
+    effectiveLeadPodId: String?,
+    globalLeaderPodId: String?,
+    onToggle: (String) -> Unit,
+    onSetLead: (String) -> Unit,
+) {
+    SectionHeader("Where it runs")
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            pods.forEach { pod ->
+                val isOn = runOnPodIds.contains(pod.podId)
+                val isLead = effectiveLeadPodId == pod.podId
+                val isGlobalLeader = globalLeaderPodId == pod.podId
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = isOn,
+                        onCheckedChange = { onToggle(pod.podId) },
+                        modifier = Modifier.semantics { testTag = "where-it-runs-toggle-${pod.podId}" },
                     )
-                    Text(
-                        text = "Stream a server-side Chromium tab and forward touches.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    )
+                    Spacer(Modifier.padding(start = FS.space.s2))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(pod.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+                            if (isGlobalLeader) {
+                                Spacer(Modifier.padding(start = FS.space.s2))
+                                FSPill(label = "Leader", kind = FSPillKind.Idle)
+                            }
+                        }
+                        pod.description?.takeIf { it.isNotEmpty() }?.let {
+                            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                        }
+                    }
+                    if (isOn) {
+                        // The radio designates the pod that owns the canonical
+                        // short domain (mirrors iOS's circle + house "Lead").
+                        RadioButton(
+                            selected = isLead,
+                            onClick = { onSetLead(pod.podId) },
+                            modifier = Modifier.semantics { testTag = "where-it-runs-lead-${pod.podId}" },
+                        )
+                    }
                 }
-                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
             }
         }
+    }
+    Text(
+        text = leadHint(pods, effectiveLeadPodId, globalLeaderPodId),
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp),
+        modifier = Modifier.padding(top = FS.space.s2, start = FS.space.s1),
+    )
+}
 
-        // P6 — collaborator invites. Unconditional row → manage view.
-        Spacer(Modifier.height(FS.space.s4))
-        SectionHeader("Collaborators")
-        FSCard(
-            padding = PaddingValues(FS.space.s4),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { nav.navigate("invite-manage/$serviceId") },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Manage collaborators",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp),
-                    )
-                    Text(
-                        text = "Issue invites + revoke active access",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    )
-                }
-                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-            }
-        }
+private fun leadHint(pods: List<PodInfo>, leadPodId: String?, globalLeaderPodId: String?): String {
+    pods.firstOrNull { it.podId == leadPodId }?.let {
+        return "Canonical short domain points to ${it.name}."
+    }
+    pods.firstOrNull { it.podId == globalLeaderPodId }?.let {
+        return "Following the account leader (${it.name})."
+    }
+    return "Pick which pod owns the canonical short domain."
+}
 
-        Spacer(Modifier.height(FS.space.s8))
-        FSPrimaryButton(
-            label = "Save",
-            onClick = { /* TODO: persist policy + (re-open vibe-code if siblings toggled) */ },
-            block = true,
-        )
-        Spacer(Modifier.height(FS.space.s4))
-        FSGhostButton(
-            label = "Uninstall",
-            onClick = { /* TODO */ },
-            block = true,
-        )
-        Spacer(Modifier.height(FS.space.s12))
+private fun relativeTime(ms: Long): String {
+    val deltaMs = System.currentTimeMillis() - ms
+    val mins = deltaMs / 60_000
+    return when {
+        mins < 1 -> "just now"
+        mins < 60 -> "$mins min ago"
+        mins < 60 * 24 -> "${mins / 60} hr ago"
+        else -> "${mins / (60 * 24)} d ago"
     }
 }
 
 @Composable
 private fun SectionHeader(label: String) {
     Text(
-        text = label,
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        text = label.uppercase(),
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
         modifier = Modifier.padding(bottom = FS.space.s3),
     )
 }
 
-@Composable
-private fun UrlRow(url: UrlEntry) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s2)) {
-                Text(text = url.fqdn, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
-                Spacer(Modifier.height(FS.space.s1))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    FSPill(label = url.kind, kind = FSPillKind.Idle)
-                    FSPill(
-                        label = when (url.ownedBy) {
-                            "self" -> "On this pod"
-                            null -> "Unclaimed"
-                            else -> "On ${url.ownedBy}"
-                        },
-                        kind = if (url.ownedBy == "self") FSPillKind.Online else FSPillKind.Idle,
-                    )
-                }
-            }
-            if (url.canClaim && url.ownedBy != "self") {
-                FSGhostButton(label = "Claim", onClick = { /* TODO: POST /api/url/claim */ })
-            } else if (url.ownedBy == "self" && url.kind != "canonical") {
-                FSGhostButton(label = "Release", onClick = { /* TODO: POST /api/url/release */ })
-            }
-        }
-    }
-}
-
-private fun sampleApp(serviceId: String) = AppDetail(
-    serviceId = serviceId,
-    name = "Notes",
-    creator = "alice",
-    version = "0.1.0",
-    siblingsEnabled = false,
-    policy = InstallPolicy(specificPods = setOf("home"), allCurrentAndFuture = false),
-)
-
-private fun samplePods() = listOf(
-    PodSummary("home", "Home box", "home.alice.flagship.services"),
-    PodSummary("office", "Office box", "office.alice.flagship.services"),
-    PodSummary("garage", "Garage box", "garage.alice.flagship.services"),
-)
-
-private fun sampleUrls() = listOf(
-    UrlEntry("notes.home.alice.flagship.services", "canonical", "self", canClaim = false),
-    UrlEntry("notes.alice.flagship.services", "alias", null, canClaim = true),
-)
-
 // ---------------------------------------------------------------
-// V3 — WEB DOMAINS section + Replace stem dialog
+// WEB DOMAINS section + Replace stem dialog (unchanged behavior —
+// driven by RenameServiceViewModel / appLinks, not the detail VM).
 // ---------------------------------------------------------------
 
 /** Three labelled groups: short redirect (top, bold), canonical
@@ -412,11 +554,13 @@ private fun sampleUrls() = listOf(
 @Composable
 private fun WebDomainsSection(
     fallbackLabel: String,
+    username: String?,
     links: AppLinksResponse?,
-    selectedPods: List<PodSummary>,
+    selectedPods: List<PodInfo>,
     onReplaceTap: () -> Unit,
 ) {
     val stem = links?.displayLabel ?: fallbackLabel
+    val user = username ?: "you"
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = "WEB DOMAINS",
@@ -433,11 +577,6 @@ private fun WebDomainsSection(
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            // CUSTOM DOMAIN sits at the very top, only when one is
-            // bound — it's the user's own name. Shown as soon as the
-            // order is recorded (even pending); the apps-list short→
-            // custom swap is what waits for .com to confirm. Mirrors
-            // iOS AppDetailScreen.customDomainGroup.
             val cd = links?.customDomain
             if (!cd.isNullOrEmpty()) {
                 UrlGroupLabel("CUSTOM DOMAIN")
@@ -458,25 +597,23 @@ private fun WebDomainsSection(
             HorizontalRule()
 
             UrlGroupLabel("CANONICAL (SHARED BY ALL INSTANCES)")
-            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.flagship.services")
+            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.$user.flagship.services")
 
             if (selectedPods.isNotEmpty()) {
                 HorizontalRule()
                 UrlGroupLabel("INDIVIDUAL INSTANCES")
                 selectedPods.forEach { pod ->
-                    UrlRowMuted(url = "https://$stem.${pod.fqdn}")
+                    UrlRowMuted(url = "https://$stem.${SlugUtil.slugify(pod.name)}.$user.flagship.services")
                 }
             }
         }
     }
 }
 
-/** #80 — SET CUSTOM DOMAIN. Mock-faithful with the iOS client:
- *  section label + right-floated M:SS countdown while cooling, input
- *  + Add (disabled during the 300s on-device cooldown), and the CNAME
- *  guidance line — all byte-identical to AppDetailScreen.swift. The
- *  decoupled request / apex→www / destructive-replace logic lives in
- *  the VM (submitCustomDomain); this is presentation only. */
+/** SET CUSTOM DOMAIN — section label + right-floated M:SS countdown while
+ *  cooling, input + Add (disabled during the 300s on-device cooldown), and
+ *  the CNAME guidance line. The decoupled request / apex→www /
+ *  destructive-replace logic lives in the VM (submitCustomDomain). */
 @Composable
 private fun SetCustomDomainSection(
     rootDomain: String,
@@ -484,8 +621,6 @@ private fun SetCustomDomainSection(
     onSubmit: (String) -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
-    // Tick every second so the countdown + disabled state stay live
-    // (mirrors the iOS TimelineView(.periodic, by: 1)).
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(cooldownUntilMs) {
         while (cooldownUntilMs != null && cooldownUntilMs > System.currentTimeMillis()) {
@@ -543,9 +678,9 @@ private fun cooldownLabel(remainingMs: Long): String {
     return "%d:%02d".format(s / 60, s % 60)
 }
 
-/** One-at-a-time alert mirroring the iOS .alert(presenting:). A
- *  confirm+Cancel when [CustomDomainPrompt.confirmLabel] is set, else
- *  an informational single-dismiss alert. */
+/** One-at-a-time alert mirroring the iOS .alert(presenting:). A confirm+Cancel
+ *  when [CustomDomainPrompt.confirmLabel] is set, else an informational
+ *  single-dismiss alert. */
 @Composable
 private fun CustomDomainPromptDialog(
     prompt: CustomDomainPrompt,
@@ -640,13 +775,13 @@ private fun UrlRowMuted(url: String) {
     )
 }
 
-// Insert a zero-width space after each dot so an FQDN wraps between
-// segments instead of mid-label. The clipboard path uses the raw url
-// (no ZWSP) so a paste is still clean — mirrors iOS wrapAtDots.
-private fun wrapAtDots(s: String): String = s.replace(".", ".\u200B")
+// Insert a zero-width space after each dot so an FQDN wraps between segments
+// instead of mid-label. The clipboard path uses the raw url (no ZWSP) so a
+// paste is still clean — mirrors iOS wrapAtDots.
+private fun wrapAtDots(s: String): String = s.replace(".", ".​")
 
-// Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync —
-// drift means the button enables for stems the server then rejects.
+// Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync — drift
+// means the button enables for stems the server then rejects.
 private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 
 @Composable
@@ -718,26 +853,3 @@ private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     cm?.setPrimaryClip(ClipData.newPlainText("flagship", text))
 }
-
-data class AppDetail(
-    val serviceId: String,
-    val name: String,
-    val creator: String,
-    val version: String?,
-    val siblingsEnabled: Boolean,
-    val policy: InstallPolicy,
-)
-
-data class InstallPolicy(
-    val specificPods: Set<String>,
-    val allCurrentAndFuture: Boolean,
-)
-
-data class PodSummary(val podId: String, val label: String, val fqdn: String)
-
-data class UrlEntry(
-    val fqdn: String,
-    val kind: String,
-    val ownedBy: String?,
-    val canClaim: Boolean,
-)
