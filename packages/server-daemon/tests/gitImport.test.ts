@@ -193,6 +193,9 @@ describe("GitImporter.inspect — journaling + clone failure", () => {
     const importer = new GitImporter({
       cmd: { run: async (cmd, args) => void calls.push({ cmd, args }) },
       workingDir: workDir(),
+      // Hermetic: stub the SSRF resolver so the default-clone path never
+      // does real DNS. github.com → a public address.
+      resolveHost: async () => ["140.82.112.3"],
     });
     await importer.inspect({ gitUrl: "https://github.com/a/b", ref: "main" });
     expect(calls[0]!.cmd).toBe("git");
@@ -200,6 +203,86 @@ describe("GitImporter.inspect — journaling + clone failure", () => {
     expect(calls[0]!.args).toContain("--depth");
     expect(calls[0]!.args).toContain("--branch");
     expect(calls[0]!.args).toContain("main");
+  });
+});
+
+describe("GitImporter.inspect — SSRF guard on the clone host", () => {
+  it("rejects a clone URL pointing at a literal loopback IP (no clone)", async () => {
+    let cloned = false;
+    const importer = new GitImporter({
+      cmd: { run: async () => void (cloned = true) },
+      workingDir: workDir(),
+      resolveHost: async () => [], // never reached for a literal IP
+    });
+    const r = await importer.inspect({ gitUrl: "http://127.0.0.1:6379/x" });
+    expect(r.fit).toBe(false);
+    expect(r.reason).toContain("unsafe clone host");
+    expect(cloned).toBe(false);
+  });
+
+  it("rejects a public clone host that RESOLVES to loopback (DNS bypass)", async () => {
+    let cloned = false;
+    const importer = new GitImporter({
+      cmd: { run: async () => void (cloned = true) },
+      workingDir: workDir(),
+      resolveHost: async () => ["127.0.0.1"],
+    });
+    const r = await importer.inspect({ gitUrl: "https://localtest.me/a/b" });
+    expect(r.fit).toBe(false);
+    expect(r.reason).toContain("unsafe clone host");
+    expect(cloned).toBe(false);
+  });
+
+  it("rejects a public clone host that resolves to the cloud metadata IP", async () => {
+    const importer = new GitImporter({
+      cmd: noopCmd,
+      workingDir: workDir(),
+      resolveHost: async () => ["169.254.169.254"],
+    });
+    const r = await importer.inspect({ gitUrl: "https://evil.example.com/a/b", buildId: "g3" });
+    expect(r.fit).toBe(false);
+    expect(r.reason).toContain("unsafe clone host");
+  });
+
+  it("permits an allowlisted internal Forgejo host (self-host override)", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const importer = new GitImporter({
+      cmd: { run: async (cmd, args) => void calls.push({ cmd, args }) },
+      workingDir: workDir(),
+      hostGuard: { hostAllowlist: ["forgejo.lan"] },
+      resolveHost: async () => {
+        throw new Error("resolver should be skipped for an allowlisted host");
+      },
+    });
+    await importer.inspect({ gitUrl: "https://forgejo.lan/team/app" });
+    expect(calls[0]!.cmd).toBe("git");
+    expect(calls[0]!.args).toContain("clone");
+  });
+
+  it("permits a resolved-private clone host when allowPrivate is set", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const importer = new GitImporter({
+      cmd: { run: async (cmd, args) => void calls.push({ cmd, args }) },
+      workingDir: workDir(),
+      hostGuard: { allowPrivate: true },
+      resolveHost: async () => ["192.168.1.20"],
+    });
+    await importer.inspect({ gitUrl: "https://forgejo.lan/team/app" });
+    expect(calls[0]!.cmd).toBe("git");
+  });
+
+  it("does NOT run the SSRF check when a cloneInto override supplies bytes", async () => {
+    // A `cloneInto` override never opens a socket; the host is irrelevant.
+    const importer = new GitImporter({
+      cmd: noopCmd,
+      workingDir: workDir(),
+      cloneInto: fixtureClone({ "flagship.app.json": VALID_MANIFEST }),
+      resolveHost: async () => {
+        throw new Error("resolver should not be consulted on the cloneInto path");
+      },
+    });
+    const r = await importer.inspect({ gitUrl: "https://github.com/alice/shopping" });
+    expect(r.fit).toBe(true);
   });
 });
 

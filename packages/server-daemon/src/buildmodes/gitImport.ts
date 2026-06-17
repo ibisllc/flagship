@@ -27,6 +27,12 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { parseManifest, type AppManifest } from "@flagship/protocol";
+import {
+  assertResolvedHostSafe,
+  UnsafeBaseUrlError,
+  type BaseUrlGuardOptions,
+  type HostResolver,
+} from "@flagship/llm-providers";
 import type { CommandRunner } from "../serviceRunner.js";
 import type { BuildJournal } from "./buildJournal.js";
 
@@ -81,6 +87,14 @@ export interface GitImportDeps {
   now?: () => number;
   /** Random suffix source for scratch dirs (Math.random is banned in some envs). */
   rand?: () => string;
+  /**
+   * SSRF posture for the clone host (same shape as the LLM baseUrl guard).
+   * Strict public-build default; a self-hoster who clones from a LAN Forgejo
+   * flips `allowPrivate` or supplies a `hostAllowlist`.
+   */
+  hostGuard?: BaseUrlGuardOptions;
+  /** Override the DNS resolver in tests (no real network). */
+  resolveHost?: HostResolver;
 }
 
 function validGitUrl(u: string): boolean {
@@ -92,6 +106,24 @@ function validGitUrl(u: string): boolean {
   return false;
 }
 
+/**
+ * Pull the host out of an already-`validGitUrl` URL. Handles `https://host[:port]/...`
+ * and scp-style `git@host:path`. Strips any `user@` prefix and `:port`/`:path`
+ * suffix so what's left is just the hostname to resolve + classify.
+ */
+function gitUrlHost(u: string): string | null {
+  if (/^https?:\/\//.test(u)) {
+    try {
+      return new URL(u).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+  const scp = u.match(/^git@([^:\s]+):/);
+  if (scp) return scp[1]!.toLowerCase();
+  return null;
+}
+
 function validRef(r: string): boolean {
   return /^[A-Za-z0-9._\/-]{1,200}$/.test(r) && !r.includes("..");
 }
@@ -101,12 +133,16 @@ export class GitImporter {
   private readonly maxBytes: number;
   private readonly now: () => number;
   private readonly rand: () => string;
+  private readonly hostGuard?: BaseUrlGuardOptions;
+  private readonly resolveHost?: HostResolver;
 
   constructor(private readonly deps: GitImportDeps) {
     this.maxFiles = deps.maxFiles ?? 400;
     this.maxBytes = deps.maxBytesPerFile ?? 256 * 1024;
     this.now = deps.now ?? (() => Date.now());
     this.rand = deps.rand ?? (() => Math.random().toString(16).slice(2, 10));
+    this.hostGuard = deps.hostGuard;
+    this.resolveHost = deps.resolveHost;
   }
 
   async inspect(args: GitInspectArgs): Promise<GitFitness> {
@@ -120,6 +156,29 @@ export class GitImporter {
       const reason = "invalid git ref";
       await this.note(buildId, "git-clone", `rejected: ${reason}`, ref);
       return { fit: false, gitUrl, ref, files: {}, reason };
+    }
+
+    // SSRF guard: a clone URL must not point at the box's loopback data
+    // plane (Redis/Postgres/Forgejo on localhost) or the cloud metadata
+    // endpoint — by literal internal IP OR by a public name with an
+    // internal A record. Only on the real-network clone path; an injected
+    // `cloneInto` (tests / a future non-network source) supplies bytes
+    // itself and never opens a socket to the host.
+    if (!this.deps.cloneInto) {
+      const host = gitUrlHost(gitUrl);
+      if (!host) {
+        const reason = "could not parse clone host";
+        await this.note(buildId, "git-clone", `rejected: ${reason}`, gitUrl);
+        return { fit: false, gitUrl, ref, files: {}, reason };
+      }
+      try {
+        await assertResolvedHostSafe(host, gitUrl, this.hostGuard, this.resolveHost);
+      } catch (e) {
+        const reason =
+          e instanceof UnsafeBaseUrlError ? `unsafe clone host (${e.reason})` : "unsafe clone host";
+        await this.note(buildId, "git-clone", `rejected: ${reason}`, host);
+        return { fit: false, gitUrl, ref, files: {}, reason };
+      }
     }
 
     const dest = join(this.deps.workingDir, `import-${buildId ?? this.rand()}`);
