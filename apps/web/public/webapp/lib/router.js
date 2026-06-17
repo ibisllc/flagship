@@ -94,6 +94,10 @@ export function parseViewQuery() {
       view: resolveViewAlias(raw),
       serverId: params.get("serverId") ?? null,
       serviceId: params.get("serviceId") ?? null,
+      // The W10 `vibecode-needs-you` push deep-links to
+      // `?view=vibecode-chat&sessionId=<id>` (service-worker.js); carry the
+      // session id so the cold-start dispatcher can open that session's chat.
+      sessionId: params.get("sessionId") ?? null,
       debug: params.get("debug") === "1",
     };
   } catch {
@@ -120,6 +124,11 @@ function resolveViewAlias(alias) {
     "pod-pair": "view-pod-pair",
     "server-detail": "view-server-detail",
     "create-server": "view-create-server",
+    // W10 vibecode-needs-you chat — the service worker emits `vibecode-chat`;
+    // accept the hyphenated `vibe-code-chat` spelling too. Both land on the
+    // registered `view-vibecode-chat`.
+    "vibecode-chat": "view-vibecode-chat",
+    "vibe-code-chat": "view-vibecode-chat",
   };
   return aliases[a] ?? `view-${a}`;
 }
@@ -143,7 +152,7 @@ export function clearViewQuery() {
   try {
     const u = new URL(window.location.href);
     let touched = false;
-    for (const k of ["view", "serverId", "serviceId"]) {
+    for (const k of ["view", "serverId", "serviceId", "sessionId"]) {
       if (u.searchParams.has(k)) {
         u.searchParams.delete(k);
         touched = true;

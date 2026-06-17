@@ -49,6 +49,16 @@ export async function dispatchInitialView() {
       const { enterCreateServer } = await import("../views/create-server.js");
       return enterCreateServer();
     }
+    if (q.view === "view-vibecode-chat" || q.view === "view-vibe-code-chat") {
+      // W10 — a `vibecode-needs-you` push (the AI paused on a tool_use) cold-
+      // starts the app at this session's chat so the owner can answer it.
+      // iOS consumes the same deep-link via `.vibeCodeChat(sessionId:)`. With
+      // no session id there's nothing to open — fall through to Home.
+      if (q.sessionId) {
+        const { enterVibeCodeChat } = await import("../views/vibecode-chat.js");
+        return enterVibeCodeChat(q.sessionId);
+      }
+    }
     if (q.view === "view-activity") {
       const { show } = await import("./router.js");
       show("view-activity");
