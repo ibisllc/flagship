@@ -958,6 +958,7 @@ export interface Storage {
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   ctAlerts: CtAlertStorage;
+  trustExceptions: TrustExceptionStorage;
   namespace: NamespaceStorage;
 }
 
@@ -992,6 +993,52 @@ export interface CtAlertStorage {
   claimAlertSlot(username: string, certSha256: string, now: number): Promise<boolean>;
   /** Test/inspection: has this pair already been alerted? */
   has(username: string, certSha256: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Maintainer-trust exceptions (docs/maintainer-trust-enforcement.md)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * One owner-signed TrustException, synced through `.com` so every box in
+ * the fleet (and every owner device) sees the same per-cert override. The
+ * row is keyed by (username, cert_hash): one acceptance per cert, fleet-
+ * wide; a re-sync of the same cert replaces the row (last-writer; replay
+ * is harmless by design). `.com` is an untrusted carrier — the envelope is
+ * device-key-signed + cert-hash-scoped, verified against the IRK-anchored
+ * device set by the consuming box.
+ */
+export interface TrustExceptionRecord {
+  username: string;
+  /** "control" | "relay" — kept loose at the storage layer. */
+  certClass: string;
+  /** sha256hex of the offending key. */
+  certHash: string;
+  grantedAt: number;
+  grantedByDevicePub: string;
+  /** The full signed TrustException envelope, JSON-serialized. */
+  envelopeJson: string;
+  storedAt: number;
+}
+
+export interface TrustExceptionStorage {
+  /** Upsert by (username, certHash). Last write wins (replay-safe). */
+  put(
+    username: string,
+    exc: {
+      kind: string;
+      certClass: string;
+      certHash: string;
+      grantedAt: number;
+      grantedByDevicePub: string;
+      signatures: { pubkey: string; sig: string }[];
+    },
+    now?: number,
+  ): Promise<void>;
+  /** All exceptions for a user, granted_at DESC. */
+  listForUser(username: string): Promise<TrustExceptionRecord[]>;
+  /** A single exception by (username, certHash), or undefined. */
+  get(username: string, certHash: string): Promise<TrustExceptionRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

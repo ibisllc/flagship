@@ -23,6 +23,9 @@ import {
   handleAuthCodeRevoke,
   handleCaCert,
   handleMaintainerBlessing,
+  handleHubBlessing,
+  handleStoreTrustException,
+  handleListTrustExceptions,
   handleCleanupApex,
   handleCompleteRePair,
   handleDeviceDisconnect,
@@ -406,6 +409,11 @@ const ROUTE_RE = {
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   MAINTAINER_BLESSING: /^\/api\/maintainer-blessing$/,
+  // Relay blessing — the `.services` hub asks `.com` to bless its
+  // self-generated key (docs/maintainer-trust-enforcement.md). ~daily.
+  HUB_BLESSING: /^\/api\/services\/hub-blessing$/,
+  // Owner-signed, per-cert maintainer-trust exceptions, synced via `.com`.
+  TRUST_EXCEPTIONS: /^\/api\/users\/([^/]+)\/trust-exceptions$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
@@ -890,6 +898,35 @@ export async function tryControlPlane(
         material: caTrustChainPublicMaterial(),
         caTrustChain: caGate.caTrustChain,
       }),
+    );
+  }
+  // The `.services` hub asks `.com` to bless its self-generated key. `.com`
+  // signs a short-lived (~26h) ServiceBlessing with the live hot CA key; a
+  // box verifies it through the maintainer chain before relaying. An
+  // operator evicts a rogue Fly by ceasing to bless it (lapses within a
+  // day).
+  if (method === "POST" && ROUTE_RE.HUB_BLESSING.test(path)) {
+    return finish(handleHubBlessing({ ca }, await readJson(request)));
+  }
+  // Owner-signed, per-cert TrustException sync. `.com` is an untrusted
+  // carrier: the envelope is device-key-signed + cert-hash-scoped, so it
+  // can drop or replay but not forge it. The consuming box re-verifies
+  // against its IRK-anchored device set.
+  if (method === "POST" && (m = path.match(ROUTE_RE.TRUST_EXCEPTIONS))) {
+    return finish(
+      await handleStoreTrustException(
+        { storage: storage.trustExceptions },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.TRUST_EXCEPTIONS))) {
+    return finish(
+      await handleListTrustExceptions(
+        { storage: storage.trustExceptions },
+        decodeURIComponent(m[1]!),
+      ),
     );
   }
 

@@ -3,6 +3,8 @@ import type {
   SchemaVersionStorage,
   CtAlertRecord,
   CtAlertStorage,
+  TrustExceptionRecord,
+  TrustExceptionStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -1140,6 +1142,7 @@ export class InMemoryStorage implements Storage {
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
   acmeAccountKeyDelivery = new InMemoryAcmeAccountKeyDeliveryStorage();
   ctAlerts = new InMemoryCtAlertStorage();
+  trustExceptions = new InMemoryTrustExceptionStorage();
   namespace = new InMemoryNamespaceStorage();
 }
 
@@ -1299,6 +1302,54 @@ export class InMemoryCtAlertStorage implements CtAlertStorage {
   }
   async has(username: string, certSha256: string) {
     return this.byKey.has(this.key(username, certSha256));
+  }
+}
+
+/**
+ * In-memory TrustExceptionStorage — owner-signed, per-cert maintainer-trust
+ * overrides. Keyed by (username, certHash): one acceptance per cert; a
+ * re-sync of the same cert replaces the row (last-writer, replay-safe).
+ */
+export class InMemoryTrustExceptionStorage implements TrustExceptionStorage {
+  private byKey = new Map<string, TrustExceptionRecord>();
+  private key(u: string, certHash: string) {
+    return `${u.toLowerCase()}|${certHash.toLowerCase()}`;
+  }
+  async put(
+    username: string,
+    exc: {
+      kind: string;
+      certClass: string;
+      certHash: string;
+      grantedAt: number;
+      grantedByDevicePub: string;
+      signatures: { pubkey: string; sig: string }[];
+    },
+    now: number = Date.now(),
+  ): Promise<void> {
+    this.byKey.set(this.key(username, exc.certHash), {
+      username: username.toLowerCase(),
+      certClass: exc.certClass,
+      certHash: exc.certHash.toLowerCase(),
+      grantedAt: exc.grantedAt,
+      grantedByDevicePub: exc.grantedByDevicePub.toLowerCase(),
+      envelopeJson: JSON.stringify(exc),
+      storedAt: now,
+    });
+  }
+  async listForUser(username: string): Promise<TrustExceptionRecord[]> {
+    const u = username.toLowerCase();
+    return [...this.byKey.values()]
+      .filter((r) => r.username === u)
+      .sort((a, b) => b.grantedAt - a.grantedAt)
+      .map((r) => ({ ...r }));
+  }
+  async get(
+    username: string,
+    certHash: string,
+  ): Promise<TrustExceptionRecord | undefined> {
+    const r = this.byKey.get(this.key(username, certHash));
+    return r ? { ...r } : undefined;
   }
 }
 
