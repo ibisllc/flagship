@@ -49,7 +49,6 @@ import { getSession } from "./lib/state.js";
 import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
 import { initPinViews } from "./views/pinLock.js";
-import { hasPin } from "./lib/pinLock.js";
 import { initHomeView, enterHome } from "./views/home.js";
 import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
