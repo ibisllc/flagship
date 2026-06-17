@@ -170,6 +170,22 @@ lease had lapsed (2026-06-02). All on `main`, green (`tsc -b` clean · vitest
   rollout-doc validation; wire `resolveTrustExceptions` (needs a box-side
   IRK-anchored device-roster accessor) + replace the log-only SOS with the real
   `flagship/push-relay/v1` fan-out; re-mint the lease before `2026-08-31`.
+- **Static-asset content-hashing — site-ops, surfaced this session (NOT started):**
+  flagshipserver.com flashes unstyled for a moment during a Worker deploy.
+  *Why:* `apps/web/public` assets use plain names (`/components.css`, `/style.css`)
+  served `max-age=0, must-revalidate`, so mid-deploy a transient CSS 404 hits the
+  SPA fallback and returns HTML (browser parses HTML as CSS). Self-heals; NOT a
+  code regression; and NOT an origin-egress issue (Cloudflare's edge serves these,
+  not Fly). *How to fix (deliberate, its own effort — rewrites the same files the
+  webapp refactor touches, so the other worker must be paused):* add an asset
+  build step that content-hashes filenames (`style.<hash>.css`) + rewrites every
+  reference (77+ native-ESM webapp imports + each HTML `<link>`/`<script>` + the
+  service-worker precache), then serve hashed files `immutable, max-age=1yr`.
+  *Why it helps:* deploys go atomic (old+new coexist as distinct files ⇒ no
+  unstyled flash) and caching becomes safely aggressive. *Cheap partial
+  mitigation meanwhile:* make the Worker return a real 404 (not the SPA HTML
+  fallback) for `.css`/`.js` so a transient miss recovers instead of mis-serving
+  HTML. Already anticipated by `apps/com/src/route.ts:746-752`.
 - **`maintainers` repo:** a `ca-endorsement --not-before/--issued-at` backdate
   flag was built (used once to mint the gap-free lease) but **intentionally NOT
   merged** — backdating attestations is a hopefully-never tool; it's parked
