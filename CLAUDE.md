@@ -166,9 +166,17 @@ integrated + gated green.
 - **Deploy the live tier** (owner): `flyctl auth login` + a test Hetzner token →
   `bash scripts/gym-setup-live-env.sh` → `npm run gym:live` / `gym:total` then
   exercise the real backend (the iOS live vertical slice + the webapp live leg).
-- **Android on-device runs** need a one-time AVD (`sdkmanager`/`avdmanager`
-  one-liner in the runbook; deferred here because the disk was ~95 % full). The
-  harness + tags + adapter are done + compile-gated; only the AVD is missing.
+- **Android: AVD provisioned + every-merge 8/8 GREEN on-device (`84533f17`).**
+  Created the `flagship_gym` AVD (API-35 arm64) and ran the gym's Android leg on
+  the emulator. The first real device-run (it had only ever been compile-gated)
+  surfaced 4 issues, all fixed: below-fold asserts (→ `assertExists`), nav-settle
+  timing (→ a `GymBase.waitUntilExists` helper), the `isUnlocked`-gated ops seed
+  (→ `SmokeMode.markUnlocked`, mirroring iOS's deterministic-unlock seam), and a
+  **real affordance bug** — the add-server chooser tile's `testTag` sat on the
+  inert card, not the clickable CTA, so a tap-by-tag never navigated. Robolectric
+  stays the fast per-merge lane; the on-device run needs the AVD booted (runbook).
+  The total-gym Android tranche (the extra 7 `androidTotal` rows) may need the
+  same first-run calibration when first run on-device.
 - **Scenario-model niceties** the workers wished for (non-blocking): a `device?:
   "iphone"|"ipad"` field (vs the `GymIPad` harness substring), plural
   `dimensions`, a `routes`/`seed` block to declare a scenario's backendless seed
