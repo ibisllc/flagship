@@ -22,6 +22,7 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -81,6 +82,19 @@ abstract class GymBase {
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
+    }
+
+    /**
+     * Wait until a node with [tag] is present in the composition (bounded). For
+     * state- or nav-driven appearances that `waitForIdle()` doesn't catch — a
+     * Flow emission (the ops seed), nav-settle (a tab switch / NavHost push), or
+     * an AnimatedVisibility enter. Throwing on timeout IS the deterministic
+     * assertion (these are real "did the screen render after the action" checks).
+     */
+    protected fun waitUntilExists(tag: String, timeoutMs: Long = 10_000) {
+        composeRule.waitUntil(timeoutMillis = timeoutMs) {
+            composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @After

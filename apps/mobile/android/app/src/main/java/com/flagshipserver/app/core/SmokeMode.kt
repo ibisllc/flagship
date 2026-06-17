@@ -79,6 +79,12 @@ object SmokeMode {
             appState.completeOnboarding(username = SmokeModeConfig.SMOKE_USERNAME, pods = pods)
         }
 
+        // The gym drives an UNLOCKED shell (mirror of iOS's deterministic-unlock
+        // smoke seam). Without this, the biometric-at-launch default leaves
+        // isUnlocked=false, which correctly HIDES the operations sliver (it gates
+        // on isUnlocked) — so a backendless gym run would never see it.
+        appState.markUnlocked()
+
         // Seed ONE in-flight build so the global operations sliver renders
         // (mirror of iOS -smoke-ops). The default DemoFixtures pods are all
         // online/offline (no pending), so the sliver correctly stays hidden

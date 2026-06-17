@@ -107,7 +107,6 @@ private fun ChooserCard(
 ) {
     FSCard(
         padding = PaddingValues(FS.space.s6),
-        modifier = if (testTag != null) Modifier.testTag(testTag) else Modifier,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Box(
@@ -127,7 +126,14 @@ private fun ChooserCard(
             }
             Text(title, color = FS.colors.text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
             Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-            FSGhostButton(label = cta, onClick = onClick, block = true)
+            // The CTA is the interactive element — carry the chooser testTag here
+            // (not on the non-clickable card) so a tap-by-tag actually navigates.
+            FSGhostButton(
+                label = cta,
+                onClick = onClick,
+                block = true,
+                modifier = if (testTag != null) Modifier.testTag(testTag) else Modifier,
+            )
         }
     }
 }
