@@ -15,6 +15,13 @@ import {
 export interface AuthCodeDeps {
   storage: AuthCodeStorage;
   usernames: UsernameStorage;
+  /**
+   * The data-plane apex serverDomains are validated against —
+   * `flagship.services` in prod, `gym.flagship.services` in the test env
+   * (docs/ui-test-gym.md §6.5). Defaults to the prod literal so prod
+   * behavior (and the serverDomain validation) is byte-identical.
+   */
+  apex?: string;
   freshnessMs?: number;
   maxExpiryMs?: number;
   now?: () => number;
@@ -66,11 +73,12 @@ export async function handleAuthCodeIssue(
     return malformed("malformed body");
   }
 
+  const apex = deps.apex ?? "flagship.services";
   const userV = validateUserLabel(c.username);
   if (!userV.ok) return malformed(userV.reason);
   const serverV = validateServerLabel(c.serverName);
   if (!serverV.ok) return malformed(serverV.reason);
-  const expectedDomain = `${serverV.label}.${userV.label}.flagship.services`;
+  const expectedDomain = `${serverV.label}.${userV.label}.${apex}`;
   if (c.serverDomain !== expectedDomain) {
     return malformed(`serverDomain must equal ${expectedDomain}`);
   }

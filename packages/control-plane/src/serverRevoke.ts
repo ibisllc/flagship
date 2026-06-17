@@ -129,6 +129,13 @@ export interface ServerReleaseDeps {
    * sealed to the old box's STK and overwritten on reuse).
    */
   luksKeys?: LuksKeyStorage;
+  /**
+   * The data-plane apex names live under — `flagship.services` in prod,
+   * `gym.flagship.services` in the test env (docs/ui-test-gym.md §6.5).
+   * Used only in the serverDomain namespace guard (not in canonical
+   * bytes). Defaults to the prod literal so prod is byte-identical.
+   */
+  apex?: string;
   freshnessMs?: number;
   now?: () => number;
 }
@@ -160,11 +167,12 @@ export async function handleServerReleaseName(
   const userV = validateUserLabel(r.username);
   if (!userV.ok) return malformed(userV.reason);
 
-  // serverDomain MUST be `<server>.<user>.flagship.services` with the
-  // user segment equal to the signing username and a valid server label.
-  // This binds the release to the owner's own namespace — even a valid
-  // IRK can't release a name under a different user.
-  const expectedSuffix = `.${userV.label}.flagship.services`;
+  // serverDomain MUST be `<server>.<user>.<apex>` with the user segment
+  // equal to the signing username and a valid server label. This binds the
+  // release to the owner's own namespace — even a valid IRK can't release a
+  // name under a different user.
+  const apex = deps.apex ?? "flagship.services";
+  const expectedSuffix = `.${userV.label}.${apex}`;
   if (
     !r.serverDomain.endsWith(expectedSuffix) ||
     r.serverDomain.length === expectedSuffix.length

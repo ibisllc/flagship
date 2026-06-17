@@ -17,6 +17,12 @@ export interface CaddyContext {
    * multiple servers under the same `<user>` namespace.
    */
   serverName: string;
+  /**
+   * The data-plane apex these names live under — `flagship.services` in
+   * prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Defaults to the prod literal so existing callers are unchanged.
+   */
+  apex?: string;
   /** Daemon address Caddy can reach. Default 127.0.0.1:9090. */
   daemonAddr?: string;
   /** TLS-cert source. Path to PEM bundle on disk that Caddy reads via `tls`. */
@@ -24,12 +30,12 @@ export interface CaddyContext {
 }
 
 /**
- * The box's own FQDN — `<server>.<user>.flagship.services`, the apex SAN of
- * the per-box cert (model A′) and the zone every canonical service name
- * lives under.
+ * The box's own FQDN — `<server>.<user>.<apex>`, the apex SAN of the
+ * per-box cert (model A′) and the zone every canonical service name lives
+ * under. `apex` defaults to the prod literal `flagship.services`.
  */
 export function serverFqdn(ctx: CaddyContext): string {
-  return `${ctx.serverName}.${ctx.username}.flagship.services`;
+  return `${ctx.serverName}.${ctx.username}.${ctx.apex ?? "flagship.services"}`;
 }
 
 /**

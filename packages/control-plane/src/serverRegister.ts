@@ -86,6 +86,13 @@ export interface ServerRegisterDeps {
     category: string;
     sealedPayloadHex: string;
   }) => Promise<{ ok: boolean; sent: number; failed: number }>;
+  /**
+   * The data-plane apex these server names live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Used to derive the user-zone CAA anchor. Defaults to the prod
+   * literal so prod behavior is byte-identical.
+   */
+  apex?: string;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -291,7 +298,7 @@ export async function handleServerRegister(
   let caaError: string | undefined;
   if (deps.dns) {
     const podApex = authCode.serverDomain;
-    const userZone = userZoneOf(podApex);
+    const userZone = userZoneOf(podApex, deps.apex ?? "flagship.services");
     const names = [podApex, `*.${podApex}`];
     try {
       for (const name of names) {
@@ -360,19 +367,24 @@ export async function handleServerRegister(
 }
 
 /**
- * For a podApex of the form `<server>.<user>.flagship.services`, return
- * the user zone `<user>.flagship.services` (the CAA record-set anchor —
- * A/AAAA publishing is per-box). Returns null on shape mismatch.
+ * For a podApex of the form `<server>.<user>.<apex>`, return the user zone
+ * `<user>.<apex>` (the CAA record-set anchor — A/AAAA publishing is
+ * per-box). Parses apex-RELATIVE: strip the configured apex suffix, then
+ * the user is the LAST remaining label — so a deeper apex like
+ * `gym.flagship.services` resolves `home.alice.gym.flagship.services` to
+ * `alice.gym.flagship.services`, not the wrong label. `apex` defaults to
+ * the prod literal. Returns null on shape mismatch.
  */
-function userZoneOf(podApex: string): string | null {
+function userZoneOf(podApex: string, apex = "flagship.services"): string | null {
   const lower = podApex.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
+  const suffix = `.${apex}`;
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, -suffix.length);
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
   if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
-  return `${user}.flagship.services`;
+  return `${user}.${apex}`;
 }
 
 export async function handleServerLookup(

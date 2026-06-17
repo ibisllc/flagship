@@ -369,7 +369,12 @@ export async function start(opts: {
       : "both";
   const app = buildServer({ surface });
   const serverRegistry = app.serverRegistry;
-  const registry = new TunnelRegistry();
+  // The data-plane apex pod canonicals live under — `flagship.services`
+  // in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+  // §6.5). Unset ⇒ the prod literal, so prod routing is byte-identical;
+  // the `gym.` test Fly app sets FLAGSHIP_SERVICES_APEX.
+  const servicesApex = process.env.FLAGSHIP_SERVICES_APEX ?? "flagship.services";
+  const registry = new TunnelRegistry({ apex: servicesApex });
   // #87 — custom-domain control channel. Must register before listen.
   const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
   registerControlRedirections(app, { registry, secret: servicesControlSecret });
@@ -446,6 +451,7 @@ export async function start(opts: {
 
   const stopHub = startTunnelHub(app.server, registry, {
     surface,
+    apex: servicesApex,
     authLookup: remoteAuthLookup,
     irkLookup,
     revocationLookup,

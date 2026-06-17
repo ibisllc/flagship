@@ -48,6 +48,13 @@ export function __resetRoutingReplayRing(): void {
 export interface RoutingDeps {
   routing: RoutingStorage;
   usernames: UsernameStorage;
+  /**
+   * The data-plane apex subdomains live under — `flagship.services` in
+   * prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Used only in the RCK subdomain namespace guard (not in
+   * canonical bytes). Defaults to the prod literal so prod is byte-identical.
+   */
+  apex?: string;
   freshnessMs?: number;
   now?: () => number;
 }
@@ -109,10 +116,10 @@ export async function handleRegisterRck(
     return forbidden("invalid signature");
   }
 
-  // Subdomain must be `<server>.<user>.flagship.services` and the user
-  // segment must match the username — defends against claiming someone
-  // else's subdomain even with a valid IRK.
-  const expectedSuffix = `.${r.username}.flagship.services`;
+  // Subdomain must be `<server>.<user>.<apex>` and the user segment must
+  // match the username — defends against claiming someone else's subdomain
+  // even with a valid IRK.
+  const expectedSuffix = `.${r.username}.${deps.apex ?? "flagship.services"}`;
   if (
     !r.subdomain.endsWith(expectedSuffix) ||
     r.subdomain.length === expectedSuffix.length

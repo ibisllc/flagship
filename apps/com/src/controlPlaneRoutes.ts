@@ -196,6 +196,23 @@ export interface ControlPlaneEnv {
   CLOUDFLARE_DNS_API_TOKEN?: string;
   /** Zone ID for flagship.services. Only used in the legacy direct mode. */
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  /**
+   * The data-plane apex this control plane manages — `flagship.services`
+   * in prod, `gym.flagship.services` for the test env (docs/ui-test-gym.md
+   * §6.5). Threaded into serverDomain validation, the user-zone CAA
+   * anchor, the DNS-01 own-name fence, and apex cleanup. Unset ⇒ the prod
+   * literal, so prod (and every canonical-byte / serverDomain vector) is
+   * byte-identical; the `gym.` test Worker overrides it via [vars].
+   */
+  SERVICES_APEX?: string;
+  /**
+   * The identity-plane apex this control plane serves —
+   * `flagshipserver.com` in prod, `gym.flagshipserver.com` for the test
+   * env. Unset ⇒ the prod literal. (The `comBaseUrl` defaults elsewhere
+   * are already parameterized; this var is the single source for the test
+   * Worker to set its own identity apex.)
+   */
+  CONTROL_APEX?: string;
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
@@ -748,7 +765,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.AUTH_CODE_ISSUE.test(path)) {
     return finish(
       await handleAuthCodeIssue(
-        { storage: storage.authCodes, usernames: storage.usernames },
+        { storage: storage.authCodes, usernames: storage.usernames, apex: env.SERVICES_APEX },
         await readJson(request),
       ),
     );
@@ -816,6 +833,7 @@ export async function tryControlPlane(
           // Activity feed: record `server-created` on first registration.
           auditEvents: storage.auditEvents,
           ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
+          apex: env.SERVICES_APEX,
         },
         await readJson(request),
       ),
@@ -834,6 +852,7 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           servers: storage.servers,
           luksKeys: storage.luksKeys,
+          apex: env.SERVICES_APEX,
         },
         await readJson(request),
       ),
@@ -933,7 +952,7 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {
     return finish(
       await handleRegisterRck(
-        { routing: storage.routing, usernames: storage.usernames },
+        { routing: storage.routing, usernames: storage.usernames, apex: env.SERVICES_APEX },
         await readJson(request),
       ),
     );
@@ -982,7 +1001,10 @@ export async function tryControlPlane(
       zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
     });
     const handler = ROUTE_RE.DNS01_PUBLISH.test(path) ? handleDns01Publish : handleDns01Delete;
-    const res = await handler({ servers: storage.servers, dns }, await readJson(request));
+    const res = await handler(
+      { servers: storage.servers, dns, apex: env.SERVICES_APEX },
+      await readJson(request),
+    );
     return finishPlain(res);
   }
 
@@ -1834,7 +1856,7 @@ export async function tryControlPlane(
       );
     }
     return finishPlain(
-      await handleCleanupApex({ dns, apex: "flagship.services" }),
+      await handleCleanupApex({ dns, apex: env.SERVICES_APEX ?? "flagship.services" }),
     );
   }
 

@@ -179,6 +179,16 @@ tag = "v1"
 new_sqlite_classes = ["BuildRelaySession"]
 
 [vars]
+# Apex roots, as CONFIG (docs/ui-test-gym.md §6.5 / §12-G1). PROD VALUES =
+# today's literals, so this Worker is byte-identical to before. The `gym.`
+# test Worker (a separate wrangler config / --name) overrides these to
+# `gym.flagship.services` / `gym.flagshipserver.com` to serve the isolated
+# test env on the SAME zones. SERVICES_APEX threads into serverDomain
+# validation, the user-zone CAA anchor, the DNS-01 own-name fence, and apex
+# cleanup; unset ⇒ the prod literal everywhere (so signed-domain / canonical
+# vectors never move).
+SERVICES_APEX = "flagship.services"
+CONTROL_APEX = "flagshipserver.com"
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
 # runs SNI passthrough on :443, so https://flagship.services/api/* will
 # always 525. The Worker proxies any /api/* path it doesn't handle to

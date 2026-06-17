@@ -107,6 +107,13 @@ export interface TunnelHubOptions {
   maxHelloAgeMs?: number;
   /** Idle close: empty state on hello → close after this many ms. Default 60s. */
   idleCloseMs?: number;
+  /**
+   * The data-plane apex pod canonicals live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). Drives the apex-RELATIVE shape/middle-label parse. Defaults to
+   * the prod literal so prod behavior is byte-identical.
+   */
+  apex?: string;
   now?: () => number;
 }
 
@@ -272,6 +279,7 @@ function attachTunnel(
         helloOk.serviceEntitlement,
         auth.validatedGrants,
         helloOk.rootEntitlement.username,
+        opts.apex,
       );
       if (!built.ok) {
         send(helloAckFrame(false, built.reason));
@@ -328,6 +336,7 @@ function attachTunnel(
         helloOk.serviceEntitlement,
         auth.validatedGrants,
         helloOk.rootEntitlement.username,
+        opts.apex,
       );
       if (!built.ok) {
         send(helloAckFrame(false, built.reason));
@@ -623,16 +632,16 @@ async function authenticateHello(
   // wildcard is a CLAIM (`*.<podCanonical>`, see buildClaimedCanonicals),
   // never an identity; a wildcard podCanonical would otherwise sail
   // through the middle-label check below.
-  if (!podCanonicalShapeOk(hello.rootEntitlement.podCanonical)) {
+  if (!podCanonicalShapeOk(hello.rootEntitlement.podCanonical, opts.apex)) {
     return {
       ok: false,
-      reason: "rootEntitlement.podCanonical is not a valid flagship.services pod name",
+      reason: "rootEntitlement.podCanonical is not a valid pod name under the data-plane apex",
       closeCode: 1008,
     };
   }
   // Pod-zone identity check: rootEntitlement.podCanonical's middle
   // label must equal rootEntitlement.username (the user-zone owner).
-  const podUser = extractMiddleLabel(hello.rootEntitlement.podCanonical);
+  const podUser = extractMiddleLabel(hello.rootEntitlement.podCanonical, opts.apex);
   if (!podUser || podUser !== hello.rootEntitlement.username) {
     return {
       ok: false,
@@ -832,6 +841,7 @@ export function buildClaimedCanonicals(
   serviceEntitlement: ServiceEntitlement | null,
   validatedGrants: ServiceGrant[],
   username: string,
+  apex: string = DEFAULT_HUB_APEX,
 ): { ok: true; canonicals: string[] } | { ok: false; reason: string } {
   const pc = podCanonical.toLowerCase();
   const user = username.toLowerCase();
@@ -858,8 +868,8 @@ export function buildClaimedCanonicals(
     }
     // Cross-zone guard: a claim must name a FQDN in this user's own
     // zone. The user-zone label is the label immediately left of the
-    // `.flagship.services` suffix.
-    const claimUser = extractMiddleLabel(c);
+    // configured apex suffix.
+    const claimUser = extractMiddleLabel(c, apex);
     if (!claimUser || claimUser !== user) {
       return {
         ok: false,
@@ -892,18 +902,26 @@ export function appGrantHosts(grants: ServiceGrant[]): string[] {
   return Array.from(hosts);
 }
 
-function podCanonicalShapeOk(podCanonical: string): boolean {
-  if (!podCanonical.endsWith(".flagship.services")) return false;
-  const head = podCanonical.slice(0, -".flagship.services".length);
+function podCanonicalShapeOk(podCanonical: string, apex: string = DEFAULT_HUB_APEX): boolean {
+  const suffix = "." + apex;
+  if (!podCanonical.endsWith(suffix)) return false;
+  const head = podCanonical.slice(0, -suffix.length);
   const parts = head.split(".");
   if (parts.length < 2) return false;
   return parts.every((p) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(p));
 }
 
-function extractMiddleLabel(serverId: string): string | null {
+// The data-plane apex helpers below default to. Threaded from
+// TunnelHubOptions.apex so the test env (`gym.flagship.services`) parses
+// apex-RELATIVE — the user is the last label after the apex suffix is
+// stripped, never a fixed offset from the right.
+const DEFAULT_HUB_APEX = "flagship.services";
+
+function extractMiddleLabel(serverId: string, apex: string = DEFAULT_HUB_APEX): string | null {
+  const suffix = "." + apex;
   const lower = serverId.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, -suffix.length);
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;

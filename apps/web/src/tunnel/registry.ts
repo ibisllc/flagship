@@ -50,8 +50,8 @@ export class TunnelRegistry {
   private readonly redirections = new Map<string, string>();
   private readonly allocator: AppUserAllocator;
 
-  constructor(opts: { allocator?: AppUserAllocator } = {}) {
-    this.allocator = opts.allocator ?? new AppUserAllocator();
+  constructor(opts: { allocator?: AppUserAllocator; apex?: string } = {}) {
+    this.allocator = opts.allocator ?? new AppUserAllocator({ apex: opts.apex });
   }
 
   /**

@@ -42,6 +42,13 @@ export interface LazyRedirectionResolverOptions {
   windowMs?: number;
   /** Per-lookup timeout. Default 2s. */
   timeoutMs?: number;
+  /**
+   * The data-plane apex first-party names live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
+   * §6.5). A miss on a first-party name is a real no-tunnel, never a
+   * custom-domain redirection. Defaults to the prod literal.
+   */
+  apex?: string;
   now?: () => number;
 }
 
@@ -64,6 +71,7 @@ export class LazyRedirectionResolver {
       maxPerWindow: opts.maxPerWindow ?? 30,
       windowMs: opts.windowMs ?? 60_000,
       timeoutMs: opts.timeoutMs ?? 2_000,
+      apex: opts.apex ?? "flagship.services",
       now: opts.now ?? (() => Date.now()),
     };
   }
@@ -80,7 +88,7 @@ export class LazyRedirectionResolver {
     if (fqdn.length === 0 || fqdn.length > 253) return null;
     // First-party names are allocator-routed; a miss there is a real
     // no-tunnel, never a custom-domain redirection.
-    if (fqdn === "flagship.services" || fqdn.endsWith(".flagship.services")) {
+    if (fqdn === this.o.apex || fqdn.endsWith("." + this.o.apex)) {
       return null;
     }
     const now = this.o.now();
