@@ -1,18 +1,32 @@
 #!/usr/bin/env tsx
 /**
- * Cross-language test-vectors generator.
+ * Cross-language test-vectors generator — THE single authoritative source of
+ * canonical-byte vectors that all four language implementations (TS, Swift,
+ * Kotlin, webapp JS) verify against.
  *
  * Emits a JSON file at `test-vectors/canonical-bytes.json` containing, for
- * every auth-flow canonical-bytes shape, a fixed input + the deterministic
- * canonical-bytes hex + an Ed25519 signature produced by a fixed-seed key.
+ * every covered canonical-bytes shape, a fixed deterministic input + the
+ * canonical-bytes hex + (where a fixed test key applies) an Ed25519 signature
+ * produced by a fixed-seed key.
  *
- * Swift and Kotlin tests load this file and assert byte-equality of:
- *   - the canonical-bytes shape they compute from the same input
- *   - their Ed25519 verify result against the recorded signature.
+ * WHO LOADS THIS FILE (no transcribed copies — they read THIS file at test
+ * time so a TS-only canonical-byte change can't ship green while a mirror
+ * asserts a stale copy):
+ *   - TS      packages/protocol/tests/canonicalBytesVectors.test.ts
+ *   - webapp  apps/web/tests/canonicalBytesVectors.test.ts
+ *   - Swift   apps/mobile/ios/Tests/FlagshipMobileTests/CanonicalBytesVectorsTests.swift
+ *             (locates this file via #filePath — no Package.swift resource copy)
+ *   - Kotlin  apps/mobile/android/.../core/CanonicalBytesVectorsTest.kt
+ *             (walks up from user.dir, same pattern as MaintainersConformanceTest)
  *
- * Run:  tsx tools/test-vectors.ts
+ * Each client asserts ONLY the purposes it actually implements and skips the
+ * rest with a note (recorded per-vector — see `clients` below). A client that
+ * claims to cover a vector but computes different bytes fails loudly.
+ *
+ * Run:        npx tsx tools/test-vectors.ts          # (re)write the file
+ * CI freshness: npx tsx tools/test-vectors.ts --check  # exit 1 if stale
  */
-import { writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   deriveBAK,
@@ -21,40 +35,65 @@ import {
   deriveSWK,
   ed,
   signAccountRecovery,
+  signAuthCode,
+  signDaemonStatusReport,
+  signDeviceCapabilityGrant,
+  signInstallBlob,
   signInvite,
   signInviteAcceptance,
-  signDeviceCapabilityGrant,
+  signJournalRequest,
   signMembershipMutation,
   signMigrationRequest,
   signPbAnnounce,
   signPbPeerConfirm,
   signPbRequestPeers,
+  signPhoneOrder,
   signRebuildRequest,
   signRegisterServer,
+  signRePairInitiate,
+  signRePairObject,
   signRevocation,
   signRevokeDeviceCapabilityGrant,
+  signServerRegister,
+  signSetRoutingTarget,
   signTunnelHello,
+  signWatchDelegateKey,
   type AccountRecovery,
+  type AuthCode,
+  type DaemonStatusReport,
   type DeviceCapabilityGrant,
   type ImageRebuildRequest,
+  type InstallBlob,
   type InviteAcceptance,
   type InviteToken,
+  type JournalRequest,
   type Keypair,
   type MembershipMutation,
   type MigrationRequest,
   type PbAnnounce,
   type PbPeerConfirm,
   type PbRequestPeers,
+  type PhoneOrder,
   type RegisterServer,
+  type RePairInitiate,
+  type RePairObject,
   type RevokeDeviceCapabilityGrant,
+  type ServerRegisterRequest,
   type ServerRevocation,
+  type SetRoutingTarget,
   type TunnelHello,
+  type WatchDelegateKey,
 } from "@flagship/protocol";
 
 function hex(b: Uint8Array): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
+}
+
+function seedKeypair(fill: number): Keypair {
+  const seed = new Uint8Array(32).fill(fill);
+  return { privateKey: seed, publicKey: ed.getPublicKey(seed) };
 }
 
 const FIXED_UMK_SEED = new Uint8Array(32);
@@ -65,48 +104,65 @@ const bak = deriveBAK(umk, "srv-test");
 const swk = deriveSWK(umk, "srv-test");
 const stk = deriveSTK(swk);
 
+// A SECOND account UMK — its IRK stands in for the "old" key in the recovery
+// re-pair vectors (re-pair-object is signed by the OLD IRK).
+const OLD_UMK_SEED = new Uint8Array(32);
+for (let i = 0; i < 32; i++) OLD_UMK_SEED[i] = (i + 0x40) & 0xff;
+const oldIrk = deriveIRK({ seed: OLD_UMK_SEED });
+
+// The Routing-Control-Key is a standalone keypair the phone generates (NOT
+// UMK-derived); a fixed seed keeps the SetRoutingTarget vector reproducible.
+const rck = seedKeypair(0x33);
+
+// A fixed server-identity keypair (ServerRegister is signed by the box's
+// identity key, not the owner IRK).
+const identity = seedKeypair(0x55);
+
+/** Which clients are expected to assert a given vector (the rest skip-with-note). */
+type Client = "ts" | "webapp" | "swift" | "kotlin";
+const ALL: Client[] = ["ts", "webapp", "swift", "kotlin"];
+/** Clients that implement the device-side surface but not the webapp. */
+const NO_WEBAPP: Client[] = ["ts", "swift", "kotlin"];
+
 interface Vector {
   name: string;
   /** `"none"` for canonical-bytes-only fixtures (no signature). */
-  signedBy: "irk" | "bak" | "stk" | "none";
+  signedBy: "irk" | "bak" | "stk" | "old-irk" | "rck" | "identity" | "none";
   input: unknown;
+  /** Clients expected to assert this vector. */
+  clients: Client[];
   /** Empty when signedBy === "none". */
   signatureHex: string;
   /**
-   * Optional: raw canonical-bytes hex for fixtures where we want to
-   * byte-compare the encoder output across languages, independent of
-   * (or in addition to) a signature verify. Used for the WiFiConfig
-   * vector — the AEAD seal involves a random nonce so the ciphertext
-   * itself can't be a fixed fixture, but the plaintext bytes that go
-   * into the seal SHOULD be deterministic across implementations.
+   * Canonical-bytes hex. Recorded for EVERY vector now (a client can assert
+   * the bytes directly, independent of a signature verify). For signed
+   * vectors it is ALSO covered transitively by the signature, but a raw byte
+   * compare pinpoints drift faster than a verify-false.
    */
-  canonicalHex?: string;
+  canonicalHex: string;
 }
 
 function makeVector(
   name: string,
-  signedBy: "irk" | "bak" | "stk",
+  signedBy: Vector["signedBy"],
   input: unknown,
   sig: Uint8Array,
-): Vector {
-  return { name, signedBy, input, signatureHex: hex(sig) };
-}
-
-function makeCanonicalOnlyVector(
-  name: string,
-  input: unknown,
   canonical: Uint8Array,
+  clients: Client[],
 ): Vector {
-  return { name, signedBy: "none", input, signatureHex: "", canonicalHex: hex(canonical) };
+  return { name, signedBy, input, clients, signatureHex: hex(sig), canonicalHex: hex(canonical) };
 }
 
-async function main() {
-  const FIXED_NONCE = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) FIXED_NONCE[i] = (i + 1) & 0xff;
-  const FIXED_INVITE_NONCE = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) FIXED_INVITE_NONCE[i] = (i + 7) & 0xff;
-  const ISSUED_AT = 1735689600000;
+const FIXED_NONCE = new Uint8Array(32);
+for (let i = 0; i < 32; i++) FIXED_NONCE[i] = (i + 1) & 0xff;
+const FIXED_INVITE_NONCE = new Uint8Array(32);
+for (let i = 0; i < 32; i++) FIXED_INVITE_NONCE[i] = (i + 7) & 0xff;
+const ISSUED_AT = 1735689600000;
+// Fixed 32-byte device pubkey for the capability-grant / re-pair vectors.
+const DEMO_DEVICE_PUB = new Uint8Array(32);
+for (let i = 0; i < 32; i++) DEMO_DEVICE_PUB[i] = (i * 3 + 11) & 0xff;
 
+function buildVectors(): Vector[] {
   const vectors: Vector[] = [];
 
   // ImageRebuildRequest (IRK)
@@ -124,6 +180,8 @@ async function main() {
       "irk",
       { ...rebuild, wifiPskHash: hex(rebuild.wifiPskHash) },
       signRebuildRequest(rebuild, irk),
+      payloadByName("rebuild", { ...rebuild, wifiPskHash: hex(rebuild.wifiPskHash) }),
+      NO_WEBAPP,
     ),
   );
 
@@ -134,7 +192,16 @@ async function main() {
     reason: "stolen",
     issuedAt: ISSUED_AT,
   };
-  vectors.push(makeVector("revoke", "irk", revoke, signRevocation(revoke, irk)));
+  vectors.push(
+    makeVector(
+      "revoke",
+      "irk",
+      revoke,
+      signRevocation(revoke, irk),
+      payloadByName("revoke", revoke as unknown as Record<string, unknown>),
+      ALL,
+    ),
+  );
 
   // MembershipMutation (IRK)
   const mem: MembershipMutation = {
@@ -143,12 +210,15 @@ async function main() {
     role: "parent",
     issuedAt: ISSUED_AT,
   };
+  const memInput = { ...mem, targetIrkPub: hex(mem.targetIrkPub) };
   vectors.push(
     makeVector(
       "membership",
       "irk",
-      { ...mem, targetIrkPub: hex(mem.targetIrkPub) },
+      memInput,
       signMembershipMutation(mem, irk),
+      payloadByName("membership", memInput),
+      NO_WEBAPP,
     ),
   );
 
@@ -161,7 +231,16 @@ async function main() {
     withData: true,
     issuedAt: ISSUED_AT,
   };
-  vectors.push(makeVector("migration", "irk", mig, signMigrationRequest(mig, irk)));
+  vectors.push(
+    makeVector(
+      "migration",
+      "irk",
+      mig,
+      signMigrationRequest(mig, irk),
+      payloadByName("migration", mig as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
+  );
 
   // InviteToken (IRK)
   const tok: InviteToken = {
@@ -171,8 +250,9 @@ async function main() {
     issuedAt: ISSUED_AT,
     expiresAt: ISSUED_AT + 14 * 24 * 60 * 60_000,
   };
+  const tokInput = { ...tok, nonce: hex(tok.nonce) };
   vectors.push(
-    makeVector("invite", "irk", { ...tok, nonce: hex(tok.nonce) }, signInvite(tok, irk)),
+    makeVector("invite", "irk", tokInput, signInvite(tok, irk), payloadByName("invite", tokInput), NO_WEBAPP),
   );
 
   // InviteAcceptance (IRK by accepter)
@@ -181,52 +261,64 @@ async function main() {
     accepterIrkPub: irk.publicKey,
     acceptedAt: ISSUED_AT + 1000,
   };
+  const accInput = {
+    ...acc,
+    inviteNonce: hex(acc.inviteNonce),
+    accepterIrkPub: hex(acc.accepterIrkPub),
+  };
   vectors.push(
     makeVector(
       "invite-acceptance",
       "irk",
-      { ...acc, inviteNonce: hex(acc.inviteNonce), accepterIrkPub: hex(acc.accepterIrkPub) },
+      accInput,
       signInviteAcceptance(acc, irk),
+      payloadByName("invite-acceptance", accInput),
+      NO_WEBAPP,
     ),
   );
 
-  // TunnelHello (BAK or STK; we use BAK here since the existing helper does).
-  // Wire field is `controlledDomains` (was `subdomains` pre-rename);
-  // serialize as `subdomains` in the fixture for backward-compatibility
-  // with existing Swift/Kotlin tests that index by the old name.
+  // TunnelHello (BAK). Wire field is `controlledDomains` (was `subdomains`
+  // pre-rename); serialize as `subdomains` for backward-compat with existing
+  // Swift/Kotlin tests that index by the old name.
   const hello: TunnelHello = {
     serverId: "srv-test",
     controlledDomains: ["b.harry", "a.harry"],
     nonce: FIXED_NONCE,
     issuedAt: ISSUED_AT,
   };
+  const helloInput = {
+    serverId: hello.serverId,
+    subdomains: hello.controlledDomains,
+    nonce: hex(hello.nonce),
+    issuedAt: hello.issuedAt,
+  };
   vectors.push(
     makeVector(
       "tunnel-hello",
       "bak",
-      {
-        serverId: hello.serverId,
-        subdomains: hello.controlledDomains,
-        nonce: hex(hello.nonce),
-        issuedAt: hello.issuedAt,
-      },
+      helloInput,
       signTunnelHello(hello, bak),
+      payloadByName("tunnel-hello", helloInput),
+      NO_WEBAPP,
     ),
   );
 
-  // RegisterServer (IRK)
+  // RegisterServer (IRK) — phone registers the box's STK pubkey.
   const reg: RegisterServer = {
     userId: "harry",
     serverId: "srv-test",
     stkPub: stk.publicKey,
     issuedAt: ISSUED_AT,
   };
+  const regInput = { ...reg, stkPub: hex(reg.stkPub) };
   vectors.push(
     makeVector(
       "register-server",
       "irk",
-      { ...reg, stkPub: hex(reg.stkPub) },
+      regInput,
       signRegisterServer(reg, irk),
+      payloadByName("register-server", regInput),
+      NO_WEBAPP,
     ),
   );
 
@@ -237,12 +329,15 @@ async function main() {
     platform: "apns",
     issuedAt: ISSUED_AT,
   };
+  const recInput = { ...rec, newPushTokenHash: hex(rec.newPushTokenHash) };
   vectors.push(
     makeVector(
       "account-recovery",
       "irk",
-      { ...rec, newPushTokenHash: hex(rec.newPushTokenHash) },
+      recInput,
       signAccountRecovery(rec, irk),
+      payloadByName("account-recovery", recInput),
+      NO_WEBAPP,
     ),
   );
 
@@ -256,7 +351,16 @@ async function main() {
     tunnelEndpoint: "203.0.113.1:51820",
     issuedAt: ISSUED_AT,
   };
-  vectors.push(makeVector("pb-announce", "stk", announce, signPbAnnounce(announce, stk)));
+  vectors.push(
+    makeVector(
+      "pb-announce",
+      "stk",
+      announce,
+      signPbAnnounce(announce, stk),
+      payloadByName("pb-announce", announce as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
+  );
 
   const reqPeers: PbRequestPeers = {
     requesterServerId: "srv-test",
@@ -265,7 +369,16 @@ async function main() {
     durabilityHint: "high",
     issuedAt: ISSUED_AT,
   };
-  vectors.push(makeVector("pb-request-peers", "stk", reqPeers, signPbRequestPeers(reqPeers, stk)));
+  vectors.push(
+    makeVector(
+      "pb-request-peers",
+      "stk",
+      reqPeers,
+      signPbRequestPeers(reqPeers, stk),
+      payloadByName("pb-request-peers", reqPeers as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
+  );
 
   const peerConfirm: PbPeerConfirm = {
     peerServerId: "srv-test",
@@ -274,33 +387,243 @@ async function main() {
     issuedAt: ISSUED_AT,
   };
   vectors.push(
-    makeVector("pb-peer-confirm", "stk", peerConfirm, signPbPeerConfirm(peerConfirm, stk)),
+    makeVector(
+      "pb-peer-confirm",
+      "stk",
+      peerConfirm,
+      signPbPeerConfirm(peerConfirm, stk),
+      payloadByName("pb-peer-confirm", peerConfirm as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
   );
 
-  // DeviceCapabilityGrant (IRK) — v2 device-addressing (S3.1).
-  // Fixed device pubkey so the canonical bytes are stable across runs.
-  const DEMO_DEVICE_PUB = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) DEMO_DEVICE_PUB[i] = (i * 3 + 11) & 0xff;
+  // ---- AuthCode (IRK) — the recipe's inner credential. Also embedded by the
+  // InstallBlob + ServerRegister vectors below (same AuthCode object). ----
+  const authCode: AuthCode = {
+    version: 1,
+    serial: "AAAA-BBBB-CCCC-DDDD",
+    username: "harry",
+    serverName: "home",
+    serverDomain: "home.harry.flagship.services",
+    delegatedPubKey: DEMO_DEVICE_PUB,
+    userPubKey: irk.publicKey,
+    issuedAt: ISSUED_AT,
+    expiresAt: ISSUED_AT + 60 * 60_000,
+  };
+  const authCodeSig = signAuthCode(authCode, irk);
+  const authCodeInput = {
+    ...authCode,
+    delegatedPubKey: hex(authCode.delegatedPubKey),
+    userPubKey: hex(authCode.userPubKey),
+  };
+  vectors.push(
+    makeVector(
+      "auth-code",
+      "irk",
+      authCodeInput,
+      authCodeSig,
+      payloadByName("auth-code", authCodeInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // ---- InstallBlob (IRK) — the phone-signed recipe. Carries the AuthCode +
+  // its IRK signature. This is THE most security-critical signed envelope. ----
+  const blob: InstallBlob = {
+    version: 2,
+    serverDomain: "home.harry.flagship.services",
+    username: "harry",
+    serverName: "home",
+    phoneDelegatedPubKey: DEMO_DEVICE_PUB,
+    registrationUrl: "https://flagshipserver.com/api/server/register",
+    authCode,
+    authCodeUserSignature: authCodeSig,
+    installerGitRef: "main",
+    rckPubKey: rck.publicKey,
+    bootUnlockMode: "approve",
+    diskEncryption: "luks",
+  };
+  const blobInput = {
+    version: blob.version,
+    serverDomain: blob.serverDomain,
+    username: blob.username,
+    serverName: blob.serverName,
+    phoneDelegatedPubKey: hex(blob.phoneDelegatedPubKey),
+    registrationUrl: blob.registrationUrl,
+    authCodeSerial: blob.authCode.serial,
+    authCodeUserPubKey: hex(blob.authCode.userPubKey),
+    authCodeUserSignature: hex(blob.authCodeUserSignature),
+    installerGitRef: blob.installerGitRef,
+    rckPubKey: hex(blob.rckPubKey),
+    bootUnlockMode: blob.bootUnlockMode,
+    diskEncryption: blob.diskEncryption,
+  };
+  vectors.push(
+    makeVector(
+      "install-blob",
+      "irk",
+      blobInput,
+      signInstallBlob(blob, irk),
+      payloadByName("install-blob", blobInput),
+      ALL,
+    ),
+  );
+
+  // ---- ServerRegister (server identity) — the box proves its own identity
+  // at /api/server/register, re-presenting the IRK-signed AuthCode. ----
+  const serverReg: ServerRegisterRequest = {
+    authCode,
+    authCodeUserSignature: authCodeSig,
+    serverIdentityPubKey: identity.publicKey,
+    issuedAt: ISSUED_AT + 5000,
+    nonce: FIXED_NONCE,
+  };
+  const serverRegInput = {
+    authCodeSerial: serverReg.authCode.serial,
+    authCodeServerDomain: serverReg.authCode.serverDomain,
+    serverIdentityPubKey: hex(serverReg.serverIdentityPubKey),
+    issuedAt: serverReg.issuedAt,
+    nonce: hex(serverReg.nonce),
+  };
+  vectors.push(
+    makeVector(
+      "server-register",
+      "identity",
+      serverRegInput,
+      signServerRegister(serverReg, identity),
+      payloadByName("server-register", serverRegInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // ---- SetRoutingTarget (RCK) — phone re-aims a subdomain at a new identity. ----
+  const setTarget: SetRoutingTarget = {
+    subdomain: "home.harry",
+    newTargetIdentityPubKey: identity.publicKey,
+    issuedAt: ISSUED_AT,
+    nonce: FIXED_NONCE,
+  };
+  const setTargetInput = {
+    subdomain: setTarget.subdomain,
+    newTargetIdentityPubKey: hex(setTarget.newTargetIdentityPubKey),
+    issuedAt: setTarget.issuedAt,
+    nonce: hex(setTarget.nonce),
+  };
+  vectors.push(
+    makeVector(
+      "rck-set-target",
+      "rck",
+      setTargetInput,
+      signSetRoutingTarget(setTarget, rck),
+      payloadByName("rck-set-target", setTargetInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // ---- PhoneOrder: set-front-page (IRK; daemon verifies against owner IRK) ----
+  const frontPage: Extract<PhoneOrder, { type: "set-front-page" }> = {
+    type: "set-front-page",
+    serverId: "home.harry.flagship.services",
+    label: "photos",
+    issuedAt: ISSUED_AT,
+  };
+  const frontPageInput = { serverId: frontPage.serverId, label: frontPage.label, issuedAt: frontPage.issuedAt };
+  vectors.push(
+    makeVector(
+      "order-set-front-page",
+      "irk",
+      frontPageInput,
+      signPhoneOrder(frontPage, irk),
+      payloadByName("order-set-front-page", frontPageInput),
+      ALL,
+    ),
+  );
+
+  // ---- PhoneOrder: power-off (IRK) — both modes (the daemon /api/power path). ----
+  for (const mode of ["off", "restart"] as const) {
+    const power: Extract<PhoneOrder, { type: "power-off" }> = {
+      type: "power-off",
+      serverId: "home.harry.flagship.services",
+      mode,
+      issuedAt: ISSUED_AT,
+    };
+    const powerInput = { serverId: power.serverId, mode: power.mode, issuedAt: power.issuedAt };
+    vectors.push(
+      makeVector(
+        `order-power-off-${mode}`,
+        "irk",
+        powerInput,
+        signPhoneOrder(power, irk),
+        payloadByName(`order-power-off-${mode}`, powerInput),
+        ALL,
+      ),
+    );
+  }
+
+  // ---- JournalRequest (IRK) — owner diagnostics over the box's own pipe. ----
+  const journal: JournalRequest = {
+    serverId: "home.harry.flagship.services",
+    unit: "flagship-daemon",
+    lines: 200,
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "journal-read",
+      "irk",
+      journal as unknown as Record<string, unknown>,
+      signJournalRequest(journal, irk),
+      payloadByName("journal-read", journal as unknown as Record<string, unknown>),
+      ALL,
+    ),
+  );
+
+  // ---- WatchDelegateKey (IRK) — single scope (boot-approval is the only one). ----
+  const watch: WatchDelegateKey = {
+    grantId: "550e8400-e29b-41d4-a716-446655440000",
+    username: "harry",
+    delegatePubKey: DEMO_DEVICE_PUB,
+    scopes: ["boot-approval"],
+    issuedAt: ISSUED_AT,
+    expiresAt: ISSUED_AT + 7 * 24 * 60 * 60_000,
+  };
+  const watchInput = { ...watch, delegatePubKey: hex(watch.delegatePubKey) };
+  vectors.push(
+    makeVector(
+      "watch-delegate-key",
+      "irk",
+      watchInput,
+      signWatchDelegateKey(watch, irk),
+      payloadByName("watch-delegate-key", watchInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // DeviceCapabilityGrant (IRK) — v2 device-addressing, MULTI-SCOPE (the
+  // canonical bytes must sort by DEVICE_SCOPES index, NOT alphabetically;
+  // unsorted-on-input proves the canonicalizer re-sorts).
   const dcg: DeviceCapabilityGrant = {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "harry",
     deviceLabel: "ipad",
     devicePubKey: DEMO_DEVICE_PUB,
-    // Deliberately unsorted on input — canonical bytes must sort by DEVICE_SCOPES index.
     scopes: ["install-service", "browse"],
     issuedAt: ISSUED_AT,
     expiresAt: ISSUED_AT + 90 * 24 * 60 * 60_000,
   };
+  const dcgInput = { ...dcg, devicePubKey: hex(dcg.devicePubKey) };
   vectors.push(
     makeVector(
       "device-capability-grant",
       "irk",
-      { ...dcg, devicePubKey: hex(dcg.devicePubKey) },
+      dcgInput,
       signDeviceCapabilityGrant(dcg, irk),
+      payloadByName("device-capability-grant", dcgInput),
+      NO_WEBAPP,
     ),
   );
 
-  // RevokeDeviceCapabilityGrant (IRK) — v2 device-addressing (S3.1).
+  // RevokeDeviceCapabilityGrant (IRK)
   const rdcg: RevokeDeviceCapabilityGrant = {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "harry",
@@ -313,49 +636,177 @@ async function main() {
       "irk",
       rdcg,
       signRevokeDeviceCapabilityGrant(rdcg, irk),
+      payloadByName("revoke-device-capability-grant", rdcg as unknown as Record<string, unknown>),
+      NO_WEBAPP,
     ),
   );
 
-  // Sanity-check: every recorded signature verifies, and every
-  // canonical-bytes-only vector's recorded canonicalHex matches what
-  // we'd compute today (catches generator self-inconsistency).
-  const verifyKeys: Record<string, Keypair> = { irk, bak, stk };
+  // ---- PushTokenRevoke (IRK) — already pinned cross-platform by hand; here it
+  // joins the shared file too. ----
+  const pushRevoke = { tokenId: "0123456789abcdef0123456789abcdef", issuedAt: 1_700_000_000_000 };
+  vectors.push(
+    makeVector(
+      "push-token-revoke",
+      "irk",
+      pushRevoke,
+      // signPushTokenRevoke takes a PushTokenRevoke; import-free path uses the
+      // canonical fn via payloadByName + a direct ed.sign to avoid another import.
+      ed.sign(payloadByName("push-token-revoke", pushRevoke), irk.privateKey),
+      payloadByName("push-token-revoke", pushRevoke),
+      ALL,
+    ),
+  );
+
+  // ---- RePairInitiate (NEW IRK) / RePairObject (OLD IRK) — recovery takeover. ----
+  const rePairInit: RePairInitiate = {
+    username: "harry",
+    newIrkPub: irk.publicKey,
+    oldIrkPub: oldIrk.publicKey,
+    issuedAt: ISSUED_AT,
+  };
+  const rePairInitInput = {
+    username: rePairInit.username,
+    newIrkPub: hex(rePairInit.newIrkPub),
+    oldIrkPub: hex(rePairInit.oldIrkPub),
+    issuedAt: rePairInit.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "re-pair-initiate",
+      "irk",
+      rePairInitInput,
+      signRePairInitiate(rePairInit, irk),
+      payloadByName("re-pair-initiate", rePairInitInput),
+      ALL,
+    ),
+  );
+
+  const rePairObj: RePairObject = {
+    username: "harry",
+    newIrkPub: irk.publicKey,
+    issuedAt: ISSUED_AT + 1000,
+  };
+  const rePairObjInput = {
+    username: rePairObj.username,
+    newIrkPub: hex(rePairObj.newIrkPub),
+    issuedAt: rePairObj.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "re-pair-object",
+      "old-irk",
+      rePairObjInput,
+      signRePairObject(rePairObj, oldIrk),
+      payloadByName("re-pair-object", rePairObjInput),
+      NO_WEBAPP,
+    ),
+  );
+
+  // ---- DaemonStatusReport (STK) — cert-fingerprint pinning. Two shapes: a
+  // full report (cert present) + a liveness-only report (null cert fields). ----
+  const daemon: DaemonStatusReport = {
+    serverDomain: "home.harry.flagship.services",
+    certSha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    certValidUntil: ISSUED_AT + 90 * 24 * 60 * 60_000,
+    certIssuer: "CN=YR2",
+    appsServed: ["photos", "blog"],
+    nonce: hex(FIXED_NONCE),
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "daemon-status",
+      "stk",
+      daemon as unknown as Record<string, unknown>,
+      signDaemonStatusReport(daemon, stk),
+      payloadByName("daemon-status", daemon as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
+  );
+
+  const daemonLiveness: DaemonStatusReport = {
+    serverDomain: "home.harry.flagship.services",
+    certSha256: null,
+    certValidUntil: null,
+    certIssuer: null,
+    appsServed: [],
+    nonce: hex(FIXED_NONCE),
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "daemon-status-liveness",
+      "stk",
+      daemonLiveness as unknown as Record<string, unknown>,
+      signDaemonStatusReport(daemonLiveness, stk),
+      payloadByName("daemon-status-liveness", daemonLiveness as unknown as Record<string, unknown>),
+      NO_WEBAPP,
+    ),
+  );
+
+  return vectors;
+}
+
+/**
+ * Build the file object. Centralized so `main`, `--check`, AND the vitest
+ * freshness test (which imports this) produce IDENTICAL bytes — the gate
+ * compares this against the on-disk test-vectors/canonical-bytes.json.
+ */
+export function buildFile(): { json: string } {
+  const vectors = buildVectors();
+  selfCheck(vectors);
+  const file = {
+    metadata: {
+      umkSeedHex: hex(FIXED_UMK_SEED),
+      oldUmkSeedHex: hex(OLD_UMK_SEED),
+      irkPubHex: hex(irk.publicKey),
+      oldIrkPubHex: hex(oldIrk.publicKey),
+      bakPubHex: hex(bak.publicKey),
+      stkPubHex: hex(stk.publicKey),
+      rckPubHex: hex(rck.publicKey),
+      identityPubHex: hex(identity.publicKey),
+      version: 2,
+      generatedAt: ISSUED_AT,
+      note:
+        "Deterministic canonical-bytes test vectors — THE single source. TS, " +
+        "webapp, Swift, and Kotlin tests LOAD this file and assert byte-equality " +
+        "for the purposes each implements (see each vector's `clients`). " +
+        "Regenerate with `npx tsx tools/test-vectors.ts`; CI fails if stale.",
+    },
+    vectors,
+  };
+  return { json: JSON.stringify(file, null, 2) + "\n" };
+}
+
+/**
+ * Sanity-check: every recorded signature verifies under its signer's pubkey,
+ * and every vector's recorded canonicalHex equals what `payloadByName`
+ * recomputes (catches generator self-inconsistency).
+ */
+function selfCheck(vectors: Vector[]): void {
+  const verifyKeys: Record<string, Keypair> = {
+    irk,
+    bak,
+    stk,
+    "old-irk": oldIrk,
+    rck,
+    identity,
+  };
   for (const v of vectors) {
+    const got = hex(payloadByName(v.name, v.input as Record<string, unknown>));
+    if (got !== v.canonicalHex) {
+      throw new Error(`vector ${v.name}: canonical-bytes self-check mismatch`);
+    }
     if (v.signedBy === "none") {
-      if (!v.canonicalHex) {
-        throw new Error(`vector ${v.name}: canonical-only vector missing canonicalHex`);
-      }
-      const got = hex(payloadFor(v));
-      if (got !== v.canonicalHex) {
-        throw new Error(`vector ${v.name}: canonical-bytes self-check mismatch`);
-      }
+      if (v.signatureHex !== "") throw new Error(`vector ${v.name}: none-vector has a signature`);
       continue;
     }
     const k = verifyKeys[v.signedBy];
     if (!k) throw new Error(`unknown signer: ${v.signedBy}`);
-    if (!ed.verify(hexFromString(v.signatureHex), payloadFor(v), k.publicKey)) {
+    if (!ed.verify(hexFromString(v.signatureHex), payloadByName(v.name, v.input as Record<string, unknown>), k.publicKey)) {
       throw new Error(`vector ${v.name}: roundtrip verification failed`);
     }
   }
-  const file = {
-    metadata: {
-      umkSeedHex: hex(FIXED_UMK_SEED),
-      irkPubHex: hex(irk.publicKey),
-      bakPubHex: hex(bak.publicKey),
-      stkPubHex: hex(stk.publicKey),
-      version: 1,
-      generatedAt: ISSUED_AT,
-      note: "Deterministic canonical-bytes test vectors. Swift/Kotlin tests assert byte-equality.",
-    },
-    vectors,
-  };
-  const outDir = resolve("test-vectors");
-  await mkdir(outDir, { recursive: true });
-  await writeFile(
-    resolve(outDir, "canonical-bytes.json"),
-    JSON.stringify(file, null, 2) + "\n",
-  );
-  console.log(`Wrote ${vectors.length} vectors → test-vectors/canonical-bytes.json`);
 }
 
 function hexFromString(h: string): Uint8Array {
@@ -364,91 +815,121 @@ function hexFromString(h: string): Uint8Array {
   return out;
 }
 
-// Re-derive the canonical-bytes payload locally for the verification sanity-check.
-// This duplicates a small bit of work, but it's a self-test so we know the file
-// we wrote is internally consistent.
-function payloadFor(v: Vector): Uint8Array {
+// Re-derive the canonical-bytes payload locally from the recorded `input`.
+// This INTENTIONALLY duplicates the field-order rules (it's a self-test that
+// keeps the recorded canonicalHex honest, and documents the exact byte layout
+// each client must reproduce). The production encoders are the authority; this
+// must agree with them or the self-check above throws.
+function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
   const enc = (s: string) => new TextEncoder().encode(s);
-  const i = v.input as Record<string, unknown>;
-  switch (v.name) {
-    case "boot":
-      return enc(`flagship/boot/v1|${i.serverId}|${i.nonce}|${i.issuedAt}`);
+  switch (name) {
     case "rebuild":
       return enc(
         `flagship/rebuild/v1|${i.userId}|${i.newServerId}|${i.wifiSsid}|${i.wifiPskHash}|${i.shareRatio}|${i.issuedAt}`,
       );
     case "revoke":
-      return enc(
-        `flagship/revoke/v1|${i.userId}|${i.revokedServerId}|${i.reason}|${i.issuedAt}`,
-      );
+      return enc(`flagship/revoke/v1|${i.userId}|${i.revokedServerId}|${i.reason}|${i.issuedAt}`);
     case "membership":
-      return enc(
-        `flagship/membership/v1|${i.serviceId}|${i.targetIrkPub}|${i.role ?? "REMOVE"}|${i.issuedAt}`,
-      );
+      return enc(`flagship/membership/v1|${i.serviceId}|${i.targetIrkPub}|${i.role ?? "REMOVE"}|${i.issuedAt}`);
     case "migration":
       return enc(
         `flagship/migration/v1|${i.serviceId}|${i.fromUser}|${i.toUser}|${i.mode}|${i.withData ? "1" : "0"}|${i.issuedAt}`,
       );
     case "invite":
-      return enc(
-        `flagship/invite/v1|${i.serviceId}|${i.role}|${i.nonce}|${i.issuedAt}|${i.expiresAt}`,
-      );
+      return enc(`flagship/invite/v1|${i.serviceId}|${i.role}|${i.nonce}|${i.issuedAt}|${i.expiresAt}`);
     case "invite-acceptance":
-      return enc(
-        `flagship/invite-accept/v1|${i.inviteNonce}|${i.accepterIrkPub}|${i.acceptedAt}`,
-      );
+      return enc(`flagship/invite-accept/v1|${i.inviteNonce}|${i.accepterIrkPub}|${i.acceptedAt}`);
     case "tunnel-hello": {
       const subs = [...(i.subdomains as string[])].sort().join(",");
-      return enc(
-        `flagship/tunnel-hello/v1|${i.serverId}|${subs}|${i.nonce}|${i.issuedAt}`,
-      );
+      return enc(`flagship/tunnel-hello/v1|${i.serverId}|${subs}|${i.nonce}|${i.issuedAt}`);
     }
     case "register-server":
-      return enc(
-        `flagship/register-server/v1|${i.userId}|${i.serverId}|${i.stkPub}|${i.issuedAt}`,
-      );
+      return enc(`flagship/register-server/v1|${i.userId}|${i.serverId}|${i.stkPub}|${i.issuedAt}`);
     case "account-recovery":
-      return enc(
-        `flagship/account-recovery/v1|${i.userId}|${i.newPushTokenHash}|${i.platform}|${i.issuedAt}`,
-      );
+      return enc(`flagship/account-recovery/v1|${i.userId}|${i.newPushTokenHash}|${i.platform}|${i.issuedAt}`);
     case "pb-announce":
       return enc(
-        [
-          "pb/announce/v1",
-          i.serverId,
-          i.pledgedBytes,
-          i.shareRatio,
-          i.maxShardSize,
-          i.region ?? "",
-          i.tunnelEndpoint,
-          i.issuedAt,
-        ].join("|"),
+        ["pb/announce/v1", i.serverId, i.pledgedBytes, i.shareRatio, i.maxShardSize, i.region ?? "", i.tunnelEndpoint, i.issuedAt].join("|"),
       );
     case "pb-request-peers":
-      return enc(
-        [
-          "pb/request-peers/v1",
-          i.requesterServerId,
-          i.n,
-          i.shardSizeBytes,
-          i.durabilityHint,
-          i.issuedAt,
-        ].join("|"),
-      );
+      return enc(["pb/request-peers/v1", i.requesterServerId, i.n, i.shardSizeBytes, i.durabilityHint, i.issuedAt].join("|"));
     case "pb-peer-confirm":
+      return enc(["pb/peer-confirm/v1", i.peerServerId, i.requesterServerId, i.shardId, i.issuedAt].join("|"));
+    case "auth-code":
       return enc(
         [
-          "pb/peer-confirm/v1",
-          i.peerServerId,
-          i.requesterServerId,
-          i.shardId,
+          "flagship/auth-code/v1",
+          i.version,
+          i.serial,
+          i.username,
+          i.serverName,
+          i.serverDomain,
+          i.delegatedPubKey,
+          i.userPubKey,
           i.issuedAt,
+          i.expiresAt,
         ].join("|"),
       );
+    case "install-blob": {
+      const parts: (string | number)[] = [
+        "flagship/install-blob/v1",
+        i.version as number,
+        i.serverDomain as string,
+        i.username as string,
+        i.serverName as string,
+        i.phoneDelegatedPubKey as string,
+        i.registrationUrl as string,
+        i.authCodeSerial as string,
+        i.authCodeUserPubKey as string,
+        i.authCodeUserSignature as string,
+        i.installerGitRef as string,
+        i.rckPubKey as string,
+      ];
+      if (i.bootUnlockMode !== undefined) parts.push(i.bootUnlockMode as string);
+      if (i.diskEncryption !== undefined) parts.push(`de=${i.diskEncryption}`);
+      return enc(parts.join("|"));
+    }
+    case "server-register":
+      return enc(
+        [
+          "flagship/server-register/v1",
+          i.authCodeSerial,
+          i.authCodeServerDomain,
+          i.serverIdentityPubKey,
+          i.issuedAt,
+          i.nonce,
+        ].join("|"),
+      );
+    case "rck-set-target":
+      return enc(
+        ["flagship/rck-set-target/v1", i.subdomain, i.newTargetIdentityPubKey, i.issuedAt, i.nonce].join("|"),
+      );
+    case "order-set-front-page":
+      return enc(["flagship/order/set-front-page/v1", i.serverId, i.label, i.issuedAt].join("|"));
+    case "order-power-off-off":
+      return enc(["flagship/order/power-off/v1", i.serverId, "off", i.issuedAt].join("|"));
+    case "order-power-off-restart":
+      return enc(["flagship/order/power-off/v1", i.serverId, "restart", i.issuedAt].join("|"));
+    case "journal-read":
+      return enc(["flagship/journal-read/v1", i.serverId, i.unit, String(i.lines), String(i.issuedAt)].join("|"));
+    case "watch-delegate-key": {
+      const order = ["boot-approval"];
+      const idx = (s: string) => order.indexOf(s);
+      const sorted = [...(i.scopes as string[])].sort((a, b) => idx(a) - idx(b)).join(",");
+      return enc(
+        [
+          "flagship/watch-delegate-key/v1",
+          i.grantId,
+          i.username,
+          i.delegatePubKey,
+          sorted,
+          i.issuedAt,
+          i.expiresAt,
+        ].join("|"),
+      );
+    }
     case "device-capability-grant": {
-      // Re-sort scopes here by the canonical DEVICE_SCOPES index so the
-      // self-test reproduces the canonicalization rule. The order in
-      // DEVICE_SCOPES is the authoritative source.
+      // Sort by the canonical DEVICE_SCOPES index (NOT alphabetical).
       const order = [
         "browse",
         "install-service",
@@ -457,6 +938,7 @@ function payloadFor(v: Vector): Uint8Array {
         "manage-services",
         "revoke-others",
         "demo-provision",
+        "admin",
       ];
       const idx = (s: string) => order.indexOf(s);
       const sorted = [...(i.scopes as string[])].sort((a, b) => idx(a) - idx(b)).join(",");
@@ -474,20 +956,77 @@ function payloadFor(v: Vector): Uint8Array {
       );
     }
     case "revoke-device-capability-grant":
+      return enc(["flagship/revoke-device-capability-grant/v1", i.grantId, i.username, i.reason, i.issuedAt].join("|"));
+    case "push-token-revoke":
+      return enc(["flagship/push-token-revoke/v1", i.tokenId, i.issuedAt].join("|"));
+    case "re-pair-initiate":
+      return enc(["flagship/re-pair-initiate/v1", i.username, i.newIrkPub, i.oldIrkPub, i.issuedAt].join("|"));
+    case "re-pair-object":
+      return enc(["flagship/re-pair-object/v1", i.username, i.newIrkPub, i.issuedAt].join("|"));
+    case "daemon-status":
+    case "daemon-status-liveness": {
+      const apps = [...(i.appsServed as string[])].sort().join(",");
       return enc(
         [
-          "flagship/revoke-device-capability-grant/v1",
-          i.grantId,
-          i.username,
-          i.reason,
-          i.issuedAt,
+          "flagship/daemon-status/v1",
+          i.serverDomain,
+          (i.certSha256 as string | null) ?? "",
+          String((i.certValidUntil as number | null) ?? ""),
+          (i.certIssuer as string | null) ?? "",
+          apps,
+          i.nonce,
+          String(i.issuedAt),
         ].join("|"),
       );
+    }
   }
-  throw new Error(`unknown vector ${v.name}`);
+  throw new Error(`unknown vector ${name}`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+async function main() {
+  const check = process.argv.includes("--check");
+  const { json } = buildFile();
+  const outDir = resolve("test-vectors");
+  const outPath = resolve(outDir, "canonical-bytes.json");
+
+  if (check) {
+    let existing: string;
+    try {
+      existing = await readFile(outPath, "utf8");
+    } catch {
+      console.error(
+        `test-vectors/canonical-bytes.json is MISSING. Run \`npx tsx tools/test-vectors.ts\` and commit it.`,
+      );
+      process.exit(1);
+      return;
+    }
+    if (existing !== json) {
+      console.error(
+        `test-vectors/canonical-bytes.json is STALE vs tools/test-vectors.ts.\n` +
+          `Run \`npx tsx tools/test-vectors.ts\` and commit the result.`,
+      );
+      process.exit(1);
+      return;
+    }
+    console.log("test-vectors/canonical-bytes.json is up to date.");
+    return;
+  }
+
+  await mkdir(outDir, { recursive: true });
+  await writeFile(outPath, json);
+  const n = buildVectors().length;
+  console.log(`Wrote ${n} vectors → test-vectors/canonical-bytes.json`);
+}
+
+// Run only when invoked as a script (tsx tools/test-vectors.ts [--check]),
+// NOT when imported by the vitest freshness test.
+const invokedDirectly =
+  typeof process !== "undefined" &&
+  Array.isArray(process.argv) &&
+  /test-vectors\.ts$/.test(process.argv[1] ?? "");
+if (invokedDirectly) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

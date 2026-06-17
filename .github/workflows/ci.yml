@@ -40,5 +40,15 @@ jobs:
       - name: Typecheck the whole tree
         run: npx tsc -b
 
+      # The cross-language canonical-byte vectors in test-vectors/canonical-bytes.json
+      # are the single source the TS, webapp, Swift, and Kotlin tests all assert
+      # against. If a production canonical-byte encoder changes but the generator
+      # output isn't regenerated + committed, the fixture goes stale and every
+      # client silently asserts old bytes. Fail the build on staleness. (The
+      # vitest suite also covers this via canonicalBytesVectorsFresh.test.ts; this
+      # is a fast, standalone belt-and-braces check that runs before the suite.)
+      - name: Canonical-byte vectors are fresh
+        run: npx tsx tools/test-vectors.ts --check
+
       - name: Run the unit suite
         run: npx vitest run
