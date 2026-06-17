@@ -154,6 +154,11 @@ private struct iPadShell: View {
             Sidebar(selected: $selected, app: app, c: c)
                 .frame(width: 280)
                 .background(c.sidebar)
+                // Addressable so the gym's iPad pass can assert the regular
+                // (iPad) shell renders the 280pt sidebar — and NOT the iPhone
+                // TabView — at the iPad destination (§7-C, D8). iPhone (compact)
+                // never builds this branch, so the id is iPad-only by construction.
+                .accessibilityIdentifier("ipad-sidebar")
             Divider()
             destinationContent(selected)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

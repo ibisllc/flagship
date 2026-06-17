@@ -23,21 +23,36 @@ import type { AdapterContext, AdapterOutcome, SurfaceAdapter } from "./types.js"
 
 const IOS_APP_DIR_REL = "apps/mobile/ios/App";
 const SCHEME = "FlagshipApp";
-/** Fallback Simulator name when no UDID can be resolved; overridable via GYM_IOS_DESTINATION. */
+/** Fallback Simulator name when no iPhone UDID can be resolved; overridable via GYM_IOS_DESTINATION. */
 const FALLBACK_DESTINATION = "platform=iOS Simulator,name=iPhone 16 Pro";
+/** Fallback iPad Simulator name (the D8 iPad pass); overridable via GYM_IOS_IPAD_DESTINATION. */
+const FALLBACK_IPAD_DESTINATION = "platform=iOS Simulator,name=iPad Pro 11-inch (M4)";
 
 function which(cmd: string): boolean {
   return spawnSync("which", [cmd], { encoding: "utf8" }).status === 0;
 }
 
 /**
- * Resolve a stable test destination. `GYM_IOS_DESTINATION` wins (e.g. an iPad
- * for the D8 iPad pass). Otherwise prefer a BOOTED iPhone simulator's UDID
- * (the most reliable matcher — `name=` matching is brittle across runtimes);
- * fall back to the first available iPhone, then to the literal name.
+ * iPad scenarios run on an iPad `-destination`; every other iOS scenario runs
+ * on the iPhone. We detect them by harness id (the GymIPadTests class) rather
+ * than a new Surface type, so the iPad pass stays inside the single "ios"
+ * surface (no scenario-model change). §7-C / D8.
  */
-function resolveDestination(): string {
-  const override = process.env.GYM_IOS_DESTINATION;
+function isIPadScenario(harness: string): boolean {
+  return harness.includes("GymIPad");
+}
+
+/**
+ * Resolve a stable test destination for a scenario. iPad scenarios prefer an
+ * iPad simulator; all others prefer an iPhone. The env overrides win
+ * (`GYM_IOS_IPAD_DESTINATION` for iPad, `GYM_IOS_DESTINATION` for iPhone).
+ * Otherwise prefer a BOOTED simulator of the right family's UDID (the most
+ * reliable matcher — `name=` matching is brittle across runtimes); fall back
+ * to the first available of that family, then to the literal name.
+ */
+function resolveDestination(harness: string): string {
+  const ipad = isIPadScenario(harness);
+  const override = ipad ? process.env.GYM_IOS_IPAD_DESTINATION : process.env.GYM_IOS_DESTINATION;
   if (override) return override;
   try {
     const out = spawnSync("xcrun", ["simctl", "list", "devices", "available", "--json"], {
@@ -49,15 +64,15 @@ function resolveDestination(): string {
         devices: Record<string, Array<{ udid: string; name: string; state: string }>>;
       };
       const all = Object.values(parsed.devices).flat();
-      const iphones = all.filter((d) => d.name.startsWith("iPhone"));
-      const booted = iphones.find((d) => d.state === "Booted");
-      const pick = booted ?? iphones[0];
+      const family = all.filter((d) => d.name.startsWith(ipad ? "iPad" : "iPhone"));
+      const booted = family.find((d) => d.state === "Booted");
+      const pick = booted ?? family[0];
       if (pick) return `platform=iOS Simulator,id=${pick.udid}`;
     }
   } catch {
     // Fall through to the literal name.
   }
-  return FALLBACK_DESTINATION;
+  return ipad ? FALLBACK_IPAD_DESTINATION : FALLBACK_DESTINATION;
 }
 
 export class IosAdapter implements SurfaceAdapter {
@@ -89,7 +104,7 @@ export class IosAdapter implements SurfaceAdapter {
     // 2. Run the scenario's UITest. `scenario.harness` is the
     //    `-only-testing:` identifier (e.g. FlagshipAppUITests/GymSmokeTests).
     const resultBundle = mkdtempSync(join(tmpdir(), "gym-xcresult-")) + "/run.xcresult";
-    const destination = resolveDestination();
+    const destination = resolveDestination(scenario.harness);
     logParts.push("[gym] destination: " + destination);
     const xcb = spawnSync(
       "xcodebuild",
