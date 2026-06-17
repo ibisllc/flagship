@@ -27,6 +27,12 @@ import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
 } from "./tunnel/tunnelClient.js";
+import { RelayTrustVerifier } from "./relayTrustVerifier.js";
+import {
+  RelayLockdownController,
+  relayTrustEnforceFromEnv,
+} from "./relayLockdown.js";
+import type { ServiceBlessing } from "@flagship/protocol";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
 import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
@@ -304,6 +310,13 @@ export interface DaemonRuntime {
    * itself is the lower-level mutation primitive.
    */
   urlController: UrlController;
+  /**
+   * Relay-trust lockdown controller (task #5). Observes every HELLO_ACK
+   * verdict; gates `resolveBackend` so a locked-down box (ENFORCE only)
+   * refuses new streams while the WS stays up for recovery. Exposed for
+   * diagnostics + the lock/SOS UI. Under OBSERVE (default) it never locks.
+   */
+  relayLockdown: RelayLockdownController;
   /**
    * In-pod live-siblings router. Receives FRAME_DOMAIN_GRANTED events
    * from the tunnel hub and inbound sibling-app-message frames from
@@ -770,6 +783,42 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         "Production loads from disk; tests inject a mint-on-the-fly bundle.",
     );
   }
+  // Relay-trust (docs/maintainer-trust-enforcement.md, task #5). On every
+  // HELLO_ACK the box verifies the hub's relay blessing + proof-of-
+  // possession (OBSERVE: logs the verdict, keeps relaying). The lockdown
+  // controller is the ENFORCE half — gated behind
+  // FLAGSHIP_RELAY_TRUST_ENFORCE (default OFF), so deploying this never
+  // bricks the live fleet. Only when enforce is ON AND a verdict FAILS (no
+  // covering owner exception) does the box stop relaying user traffic; the
+  // WS/control channel stays up so a fresh blessing or exception can lift
+  // it. SOS is the log-only owner-notify hook (push wiring operator-
+  // supplied), mirroring the vibe-code W10 hook.
+  const relayTrustVerifier = new RelayTrustVerifier({
+    comBaseUrl: opts.controlPlaneBaseUrl,
+  });
+  const relayLockdown = new RelayLockdownController({
+    enforce: relayTrustEnforceFromEnv(),
+    // TODO(exception-sync): resolveTrustExceptions reads the owner-signed
+    // relay exceptions from `.com`'s directory + the IRK-anchored device
+    // roster. Left unwired here (no roster accessor on the box yet, same
+    // gap noted in control-plane/serviceBlessing.ts); under ENFORCE a
+    // failing verdict locks down with no exception. OBSERVE is unaffected.
+  });
+  const onHelloAckTrust = (e: {
+    serviceBlessing: unknown;
+    hubSig: string | undefined;
+    nonce: Uint8Array;
+  }): void => {
+    void (async () => {
+      const verdict = await relayTrustVerifier.verify(
+        (e.serviceBlessing as ServiceBlessing | undefined) ?? undefined,
+        e.hubSig,
+        e.nonce,
+      );
+      await relayLockdown.onVerdict(verdict);
+    })();
+  };
+
   // Supervised tunnel client: reconnects on any WS close with full-jitter
   // exponential backoff (capped at 60s), and runs a 30s ping/pong keep-
   // alive so a half-open connection (Fly cycled the TCP without telling
@@ -778,7 +827,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     hubUrl: opts.tunnelHubUrl,
     signingKey: identity,
     getEntitlements: opts.entitlements,
-    resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
+    // Under ENFORCE a locked-down box refuses NEW streams (returns null →
+    // the hub gets FRAME_CLOSE_REMOTE) while the WS itself stays up for
+    // recovery. Under OBSERVE isRelayAllowed() is always true.
+    resolveBackend: () =>
+      relayLockdown.isRelayAllowed() ? { host: "127.0.0.1", port: tlsPort } : null,
+    onHelloAckTrust,
     onDomainGranted: (e) => {
       siblingRouter.broadcastDomainGranted({
         fqdn: e.fqdn,
@@ -1126,6 +1180,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     dataProvisioner,
     servicePlatform: servicePlatformRef.current,
     urlController,
+    relayLockdown,
     siblingRouter,
     appBackup,
     envStore,

@@ -1563,6 +1563,17 @@ export type {
   RelayTrustVerifierOptions,
   MaintainerChainMaterial,
 } from "./relayTrustVerifier.js";
+export {
+  RelayLockdownController,
+  relayTrustEnforceFromEnv,
+} from "./relayLockdown.js";
+export type {
+  RelayLockdownState,
+  RelayLockdownOptions,
+  RelaySosEvent,
+} from "./relayLockdown.js";
+export { shouldRelayThroughHub } from "./relayBlessing.js";
+export type { RelayGateResult, RelayGateReason } from "./relayBlessing.js";
 export { MembershipStore, InviteStore, AppMembership } from "./membership.js";
 export type {
   MembershipEntry,
