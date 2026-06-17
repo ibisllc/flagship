@@ -108,6 +108,11 @@ public enum HumanError {
             return .requestProblem
         case .notImplemented:
             return .requestProblem
+        case .controlServerUntrusted:
+            // The `GlobalTrustBar` red sliver is the PRIMARY surface for the
+            // untrusted-control-server state; `HumanError` is only the inline-
+            // text fallback when a halted call's error is shown directly.
+            return .requestProblem
         }
     }
 
