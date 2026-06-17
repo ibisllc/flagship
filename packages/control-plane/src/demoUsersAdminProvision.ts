@@ -105,6 +105,9 @@ export interface WritableR2Bucket {
 // ──────────────────────────────────────────────────────────────────────
 
 export interface DemoProvisionDeps {
+  /** The services apex (default "flagship.services"); a test env sets it to
+   *  e.g. "gym.flagship.services" so demo boxes land in ITS namespace. */
+  apex?: string;
   storage: DemoUsersStorage;
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -354,7 +357,7 @@ export async function handleAdminSnapshotNow(
   }
 
   const serial = bytesToHex(rand(16));
-  const serverDomain = `${serverName}.${u}.flagship.services`;
+  const serverDomain = `${serverName}.${u}.${deps.apex ?? "flagship.services"}`;
   const issuedAt = now;
   const expiresAt = now + 24 * 3_600_000;
 

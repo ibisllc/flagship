@@ -2191,6 +2191,7 @@ export async function tryControlPlane(
           buildTickets: storage.buildTickets,
           deviceCapabilityGrants: storage.deviceCapabilityGrants,
           demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
+          apex: env.SERVICES_APEX ?? "flagship.services",
         }
       : null;
     if (
@@ -2292,6 +2293,7 @@ export async function tryControlPlane(
           "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64.iso",
         hetzner: provisionHetzner,
         demoIrkKek: adminDeps.demoIrkKek,
+        apex: env.SERVICES_APEX ?? "flagship.services",
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
         defaultRegion: "fsn1",
         defaultSize: "cpx11",
@@ -2364,6 +2366,7 @@ export async function tryControlPlane(
         deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
         hetzner: cloudInitHetzner,
         demoIrkKek: adminDeps.demoIrkKek,
+        apex: env.SERVICES_APEX ?? "flagship.services",
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
         defaultRegion: "fsn1",
         defaultSize: "cpx11",

@@ -192,6 +192,10 @@ export function deriveDemoRckKey(
 // ──────────────────────────────────────────────────────────────────────
 
 export interface DemoAdminDeps extends DemoUsersDeps {
+  /** The services apex (default "flagship.services"); a test env (e.g. the gym)
+   *  sets it to "gym.flagship.services" so demo boxes land in ITS namespace,
+   *  not prod's. */
+  apex?: string;
   /** Real `usernames` table — admin-claim-and-issue inserts the demo
    *  row here so subsequent auth-code / server-register flows resolve
    *  the IRK pub the way they would for a real claim. */
@@ -333,7 +337,7 @@ export async function handleAdminClaimAndIssue(
   const expiresAt = now + 24 * 3_600_000;
 
   const serial = bytesToHex(rand(16));
-  const serverDomain = `${serverName}.${username}.flagship.services`;
+  const serverDomain = `${serverName}.${username}.${deps.apex ?? "flagship.services"}`;
 
   const authCode: AuthCode = {
     version: 1,
