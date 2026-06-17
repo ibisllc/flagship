@@ -68,6 +68,7 @@ import { buildArtifactDeployer } from "./buildmodes/deployArtifact.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
 import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
+import type { ServicePlatform } from "./servicePlatform.js";
 import {
   startDaemonRuntime,
   type DaemonRuntime,
@@ -180,61 +181,15 @@ async function main(): Promise<void> {
   // ---- Backup loop (peer-backup participation) ----
   // SWK is provisioned by the phone at first boot. Until that's wired,
   // we accept FLAGSHIP_SWK_HEX from env / disk so the loop can be
-  // constructed and toggled by phone orders. Without an SWK the loop
-  // can't encrypt; we still construct a stub so set-backup-policy has
-  // somewhere meaningful to call.
+  // constructed and toggled by phone orders.
   const swkHex =
     process.env.FLAGSHIP_SWK_HEX ?? (await tryReadFile("/var/flagship/swk.hex"));
-  const backupLoop = swkHex
-    ? new BackupLoop({ swk: hexToBytes(swkHex.trim()), k: 3, n: 5 })
-    : null;
+  const { backupLoop, repairAccumulator, repairScheduler } =
+    wirePeerBackup({ swkHex });
 
-  // B4 — peer-backup repair scheduler. Accumulator is always
-  // constructed so the P9 BFF surfaces a typed snapshot (vs. a
-  // null-provider fallback). The scheduler arms an interval that
-  // drives `RepairDaemon.repairOnce` only when a real daemon is
-  // wired; today the upstream shard-registry + peer-side adapters
-  // aren't bolted in yet, so `start()` is a no-op (intentionally)
-  // and the BFF surfaces idle/zero — same observable behavior as
-  // pre-B4, but with the scheduling site in place for the upstream
-  // wire-up to flip on without further changes here.
-  const repairAccumulator = new RepairStatsAccumulator();
-  const repairTickMs = (() => {
-    const raw = process.env.FLAGSHIP_REPAIR_TICK_MS;
-    if (!raw) return undefined;
-    const n = Number(raw);
-    return Number.isInteger(n) && n >= 1_000 ? n : undefined;
-  })();
-  const repairScheduler = new RepairScheduler({
-    accumulator: repairAccumulator,
-    daemon: null,
-    ...(repairTickMs !== undefined ? { intervalMs: repairTickMs } : {}),
-  });
-  // Idempotent no-op today (daemon=null). Once the upstream wires a
-  // real RepairDaemon and calls repairScheduler.setDaemon(daemon),
-  // a subsequent .start() will arm the interval.
-  repairScheduler.start();
-
-  // P6 — collaborator invites BFF store. The signed surface
-  // (`/.flagship/app/<id>/invite`) and the Screens-BFF MUST point at
-  // the same `AppInviteStore` instance so an invite issued via the
-  // phone appears in the webapp's manage view (and vice versa). The
-  // signed-surface entry isn't wired into the production boot yet;
-  // when it lands it must take THIS instance, not its own.
-  const appInviteStore = new InMemoryAppInviteStore();
-
-  // P14 — Companion-browser dock ticket ledger. Same in-memory shape
-  // as the appInviteStore; tickets TTL out in 60s so a daemon restart
-  // never strands a real user. A SQLite-backed store can slot in
-  // later via the CompanionTicketStore interface.
-  const companionTicketStore = new InMemoryCompanionTicketStore();
-
-  // P14 Phase 2 — write-relay queue. Companions POST unsigned intents
-  // here; the owner reads + signs + dispatches + resolves. Single
-  // instance shared across the four routes
-  // (request-write / pending-writes / resolve-pending / my-pending).
-  // 10-minute TTL bounds the daemon-restart window.
-  const companionWriteRequestStore = new InMemoryCompanionWriteRequestStore();
+  // BFF in-memory ledgers (collaborator invites + companion-dock).
+  const { appInviteStore, companionTicketStore, companionWriteRequestStore } =
+    wireBffStores();
 
   // ---- Order serial (provisioning-status channel) ----
   // The InstallBlob's authCode.serial is the order id keying the
@@ -274,31 +229,12 @@ async function main(): Promise<void> {
   );
 
   // ---- Pod-resident browser bundle (optional) ----
-  // The compose stack publishes Chromium's CDP on 127.0.0.1:9222. If the
-  // daemon can reach it we wire the full browser surface; if it can't,
-  // the daemon still boots and apps without `browser.domains` are
-  // unaffected. Bundle survives daemon shutdown via `bundle.close()`
-  // registered on process exit.
   const alertInbox = new InMemoryAlertInbox();
-  const cdpEndpoint =
-    process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";
-  let browserBundle: BrowserBundle | null = null;
-  if (process.env.FLAGSHIP_DISABLE_BROWSER !== "1") {
-    try {
-      browserBundle = await bootstrapBrowserBundle({
-        cdpEndpoint,
-        dataDir,
-        alertInbox,
-        pairedSessionGate: pairedSessions,
-      });
-      console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
-    } catch (e) {
-      console.warn(
-        `[daemon] browser bundle disabled: ${(e as Error).message}; ` +
-          `apps with browser.domains will get 403`,
-      );
-    }
-  }
+  const browserBundle = await wireBrowserBundle({
+    dataDir,
+    alertInbox,
+    pairedSessions,
+  });
 
   // Lock & power-off + dead-man: one suppressor + one host-power runner,
   // shared by the manual `power-off` order and the dead-man timer so the
@@ -329,206 +265,56 @@ async function main(): Promise<void> {
   console.log(`[daemon]   wildcard:      ${env.wildcard ? "yes" : "no"}`);
 
   // ---- Update-pack distribution wiring ----
-  const appCloneRoot = join(dataDir, "data", "app-clones");
-  const appWorkingDir = (serviceId: string) => join(appCloneRoot, serviceId);
-  const pullStateStore = new FileAppPullStateStore(
-    join(dataDir, "data", "app-state"),
-  );
-  // Forgejo-backed app repos live under /var/flagship/data/forgejo/git/<host>/<slug>.git;
-  // exact path is environment-specific so we make it overridable via env.
-  const repoRoot =
-    process.env.FLAGSHIP_REPO_ROOT ?? join(dataDir, "data", "forgejo", "git");
-  const servicePlatformRefForServer: { current: import("./servicePlatform.js").ServicePlatform | null } = { current: null };
-  const updateServer = new UpdateServer({
-    appDistribution: buildAppDistribution({
-      // Platform isn't strictly used by buildAppDistribution beyond its
-      // type; the closure supplies the per-app repo path.
-      platform: undefined as unknown as import("./servicePlatform.js").ServicePlatform,
-      registry: subscriberRegistry,
-      repoPath: (app) =>
-        join(repoRoot, app.creator.toLowerCase(), `${app.slug.toLowerCase()}.git`),
-    }),
-    resolveServerPubkey: async (fqdn) => {
-      // .com exposes /api/server/by-domain/<fqdn> as the registry source
-      // of truth (registered at install time, signed by IRK). Returning
-      // null causes UpdateServer to reject the puller with 401.
-      try {
-        const r = await fetch(
-          `${env.controlPlaneBaseUrl!.replace(/\/+$/, "")}/api/server/by-domain/${encodeURIComponent(fqdn)}`,
-        );
-        if (!r.ok) return null;
-        const body = (await r.json()) as { stkPubKey?: string; identityPubKey?: string };
-        const hex = body.identityPubKey ?? body.stkPubKey;
-        if (typeof hex !== "string") return null;
-        return hexToBytes(hex);
-      } catch {
-        return null;
-      }
-    },
-    cacheDir: join(dataDir, "data", "update-pack-cache"),
-  });
-
-  const cloneService = buildCloneApp({
-    identity: identityKeypair,
-    pullerServerId: env.serverFqdn!,
-    appWorkingDir,
-  });
-  const runMigration = buildRunMigration({
-    serviceByServiceId: (serviceId) => servicePlatformRefForServer.current?.byServiceId(serviceId) ?? null,
-  });
-  const updateClient = new UpdateClient({
-    identity: identityKeypair,
-    pullerServerId: env.serverFqdn!,
-    state: pullStateStore,
-    appWorkingDir,
-    runMigration,
-    restartContainer: async (serviceId) => {
-      const ap = servicePlatformRefForServer.current;
-      const app = ap?.byServiceId(serviceId);
-      // AppRunner uses docker; restarting the named container is enough.
-      // We don't tear down the ServicePlatform record because the install
-      // is still valid; only the container's image needs to re-read
-      // bind-mounted files.
-      if (app) {
-        // best-effort; AppRunner.deploy is idempotent on container name.
-      }
-      // Leaving as a no-op for v1; production wires AppRunner.restart.
-      void app;
-    },
-    emitPhoneAlert: (alert) => {
-      alertInbox.emit(alert);
-    },
-  });
-  const updateScheduler = new UpdateScheduler({
-    client: updateClient,
-    store: pullStateStore,
-    onResult: (serviceId, r) =>
-      console.log(`[update-pack] ${serviceId} → ${r.kind}`),
-    onError: (serviceId, e) =>
-      console.warn(`[update-pack] ${serviceId} threw: ${e.message}`),
+  // The ServicePlatform isn't built until startDaemonRuntime resolves, but
+  // the update-pack closures (runMigration, restartContainer) and the
+  // front-page label resolver must reference it. This ref-cell is the
+  // two-phase-init seam: created null here, back-patched to the live
+  // platform right after the runtime is up (see below). Keep it owned by
+  // main() so every late-binding consumer shares the SAME cell.
+  const servicePlatformRefForServer: { current: ServicePlatform | null } = {
+    current: null,
+  };
+  const {
+    pullStateStore,
+    updateServer,
+    updateClient,
+    updateScheduler,
+    cloneService,
+  } = wireUpdatePack({
+    env: env as RuntimeEnv,
+    dataDir,
+    identityKeypair,
+    subscriberRegistry,
+    alertInbox,
+    servicePlatformRef: servicePlatformRefForServer,
   });
 
   // ---- Phone-pollable AlertInbox HTTP + admin proxy + identity rotate ----
-  const alertInboxHandle = buildAlertInboxHandlers({
-    inbox: alertInbox,
-    gate: pairedSessions,
+  const additionalHandlers = wirePreRuntimeHandlers({
+    dataDir,
+    alertInbox,
+    pairedSessions,
+    browserBundle,
   });
-  const adminProxyHandle = buildAdminProxyHandler({ gate: pairedSessions });
-  const identityRotateHandle = buildIdentityRotateHandlers({
-    gate: pairedSessions,
-    pendingPath: defaultPendingIdentityPath(dataDir),
-  });
-
-  const additionalHandlers: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
-  if (browserBundle) additionalHandlers.push(browserBundle.apiHandle);
-  additionalHandlers.push(alertInboxHandle);
-  additionalHandlers.push(adminProxyHandle);
-  additionalHandlers.push(identityRotateHandle);
 
   // Provisioning-STATUS reporter — the SINGLE canonical channel the phone
-  // polls (POST /api/order/<serial>/status). The box bootstrap reports the
-  // install-time phases (booting → … → sealing); the daemon adds the two only
-  // it can know — `pairing` (entitlement loaded, handoff complete) and `live`
-  // (cert serving) — plus the terminal `error`. The legacy signed
-  // provision-event channel is RETIRED: ACME sub-phases stay in the daemon log
-  // (observability), never their own UI vocabulary. Best-effort + idempotent
-  // (one POST per phase — repeats for an already-reported phase are dropped so
-  // renewals / retries don't spam .com). Disabled (a no-op) when no serial was
-  // baked through.
-  const reportedStatusPhases = new Set<string>();
-  const reportStatus = (phase: ProvisionStatusPhase, detail?: string) => {
-    if (!orderSerial) return;
-    if (reportedStatusPhases.has(phase)) return;
-    reportedStatusPhases.add(phase);
-    return reportProvisionStatus({
-      serial: orderSerial,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-      phase,
-      ...(detail !== undefined ? { detail } : {}),
-    });
-  };
+  // polls (POST /api/order/<serial>/status).
+  const reportStatus = buildStatusReporter({
+    orderSerial,
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+  });
 
   // ---- Entitlement bundle (REQUIRED to start the tunnel client) ----
-  // N12b: the tunnel client presents an IRK-signed RootEntitlement (+
-  // optional ServiceEntitlement) on every HELLO instead of a raw
-  // controlledDomains list. The bundle is minted off-box (the phone, or
-  // the demo cloud-init bootstrap) and persisted to disk; the daemon
-  // loads it here and hands the runtime a getter so a rolling refresh
-  // (re-written file picked up via process restart) takes effect.
-  const entitlementBundlePath =
-    process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
-  let entitlementBundle: EntitlementBundle;
-  try {
-    let loaded = await loadEntitlementBundle(entitlementBundlePath);
-
-    // Entitlement-via-relay (docs/security-phone-as-unlock-endpoint.md §4).
-    // If no bundle is on disk, ask the user's phone — through `.com`'s blind
-    // mailbox — to IRK-sign a RootEntitlement for this freshly-burned box,
-    // instead of relying on a self-signed credential. We can only do this
-    // when we know the owner IRK (baked into FLAGSHIP_CONFIG); without it we
-    // can't verify the relay reply, so we skip straight to the fallback.
-    // ANY relay failure (timeout, no reply, forged/mismatched carrier) falls
-    // through to whatever already exists on disk — never a brick.
-    if (!loaded && cfg) {
-      console.log(
-        `[daemon] no entitlement bundle on disk; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
-      );
-      // The awaiting-entitlement handoff is covered by the `pairing` status
-      // report fired once the bundle loads below — no separate UI phase.
-      const relayed = await fetchEntitlementViaRelay({
-        serverDomain: env.serverFqdn!,
-        identity: identityKeypair,
-        ownerIrkPub: cfg.irkPublicKey,
-        controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-        entitlementBundlePath,
-        onLog: (m) => console.log(m),
-      });
-      if (relayed) {
-        loaded = relayed;
-      } else {
-        // Re-read in case a concurrent provisioner (the burner's self-signed
-        // bundle, a phone PhoneOrders delivery) wrote one while we waited.
-        loaded = await loadEntitlementBundle(entitlementBundlePath);
-      }
-    }
-
-    if (!loaded) {
-      throw new Error(
-        `entitlement bundle not found at ${entitlementBundlePath}; ` +
-          `the provisioner (phone relay / demo cloud-init bootstrap) must mint + write it before the daemon can serve`,
-      );
-    }
-    // Defense-in-depth: the bundle's podCanonical must be this server,
-    // and its podPubKey must equal our identity pubkey — otherwise the
-    // hub will reject the HELLO ("STK pubkey mismatches podPubKey") and
-    // we'd crash-loop with a confusing error. Catch it here instead.
-    if (loaded.rootEntitlement.podCanonical.toLowerCase() !== env.serverFqdn!.toLowerCase()) {
-      throw new Error(
-        `entitlement bundle podCanonical (${loaded.rootEntitlement.podCanonical}) does not match FLAGSHIP_SUBDOMAIN (${env.serverFqdn})`,
-      );
-    }
-    const ourPubHex = bytesToHexLocal(identityKeypair.publicKey);
-    const bundlePubHex = bytesToHexLocal(loaded.rootEntitlement.podPubKey);
-    if (ourPubHex !== bundlePubHex) {
-      throw new Error(
-        `entitlement bundle podPubKey (${bundlePubHex.slice(0, 16)}…) does not match server identity (${ourPubHex.slice(0, 16)}…)`,
-      );
-    }
-    entitlementBundle = loaded;
-    console.log(
-      `[daemon] loaded entitlement bundle for ${entitlementBundle.rootEntitlement.podCanonical} ` +
-        `(${entitlementBundle.serviceEntitlement ? `${entitlementBundle.serviceEntitlement.canonicals.length} service canonicals` : "root-only"})`,
-    );
-    // Pairing handoff complete — the box now holds the phone's IRK-signed
-    // entitlement, so it's paired. Tell the per-order status channel so the
-    // phone's timeline advances past `sealing`. Best-effort.
-    void reportStatus("pairing");
-  } catch (e) {
-    const msg = (e as Error).message ?? String(e);
-    console.error(`[daemon] entitlement bundle load failed: ${msg}`);
-    await reportStatus("error", `entitlements: ${msg}`.slice(0, 280));
-    process.exit(1);
-  }
+  // Loads (or relays-then-loads) the IRK-signed entitlement; on any failure
+  // it reports the terminal `error` phase and exits — same behavior as the
+  // inline try/catch it replaces.
+  const entitlementBundle = await loadEntitlementsOrExit({
+    env: env as RuntimeEnv,
+    cfg,
+    dataDir,
+    identityKeypair,
+    reportStatus,
+  });
 
   // Signed daemon-status heartbeat — populates `daemon_status` with REAL cert
   // info + a fresh heartbeat so /pods shows true current liveness (the proper
@@ -614,268 +400,838 @@ async function main(): Promise<void> {
     // phase: the canonical channel already shows `pairing` (entitlement loaded)
     // and advances to `live` from `onCertIssued` once the cert lands.
 
-    // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
-    // surface now that runtime.servicePlatform / appBackup / urlController
-    // are populated. Both surfaces are paired-session gated.
-    const vibeRegistry = new VibeCodeSessionRegistry();
-    const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
-    const forgejoToken = process.env.FLAGSHIP_FORGEJO_TOKEN;
-    const forgejoOrg =
-      process.env.FLAGSHIP_FORGEJO_ORG ?? `${cfg?.userId ?? "user"}-flagship`;
-    const forgejoAdmin =
-      forgejoBaseUrl && forgejoToken
-        ? new ForgejoAppAdmin({
-            baseUrl: forgejoBaseUrl,
-            orgName: forgejoOrg,
-            serviceToken: forgejoToken,
-          })
-        : null;
-    const vibeAppDir = join(dataDir, "data", "app-clones");
-    const username = cfg?.userId ?? env.serverFqdn!.split(".")[1] ?? "user";
+    // Wire vibe-code + build-modes + the /api/screens/* BFF + the re-pair
+    // watcher onto the live runtime (servicePlatform / appBackup /
+    // urlController are now populated). These share a dense web of locals
+    // (the vibe registry, build journal, BYOK harness/credentials, the
+    // deploy session), so they're wired as ONE cohesive unit rather than
+    // threading ~15 values through separate builders. Also starts the
+    // update-pack scheduler. Same order + side effects as before.
+    await wireRuntimeSurfaces({
+      runtime,
+      cfg,
+      env: env as RuntimeEnv,
+      dataDir,
+      swkHex,
+      identityKeypair,
+      pairedSessions,
+      browserBundle,
+      alertInbox,
+      backupLoop,
+      repairAccumulator,
+      appInviteStore,
+      companionTicketStore,
+      companionWriteRequestStore,
+      pullStateStore,
+      updateClient,
+      updateScheduler,
+    });
+  } catch (e) {
+    const msg = (e as Error).message ?? String(e);
+    console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
+    // Surface the terminal failure to the phone on the single canonical
+    // channel before exiting; the detail carries the real cause. Await briefly
+    // so the POST has a chance to land before exit.
+    await reportStatus("error", `startup: ${msg}`.slice(0, 280));
+    process.exit(1);
+  }
 
-    // The shared build journal — written by every mode (scratch / git /
-    // mcp). Hoisted above the vibe-code wiring so scratch chat turns +
-    // attachments land in the SAME journal the git/mcp paths use (buildId
-    // = the vibe sessionId). Value-free: a short text preview + per-
-    // attachment NAME/kind/size summaries, never the content/base64.
-    const buildJournal = new FileBuildJournal(join(dataDir, "build-journals"));
-    const recordScratchTurn = (a: {
-      sessionId: string;
-      text: string;
-      attachmentSummaries: string[];
-    }): void => {
-      const preview = a.text.length > 120 ? `${a.text.slice(0, 117)}…` : a.text;
+  // ---- Owner-IRK handlers: dead-man + power + front-page + journal ----
+  // Production-only (needs cfg.irkPublicKey). No enabled dead-man policy ⇒
+  // no timer, no behavior change. Mounts onto the live runtime + arms the
+  // dead-man SIGTERM/SIGINT stop hooks.
+  await wireOwnerHandlers({
+    runtime,
+    cfg,
+    env: env as RuntimeEnv,
+    autoUnlockSuppressor,
+    hostPowerRunner,
+    servicePlatformRef: servicePlatformRefForServer,
+  });
+
+  // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
+  await wireLocalHttpApi({ cfg });
+
+  // ---- Graceful-shutdown hooks (browser bundle + schedulers) ----
+  wireShutdownHooks({ browserBundle, updateScheduler, repairScheduler });
+
+  // Stay alive forever (tunnel client + TLS server are event-driven and
+  // hold the event loop on their own).
+  await runtime.ready();
+}
+
+// ===========================================================================
+// wire*() builders — main() is the readable sequence of these calls. Each
+// builder owns one cohesive subsystem, takes exactly the deps it needs, and
+// returns the typed bundle it produces. They are called in main()'s original
+// order with identical side effects; this is a pure decomposition.
+// ===========================================================================
+
+/** Late-binding cell for the ServicePlatform (built only once the runtime is up). */
+type ServicePlatformRef = { current: ServicePlatform | null };
+
+interface PeerBackupBundle {
+  backupLoop: BackupLoop | null;
+  repairAccumulator: RepairStatsAccumulator;
+  repairScheduler: RepairScheduler;
+}
+
+/**
+ * Peer-backup participation: the encrypting BackupLoop (only when an SWK is
+ * available) + the B4 repair accumulator/scheduler. The scheduler is started
+ * here (idempotent no-op today with daemon=null) exactly as before — the wire
+ * site is in place for the upstream RepairDaemon to flip on later.
+ */
+function wirePeerBackup(deps: { swkHex: string | null }): PeerBackupBundle {
+  const backupLoop = deps.swkHex
+    ? new BackupLoop({ swk: hexToBytes(deps.swkHex.trim()), k: 3, n: 5 })
+    : null;
+
+  const repairAccumulator = new RepairStatsAccumulator();
+  const repairTickMs = (() => {
+    const raw = process.env.FLAGSHIP_REPAIR_TICK_MS;
+    if (!raw) return undefined;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1_000 ? n : undefined;
+  })();
+  const repairScheduler = new RepairScheduler({
+    accumulator: repairAccumulator,
+    daemon: null,
+    ...(repairTickMs !== undefined ? { intervalMs: repairTickMs } : {}),
+  });
+  // Idempotent no-op today (daemon=null). Once the upstream wires a real
+  // RepairDaemon and calls repairScheduler.setDaemon(daemon), a subsequent
+  // .start() will arm the interval.
+  repairScheduler.start();
+
+  return { backupLoop, repairAccumulator, repairScheduler };
+}
+
+interface BffStores {
+  appInviteStore: InMemoryAppInviteStore;
+  companionTicketStore: InMemoryCompanionTicketStore;
+  companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
+}
+
+/**
+ * The in-memory BFF ledgers that the Screens-BFF (and, when wired, the signed
+ * surfaces) share: P6 collaborator invites + P14 companion-dock tickets +
+ * P14-Phase-2 write-relay queue. Each must be a single shared instance.
+ */
+function wireBffStores(): BffStores {
+  return {
+    appInviteStore: new InMemoryAppInviteStore(),
+    companionTicketStore: new InMemoryCompanionTicketStore(),
+    companionWriteRequestStore: new InMemoryCompanionWriteRequestStore(),
+  };
+}
+
+/**
+ * The optional pod-resident browser bundle. The compose stack publishes
+ * Chromium's CDP on 127.0.0.1:9222; if the daemon can reach it we wire the
+ * full browser surface, otherwise the daemon still boots and apps without
+ * `browser.domains` are unaffected (they get 403). Returns null when disabled
+ * or unreachable. The teardown hook is registered separately on exit.
+ */
+async function wireBrowserBundle(deps: {
+  dataDir: string;
+  alertInbox: InMemoryAlertInbox;
+  pairedSessions: FilePairedSessionStore;
+}): Promise<BrowserBundle | null> {
+  const cdpEndpoint = process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";
+  if (process.env.FLAGSHIP_DISABLE_BROWSER === "1") return null;
+  try {
+    const bundle = await bootstrapBrowserBundle({
+      cdpEndpoint,
+      dataDir: deps.dataDir,
+      alertInbox: deps.alertInbox,
+      pairedSessionGate: deps.pairedSessions,
+    });
+    console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
+    return bundle;
+  } catch (e) {
+    console.warn(
+      `[daemon] browser bundle disabled: ${(e as Error).message}; ` +
+        `apps with browser.domains will get 403`,
+    );
+    return null;
+  }
+}
+
+interface UpdatePackBundle {
+  pullStateStore: FileAppPullStateStore;
+  updateServer: UpdateServer;
+  updateClient: UpdateClient;
+  updateScheduler: UpdateScheduler;
+  cloneService: ReturnType<typeof buildCloneApp>;
+}
+
+/**
+ * Update-pack distribution wiring: the per-app working-dir resolver, the pull
+ * state store, the UpdateServer (serves packs to subscribers), the clone
+ * service, and the UpdateClient/UpdateScheduler (pulls packs from canonical
+ * homes). The runMigration + restartContainer closures read the live
+ * ServicePlatform through the shared `servicePlatformRef` (back-patched once
+ * the runtime is up). The scheduler is NOT started here — main() starts it
+ * after the runtime is reachable, exactly as before.
+ */
+function wireUpdatePack(deps: {
+  env: RuntimeEnv;
+  dataDir: string;
+  identityKeypair: Keypair;
+  subscriberRegistry: FileSubscriberRegistry;
+  alertInbox: InMemoryAlertInbox;
+  servicePlatformRef: ServicePlatformRef;
+}): UpdatePackBundle {
+  const { env, dataDir, identityKeypair, subscriberRegistry, alertInbox } = deps;
+  const appCloneRoot = join(dataDir, "data", "app-clones");
+  const appWorkingDir = (serviceId: string) => join(appCloneRoot, serviceId);
+  const pullStateStore = new FileAppPullStateStore(join(dataDir, "data", "app-state"));
+  // Forgejo-backed app repos live under /var/flagship/data/forgejo/git/<host>/<slug>.git;
+  // exact path is environment-specific so we make it overridable via env.
+  const repoRoot =
+    process.env.FLAGSHIP_REPO_ROOT ?? join(dataDir, "data", "forgejo", "git");
+  const updateServer = new UpdateServer({
+    appDistribution: buildAppDistribution({
+      // Platform isn't strictly used by buildAppDistribution beyond its
+      // type; the closure supplies the per-app repo path.
+      platform: undefined as unknown as ServicePlatform,
+      registry: subscriberRegistry,
+      repoPath: (app) =>
+        join(repoRoot, app.creator.toLowerCase(), `${app.slug.toLowerCase()}.git`),
+    }),
+    resolveServerPubkey: async (fqdn) => {
+      // .com exposes /api/server/by-domain/<fqdn> as the registry source
+      // of truth (registered at install time, signed by IRK). Returning
+      // null causes UpdateServer to reject the puller with 401.
+      try {
+        const r = await fetch(
+          `${env.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/server/by-domain/${encodeURIComponent(fqdn)}`,
+        );
+        if (!r.ok) return null;
+        const body = (await r.json()) as { stkPubKey?: string; identityPubKey?: string };
+        const hex = body.identityPubKey ?? body.stkPubKey;
+        if (typeof hex !== "string") return null;
+        return hexToBytes(hex);
+      } catch {
+        return null;
+      }
+    },
+    cacheDir: join(dataDir, "data", "update-pack-cache"),
+  });
+
+  const cloneService = buildCloneApp({
+    identity: identityKeypair,
+    pullerServerId: env.serverFqdn,
+    appWorkingDir,
+  });
+  const runMigration = buildRunMigration({
+    serviceByServiceId: (serviceId) =>
+      deps.servicePlatformRef.current?.byServiceId(serviceId) ?? null,
+  });
+  const updateClient = new UpdateClient({
+    identity: identityKeypair,
+    pullerServerId: env.serverFqdn,
+    state: pullStateStore,
+    appWorkingDir,
+    runMigration,
+    restartContainer: async (serviceId) => {
+      const ap = deps.servicePlatformRef.current;
+      const app = ap?.byServiceId(serviceId);
+      // AppRunner uses docker; restarting the named container is enough.
+      // We don't tear down the ServicePlatform record because the install
+      // is still valid; only the container's image needs to re-read
+      // bind-mounted files.
+      if (app) {
+        // best-effort; AppRunner.deploy is idempotent on container name.
+      }
+      // Leaving as a no-op for v1; production wires AppRunner.restart.
+      void app;
+    },
+    emitPhoneAlert: (alert) => {
+      alertInbox.emit(alert);
+    },
+  });
+  const updateScheduler = new UpdateScheduler({
+    client: updateClient,
+    store: pullStateStore,
+    onResult: (serviceId, r) => console.log(`[update-pack] ${serviceId} → ${r.kind}`),
+    onError: (serviceId, e) => console.warn(`[update-pack] ${serviceId} threw: ${e.message}`),
+  });
+
+  return { pullStateStore, updateServer, updateClient, updateScheduler, cloneService };
+}
+
+/**
+ * The pre-runtime loopback handlers (phone-pollable AlertInbox + admin proxy +
+ * identity-rotate), assembled in the original push order into the
+ * `additionalHandlers` array that startDaemonRuntime mounts. The browser
+ * bundle's API handler goes first when present.
+ */
+function wirePreRuntimeHandlers(deps: {
+  dataDir: string;
+  alertInbox: InMemoryAlertInbox;
+  pairedSessions: FilePairedSessionStore;
+  browserBundle: BrowserBundle | null;
+}): Array<(req: HttpRequest) => Promise<HttpResponse | null>> {
+  const alertInboxHandle = buildAlertInboxHandlers({
+    inbox: deps.alertInbox,
+    gate: deps.pairedSessions,
+  });
+  const adminProxyHandle = buildAdminProxyHandler({ gate: deps.pairedSessions });
+  const identityRotateHandle = buildIdentityRotateHandlers({
+    gate: deps.pairedSessions,
+    pendingPath: defaultPendingIdentityPath(deps.dataDir),
+  });
+
+  const additionalHandlers: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
+  if (deps.browserBundle) additionalHandlers.push(deps.browserBundle.apiHandle);
+  additionalHandlers.push(alertInboxHandle);
+  additionalHandlers.push(adminProxyHandle);
+  additionalHandlers.push(identityRotateHandle);
+  return additionalHandlers;
+}
+
+/** The reporter closure for the per-order provision-status channel. */
+type StatusReporter = (phase: ProvisionStatusPhase, detail?: string) => void | Promise<void>;
+
+/**
+ * Provisioning-STATUS reporter — the SINGLE canonical channel the phone polls
+ * (POST /api/order/<serial>/status). The box bootstrap reports the install-time
+ * phases (booting → … → sealing); the daemon adds the two only it can know —
+ * `pairing` (entitlement loaded) and `live` (cert serving) — plus the terminal
+ * `error`. Best-effort + idempotent (one POST per phase — repeats for an
+ * already-reported phase are dropped so renewals/retries don't spam .com).
+ * Disabled (a no-op) when no serial was baked through.
+ */
+function buildStatusReporter(deps: {
+  orderSerial: string | null;
+  controlPlaneBaseUrl: string;
+}): StatusReporter {
+  const reportedStatusPhases = new Set<string>();
+  return (phase: ProvisionStatusPhase, detail?: string) => {
+    if (!deps.orderSerial) return;
+    if (reportedStatusPhases.has(phase)) return;
+    reportedStatusPhases.add(phase);
+    return reportProvisionStatus({
+      serial: deps.orderSerial,
+      controlPlaneBaseUrl: deps.controlPlaneBaseUrl,
+      phase,
+      ...(detail !== undefined ? { detail } : {}),
+    });
+  };
+}
+
+/**
+ * Load (or relay-then-load) the IRK-signed entitlement bundle REQUIRED to start
+ * the tunnel client. If none is on disk and we know the owner IRK (cfg), ask the
+ * phone via the blind mailbox; any relay failure falls through to whatever
+ * exists on disk. Validates podCanonical + podPubKey against this server.
+ * On any failure it reports the terminal `error` phase and process.exit(1)s —
+ * identical to the inline try/catch it replaces. On success reports `pairing`.
+ */
+async function loadEntitlementsOrExit(deps: {
+  env: RuntimeEnv;
+  cfg: ServerConfig | null;
+  dataDir: string;
+  identityKeypair: Keypair;
+  reportStatus: StatusReporter;
+}): Promise<EntitlementBundle> {
+  const { env, cfg, dataDir, identityKeypair, reportStatus } = deps;
+  const entitlementBundlePath =
+    process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
+  try {
+    let loaded = await loadEntitlementBundle(entitlementBundlePath);
+
+    // Entitlement-via-relay (docs/security-phone-as-unlock-endpoint.md §4).
+    // If no bundle is on disk, ask the user's phone — through `.com`'s blind
+    // mailbox — to IRK-sign a RootEntitlement for this freshly-burned box,
+    // instead of relying on a self-signed credential. We can only do this
+    // when we know the owner IRK (baked into FLAGSHIP_CONFIG); without it we
+    // can't verify the relay reply, so we skip straight to the fallback.
+    // ANY relay failure (timeout, no reply, forged/mismatched carrier) falls
+    // through to whatever already exists on disk — never a brick.
+    if (!loaded && cfg) {
+      console.log(
+        `[daemon] no entitlement bundle on disk; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
+      );
+      // The awaiting-entitlement handoff is covered by the `pairing` status
+      // report fired once the bundle loads below — no separate UI phase.
+      const relayed = await fetchEntitlementViaRelay({
+        serverDomain: env.serverFqdn,
+        identity: identityKeypair,
+        ownerIrkPub: cfg.irkPublicKey,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+        entitlementBundlePath,
+        onLog: (m) => console.log(m),
+      });
+      if (relayed) {
+        loaded = relayed;
+      } else {
+        // Re-read in case a concurrent provisioner (the burner's self-signed
+        // bundle, a phone PhoneOrders delivery) wrote one while we waited.
+        loaded = await loadEntitlementBundle(entitlementBundlePath);
+      }
+    }
+
+    if (!loaded) {
+      throw new Error(
+        `entitlement bundle not found at ${entitlementBundlePath}; ` +
+          `the provisioner (phone relay / demo cloud-init bootstrap) must mint + write it before the daemon can serve`,
+      );
+    }
+    // Defense-in-depth: the bundle's podCanonical must be this server,
+    // and its podPubKey must equal our identity pubkey — otherwise the
+    // hub will reject the HELLO ("STK pubkey mismatches podPubKey") and
+    // we'd crash-loop with a confusing error. Catch it here instead.
+    if (loaded.rootEntitlement.podCanonical.toLowerCase() !== env.serverFqdn.toLowerCase()) {
+      throw new Error(
+        `entitlement bundle podCanonical (${loaded.rootEntitlement.podCanonical}) does not match FLAGSHIP_SUBDOMAIN (${env.serverFqdn})`,
+      );
+    }
+    const ourPubHex = bytesToHexLocal(identityKeypair.publicKey);
+    const bundlePubHex = bytesToHexLocal(loaded.rootEntitlement.podPubKey);
+    if (ourPubHex !== bundlePubHex) {
+      throw new Error(
+        `entitlement bundle podPubKey (${bundlePubHex.slice(0, 16)}…) does not match server identity (${ourPubHex.slice(0, 16)}…)`,
+      );
+    }
+    console.log(
+      `[daemon] loaded entitlement bundle for ${loaded.rootEntitlement.podCanonical} ` +
+        `(${loaded.serviceEntitlement ? `${loaded.serviceEntitlement.canonicals.length} service canonicals` : "root-only"})`,
+    );
+    // Pairing handoff complete — the box now holds the phone's IRK-signed
+    // entitlement, so it's paired. Tell the per-order status channel so the
+    // phone's timeline advances past `sealing`. Best-effort.
+    void reportStatus("pairing");
+    return loaded;
+  } catch (e) {
+    const msg = (e as Error).message ?? String(e);
+    console.error(`[daemon] entitlement bundle load failed: ${msg}`);
+    await reportStatus("error", `entitlements: ${msg}`.slice(0, 280));
+    process.exit(1);
+  }
+}
+
+/**
+ * Wire vibe-code + build-modes + the /api/screens/* BFF + the J.3/J.4 re-pair
+ * watcher onto the live runtime, and start the update-pack scheduler. These
+ * share a dense web of locals (the vibe registry, build journal, BYOK
+ * harness/credentials, the deploy session, the rePairWatcherRef forward ref)
+ * so they live as ONE cohesive builder rather than threading ~15 values through
+ * separate functions. Construction order + side effects are identical to the
+ * original inline block.
+ */
+async function wireRuntimeSurfaces(deps: {
+  runtime: DaemonRuntime;
+  cfg: ServerConfig | null;
+  env: RuntimeEnv;
+  dataDir: string;
+  swkHex: string | null;
+  identityKeypair: Keypair;
+  pairedSessions: FilePairedSessionStore;
+  browserBundle: BrowserBundle | null;
+  alertInbox: InMemoryAlertInbox;
+  backupLoop: BackupLoop | null;
+  repairAccumulator: RepairStatsAccumulator;
+  appInviteStore: InMemoryAppInviteStore;
+  companionTicketStore: InMemoryCompanionTicketStore;
+  companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
+  pullStateStore: FileAppPullStateStore;
+  updateClient: UpdateClient;
+  updateScheduler: UpdateScheduler;
+}): Promise<void> {
+  const {
+    runtime,
+    cfg,
+    env,
+    dataDir,
+    swkHex,
+    identityKeypair,
+    pairedSessions,
+    browserBundle,
+    alertInbox,
+    backupLoop,
+    repairAccumulator,
+    appInviteStore,
+    companionTicketStore,
+    companionWriteRequestStore,
+    pullStateStore,
+    updateClient,
+    updateScheduler,
+  } = deps;
+
+  // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
+  // surface now that runtime.servicePlatform / appBackup / urlController
+  // are populated. Both surfaces are paired-session gated.
+  const vibeRegistry = new VibeCodeSessionRegistry();
+  const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
+  const forgejoToken = process.env.FLAGSHIP_FORGEJO_TOKEN;
+  const forgejoOrg =
+    process.env.FLAGSHIP_FORGEJO_ORG ?? `${cfg?.userId ?? "user"}-flagship`;
+  const forgejoAdmin =
+    forgejoBaseUrl && forgejoToken
+      ? new ForgejoAppAdmin({
+          baseUrl: forgejoBaseUrl,
+          orgName: forgejoOrg,
+          serviceToken: forgejoToken,
+        })
+      : null;
+  const vibeAppDir = join(dataDir, "data", "app-clones");
+  const username = cfg?.userId ?? env.serverFqdn.split(".")[1] ?? "user";
+
+  // The shared build journal — written by every mode (scratch / git /
+  // mcp). Hoisted above the vibe-code wiring so scratch chat turns +
+  // attachments land in the SAME journal the git/mcp paths use (buildId
+  // = the vibe sessionId). Value-free: a short text preview + per-
+  // attachment NAME/kind/size summaries, never the content/base64.
+  const buildJournal = new FileBuildJournal(join(dataDir, "build-journals"));
+  const recordScratchTurn = (a: {
+    sessionId: string;
+    text: string;
+    attachmentSummaries: string[];
+  }): void => {
+    const preview = a.text.length > 120 ? `${a.text.slice(0, 117)}…` : a.text;
+    void buildJournal
+      .append(a.sessionId, {
+        mode: "scratch",
+        kind: "user-message",
+        actor: "owner",
+        summary: preview.length > 0 ? preview : "(no text)",
+      })
+      .catch(() => {});
+    for (const summary of a.attachmentSummaries) {
       void buildJournal
         .append(a.sessionId, {
           mode: "scratch",
-          kind: "user-message",
+          kind: "attachment-added",
           actor: "owner",
-          summary: preview.length > 0 ? preview : "(no text)",
+          summary,
         })
         .catch(() => {});
-      for (const summary of a.attachmentSummaries) {
-        void buildJournal
-          .append(a.sessionId, {
-            mode: "scratch",
-            kind: "attachment-added",
-            actor: "owner",
-            summary,
-          })
-          .catch(() => {});
-      }
-    };
-    // ---- Live BYOK LLM wiring (scratch streaming + git-adapt) ----------
-    //
-    // The harness holds NO key — it opens a transient, sealed-at-rest
-    // credential just-in-time for each provider call. The credential
-    // arrives over the paired-session-gated pinned pipe (the box
-    // terminates TLS) and NEVER leaves the box; flagshipserver.com is not
-    // in this path. The credential store survives a daemon restart so an
-    // in-flight build continues while the phone is locked (the owner's
-    // endorsed "transient key on the box" posture). The strict default
-    // baseUrlGuard (https + public only) applies; an explicit `baseUrl`
-    // for an OpenAI-compatible / proxy endpoint is allowed by the guard's
-    // normal public-host rules. (LAN baseUrl override is a future
-    // self-host item, not enabled here.)
-    const llmHarness = new LlmHarness({
-      swk: swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
-    });
-    const llmCredentials = new FileBuildCredentialStore(
-      join(dataDir, "llm-credentials"),
-      swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
-    );
-    await llmCredentials.load();
-    const defaultLlmModel =
-      process.env.FLAGSHIP_LLM_DEFAULT_MODEL ?? "claude-3-5-sonnet-latest";
+    }
+  };
+  // ---- Live BYOK LLM wiring (scratch streaming + git-adapt) ----------
+  //
+  // The harness holds NO key — it opens a transient, sealed-at-rest
+  // credential just-in-time for each provider call. The credential
+  // arrives over the paired-session-gated pinned pipe (the box
+  // terminates TLS) and NEVER leaves the box; flagshipserver.com is not
+  // in this path. The credential store survives a daemon restart so an
+  // in-flight build continues while the phone is locked (the owner's
+  // endorsed "transient key on the box" posture). The strict default
+  // baseUrlGuard (https + public only) applies; an explicit `baseUrl`
+  // for an OpenAI-compatible / proxy endpoint is allowed by the guard's
+  // normal public-host rules. (LAN baseUrl override is a future
+  // self-host item, not enabled here.)
+  const llmHarness = new LlmHarness({
+    swk: swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+  });
+  const llmCredentials = new FileBuildCredentialStore(
+    join(dataDir, "llm-credentials"),
+    swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+  );
+  await llmCredentials.load();
+  const defaultLlmModel =
+    process.env.FLAGSHIP_LLM_DEFAULT_MODEL ?? "claude-3-5-sonnet-latest";
 
-    const deploySession = runtime.servicePlatform
-      ? buildDeploySession({
-          servicePlatform: runtime.servicePlatform,
-          hostIrk: identityKeypair,
-          hostUsername: username,
-          workingDir: vibeAppDir,
-          cmd: (await import("./serviceRunner.js")).realCommandRunner,
-          forgejoAdmin,
-        })
-      : undefined;
-    const vibeCodeHandle = buildVibeCodeHttpHandlers({
-      registry: vibeRegistry,
-      gate: pairedSessions,
-      username,
-      serverFqdn: env.serverFqdn!,
-      deploySession,
-      recordScratchTurn,
-    });
-    runtime.addHandler(vibeCodeHandle);
-
-    // W10 — fire a notify-owner callback whenever a vibe-code session
-    // transitions into awaiting-tool-response. The default impl logs
-    // (operator-visible) so the chain is provably wired; production
-    // deployments that integrate with .com's push relay replace this
-    // hook with a real fan-out (POST `<controlPlane>/api/push/relay`
-    // with a category of "vibecode-needs-you"). The callback is
-    // value-free by construction — it receives only the session id,
-    // the tool kind, and the tool-use id. No model arguments, no env
-    // values, no chat messages.
-    vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
-          `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
-      );
-    });
-
-    // ---- Build modes: git import + MCP (the two new create-service
-    // sources beyond scratch). They share ONE journal with scratch so the
-    // "your builds" list + the journal viewer span every mode. The deploy
-    // path is the same artifact deployer (harness-only Forgejo push,
-    // docker build, signed install) all modes funnel through.
-    if (runtime.servicePlatform) {
-      const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
-      const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
-      await mcpKeys.load();
-      const realCmd = (await import("./serviceRunner.js")).realCommandRunner;
-      const gitImporter = new GitImporter({
-        cmd: realCmd,
-        workingDir: join(dataDir, "data", "git-imports"),
-        journal: buildJournal,
-      });
-      const artifactDeployer = buildArtifactDeployer({
+  const deploySession = runtime.servicePlatform
+    ? buildDeploySession({
         servicePlatform: runtime.servicePlatform,
         hostIrk: identityKeypair,
         hostUsername: username,
         workingDir: vibeAppDir,
-        cmd: realCmd,
+        cmd: (await import("./serviceRunner.js")).realCommandRunner,
         forgejoAdmin,
-        journal: buildJournal,
-      });
-      const buildOrchestrator = new BuildOrchestrator({
-        journal: buildJournal,
-        gitImporter,
-        mcpKeys,
-        deployArtifact: artifactDeployer,
-        serverFqdn: env.serverFqdn!,
-        mcpBaseUrl: `https://${env.serverFqdn!}`,
-        // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
-        // provider chat call (the harness opens the build's transient,
-        // sealed BYOK credential just-in-time, applies the SSRF baseUrl
-        // guard, and returns the raw assistant text in the emit-format the
-        // VibeCodeStreamParser reads). The credential is keyed by buildId
-        // in the same store the scratch path uses; the owner delivers it
-        // over the pinned pipe. When NO credential is stored for the build,
-        // this resolves to undefined-equivalent: the runner throws and the
-        // orchestrator surfaces the clean "AI adapt not configured" 503 —
-        // exactly the genuine no-credential case the contract calls for.
-        // flagshipserver.com is never in this path.
-        adaptRunner: async ({ buildId, systemPrompt, userPrompt, model }) => {
-          const credential = await llmCredentials.get(buildId);
-          if (!credential) {
-            // Defensive — adaptCredentialAvailable below already
-            // short-circuits this case into the clean 503.
-            throw new Error("AI adapt not configured");
-          }
-          const resp = await llmHarness.chatWithCredential(credential, {
-            model: model ?? defaultLlmModel,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-          });
-          return resp.content;
-        },
-        // The genuine no-credential case: a build for which the owner
-        // never delivered a BYOK key degrades to the same clean 503 as
-        // the provider-not-wired case.
-        adaptCredentialAvailable: (buildId) => llmCredentials.has(buildId),
-        // An external IDE / the AI can ask the owner to set a secret env var
-        // VALUE-FREE (request_env_var). Journal it (names not values) so the
-        // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.
-        recordEnvRequest: async ({ buildId, name, why }) => {
-          await buildJournal.append(buildId, {
-            mode: "mcp",
-            kind: "env-requested",
-            actor: "ide",
-            summary: `requested env var ${name}`,
-            ...(why != null ? { detail: why } : {}),
-          });
-        },
-        // Mirror the vibe-code W10 notify-owner hook: log-only by default so
-        // the chain is provably wired; production deployments that integrate
-        // with .com's push relay replace this with a real fan-out (POST
-        // `<controlPlane>/api/push/relay`, category "build-needs-env"). The
-        // callback is value-free by construction — only the build id + the
-        // env NAME, never a value, reason, or secret flag.
-        notifyOwner: ({ buildId, name }) => {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[build] build=${buildId} env-requested=${name} ` +
-              `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
-          );
-        },
-      });
-      runtime.addHandler(
-        buildBuildModesHttpHandlers({
-          orchestrator: buildOrchestrator,
-          gate: pairedSessions,
-          credentials: llmCredentials,
-        }),
-      );
+      })
+    : undefined;
+  const vibeCodeHandle = buildVibeCodeHttpHandlers({
+    registry: vibeRegistry,
+    gate: pairedSessions,
+    username,
+    serverFqdn: env.serverFqdn,
+    deploySession,
+    recordScratchTurn,
+  });
+  runtime.addHandler(vibeCodeHandle);
 
-      // Bridge scratch (vibe-code) into the same journal so all three
-      // modes appear together. Value-free: only the session id + tool
-      // kind, mirroring the notify hook's contract. This replaces the
-      // log-only hook above with log + journal.
-      vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
+  // W10 — fire a notify-owner callback whenever a vibe-code session
+  // transitions into awaiting-tool-response. The default impl logs
+  // (operator-visible) so the chain is provably wired; production
+  // deployments that integrate with .com's push relay replace this
+  // hook with a real fan-out (POST `<controlPlane>/api/push/relay`
+  // with a category of "vibecode-needs-you"). The callback is
+  // value-free by construction — it receives only the session id,
+  // the tool kind, and the tool-use id. No model arguments, no env
+  // values, no chat messages.
+  vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
+        `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
+    );
+  });
+
+  // ---- Build modes: git import + MCP (the two new create-service
+  // sources beyond scratch). They share ONE journal with scratch so the
+  // "your builds" list + the journal viewer span every mode. The deploy
+  // path is the same artifact deployer (harness-only Forgejo push,
+  // docker build, signed install) all modes funnel through.
+  if (runtime.servicePlatform) {
+    const mcpSwk = swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32);
+    const mcpKeys = new FileMcpKeyStore(join(dataDir, "mcp-keys"), mcpSwk);
+    await mcpKeys.load();
+    const realCmd = (await import("./serviceRunner.js")).realCommandRunner;
+    const gitImporter = new GitImporter({
+      cmd: realCmd,
+      workingDir: join(dataDir, "data", "git-imports"),
+      journal: buildJournal,
+    });
+    const artifactDeployer = buildArtifactDeployer({
+      servicePlatform: runtime.servicePlatform,
+      hostIrk: identityKeypair,
+      hostUsername: username,
+      workingDir: vibeAppDir,
+      cmd: realCmd,
+      forgejoAdmin,
+      journal: buildJournal,
+    });
+    const buildOrchestrator = new BuildOrchestrator({
+      journal: buildJournal,
+      gitImporter,
+      mcpKeys,
+      deployArtifact: artifactDeployer,
+      serverFqdn: env.serverFqdn,
+      mcpBaseUrl: `https://${env.serverFqdn}`,
+      // AI "adapt" pass for non-fit git imports — LIVE. One non-streaming
+      // provider chat call (the harness opens the build's transient,
+      // sealed BYOK credential just-in-time, applies the SSRF baseUrl
+      // guard, and returns the raw assistant text in the emit-format the
+      // VibeCodeStreamParser reads). The credential is keyed by buildId
+      // in the same store the scratch path uses; the owner delivers it
+      // over the pinned pipe. When NO credential is stored for the build,
+      // this resolves to undefined-equivalent: the runner throws and the
+      // orchestrator surfaces the clean "AI adapt not configured" 503 —
+      // exactly the genuine no-credential case the contract calls for.
+      // flagshipserver.com is never in this path.
+      adaptRunner: async ({ buildId, systemPrompt, userPrompt, model }) => {
+        const credential = await llmCredentials.get(buildId);
+        if (!credential) {
+          // Defensive — adaptCredentialAvailable below already
+          // short-circuits this case into the clean 503.
+          throw new Error("AI adapt not configured");
+        }
+        const resp = await llmHarness.chatWithCredential(credential, {
+          model: model ?? defaultLlmModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        });
+        return resp.content;
+      },
+      // The genuine no-credential case: a build for which the owner
+      // never delivered a BYOK key degrades to the same clean 503 as
+      // the provider-not-wired case.
+      adaptCredentialAvailable: (buildId) => llmCredentials.has(buildId),
+      // An external IDE / the AI can ask the owner to set a secret env var
+      // VALUE-FREE (request_env_var). Journal it (names not values) so the
+      // "your IDE asked for STRIPE_KEY" signal is durable + reviewable.
+      recordEnvRequest: async ({ buildId, name, why }) => {
+        await buildJournal.append(buildId, {
+          mode: "mcp",
+          kind: "env-requested",
+          actor: "ide",
+          summary: `requested env var ${name}`,
+          ...(why != null ? { detail: why } : {}),
+        });
+      },
+      // Mirror the vibe-code W10 notify-owner hook: log-only by default so
+      // the chain is provably wired; production deployments that integrate
+      // with .com's push relay replace this with a real fan-out (POST
+      // `<controlPlane>/api/push/relay`, category "build-needs-env"). The
+      // callback is value-free by construction — only the build id + the
+      // env NAME, never a value, reason, or secret flag.
+      notifyOwner: ({ buildId, name }) => {
         // eslint-disable-next-line no-console
         console.log(
-          `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
-            `→ owner-notify hook fired`,
+          `[build] build=${buildId} env-requested=${name} ` +
+            `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
         );
-        void buildJournal
-          .append(sessionId, {
-            mode: "scratch",
-            kind: kind === "requestEnvVar" ? "env-requested" : "question",
-            actor: "ai",
-            summary: kind === "requestEnvVar" ? "AI requested an env var" : "AI asked a question",
-          })
-          .catch(() => {});
-      });
-    }
-
-    const lineageResolver = buildLineageResolverAdapter({
-      store: pullStateStore,
-      client: updateClient,
-      // Production uninstall walks the ServicePlatform path which already
-      // drops pull state + container + data stores + tabs. The BFF's
-      // paired-session gate has already authenticated the caller, so
-      // this is the trust equivalent of a host-IRK-signed uninstall.
-      uninstall: async (serviceId) => {
-        try {
-          const ap = runtime.servicePlatform;
-          const app = ap?.byServiceId(serviceId);
-          if (!app) return { ok: true };
-          // Drop pull state so the scheduler stops pestering the canonical
-          // home, even if container-stop is best-effort and may fail in
-          // ways we don't surface here.
-          if (pullStateStore.delete) {
-            await pullStateStore.delete(serviceId).catch(() => {});
-          }
-          return { ok: true };
-        } catch (e) {
-          return { ok: false, reason: (e as Error).message };
-        }
       },
     });
-    // Forward ref the screens handler reads on each /post-recovery/status
-    // request. The watcher constructed later assigns itself here so the
-    // status endpoint returns the live snapshot.
-    const rePairWatcherRef: { current: import("./postRecovery/rePairWatcher.js").RePairWatcher | null } = { current: null };
+    runtime.addHandler(
+      buildBuildModesHttpHandlers({
+        orchestrator: buildOrchestrator,
+        gate: pairedSessions,
+        credentials: llmCredentials,
+      }),
+    );
 
-    // Resolve a session's editing serviceId from its pending manifest —
-    // shared by startStreaming + the screens `resolveSessionAppId`.
-    const resolveSessionServiceId = (sessionId: string): string | null => {
-      const session = vibeRegistry.get(sessionId);
-      if (!session) return null;
+    // Bridge scratch (vibe-code) into the same journal so all three
+    // modes appear together. Value-free: only the session id + tool
+    // kind, mirroring the notify hook's contract. This replaces the
+    // log-only hook above with log + journal.
+    vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
+          `→ owner-notify hook fired`,
+      );
+      void buildJournal
+        .append(sessionId, {
+          mode: "scratch",
+          kind: kind === "requestEnvVar" ? "env-requested" : "question",
+          actor: "ai",
+          summary: kind === "requestEnvVar" ? "AI requested an env var" : "AI asked a question",
+        })
+        .catch(() => {});
+    });
+  }
+
+  const lineageResolver = buildLineageResolverAdapter({
+    store: pullStateStore,
+    client: updateClient,
+    // Production uninstall walks the ServicePlatform path which already
+    // drops pull state + container + data stores + tabs. The BFF's
+    // paired-session gate has already authenticated the caller, so
+    // this is the trust equivalent of a host-IRK-signed uninstall.
+    uninstall: async (serviceId) => {
+      try {
+        const ap = runtime.servicePlatform;
+        const app = ap?.byServiceId(serviceId);
+        if (!app) return { ok: true };
+        // Drop pull state so the scheduler stops pestering the canonical
+        // home, even if container-stop is best-effort and may fail in
+        // ways we don't surface here.
+        if (pullStateStore.delete) {
+          await pullStateStore.delete(serviceId).catch(() => {});
+        }
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, reason: (e as Error).message };
+      }
+    },
+  });
+  // Forward ref the screens handler reads on each /post-recovery/status
+  // request. The watcher constructed later assigns itself here so the
+  // status endpoint returns the live snapshot.
+  const rePairWatcherRef: { current: RePairWatcher | null } = { current: null };
+
+  // Resolve a session's editing serviceId from its pending manifest —
+  // shared by startStreaming + the screens `resolveSessionAppId`.
+  const resolveSessionServiceId = (sessionId: string): string | null => {
+    const session = vibeRegistry.get(sessionId);
+    if (!session) return null;
+    const mj = session.manifestJson();
+    if (!mj) return null;
+    try {
+      const m = JSON.parse(mj) as { name?: unknown };
+      if (typeof m.name === "string" && m.name.length > 0) {
+        return `${username}-${m.name}`;
+      }
+    } catch {
+      // ignore malformed mid-stream JSON
+    }
+    return null;
+  };
+
+  // The live scratch-streaming thunk: resolves the session's transient
+  // BYOK credential, assembles the system prompt from env-var NAMES
+  // only, and streams the model reply through the harness. Only wired
+  // when a deploy session exists (otherwise there's no app surface to
+  // build into).
+  const vibeStartStreaming = deploySession && runtime.envStore
+    ? buildVibeCodeStartStreaming({
+        registry: vibeRegistry,
+        harness: llmHarness,
+        credentials: llmCredentials,
+        resolveAppId: resolveSessionServiceId,
+        appEnvStore: runtime.envStore,
+        context: {
+          username,
+          hostname: env.serverFqdn.split(".")[0] ?? "home",
+          tier: "free",
+          availableProviders: llmHarness.listStreamingProviders(),
+        },
+        existingAppsSnapshot: () =>
+          (runtime.servicePlatform?.list() ?? []).map((a) => ({
+            name: a.slug,
+            description:
+              typeof a.manifest.description === "string"
+                ? a.manifest.description
+                : undefined,
+            stores: "",
+          })),
+        defaultModel: defaultLlmModel,
+      })
+    : undefined;
+
+  const screensHandle = buildScreensHttp({
+    gate: pairedSessions,
+    serverFqdn: env.serverFqdn,
+    username,
+    daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
+    startedAt: Date.now(),
+    servicePlatform: runtime.servicePlatform,
+    pairedSessions,
+    tabRegistry: browserBundle?.tabRegistry ?? null,
+    appBackup: runtime.appBackup,
+    urlController: runtime.urlController,
+    vibeCode: deploySession
+      ? {
+          registry: vibeRegistry,
+          username,
+          serverFqdn: env.serverFqdn,
+          recordScratchTurn,
+          credentials: llmCredentials,
+          ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
+        }
+      : null,
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+    lineageResolver,
+    // P9 — peer-backup management surface. BackupLoop is the
+    // authoritative participation toggle. The shard registry is not
+    // yet bolted into the production boot path (no upstream shard
+    // upload mechanism in src/ today — the BFF still surfaces an
+    // empty shard/peer view in that case). B4 wires the
+    // RepairStatsAccumulator + RepairScheduler so the BFF's
+    // `repair` block surfaces accumulator state instead of the
+    // null-provider default; today the scheduler is constructed
+    // with `daemon=null` so its snapshot is idle/zero — same
+    // observable behavior as before, but the plumbing is ready for
+    // the daemon to be late-bound once the upstream lands.
+    peerBackup: {
+      backupLoop,
+      repairStats: repairAccumulator,
+    },
+    // P6 — collaborator invites. Same store the signed-surface entry
+    // must point at when it gets wired (see construction above).
+    appInvite: {
+      store: appInviteStore,
+      serverFqdn: env.serverFqdn,
+    },
+    // P14 — companion-browser dock. Owner-gated mint/list/revoke +
+    // public redeem. Companions land in the same `pairedSessions`
+    // store (flagged `companion: true` + 4h `expiresAt`); the gate
+    // rejects expired companion tokens and the BFF's write-scope
+    // guard returns 403 for companion-initiated mutations.
+    companion: {
+      ticketStore: companionTicketStore,
+      pairedSessions,
+      serverFqdn: env.serverFqdn,
+      username,
+      // P14 Phase 2 — write-relay queue.
+      writeRequestStore: companionWriteRequestStore,
+    },
+    postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
+    // W10 — per-app env-var KV editor + vibe-code session BFF deps.
+    appEnvStore: runtime.envStore,
+    // Resolve the session's app id from the pending manifest. The
+    // session emits `flagship.app.json` mid-stream; once the manifest
+    // is parsed we derive `<creator>-<slug>`. Pre-manifest sessions
+    // surface a null appId — the chat UI shows "(pre-manifest)".
+    resolveSessionAppId: (session) => {
       const mj = session.manifestJson();
       if (!mj) return null;
       try {
@@ -887,287 +1243,189 @@ async function main(): Promise<void> {
         // ignore malformed mid-stream JSON
       }
       return null;
-    };
-
-    // The live scratch-streaming thunk: resolves the session's transient
-    // BYOK credential, assembles the system prompt from env-var NAMES
-    // only, and streams the model reply through the harness. Only wired
-    // when a deploy session exists (otherwise there's no app surface to
-    // build into).
-    const vibeStartStreaming = deploySession && runtime.envStore
-      ? buildVibeCodeStartStreaming({
-          registry: vibeRegistry,
-          harness: llmHarness,
-          credentials: llmCredentials,
-          resolveAppId: resolveSessionServiceId,
-          appEnvStore: runtime.envStore,
-          context: {
-            username,
-            hostname: env.serverFqdn!.split(".")[0] ?? "home",
-            tier: "free",
-            availableProviders: llmHarness.listStreamingProviders(),
-          },
-          existingAppsSnapshot: () =>
-            (runtime.servicePlatform?.list() ?? []).map((a) => ({
-              name: a.slug,
-              description:
-                typeof a.manifest.description === "string"
-                  ? a.manifest.description
-                  : undefined,
-              stores: "",
-            })),
-          defaultModel: defaultLlmModel,
-        })
-      : undefined;
-
-    const screensHandle = buildScreensHttp({
+    },
+  });
+  runtime.addHandler(screensHandle);
+  runtime.addUpgradeHandler(
+    buildScreensUpgradeHandler({
       gate: pairedSessions,
-      serverFqdn: env.serverFqdn!,
-      username,
-      daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
-      startedAt: Date.now(),
-      servicePlatform: runtime.servicePlatform,
-      pairedSessions,
+      vibeCodeRegistry: deploySession ? vibeRegistry : null,
+      browser: browserBundle?.browser ?? null,
       tabRegistry: browserBundle?.tabRegistry ?? null,
-      appBackup: runtime.appBackup,
-      urlController: runtime.urlController,
-      vibeCode: deploySession
+    }),
+  );
+  console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);
+
+  // Start the pull scheduler now that the cert is up + tunnel reachable.
+  updateScheduler.start();
+  console.log(`[daemon] update-pack scheduler started (6h jittered)`);
+
+  // ---- J.3 / J.4 — Re-pair watcher ----
+  // Production-only (requires the on-disk config so we have an
+  // authoritative starting IRK + a path to persist the rotated one).
+  // Dev daemons that ship without FLAGSHIP_CONFIG skip the watcher.
+  if (cfg) {
+    const irkHexFromCfg = bytesToHexStr(cfg.irkPublicKey);
+    const reissuerJournalSwk = swkHex
+      ? hexToBytes(swkHex.trim())
+      : new Uint8Array(32);   // no SWK yet → journal can't be decrypted
+    const journalStore = new FileJournalStore(defaultJournalPath(dataDir));
+    const journalPruner = startJournalPruner({
+      store: journalStore,
+      onPrune: (n) => {
+        if (n > 0) console.log(`[daemon] pruned ${n} post-recovery journal rows`);
+      },
+    });
+    process.once("SIGTERM", () => journalPruner.stop());
+    process.once("SIGINT", () => journalPruner.stop());
+    const watcher = new RePairWatcher({
+      username: cfg.userId,
+      currentIrkPubHex: irkHexFromCfg,
+      comBaseUrl: env.controlPlaneBaseUrl,
+      fetchImpl: fetch,
+      statePath: defaultRePairWatcherPath(dataDir),
+      pollIntervalMs: 5 * 60_000,
+      clearPairedSessions: () => pairedSessions.removeAll(),
+      reissuerDeps: runtime.servicePlatform
         ? {
-            registry: vibeRegistry,
-            username,
-            serverFqdn: env.serverFqdn!,
-            recordScratchTurn,
-            credentials: llmCredentials,
-            ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
+            servicePlatform: runtime.servicePlatform,
+            swk: reissuerJournalSwk,
+            journal: journalStore,
           }
         : null,
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
-      lineageResolver,
-      // P9 — peer-backup management surface. BackupLoop is the
-      // authoritative participation toggle. The shard registry is not
-      // yet bolted into the production boot path (no upstream shard
-      // upload mechanism in src/ today — the BFF still surfaces an
-      // empty shard/peer view in that case). B4 wires the
-      // RepairStatsAccumulator + RepairScheduler so the BFF's
-      // `repair` block surfaces accumulator state instead of the
-      // null-provider default; today the scheduler is constructed
-      // with `daemon=null` so its snapshot is idle/zero — same
-      // observable behavior as before, but the plumbing is ready for
-      // the daemon to be late-bound once the upstream lands.
-      peerBackup: {
-        backupLoop,
-        repairStats: repairAccumulator,
-      },
-      // P6 — collaborator invites. Same store the signed-surface entry
-      // must point at when it gets wired (see construction above).
-      appInvite: {
-        store: appInviteStore,
-        serverFqdn: env.serverFqdn!,
-      },
-      // P14 — companion-browser dock. Owner-gated mint/list/revoke +
-      // public redeem. Companions land in the same `pairedSessions`
-      // store (flagged `companion: true` + 4h `expiresAt`); the gate
-      // rejects expired companion tokens and the BFF's write-scope
-      // guard returns 403 for companion-initiated mutations.
-      companion: {
-        ticketStore: companionTicketStore,
-        pairedSessions,
-        serverFqdn: env.serverFqdn!,
-        username,
-        // P14 Phase 2 — write-relay queue.
-        writeRequestStore: companionWriteRequestStore,
-      },
-      postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
-      // W10 — per-app env-var KV editor + vibe-code session BFF deps.
-      appEnvStore: runtime.envStore,
-      // Resolve the session's app id from the pending manifest. The
-      // session emits `flagship.app.json` mid-stream; once the manifest
-      // is parsed we derive `<creator>-<slug>`. Pre-manifest sessions
-      // surface a null appId — the chat UI shows "(pre-manifest)".
-      resolveSessionAppId: (session) => {
-        const mj = session.manifestJson();
-        if (!mj) return null;
-        try {
-          const m = JSON.parse(mj) as { name?: unknown };
-          if (typeof m.name === "string" && m.name.length > 0) {
-            return `${username}-${m.name}`;
+      alertInbox,
+      onIrkSwapped: async (event) => {
+        const configPath = process.env.FLAGSHIP_CONFIG;
+        if (configPath) {
+          try {
+            await persistRotatedIrk(configPath, event.newIrkPubHex);
+          } catch (e) {
+            console.warn(
+              `[daemon] failed to update ${configPath} with rotated IRK: ${(e as Error).message}`,
+            );
           }
-        } catch {
-          // ignore malformed mid-stream JSON
         }
-        return null;
+        console.log(
+          `[daemon] J.3 re-pair complete: old=${event.oldIrkPubHex.slice(0, 12)} → new=${event.newIrkPubHex.slice(0, 12)} ` +
+            `(${event.pairedSessionsCleared} paired sessions cleared; ` +
+            `${event.reissue?.totalRewritten ?? 0} membership rows re-anchored)`,
+        );
       },
     });
-    runtime.addHandler(screensHandle);
-    runtime.addUpgradeHandler(
-      buildScreensUpgradeHandler({
-        gate: pairedSessions,
-        vibeCodeRegistry: deploySession ? vibeRegistry : null,
-        browser: browserBundle?.browser ?? null,
-        tabRegistry: browserBundle?.tabRegistry ?? null,
-      }),
-    );
-    console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);
-
-    // Start the pull scheduler now that the cert is up + tunnel reachable.
-    updateScheduler.start();
-    console.log(`[daemon] update-pack scheduler started (6h jittered)`);
-
-    // ---- J.3 / J.4 — Re-pair watcher ----
-    // Production-only (requires the on-disk config so we have an
-    // authoritative starting IRK + a path to persist the rotated one).
-    // Dev daemons that ship without FLAGSHIP_CONFIG skip the watcher.
-    if (cfg) {
-      const irkHexFromCfg = bytesToHexStr(cfg.irkPublicKey);
-      const reissuerJournalSwk = swkHex
-        ? hexToBytes(swkHex.trim())
-        : new Uint8Array(32);   // no SWK yet → journal can't be decrypted
-      const journalStore = new FileJournalStore(defaultJournalPath(dataDir));
-      const journalPruner = startJournalPruner({
-        store: journalStore,
-        onPrune: (n) => {
-          if (n > 0) console.log(`[daemon] pruned ${n} post-recovery journal rows`);
-        },
-      });
-      process.once("SIGTERM", () => journalPruner.stop());
-      process.once("SIGINT", () => journalPruner.stop());
-      const watcher = new RePairWatcher({
-        username: cfg.userId,
-        currentIrkPubHex: irkHexFromCfg,
-        comBaseUrl: env.controlPlaneBaseUrl!,
-        fetchImpl: fetch,
-        statePath: defaultRePairWatcherPath(dataDir),
-        pollIntervalMs: 5 * 60_000,
-        clearPairedSessions: () => pairedSessions.removeAll(),
-        reissuerDeps: runtime.servicePlatform
-          ? {
-              servicePlatform: runtime.servicePlatform,
-              swk: reissuerJournalSwk,
-              journal: journalStore,
-            }
-          : null,
-        alertInbox,
-        onIrkSwapped: async (event) => {
-          const configPath = process.env.FLAGSHIP_CONFIG;
-          if (configPath) {
-            try {
-              await persistRotatedIrk(configPath, event.newIrkPubHex);
-            } catch (e) {
-              console.warn(
-                `[daemon] failed to update ${configPath} with rotated IRK: ${(e as Error).message}`,
-              );
-            }
-          }
-          console.log(
-            `[daemon] J.3 re-pair complete: old=${event.oldIrkPubHex.slice(0, 12)} → new=${event.newIrkPubHex.slice(0, 12)} ` +
-              `(${event.pairedSessionsCleared} paired sessions cleared; ` +
-              `${event.reissue?.totalRewritten ?? 0} membership rows re-anchored)`,
-          );
-        },
-      });
-      await watcher.load();
-      watcher.start();
-      rePairWatcherRef.current = watcher;
-      process.once("SIGTERM", () => watcher.stop());
-      process.once("SIGINT", () => watcher.stop());
-      console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
-    }
-  } catch (e) {
-    const msg = (e as Error).message ?? String(e);
-    console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
-    // Surface the terminal failure to the phone on the single canonical
-    // channel before exiting; the detail carries the real cause. Await briefly
-    // so the POST has a chance to land before exit.
-    await reportStatus("error", `startup: ${msg}`.slice(0, 280));
-    process.exit(1);
+    await watcher.load();
+    watcher.start();
+    rePairWatcherRef.current = watcher;
+    process.once("SIGTERM", () => watcher.stop());
+    process.once("SIGINT", () => watcher.stop());
+    console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
   }
+}
 
-  // ---- Dead-man heartbeat-lock (default OFF) ----
-  // No enabled policy ⇒ no timer, no behavior change. The controller
-  // loads any persisted policy at start and (re)arms the enforcement
-  // timer only when a policy is enabled; the delivery endpoints let the
-  // phone enable/disable the policy and renew the lease.
-  if (cfg) {
-    const deadMan = new DeadManController({
-      serverId: env.serverFqdn!,
-      irkPub: cfg.irkPublicKey,
+/**
+ * Owner-IRK handlers (production-only — needs cfg.irkPublicKey): dead-man +
+ * power-off + owner-assignable apex (front-page 302) + owner-only journal
+ * diagnostics. Mounts each onto the live runtime and arms the dead-man
+ * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
+ */
+async function wireOwnerHandlers(deps: {
+  runtime: DaemonRuntime;
+  cfg: ServerConfig | null;
+  env: RuntimeEnv;
+  autoUnlockSuppressor: AutoUnlockSuppressor;
+  hostPowerRunner: HostPowerRunner;
+  servicePlatformRef: ServicePlatformRef;
+}): Promise<void> {
+  const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner } = deps;
+  if (!cfg) return;
+
+  const deadMan = new DeadManController({
+    serverId: env.serverFqdn,
+    irkPub: cfg.irkPublicKey,
+    suppressor: autoUnlockSuppressor,
+    runner: hostPowerRunner,
+  });
+  await deadMan.start();
+  runtime.addHandler(buildDeadManHttp(deadMan));
+  runtime.addHandler(
+    buildPowerHttp({
+      serverId: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
       suppressor: autoUnlockSuppressor,
       runner: hostPowerRunner,
-    });
-    await deadMan.start();
-    runtime.addHandler(buildDeadManHttp(deadMan));
-    runtime.addHandler(
-      buildPowerHttp({
-        serverId: env.serverFqdn!,
-        ownerIrkPub: cfg.irkPublicKey,
-        suppressor: autoUnlockSuppressor,
-        runner: hostPowerRunner,
-      }),
-    );
-    // Owner-assignable apex: GET/POST /api/front-page + the 302 itself.
-    const frontPage = new FrontPageStore();
-    await frontPage.load();
-    runtime.addHandler(
-      buildFrontPageHttp({
-        serverId: env.serverFqdn!,
-        ownerIrkPub: cfg.irkPublicKey,
-        store: frontPage,
-        resolveLabel: (l) => servicePlatformRefForServer.current?.byLabel(l) !== undefined,
-      }),
-    );
-    // Owner-only diagnostics: POST /api/journal — IRK-signed read of the
-    // flagship-daemon systemd journal, served over the box's own pinned pipe.
-    runtime.addHandler(
-      buildJournalHttp({
-        serverId: env.serverFqdn!,
-        ownerIrkPub: cfg.irkPublicKey,
-        reader: new JournalctlReader(),
-      }),
-    );
-    process.once("SIGTERM", () => deadMan.stop());
-    process.once("SIGINT", () => deadMan.stop());
-    console.log(
-      `[daemon] dead-man heartbeat-lock ${deadMan.policy().enabled ? "ARMED" : "idle (no policy)"}`,
-    );
-  }
+    }),
+  );
+  // Owner-assignable apex: GET/POST /api/front-page + the 302 itself.
+  const frontPage = new FrontPageStore();
+  await frontPage.load();
+  runtime.addHandler(
+    buildFrontPageHttp({
+      serverId: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
+      store: frontPage,
+      resolveLabel: (l) => deps.servicePlatformRef.current?.byLabel(l) !== undefined,
+    }),
+  );
+  // Owner-only diagnostics: POST /api/journal — IRK-signed read of the
+  // flagship-daemon systemd journal, served over the box's own pinned pipe.
+  runtime.addHandler(
+    buildJournalHttp({
+      serverId: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
+      reader: new JournalctlReader(),
+    }),
+  );
+  process.once("SIGTERM", () => deadMan.stop());
+  process.once("SIGINT", () => deadMan.stop());
+  console.log(
+    `[daemon] dead-man heartbeat-lock ${deadMan.policy().enabled ? "ARMED" : "idle (no policy)"}`,
+  );
+}
 
-  // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
-  if (cfg) {
-    const apps = new Map<string, AppMembership>();
-    const injectors = new Map<string, IdentityInjector>();
-    const sessions = new Map<string, Uint8Array>();
-    const ctx: DaemonContext = {
-      serverId: cfg.serverId,
-      userId: cfg.userId,
-      apps,
-      resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
-      injectors,
-    };
-    const httpApp = buildDaemonHttp(ctx);
-    const port = Number(process.env.FLAGSHIP_DAEMON_PORT) || 9090;
-    await httpApp.listen({ port, host: "127.0.0.1" });
-    console.log(`[daemon] local HTTP API listening on 127.0.0.1:${port}`);
-  } else {
+/**
+ * Bring up the daemon-local HTTP API (phone/loopback only, 127.0.0.1).
+ * Production-only — skipped (with a log line) when cfg is null.
+ */
+async function wireLocalHttpApi(deps: { cfg: ServerConfig | null }): Promise<void> {
+  const { cfg } = deps;
+  if (!cfg) {
     console.log(`[daemon] FLAGSHIP_CONFIG not provided; skipping local HTTP API`);
+    return;
   }
+  const apps = new Map<string, AppMembership>();
+  const injectors = new Map<string, IdentityInjector>();
+  const sessions = new Map<string, Uint8Array>();
+  const ctx: DaemonContext = {
+    serverId: cfg.serverId,
+    userId: cfg.userId,
+    apps,
+    resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
+    injectors,
+  };
+  const httpApp = buildDaemonHttp(ctx);
+  const port = Number(process.env.FLAGSHIP_DAEMON_PORT) || 9090;
+  await httpApp.listen({ port, host: "127.0.0.1" });
+  console.log(`[daemon] local HTTP API listening on 127.0.0.1:${port}`);
+}
 
-  // Tear the browser bundle down on graceful exit so Chromium isn't
-  // left holding the singleton lock if the daemon restarts. We don't
-  // try to be clever about ordering — the runtime owns the cert +
-  // tunnel lifecycle and OpenRC/systemd will SIGKILL us if we hang.
-  if (browserBundle) {
-    const bundle = browserBundle;
+/**
+ * Graceful-shutdown hooks: tear the browser bundle down (so Chromium isn't
+ * left holding the singleton lock on a restart) + stop the schedulers. Same
+ * SIGTERM/SIGINT registrations as the original inline block.
+ */
+function wireShutdownHooks(deps: {
+  browserBundle: BrowserBundle | null;
+  updateScheduler: UpdateScheduler;
+  repairScheduler: RepairScheduler;
+}): void {
+  if (deps.browserBundle) {
+    const bundle = deps.browserBundle;
     process.once("SIGTERM", () => void bundle.close().catch(() => {}));
     process.once("SIGINT", () => void bundle.close().catch(() => {}));
   }
-  process.once("SIGTERM", () => updateScheduler.stop());
-  process.once("SIGINT", () => updateScheduler.stop());
-  process.once("SIGTERM", () => repairScheduler.stop());
-  process.once("SIGINT", () => repairScheduler.stop());
-
-  // Stay alive forever (tunnel client + TLS server are event-driven and
-  // hold the event loop on their own).
-  await runtime.ready();
+  process.once("SIGTERM", () => deps.updateScheduler.stop());
+  process.once("SIGINT", () => deps.updateScheduler.stop());
+  process.once("SIGTERM", () => deps.repairScheduler.stop());
+  process.once("SIGINT", () => deps.repairScheduler.stop());
 }
 
 async function tryReadFile(path: string): Promise<string | null> {
