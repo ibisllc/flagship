@@ -19,7 +19,7 @@
  * Lane modules:
  *   - suites/web.ts      → WEB_GYM_SCENARIOS      (Playwright)
  *   - suites/ios.ts      → IOS_GYM_SCENARIOS      (XCUITest; iPad = same classes, iPad destination)
- *   - suites/android.ts  → ANDROID_GYM_SCENARIOS  (Compose UI Test; empty until §10 Phase-5)
+ *   - suites/android.ts  → ANDROID_GYM_SCENARIOS  (Compose UI Test on an AVD; adapter detect-and-skips without one)
  *   - suites/quality.ts  → QUALITY_GYM_SCENARIOS  (D7 token/nav/dead-control gates)
  */
 

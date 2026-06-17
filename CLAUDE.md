@@ -123,7 +123,64 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-17**.
 
-### 2026-06-17 (latest) — security/ops gap-closures + cross-surface parity build-out
+### 2026-06-17 (latest) — UI test gym built end-to-end + a real GA parity bug fixed
+
+**The "gym" (automated UI-test harness, `docs/ui-test-gym.md`) is built,
+integrated, and one-command-runnable on `main`** — a deterministic gate +
+advisory BYOK AI judge, across web (Playwright) · iOS/iPad (XCUITest) · Android
+(Compose-UI-Test) · a live `gym.` tier. Built in one run via 4 parallel worktree
+workers (web / iOS / Android / AI-quality), each in a disjoint per-surface
+registry lane (`tools/gym/src/suites/{web,ios,android,quality}.ts`), all
+integrated + gated green.
+
+- **One command, then wait:** `npm run gym:every-merge` (the fast merge gate, no
+  backend) · `npm run gym:total` (broad acceptance) · `npm run gym:live` (the
+  live Tier-2 slice; detect-and-skips until the env is deployed). Each writes
+  `gym-results/<ts>/` (summary.json + summary.txt + screenshots) and exits 0/1 on
+  the DETERMINISTIC verdict. `GYM_AI_API_KEY` turns on the advisory screenshot
+  judge (BYOK, anthropic-shaped, error-swallowing — NEVER the pass/fail oracle).
+- **Coverage now:** web **45** scenarios (D1–D7), iOS/iPad **36** (incl. the iPad
+  sidebar/reading-column adaptive checks + 3 D7 token/nav/dead-control gates),
+  Android **15** (the net-new `app/src/androidTest/` instrumentation harness + a
+  12-screen `testTag` sweep + a real detect-and-skip adapter — runs once an AVD
+  exists; the JVM Robolectric suite stays the fast lane). Last integrated gate:
+  every-merge **18 pass / 8 android-skip**, verdict OK; whole-tree `tsc -b`
+  clean; vitest **430 files / 5631 pass / 28 skip**.
+- **⭐ The gym caught + I fixed a real GA blocker (parity):** on iOS the Settings →
+  **Account security** row was a DEAD CONTROL — `SettingsTab` never passed
+  `onOpenAccountSecurity` and `SettingsRoute` had no `.accountSecurity` case, so
+  the TOTP + recovery-code enroll screen was **unreachable from iOS Settings**
+  (web + Android both reach it). Fixed: route case + handler +
+  `AccountSecurityContainer`; the formerly-skipped gym test is now a passing
+  regression guard (`xcodebuild` TEST SUCCEEDED). (Earlier in the run the gym also
+  caught a webapp-boot crash — a duplicate `hasPin` import — fixed on `main`.)
+- **Live `gym.` tier — turnkey, owner-gated deploy:** `scripts/gym-setup-live-env.sh`
+  is one idempotent command (generates test-only secrets, creates D1/R2, patches
+  the `wrangler.gym.toml` placeholders, deploys the gym Worker, then the Fly app
+  once authed); `docs/runbooks/gym-test-env.md` is the do-it-yourself version.
+  **NOT deployed by the agent** — it provisions a public surface on the prod CF
+  zone and needs `flyctl auth login` + a test Hetzner token (owner's). wrangler is
+  authed; Fly is not.
+
+**Open follow-ups (deferred, not blocking):**
+- **Deploy the live tier** (owner): `flyctl auth login` + a test Hetzner token →
+  `bash scripts/gym-setup-live-env.sh` → `npm run gym:live` / `gym:total` then
+  exercise the real backend (the iOS live vertical slice + the webapp live leg).
+- **Android on-device runs** need a one-time AVD (`sdkmanager`/`avdmanager`
+  one-liner in the runbook; deferred here because the disk was ~95 % full). The
+  harness + tags + adapter are done + compile-gated; only the AVD is missing.
+- **Scenario-model niceties** the workers wished for (non-blocking): a `device?:
+  "iphone"|"ipad"` field (vs the `GymIPad` harness substring), plural
+  `dimensions`, a `routes`/`seed` block to declare a scenario's backendless seed
+  state in the registry, and a "not-hittable" assertion kind.
+- **Matrix fill-in** continues incrementally per `docs/ui-test-gym.md` §6 (the
+  full ~70×4 is a strong start at web 45 / iOS 36 / Android 15); marketplace gym
+  scenarios ship on `feat/marketplace` (branch-gate).
+- **Feature branches** (`feat/marketplace`, `feat/retail`) are now behind `main`
+  by the gym + apex-threading + this fix; re-rebase when convenient (the gym +
+  G1/G2 apex-threading are main-only workspace artifacts/refactors).
+
+### 2026-06-17 — security/ops gap-closures + cross-surface parity build-out
 
 **Large `main` session: closed the agent-doable security/ops gaps from the
 full-repo audit, did a UX/refactor pass, and raised Android (and the webapp)
