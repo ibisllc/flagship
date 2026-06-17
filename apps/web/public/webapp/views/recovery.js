@@ -21,6 +21,7 @@ import {
 } from "../lib/recovery.js";
 import { ensureUsername, getSession, unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { humanError } from "../lib/humanError.js";
 import {
   KEYFILE_COPY,
   createBackupFile,
@@ -353,12 +354,140 @@ async function runKeyfileImport(file) {
       keystore,
       unlockSession,
     });
-    toast(`restored ${username}`, "ok");
-    const { dispatchInitialView } = await import("../lib/deepLink.js");
-    await dispatchInitialView();
+
+    // H6 — bringing this device in via the backup file is a TAKEOVER, not a
+    // silent local-identity swap. INITIATE the re-pair so the account's OTHER
+    // devices are alerted and can object during the grace window — exactly the
+    // security flow iOS/Android run. The seed is now in the unlocked session.
+    const session = getSession();
+    if (!(session.umk instanceof Uint8Array)) {
+      // Defense-in-depth: restore is supposed to have unlocked the session.
+      // Without the seed we can't sign the re-pair — fail rather than silently
+      // skip the takeover (the bug this fix closes).
+      throw new Error("account key wasn't available after restore");
+    }
+    const { signWithIrk, deriveIrkFromSeed, bytesToHex } = keystore;
+    const { runKeyfileImportTakeover, SecondFactorRequiredError } = await import(
+      "../lib/keyfileImportTakeover.js"
+    );
+    const { addProfile } = await import("../lib/profiles.js");
+    let takeover;
+    try {
+      takeover = await runKeyfileImportTakeover({
+        username,
+        seed: session.umk,
+        deriveIrkFromSeed,
+        signWithIrk,
+        bytesToHex,
+        addProfile: (profile) => addProfile(profile),
+      });
+    } catch (e) {
+      if (e instanceof SecondFactorRequiredError) {
+        // The account has a second factor enrolled (#52). The import sheet
+        // can't collect it; route the user to the sign-in flow which can —
+        // same guidance iOS/Android show.
+        toast(e.message, "warn");
+        return;
+      }
+      throw e;
+    }
+
+    toast(`bringing this device into ${username}`, "ok");
+    await runImportGraceCountdown(takeover);
   } catch (e) {
     toast(importErrorMessage(e), "err");
   }
+}
+
+/**
+ * H6 — the grace-period countdown after a keyfile-import takeover is initiated.
+ * Mirrors iOS `KeyfileImportSheet.graceCountdownView`: a non-dismissible card
+ * with a live "this device takes over in N — your other devices are being
+ * alerted and can object until then" line + a "Finish now" button that arms
+ * once the grace has elapsed (then completes the re-pair + opens the account).
+ *
+ * Reuses loginTakeover.js's pure `graceTimeline` (label + ready flag) +
+ * `finishTakeover` (the CAS-swap completion) so the countdown logic stays the
+ * shared, unit-tested core.
+ */
+async function runImportGraceCountdown(takeover) {
+  const { graceTimeline, finishTakeover } = await import("../lib/loginTakeover.js");
+  const { dispatchInitialView } = await import("../lib/deepLink.js");
+
+  let host = document.getElementById("flagship-modal-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "flagship-modal-host";
+    document.body.appendChild(host);
+  }
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.innerHTML = `
+    <div class="modal-card" role="document">
+      <h3 class="modal-title">Bringing this device in</h3>
+      <p class="modal-message" data-grace-line></p>
+      <div class="row-2 mt-3">
+        <button data-grace-finish disabled>Finish now</button>
+      </div>
+    </div>
+  `;
+  host.appendChild(overlay);
+  document.body.classList.add("modal-open");
+
+  const lineEl = overlay.querySelector("[data-grace-line]");
+  const finishBtn = overlay.querySelector("[data-grace-finish]");
+  let tickHandle = null;
+  let finishing = false;
+
+  const close = () => {
+    if (tickHandle) clearInterval(tickHandle);
+    overlay.remove();
+    document.body.classList.remove("modal-open");
+  };
+
+  const paint = () => {
+    const vm = graceTimeline(takeover.rePair);
+    lineEl.textContent = vm.label;
+    finishBtn.disabled = !vm.actionEnabled || finishing;
+  };
+
+  finishBtn.addEventListener("click", async () => {
+    if (finishing) return;
+    finishing = true;
+    finishBtn.disabled = true;
+    finishBtn.textContent = "Finishing…";
+    try {
+      const result = await finishTakeover(takeover, {
+        finalizeV2Irk: () => {},
+        openAccount: async () => {
+          close();
+          await dispatchInitialView();
+        },
+      });
+      if (result.outcome === "objected") {
+        toast(result.message, "err");
+        close();
+      } else if (result.outcome === "expired") {
+        toast(result.message, "err");
+        close();
+      } else if (result.outcome === "too-early") {
+        // The button shouldn't be reachable before the deadline; re-arm.
+        finishing = false;
+        finishBtn.textContent = "Finish now";
+        paint();
+      }
+    } catch (e) {
+      toast(humanError(e), "err");
+      finishing = false;
+      finishBtn.textContent = "Finish now";
+      paint();
+    }
+  });
+
+  paint();
+  tickHandle = setInterval(paint, 1000);
 }
 
 export function initRecoveryView() {
