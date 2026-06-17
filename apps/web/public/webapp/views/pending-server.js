@@ -21,10 +21,11 @@ import { signWithIrk } from "../keystore.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 import { PROVISION_PHASE_TITLES } from "../lib/provisionProgress.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-pending-server", { tab: "home" });
 
-const CONTROL_PLANE_BASE = "https://flagshipserver.com";
+const CONTROL_PLANE_BASE = controlApex();
 const POLL_INTERVAL_MS = 3_000;
 const TERMINAL_PHASES = new Set(["live", "error"]);
 
@@ -106,7 +107,7 @@ async function runCancel() {
     // Best-effort revoke. The Worker tolerates 404/403 as "already gone"
     // since the success surface for the user is the same.
     const resp = await fetch(
-      `https://flagshipserver.com/api/auth-code/${encodeURIComponent(currentOrder.serial)}/revoke`,
+      `${CONTROL_PLANE_BASE}/api/auth-code/${encodeURIComponent(currentOrder.serial)}/revoke`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },

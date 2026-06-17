@@ -40,11 +40,12 @@ import {
   bytesToHex,
 } from "../keystore.js";
 import { requireOwnerProfile } from "./companionGuard.js";
+import { controlApex } from "./apex.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_RE_PAIR_INITIATE. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 
 /**
  * Build the canonical bytes the NEW IRK signs. Pinned byte-for-byte to

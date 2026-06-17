@@ -21,13 +21,14 @@
 // asserts they stay in lockstep.
 
 import { verifyComBlessing } from "./maintainerTrust.js";
+import { controlApex } from "./apex.js";
 
 // Re-baked per surface (#30 generalised) — keep byte-identical to
 // packages/protocol/src/maintainerCa.ts MAINTAINER_PINNED_MANDATE_HASH.
 export const BAKED_PIN = "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae";
 
 const COM_BLESSING_PATH = "/api/maintainer-blessing";
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 
 // The "control" cert-class slug is derived from the served CA pubkey:
 //   certHash = sha256hex(utf8(caPubkey)).  The slug shown in the sliver is the

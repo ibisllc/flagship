@@ -15,6 +15,7 @@
 //     → { ok: true }
 
 import { screensFetch } from "./api.js";
+import { webappOrigin } from "./apex.js";
 
 /** Mint a fresh companion ticket. */
 export async function companionMintTicket({ label } = {}) {
@@ -56,7 +57,7 @@ export function buildCompanionReceiverUrl({
   ticketSecret,
   podBaseUrl,
   username,
-  webappBaseUrl = "https://web.flagshipserver.com",
+  webappBaseUrl = webappOrigin(),
 }) {
   if (!ticketId || !ticketSecret || !podBaseUrl || !username) {
     throw new Error("buildCompanionReceiverUrl: ticketId/ticketSecret/podBaseUrl/username required");

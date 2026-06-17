@@ -13,8 +13,9 @@ import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { chipRow, searchField, listRow } from "../lib/uikit.js";
 import { packageIcon } from "../lib/icons.js";
+import { controlApex } from "../lib/apex.js";
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 registerView("view-services-list");
 

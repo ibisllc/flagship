@@ -45,6 +45,8 @@
  *  @property {GraceModel} graceModel
  */
 
+import { controlApex } from "./apex.js";
+
 /** Login field is a bare handle: 3–30 lowercase letters/digits, no dots,
  *  no hyphens. Mirror of bootstrap.js / state.js / control-plane labels.ts. */
 const USERNAME_RE = /^[a-z0-9]{3,30}$/;
@@ -93,7 +95,7 @@ export function isBareLoginHandle(username) {
  */
 export async function resolveAccount(username, opts = {}) {
   const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || "https://flagshipserver.com";
+  const baseUrl = opts.baseUrl || controlApex();
   const url = `${baseUrl}/api/account/resolve/${encodeURIComponent(username)}`;
   const resp = await f(url, { method: "GET" });
   if (resp.status === 429) {

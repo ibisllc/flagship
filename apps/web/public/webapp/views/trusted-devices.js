@@ -29,10 +29,11 @@ import {
   setCurrentIrkVersion,
 } from "../keystore.js";
 import { renderPendingBanner, shouldRenderBanner } from "../lib/pendingRePairBanner.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-trusted-devices");
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 /** Cached state: last-fetched devices + ETag for the If-Match flow.
  *  `pendingRePair` mirrors the GET /api/users/:u/re-pair snapshot so a

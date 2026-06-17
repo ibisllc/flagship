@@ -33,6 +33,7 @@ import {
   saveDraft,
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
+import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
 
 registerView("view-create-server");
 
@@ -307,7 +308,7 @@ async function revokeAuthCodeBestEffort(serial, username) {
     canonical(["flagship/auth-code-revoke/v1", serial, username, issuedAt]),
   );
   const resp = await fetch(
-    `https://flagshipserver.com/api/auth-code/${encodeURIComponent(serial)}/revoke`,
+    `${controlApex()}/api/auth-code/${encodeURIComponent(serial)}/revoke`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -568,7 +569,7 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     serial: genSerial(),
     username,
     serverName,
-    serverDomain: `${serverName}.${username}.flagship.services`,
+    serverDomain: serverFqdn(serverName, username),
     delegatedPubKey: delegated.publicKey,
     userPubKey: session.irk.publicKey,
     issuedAt: acIssuedAt,
@@ -621,7 +622,7 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     username,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagshipserver.com/api/server/register",
+    registrationUrl: `${controlApex()}/api/server/register`,
     authCode: code,
     authCodeUserSignature: acSig,
     installerGitRef: "main",
@@ -680,7 +681,7 @@ async function deliverThroughRelay({ sid, pkB }, blobBundle) {
   // Open WS as phone. We always dial the apex — the webapp lives at
   // web.flagshipserver.com but the relay is on flagshipserver.com.
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const wsUrl = `${proto}://flagshipserver.com/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
+  const wsUrl = `${proto}://${controlHost()}/qr-pipe/${encodeURIComponent(sid)}?role=phone`;
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);

@@ -63,6 +63,8 @@
  *  @property {string} signature
  */
 
+import { controlApex } from "./apex.js";
+
 /** Canonical scope list — mirror of `DEVICE_SCOPES` in
  *  `packages/protocol/src/auth.ts`. Order MUST match the canonical
  *  sort order so a future audit-trail render stays stable.
@@ -224,7 +226,7 @@ export function samplePodFromDemoServer(block, username) {
  */
 export async function checkUsername(username, opts = {}) {
   const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || "https://flagshipserver.com";
+  const baseUrl = opts.baseUrl || controlApex();
   const resp = await f(`${baseUrl}/api/users/check`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -245,7 +247,7 @@ export async function checkUsername(username, opts = {}) {
  */
 export async function connectDemoServer(username, opts = {}) {
   const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || "https://flagshipserver.com";
+  const baseUrl = opts.baseUrl || controlApex();
   const url = `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/connect`;
   const resp = await f(url, {
     method: "POST",
@@ -270,7 +272,7 @@ export async function connectDemoServer(username, opts = {}) {
  */
 export async function cancelDemoServer(username, opts = {}) {
   const f = opts.fetch || fetch;
-  const baseUrl = opts.baseUrl || "https://flagshipserver.com";
+  const baseUrl = opts.baseUrl || controlApex();
   const url = `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/cancel`;
   const resp = await f(url, {
     method: "POST",

@@ -41,7 +41,9 @@
 // unit-testable without IndexedDB / the DOM / the network / a real
 // passkey.
 
-const APEX = "https://flagshipserver.com";
+import { controlApex } from "./apex.js";
+
+const APEX = controlApex();
 
 /** The rotation version the takeover's NEW device key derives at. v1 is
  *  the registered (old) IRK; the takeover device owns v2. */

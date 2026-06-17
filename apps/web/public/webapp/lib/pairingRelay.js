@@ -26,7 +26,9 @@
 // orchestrators stay transport-agnostic; the exact wire is documented
 // inline.
 
-const RELAY_HOST = "flagshipserver.com";
+import { controlHost } from "./apex.js";
+
+const RELAY_HOST = controlHost();
 
 function wsProto() {
   return (typeof location !== "undefined" && location.protocol === "https:") ? "wss" : "ws";

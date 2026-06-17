@@ -22,6 +22,7 @@
 
 import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
 import { submitWriteRequest } from "./companionWriteRelay.js";
+import { controlApex } from "./apex.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_REVOKE. */
 export const TAG_REVOKE = "flagship/revoke/v1";
@@ -29,7 +30,7 @@ export const TAG_REVOKE = "flagship/revoke/v1";
 /** The fixed reason vocabulary. Must match @flagship/protocol RevocationReason. */
 export const REVOCATION_REASONS = ["lost", "stolen", "decommissioned"];
 
-const ORIGIN = "https://flagshipserver.com";
+const ORIGIN = controlApex();
 
 function canonical(parts) {
   return new TextEncoder().encode(parts.join("|"));

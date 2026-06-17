@@ -43,7 +43,9 @@
 //   3. Explicit risk warning on both screens (the QR shares your account
 //      keys; anyone who scans it can join).
 
-const APEX = "https://flagshipserver.com";
+import { controlApex } from "./apex.js";
+
+const APEX = controlApex();
 
 /** Canonical-bytes tag for the device-admit envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_DEVICE_ADMIT and the Worker. */

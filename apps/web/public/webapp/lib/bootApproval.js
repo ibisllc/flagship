@@ -36,9 +36,10 @@ import {
   hexToBytes,
 } from "../keystore.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
+import { controlApex, bootOrigin } from "./apex.js";
 
-const COM_BASE = "https://flagshipserver.com";
-const BOOT_BASE = "https://boot.flagshipserver.com";
+const COM_BASE = controlApex();
+const BOOT_BASE = bootOrigin();
 
 const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 const TAG_SECRET_REQUEST = "flagship/secret-request/v1";

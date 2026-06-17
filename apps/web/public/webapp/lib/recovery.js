@@ -33,9 +33,10 @@
 
 import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
+import { controlApex, recoveryOrigin } from "./apex.js";
 
-const APEX = "https://flagshipserver.com";
-const RECOVERY_ORIGIN = "https://recovery.flagshipserver.com";
+const APEX = controlApex();
+const RECOVERY_ORIGIN = recoveryOrigin();
 
 /** Time-budget for the popup round-trip; covers WebAuthn UV ceremony. */
 const POPUP_TIMEOUT_MS = 180_000;

@@ -11,8 +11,9 @@ import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { controlApex, dataApex } from "../lib/apex.js";
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 /** V3 — cached service-links per serviceId for the current render. Carries
  *  `customDomain` + `customDomainConfirmed` from .com's /links. */
@@ -383,7 +384,7 @@ function cooldownLabel(ms) {
 }
 
 function customDomainRoot() {
-  return `${getSession().username || "you"}.flagship.services`;
+  return `${getSession().username || "you"}.${dataApex()}`;
 }
 
 /** SET CUSTOM DOMAIN card: section label + right-floated M:SS

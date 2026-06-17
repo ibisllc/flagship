@@ -34,11 +34,12 @@
 
 import { bytesToHex, deriveIrkFromSeed, hkdf32 } from "../keystore.js";
 import { requireOwnerProfile } from "./companionGuard.js";
+import { controlApex } from "./apex.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_WIPE_RESTART. */
 export const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 
 /**
  * Compose the canonical bytes the OLD IRK signs. Byte-for-byte mirror

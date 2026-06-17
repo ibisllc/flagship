@@ -16,11 +16,13 @@
 // returns fewer rows than the requested window (no more history) or the
 // 50-row cap is reached. Events are always presented newest-first.
 
+import { controlApex } from "./apex.js";
+
 /** Server-side per-request cap — mirror of MAX_LIMIT in
  *  packages/control-plane/src/auditEvents.ts. */
 export const AUDIT_MAX_LIMIT = 50;
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 /**
  * Human label for an audit event kind. Mirrors AuditLogViewModel.label

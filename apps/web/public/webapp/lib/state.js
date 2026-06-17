@@ -12,6 +12,7 @@ import {
   ensureProfile,
   setActiveCloudName,
 } from "./profilesStore.js";
+import { controlApex } from "./apex.js";
 
 const _session = {
   umk: null,
@@ -89,7 +90,7 @@ export async function checkUsernameAvailability(handle) {
   if (!handle) return { ok: false, reason: "empty" };
   if (!USERNAME_RE.test(handle)) return { ok: false, reason: "invalid" };
   try {
-    const r = await fetch(`https://flagshipserver.com/api/username/${encodeURIComponent(handle)}`);
+    const r = await fetch(`${controlApex()}/api/username/${encodeURIComponent(handle)}`);
     if (r.status === 404) return { ok: true, available: true };
     if (r.status === 200) return { ok: true, available: false };
     if (r.status === 429) {

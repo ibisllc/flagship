@@ -15,10 +15,11 @@
 
 import { bytesToHex, hexToBytes, hkdf32, signWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
+import { controlApex } from "./apex.js";
 
 // Webapp lives on web.flagshipserver.com; .com endpoints live on the
 // apex. Same Worker handles both via host-based routing.
-const APEX = "https://flagshipserver.com";
+const APEX = controlApex();
 
 const ONE_SHOT_TTL_MS = 10 * 60 * 1000;        // 10 min
 const DEFAULT_LONG_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days

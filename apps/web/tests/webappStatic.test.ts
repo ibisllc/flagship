@@ -195,10 +195,28 @@ describe("/webapp PWA static surface", () => {
     // Canonical bytes pinned to the protocol-side tag (auth.ts).
     expect(r.body).toContain("flagship/auto-unlock-lease/v1");
     expect(r.body).toContain("flagship/revoke-auto-unlock-lease/v1");
-    // Talks to the apex (not web.) for .com endpoints.
-    expect(r.body).toContain("https://flagshipserver.com");
+    // Talks to the apex (not web.) for .com endpoints. The apex used to be a
+    // baked literal here; it now routes through the single lib/apex.js
+    // accessor (origin-driven, prod-default — G2) so a gym build retargets
+    // with one knob. The prod literal itself is pinned in apex.js below.
+    expect(r.body).toContain('from "./apex.js"');
+    expect(r.body).toContain("controlApex()");
     // Must do the Ed25519 → X25519 conversion locally (no @flagship/protocol bundle on the webapp).
     expect(r.body).toContain("X25519");
+  });
+
+  it("/webapp/lib/apex.js is the single apex source + carries the PROD literal as the floor", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/apex.js" });
+    expect(r.statusCode).toBe(200);
+    // The prod-default invariant: with no browser origin / no override, the
+    // control + data apexes resolve to today's literals byte-for-byte.
+    expect(r.body).toContain("https://flagshipserver.com");
+    expect(r.body).toContain("flagship.services");
+    expect(r.body).toContain("export function controlApex");
+    expect(r.body).toContain("export function dataApex");
+    // Derived from the served origin (so gym.flagshipserver.com auto-retargets).
+    expect(r.body).toContain("globalThis.location");
   });
 
   it("/webapp/views/server-detail.js exposes the auto-unlock toggle + revoke + list", async () => {

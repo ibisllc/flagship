@@ -25,6 +25,7 @@ import {
   set as recoveryStoreSet,
   remove as profileRemove,
 } from "../lib/profilesStore.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -74,7 +75,7 @@ export async function fetchPodInventory(username) {
   if (!username) return out;
   try {
     const r = await fetch(
-      `https://flagshipserver.com/api/users/${encodeURIComponent(username)}/pods`,
+      `${controlApex()}/api/users/${encodeURIComponent(username)}/pods`,
     );
     if (!r.ok) return out;
     const body = await r.json();
@@ -418,7 +419,7 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
-const COM_BASE_FOR_E7 = "https://flagshipserver.com";
+const COM_BASE_FOR_E7 = controlApex();
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
 // Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"

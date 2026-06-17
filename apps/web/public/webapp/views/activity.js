@@ -14,6 +14,7 @@ import {
   auditKindIcon as auditIcon,
 } from "../lib/auditLog.js";
 import { enterAccountAudit } from "./account-audit.js";
+import { controlApex } from "../lib/apex.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -22,7 +23,7 @@ function fmtDate(unixMs) {
   return new Date(unixMs).toLocaleString();
 }
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 async function fanOut() {
   // The fetch helpers throw ScreensError on non-2xx; recovery + detail

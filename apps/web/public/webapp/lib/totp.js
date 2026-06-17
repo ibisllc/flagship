@@ -22,8 +22,9 @@
 // as the mobile flow.
 
 import { signWithIrk as defaultSignWithIrk } from "../keystore.js";
+import { controlApex } from "./apex.js";
 
-const COM_BASE = "https://flagshipserver.com";
+const COM_BASE = controlApex();
 
 export const TAG_TOTP_ENROLL_BEGIN = "flagship/totp-enroll-begin/v1";
 export const TAG_TOTP_ENROLL_CONFIRM = "flagship/totp-enroll-confirm/v1";

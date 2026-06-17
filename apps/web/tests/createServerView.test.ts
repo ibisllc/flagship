@@ -85,8 +85,12 @@ describe("create-server view — static structure (#24)", () => {
     expect(VIEW_SRC).toContain("600");
   });
 
-  it("dials the apex host explicitly (the webapp lives on web.flagshipserver.com)", () => {
-    expect(VIEW_SRC).toContain("flagshipserver.com/qr-pipe");
+  it("dials the apex host via the single apex accessor (G2 — prod default unchanged)", () => {
+    // The relay host used to be the baked literal `flagshipserver.com`; it is
+    // now derived through lib/apex.js (origin-driven, prod-default) so a gym
+    // build retargets with one knob. The dial still lands on /qr-pipe as phone.
+    expect(VIEW_SRC).toMatch(/controlHost\(\)\}\/qr-pipe/);
+    expect(VIEW_SRC).toContain('from "../lib/apex.js"');
   });
 
   it("index.html has the view-create-server slot with every wired input", () => {
