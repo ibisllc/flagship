@@ -37,6 +37,39 @@ class AiKeyStoreTest {
     fun emptyByDefault() {
         assertTrue(AiKeyStore.list().isEmpty())
         assertNull(AiKeyStore.active())
+        assertNull(AiKeyStore.activeId())
+    }
+
+    @Test
+    fun setActiveOverridesTheLastAddedDefault() {
+        val a = AiKeyStore.add("anthropic", "sk-ant-abc123456789", "Personal")
+        val b = AiKeyStore.add("openai", "sk-openai-xyz987654321", "Work")
+        // Most-recently-added is the implicit default.
+        assertEquals(b.id, AiKeyStore.activeId())
+        // An explicit "make default" pick wins.
+        AiKeyStore.setActive(a.id)
+        assertEquals(a.id, AiKeyStore.activeId())
+        assertEquals(a.id, AiKeyStore.active()?.id)
+    }
+
+    @Test
+    fun deletingTheActiveEntryFallsBackToLastAdded() {
+        val a = AiKeyStore.add("anthropic", "sk-ant-abc123456789", "Personal")
+        val b = AiKeyStore.add("openai", "sk-openai-xyz987654321", "Work")
+        AiKeyStore.setActive(a.id)
+        assertEquals(a.id, AiKeyStore.activeId())
+        // Removing the pinned-active entry drops the dangling pointer; the
+        // default reverts to the most-recently-added survivor.
+        AiKeyStore.delete(a.id)
+        assertEquals(b.id, AiKeyStore.activeId())
+    }
+
+    @Test
+    fun setActiveIgnoresUnknownId() {
+        val a = AiKeyStore.add("anthropic", "sk-ant-abc123456789", "Personal")
+        AiKeyStore.setActive("not-a-real-id")
+        // A stale tap can't orphan the pointer — active stays the real entry.
+        assertEquals(a.id, AiKeyStore.activeId())
     }
 
     @Test

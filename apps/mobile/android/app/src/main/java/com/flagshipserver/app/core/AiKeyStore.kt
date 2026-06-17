@@ -52,6 +52,10 @@ object AiKeyStore {
 
     private const val FILE_NAME = "flagship-ai-keys"
     private const val RECORD_KEY = "entries"
+    // Explicit "make default" pick. Absent (or pointing at a deleted entry) ⇒
+    // the active key falls back to the most-recently-added one. Mirrors the
+    // webapp's `activeId` + iOS SavedKeyStore.activeId.
+    private const val ACTIVE_KEY = "activeId"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val rng = SecureRandom()
@@ -114,14 +118,41 @@ object AiKeyStore {
 
     fun delete(id: String) {
         persist(list().filterNot { it.id == id })
+        // Drop a dangling explicit-active pointer so active() cleanly falls
+        // back to the most-recently-added entry.
+        if (store().getString(ACTIVE_KEY, null) == id) {
+            store().edit().remove(ACTIVE_KEY).apply()
+        }
     }
 
     fun clear() {
-        store().edit().remove(RECORD_KEY).apply()
+        store().edit().remove(RECORD_KEY).remove(ACTIVE_KEY).apply()
     }
 
-    /** Most-recently-added entry is treated as active (the confirm default). */
-    fun active(): SavedAiKey? = list().lastOrNull()
+    /**
+     * The active (confirm-default) entry: the user's explicit "make default"
+     * pick if it's set AND still present, otherwise the most-recently-added
+     * entry. Mirrors the webapp providers.js + iOS SavedKeyStore semantics.
+     */
+    fun active(): SavedAiKey? {
+        val all = list()
+        val explicit = store().getString(ACTIVE_KEY, null)
+        if (explicit != null) {
+            all.firstOrNull { it.id == explicit }?.let { return it }
+        }
+        return all.lastOrNull()
+    }
+
+    /** The active entry's id (resolved like [active]), or null when none. */
+    fun activeId(): String? = active()?.id
+
+    /** Pin a saved entry as the active (confirm-default) one. No-op for an
+     *  unknown id, so a stale tap can't orphan the pointer. */
+    fun setActive(id: String) {
+        if (list().any { it.id == id }) {
+            store().edit().putString(ACTIVE_KEY, id).apply()
+        }
+    }
 
     /** The full credential for a saved entry, for handing to a build. */
     fun credentialFor(id: String): AiCredential? =

@@ -277,6 +277,7 @@ private fun ProviderPickChip(label: String, selected: Boolean, onClick: () -> Un
 @Composable
 fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
     val keys by vm.keys.collectAsState()
+    val activeId by vm.activeId.collectAsState()
     var showForm by remember { mutableStateOf(false) }
 
     val scroll = rememberScrollState()
@@ -310,15 +311,36 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
             )
         } else {
             keys.forEach { row ->
+                val isActive = row.id == activeId
                 FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            row.maskedSlug,
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                            modifier = Modifier.weight(1f),
-                        )
-                        FSDangerButton(label = "Delete", onClick = { vm.delete(row.id) })
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    row.maskedSlug,
+                                    color = FS.colors.text,
+                                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                                )
+                                if (isActive) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        "Default for new builds",
+                                        color = FS.colors.primary,
+                                        style = TextStyle(fontSize = 12.sp),
+                                    )
+                                }
+                            }
+                            FSDangerButton(label = "Delete", onClick = { vm.delete(row.id) })
+                        }
+                        // "Make default" on every non-active row — mirrors iOS's
+                        // AiKeysScreen + the webapp providers manager.
+                        if (!isActive) {
+                            Spacer(Modifier.height(FS.space.s2))
+                            FSGhostButton(
+                                label = "Make default",
+                                onClick = { vm.setActive(row.id) },
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(FS.space.s2))

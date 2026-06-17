@@ -346,7 +346,7 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                "Now add your first server. Order a pre-built box (~$199) or flash any old PC — either way, about ten minutes. You can add more servers anytime.",
+                "You don't have any servers yet. Add your first server to start running your own services — or come back to it whenever you like.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )

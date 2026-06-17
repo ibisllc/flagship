@@ -66,6 +66,20 @@ class AiKeysViewModelTest {
     }
 
     @Test
+    fun setActiveReflectsThroughActiveId() {
+        val vm = AiKeysViewModel()
+        vm.add("anthropic", "sk-ant-abc123456789", "Personal", null)
+        vm.add("openai", "sk-openai-xyz987654321", "Work", null)
+        val first = vm.keys.value.first().id
+        val second = vm.keys.value[1].id
+        // Most-recently-added is the implicit default.
+        assertEquals(second, vm.activeId.value)
+        // "Make default" on the other row flips it.
+        vm.setActive(first)
+        assertEquals(first, vm.activeId.value)
+    }
+
+    @Test
     fun credentialForReturnsFullKey() {
         val vm = AiKeysViewModel()
         vm.add("google", "AIza-secret-123456789", "Gemini", "https://g")

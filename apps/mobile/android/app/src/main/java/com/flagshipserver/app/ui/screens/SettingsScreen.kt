@@ -43,6 +43,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.api.PushTokenRevokeRequest
@@ -62,6 +65,7 @@ import com.flagshipserver.app.ui.components.FSSettingsGroup
 import com.flagshipserver.app.ui.components.FSSettingsRowData
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
+import com.flagshipserver.app.viewmodels.AccountSecurityViewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -95,6 +99,23 @@ fun SettingsScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val hasRecovery by app.hasCloudRecovery.collectAsState()
     val username = app.currentUser.collectAsState().value ?: ""
+
+    // Real account type (single vs multi-device + 2FA), read off the Worker
+    // `usernames` row via the same VM the Account-security screen uses, so the
+    // hero subtitle + the ACCOUNT-security row reflect the live state instead
+    // of a recovery-only guess. Null while the load is in flight / on failure.
+    val accountSecurity: AccountSecurityViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                AccountSecurityViewModel(
+                    server = server,
+                    username = { app.currentUser.value },
+                )
+            }
+        },
+    )
+    val accountType by accountSecurity.accountType.collectAsState()
+    LaunchedEffect(username) { accountSecurity.load() }
     // #52 — the Tier-2 sign-out gate. Demo/mock sessions (the mock screens
     // client, i.e. !useLiveClient) are exempt: they never wrap a real UMK.
     // Absent DeveloperSettings ⇒ NOT demo (fail-closed: the gate applies).
@@ -112,14 +133,17 @@ fun SettingsScreen(nav: NavController) {
     }
     val sessionGated = signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY
 
-    // Account-type one-liner under the username on the profile hero. We
-    // don't yet surface a multi/single account-type flag on Android, so
-    // we lean on the recovery state we already hold (mirrors iOS's
-    // default "Tap to manage account security" framing).
-    val profileSubtitle = if (hasRecovery)
-        "Cloud recovery on · Tap to manage account security"
-    else
-        "Tap to manage account security"
+    // Account-type one-liner under the username on the profile hero, driven by
+    // the live account type (mirror of iOS SettingsScreen.profileSubtitle).
+    // Until the load resolves we fall back to the recovery-aware framing.
+    val profileSubtitle = when (accountType) {
+        "multi" -> "Multi-device + 2FA"
+        "single" -> "Single-device account"
+        else -> if (hasRecovery)
+            "Cloud recovery on · Tap to manage account security"
+        else
+            "Tap to manage account security"
+    }
 
     val scroll = rememberScrollState()
     Column(
@@ -169,11 +193,22 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
                     onClick = { nav.navigate("ai-keys") },
                 ),
-                // v1.2 Phase 4 — Account security badge + drill-down.
+                // v1.2 Phase 4 — Account security badge + drill-down. Title +
+                // subtitle reflect the live account type (mirror of iOS's
+                // accountSecuritySection); the recovery framing is the
+                // load-pending fallback.
                 FSSettingsRowData(
                     icon = "🛡",
-                    title = "Account security",
-                    subtitle = "Single-device vs multi-device + 2FA.",
+                    title = when (accountType) {
+                        "multi" -> "Multi-device + 2FA"
+                        "single" -> "Single-device account"
+                        else -> "Account security"
+                    },
+                    subtitle = when (accountType) {
+                        "multi" -> "Recovery requires a 6-digit code + 24-hour grace."
+                        "single" -> "Recovery is a 3-day waiting period."
+                        else -> "Single-device vs multi-device + 2FA."
+                    },
                     onClick = { nav.navigate("account-security") },
                 ),
             ),

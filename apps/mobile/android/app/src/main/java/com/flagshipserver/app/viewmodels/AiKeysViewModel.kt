@@ -48,7 +48,13 @@ class AiKeysViewModel : ViewModel() {
     fun refresh() {
         val all = AiKeyStore.list()
         _keys.value = all.map { it.toRow() }
-        _activeId.value = AiKeyStore.active()?.id
+        _activeId.value = AiKeyStore.activeId()
+    }
+
+    /** Pin a saved entry as the active (confirm-default) key. */
+    fun setActive(id: String) {
+        AiKeyStore.setActive(id)
+        refresh()
     }
 
     /** Recall a saved entry's full credential to hand to a build. */
