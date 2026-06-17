@@ -347,7 +347,7 @@ public struct SettingsScreen: View {
                 title: accountType == "multi" ? "Multi-device + 2FA" : "Single-device account",
                 subtitle: accountType == "multi"
                     ? "Recovery requires a 6-digit code + 24-hour grace."
-                    : "Recovery is a 7-day waiting period.",
+                    : "Recovery is a 3-day waiting period.",
                 action: onOpenAccountSecurity
             )
         ])

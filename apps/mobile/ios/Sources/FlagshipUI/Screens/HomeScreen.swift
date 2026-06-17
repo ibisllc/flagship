@@ -176,7 +176,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
                 title: "Your account isn't backed up yet",
-                message: "If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account.",
+                message: "If you lose this device, getting back in means a 3-day wait — and that same path lets anyone who knows your username try to claim your account. Set up recovery now (one minute) so you can restore instantly and privately.",
                 ctaLabel: "Secure my account",
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryBackupBanner
@@ -186,7 +186,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
                 title: "Set up recovery",
-                message: "Right now this device is the only way back into your account. Bank a passkey with Apple so you can recover if you lose it.",
+                message: "Right now, recovering this account without this device takes a 3-day wait that anyone who knows your username can start. Bank a passkey with Apple so you can recover instantly and privately instead.",
                 ctaLabel: "Set it up",
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryNudge

@@ -285,7 +285,7 @@ public struct RealAccountLoginScreen: View {
                 .font(FS.font.h2()).foregroundColor(c.text)
             Text(multi
                  ? "Sign in with your recovery passkey and your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified so they can stop it if it wasn't you."
-                 : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 7-day hold — if another device is signed in, it's notified and can stop it if it wasn't you.")
+                 : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 3-day hold — if another device is signed in, it's notified and can stop it if it wasn't you.")
                 .font(FS.font.body())
                 .foregroundColor(c.textMuted)
 
@@ -310,7 +310,7 @@ public struct RealAccountLoginScreen: View {
             }
 
             FSPrimaryButton(
-                multi ? "Restore access (24-hour hold)" : "Restore access (7-day hold)",
+                multi ? "Restore access (24-hour hold)" : "Restore access (3-day hold)",
                 enabled: multi ? vm.canStartMultiTakeover : true,
                 block: true,
                 large: true
@@ -331,11 +331,11 @@ public struct RealAccountLoginScreen: View {
                 Image(systemName: "clock.badge.exclamationmark")
                     .foregroundColor(c.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(multi ? "24-hour security hold" : "7-day security hold")
+                    Text(multi ? "24-hour security hold" : "3-day security hold")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                     Text(multi
                          ? "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified and can stop it until then."
-                         : "This hold is the safety delay for a single-device account: after 7 days, this device has full access. It's what stops anyone else from quietly restoring your account — and if another device is ever signed in, it's alerted throughout and can stop the change.")
+                         : "This hold is the safety delay for a single-device account: after 3 days, this device has full access. It's what stops anyone else from quietly restoring your account — and if another device is ever signed in, it's alerted throughout and can stop the change.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }

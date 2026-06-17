@@ -299,7 +299,7 @@ describe("Phase 5 conformance — no-recovery renders a STATE, never a 404", () 
  * ════════════════════════════════════════════════════════════════════ */
 
 describe("Phase 5 conformance — credentialed takeover matrix (single vs multi)", () => {
-  it("single → 7-day grace, NO second-factor prompt, re-pair body has no totpProof", async () => {
+  it("single → 3-day grace, NO second-factor prompt, re-pair body has no totpProof", async () => {
     const { loginRealAccount } = await loadTakeover();
     const { deps, fetchMock } = fakeTakeoverDeps();
     const confirm = vi.fn(async () => true);
@@ -307,7 +307,7 @@ describe("Phase 5 conformance — credentialed takeover matrix (single vs multi)
     const out = await loginRealAccount(singleResolution("harry"), {
       showState: vi.fn(), confirm, prompt, takeoverDeps: deps,
     });
-    expect(confirm.mock.calls[0]![0].message).toMatch(/7-day grace/);
+    expect(confirm.mock.calls[0]![0].message).toMatch(/3-day grace/);
     expect(prompt).not.toHaveBeenCalled();
     expect(out.outcome).toBe("takeover");
     expect(out.takeover.deviceLabel).toBe("admin");

@@ -235,7 +235,7 @@ describe("loginTakeover initiateRePair — J.3 envelope body", () => {
   });
 });
 
-describe("loginTakeover runTakeover — single (7-day grace)", () => {
+describe("loginTakeover runTakeover — single (3-day grace)", () => {
   it("unwraps, persists, INITIATES re-pair, labels admin, opens", async () => {
     const { runTakeover, TAKEOVER_IRK_VERSION, ADMIN_LABEL, TAG_RE_PAIR_INITIATE } = await loadLib();
     const { deps, calls, seed, fetchMock } = fakeTakeoverDeps();
@@ -335,7 +335,7 @@ describe("loginTakeover loginRealAccount — full branch orchestration", () => {
     expect(deps.recoverFromCloud).not.toHaveBeenCalled();
   });
 
-  it("single → confirm the 7-day grace → takeover (no factor prompt)", async () => {
+  it("single → confirm the 3-day grace → takeover (no factor prompt)", async () => {
     const { loginRealAccount } = await loadLib();
     const { deps, fetchMock } = fakeTakeoverDeps();
     const confirm = vi.fn(async () => true);
@@ -347,7 +347,7 @@ describe("loginTakeover loginRealAccount — full branch orchestration", () => {
       takeoverDeps: deps,
     });
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm.mock.calls[0]![0].message).toMatch(/7-day grace/);
+    expect(confirm.mock.calls[0]![0].message).toMatch(/3-day grace/);
     expect(prompt).not.toHaveBeenCalled(); // single needs no second factor
     expect(out.outcome).toBe("takeover");
     expect(out.takeover.deviceLabel).toBe("admin");

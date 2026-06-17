@@ -472,7 +472,7 @@ function renderRecoveryBanner() {
     icon: keyIcon,
     title: "Your account isn't backed up yet",
     message:
-      "If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account from a fresh browser.",
+      "If you lose this device, getting back in means a 3-day wait — and that same path lets anyone who knows your username try to claim your account. Set up recovery now (one minute) so you can restore instantly and privately from a fresh browser.",
     ctaLabel: "Secure my account",
     dismissible: true,
     tone: "teal",

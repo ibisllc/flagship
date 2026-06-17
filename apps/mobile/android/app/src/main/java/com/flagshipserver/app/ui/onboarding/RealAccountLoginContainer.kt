@@ -338,7 +338,7 @@ private fun TakeoverExplainerView(
             "This device takes over in 24 hours." to
                 "Your other devices are alerted now and can object during the grace window."
         AccountResolution.GraceModel.SevenDay ->
-            "This device takes over in 7 days." to
+            "This device takes over in 3 days." to
                 "Your old device is alerted now. After the grace window this device becomes the admin."
         else ->
             "This device will take over your account." to
