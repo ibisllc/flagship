@@ -20,7 +20,12 @@ import {
 } from "./lib/operationsBar.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
-import { initTrustSliver, setTrustSliverTapHandler } from "./lib/trustSliver.js";
+import {
+  initTrustSliver,
+  setTrustSliverTapHandler,
+  setTrustSliverUnlockedResolver,
+  renderTrustSliver,
+} from "./lib/trustSliver.js";
 import { grantTrustException, loadAndApplyExceptions } from "./lib/trustOverride.js";
 import { inlinePrompt } from "./lib/modal.js";
 import { verifyPin, hasPin } from "./lib/pinLock.js";
@@ -449,12 +454,10 @@ async function boot() {
   wireActivityEntries();
   wireServicesTabEntries();
 
-  // Global operations sliver (WhatsApp-style active-operations bar). It reads
-  // lib/activeOperations.js (fed by Home's pod sync + the vibe-code build
-  // lifecycle) and pins a teal strip the shell slides down to reveal. Hide it
-  // on the pre-paired / locked surfaces so operation names never slide in over
-  // the bootstrap/unlock/PIN screens — same intent as iOS's hide-under-lock.
-  setOperationsBarUnlockedResolver(() => {
+  // Shared lock predicate for the top slivers — true once the app is past the
+  // pre-paired / locked surfaces, so neither the teal ops bar nor the red trust
+  // sliver slides in over the bootstrap/unlock/PIN screens (iOS hide-under-lock).
+  const sliversUnlocked = () => {
     const v = currentViewId();
     return (
       v !== "view-bootstrap" &&
@@ -464,19 +467,32 @@ async function boot() {
       v !== "view-wizard" &&
       v != null
     );
-  });
+  };
+
+  // Global operations sliver (WhatsApp-style active-operations bar). It reads
+  // lib/activeOperations.js (fed by Home's pod sync + the vibe-code build
+  // lifecycle) and pins a teal strip the shell slides down to reveal.
+  setOperationsBarUnlockedResolver(sliversUnlocked);
   initOperationsBar();
-  // Re-evaluate the bar's visibility on every navigation (the lock surfaces
-  // hide it; unlocking back into the app reveals any running operations).
-  document.addEventListener("flagship:view-shown", () => refreshOperationsBar());
 
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per
   // failing cert while the control-server blessing is broken. It pins ABOVE
   // the teal ops bar and pushes the whole shell down. Tapping a line runs the
-  // biometric/PIN-gated per-cert override.
+  // biometric/PIN-gated per-cert override. Hidden under the lock — same as the
+  // ops bar + iOS's GlobalTrustBar — so a degraded-trust banner never shows
+  // through the lock screen.
+  setTrustSliverUnlockedResolver(sliversUnlocked);
   initTrustSliver();
   setTrustSliverTapHandler((certHash) => runTrustOverride(certHash));
+
+  // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
+  // hide them; unlocking back into the app reveals any running operations / a
+  // still-failing trust line.
+  document.addEventListener("flagship:view-shown", () => {
+    refreshOperationsBar();
+    renderTrustSliver();
+  });
   // Fetch + verify the control-server blessing (CLIENT clock; a network error
   // is NOT a verdict), then re-apply any accepted exceptions so one acceptance
   // per cert holds fleet-wide. Best-effort + non-blocking — boot never waits

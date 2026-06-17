@@ -89,3 +89,31 @@ describe("trustSliver — line dedup", () => {
     expect(s.trustSliverLines(undefined)).toEqual([]);
   });
 });
+
+describe("trustSliver — hide under the lock screen (M7)", () => {
+  it("LOCKED ⇒ zero lines even with failing certs (iOS app.isUnlocked gate)", async () => {
+    const s = await loadSliver();
+    const certs = [{ certClass: "control", certHash: HASH_A }];
+    // Unlocked shows the failing cert; locked suppresses it entirely.
+    expect(s.visibleTrustLines(true, certs)).toHaveLength(1);
+    expect(s.visibleTrustLines(false, certs)).toEqual([]);
+  });
+
+  it("LOCKED ⇒ zero lines regardless of how many certs fail", async () => {
+    const s = await loadSliver();
+    const certs = [
+      { certClass: "control", certHash: HASH_A },
+      { certClass: "relay", certHash: HASH_B },
+    ];
+    expect(s.visibleTrustLines(true, certs)).toHaveLength(2);
+    expect(s.visibleTrustLines(false, certs)).toEqual([]);
+  });
+});
+
+describe("trustSliver — override badge copy (L11)", () => {
+  it('says "continuing", NOT "accepted" (matches iOS/Android)', async () => {
+    const s = await loadSliver();
+    expect(s.TRUST_OVERRIDE_LABEL).toBe("continuing");
+    expect(s.TRUST_OVERRIDE_LABEL).not.toBe("accepted");
+  });
+});

@@ -58,14 +58,46 @@ export function trustSliverLines(certs) {
   return lines;
 }
 
+/** The badge shown on a line whose cert the owner chose to override — "we
+ *  haven't recovered trust, we're just continuing past it". iOS/Android say
+ *  "continuing" (NOT "accepted", which read as "all good"); the webapp matches.
+ *  Exported so the copy is pinned without a DOM. */
+export const TRUST_OVERRIDE_LABEL = "continuing";
+
+/**
+ * The lines the sliver should actually render given the lock state — the pure,
+ * DOM-free core of the hide-under-lock rule. A LOCKED app gets ZERO lines so
+ * cert-failure data never slides in over the unlock/PIN/bootstrap screens,
+ * mirroring iOS's `app.isUnlocked ? sliverFailures : []`.
+ * @param {boolean} unlocked
+ * @param {Array<{certClass:string, certHash:string, overridden?:boolean}>} certs
+ */
+export function visibleTrustLines(unlocked, certs) {
+  return unlocked ? trustSliverLines(certs) : [];
+}
+
 /* ---------- DOM render ---------- */
 
 let barEl = null;
 let onLineTap = null;
+let unlockedFn = () => true;
 
 /** Wire the per-line tap handler (the override flow). */
 export function setTrustSliverTapHandler(fn) {
   if (typeof fn === "function") onLineTap = fn;
+}
+
+/**
+ * Resolve whether the app is currently unlocked. The red sliver hides while
+ * locked so the lock/PIN/bootstrap screens never have the degraded-trust banner
+ * slide in over them — mirroring iOS's `GlobalTrustBar`
+ * (`app.isUnlocked ? sliverFailures : []`) and the teal ops bar's
+ * `setOperationsBarUnlockedResolver`. Defaults to "unlocked" so a surface that
+ * never wires it still shows the sliver. Call {@link renderTrustSliver} again
+ * whenever the lock state flips (app.js refreshes it on every navigation).
+ */
+export function setTrustSliverUnlockedResolver(fn) {
+  if (typeof fn === "function") unlockedFn = fn;
 }
 
 function escapeText(s) {
@@ -90,7 +122,10 @@ function ensureBar() {
 export function renderTrustSliver() {
   const el = ensureBar();
   if (!el) return;
-  const lines = trustSliverLines(serverTrust.failingCerts());
+  // Hide under the lock screen via the pure visibleTrustLines rule (iOS's
+  // `app.isUnlocked ? failures : []`): a locked surface gets ZERO lines so
+  // cert-failure data never slides in over the unlock/PIN/bootstrap screens.
+  const lines = visibleTrustLines(unlockedFn(), serverTrust.failingCerts());
   if (lines.length === 0) {
     el.classList.remove("is-shown");
     el.setAttribute("aria-hidden", "true");
@@ -104,10 +139,10 @@ export function renderTrustSliver() {
     .map(
       (l) => `
       <button type="button" class="trust-bar-line" data-cert-hash="${escapeText(l.certHash)}"
-              aria-label="${escapeText(l.label)}${l.overridden ? " (accepted)" : ""}">
+              aria-label="${escapeText(l.label)}${l.overridden ? ` (${TRUST_OVERRIDE_LABEL})` : ""}">
         <span class="trust-bar-icon" aria-hidden="true">&#9888;</span>
         <span class="trust-bar-label">${escapeText(l.label)}</span>
-        ${l.overridden ? '<span class="trust-bar-accepted">accepted</span>' : ""}
+        ${l.overridden ? `<span class="trust-bar-accepted">${TRUST_OVERRIDE_LABEL}</span>` : ""}
       </button>`,
     )
     .join("");
