@@ -126,7 +126,7 @@ describe("handleAccountResolve", () => {
     expect(b.recovery.present).toBe(false);
   });
 
-  it("single account without cloud recovery: kind:single, recovery.present false, graceModel:7d", async () => {
+  it("single account without cloud recovery: kind:single, recovery.present false, graceModel:3d", async () => {
     const r = await handleAccountResolve(
       deps({ usernames: usernames({ harry: {} }), pushTokens: pushTokens({ harry: 1 }) }),
       "harry",
@@ -135,7 +135,7 @@ describe("handleAccountResolve", () => {
     const b = body(r);
     expect(b.kind).toBe("single");
     expect(b.exists).toBe(true);
-    expect(b.graceModel).toBe("7d");
+    expect(b.graceModel).toBe("3d");
     expect(b.recovery.present).toBe(false);
     expect(b.totpEnrolled).toBe(false);
     expect(b.trustedDeviceCount).toBe(1);

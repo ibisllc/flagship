@@ -37,7 +37,7 @@ public struct RecoveryScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Recover on a new device").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your account's master key lives only on this device. Set up recovery now so you can get back in if you lose it. We keep a copy locked away in the cloud — unlockable only with your passkey (synced through iCloud) and a recovery passphrase you choose. We can't open it, and we can't reset your passphrase. If you lose this device, install Flagship on a new one, sign in, and enter your passphrase. For safety, single-admin accounts unlock after a 3-day wait.")
+                Text("Your account's master key lives only on this device. Set up recovery now so you can get back in fast and safely if you lose it. We keep a copy locked away in the cloud — unlockable only with your passkey (synced through iCloud) and a recovery passphrase you choose. We can't open it, and we can't reset your passphrase. With recovery, you install Flagship on a new device, sign in, enter your passphrase, and you're back in. Without it you can still get back in, but only the slow way: a single-device account can be claimed from a new device after a 3-day wait — and because that same path lets anyone who knows your username start a claim, you'll want recovery's instant, private route instead.")
                     .font(FS.font.body()).foregroundColor(c.textMuted)
 
                 FSCard {

@@ -190,7 +190,7 @@ public struct ServicesTab: View {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text("Add a server first").font(FS.font.h3()).foregroundColor(c.text)
-                    Text("Apps run on your own server. Add one to start building.")
+                    Text("Services run on your own server. Add one to start building.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
             }
@@ -218,10 +218,10 @@ public struct ServicesTab: View {
             if apps.isEmpty {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("Build your first app").font(FS.font.h3()).foregroundColor(c.text)
+                        Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
                         Text("Describe it in plain English. The AI writes it, the daemon runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
-                        FSPrimaryButton("Build an app", block: true) {
+                        FSPrimaryButton("Build a service", block: true) {
                             path.append(.buildSource)
                         }
                     }
@@ -242,7 +242,7 @@ public struct ServicesTab: View {
                 Button(action: { path.append(.buildSource) }) {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles").foregroundColor(c.primary)
-                        Text("Build another app").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
+                        Text("Build another service").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
                         Spacer()
                     }
                     .padding(.horizontal, FS.space.s4)

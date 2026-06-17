@@ -53,7 +53,7 @@ fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing an app will use Face Unlock or your fingerprint.",
+            text = "Your master key lives in this phone's secure hardware. Approving a server unlock or installing a service will use Face Unlock or your fingerprint.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
         )

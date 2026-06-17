@@ -129,7 +129,7 @@ function renderAppCards() {
   const cardsHtml = visible.length
     ? visible.map((e) => appCardHtml(e.app)).join("")
     : `<div class="card placeholder">${
-        appsQuery || appsFilter !== "all" ? "No apps match this filter." : "No services installed yet."
+        appsQuery || appsFilter !== "all" ? "No services match this filter." : "No services installed yet."
       }</div>`;
 
   root.innerHTML = `

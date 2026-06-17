@@ -32,7 +32,7 @@ public struct BrowserTabsScreen: View {
                 case .loaded(let tabs):
                     if tabs.isEmpty {
                         FSCard {
-                            Text("No tabs open for this app.")
+                            Text("No tabs open for this service.")
                                 .foregroundColor(c.textMuted)
                         }
                     } else {

@@ -61,7 +61,7 @@ sealed interface SettingsRoute {
 
 enum class RootDestination(val key: String, val label: String) {
     HOME("home", "Home"),
-    APPS("apps", "Apps"),
+    APPS("apps", "Services"),
     ACTIVITY("activity", "Activity"),
     SETTINGS("settings", "Settings"),
     ;

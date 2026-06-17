@@ -72,7 +72,7 @@ public struct AccountSecurityScreen: View {
                 showDisableSheet = false
             }
         } message: {
-            Text("Drops your TOTP secret + recovery codes. The account goes back to single-device + 7-day recovery grace. Refused while other trusted devices exist.")
+            Text("Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist.")
         }
     }
 
@@ -90,7 +90,7 @@ public struct AccountSecurityScreen: View {
                         .accessibilityIdentifier("account-security-badge")
                     Text(viewModel.isMultiDevice
                          ? "Account recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
-                         : "Account recovery uses a 7-day waiting period during which your other devices can object.")
+                         : "Account recovery uses a 3-day waiting period during which your other devices can object.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }
@@ -249,7 +249,7 @@ struct AccountSecurityEnableSheet: View {
                 .foregroundColor(c.textMuted)
             Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
                 .foregroundColor(c.text)
-            Text("After 2FA is on, account recovery becomes a 24-hour grace window that requires your 6-digit code (or a recovery code) instead of the 7-day waiting period.")
+            Text("After 2FA is on, account recovery becomes a 24-hour grace window that requires your 6-digit code (or a recovery code) instead of the 3-day waiting period.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
             FSPrimaryButton("Continue", block: true, large: true) {

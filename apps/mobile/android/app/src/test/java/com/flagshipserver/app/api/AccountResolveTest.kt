@@ -101,7 +101,7 @@ class AccountResolveTest {
         val r = mock.resolveAccount("harry")
         assertTrue(r.exists)
         assertEquals("single", r.kind)
-        assertEquals("7d", r.graceModel)
+        assertEquals("3d", r.graceModel)
     }
 
     @Test fun resolveAccount_claimedMultiAccount_resolvesToMulti() = runTest {

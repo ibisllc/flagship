@@ -111,7 +111,7 @@ fun AccountSecurityScreen(nav: NavController) {
                 if (accountType == "multi")
                     "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
                 else
-                    "Recovery uses a 7-day waiting period during which your other devices can object.",
+                    "Recovery uses a 3-day waiting period during which your other devices can object.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
@@ -186,7 +186,7 @@ fun AccountSecurityScreen(nav: NavController) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
                         "Drops your TOTP secret + recovery codes. The account goes back to " +
-                            "single-device + 7-day recovery grace. Refused while other " +
+                            "single-device + 3-day recovery grace. Refused while other " +
                             "trusted devices exist.",
                     )
                     OutlinedTextField(
@@ -316,7 +316,7 @@ private fun Step1(beginning: Boolean) {
     )
     Text(
         "After 2FA is on, account recovery becomes a 24-hour grace window that requires " +
-            "your 6-digit code (or a recovery code) instead of the 7-day waiting period.",
+            "your 6-digit code (or a recovery code) instead of the 3-day waiting period.",
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 13.sp),
     )

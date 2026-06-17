@@ -6,7 +6,7 @@
 //   1. graceTimeline(rePair, now) → a countdown view-model with the
 //      "This device takes over in N — your other devices are being
 //      alerted" copy and a "Take over now" action that arms once
-//      now >= completesAt (graceModel: 7d single / 24h-totp multi).
+//      now >= completesAt (graceModel: 3d single / 24h-totp multi).
 //   2. completeRePair() → POST /api/users/:u/re-pair/complete
 //      (idempotent, no signature gate; body optional per W6). Tagged
 //      outcomes so the UI renders states, never raw errors:
@@ -84,16 +84,16 @@ describe("loginTakeover formatRemaining — countdown wording", () => {
 });
 
 describe("loginTakeover graceTimeline — grace window per graceModel", () => {
-  it("single (7d): mid-window → not ready, action disabled, alert copy", async () => {
+  it("single (3d): mid-window → not ready, action disabled, alert copy", async () => {
     const { graceTimeline } = await loadLib();
-    const completesAt = 7 * DAY; // measured from now=0
+    const completesAt = 3 * DAY; // measured from now=0
     const t = graceTimeline(singleRePair(completesAt), 0);
-    expect(t.graceModel).toBe("7d");
+    expect(t.graceModel).toBe("3d");
     expect(t.ready).toBe(false);
     expect(t.actionEnabled).toBe(false);
-    expect(t.remainingMs).toBe(7 * DAY);
+    expect(t.remainingMs).toBe(3 * DAY);
     expect(t.label).toBe(
-      "This device takes over in 7d 0h — your other devices are being alerted.",
+      "This device takes over in 3d 0h — your other devices are being alerted.",
     );
   });
 

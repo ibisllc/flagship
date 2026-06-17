@@ -33,8 +33,8 @@ export function renderPendingBanner(snapshot, nowMs = Date.now()) {
   const elapsed = typeof p.completesAt === "number" && p.completesAt <= nowMs;
   const when = formatCompletesAt(p.completesAt);
   const body = elapsed
-    ? `The 24-hour grace window has elapsed — finalize the device replacement now.`
-    : `Replace pending — finalize when the 7-day grace elapses (${escapeHtml(when)}).`;
+    ? `The grace window has elapsed — finalize the device replacement now.`
+    : `Replace pending — finalize when the 3-day grace elapses (${escapeHtml(when)}).`;
   return `
     <div class="card" data-pending-re-pair role="status" aria-live="polite">
       <div class="row">

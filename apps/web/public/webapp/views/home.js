@@ -307,7 +307,7 @@ export function renderServerCard(server, pod, opts = {}) {
     : "phone-tap only";
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
-  const subtitle = `${serviceCount} app${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  const subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
   // A box that registered during install but whose daemon never checked in
   // (`never-seen`) is a dead install — offer the decommission / free-the-name
   // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
@@ -472,7 +472,7 @@ function renderRecoveryBanner() {
     icon: keyIcon,
     title: "Your account isn't backed up yet",
     message:
-      "If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account from a fresh browser.",
+      "If you lose this device, getting back in means a 3-day wait — and that same path lets anyone who knows your username try to claim your account. Set up recovery now (one minute) so you can restore instantly and privately from a fresh browser.",
     ctaLabel: "Secure my account",
     dismissible: true,
     tone: "teal",

@@ -22,7 +22,7 @@ import FlagshipAPI
 ///             ├─ unknown → inline "no account by that name" state
 ///             └─ single/multi → RealAccountLoginScreen — the Phase-3
 ///                       state machine (RealAccountLoginViewModel):
-///                       no-recovery STATE / single 7-day-grace takeover
+///                       no-recovery STATE / single 3-day-grace takeover
 ///                       / multi 24h-grace + recovery-TOTP takeover →
 ///                       install UMK → re-pair → label this device
 ///                       `admin` → completeOnboarding.

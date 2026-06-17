@@ -86,7 +86,7 @@ public struct ReplaceDeviceFinalizeScreen: View {
             Text("Replacing this device")
                 .font(FS.font.h3())
                 .foregroundColor(c.text)
-            Text("This rotates your account's identity key. Once the grace window ends, every other device on the account must re-pair the next time it opens — including this phone. Your pods keep running and your apps stay installed.")
+            Text("This rotates your account's identity key. Once the grace window ends, every other device on the account must re-pair the next time it opens — including this phone. Your pods keep running and your services stay installed.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
         }

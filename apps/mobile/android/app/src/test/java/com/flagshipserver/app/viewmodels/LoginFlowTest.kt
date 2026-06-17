@@ -125,7 +125,7 @@ class LoginFlowTest {
         kind: String,
         recoveryPresent: Boolean,
         totpEnrolled: Boolean = false,
-        grace: String = if (kind == "multi") "24h-totp" else "7d",
+        grace: String = if (kind == "multi") "24h-totp" else "3d",
         registeredIrkPubHex: String? = mismatchedRegisteredPub,
     ) = AccountResolution(
         username = username,
@@ -230,7 +230,7 @@ class LoginFlowTest {
         ),
         totpEnrolled = kind == "multi",
         trustedDeviceCount = 0,
-        graceModel = if (kind == "multi") "24h-totp" else "7d",
+        graceModel = if (kind == "multi") "24h-totp" else "3d",
     )
 
     @Test fun begin_gatedRecord_awaitsPassphrase_doesNotFetch() = runTest {
@@ -253,7 +253,7 @@ class LoginFlowTest {
         m.submitPassphrase(GATED_PASSPHRASE)
 
         assertEquals(
-            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.ThreeDay),
             m.phase.first(),
         )
         assertNull("nothing committed before confirm", server.lastRePairInitiate)
@@ -296,7 +296,7 @@ class LoginFlowTest {
         m.begin()
 
         assertEquals(
-            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.ThreeDay),
             m.phase.first(),
         )
         // Nothing committed yet — the user can still back out.
@@ -493,7 +493,7 @@ class LoginFlowTest {
 
         m.submitSecondFactor("123456", isRecoveryCode = false)
         assertEquals(
-            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.ThreeDay),
             m.phase.first(),
         )
         m.confirmTakeover()

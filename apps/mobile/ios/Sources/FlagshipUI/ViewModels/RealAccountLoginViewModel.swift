@@ -25,7 +25,7 @@ import FlagshipCore
 ///                 still has access."
 ///       multi  → "Use another device, or one of your recovery codes."
 ///   - `single` + recovery → passkey-PRF unwrap → this is a TAKEOVER
-///       (single has no peer) → 7-day-grace explainer → install UMK →
+///       (single has no peer) → 3-day-grace explainer → install UMK →
 ///       initiate re-pair → label `admin` → completeOnboarding.
 ///   - `multi` + recovery + totpEnrolled → passkey-PRF unwrap AND a
 ///       recovery TOTP (6-digit) OR a recovery code → pass it as the
@@ -49,7 +49,7 @@ public final class RealAccountLoginViewModel {
         /// No cloud backup on the account (recovery.present == false).
         /// `multi` differs only in copy (recovery-codes hint).
         case noRecovery(multi: Bool)
-        /// single → passkey-PRF takeover behind a 7-day grace.
+        /// single → passkey-PRF takeover behind a 3-day grace.
         case singleTakeover
         /// multi → passkey-PRF + a recovery TOTP / recovery-code behind
         /// a 24h grace. `totpEnrolled` is always true here (the

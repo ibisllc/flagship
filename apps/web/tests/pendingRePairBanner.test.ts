@@ -61,7 +61,7 @@ describe("pendingRePairBanner — renderPendingBanner", () => {
     expect(html).toContain("Replace pending");
     expect(html).toContain('id="finalize-replace-btn"');
     expect(html).toContain("disabled");
-    expect(html).toContain("7-day grace");
+    expect(html).toContain("3-day grace");
   });
 
   it("renders a Finalize now button (enabled) once the grace has elapsed", () => {

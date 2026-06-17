@@ -159,7 +159,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             val resolution = Json.decodeFromString(AccountResolution.serializer(), raw)
             // Phase 3 — the REAL single/multi login state machine.
             // No-cloud-backup renders a STATE (not a 404); single does a
-            // 7-day-grace takeover; multi collects the recovery TOTP /
+            // 3-day-grace takeover; multi collects the recovery TOTP /
             // code then a 24h-grace takeover. Both install the recovered
             // UMK + initiate re-pair + label this device "admin" with the
             // resolved username (no "recovered-user" placeholder).

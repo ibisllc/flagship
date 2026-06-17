@@ -149,12 +149,12 @@ class LoginDecisionMatrixConformanceTest {
         assertNull(r.demoServer)
     }
 
-    @Test fun matrix_single_resolvesSevenDay() = runTest {
+    @Test fun matrix_single_resolvesThreeDay() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         claim(server, "harry")
         val r = server.resolveAccount("harry")
         assertEquals(AccountResolution.AccountKind.Single, r.accountKind)
-        assertEquals(AccountResolution.GraceModel.SevenDay, r.grace)
+        assertEquals(AccountResolution.GraceModel.ThreeDay, r.grace)
     }
 
     @Test fun matrix_multi_resolves24hTotp() = runTest {
@@ -225,7 +225,7 @@ class LoginDecisionMatrixConformanceTest {
         assertNull(app.currentUser.first())
     }
 
-    // ── single → 7-day takeover, becomes admin ────────────────────────
+    // ── single → 3-day takeover, becomes admin ────────────────────────
 
     @Test fun branch_single_takeoverReachesAdmin() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
@@ -238,7 +238,7 @@ class LoginDecisionMatrixConformanceTest {
             recovery = AccountResolution.RecoveryState(true, false, credentialId),
             totpEnrolled = false,
             trustedDeviceCount = 0,
-            graceModel = "7d",
+            graceModel = "3d",
             // A rotated (mismatched) registered IRK forces the Phase-B
             // re-pair-with-grace path this branch pins. The instant-pair
             // (Phase A) path is covered in LoginFlowTest.
@@ -247,7 +247,7 @@ class LoginDecisionMatrixConformanceTest {
         val m = loginVm(r, server, app)
         m.begin()
         assertEquals(
-            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.ThreeDay),
             m.phase.first(),
         )
         m.confirmTakeover()
@@ -298,7 +298,7 @@ class LoginDecisionMatrixConformanceTest {
             recovery = AccountResolution.RecoveryState(false, false),
             totpEnrolled = false,
             trustedDeviceCount = 0,
-            graceModel = "7d",
+            graceModel = "3d",
         )
         val m = loginVm(r, server, app)
         m.begin()
@@ -362,7 +362,7 @@ class LoginDecisionMatrixConformanceTest {
             recovery = AccountResolution.RecoveryState(true, false, credentialId),
             totpEnrolled = false,
             trustedDeviceCount = 0,
-            graceModel = "7d",
+            graceModel = "3d",
         )
         val m = loginVm(r, server, app)
         m.begin()

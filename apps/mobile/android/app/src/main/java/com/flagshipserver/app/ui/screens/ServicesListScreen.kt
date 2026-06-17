@@ -148,7 +148,7 @@ fun ServicesListScreen(nav: NavController) {
             FSCard(padding = PaddingValues(FS.space.s6)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Text(
-                        text = "Build your first app",
+                        text = "Build your first service",
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                     )
@@ -169,7 +169,7 @@ fun ServicesListScreen(nav: NavController) {
             FSSearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = "Search apps",
+                placeholder = "Search services",
             )
             // The owner chips only when there's a meaningful split (at least
             // one shared app), so a solo user isn't given a redundant toggle.
@@ -219,7 +219,7 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
     }
 }
 
-/** A dashed-outline "Build another app" affordance under the list. */
+/** A dashed-outline "Build another service" affordance under the list. */
 @Composable
 private fun BuildAnotherAppRow(onClick: () -> Unit) {
     Row(
@@ -235,7 +235,7 @@ private fun BuildAnotherAppRow(onClick: () -> Unit) {
     ) {
         Text("✨", color = FS.colors.primary, style = TextStyle(fontSize = 15.sp))
         Text(
-            text = "Build another app",
+            text = "Build another service",
             color = FS.colors.primary,
             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
         )

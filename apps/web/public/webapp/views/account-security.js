@@ -70,7 +70,7 @@ function renderBadge() {
   const titleText = isMulti ? "Multi-device + 2FA" : "Single-device account";
   const explainer = isMulti
     ? "Recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
-    : "Recovery uses a 7-day waiting period during which your other devices can object.";
+    : "Recovery uses a 3-day waiting period during which your other devices can object.";
   return `
     <div class="card" data-account-security-badge="${escapeHtml(state.accountType ?? "unknown")}">
       <div class="row">
@@ -256,7 +256,7 @@ function bindHandlers() {
     const { inlineConfirm } = await import("../lib/modal.js");
     const ok = await inlineConfirm({
       title: "Disable multi-device + 2FA?",
-      message: "Drops your TOTP secret + recovery codes. The account goes back to single-device + 7-day recovery grace. Refused while other trusted devices exist.",
+      message: "Drops your TOTP secret + recovery codes. The account goes back to single-device + 3-day recovery grace. Refused while other trusted devices exist.",
       okLabel: "Disable",
       danger: true,
     });

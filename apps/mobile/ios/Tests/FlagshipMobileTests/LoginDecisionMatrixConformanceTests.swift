@@ -149,14 +149,14 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         XCTAssertEqual(u, "nobodyhere")
     }
 
-    // MARK: - 4. single → takeover branch (7-day grace, no second factor)
+    // MARK: - 4. single → takeover branch (3-day grace, no second factor)
 
     func test_single_withRecovery_routesToSingleTakeover_7d() async throws {
         let server = makeServer()
         try await seedAccount(server, username: "harry", multi: false, recovery: true)
         let r = try await server.resolveAccount(username: "harry")
         XCTAssertEqual(r.kind, .single)
-        XCTAssertEqual(r.graceModel, .sevenDay)
+        XCTAssertEqual(r.graceModel, .threeDay)
         XCTAssertTrue(r.recovery.present)
 
         // LoginViewModel hands single/multi to the real-account branch.
@@ -294,9 +294,9 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
         }
         let cells: [Cell] = [
             Cell(name: "single-no-recovery", multi: false, recovery: false, totp: false,
-                 expectedKind: .single, expectedGrace: .sevenDay, expectedBranch: .noRecovery(multi: false)),
+                 expectedKind: .single, expectedGrace: .threeDay, expectedBranch: .noRecovery(multi: false)),
             Cell(name: "single-with-recovery", multi: false, recovery: true, totp: false,
-                 expectedKind: .single, expectedGrace: .sevenDay, expectedBranch: .singleTakeover),
+                 expectedKind: .single, expectedGrace: .threeDay, expectedBranch: .singleTakeover),
             Cell(name: "multi-no-recovery", multi: true, recovery: false, totp: true,
                  expectedKind: .multi, expectedGrace: .twentyFourHourTotp, expectedBranch: .noRecovery(multi: true)),
             Cell(name: "multi-with-recovery", multi: true, recovery: true, totp: true,

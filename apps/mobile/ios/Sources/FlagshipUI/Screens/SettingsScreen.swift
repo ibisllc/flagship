@@ -296,7 +296,7 @@ public struct SettingsScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, apps stay installed. The change takes effect after a 24-hour grace window during which another device can object.")
+            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, services stay installed. The change takes effect after a 24-hour grace window during which another device can object.")
         }
         .confirmationDialog(
             "Wipe and start over?",
@@ -347,7 +347,7 @@ public struct SettingsScreen: View {
                 title: accountType == "multi" ? "Multi-device + 2FA" : "Single-device account",
                 subtitle: accountType == "multi"
                     ? "Recovery requires a 6-digit code + 24-hour grace."
-                    : "Recovery is a 7-day waiting period.",
+                    : "Recovery is a 3-day waiting period.",
                 action: onOpenAccountSecurity
             )
         ])
@@ -785,7 +785,7 @@ struct WipeComingSoonSheet: View {
             Text("Coming in v1.1.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
-            Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, apps stay installed.")
+            Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, services stay installed.")
                 .foregroundColor(c.text)
             Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the Keystore-rotation primitives. The full Wipe ceremony needs the new-IRK + new-UMK + new-passkey generation paths exercised end-to-end before we ship it.")
                 .font(FS.font.bodySm())

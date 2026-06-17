@@ -68,7 +68,7 @@ import { ALERT_BIT_T0 } from "./rePairAlerts.js";
  * v1.1 baseline grace — kept exported so existing callers + tests
  * still reference a single canonical multi-device value. Phase 2 of
  * the v1.2 cascade lets `handleInitiateRePair` widen this to
- * `RE_PAIR_SINGLE_GRACE_MS` (7 days) when the target account is
+ * `RE_PAIR_SINGLE_GRACE_MS` (3 days) when the target account is
  * single-device. The multi-device path stays at 24h on purpose:
  * a TOTP proof is required before the grace even starts, so a
  * shorter waiting period is the right trade-off for that mode.

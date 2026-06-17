@@ -30,7 +30,7 @@ struct FrontPageCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("What visitors see at \(serverDomain). Point it at one of your apps, or keep the default Flagship page.")
+                    Text("What visitors see at \(serverDomain). Point it at one of your services, or keep the default Flagship page.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                     switch vm?.phase {
