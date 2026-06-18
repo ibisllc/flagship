@@ -19,10 +19,37 @@ function toGeminiContents(messages: ChatRequest["messages"]) {
     .pop();
   const contents = messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+    .map((m) => {
+      // An assistant turn that emitted tool calls → a `model` turn whose
+      // parts are `functionCall`s (plus any text), so Gemini has memory of
+      // what it invoked when the agentic loop resumes.
+      if (m.role === "assistant" && m.toolUses && m.toolUses.length > 0) {
+        const parts: unknown[] = [];
+        if (m.content.length > 0) parts.push({ text: m.content });
+        for (const t of m.toolUses) {
+          parts.push({ functionCall: { name: t.name, args: t.input ?? {} } });
+        }
+        return { role: "model", parts };
+      }
+      // A tool-result turn → a `user` turn whose parts are
+      // `functionResponse`s keyed by the tool name (Gemini matches by name,
+      // not id).
+      if (m.role === "tool" && m.toolResults && m.toolResults.length > 0) {
+        return {
+          role: "user",
+          parts: m.toolResults.map((r) => ({
+            functionResponse: {
+              name: r.name ?? r.toolUseId,
+              response: { result: r.content, ...(r.isError ? { error: true } : {}) },
+            },
+          })),
+        };
+      }
+      return {
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      };
+    });
   return { contents, systemInstruction };
 }
 

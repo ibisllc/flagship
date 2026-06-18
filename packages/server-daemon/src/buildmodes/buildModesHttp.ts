@@ -146,7 +146,17 @@ export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
       if (!r.ok) {
         return jerr(r.reason === "AI adapt not configured" ? 503 : 502, r.reason);
       }
-      return jok({ ok: true, fileCount: r.fileCount });
+      // The agentic path may have already deployed the app (the AI called
+      // the deploy tool itself); surface that so the client can skip the
+      // separate .../deploy step and link straight to the live URL.
+      return jok({
+        ok: true,
+        fileCount: r.fileCount,
+        ...(r.deployed != null ? { deployed: r.deployed } : {}),
+        ...(r.deployedUrl != null ? { deployedUrl: r.deployedUrl } : {}),
+        ...(r.serviceId != null ? { serviceId: r.serviceId } : {}),
+        ...(r.turns != null ? { turns: r.turns } : {}),
+      });
     }
 
     if (verb === "deploy" && req.method === "POST") {

@@ -12,6 +12,41 @@ import { ProviderError } from "../types.js";
 
 const DEFAULT_BASE = "https://api.openai.com";
 
+/**
+ * Map our provider-agnostic messages onto OpenAI's chat wire shape,
+ * including the tool-call round-trip an agentic loop needs:
+ *   - an ASSISTANT turn that emitted tool calls → `tool_calls: [...]`
+ *     (content may be null when the turn was tool-only).
+ *   - a TOOL turn (the driver's results) → one `role:"tool"` message per
+ *     result, each with the matching `tool_call_id`.
+ * Plain text / multimodal turns pass through as-is.
+ */
+export function toOpenAiMessages(messages: ChatRequest["messages"]): unknown[] {
+  const out: unknown[] = [];
+  for (const m of messages) {
+    if (m.role === "assistant" && m.toolUses && m.toolUses.length > 0) {
+      out.push({
+        role: "assistant",
+        content: m.content.length > 0 ? m.content : null,
+        tool_calls: m.toolUses.map((t) => ({
+          id: t.id,
+          type: "function",
+          function: { name: t.name, arguments: JSON.stringify(t.input ?? {}) },
+        })),
+      });
+      continue;
+    }
+    if (m.role === "tool" && m.toolResults && m.toolResults.length > 0) {
+      for (const r of m.toolResults) {
+        out.push({ role: "tool", tool_call_id: r.toolUseId, content: r.content });
+      }
+      continue;
+    }
+    out.push({ role: m.role, content: m.content });
+  }
+  return out;
+}
+
 export const openai: LLMProvider = {
   name: "openai",
   async chat(req: ChatRequest, cfg: ProviderConfig, fetchImpl?: FetchLike): Promise<ChatResponse> {
@@ -19,7 +54,7 @@ export const openai: LLMProvider = {
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: req.messages,
+      messages: toOpenAiMessages(req.messages),
       max_tokens: req.maxTokens,
       temperature: req.temperature,
     };
@@ -113,7 +148,7 @@ export const openaiStreaming: StreamingLLMProvider = {
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: req.messages,
+      messages: toOpenAiMessages(req.messages),
       max_tokens: req.maxTokens,
       temperature: req.temperature,
       stream: true,

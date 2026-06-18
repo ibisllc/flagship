@@ -292,6 +292,88 @@ describe("google — tool-use", () => {
   });
 });
 
+describe("tool round-trip serialization (agentic multi-turn)", () => {
+  // An assistant turn that called a tool, then the tool result fed back —
+  // the shape an agentic loop appends each turn. The adapters must emit the
+  // provider's native assistant-tool-call + tool-result wire shapes.
+  const HISTORY = [
+    { role: "user" as const, content: "build it" },
+    {
+      role: "assistant" as const,
+      content: "",
+      toolUses: [{ id: "call_1", name: "write_file", input: { path: "flagship.app.json", content: "{}" } }],
+    },
+    {
+      role: "tool" as const,
+      content: "",
+      toolResults: [{ toolUseId: "call_1", name: "write_file", content: '{"ok":true,"path":"flagship.app.json"}' }],
+    },
+  ];
+
+  it("openai: assistant turn → tool_calls; tool turn → role:tool with tool_call_id", async () => {
+    const { f, calls } = jsonFetch({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }], model: "gpt-4o" });
+    await openai.chat({ model: "gpt-4o", messages: HISTORY }, { apiKey: "k" }, f);
+    const sent = calls[0]!.body as { messages: Array<Record<string, unknown>> };
+    const assistant = sent.messages.find((m) => m.role === "assistant")!;
+    expect((assistant.tool_calls as any[])[0].id).toBe("call_1");
+    expect((assistant.tool_calls as any[])[0].function.name).toBe("write_file");
+    // arguments are JSON-stringified.
+    expect(JSON.parse((assistant.tool_calls as any[])[0].function.arguments).path).toBe("flagship.app.json");
+    const toolMsg = sent.messages.find((m) => m.role === "tool")!;
+    expect(toolMsg.tool_call_id).toBe("call_1");
+    expect(toolMsg.content).toContain('"ok":true');
+  });
+
+  it("anthropic: assistant turn → tool_use blocks; tool turn → user with tool_result", async () => {
+    const { f, calls } = jsonFetch({
+      content: [{ type: "text", text: "ok" }],
+      model: "claude-sonnet",
+      stop_reason: "end_turn",
+    });
+    await anthropic.chat({ model: "claude-sonnet", messages: HISTORY }, { apiKey: "k" }, f);
+    const sent = calls[0]!.body as { messages: Array<{ role: string; content: any }> };
+    const assistant = sent.messages.find((m) => m.role === "assistant")!;
+    const toolUseBlock = (assistant.content as any[]).find((b) => b.type === "tool_use");
+    expect(toolUseBlock.id).toBe("call_1");
+    expect(toolUseBlock.name).toBe("write_file");
+    expect(toolUseBlock.input.path).toBe("flagship.app.json");
+    // The tool result is a USER turn carrying tool_result blocks.
+    const userTurns = sent.messages.filter((m) => m.role === "user");
+    const resultTurn = userTurns.find((m) => Array.isArray(m.content) && m.content.some((b: any) => b.type === "tool_result"));
+    expect(resultTurn).toBeTruthy();
+    const resultBlock = (resultTurn!.content as any[]).find((b) => b.type === "tool_result");
+    expect(resultBlock.tool_use_id).toBe("call_1");
+    expect(resultBlock.content).toContain('"ok":true');
+  });
+
+  it("google: assistant turn → functionCall part; tool turn → functionResponse part", async () => {
+    const { f, calls } = jsonFetch({
+      candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+    });
+    await google.chat({ model: "gemini", messages: HISTORY }, { apiKey: "k" }, f);
+    const sent = calls[0]!.body as { contents: Array<{ role: string; parts: any[] }> };
+    const model = sent.contents.find((c) => c.role === "model")!;
+    expect(model.parts.some((p) => p.functionCall?.name === "write_file")).toBe(true);
+    const resp = sent.contents.find((c) => c.parts.some((p) => p.functionResponse))!;
+    expect(resp.parts[0].functionResponse.name).toBe("write_file");
+  });
+
+  it("isError tool result flows to the provider so the model can recover", async () => {
+    const errHistory = [
+      { role: "user" as const, content: "x" },
+      { role: "assistant" as const, content: "", toolUses: [{ id: "v1", name: "validate", input: {} }] },
+      { role: "tool" as const, content: "", toolResults: [{ toolUseId: "v1", name: "validate", content: '{"ok":false,"problems":["bad name"]}', isError: true }] },
+    ];
+    const { f, calls } = jsonFetch({ content: [{ type: "text", text: "fixing" }], model: "claude", stop_reason: "end_turn" });
+    await anthropic.chat({ model: "claude", messages: errHistory }, { apiKey: "k" }, f);
+    const sent = calls[0]!.body as { messages: Array<{ role: string; content: any }> };
+    const resultTurn = sent.messages.find((m) => Array.isArray(m.content) && m.content.some((b: any) => b.type === "tool_result"))!;
+    const block = (resultTurn.content as any[]).find((b) => b.type === "tool_result");
+    expect(block.is_error).toBe(true);
+    expect(block.content).toContain("bad name");
+  });
+});
+
 describe("ollama — graceful no-op for tools", () => {
   it("ignores req.tools and the wire body never carries them (text-only fallback)", async () => {
     const { f, calls } = jsonFetch({

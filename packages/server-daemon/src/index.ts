@@ -1041,6 +1041,24 @@ async function wireRuntimeSurfaces(deps: {
         });
         return resp.content;
       },
+      // ⭐ The AGENTIC adapt path (the product bar). A provider-agnostic
+      // tool-calling chat runner the loop drives over the SHARED build tool
+      // surface (read_file → write_file → validate → deploy) until the app
+      // deploys. The build's transient sealed BYOK credential is opened
+      // just-in-time per call (same store the scratch path uses); the
+      // request carries the tool specs, and the credential's provider must
+      // support tool-calling (anthropic / openai / google / openrouter do —
+      // ollama degrades to the legacy single-shot pass it can't tool-drive).
+      // flagshipserver.com is never in this path. `adaptCredentialAvailable`
+      // above already gates the genuine no-credential case to the clean 503.
+      agentRunner: async (buildId, req) => {
+        const credential = await llmCredentials.get(buildId);
+        if (!credential) throw new Error("AI adapt not configured");
+        return llmHarness.chatWithCredential(credential, {
+          ...req,
+          model: req.model && req.model.length > 0 ? req.model : defaultLlmModel,
+        });
+      },
       // The genuine no-credential case: a build for which the owner
       // never delivered a BYOK key degrades to the same clean 503 as
       // the provider-not-wired case.

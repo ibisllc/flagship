@@ -22,6 +22,17 @@ const ANTHROPIC_VERSION = "2023-06-01";
  * attachment.
  */
 function toAnthropicContent(m: ChatRequest["messages"][number]): unknown {
+  // An assistant turn that emitted tool calls: serialize as a content-block
+  // array — its text (if any) then one `tool_use` block per call — so the
+  // model has memory of what it invoked when the agentic loop resumes.
+  if (m.role === "assistant" && m.toolUses && m.toolUses.length > 0) {
+    const blocks: unknown[] = [];
+    if (m.content.length > 0) blocks.push({ type: "text", text: m.content });
+    for (const t of m.toolUses) {
+      blocks.push({ type: "tool_use", id: t.id, name: t.name, input: t.input });
+    }
+    return blocks;
+  }
   if (!m.attachments || m.attachments.length === 0) return m.content;
   const blocks: unknown[] = [];
   if (m.content.length > 0) blocks.push({ type: "text", text: m.content });
@@ -43,7 +54,23 @@ function splitSystem(messages: ChatRequest["messages"]) {
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
   const conv = messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: toAnthropicContent(m) }));
+    .map((m) => {
+      // A tool-result turn (the driver's reply after running the calls)
+      // becomes a USER message whose content is `tool_result` blocks, per
+      // Anthropic's tool protocol.
+      if (m.role === "tool" && m.toolResults && m.toolResults.length > 0) {
+        return {
+          role: "user" as const,
+          content: m.toolResults.map((r) => ({
+            type: "tool_result",
+            tool_use_id: r.toolUseId,
+            content: r.content,
+            ...(r.isError ? { is_error: true } : {}),
+          })),
+        };
+      }
+      return { role: m.role, content: toAnthropicContent(m) };
+    });
   return { system, conv };
 }
 
