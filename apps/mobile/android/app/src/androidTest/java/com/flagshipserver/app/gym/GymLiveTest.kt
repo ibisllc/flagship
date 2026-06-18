@@ -31,12 +31,19 @@ package com.flagshipserver.app.gym
 import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -148,8 +155,51 @@ class GymLiveTest {
     private fun cdExists(cd: String): Boolean =
         composeRule.onAllNodesWithContentDescription(cd).fetchSemanticsNodes().isNotEmpty()
 
+    /** True if ANY visible text node contains [substr]. */
+    private fun screenHasText(substr: String): Boolean {
+        val nodes = composeRule.onAllNodes(
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+        ).fetchSemanticsNodes()
+        return nodes.any { n ->
+            n.config.getOrNull(SemanticsProperties.Text)
+                ?.any { it.text.contains(substr) } == true
+        }
+    }
+
+    /** Bounded wait until any visible text node contains [substr]. */
+    private fun waitForScreenText(substr: String, timeoutMs: Long = 30_000): Boolean = try {
+        composeRule.waitUntil(timeoutMs) { screenHasText(substr) }
+        true
+    } catch (_: Throwable) {
+        false
+    }
+
     private fun tagExists(tag: String): Boolean =
         composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+
+    /** Concatenated text of the FIRST node carrying content-description [cd], or
+     *  "" if absent. Reads the SemanticsProperties.Text the Compose Text node
+     *  publishes — the rendered journal lines, not the picker chrome. */
+    private fun readNodeText(cd: String): String {
+        val nodes = composeRule.onAllNodesWithContentDescription(cd).fetchSemanticsNodes()
+        if (nodes.isEmpty()) return ""
+        val texts = nodes.first().config.getOrNull(SemanticsProperties.Text) ?: return ""
+        return texts.joinToString("\n") { it.text }
+    }
+
+    /** Best-effort scroll a content-described node into view (so it's on-screen
+     *  for the screenshot). Swallows — a node already on-screen / not scrollable
+     *  must never change the verdict. */
+    private fun scrollToCd(cd: String) {
+        try {
+            val node: SemanticsNodeInteraction =
+                composeRule.onAllNodesWithContentDescription(cd).onFirst()
+            node.performScrollTo()
+            composeRule.waitForIdle()
+        } catch (_: Throwable) {
+            // not scrollable / already visible — fine
+        }
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // The whole slice as ONE ordered flow — adoption is expensive (a real box
@@ -186,15 +236,25 @@ class GymLiveTest {
         )
         gymShot("live-home-online")
 
-        // ── 2. Server detail loads ──────────────────────────────────────────
+        // ── 2. Server detail loads (for the REAL box) ───────────────────────
         composeRule.onAllNodesWithTag("home-pod-row").onFirst().performClick()
         assertTrue(
             "Tapping the live pod row should push server-detail.",
             waitForCd("server-detail-screen", 20_000),
         )
-        // Server-detail's BFF load (real /api/screens/server-detail over the
-        // paired session) drives the cards; the journal-fetch control proves the
-        // detail rendered for a real, paired box.
+        // The adopt's `add-paired-session` POST is async, so the screens client
+        // flips mock→live (sessionToken appears) a beat AFTER the push. The MOCK
+        // detail renders a demo `harry.flagship.services` pod with its own
+        // journal-fetch control — tapping THAT would never fetch the real box.
+        // So wait until the LIVE detail is on-screen: its header carries the real
+        // box FQDN (the mock never does). Only then are the cards box-backed.
+        val liveDetailLoaded = waitForScreenText(fqdn, 60_000)
+        assertTrue(
+            "Server-detail should load the LIVE box ($fqdn) over the paired session, " +
+                "not the mock demo pod.",
+            liveDetailLoaded,
+        )
+        // The journal-fetch control proves the detail rendered for a real box.
         assertTrue(
             "Server-detail should render the Diagnostics → View-journal control.",
             waitForCd("sd-journal-fetch", 30_000),
@@ -203,16 +263,87 @@ class GymLiveTest {
 
         // ── 3. Journal returns REAL lines ───────────────────────────────────
         // The journal read signs a JournalRequest with the box owner IRK (the
-        // gym-adopt override) over the box-pinned session. The fetched lines
-        // render in `sd-journal-output`; assert the box's syslog host prefix
-        // (`flagship-gym-<user>-…`) appears — content that ONLY shows in REAL
-        // journal output, never in the UI chrome.
-        composeRule.onAllNodesWithContentDescription("sd-journal-fetch").onFirst().performClick()
-        val journalAppeared = waitForCd("sd-journal-output", 45_000)
+        // gym-adopt override — the PROTOCOL dot-form `flagship.irk.v1` key the
+        // box's /api/journal pins) over the box transport. The fetched lines
+        // render in `sd-journal-output`. Mirroring iOS, we assert on CONTENT that
+        // ONLY appears in REAL journal output, NOT in the UI chrome: every
+        // journalctl line carries the box's syslog hostname `flagship-gym-<user>-…`
+        // and the daemon runs under `npm[…]`. The unit-picker button reads
+        // "flagship-daemon" — deliberately NOT in this set — so a pass means
+        // actual log lines rendered, not the picker label or the "journal is
+        // empty" placeholder.
+        //
+        // Tap with a retry loop: the first fetch may race a late recomposition
+        // (the mock→live screen swap recreates the JournalCard, resetting its
+        // phase to Idle), so re-tap if no real lines render within the window.
+        val hostPrefix = "flagship-gym-$username"
+        fun journalHasRealLines(): Boolean {
+            val t = readNodeText("sd-journal-output")
+            return t.contains(hostPrefix) || t.contains("+0000 flagship-gym") || t.contains("npm[")
+        }
+        var journalRendered = false
+        for (attempt in 0 until 3) {
+            // The journal card sits far below the fold in the scrolling Column;
+            // Compose only delivers a click to a node that's actually in the
+            // viewport, so scroll it on-screen FIRST (otherwise performClick is a
+            // silent no-op — the onClick never fires).
+            composeRule.onAllNodesWithContentDescription("sd-journal-fetch").onFirst()
+                .performScrollTo()
+                .performClick()
+            journalRendered = try {
+                composeRule.waitUntil(30_000) { journalHasRealLines() }
+                true
+            } catch (_: Throwable) {
+                false
+            }
+            if (journalRendered) break
+            composeRule.waitForIdle()
+        }
+        val journalText = readNodeText("sd-journal-output")
+        // Bring the rendered log lines on-screen for the screenshot. The journal
+        // card sits far below the metrics in the scrolling Column and the output
+        // renders just under the "View journal" button, so a single
+        // performScrollTo lands the button at the fold with the lines below it.
+        // Drag the OUTPUT block itself up by its center so the monospaced lines
+        // fill the frame (a root swipe would scroll the whole page back to the
+        // top). Cosmetic only — the assertion already proved the lines via
+        // readNodeText; the test log also dumps them on failure.
+        scrollToCd("sd-journal-output")
+        composeRule.waitForIdle()
+        try {
+            composeRule.onAllNodesWithContentDescription("sd-journal-output").onFirst()
+                .performTouchInput {
+                    swipeUp(startY = centerY + 200f, endY = centerY - 600f)
+                }
+            composeRule.waitForIdle()
+        } catch (_: Throwable) {
+            // best-effort framing — never affects the verdict
+        }
+        Thread.sleep(700)
         gymShot("live-journal-lines")
+        // Surface what we got into the test log on failure for fast triage.
+        android.util.Log.i(
+            "GymLiveTest",
+            "journal: outputNodeExists=${cdExists("sd-journal-output")} " +
+                "fetchNodeExists=${cdExists("sd-journal-fetch")} " +
+                "text.len=${journalText.length} text(400)=${journalText.take(400)}",
+        )
+        if (!journalRendered) {
+            // Dump every visible text node so a Failed-phase error message
+            // (which has no contentDescription) shows up in the test log.
+            val all = composeRule.onAllNodes(
+                SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+            ).fetchSemanticsNodes()
+            val dump = all.mapNotNull { n ->
+                n.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }
+            }.filter { it.isNotBlank() }.joinToString(" || ")
+            android.util.Log.i("GymLiveTest", "screen-text-dump: ${dump.take(1500)}")
+        }
         assertTrue(
-            "Fetching the journal should render REAL daemon log lines from the live box.",
-            journalAppeared,
+            "Fetching the journal should return REAL daemon log lines (host-prefixed " +
+                "'$hostPrefix' or 'npm[') from the live box, not just the picker label / " +
+                "an empty journal. Got: ${journalText.take(200)}",
+            journalRendered,
         )
 
         // ── 4. Install a service via the REAL signing primitive ─────────────
