@@ -30,10 +30,14 @@ import {
   signPhoneOrder,
   signInstallService,
   signUninstallService,
+  signSetServiceEnv,
+  signSetDeadManPolicy,
   type JournalRequest,
   type PhoneOrder,
   type InstallServiceRequest,
   type UninstallServiceRequest,
+  type SetServiceEnvRequest,
+  type SetDeadManPolicy,
 } from "@flagship/protocol";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
@@ -139,14 +143,15 @@ async function main(): Promise<void> {
   // ── 2. Provision + bring-up (unless reusing) ──────────────────────────────
   if (!REUSE_USER) {
     log("[provision]");
-    const provisioned = await check("provision a fresh box via the admin flow", () => {
+    const boxSize = process.env.GYM_BOX_SIZE || "cpx31"; // full-platform default (docker + a real container)
+    const provisioned = await check(`provision a fresh ${boxSize} box via the admin flow`, () => {
       try {
-        execFileSync("node", ["scripts/sample-user.mjs", "create", user], {
+        execFileSync("node", ["scripts/sample-user.mjs", "create", user, "--size", boxSize], {
           env: provEnv,
           encoding: "utf8",
           timeout: 240000,
         });
-        return `provisioned ${user}`;
+        return `provisioned ${user} (${boxSize})`;
       } catch (e: any) {
         // The `create` CLI BLOCKS polling state=provisioning; a real Hetzner box
         // takes longer than that window to register, so a poll timeout just means
@@ -418,6 +423,47 @@ async function main(): Promise<void> {
           return `rejected ${r.status}`;
         });
 
+        // DEAD-MAN server control (owner-IRK). We exercise the signed control
+        // path WITHOUT ever arming the kill-switch: a forged policy must be
+        // rejected, and a VALID policy with enabled:false must be accepted (it
+        // disarms — a live box must never be left with a lapsing lockout).
+        await check("dead-man policy REJECTS a forged signature", async () => {
+          const req: SetDeadManPolicy = {
+            serverId: fqdn,
+            enabled: false,
+            windowMs: 24 * 60 * 60 * 1000,
+            graceMs: 60 * 60 * 1000,
+            lockoutMode: "off",
+            issuedAt: Date.now(),
+          };
+          const r = await http(`https://${fqdn}/api/deadman/policy`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ request: req, signature: "00".repeat(64) }),
+          });
+          assert(r.status === 401 || r.status === 403, `expected 401/403, got ${r.status}`);
+          return `rejected ${r.status}`;
+        });
+        await check("dead-man policy set (owner-IRK signed, DISABLED — never arms) → 200", async () => {
+          const req: SetDeadManPolicy = {
+            serverId: fqdn,
+            enabled: false, // deliberately disabled — proves the control path, leaves no lockout
+            windowMs: 24 * 60 * 60 * 1000,
+            graceMs: 60 * 60 * 1000,
+            lockoutMode: "off",
+            issuedAt: Date.now(),
+          };
+          const sig = bytesToHex(signSetDeadManPolicy(req, userIrk));
+          const r = await http(`https://${fqdn}/api/deadman/policy`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ request: req, signature: sig }),
+          });
+          assert(r.status === 200, `got ${r.status}: ${r.text.slice(0, 120)}`);
+          assert(r.json?.enabled === false, `expected enabled:false echo, got ${JSON.stringify(r.json)}`);
+          return "accepted (disarmed)";
+        });
+
         // SERVICE LIFECYCLE — create / run / delete a real service (owner-IRK).
         // An image-only app (no data.stores) so it needs only docker, not the
         // full data stack.
@@ -457,6 +503,37 @@ async function main(): Promise<void> {
           return `installed + listed (${apps.length} services)`;
         });
         if (installed) {
+          // MANAGE the service: set its environment (owner-IRK signed). This is
+          // the "managing services" path — values are secret, never echoed.
+          await check("manage service env (SetServiceEnv, owner-IRK signed) → ok", async () => {
+            const req: SetServiceEnvRequest = {
+              serverId: fqdn,
+              creator: user,
+              slug,
+              env: { LIVE_E2E_PROBE: "ok", GREETING: "hello-from-live-e2e" },
+              issuedAt: Date.now(),
+            };
+            const sig = bytesToHex(signSetServiceEnv(req, userIrk));
+            const serviceId = `${user}-${slug}`;
+            const r = await http(
+              `https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`,
+              { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
+              60_000,
+            );
+            assert(r.status === 200, `set-env ${r.status}: ${r.text.slice(0, 160)}`);
+            return "env applied (2 vars)";
+          });
+          await check("manage service env REJECTS a forged signature", async () => {
+            const req: SetServiceEnvRequest = { serverId: fqdn, creator: user, slug, env: { X: "y" }, issuedAt: Date.now() };
+            const serviceId = `${user}-${slug}`;
+            const r = await http(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ request: req, signature: "00".repeat(64) }),
+            });
+            assert(r.status >= 400 && r.status < 500, `expected a 4xx rejection, got ${r.status}`);
+            return `rejected ${r.status}`;
+          });
           await check("installed service serves a running container (best-effort runtime)", async () => {
             // Best-effort: install + uninstall (above/below) are the hard
             // lifecycle proofs. The container actually answering at its subdomain
@@ -489,11 +566,16 @@ async function main(): Promise<void> {
 
   // ── 6.6 Control-plane: maintainer-trust (pass path) + marketplace ─────────
   log("[control plane: trust + marketplace]");
-  await check("maintainer-blessing chain served (GET /api/maintainer-blessing 200)", async () => {
+  await check("maintainer-blessing chain served + CA mandate is LIVE (not expired)", async () => {
     const r = await http(`https://${CONTROL}/api/maintainer-blessing`);
     assert(r.status === 200, `got ${r.status}`);
     assert(r.json?.pinnedMandateHash || r.json?.caPubkey || r.json?.mandates, `unexpected: ${r.text.slice(0, 80)}`);
-    return `caAuthorizedNow=${r.json?.caPubkeyAuthorizedNow}`;
+    // The PASS path for "expired-mandate handling": the served CA key must be
+    // authorized by the mandate/endorsement chain RIGHT NOW (within its lease).
+    // The FAIL path (an actually-lapsed lease → refuse to sign) is covered by
+    // in-process vitest (caGate / caLeaseWarning / serviceBlessing).
+    assert(r.json?.caPubkeyAuthorizedNow === true, `CA mandate NOT live (caPubkeyAuthorizedNow=${r.json?.caPubkeyAuthorizedNow}) — lease lapsed?`);
+    return `CA mandate live (caPubkeyAuthorizedNow=true), pin=${String(r.json?.pinnedMandateHash).slice(0, 12)}…`;
   });
   await check("marketplace browse (GET /api/marketplace/search) — 200, or 404 when branch-gated", async () => {
     const r = await http(`https://${CONTROL}/api/marketplace/search?limit=5`);
