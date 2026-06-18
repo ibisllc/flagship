@@ -121,9 +121,72 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-17**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-18**.
 
-### 2026-06-17 (latest) — UI test gym built end-to-end + a real GA parity bug fixed
+### 2026-06-18 (latest) — ⭐ LIVE gym Tier-2 box PROVEN online end-to-end (3 real fixes)
+
+**A real gym box now provisions into the `gym.` test env and serves
+browser-trusted Let's Encrypt TLS at its gym FQDN — the live Tier-2 slice's
+backend is proven, so `gym:total`/`gym:live` can run against a real box, not a
+mock.** Validated live: `home.gymbox.gym.flagship.services` → **HTTP 200, TLS
+verify=0** (LE cert `issuer=CN=YR2`, valid 90d), serving the daemon's apex page.
+Getting there surfaced + fixed **three real bugs** (all on `main`, pushed; `tsc
+-b` clean, +4 control-plane tests):
+
+1. **Cloud-init didn't pin the daemon to its provisioning control plane**
+   (`demoUsersAdminCloudInit.ts`, `893e0a87`). `daemon.env` wrote only
+   `FLAGSHIP_SUBDOMAIN` + `FLAGSHIP_IDENTITY_PRIV_HEX`, so `controlPlaneBaseUrl`
+   fell back to the `flagshipserver.com` default — a gym box did hub-discovery,
+   ACME DNS-01, and the status heartbeat against PROD even though it *registered*
+   against gym (via the already-threaded `registrationUrl`). Now writes
+   `FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE` (gym). Prod unaffected (CTRL_BASE
+   == the default there).
+2. **The gym Fly hub verified box claims against the wrong `.com`**
+   (`fly.gym.toml`, `0bf8e7e7`). `server.ts: comBaseUrl = FLAGSHIP_COM_BASE_URL
+   ?? flagshipserver.com`, and the gym Fly app never set it → the hub's
+   `irkLookup` (fail-closed) hit PROD, where the gym box's user doesn't exist →
+   tunnel claim rejected → no HELLO_ACK → `tunnel.ready()` hangs at runtime.ts:849
+   → ACME never starts. Set `FLAGSHIP_COM_BASE_URL=https://gym.flagshipserver.com`
+   (Fly secret for the live app + durable in `fly.gym.toml` [env]). After this the
+   daemon logged `tunnel online … ACME issuance running`.
+3. **ACME DNS-01 publish wasn't idempotent** (`cloudflareDns.ts`, `0bf8e7e7`).
+   `createTxt` is a plain CF create; a daemon restart / issuance retry that
+   re-publishes the same challenge value before the prior record is swept hit CF
+   **81058 "An identical record already exists"** and wedged issuance *forever*
+   (observed live, attempts 1–5 backing off to 300s). Now treats 81058 as success
+   (lists + returns the existing record) — the DNS-01 invariant is only that the
+   TXT value is present. **This is a prod bug too**, not gym-only. After deploy:
+   `🔒 cert installed … on attempt 1`.
+
+**Also:** scaled the gym Fly app to **1 machine** (durable in `fly.gym.toml`) — a
+box tunnels to a single hub machine and the registry is per-machine, so a 2nd
+machine made `:443` SNI routing land ~50% on a machine with no route (intermittent
+`SSL_ERROR_SYSCALL`). One machine → **6/6 HTTP 200**. HA isn't the point for a
+one-box test env.
+
+**Gym infra now fully live + healthy:** control plane `gym.flagshipserver.com/api/health`
+200 · data plane `flagship-services-gym.fly.dev:8443/api/health` 200 (1 machine) ·
+per-box DNS + ACME DNS-01 publish into `flagship.services` via the gym's own
+`CLOUDFLARE_DNS_API_TOKEN`. The gym box-bring-up chain (provision → register →
+tunnel→gym-hub → LE cert via gym DNS-01 → serve) is the "iso" the live tests
+needed; it's done.
+
+**Open / next:**
+- **The live Tier-2 slice itself is an iOS XCUITest** (`FlagshipAppUITests/GymLiveTests`,
+  `tools/gym/src/live.ts`) that *creates its own* box through the app under
+  `gymdemo` then installs a service. It's gated detect-and-skip on
+  `gym.flagshipserver.com/api/health` (now reachable → it will RUN, not skip).
+  Running it needs an Xcode build (`-apex-host gym.flagshipserver.com`) + a ~15-min
+  real provision; that's the remaining owner-side run. Tier-1 `gym:total` (web
+  Playwright + fixtures) runs now with no backend.
+- **`gymbox` (Hetzner `142510080`, `167.233.123.181`) is BILLING (~$0.50/day).**
+  It was the pre-flight proof; the iOS slice provisions its own. Tear down when
+  done: delete via the Hetzner API token, or `node scripts/sample-user.mjs` has no
+  delete — use the gym admin/Hetzner API. (Two stale `gymdemo` pending orders +
+  any leftover `_acme-challenge` TXT are harmless.)
+- **ROTATE the test Hetzner token** (it was pasted into a chat transcript).
+
+### 2026-06-17 — UI test gym built end-to-end + a real GA parity bug fixed
 
 **The "gym" (automated UI-test harness, `docs/ui-test-gym.md`) is built,
 integrated, and one-command-runnable on `main`** — a deterministic gate +

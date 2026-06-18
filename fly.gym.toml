@@ -48,12 +48,17 @@ kill_timeout = "30s"
   FLAGSHIP_COM_BASE_URL = "https://gym.flagshipserver.com"
 
 # External :443 → internal :8443 (raw TCP, SNI passthrough). Identical to prod.
+# ⭐ ONE machine (vs prod's HA pair): a box opens its tunnel to a SINGLE hub
+# machine, and the in-memory registry is per-machine, so a :443 SNI connection
+# load-balanced to the OTHER machine has no route → intermittent
+# SSL_ERROR_SYSCALL. One machine makes gym SNI routing deterministic for the
+# live Tier-2 slice (the gym serves one box at a time; HA isn't the point).
 [[services]]
   protocol = "tcp"
   internal_port = 8443
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 2
+  min_machines_running = 1
 
   [[services.ports]]
     port = 443
@@ -66,7 +71,7 @@ kill_timeout = "30s"
   internal_port = 3000
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 2
+  min_machines_running = 1
 
   [[services.ports]]
     port = 8443
