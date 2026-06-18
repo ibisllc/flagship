@@ -261,6 +261,10 @@ SERVER_NAME="$(jq -r .serverName "$BLOB_JSON")"
 REGISTRATION_URL="$(jq -r .registrationUrl "$BLOB_JSON")"
 PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
 AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
+# The account (owner) IRK pubkey. The box pins this as the verifier for every
+# owner-signed request (front-page / journal / power / dead-man). On the demo
+# path it's the deterministic demo User IRK the admin minted into the blob.
+USER_IRK_PUB="$(jq -r .authCode.userPubKey "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
 # Provisioning observability — POST a canonical ProvisionStatusPhase to the
@@ -408,10 +412,23 @@ shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 #     gym.flagshipserver.com → the box lands in the gym's hub + DNS zone
 #     instead of contaminating (or vanishing into) prod.
 mkdir -p /etc/flagship
+# Server config (FLAGSHIP_CONFIG). Gives the daemon the owner IRK so
+# wireOwnerHandlers() mounts the owner-signed API — front-page (owner-assignable
+# apex), journal (IRK-signed diagnostics), power, dead-man. WITHOUT a config the
+# daemon logs "FLAGSHIP_CONFIG not provided; skipping local HTTP API" and every
+# one of those endpoints 404s (the cfg===null short-circuit). bakPublicKey reuses
+# the phone-delegated key — a valid 32-byte pub, and it's NOT on the owner-verify
+# path (that's irkPublicKey). A malformed config fails closed (daemon falls back
+# to no-cfg), so this never blocks the cert/serving bring-up.
+cat > /etc/flagship/config.json <<CFGEOF
+{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"}
+CFGEOF
+chmod 600 /etc/flagship/config.json
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
 FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
 FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
+FLAGSHIP_CONFIG=/etc/flagship/config.json
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 

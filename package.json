@@ -26,7 +26,8 @@
     "gym": "npm --workspace=@flagship/gym run gym --",
     "gym:every-merge": "npm --workspace=@flagship/gym run gym -- every-merge",
     "gym:total": "npm --workspace=@flagship/gym run gym -- total",
-    "gym:live": "npm --workspace=@flagship/gym run gym -- live"
+    "gym:live": "npm --workspace=@flagship/gym run gym -- live",
+    "live-e2e": "tsx tools/live-e2e/run.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
