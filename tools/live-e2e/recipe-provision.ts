@@ -131,6 +131,34 @@ async function http(
   }
 }
 
+/**
+ * Raw response headers (lower-cased keys) + status for a curl request.
+ * Used by the CORS checks so we can assert on Access-Control-* headers,
+ * which the fetch-based `http` helper above doesn't surface.
+ */
+function curlHeaders(
+  url: string,
+  args: string[],
+): { status: number; headers: Record<string, string>; raw: string } {
+  const out = spawnSync("curl", ["-s", "-D", "-", "-o", "/dev/null", ...args, url], {
+    encoding: "utf8",
+    timeout: 25000,
+  });
+  const raw = (out.stdout || "") + (out.stderr || "");
+  const lines = raw.split(/\r?\n/);
+  const status = parseInt((/HTTP\/\S+\s+(\d+)/.exec(lines[0] || "") || [])[1] || "0", 10) || 0;
+  const headers: Record<string, string> = {};
+  for (let i = 1; i < lines.length; i++) {
+    const idx = lines[i]!.indexOf(":");
+    if (idx === -1) continue;
+    const k = lines[i]!.slice(0, idx).trim().toLowerCase();
+    const v = lines[i]!.slice(idx + 1).trim();
+    // Preserve the first occurrence; CORS headers are single-valued here.
+    if (!(k in headers)) headers[k] = v;
+  }
+  return { status, headers, raw };
+}
+
 /** issuer / subject / SAN list for a live host's served cert (openssl s_client). */
 function certInfo(fqdn: string): { issuer: string; subject: string; sans: string[] } {
   const out = spawnSync(
@@ -401,6 +429,46 @@ async function main(): Promise<void> {
         assert(/Let's Encrypt/i.test(c.issuer), `issuer=${c.issuer || "<none>"}`);
         assert(c.subject.includes(fqdn), `subject=${c.subject || "<none>"}`);
         return c.issuer.replace(/.*CN ?= ?/i, "");
+      });
+
+      // ── CORS — the box's own /api/* must answer the webapp origin ─────────
+      log("[CORS — daemon /api/* honours the webapp origin]");
+      const webappOrigin = `https://web.${CONTROL}`; // web.gym.flagshipserver.com
+      const apiUrl = `https://${fqdn}/api/front-page`;
+      await check("OPTIONS preflight from the webapp origin echoes ACAO + methods/headers", () => {
+        const r = curlHeaders(apiUrl, [
+          "-X", "OPTIONS",
+          "-H", `Origin: ${webappOrigin}`,
+          "-H", "Access-Control-Request-Method: GET",
+          "-H", "Access-Control-Request-Headers: content-type, x-flagship-session",
+        ]);
+        assert(r.status === 204 || r.status === 200, `preflight status ${r.status}`);
+        assert(
+          r.headers["access-control-allow-origin"] === webappOrigin,
+          `ACAO=${r.headers["access-control-allow-origin"] ?? "<none>"} (want ${webappOrigin})`,
+        );
+        const methods = r.headers["access-control-allow-methods"] ?? "";
+        assert(/GET/.test(methods) && /POST/.test(methods) && /OPTIONS/.test(methods), `methods=${methods}`);
+        const hdrs = (r.headers["access-control-allow-headers"] ?? "").toLowerCase();
+        assert(/x-flagship-session/.test(hdrs) && /content-type/.test(hdrs), `allow-headers=${hdrs}`);
+        return `${r.status} ACAO=${r.headers["access-control-allow-origin"]} methods=[${methods}]`;
+      });
+      await check("actual GET from the webapp origin carries ACAO + Vary: Origin", () => {
+        const r = curlHeaders(apiUrl, ["-H", `Origin: ${webappOrigin}`]);
+        assert(
+          r.headers["access-control-allow-origin"] === webappOrigin,
+          `ACAO=${r.headers["access-control-allow-origin"] ?? "<none>"} (want ${webappOrigin})`,
+        );
+        assert(/origin/i.test(r.headers["vary"] ?? ""), `Vary=${r.headers["vary"] ?? "<none>"}`);
+        return `http ${r.status} ACAO=${r.headers["access-control-allow-origin"]} Vary=${r.headers["vary"]}`;
+      });
+      await check("NEGATIVE — an evil Origin gets NO Access-Control-Allow-Origin echoed", () => {
+        const r = curlHeaders(apiUrl, ["-H", "Origin: https://evil.example"]);
+        assert(
+          r.headers["access-control-allow-origin"] === undefined,
+          `leaked ACAO=${r.headers["access-control-allow-origin"]} to evil.example`,
+        );
+        return `http ${r.status} no ACAO (rejected)`;
       });
 
       // ── 7. PROVE app-ownership via the app IRK ───────────────────────────
