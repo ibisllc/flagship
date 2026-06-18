@@ -186,6 +186,49 @@ needed; it's done.
   any leftover `_acme-challenge` TXT are harmless.)
 - **ROTATE the test Hetzner token** (it was pasted into a chat transcript).
 
+### 2026-06-18 — first FULL multi-surface gym e2e run (web·iOS·iPad·android·live) + 3 gym fixes
+
+**Ran the whole gym across all four surfaces on the Mac, in parallel, with the
+live `gym.` env reachable.** Results + what it surfaced (commit `821f323a`):
+- **web 45/45 PASS** (Playwright→chromium, self-served webapp). Clean.
+- **android 15/15** after fixing **2 real test-parity gaps the gym caught** (the
+  app was correct, the tests over-/mis-asserted): (1) the D5 lifecycle-pill tests
+  (`awaitingUnlockPillOnHome`/`deadServerSurfacesOnHome`) queried the MERGED
+  semantics tree, but the pill `testTag` is in `FSListRow`'s `below` slot under
+  the row's `combinedClickable` (which merges descendants) → query the UNMERGED
+  tree; (2) `onNodeWithTag` (exactly-1) vs the demo `Music` pod ALSO classifying
+  DEAD → 2 never-online pills → use `onAllNodesWithTag().onFirst()` (≥1, mirroring
+  iOS XCUITest `.exists`). These `androidTotal` rows had only ever been
+  compile-gated; first on-device run = first-run calibration (as predicted).
+- **iOS 36/36 fixtures PASS** (iPhone + iPad sims; the iPad D8 rows too). The one
+  initial red (`ios-total-ai-keys-add-form`) was a **false negative I induced** —
+  running android `gradle` builds concurrently with the iOS `xcodebuild` tripped a
+  DerivedData DB lock; re-run **alone it passes** (`totalTestCount:1`). Lesson:
+  don't run two native builds at once on this 16 GB Mac.
+- **⭐ The live slice exposed a gym-correctness bug + a missing harness.** The
+  `ios-live-vertical-slice` (the ONLY `backend:live` scenario) was **false-passing
+  in 9s with zero screenshots**: `GymLiveTests.swift` **does not exist** (only
+  EveryMerge/Smoke/IPad/Total/TotalDetail do), and the iOS adapter computed
+  `passed = (xcodebuild exit 0)` with **no 0-test guard** — `xcodebuild` exits 0
+  when `-only-testing:` matches nothing, so an absent harness silently went green.
+  Fixed the adapter to read the executed count from the `.xcresult`
+  (`xcresulttool ... test-results summary` → `totalTestCount`); 0 ⇒ FAIL,
+  unreadable ⇒ trust exit code (no false-fail) — mirrors the Android adapter's
+  long-standing guard. **Verified: `gym live` now correctly FAILS** the
+  unimplemented slice instead of false-passing.
+
+**Net:** web + iOS + iPad + android fixture coverage is GENUINELY green
+(45+36+15). The true "with server" e2e on iOS is **NOT actually implemented** —
+`GymLiveTests.swift` must be written (the backend it needs is proven: the live
+gym box `home.gymbox.gym.flagship.services` serves a real LE-padlock, see the
+entry above). Until then `gym:total`/`gym:live` are HONESTLY red on the live slice
+(the right state — a declared-but-absent test should fail the gate, not pass it).
+Follow-ups: implement `GymLiveTests.swift` (provision-through-app vs. a lighter
+launch-live-reach-home smoke — the full 15-min UI provision is fragile for a
+gate); the demo `Music` offline pod classifying DEAD/"Never came online" is a
+pre-existing cross-platform fixture nuance (no distinct offline liveness state),
+worth a product call but not introduced here.
+
 ### 2026-06-17 — UI test gym built end-to-end + a real GA parity bug fixed
 
 **The "gym" (automated UI-test harness, `docs/ui-test-gym.md`) is built,
