@@ -243,11 +243,14 @@ GIT_REF="${args.installerGitRef}"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \\
-    git curl jq ca-certificates xxd cryptsetup lvm2 gnupg \\
-    docker.io docker-cli docker-compose \\
+    git curl jq ca-certificates xxd cryptsetup lvm2 gnupg openssl \\
     || echo "[flagship-bootstrap] WARNING: some apt packages failed; check above"
-# Docker runs the app containers (service install) + the data-services stack.
-# docker-cli is listed explicitly because --no-install-recommends drops it.
+# Docker on a SEPARATE line so a docker failure can never break the core
+# packages (git/curl/jq) the bootstrap depends on — a single bad name aborts the
+# whole apt invocation. On Debian, docker.io bundles the CLI (there is NO
+# docker-cli package — listing it aborts the install).
+apt-get install -y --no-install-recommends docker.io docker-compose \\
+    || echo "[flagship-bootstrap] WARNING: docker install failed; apps won't run"
 systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
 
 # NodeSource Node 20 — official upstream Node.js apt repo. Idempotent
@@ -434,7 +437,8 @@ chmod 600 /etc/flagship/config.json
 # generate a random 32-byte SWK here: this is what flips a demo box from
 # "cert+serve only" (GET /api/services → 503) to a full app-hosting box. (The
 # demo root is plaintext, so this is a TEST sealing key, not a real at-rest key.)
-head -c 32 /dev/urandom | xxd -p -c 32 > /var/flagship/swk.hex
+openssl rand -hex 32 > /var/flagship/swk.hex 2>/dev/null \\
+    || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \\n' > /var/flagship/swk.hex
 chmod 600 /var/flagship/swk.hex
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
