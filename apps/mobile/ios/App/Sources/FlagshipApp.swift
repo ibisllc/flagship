@@ -471,6 +471,35 @@ struct FlagshipApp: App {
                 }
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
+                    // GYM-ONLY live-e2e identity adoption (the iOS analogue of
+                    // the webapp's __gymAdopt). When launched with
+                    // `-gym-adopt-seed <hex> -gym-username <u> -gym-fqdn <f>`,
+                    // install the box's owner UMK seed, mark paired + live, and
+                    // mint a box paired session — so an XCUITest drives the REAL
+                    // app against a REAL box. Production never passes the arg, so
+                    // this is dead in the live app. Runs async (network);
+                    // restorePersistedIdentity() stands aside while it's requested.
+                    if let gymArgs = GymLiveAdoption.parse(ProcessInfo.processInfo.arguments) {
+                        Task { @MainActor in
+                            do {
+                                try await GymLiveAdoption.adopt(
+                                    gymArgs,
+                                    app: appState,
+                                    dev: dev,
+                                    store: sessionStore,
+                                    privacy: privacy,
+                                    urlSession: BoxPinnedURLSession.make(
+                                        pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
+                                    )
+                                )
+                            } catch {
+                                // Surface to the test log + leave a visible
+                                // unpaired shell (the test asserts on paired
+                                // state, so a failed adopt fails the test).
+                                print("GymLiveAdoption FAILED: \(error)")
+                            }
+                        }
+                    }
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)
                     // Wire the FlagshipCore security-alerts bridge → the
@@ -508,6 +537,10 @@ struct FlagshipApp: App {
     private func restorePersistedIdentity() async {
         guard !persistedIdentityRestoreStarted else { return }
         persistedIdentityRestoreStarted = true
+        // GYM-ONLY: a `-gym-adopt-seed` launch owns the session (installed by
+        // GymLiveAdoption in onAppear) and keeps the biometric lock off so the
+        // headless test reaches the shell — skip restore and lock arming.
+        if GymLiveAdoption.isRequested { return }
 
         // Arm the user's local lock preference before restoring. The directory
         // lookup below never participates in deciding whether local access is
