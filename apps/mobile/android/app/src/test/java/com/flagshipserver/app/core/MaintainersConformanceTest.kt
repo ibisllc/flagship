@@ -251,8 +251,10 @@ class MaintainersConformanceTest {
      *  and an empty pin fails closed with `no-pin` (never falls back). */
     @Test
     fun pinnedConstant_isExactPublishedValue_andEmptyPinFailsClosed() {
+        // ⚠️ GYM TEST BRANCH ONLY — the gym self-contained chain pin. On `main`
+        // this is the prod pin "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae".
         assertEquals(
-            "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae",
+            "87f5ae60cd1cfc0629fdf10ab97a547d33bca68bf3a1426614096a3054d57ae7",
             MaintainersTrust.pinnedMandateHash,
         )
         val chain = MaintainersVerifier.verifyMandateChainFromPin("", emptyList())
