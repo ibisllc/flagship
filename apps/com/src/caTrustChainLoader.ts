@@ -36,24 +36,26 @@ import {
   type CaTrustChain,
 } from "@flagship/protocol";
 
-// Bundled at build time by esbuild/wrangler (resolveJsonModule).
-// Path: apps/com/src → repo root `.maintainers/`.
-// The ca-track ORIGIN mandate (the pin anchors exactly this file's
-// canonical bytes — see Gate B / docs/ca-operations.md).
-import caOriginMandate from "../../../.maintainers/tracks/ca/mandates/20260519T120808-706880c9.json";
-// The committed CaEndorsement leases. Starts `[]`; the human ceremony
-// appends (see docs/ca-operations.md "CaEndorsement ceremony runbook").
-import caEndorsementsBundle from "../../../.maintainers/ca-endorsements/bundle.json";
+// ⚠️ GYM TEST BRANCH ONLY divergence from `main`. On `main` these import the
+// committed prod `.maintainers/` material (ca-track ORIGIN mandate +
+// CaEndorsement `bundle.json`). On the `gym` branch the worker serves the gym's
+// OWN self-contained chain — one key K that is BOTH the gym maintainer
+// authority AND the gym worker CA key — so it loads the gym root Mandate + the
+// live 100-yr gym CaEndorsement from `@flagship/control-plane` gymTrustMaterial.
+// The gym apps verify this REAL chain against the gym pin (no anchor bypass).
+import {
+  GYM_CA_TRACK_MANDATES,
+  GYM_CA_ENDORSEMENTS,
+} from "@flagship/control-plane";
 
 /**
  * The committed ca-track mandate log, oldest-first (canonical-log
- * order). Today this is the single ORIGIN mandate; successor mandates
- * (added by future ceremonies) extend this array — keep it
- * filename-sorted, exactly the daemon's `readStoreFromDisk` convention.
+ * order). GYM BRANCH: the single self-signed gym root Mandate (holder = K).
  */
-const CA_TRACK_MANDATES: Mandate[] = [caOriginMandate as Mandate];
+const CA_TRACK_MANDATES: Mandate[] = GYM_CA_TRACK_MANDATES as unknown as Mandate[];
 
-const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
+const CA_ENDORSEMENTS: CaEndorsement[] =
+  GYM_CA_ENDORSEMENTS as unknown as CaEndorsement[];
 
 /**
  * Build the #30 `CaTrustChain` the control-plane handlers consult. The

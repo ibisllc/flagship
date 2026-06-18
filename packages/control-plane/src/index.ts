@@ -67,6 +67,9 @@ export * from "./demoIdentity.js";
 export * from "./demoProvisioningProvider.js";
 export * from "./demoCloudConfig.js";
 export * from "./gymProvision.js";
+// ⚠️ GYM TEST BRANCH ONLY — not on `main`. The gym's self-contained
+// maintainer-trust chain material (public throwaway key K).
+export * from "./gymTrustMaterial.js";
 export * from "./personalizeIso.js";
 export * from "./outstandingOrders.js";
 export * from "./ctMonitor.js";
