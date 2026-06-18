@@ -124,6 +124,7 @@ import {
   handleAdminClaimAndIssue,
   handleAdminMintDeviceGrant,
   handleAdminCloudInitNow,
+  handleGymProvision,
   handleAdminSnapshotNow,
   handleMintDeviceGrant,
   handleListDeviceGrants,
@@ -554,6 +555,10 @@ const ROUTE_RE = {
   DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
+  // Phase 1 of the gym recipe→Hetzner pipeline. GYM-ONLY: provisions a box
+  // from an app-signed recipe + the app's TEST IRK priv. Gated on the gym env
+  // in the dispatcher below — must never run on prod.
+  GYM_PROVISION: /^\/api\/gym\/provision$/,
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
@@ -2452,6 +2457,57 @@ export async function tryControlPlane(
       }
       return finishPlain(await handleGetDemoUser(demoDeps, decodeURIComponent(m[1]!)));
     }
+  }
+
+  // Phase 1 of the gym recipe→Hetzner pipeline (docs/gym-recipe-to-hetzner.md).
+  // gym-only; accepts an IRK priv to self-mint entitlements — must never be
+  // enabled on prod. The dispatch is fenced THREE ways: (1) the env must be the
+  // gym env (CONTROL_APEX is the gym apex — prod leaves it unset / a non-gym
+  // literal), (2) the admin secret header (same x-admin-secret gate as the demo
+  // provision routes), and (3) HCLOUD_TOKEN must be configured. Any miss → the
+  // request never reaches handleGymProvision. Prod uses the entitlement relay
+  // instead (out of scope here).
+  if (method === "POST" && ROUTE_RE.GYM_PROVISION.test(path)) {
+    const controlApex = env.CONTROL_APEX ?? "flagshipserver.com";
+    const isGymEnv = controlApex.startsWith("gym.");
+    if (!isGymEnv) {
+      // Fail as if the route does not exist on prod — never reveal the gym
+      // affordance off the gym env.
+      return jsonResponse({ error: "not found" }, 404);
+    }
+    {
+      const _adminAuth = authorizeAdmin({
+        expected: env.FLAGSHIP_ADMIN_SECRET,
+        provided: request.headers.get("x-admin-secret"),
+      });
+      if (_adminAuth) return finishPlain(_adminAuth);
+    }
+    if (!env.HCLOUD_TOKEN) {
+      return jsonResponse(
+        { error: "gym provision requires HCLOUD_TOKEN on the Worker" },
+        503,
+      );
+    }
+    const gymHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+    const gymSshKeyRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
+    const gymSshKeyId = gymSshKeyRaw ? parseInt(gymSshKeyRaw, 10) : 0;
+    return finishPlain(
+      await handleGymProvision(
+        {
+          usernames: storage.usernames,
+          authCodes: storage.authCodes,
+          hetzner: gymHetzner,
+          ...(gymSshKeyId ? { demoSshKeyId: gymSshKeyId } : {}),
+          defaultRegion: "fsn1",
+          // Full-platform gym boxes run the data-services docker stack; cpx11
+          // is too small for it (per docs/gym-recipe-to-hetzner.md + the
+          // 2026-06-18 full-platform notes). cpx31 has the headroom.
+          defaultSize: "cpx31",
+          fallbackServerTypes: ["cpx41", "cpx51"] as const,
+        },
+        await readJson(request),
+      ),
+    );
   }
 
   // W12 debug — unauthenticated late-command log exfil. Returns 503
