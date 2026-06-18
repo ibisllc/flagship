@@ -239,6 +239,14 @@ describe("buildCloudConfigUserData", () => {
     // Without it the daemon defaults to flagshipserver.com — a gym/test box
     // would then vanish into prod's hub + DNS zone. Regression: gym e2e.
     expect(bootstrap).toContain("FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE");
+    // Full-platform enablement: the SWK + config make the daemon construct the
+    // ServicePlatform (services / build / deploy / screens / vibe); the PSK pub
+    // enables paired-session minting; docker + the data-services unit run apps.
+    expect(bootstrap).toContain("/var/flagship/swk.hex");
+    expect(bootstrap).toContain("FLAGSHIP_SWK_HEX=");
+    expect(bootstrap).toContain("FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY");
+    expect(bootstrap).toContain("docker.io docker-cli docker-compose");
+    expect(bootstrap).toContain("flagship-data-services.service");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");

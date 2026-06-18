@@ -373,6 +373,17 @@ async function main(): Promise<void> {
       },
       orders,
       servicePlatform: {
+        // Construct the ServicePlatform (the services / build / deploy / screens
+        // / vibe surfaces) when the box has its owner identity AND a sealing key.
+        // host{username,irkPub} come from the persisted config; the SWK from
+        // FLAGSHIP_SWK_HEX / /var/flagship/swk.hex. ALL THREE are required by the
+        // runtime gate — previously NONE were passed, so the platform never
+        // constructed on any box (GET /api/services → 503). A box without a
+        // config or an SWK still runs platform-less (unchanged), so this only
+        // turns the platform ON where those inputs exist.
+        hostUsername: cfg?.userId,
+        hostIrkPub: cfg?.irkPublicKey,
+        swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
         // The data-services compose stack writes its admin creds here on
         // first boot. If it's missing, the runtime degrades gracefully:
         // apps declaring `data.stores` will refuse to install with a

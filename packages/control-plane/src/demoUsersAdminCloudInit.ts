@@ -244,7 +244,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \\
     git curl jq ca-certificates xxd cryptsetup lvm2 gnupg \\
+    docker.io docker-cli docker-compose \\
     || echo "[flagship-bootstrap] WARNING: some apt packages failed; check above"
+# Docker runs the app containers (service install) + the data-services stack.
+# docker-cli is listed explicitly because --no-install-recommends drops it.
+systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
 
 # NodeSource Node 20 — official upstream Node.js apt repo. Idempotent
 # even if rerun. Uses the setup script's keyring + sources.list.d entry.
@@ -424,11 +428,21 @@ cat > /etc/flagship/config.json <<CFGEOF
 {"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"}
 CFGEOF
 chmod 600 /etc/flagship/config.json
+# Sealing key (SWK). The daemon constructs the ServicePlatform — i.e. the whole
+# services / build / deploy / screens / vibe surface — ONLY when it has
+# host{username,irkPub} (the config above) AND an SWK. Nothing else mints one, so
+# generate a random 32-byte SWK here: this is what flips a demo box from
+# "cert+serve only" (GET /api/services → 503) to a full app-hosting box. (The
+# demo root is plaintext, so this is a TEST sealing key, not a real at-rest key.)
+head -c 32 /dev/urandom | xxd -p -c 32 > /var/flagship/swk.hex
+chmod 600 /var/flagship/swk.hex
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
 FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
 FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
 FLAGSHIP_CONFIG=/etc/flagship/config.json
+FLAGSHIP_SWK_HEX=$(cat /var/flagship/swk.hex)
+FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
@@ -520,8 +534,31 @@ SEALED_LUKS_KEY_HEX=$SEALED_LUKS_KEY_HEX
 ENV
 chmod 600 /etc/flagship-bootstrap.env
 
+# Data-services oneshot — brings up the docker stack (postgres/minio/redis/
+# forgejo/chromium) that data-backed apps + the git/vibe BUILD path need. Gated
+# on the env file NOT existing (init.sh writes it), so it's idempotent. The
+# daemon degrades gracefully if it's not up yet (data layer disabled) and picks
+# up the creds on its next restart, so this never blocks the cert/serve bring-up.
+cat > /etc/systemd/system/flagship-data-services.service <<'DSUNIT'
+[Unit]
+Description=Flagship data-services (docker stack)
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+ConditionPathExists=!/var/flagship/data-services.env
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/flagship
+ExecStart=/bin/bash /opt/flagship/installer/data-services/init.sh
+RemainAfterExit=yes
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
+DSUNIT
+
 systemctl daemon-reload
-systemctl enable flagship-daemon.service flagship-first-boot-register.service
+systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service
 echo "[flagship-bootstrap] systemd units installed + enabled"
 
 # 9. Run registration INLINE here (don't wait for systemd to pick it
