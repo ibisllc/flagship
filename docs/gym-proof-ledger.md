@@ -1,0 +1,66 @@
+# Gym proof-ledger — what's been PROVEN against a real box
+
+> **Persistent record. Safeguard against context loss.** The "gym" = drive the
+> REAL client (webapp / iOS sim / Android emulator) against a REAL Hetzner box
+> and watch a feature work, with saved evidence — NOT mocks, NOT hand-run
+> harnesses pretending to be the app. Every row here is a thing genuinely
+> demonstrated end-to-end with on-disk evidence (a `curl -i` capture, a journal
+> transcript, or screenshots). Update this file as proofs land. Last updated
+> **2026-06-18**.
+>
+> Conventions: boxes are `home.<user>.gym.flagship.services` (gym env). Commits
+> are on `main` unless tagged `(gym)`. Evidence lives under a worker's
+> `gym-results/<area>/` (gitignored — local artifacts). Secrets:
+> `/Users/harrywinner/flagship/.gym-secrets.env` (source by abs path). Gym deploy:
+> `wrangler --config wrangler.gym.toml`. The `gym` branch is **behind `main`** —
+> prod fixes get extracted to `main` (3-way apply), gym-only seams (`__gymAdopt`,
+> `__gymCreate`) stay on `gym`.
+
+## PROVEN — real app → real box (with evidence)
+
+| # | Feature | Box | Evidence | Commit |
+|---|---|---|---|---|
+| 76 | Services: set-env via real iOS UI + uninstall (signed) | home.wapjzrl3h | `gym-results/ios-service-manage/*` (env-add/list, after-uninstall) | `7b61cedf` (gym) |
+| 77 | Pair devices — **companion** (4h read-only, P14) | home.wapjrq7nb | `pairing-e2e/*` (07 shared-box detail, 09 active companions), 6/6 ACAO | `7685008b` |
+| 78 | Pair devices — **full device-add** (QR+DeviceAdmit+SAS, joins quarantined) | home.wapjww5bv | `device-add-e2e/*`, matched SAS, quarantineUntil, 200s | `28b1ddb3` |
+| 79 | Account recovery (.flagshipkey import → same account+cloud) | home.wapjsieom | `recovery-e2e/*` (05 import, 06 recovered home, 07 server-detail), 6/6 ACAO | `6ff658f8` |
+| 80/81 | **Vibe-code (scratch)** AI authors app → deploy → 200 (CANONICAL url) | home.wapjz2hfn | `ai-build-proof/vibe-200.txt` (`hello from flagship gym`), `vibe-authored-files.json` | `4d21905c` (gym), `7bfbcf06` |
+| 80/81 | **Git-adapt** AI drives read/write/validate/deploy → 200 (CANONICAL url) | home.wapjz2hfn | `ai-build-proof/adapt-200.txt` (visitor #2), `adapt-journal.json` (9-turn transcript) | `4d21905c` (gym) |
+| 75 | Create → manage → delete server via the real webapp | home.cswqjz9zaa | `create-server-e2e/*` (03 form, 04 manage/journal, 06 after-revoke) | `84815db1` (gym), `96fd8432` |
+
+Model for AI builds: **openai / gpt-4o-mini** (BYOK over the paired-session pinned
+pipe; flagshipserver.com never in the credential path). All boxes torn down after.
+
+## PROD BUGS found + fixed (only surfaced by real-app-vs-real-box)
+
+| Bug | Fix |
+|---|---|
+| qrEncoder.js served as SPA HTML on webapp host → pairing QR never renders (prod) | `7685008b` |
+| Cross-device device-add bundle delivery **fully broken in prod** (relay had no 2nd leg) | `28b1ddb3` |
+| `/join` deep-link served marketing, not the PWA receiver (webapp host) | `71196803` |
+| Keyfile recovery: restore activated no cloud profile + re-pair sent old==new IRK (dead on webapp+iOS) | `6ff658f8` |
+| `flagship-webapp` IndexedDB v1/v2 store-version mismatch → VersionError breaks unlock/recovery | `96fd8432` |
+| create-server POSTed auth-code/RCK endpoints RELATIVE → 405 on the webapp host | `96fd8432` |
+| Scratch system-prompt worked example seeds a non-building Dockerfile (COPY package.json, never emitted) | `7bfbcf06` |
+| Android `NetworkOnMainThreadException` reading HTTP body on Main | `35f87cbd` |
+| (pre-compaction) serve-502 host:manifestPort, daemon CORS, CF DNS 200-cap, cpx31-needs-ash, IRK dot/slash, apex-capture timing, box-deploy-signing, build-modes $PORT | various (main + gym) |
+
+## IN PROGRESS / PENDING
+
+- **#78 admin enforcement (live)** — Worker F wiring `requireDeviceScope` into server-revocation (main); live test (owner grants dev2 `revoke-others` → revoke a server; revoke grant → 403) pending F + a gym deploy.
+- **#83 iOS Remove-service button** — Worker G wiring the stub to a real signed uninstall (main).
+- **#86 iOS keyfile re-pair parity** — iOS has the old==new IRK bug E fixed on webapp; needs the rotating fix (after G frees the iOS sim).
+- **Expanded AI-build scope (user, 2026-06-18) — DO ALL:**
+  - **Multi-tier URLs** for a vibe-coded AND a git-adapted app: canonical 200 (done) + **short-canonical `<service>.<user>` (tier-2)** 200 + **voi.ci 302→200**. (Tier-2 = cert-model A′ Phase 5 ServiceCertAuthority mint/install; voi.ci = the shortener — VERIFY voi.ci works in the gym env first.)
+  - **iOS vibe-code CHAT drive** vs a real box — a real chat turn guiding the live AI → deploy → 200 (native XCUITest, full-platform box, live streaming through the client + the app's AI-key step for BYOK).
+  - **Android vibe-code CHAT drive** vs a real box (Compose UI test). NOTE: never run iOS + Android native builds concurrently (16GB Mac → DerivedData lock / OOM).
+  - **Notifications** (AI-chat alerts) — must work via **(a) manufacturer push (APNs/FCM)** AND **(b) long-poll, foreground AND background → app-initiated LOCAL notification**, surfaced in the **teal top sliver** (`ActiveOperationsCenter`). Real APNs/FCM delivery to a device needs TestFlight/Play (owner-gated; not on a store yet) — the long-poll → local → sliver path is testable now; the push path is a seam to wire/verify.
+- **#84 deploy** — 6 webapp/.com prod fixes batched on main (owner-gated): `7685008b 28b1ddb3 71196803 6ff658f8 96fd8432` + the route ones. Daemon systemPrompt fix `7bfbcf06` ships via the box recipe.
+
+## ORCHESTRATION NOTES
+
+- One background agent per task, `isolation: worktree` (off `main`) OR a pre-made `git worktree add -b <name> <path> gym` for gym-branch work. NEVER let two agents share the main tree (branch-switch corruption).
+- Only ONE native build (iOS xcodebuild / Android gradle) at a time.
+- Don't redeploy the gym webapp/Worker while a sibling webapp worker is live-testing the deployed gym.
+- `__gymAdopt` (restore owner session from a UMK seed) is `gym:apps/web/public/webapp/app.js`; `__gymCreate` mirrors it. `provision-for-webapp.ts` + `teardown.ts` are gym-only tooling. Full-platform box = cpx31/ash with docker+SWK+`FLAGSHIP_PSK_PUB_HEX` (needed for build/vibe/adapt; `/api/services` 200 not 503).
+- ROTATE the pasted test Hetzner + OpenAI keys (they were in chat).
