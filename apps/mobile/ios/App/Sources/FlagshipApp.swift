@@ -418,6 +418,35 @@ struct FlagshipApp: App {
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
+                    // GYM-ONLY live-e2e identity adoption (the iOS analogue of
+                    // the webapp's __gymAdopt). When launched with
+                    // `-gym-adopt-seed <hex> -gym-username <u> -gym-fqdn <f>`,
+                    // install the box's owner UMK seed, mark paired + live, and
+                    // mint a box paired session — so an XCUITest drives the REAL
+                    // app against a REAL box. Production never passes the arg, so
+                    // this is dead in the live app. Runs async (network); the
+                    // session-restore branch below is skipped while it's in flight.
+                    if let gymArgs = GymLiveAdoption.parse(ProcessInfo.processInfo.arguments) {
+                        Task { @MainActor in
+                            do {
+                                try await GymLiveAdoption.adopt(
+                                    gymArgs,
+                                    app: appState,
+                                    dev: dev,
+                                    store: sessionStore,
+                                    privacy: privacy,
+                                    urlSession: BoxPinnedURLSession.make(
+                                        pinFor: { CertPinRegistry.shared.pinFor(host: $0) }
+                                    )
+                                )
+                            } catch {
+                                // Surface to the test log + leave a visible
+                                // unpaired shell (the test asserts on paired
+                                // state, so a failed adopt fails the test).
+                                print("GymLiveAdoption FAILED: \(error)")
+                            }
+                        }
+                    }
                     // Restore a previously paired session: if the Keystore
                     // still holds a wrapped UMK (a real account that
                     // survives restarts) and we know which cloud was
@@ -426,7 +455,9 @@ struct FlagshipApp: App {
                     // wrap a UMK, so they fall through to Welcome as before.
                     // Skipped when the user opted into a full passphrase
                     // sign-in on every open (Settings -> Privacy).
-                    if !appState.isPaired,
+                    // (Skipped under gym-adopt — that path owns the session.)
+                    if !GymLiveAdoption.isRequested,
+                       !appState.isPaired,
                        !privacy.requirePassphraseAtLaunch,
                        Keystore.hasWrappedUMK,
                        Keystore.activeProfileId != Keystore.defaultProfileId {
@@ -436,10 +467,13 @@ struct FlagshipApp: App {
                     // user preference. Done in onAppear (not init) so
                     // SmokeMode + session-restore run first and can leave
                     // isPaired false (in which case requireBiometricAtLaunch
-                    // is moot — Welcome is unauthenticated anyway).
-                    appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
-                    if privacy.requireBiometricAtLaunch && appState.isPaired {
-                        appState.isUnlocked = false
+                    // is moot — Welcome is unauthenticated anyway). Gym-adopt
+                    // forces the lock off so the headless test reaches the shell.
+                    if !GymLiveAdoption.isRequested {
+                        appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
+                        if privacy.requireBiometricAtLaunch && appState.isPaired {
+                            appState.isUnlocked = false
+                        }
                     }
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)

@@ -3148,7 +3148,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public static var defaultBaseUrl: URL { Endpoints.controlBaseUrl }
 
     private let urlSession: URLSession
-    private let baseUrl: URL
+    /// nil ⇒ resolve `Endpoints.controlBaseUrl` PER CALL (prod default + the gym
+    /// `-apex-host` override seam, honored even if the override lands after this
+    /// client is built). Prod is byte-identical. Tests can pin an explicit URL.
+    private let baseUrlOverride: URL?
+    private var baseUrl: URL { baseUrlOverride ?? Endpoints.controlBaseUrl }
     /// Maintainer-trust short-circuit. Returns the app's current
     /// `isServerTrusted` foundation boolean; when it returns false EVERY
     /// backend call throws `controlServerUntrusted` BEFORE any bytes leave the
@@ -3160,11 +3164,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public init(
         urlSession: URLSession = .shared,
-        baseUrl: URL = defaultBaseUrl,
+        baseUrl: URL? = nil,
         trustGate: (@Sendable () async -> Bool)? = nil
     ) {
         self.urlSession = urlSession
-        self.baseUrl = baseUrl
+        self.baseUrlOverride = baseUrl
         self.trustGate = trustGate
     }
 

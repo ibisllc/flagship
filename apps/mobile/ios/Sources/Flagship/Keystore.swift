@@ -423,6 +423,17 @@ public struct Keystore {
         return contact
     }
 
+    /// GYM-ONLY IRK override. A box provisioned by the protocol / webapp (e.g.
+    /// the gym `provision-for-webapp.ts`) pins the PROTOCOL dot-form IRK
+    /// (`flagship.irk.v1`), which differs from this Keystore's slash-form
+    /// (`flagship/irk/v1`). When the gym live-adopt seam sets this, EVERY
+    /// box-op signer that defaults to `deriveIRK` (journal / power / front-page)
+    /// signs with the box's actual owner key — so the live e2e drives those flows
+    /// UI-driven against the right key. nil in production (the seam is gated on a
+    /// gym-only launch arg). Mirrors the `SignOutPolicy.gymForceBlockNoRecovery`
+    /// gym-override pattern.
+    public nonisolated(unsafe) static var gymAdoptedIrkOverride: Curve25519.Signing.PrivateKey?
+
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
     ///
     /// Reads `currentIrkVersion()` from Keychain (defaulting to v1 on
@@ -431,6 +442,7 @@ public struct Keystore {
     /// by Replace device (B7) and Wipe & restart (E2), invalidating
     /// any leaked-disk OLD IRK private key on a stolen peer device.
     public static func deriveIRK(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        if let override = gymAdoptedIrkOverride { return override }
         return try await deriveIRK(reason: reason, version: currentIrkVersion())
     }
 
