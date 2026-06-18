@@ -614,6 +614,7 @@ fun ServerRow(
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
                 modifier = Modifier
                     .weight(1f)
+                    .testTag("home-pod-row")
                     .combinedClickable(onClick = onTap, onLongClick = { menuOpen = true })
                     .semantics { if (moveActions.isNotEmpty()) customActions = moveActions }
                     .padding(
