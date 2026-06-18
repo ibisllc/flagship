@@ -269,6 +269,7 @@ fun ServerDetailScreen(
                 ?: "Server",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.semantics { contentDescription = "server-detail-screen" },
         )
 
         Spacer(Modifier.height(FS.space.s6))
@@ -1095,6 +1096,7 @@ private fun JournalCard(serverDomain: String) {
                         text,
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.semantics { contentDescription = "sd-journal-output" },
                     )
                 }
             }
