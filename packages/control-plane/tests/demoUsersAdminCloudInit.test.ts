@@ -246,7 +246,7 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("FLAGSHIP_SWK_HEX=");
     expect(bootstrap).toContain("FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY");
     expect(bootstrap).toContain("docker.io docker-compose");
-    expect(bootstrap).not.toContain("docker-cli"); // not a Debian package — aborts apt
+    expect(bootstrap).not.toContain("docker.io docker-cli"); // docker-cli aborts apt on Debian
     expect(bootstrap).toContain("flagship-data-services.service");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
