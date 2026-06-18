@@ -37,6 +37,14 @@ import {
 const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
+/** Assets that live at the SITE root (apps/web/public/<file>) and are shared
+ *  with the marketing landing page, yet are imported by the webapp via an
+ *  absolute path. On the webapp host these must be served from root (NOT
+ *  rewritten under /webapp/, where they don't exist → SPA HTML fallback →
+ *  failed dynamic import). Keep this list tight: only genuinely root-shared,
+ *  webapp-imported assets belong here. */
+const WEBAPP_SHARED_ROOT_ASSETS: ReadonlySet<string> = new Set(["/qrEncoder.js"]);
+
 /** The webapp host for THIS env: `web.flagshipserver.com` in prod, or
  *  `web.<CONTROL_APEX>` under a test env (the gym serves the webapp at
  *  web.gym.flagshipserver.com). Prod-preserving — equals WEBAPP_HOST when
@@ -1129,7 +1137,21 @@ async function serveWebapp(
   // Disk layout:  apps/web/public/webapp/<file>
   // Public path:  /<file>     → rewrite to /webapp/<file> for ASSETS
   // Public root:  /           → ASSETS /webapp/  (binding serves index.html)
-  const rewrittenPath = url.pathname === "/" ? "/webapp/" : `/webapp${url.pathname}`;
+  //
+  // Exception — shared root assets. A few files live at the SITE root
+  // (apps/web/public/<file>) and are imported by BOTH the marketing landing
+  // page AND the webapp (e.g. `qrEncoder.js`, which the webapp's add-device +
+  // companion-dock views `import("/qrEncoder.js")`). They have no copy under
+  // webapp/, so the normal `/webapp/<file>` rewrite hits the SPA HTML fallback
+  // (content-type text/html) and the browser's dynamic `import()` fails — the
+  // pairing QR never renders. Serve these from the site root so there is ONE
+  // copy (no drift) and they resolve as real JS. (Affected prod too.)
+  const rewrittenPath =
+    url.pathname === "/"
+      ? "/webapp/"
+      : WEBAPP_SHARED_ROOT_ASSETS.has(url.pathname)
+        ? url.pathname
+        : `/webapp${url.pathname}`;
   const rewritten = new URL(rewrittenPath + url.search, "https://flagshipserver.com");
   // Preserve method + headers; body is empty for GET/HEAD.
   const assetReq = new Request(rewritten.toString(), {

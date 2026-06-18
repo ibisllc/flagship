@@ -798,6 +798,21 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
     expect(await r.text()).toBe("asset:/webapp/views/home.js");
   });
 
+  it("/qrEncoder.js (shared root asset) is served from the SITE ROOT, not /webapp/", async () => {
+    // qrEncoder.js lives at apps/web/public/qrEncoder.js (shared with the
+    // marketing landing page) and is imported by the webapp's add-device +
+    // companion-dock views via `import("/qrEncoder.js")`. There is NO copy
+    // under webapp/, so a /webapp/ rewrite would hit the SPA index.html
+    // fallback (content-type text/html) and the dynamic import would fail —
+    // breaking the pairing QR. It must resolve from root.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/qrEncoder.js"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/qrEncoder.js");
+  });
+
   it("/api/* on web. host is NOT proxied — it's rewritten under /webapp/ (not exposed here)", async () => {
     // The webapp talks to the user's pod for /api/screens/*, never to
     // web.flagshipserver.com. Anything that lands on /api/* here is a
