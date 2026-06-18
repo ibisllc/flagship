@@ -199,10 +199,10 @@ async function main(): Promise<void> {
   await check("GET /api/services responds (list, or 503 when the platform is off)", async () => {
     const r = await http(`https://${fqdn}/api/services`);
     assert(r.status === 200 || r.status === 503, `got ${r.status}`);
-    if (r.status === 503) return "503 — service platform disabled (demo box runs no docker stack)";
-    const list = Array.isArray(r.json) ? r.json : r.json?.services;
-    assert(Array.isArray(list), `200 but not an array: ${r.text.slice(0, 80)}`);
-    return `${list.length} services`;
+    if (r.status === 503) return "503 — service platform disabled (cert+serve-only box)";
+    const list = Array.isArray(r.json) ? r.json : (r.json?.apps ?? r.json?.services);
+    assert(Array.isArray(list), `200 but not a list: ${r.text.slice(0, 80)}`);
+    return `${list.length} services (platform up)`;
   });
   await check("GET /api/front-page returns the apex assignment", async () => {
     const r = await http(`https://${fqdn}/api/front-page`);
@@ -266,7 +266,7 @@ async function main(): Promise<void> {
         log("    (platform OFF — this box is cert+serve-only; build/vibe/mcp not available)");
         return "503 — platform off (minimal box)";
       }
-      const list = Array.isArray(svc.json) ? svc.json : svc.json?.services;
+      const list = Array.isArray(svc.json) ? svc.json : (svc.json?.apps ?? svc.json?.services);
       return `platform UP — ${(list?.length ?? 0)} services`;
     });
     if (platformUp) {
