@@ -4,6 +4,7 @@
 package com.flagshipserver.app.core
 
 import android.content.Intent
+import kotlinx.coroutines.launch
 import com.flagshipserver.app.api.AppAccessPending
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -143,6 +144,28 @@ object Variant : AppVariant {
                 accessBoxes = accessBoxes,
             ),
         )
+    }
+
+    override fun adoptLiveIdentity(
+        intent: Intent?,
+        appState: AppState,
+        store: com.flagshipserver.app.api.SessionStoring,
+        client: okhttp3.OkHttpClient,
+        scope: kotlinx.coroutines.CoroutineScope,
+    ) {
+        val gymArgs = GymLiveAdoption.parse(intent) ?: return
+        try {
+            GymLiveAdoption.adoptLocal(gymArgs, appState)
+            scope.launch {
+                try {
+                    GymLiveAdoption.adoptRemote(args = gymArgs, seedHex = gymArgs.umkSeedHex, store = store, client = client)
+                } catch (e: Throwable) {
+                    android.util.Log.e("GymLiveAdoption", "remote adopt FAILED", e)
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("GymLiveAdoption", "local adopt FAILED", e)
+        }
     }
 
     override val usesMockClients: Boolean get() = mockRun
