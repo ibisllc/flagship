@@ -51,8 +51,11 @@ describe("workerCaTrustChain — real verifier over the committed assets", () =>
   // At a NOW past every committed lease's notAfter the real verifier
   // MUST return []. A stub returning a hardcoded key, or one that
   // skipped the per-request lease check, would not.
+  // ⚠️ GYM TEST BRANCH: the committed gym lease is a 100-yr endorsement
+  // (notAfter 2124-01-01), so "past every lease" is a date beyond it. On
+  // `main` the prod leases all lapse by 2026, so any far-future date works.
   it("real committed chain at NOW past every lease ⇒ [] (fail-closed via real verifier)", () => {
-    const farFuture = Date.parse("2099-01-01T00:00:00.000Z");
+    const farFuture = Date.parse("2199-01-01T00:00:00.000Z");
     const chain = workerCaTrustChain();
     expect(chain.authorizedCaKeys(farFuture)).toEqual([]);
   });

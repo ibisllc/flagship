@@ -53,8 +53,10 @@ function chainReturning(keys: string[]): CaTrustChain {
 
 describe("MAINTAINER_PINNED_MANDATE_HASH (#30 link-1, generalised)", () => {
   it("is POPULATED post-Gate-B; empty pin is still fail-closed", () => {
+    // ⚠️ GYM TEST BRANCH ONLY — the gym self-contained chain pin. On `main`
+    // this is the prod pin "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae".
     expect(MAINTAINER_PINNED_MANDATE_HASH).toBe(
-      "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae",
+      "87f5ae60cd1cfc0629fdf10ab97a547d33bca68bf3a1426614096a3054d57ae7",
     );
     expect(maintainerPinConfigured()).toBe(true);
     // The empty-⇒-fail-closed invariant still holds with an explicit "".
