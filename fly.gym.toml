@@ -38,6 +38,14 @@ kill_timeout = "30s"
   # from prod — it makes pod-canonical parsing + first-party guards resolve
   # against `gym.flagship.services` (test boxes = `<server>.<user>.gym.flagship.services`).
   FLAGSHIP_SERVICES_APEX = "gym.flagship.services"
+  # ⭐ The gym control plane. The hub resolves a connecting box's IRK + its
+  # hub-blessing + by-domain routing against THIS .com (server.ts: comBaseUrl =
+  # process.env.FLAGSHIP_COM_BASE_URL ?? flagshipserver.com). Without it the gym
+  # hub's irkLookup hits PROD, where a gym box's user doesn't exist → fail-closed
+  # → the box's tunnel claim is rejected → no HELLO_ACK → tunnel.ready() hangs →
+  # the box never starts ACME / serves. Prod's root fly.toml omits it (keeps the
+  # flagshipserver.com default).
+  FLAGSHIP_COM_BASE_URL = "https://gym.flagshipserver.com"
 
 # External :443 → internal :8443 (raw TCP, SNI passthrough). Identical to prod.
 [[services]]
