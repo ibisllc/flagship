@@ -57,6 +57,9 @@ struct FlagshipApp: App {
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
+        // Owner-signed service uninstall (`DELETE /api/services/:id`) rides the
+        // SAME box-pinned session so a rogue `.com` cert can't intercept it.
+        self.liveServiceUninstall = LiveServiceUninstallClient(urlSession: pinnedSession)
         // Maintainer-trust short-circuit: the live `.com` client refuses to
         // send when the control server is positively untrusted (and the owner
         // hasn't overridden). `.unknown`/`.trusted` + any network-error
@@ -305,6 +308,10 @@ struct FlagshipApp: App {
     // session and live/mock split as lock/power.
     private let mockFrontPage = MockFrontPageClient()
     private let liveFrontPage: any FrontPageClient
+    // Service-uninstall box-direct client — same pinned session and live/mock
+    // split as lock/power + front-page.
+    private let mockServiceUninstall = MockServiceUninstallClient()
+    private let liveServiceUninstall: any ServiceUninstallClient
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -330,6 +337,9 @@ struct FlagshipApp: App {
     private var activeFrontPage: any FrontPageClient {
         dev.useLiveClient ? liveFrontPage : mockFrontPage
     }
+    private var activeServiceUninstall: any ServiceUninstallClient {
+        dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -349,6 +359,7 @@ struct FlagshipApp: App {
                 .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.frontPageClient, activeFrontPage)
+                .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)

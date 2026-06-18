@@ -118,6 +118,22 @@ public extension EnvironmentValues {
     }
 }
 
+/// Box-direct delivery for the owner-signed service uninstall
+/// (`DELETE /api/services/:id`). Same pinned canonical pipe + IRK-signature
+/// trust posture as the front-page / lock-power clients. Defaults to the
+/// in-process Mock so previews/tests are inert (they record sends, never hit a
+/// network).
+private struct ServiceUninstallClientKey: EnvironmentKey {
+    static let defaultValue: any ServiceUninstallClient = MockServiceUninstallClient()
+}
+
+public extension EnvironmentValues {
+    var serviceUninstallClient: any ServiceUninstallClient {
+        get { self[ServiceUninstallClientKey.self] }
+        set { self[ServiceUninstallClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed

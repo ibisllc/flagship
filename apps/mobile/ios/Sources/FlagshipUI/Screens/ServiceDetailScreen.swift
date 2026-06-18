@@ -600,7 +600,13 @@ public struct ServiceDetailScreen: View {
     private func saveAndRemove(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             FSPrimaryButton("Save changes", block: true, large: true, action: onSave)
-            FSDangerButton("Remove service", block: true, action: onRemove)
+            FSDangerButton(
+                vm.isRemoving ? "Removing…" : "Remove service",
+                block: true,
+                action: onRemove
+            )
+            .disabled(vm.isRemoving)
+            .accessibilityIdentifier("service-detail-remove-btn")
         }
         .padding(.top, FS.space.s4)
     }

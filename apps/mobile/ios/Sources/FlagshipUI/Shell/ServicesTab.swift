@@ -35,6 +35,14 @@ public struct ServicesTab: View {
         }
         .onChange(of: linker.pending) { _, link in consume(link) }
         .task(id: linker.pending) { consume(linker.pending) }
+        .onChange(of: path) { old, new in
+            // Returning to the list root after a child action (e.g. an
+            // uninstall popped the detail) — refresh so a removed service
+            // disappears without a manual pull-to-refresh.
+            if !old.isEmpty && new.isEmpty {
+                Task { await vm?.load() }
+            }
+        }
     }
 
     private func consume(_ link: DeepLink?) {
@@ -349,10 +357,20 @@ struct ServiceDetailContainer: View {
     @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.serviceUninstallClient) private var uninstallClient
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: ServiceDetailViewModel?
+    /// Drives the destructive "Remove service" confirm dialog.
+    @State private var confirmRemove = false
+
+    /// The box this service runs on — the daemon there pins the owner IRK as
+    /// `serverId`, so the signed uninstall must target it (same resolution as
+    /// the env editor / vibe-code containers).
+    private var serverDomain: String {
+        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -365,13 +383,25 @@ struct ServiceDetailContainer: View {
                     pods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     onSave: { Task { await save(vm: vm) } },
-                    onRemove: { toasts.warning("Remove flow not wired yet.") },
+                    onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
                     onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+        .confirmationDialog(
+            "Remove this service?",
+            isPresented: $confirmRemove,
+            titleVisibility: .visible
+        ) {
+            Button("Remove service", role: .destructive) {
+                if let vm { Task { await remove(vm: vm) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This uninstalls the service from \(serverDomain) and deletes its data. This can't be undone.")
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -402,7 +432,9 @@ struct ServiceDetailContainer: View {
                     allPods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     server: server,
-                    username: { [app] in app.currentUser }
+                    username: { [app] in app.currentUser },
+                    uninstallClient: uninstallClient,
+                    serverDomain: serverDomain
                 )
             }
             await vm?.load()
@@ -416,6 +448,23 @@ struct ServiceDetailContainer: View {
             toasts.success("Saved \(vm.serviceId).")
         } catch {
             toasts.error("Save failed. \(HumanError.humanize(error))")
+        }
+    }
+
+    /// Sign + send the box-direct uninstall. On success, pop back to the
+    /// services list (which reloads on path-empty) + toast; on failure, stay
+    /// put and surface the humanized error.
+    private func remove(vm: ServiceDetailViewModel) async {
+        let slug = vm.detail.value?.app.slug ?? vm.serviceId
+        let ok = await vm.uninstall()
+        if ok {
+            toasts.success("Removed \(slug).")
+            // Pop straight back to the list root; ServicesTab reloads it.
+            path.removeAll()
+        } else if case .failed(let msg) = vm.removePhase {
+            toasts.error(msg)
+        } else {
+            toasts.error("Couldn't remove the service. Try again in a moment.")
         }
     }
 }
