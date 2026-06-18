@@ -548,7 +548,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     const claimIssuedAt = Date.now();
     const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, claimIssuedAt]);
     const claimSig = await signWithIrk(session.umk, claimMsg);
-    const claimResp = await fetch("/api/username/claim", {
+    // Absolute control-plane URL — a relative POST hits the webapp origin
+    // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the sibling
+    // controlApex() calls in this file (auth-code revoke, registrationUrl).
+    const claimResp = await fetch(`${controlApex()}/api/username/claim`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

@@ -130,12 +130,24 @@ async function main(): Promise<void> {
   if (!REUSE_USER) {
     log("[provision]");
     const provisioned = await check("provision a fresh box via the admin flow", () => {
-      execFileSync("node", ["scripts/sample-user.mjs", "create", user], {
-        env: provEnv,
-        encoding: "utf8",
-        timeout: 360000,
-      });
-      return `requested ${user}`;
+      try {
+        execFileSync("node", ["scripts/sample-user.mjs", "create", user], {
+          env: provEnv,
+          encoding: "utf8",
+          timeout: 240000,
+        });
+        return `provisioned ${user}`;
+      } catch (e: any) {
+        // The `create` CLI BLOCKS polling state=provisioning; a real Hetzner box
+        // takes longer than that window to register, so a poll timeout just means
+        // "kicked off" — the online-poll below waits for it. Only a non-timeout
+        // failure (bad admin secret / claim error) is a genuine provision failure.
+        const msg = String(e?.message ?? e);
+        if (e?.code === "ETIMEDOUT" || /ETIMEDOUT/.test(msg)) {
+          return `kicked off ${user} (provision continues async; online-poll confirms)`;
+        }
+        throw e;
+      }
     });
     if (provisioned) {
       log("[bring-up — polling registered → online → cert → serving, up to 16 min]");

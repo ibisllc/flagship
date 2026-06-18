@@ -1,0 +1,160 @@
+{
+  "config": {
+    "configFile": "/Users/harrywinner/flagship/apps/web/e2e/live/playwright.live.config.ts",
+    "rootDir": "/Users/harrywinner/flagship/apps/web/e2e/live",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/harrywinner/flagship/apps/web/e2e/live/.live-out/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/harrywinner/flagship/apps/web/e2e/live",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/harrywinner/flagship/apps/web/e2e/live/.live-out/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "webapp-live.spec.ts",
+      "file": "webapp-live.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "webapp LIVE (real gym backend)",
+          "file": "webapp-live.spec.ts",
+          "line": 18,
+          "column": 6,
+          "specs": [
+            {
+              "title": "live webapp serves and boots the bootstrap shell",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 892,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-18T02:42:59.923Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "cd411c22606e0f0e4390-70f75804faaec68e4955",
+              "file": "webapp-live.spec.ts",
+              "line": 27,
+              "column": 3
+            },
+            {
+              "title": "live bootstrap reaches the account form + fires a real call to the gym control plane",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9068,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[live] backend calls: [{\"url\":\"https://gym.flagshipserver.com/api/maintainer-blessing\",\"status\":200}]\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-06-18T02:43:01.085Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "cd411c22606e0f0e4390-02e0f7b11c5af4262ae8",
+              "file": "webapp-live.spec.ts",
+              "line": 37,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-06-18T02:42:59.584Z",
+    "duration": 10595.872,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

@@ -85,7 +85,7 @@ describe("webapp claimUsername — standalone idempotent claim", () => {
 
     expect(out).toEqual({ status: 200, alreadyClaimed: false });
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/api/username/claim");
+    expect(url).toMatch(/^https:\/\/[^/]+\/api\/username\/claim$/);
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body);
     expect(body.request.username).toBe("alice");
@@ -145,7 +145,7 @@ describe("webapp openAccount — open without provisioning a server", () => {
     // Exactly ONE network call — the standalone claim. No auth-code, no
     // RCK, no server registration: server provisioning is decoupled.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/username/claim");
+    expect(fetchMock.mock.calls[0]![0]).toMatch(/^https:\/\/[^/]+\/api\/username\/claim$/);
 
     // Identity bound locally.
     expect(calls.username).toBe("alice");

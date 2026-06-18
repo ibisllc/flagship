@@ -37,6 +37,15 @@ import {
 const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
+/** The webapp host for THIS env: `web.flagshipserver.com` in prod, or
+ *  `web.<CONTROL_APEX>` under a test env (the gym serves the webapp at
+ *  web.gym.flagshipserver.com). Prod-preserving — equals WEBAPP_HOST when
+ *  CONTROL_APEX is unset. apex.js retargets the app's backend off the served
+ *  origin, so recognising + serving this host is all the gym webapp needs. */
+function webappHost(env: RouteEnv): string {
+  return env.CONTROL_APEX ? `web.${env.CONTROL_APEX}` : WEBAPP_HOST;
+}
+
 /**
  * voi.ci — Flagship's URL shortener (V1).
  *
@@ -158,6 +167,13 @@ export interface RouteEnv {
   FLAGSHIP_ISO_MANIFEST?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
+  /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset
+   *  in prod. The webapp host is `web.<CONTROL_APEX>`, so this makes the
+   *  webapp-host routing apex-aware (without it the gym webapp host 307s to the
+   *  prod webapp origin). apex.js already retargets the app's backend off the
+   *  served origin, so serving the webapp on web.gym.flagshipserver.com is all
+   *  that's needed for the live web e2e. */
+  CONTROL_APEX?: string;
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
@@ -319,7 +335,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   const override = request.headers.get("x-flagship-effective-host");
   if (override) {
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
-    if (lowered === WEBAPP_HOST ||
+    if (lowered === webappHost(env) ||
         lowered === RECOVERY_HOST ||
         lowered === BOOT_HOST ||
         lowered === "www.flagshipserver.com" ||
@@ -337,7 +353,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     // when the request really came from the SW registration on the
     // webapp origin.
     url = new URL(
-      `https://${WEBAPP_HOST}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
+      `https://${webappHost(env)}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
     );
   }
 
@@ -346,11 +362,11 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   // /api/* on the apex trigger a preflight. Answer it directly so the
   // actual request can proceed.
   if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
-    return corsPreflight(request);
+    return corsPreflight(request, env);
   }
 
   const res = await routeImpl(request, env, url);
-  return applyCors(request, url, res);
+  return applyCors(request, url, res, env);
 }
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */
@@ -363,7 +379,7 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // /og + control-plane routes are NOT exposed here. The webapp itself
   // talks to the user's pod for /api/screens/* and to the apex for
   // anything .com-resident — never to web. directly.
-  if (url.hostname === WEBAPP_HOST) {
+  if (url.hostname === webappHost(env)) {
     return serveWebapp(request, url, env);
   }
 
@@ -1044,10 +1060,21 @@ function originHeader(request: Request): string | null {
  * for those (and for non-/api paths). Sensitive endpoints are signed,
  * so this CORS layer is defense-in-depth, not the primary auth gate.
  */
-function applyCors(request: Request, url: URL, res: Response): Response {
+/** Is this Origin allowed to make cross-origin /api/* calls? The static prod set
+ *  plus, under a test env, the env-derived webapp origin (web.<CONTROL_APEX>) —
+ *  the gym webapp at web.gym.flagshipserver.com calls gym.flagshipserver.com
+ *  cross-origin and the static set can't know it. Prod-preserving: CONTROL_APEX
+ *  unset ⇒ only the static set. Surfaced by the live web e2e (CORS-blocked
+ *  username check / claim). */
+function isCorsAllowed(origin: string, env: RouteEnv): boolean {
+  if (CORS_ALLOWED_ORIGINS.has(origin)) return true;
+  return !!env.CONTROL_APEX && origin === `https://web.${env.CONTROL_APEX}`;
+}
+
+function applyCors(request: Request, url: URL, res: Response, env: RouteEnv): Response {
   if (!url.pathname.startsWith("/api/")) return res;
   const origin = originHeader(request);
-  if (!origin || !CORS_ALLOWED_ORIGINS.has(origin)) return res;
+  if (!origin || !isCorsAllowed(origin, env)) return res;
   // Headers on a Response are immutable when sourced from fetch(); clone
   // into a fresh Response with the merged header set.
   const headers = new Headers(res.headers);
@@ -1061,7 +1088,7 @@ function applyCors(request: Request, url: URL, res: Response): Response {
 }
 
 /** Preflight handler — answers OPTIONS for /api/* without touching downstream. */
-function corsPreflight(request: Request): Response {
+function corsPreflight(request: Request, env: RouteEnv): Response {
   const origin = originHeader(request);
   const headers = new Headers({
     "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
@@ -1069,7 +1096,7 @@ function corsPreflight(request: Request): Response {
     "access-control-max-age": "600",
     vary: "origin",
   });
-  if (origin && CORS_ALLOWED_ORIGINS.has(origin)) {
+  if (origin && isCorsAllowed(origin, env)) {
     headers.set("access-control-allow-origin", origin);
   }
   return new Response(null, { status: 204, headers });

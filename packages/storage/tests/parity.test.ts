@@ -804,14 +804,15 @@ describe("D1 ↔ InMemory parity", () => {
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────
   describe("migration application", () => {
-    it("applies all migrations with only the documented 0026 no-op", () => {
+    it("applies the whole migration ledger cleanly (0026 is a SELECT 1; no-op)", () => {
       const sqlite = createSqliteD1();
       openHandles.push(sqlite);
-      // 0026 renames custom_domain_orders.app_id → service_id, but fresh
-      // DBs already have service_id (0022 was edited in-place pre-launch),
-      // so the RENAME no-ops. That is the ONLY tolerated divergence.
-      expect(sqlite.toleratedNoOps).toHaveLength(1);
-      expect(sqlite.toleratedNoOps[0]?.file).toBe("0026_rename_app_to_service.sql");
+      // 0026 historically renamed custom_domain_orders.app_id → service_id, but
+      // fresh DBs already have service_id (0022 was edited in-place pre-launch),
+      // so the rename was made a forward-only, replay-safe `SELECT 1;` no-op (it
+      // aborted `wrangler d1 migrations apply` on a fresh DB otherwise). It now
+      // APPLIES cleanly — there is no longer any error-tolerated divergence.
+      expect(sqlite.toleratedNoOps).toHaveLength(0);
     });
   });
 });

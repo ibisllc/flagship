@@ -21,6 +21,8 @@
 // All side-effecting collaborators are injected so this is unit-testable
 // without IndexedDB / the DOM / the network.
 
+import { controlApex } from "./apex.js";
+
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
  *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
  *  labels.ts. */
@@ -59,7 +61,12 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
   const irkPubHex = toHex(irkPub);
   const issuedAt = Date.now();
   const sig = await sign(canonical([TAG_CLAIM, username, irkPubHex, issuedAt]));
-  const resp = await f("/api/username/claim", {
+  // ABSOLUTE control-plane URL (controlApex), not a relative path: the webapp is
+  // served from web.<apex>, whose origin only serves GET/HEAD static assets — a
+  // relative POST 405s there (and never reaches the control plane). Mirrors the
+  // username CHECK (state.js) + the sibling calls in create-server.js. Surfaced
+  // by the live web e2e (the claim was hitting web.gym.flagshipserver.com → 405).
+  const resp = await f(`${controlApex()}/api/username/claim`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
