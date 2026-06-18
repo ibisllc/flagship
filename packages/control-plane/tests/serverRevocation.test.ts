@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveIRK,
+  ed,
   signClaimUsername,
+  signDeviceCapabilityGrant,
   signRevocation,
   verifyRevocation,
+  type DeviceCapabilityGrant,
+  type DeviceScope,
+  type Keypair,
   type ServerRevocation,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
+import { handleMintDeviceGrant } from "../src/deviceCapabilityGrants.js";
 import { handleRevokeServer } from "../src/serverRevocation.js";
 import { handleUsernameClaim } from "../src/usernameClaim.js";
 
@@ -367,5 +373,338 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     const r = await handleRevokeServer(deps(storage), body);
     expect(r.status).toBe(200);
     expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Device-authorized revocation (task #39): a 2nd device holding a
+// `revoke-others` (or superset `admin`) DeviceCapabilityGrant may revoke a
+// server by passing `signerPubHex` on the body. This is the ONLY production
+// consumer of `requireDeviceScope`. The owner legacy path (no `signerPubHex`)
+// must be UNCHANGED.
+// ──────────────────────────────────────────────────────────────────────
+
+function makeKey(): Keypair {
+  const priv = new Uint8Array(32);
+  crypto.getRandomValues(priv);
+  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+}
+
+/** deps WITH the grants dep wired (mirrors the apps/com call site). */
+function depsWithGrants(storage: InMemoryStorage) {
+  return {
+    ...deps(storage),
+    grants: {
+      storage: storage.deviceCapabilityGrants,
+      usernames: storage.usernames,
+    },
+  };
+}
+
+/** Mint a DeviceCapabilityGrant for `device` under USERNAME via the real
+ *  mint handler (same storage `requireDeviceScope` reads), so revocation +
+ *  expiry behave exactly as in production. */
+async function mintDeviceGrant(
+  storage: InMemoryStorage,
+  device: Keypair,
+  opts: {
+    scopes: DeviceScope[];
+    deviceLabel?: string;
+    grantId?: string;
+    issuedAt?: number;
+    expiresAt?: number;
+  },
+): Promise<string> {
+  const issuedAt = opts.issuedAt ?? Date.now();
+  const expiresAt = opts.expiresAt ?? issuedAt + 90 * 24 * 3_600_000;
+  const grantId = opts.grantId ?? `grant-${Math.random().toString(36).slice(2)}`;
+  const grant: DeviceCapabilityGrant = {
+    grantId,
+    username: USERNAME,
+    deviceLabel: opts.deviceLabel ?? "ipad",
+    devicePubKey: device.publicKey,
+    scopes: opts.scopes,
+    issuedAt,
+    expiresAt,
+  };
+  const sig = signDeviceCapabilityGrant(grant, harryIrk);
+  const r = await handleMintDeviceGrant(
+    { storage: storage.deviceCapabilityGrants, usernames: storage.usernames },
+    {
+      grant: {
+        grantId,
+        username: USERNAME,
+        deviceLabel: grant.deviceLabel,
+        devicePubKey: bytesToHex(device.publicKey),
+        scopes: opts.scopes,
+        issuedAt,
+        expiresAt,
+      },
+      signature: bytesToHex(sig),
+    },
+  );
+  expect(r.status).toBe(200);
+  return grantId;
+}
+
+/** A ServerRevocation body signed by `signer` (a device key), carrying
+ *  `signerPubHex`. */
+function deviceRevokeBody(signer: Keypair, overrides: Partial<ServerRevocation> = {}) {
+  const claim: ServerRevocation = {
+    userId: USERNAME,
+    revokedServerId: DOMAIN,
+    reason: "decommissioned",
+    issuedAt: Date.now(),
+    ...overrides,
+  };
+  const sig = signRevocation(claim, signer);
+  return {
+    request: {
+      userId: claim.userId,
+      revokedServerId: claim.revokedServerId,
+      reason: claim.reason,
+      issuedAt: claim.issuedAt,
+    },
+    signature: bytesToHex(sig),
+    signerPubHex: bytesToHex(signer.publicKey),
+  };
+}
+
+describe("POST /api/server-registry/revoke — device-authorized path (signerPubHex)", () => {
+  it("owner legacy path (no signerPubHex) still returns 200 — unchanged", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    // grants wired, but the body omits signerPubHex → owner-IRK path.
+    const { body } = revokeBody();
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(200);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+  });
+
+  it("owner via signerPubHex (owner IRK pubkey) → 200 (user-IRK fast path)", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    // No grant minted: the owner's own IRK pubkey satisfies requireDeviceScope
+    // directly (the user-IRK fast path), AND the envelope is owner-signed.
+    const body = deviceRevokeBody(harryIrk);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(200);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+  });
+
+  it("device WITH an active revoke-others grant → 200", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["browse", "revoke-others"] });
+
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(200);
+    expect((r.body as { reason: string }).reason).toBe("decommissioned");
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+
+    // Audit row landed under the user.
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.find((e) => e.eventKind === "server-revoked")).toBeDefined();
+  });
+
+  it("device WITH the admin superset grant (no explicit revoke-others) → 200", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["admin"] });
+
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(200);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+  });
+
+  it("device WITHOUT a grant → 403, server untouched", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey(); // never granted anything
+
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(403);
+    expect((r.body as { error: string }).error).toMatch(/not authorized/i);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+    // No audit row.
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.find((e) => e.eventKind === "server-revoked")).toBeUndefined();
+  });
+
+  it("device with a grant lacking revoke-others/admin (e.g. browse only) → 403", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["browse", "install-service"] });
+
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+
+  it("device whose grant was REVOKED → 403", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    const grantId = await mintDeviceGrant(storage, device, {
+      scopes: ["revoke-others"],
+    });
+    // Revoke the grant (mirrors handleRevokeDeviceGrant's effect on the row).
+    await storage.deviceCapabilityGrants.revoke(grantId, Date.now());
+
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+
+  it("device with an EXPIRED grant → 403", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    const mintAt = Date.now();
+    // Mint a grant that is valid NOW (the mint handler rejects an
+    // already-expired grant) but expires shortly after.
+    await mintDeviceGrant(storage, device, {
+      scopes: ["revoke-others"],
+      issuedAt: mintAt,
+      expiresAt: mintAt + 5_000,
+    });
+
+    // Advance the handler's clock past the grant's expiry. The same clock
+    // must drive BOTH the replay window (deps.now) AND requireDeviceScope's
+    // expiry check (deps.grants.now), and the revocation issuedAt must sit
+    // inside the replay window relative to that clock.
+    const later = mintAt + 10_000;
+    const grantsDeps = {
+      storage: storage.deviceCapabilityGrants,
+      usernames: storage.usernames,
+      now: () => later,
+    };
+    const body = deviceRevokeBody(device, { issuedAt: later });
+    const r = await handleRevokeServer(
+      { ...deps(storage), grants: grantsDeps, now: () => later },
+      body,
+    );
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+
+  it("forged signerPubHex (envelope signed by a DIFFERENT key) → 403 invalid signature", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["revoke-others"] });
+
+    // Build a body claiming the granted device's pubkey but sign it with a
+    // DIFFERENT key (the attacker has the granted pubkey but not its private
+    // half). The sig check under signerPubHex must fail BEFORE any grant
+    // lookup matters.
+    const attacker = makeKey();
+    const claim: ServerRevocation = {
+      userId: USERNAME,
+      revokedServerId: DOMAIN,
+      reason: "decommissioned",
+      issuedAt: Date.now(),
+    };
+    const sig = signRevocation(claim, attacker);
+    const body = {
+      request: {
+        userId: claim.userId,
+        revokedServerId: claim.revokedServerId,
+        reason: claim.reason,
+        issuedAt: claim.issuedAt,
+      },
+      signature: bytesToHex(sig),
+      signerPubHex: bytesToHex(device.publicKey), // forged — not attacker's key
+    };
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(403);
+    expect((r.body as { error: string }).error).toMatch(/signature/i);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+
+  it("malformed signerPubHex (not 32-byte hex) → 400", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["revoke-others"] });
+    const body = { ...deviceRevokeBody(device), signerPubHex: "deadbeef" };
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(400);
+    expect((r.body as { error: string }).error).toMatch(/signerPubHex/i);
+  });
+
+  it("signerPubHex present but grants dep NOT wired → 403 (fail-closed, no owner fallback)", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const device = makeKey();
+    await mintDeviceGrant(storage, device, { scopes: ["revoke-others"] });
+    // deps() omits `grants`.
+    const body = deviceRevokeBody(device);
+    const r = await handleRevokeServer(deps(storage), body);
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
+  });
+
+  it("device grant for the WRONG user does not authorize (requireDeviceScope username check)", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    // Claim a second user 'bob' and grant bob's device revoke-others under bob.
+    const bobUmk = { seed: new Uint8Array(32).fill(77) };
+    const bobIrk = deriveIRK(bobUmk);
+    await handleUsernameClaim(
+      { storage: storage.usernames },
+      {
+        request: {
+          username: "bob",
+          irkPub: bytesToHex(bobIrk.publicKey),
+          issuedAt: Date.now(),
+        },
+        signature: bytesToHex(
+          signClaimUsername(
+            { username: "bob", irkPub: bobIrk.publicKey, issuedAt: Date.now() },
+            bobIrk,
+          ),
+        ),
+      },
+    );
+    const bobDevice = makeKey();
+    const grant: DeviceCapabilityGrant = {
+      grantId: "bob-grant",
+      username: "bob",
+      deviceLabel: "ipad",
+      devicePubKey: bobDevice.publicKey,
+      scopes: ["revoke-others"],
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + 90 * 24 * 3_600_000,
+    };
+    await handleMintDeviceGrant(
+      { storage: storage.deviceCapabilityGrants, usernames: storage.usernames },
+      {
+        grant: {
+          grantId: grant.grantId,
+          username: "bob",
+          deviceLabel: grant.deviceLabel,
+          devicePubKey: bytesToHex(bobDevice.publicKey),
+          scopes: ["revoke-others"],
+          issuedAt: grant.issuedAt,
+          expiresAt: grant.expiresAt,
+        },
+        signature: bytesToHex(signDeviceCapabilityGrant(grant, bobIrk)),
+      },
+    );
+
+    // bob's device signs a revocation of harry's server (userId=harry).
+    const body = deviceRevokeBody(bobDevice);
+    const r = await handleRevokeServer(depsWithGrants(storage), body);
+    expect(r.status).toBe(403);
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeUndefined();
   });
 });

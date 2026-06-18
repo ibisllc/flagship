@@ -248,17 +248,16 @@ export async function handleListDeviceGrants(
 // POST /api/users/:u/device-grants/revoke
 // ──────────────────────────────────────────────────────────────────────
 
-// NOTE (task #39): revoking a grant only becomes operationally
-// meaningful once a production mutation actually authorizes via
-// `requireDeviceScope`. As of this writing NO production handler calls
-// `requireDeviceScope` (it's exercised only in tests), so flipping a
-// grant's `revokedAt` here changes nothing an attacker could exploit —
-// there is no grant-accepting code path to lock out. The pinning test
-// in `deviceCapabilityGrants.test.ts` ("requireDeviceScope has no
-// production consumers") guards this assumption: if someone adds a
-// grant-accepting handler without wiring `requireDeviceScope`, that
-// test fails and forces the author to either consume it (so revocation
-// bites) or consciously update the pin.
+// NOTE (task #39): revoking a grant is now operationally meaningful —
+// `serverRevocation.ts` authorizes the device-signed server-revoke path
+// via `requireDeviceScope`, which re-checks `revokedAt` (and expiry) on
+// every call. Flipping a grant's `revokedAt` here therefore immediately
+// stops that device from revoking servers. The pinning test in
+// `deviceCapabilityGrants.test.ts` ("requireDeviceScope production
+// consumers") asserts the EXACT known-consumer set, so a NEW
+// grant-accepting handler still fails the pin and forces the author to
+// either prove the revocation path is covered or consciously update the
+// list.
 export async function handleRevokeDeviceGrant(
   deps: DeviceCapabilityGrantsDeps,
   body: RevokeBody | undefined,

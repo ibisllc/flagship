@@ -906,6 +906,15 @@ export async function tryControlPlane(
           auditEvents: storage.auditEvents,
           autoUnlockLeases: storage.autoUnlockLeases,
           boxSealedLeases: storage.boxSealedLeases,
+          // Device-authorized revocation: a 2nd device holding a
+          // `revoke-others`/`admin` DeviceCapabilityGrant may revoke a server
+          // by passing `signerPubHex`. Same grant storage the device-grant
+          // mint/list/revoke handlers use, so a revoked grant stops working
+          // here immediately. Absent `signerPubHex` → owner-IRK path.
+          grants: {
+            storage: storage.deviceCapabilityGrants,
+            usernames: storage.usernames,
+          },
           ...(revokeDns ? { dns: revokeDns } : {}),
         },
         await readJson(request),
