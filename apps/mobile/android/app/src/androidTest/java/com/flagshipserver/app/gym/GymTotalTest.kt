@@ -6,6 +6,8 @@
 package com.flagshipserver.app.gym
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Test
@@ -92,7 +94,15 @@ class GymTotalTest : GymBase() {
     @Test
     fun awaitingUnlockPillOnHome() {
         launch(tab = "home", podsVariant = "awaiting-unlock")
-        composeRule.onNodeWithTag("pod-card-waiting-approval").assertIsDisplayed()
+        // The pill's testTag sits in FSListRow's `below` slot, under the row's
+        // combinedClickable — which MERGES descendant semantics, so the default
+        // (merged) tree query can't see the pill as its own node. Query the
+        // UNMERGED tree. Use onAllNodes().onFirst() (≥1, mirroring iOS XCUITest
+        // `.exists`) since the base demo fixtures may already carry a same-class
+        // pill. The pill renders correctly (text merges into the row a11y) — this
+        // is the Compose-test query, not an app defect.
+        composeRule.onAllNodesWithTag("pod-card-waiting-approval", useUnmergedTree = true)
+            .onFirst().assertExists()
         gymShot("home-awaiting")
     }
 
@@ -102,7 +112,11 @@ class GymTotalTest : GymBase() {
     @Test
     fun deadServerSurfacesOnHome() {
         launch(tab = "home", podsVariant = "dead")
-        composeRule.onNodeWithTag("pod-card-never-online").assertIsDisplayed()
+        // Unmerged-tree, ≥1 — same merged-semantics + base-fixture-collision
+        // reasons as awaitingUnlockPillOnHome (the demo "Music" pod also
+        // classifies DEAD, so there are 2 never-online pills here).
+        composeRule.onAllNodesWithTag("pod-card-never-online", useUnmergedTree = true)
+            .onFirst().assertExists()
         gymShot("dead-server")
     }
 }

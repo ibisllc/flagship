@@ -125,7 +125,24 @@ export class IosAdapter implements SurfaceAdapter {
     );
     logParts.push("[xcodebuild]\n" + (xcb.stdout ?? "") + (xcb.stderr ?? ""));
 
-    const passed = xcb.status === 0;
+    // A 0-test run is NOT a pass (mirror of the Android adapter's guard).
+    // xcodebuild EXITS 0 when `-only-testing:` matches no test — e.g. a missing
+    // or misnamed UITest class — so without this guard a non-existent harness
+    // silently "passes" (this is exactly how the absent GymLiveTests live slice
+    // was reporting green). Read the executed count from the .xcresult; fall back
+    // to the exit code only when the count genuinely can't be read, so a real
+    // passing run is never false-failed.
+    const ranCount = this.executedTestCount(resultBundle, logParts);
+    let passed: boolean;
+    if (ranCount === 0) {
+      passed = false;
+      logParts.push(
+        `[gym] xcodebuild executed 0 tests — \`-only-testing:${scenario.harness}\` ` +
+          "matched no test (missing/misnamed harness?). NOT claiming a pass.",
+      );
+    } else {
+      passed = xcb.status === 0;
+    }
     const screenshots = this.extractScreenshots(resultBundle, scenario, ctx, logParts);
 
     rmSync(resultBundle, { recursive: true, force: true });
@@ -135,6 +152,34 @@ export class IosAdapter implements SurfaceAdapter {
       screenshots,
       log: logParts.join("\n").slice(-6000),
     };
+  }
+
+  /**
+   * Tests actually executed, read from the .xcresult test-results summary
+   * (`xcrun xcresulttool get test-results summary`). Returns the count, or
+   * `null` when it genuinely can't be determined (the caller then trusts the
+   * exit code, so a real run is never false-failed). `0` is a real value — it's
+   * what a `-only-testing:` miss produces, and the caller treats it as a fail.
+   */
+  private executedTestCount(resultBundle: string, logParts: string[]): number | null {
+    if (!existsSync(resultBundle)) return null;
+    const res = spawnSync(
+      "xcrun",
+      ["xcresulttool", "get", "test-results", "summary", "--path", resultBundle, "--format", "json"],
+      { encoding: "utf8", timeout: 60_000 },
+    );
+    if (res.status !== 0 || !res.stdout) {
+      logParts.push(
+        "[gym] xcresult test-count unavailable; trusting exit code: " + (res.stderr ?? "").slice(0, 200),
+      );
+      return null;
+    }
+    try {
+      const summary = JSON.parse(res.stdout) as { totalTestCount?: number };
+      return typeof summary.totalTestCount === "number" ? summary.totalTestCount : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
