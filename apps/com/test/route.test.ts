@@ -849,6 +849,126 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
   });
 });
 
+describe("webapp host — client-route SPA fallback (the /join pairing bug)", () => {
+  // The cross-device pairing QR encodes <controlApex>/join?sid=…&pk=…. On the
+  // webapp host that path must boot the webapp's index.html so the in-app
+  // router runs enterJoin({sid,pk}); a naive /join → /webapp/join rewrite
+  // misses on disk and the assets binding's site-root SPA fallback serves the
+  // MARKETING page instead. Every webapp client route (extensionless path)
+  // serves the webapp's OWN index.html.
+
+  it("/join on web. host serves the webapp index.html (PWA boots → enterJoin)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/join"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("/join?sid=x&pk=y on web. host serves the webapp index.html (query carried by browser)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/join?sid=relay123&pk=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    // The router reads sid/pk from window.location in the browser — the
+    // server just needs to hand back the webapp shell, not the asset /join.
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("a generic extensionless route (/home) also serves the webapp index.html", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/home"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("real asset files (with an extension) still rewrite to /webapp/<file>, NOT index.html", async () => {
+    // Regression guard: the SPA fallback must not swallow actual files.
+    const css = await route(
+      new Request("https://web.flagshipserver.com/style.css"),
+      makeEnv(),
+    );
+    expect(await css.text()).toBe("asset:/webapp/style.css");
+    const js = await route(
+      new Request("https://web.flagshipserver.com/lib/api.js"),
+      makeEnv(),
+    );
+    expect(await js.text()).toBe("asset:/webapp/lib/api.js");
+  });
+
+  it("/ on web. host still serves /webapp/ (binding serves index.html) — unchanged", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(await r.text()).toBe("asset:/webapp/");
+  });
+
+  // Apex-aware: the gym webapp host is web.<CONTROL_APEX>.
+  it("/join on the GYM webapp host (web.gym.flagshipserver.com) serves the webapp index.html", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://web.gym.flagshipserver.com/join?sid=x&pk=y"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+
+  it("a gym webapp asset file still rewrites to /webapp/<file>", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://web.gym.flagshipserver.com/manifest.json"),
+      env,
+    );
+    expect(await r.text()).toBe("asset:/webapp/manifest.json");
+  });
+
+  // The CONTROL apex must be UNCHANGED: there /join is the native universal
+  // link and the web fallback is the marketing surface — it must NEVER route
+  // into serveWebapp / the webapp index.html.
+  it("/join on the CONTROL apex (flagshipserver.com) is NOT the webapp — coming-soon without the preview cookie", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/join"),
+      makeEnv(),
+    );
+    // Pre-launch gate: an un-cookied visitor sees the coming-soon page, not
+    // the webapp shell.
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
+  it("/join on the CONTROL apex with the preview cookie falls through to the marketing asset, NOT /webapp/index.html", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/join", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    // The marketing SPA fallback (asset binding) — explicitly NOT the webapp.
+    const body = await r.text();
+    expect(body).toBe("asset:/join");
+    expect(body).not.toBe("asset:/webapp/index.html");
+  });
+
+  it("/join on the GYM control apex (gym.flagshipserver.com) is also NOT the webapp", async () => {
+    const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
+    const r = await route(
+      new Request("https://gym.flagshipserver.com/join", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
+      env,
+    );
+    const body = await r.text();
+    expect(body).toBe("asset:/join");
+    expect(body).not.toBe("asset:/webapp/index.html");
+  });
+});
+
 describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("answers OPTIONS preflight from web. with the right ACL headers", async () => {
     const r = await route(

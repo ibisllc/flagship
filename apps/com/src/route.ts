@@ -1111,11 +1111,60 @@ function corsPreflight(request: Request, env: RouteEnv): Response {
 }
 
 /**
+ * Is this webapp-host path a client-side route the SPA owns (rather than
+ * a real file under apps/web/public/webapp/)?
+ *
+ * The webapp is a single-page app: routes like `/join`, `/home`,
+ * `/settings` have no on-disk file — the router reads `window.location`
+ * after index.html boots and dispatches in-app (e.g. the `/join?sid&pk`
+ * cross-device pairing receiver → `enterJoin`). Every real webapp asset
+ * has a file extension (`/manifest.json`, `/lib/api.js`, `/style.css`),
+ * so an extensionless path is the unambiguous signal for "client route".
+ *
+ * Why this matters: the assets binding's `not_found_handling =
+ * "single-page-application"` falls back to the SITE-ROOT index.html
+ * (`apps/web/public/index.html` — the MARKETING page) on a miss. So a
+ * naive `/join` → `/webapp/join` rewrite misses (no such file) and the
+ * binding serves the marketing page instead of the webapp — the PWA
+ * never boots and `enterJoin` never runs. Mapping client routes to the
+ * webapp's OWN index.html is the per-`/webapp/`-root SPA fallback.
+ *
+ * The last path segment is what's inspected so a route under a directory
+ * (`/x/join`) is still treated as a route; a dotfile asset (`/.well-known/…`)
+ * never reaches here (the webapp serves none).
+ *
+ * `/api/*` is excluded: the webapp talks to the user's POD for data, never to
+ * its own origin, so an /api/* path here is a no-such-thing the binding maps
+ * literally under /webapp/ (preserving the long-standing not-proxied contract)
+ * rather than masquerading as a client route.
+ */
+function isWebappClientRoute(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (pathname === PROXY_PREFIX || pathname.startsWith(PROXY_PREFIX)) return false;
+  const lastSegment = pathname.split("/").pop() ?? "";
+  return !lastSegment.includes(".");
+}
+
+/**
  * Serve a request to web.flagshipserver.com by rewriting `/X` to
  * `/webapp/X` and handing off to the assets binding. The on-disk file
  * tree is unchanged (apps/web/public/webapp/...); the user-visible
  * origin sees those files at root paths so the manifest's start_url
  * and the service-worker scope can both be `/`.
+ *
+ * Client-side routes (extensionless paths like `/join`, plus `/`) have
+ * no on-disk file, so they're served the webapp's OWN index.html — a
+ * per-`/webapp/`-root SPA fallback. Without it the assets binding's
+ * site-root SPA fallback serves the marketing page for `/join`, so the
+ * PWA never boots its cross-device-pairing receiver. Real asset files
+ * (anything with an extension) keep the literal `/webapp<path>` rewrite.
+ *
+ * Apex-aware: this fires for whatever `webappHost(env)` is —
+ * `web.flagshipserver.com` in prod, `web.<CONTROL_APEX>` (e.g.
+ * web.gym.flagshipserver.com) in a test env. The CONTROL apex
+ * (flagshipserver.com / gym.flagshipserver.com) never reaches here:
+ * there `/join` is the native universal link and falls through to the
+ * marketing asset fallback, unchanged.
  *
  * Anything not a GET/HEAD on this host falls through to a 405 — the
  * webapp's data-plane writes (orders, paired-session adds) go to the
@@ -1135,23 +1184,24 @@ async function serveWebapp(
   }
 
   // Disk layout:  apps/web/public/webapp/<file>
-  // Public path:  /<file>     → rewrite to /webapp/<file> for ASSETS
-  // Public root:  /           → ASSETS /webapp/  (binding serves index.html)
-  //
-  // Exception — shared root assets. A few files live at the SITE root
-  // (apps/web/public/<file>) and are imported by BOTH the marketing landing
-  // page AND the webapp (e.g. `qrEncoder.js`, which the webapp's add-device +
-  // companion-dock views `import("/qrEncoder.js")`). They have no copy under
-  // webapp/, so the normal `/webapp/<file>` rewrite hits the SPA HTML fallback
-  // (content-type text/html) and the browser's dynamic `import()` fails — the
-  // pairing QR never renders. Serve these from the site root so there is ONE
-  // copy (no drift) and they resolve as real JS. (Affected prod too.)
+  // Public root:  /                      -> ASSETS /webapp/  (binding serves index.html)
+  // Shared root:  /qrEncoder.js ...       -> SITE ROOT. A few files live at apps/web/public/<file>
+  //   and are imported by BOTH the marketing page AND the webapp (e.g. qrEncoder.js, which the
+  //   add-device + companion views `import("/qrEncoder.js")`). They have no /webapp/ copy, so the
+  //   normal rewrite hits the SPA HTML fallback and the dynamic import() fails (pairing QR never
+  //   renders). Serve from root: one copy, no drift, real JS. (Affected prod too.)
+  // Client route: /join | /home ...       -> ASSETS /webapp/index.html so the PWA boots + its router
+  //   runs. Extensionless paths are client routes, NOT files; else the SPA fallback serves the
+  //   site-root marketing index.html and the receiver never boots.
+  // Asset file:   /style.css | /lib/x.js  -> rewrite to /webapp/<file> for ASSETS
   const rewrittenPath =
     url.pathname === "/"
       ? "/webapp/"
       : WEBAPP_SHARED_ROOT_ASSETS.has(url.pathname)
         ? url.pathname
-        : `/webapp${url.pathname}`;
+        : isWebappClientRoute(url.pathname)
+          ? "/webapp/index.html"
+          : `/webapp${url.pathname}`;
   const rewritten = new URL(rewrittenPath + url.search, "https://flagshipserver.com");
   // Preserve method + headers; body is empty for GET/HEAD.
   const assetReq = new Request(rewritten.toString(), {
