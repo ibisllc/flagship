@@ -477,8 +477,68 @@ async function runTrustOverride(certHash) {
   }
 }
 
+/**
+ * GYM-ONLY adoption seam (docs/gym-recipe-to-hetzner.md). Lets the live gym
+ * webapp e2e load an account that owns a freshly-provisioned gym box DIRECTLY
+ * into the session — the same session-population path the real recovery uses
+ * (`bootstrapFromExistingSeed` + `unlockSession`), minus the WebAuthn/grace
+ * ceremony the browser can't drive in a headless harness. The box is owned by
+ * `deriveIRK(umkSeed)`, so the session that results genuinely OWNS it and owner
+ * ops execute for real.
+ *
+ * Gated hard to the gym control host (`*.gym.flagshipserver.com`): on prod this
+ * hook is NEVER installed, so there is no test backdoor in production. Lives on
+ * the `gym` branch only (never main).
+ *
+ * Usage from the harness:
+ *   await page.evaluate((p) => window.__gymAdopt(p),
+ *     { umkSeedHex, username });
+ */
+function installGymAdoptSeam() {
+  let host = "";
+  try {
+    host = controlHostForGymGate();
+  } catch {
+    return;
+  }
+  // Match the gym apex host (`gym.flagshipserver.com`) OR any sub-origin of it,
+  // but NEVER prod (`flagshipserver.com`). `web.` is already stripped above.
+  if (!/(^|\.)gym\.flagshipserver\.com$/.test(host)) return; // PROD: no seam.
+  window.__gymAdopt = async ({ umkSeedHex, username }) => {
+    const hex = String(umkSeedHex || "");
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) throw new Error("umkSeedHex must be 64 hex chars");
+    const seed = new Uint8Array(hex.match(/.{2}/g).map((b) => parseInt(b, 16)));
+    const keystore = await import("./keystore.js");
+    const { unlockSession } = await import("./lib/state.js");
+    const { addProfile } = await import("./lib/profiles.js");
+    // Clean restore: drop any existing identity, point the keystore at this
+    // account, then wrap the seed under a throwaway local passphrase.
+    if (await keystore.hasWrappedUmk()) await keystore.resetDevice();
+    keystore.setActiveKeystoreProfile(username);
+    await keystore.persistSeedForProfile(seed, username, "gym-adopt-local-pass");
+    try { addProfile({ cloudName: username, kind: "admin" }); } catch { /* best-effort */ }
+    await unlockSession(seed, username);
+    setSubtitle(username);
+    show("view-home");
+    await enterHome();
+    return { ok: true, username };
+  };
+}
+
+/** Bare control apex host for the gym gate (no scheme), via lib/apex. */
+function controlHostForGymGate() {
+  try {
+    const loc = globalThis.location;
+    return new URL(loc.origin).host.replace(/^web\./, "");
+  } catch {
+    return "";
+  }
+}
+
 async function boot() {
   persistDebugFlagFromUrl();
+  // GYM-ONLY (never prod): expose the live-e2e account adoption seam.
+  try { installGymAdoptSeam(); } catch { /* best-effort */ }
   // Maintainer-trust enforcement: install the global .com fetch guard BEFORE
   // any backend call so that, the moment a verdict flips untrusted, every
   // .com call short-circuits — no matter which lib makes it. (No verdict yet ⇒
