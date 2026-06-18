@@ -13,6 +13,22 @@ import CryptoKit
 /// SWK ("flagship/swk/v1|…"), which never has to match the box.
 public enum ServerKeys {
     private static let infoSWK = "flagship.swk.v1"
+    /// PROTOCOL IRK info (dot-separated) — `packages/protocol/src/keys.ts`
+    /// `INFO_IRK`. DISTINCT from the iOS `Keystore`'s slash-form `flagship/irk/v1`:
+    /// the iOS Keystore derives its own (registered) account IRK, whereas a box
+    /// provisioned by the protocol / webapp (e.g. the gym `provision-for-webapp.ts`,
+    /// which signs with `@flagship/protocol`'s `deriveIRK`) pins THIS dot-form IRK.
+    private static let infoIRK = "flagship.irk.v1"
+
+    /// The PROTOCOL account IRK Ed25519 keypair, byte-identical to the TS
+    /// `deriveIRK(umk)` and the webapp's `keystore.js` `deriveIRK`. Returns nil on
+    /// a malformed seed. USE: the gym live-adopt seam only (production iOS pairing
+    /// uses `Keystore.deriveIRK` — the slash-form the iOS app registers).
+    public static func deriveProtocolIrk(umkSeed: Data) -> Curve25519.Signing.PrivateKey? {
+        guard umkSeed.count == 32 else { return nil }
+        let irkSeed = hkdfSha256(ikm: umkSeed, info: Data(infoIRK.utf8))
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed)
+    }
 
     public static func deriveSwk(umkSeed: Data, serverId: String) -> Data? {
         guard umkSeed.count == 32 else { return nil }
