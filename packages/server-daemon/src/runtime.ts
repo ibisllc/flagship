@@ -34,6 +34,7 @@ import {
 } from "./relayLockdown.js";
 import type { ServiceBlessing } from "@flagship/protocol";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
+import { corsPreflight, withCors } from "./cors.js";
 import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 
@@ -706,7 +707,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       const isOwnHost = sni === ownFqdn;
       const inBoxZone = sni.endsWith(`.${ownFqdn}`);
       if (!isOwnHost && inBoxZone) return disambiguationResponse(sni);
-      return handleHttp(req);
+      // CORS for the daemon's own /api/* surface only (NOT the app-proxy
+      // path above, which serves the user's own apps). The browser webapp
+      // is a different origin (web.<control-apex>) and calls the box's API
+      // directly, so it needs ACAO. Preflight short-circuits before auth.
+      const preflight = corsPreflight(req);
+      if (preflight) return preflight;
+      return withCors(req, await handleHttp(req));
     }, {
       onUpgrade: (args) => {
         // Try registered upgrade handlers first (post-startup wiring
