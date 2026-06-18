@@ -400,10 +400,18 @@ shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 #     (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process
 #     env only; without them it logs "Missing required inputs" and exits
 #     2. systemd loads this file via EnvironmentFile= in the unit below.
+#     FLAGSHIP_CONTROL_PLANE_BASE_URL pins the daemon to the SAME control
+#     plane that provisioned it (CTRL_BASE, derived from the blob's
+#     registrationUrl), so hub-discovery (/api/services/endpoints), ACME
+#     DNS-01, and the status heartbeat all target this env. Prod boxes get
+#     the default flagshipserver.com; a test env (gym) gets
+#     gym.flagshipserver.com → the box lands in the gym's hub + DNS zone
+#     instead of contaminating (or vanishing into) prod.
 mkdir -p /etc/flagship
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
 FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
+FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 

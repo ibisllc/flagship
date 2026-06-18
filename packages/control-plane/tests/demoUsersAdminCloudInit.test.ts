@@ -233,6 +233,12 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("EnvironmentFile=/etc/flagship/daemon.env");
     expect(bootstrap).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
     expect(bootstrap).toContain("FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX");
+    // The daemon must be pinned to the SAME control plane that provisioned
+    // it (CTRL_BASE = blob registrationUrl minus /api/server/register), so
+    // hub-discovery, ACME DNS-01, and the status heartbeat target this env.
+    // Without it the daemon defaults to flagshipserver.com — a gym/test box
+    // would then vanish into prod's hub + DNS zone. Regression: gym e2e.
+    expect(bootstrap).toContain("FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");
