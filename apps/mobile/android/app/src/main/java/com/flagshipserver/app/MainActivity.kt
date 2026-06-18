@@ -229,6 +229,10 @@ class MainActivity : FragmentActivity() {
                 .onSuccess { registeredNetworkCallback = networkCallback }
         }
 
+        // Gym live e2e (debug builds only; nothing in release): adopt a real
+        // box's owner identity before the first composition.
+        com.flagshipserver.app.core.Variant.adoptLiveIdentity(intent, appState, sessionStore, okHttp, lifecycleScope)
+
         // Identity / security plane: the real flagshipserver.com (identity
         // claims, login/resolve, recovery, device admit/replace/wipe, TOTP,
         // audit, revoke, peer-backup, tier).
