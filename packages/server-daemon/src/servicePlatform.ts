@@ -279,6 +279,7 @@ export class ServicePlatform {
     const ownerEnv = this.deps.envStore
       ? sanitizeOwnerEnv(await this.deps.envStore.get(serviceId).catch(() => null))
       : {};
+    const containerPort = parsed.manifest.runtime.port;
     const env: Record<string, string> = {
       ...ownerEnv,
       ...(parsed.manifest.runtime.env ?? {}),
@@ -287,13 +288,22 @@ export class ServicePlatform {
       FLAGSHIP_CREATOR: r.creator,
       FLAGSHIP_SLUG: r.slug,
       FLAGSHIP_HOST: this.deps.host.username,
+      // 12-factor: tell the app the port it should bind. It equals the
+      // manifest runtime.port the publish maps to, so a contract app that
+      // reads $PORT and an image that hardcodes its declared port both end up
+      // reachable by the proxy. (Set ABOVE the FLAGSHIP_* block? No — after
+      // runtime.env so the manifest can't override the platform's PORT.)
+      PORT: String(containerPort),
       ...(apiToken ? { FLAGSHIP_APP_TOKEN: apiToken } : {}),
     };
     const spec: AppSpec = {
       serviceId,
       image: parsed.manifest.runtime.image,
       env,
+      // `port` = allocated host-loopback port the proxy dials; `containerPort`
+      // = the app's manifest listen port. Publish maps host→container.
       port,
+      containerPort,
     };
     try {
       await this.deps.appRunner.deploy(spec);

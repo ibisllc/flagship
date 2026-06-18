@@ -66,6 +66,23 @@ describe("AppRunner", () => {
     expect(call.args).toContain("127.0.0.1:8080:8080");
   });
 
+  it("maps the allocated host port to the app's container port (regression: serve 502)", async () => {
+    // The daemon allocates a per-service host-loopback port (what the proxy
+    // dials) that is NOT the app's listen port (the manifest runtime.port).
+    // The publish MUST be host:container, else nothing answers the proxy.
+    const rec = new RecordingRunner();
+    const runner = new AppRunner(rec);
+    await runner.deploy({
+      serviceId: "photos",
+      image: "ghcr.io/flagship/photos:latest",
+      port: 63015, // allocated host port the proxy dials
+      containerPort: 80, // the app's manifest listen port
+    });
+    const args = rec.calls[0]!.args;
+    expect(args).toContain("127.0.0.1:63015:80");
+    expect(args).not.toContain("127.0.0.1:63015:63015");
+  });
+
   describe("container isolation (SEC-4)", () => {
     async function deployArgs(
       overrides?: ConstructorParameters<typeof AppRunner>[1],

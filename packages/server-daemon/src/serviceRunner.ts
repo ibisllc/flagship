@@ -4,7 +4,17 @@ export interface AppSpec {
   serviceId: string;
   image: string;
   env?: Record<string, string>;
+  /** Host loopback port the daemon's app-proxy dials (allocated per service). */
   port?: number;
+  /**
+   * Port the app actually LISTENS ON inside the container (the manifest's
+   * runtime.port). The publish maps `host:<port>` → `container:<containerPort>`.
+   * Absent ⇒ same as `port` (back-compat). Without this the daemon published
+   * `host:<port> → container:<port>` while the image listened on its own
+   * manifest port, so nothing answered the proxy (502). See the `PORT` env the
+   * platform also injects so contract apps bind this port.
+   */
+  containerPort?: number;
 }
 
 export interface CommandRunner {
@@ -142,7 +152,7 @@ export class AppRunner {
       this.containerName(spec.serviceId),
       ...this.hardeningArgs(),
       ...this.envArgs(spec.env),
-      ...this.portArgs(spec.port),
+      ...this.portArgs(spec.port, spec.containerPort),
       spec.image,
     ];
     await this.cmd.run("docker", args);
@@ -241,14 +251,21 @@ export class AppRunner {
     return Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
   }
 
-  private portArgs(port: number | undefined): string[] {
-    if (!port) return [];
+  private portArgs(hostPort: number | undefined, containerPort?: number): string[] {
+    if (!hostPort) return [];
     // Publish to host loopback only. The daemon runs as a HOST process,
-    // so it reaches the app at 127.0.0.1:<port>; the port is never
+    // so it reaches the app at 127.0.0.1:<hostPort>; the port is never
     // exposed off-box. Crucially this does NOT re-open the daemon API to
     // the app: the container is on the dedicated bridge, so the app's own
     // `127.0.0.1` is its container namespace — reaching the host's
     // loopback (where the daemon API binds) is not possible from there.
-    return ["-p", `127.0.0.1:${port}:${port}`];
+    //
+    // host:<hostPort> → container:<containerPort>. The container port is the
+    // app's manifest runtime.port (the port it actually listens on); the host
+    // port is an allocated, per-service loopback handle the proxy dials. They
+    // are NOT the same number — mapping host→host while the app listened on
+    // its manifest port left nothing answering the proxy (the historical 502).
+    const cport = containerPort ?? hostPort;
+    return ["-p", `127.0.0.1:${hostPort}:${cport}`];
   }
 }
