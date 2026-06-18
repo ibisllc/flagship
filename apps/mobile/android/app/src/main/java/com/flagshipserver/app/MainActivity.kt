@@ -28,6 +28,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.EncryptedSessionStore
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -183,6 +185,41 @@ class MainActivity : FragmentActivity() {
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         val okHttp = buildOkHttp()
+
+        // GYM-ONLY live-e2e identity adoption (the Android analogue of the
+        // webapp's __gymAdopt / iOS GymLiveAdoption). DEBUG-ONLY: when the launch
+        // intent carries `flagship.gymAdoptSeed`, install the box's owner UMK
+        // seed + the dot-form protocol-IRK override, mark paired + live, and mint
+        // a box paired session — so an instrumentation test drives the REAL app
+        // against a REAL box. A RELEASE build skips this branch entirely + a prod
+        // launch never passes the extra, so it is dead in the live app. The local
+        // (synchronous) phase runs BEFORE setContent so the first composition
+        // sees the paired shell; the remote phase (the add-paired-session POST)
+        // runs async and sets the session token on success.
+        if (isDebuggable) {
+            com.flagshipserver.app.core.GymLiveAdoption.parse(intent)?.let { gymArgs ->
+                try {
+                    com.flagshipserver.app.core.GymLiveAdoption.adoptLocal(gymArgs, appState, devSettings)
+                    lifecycleScope.launch {
+                        try {
+                            com.flagshipserver.app.core.GymLiveAdoption.adoptRemote(
+                                args = gymArgs,
+                                seedHex = gymArgs.umkSeedHex,
+                                store = sessionStore,
+                                client = okHttp,
+                            )
+                        } catch (e: Throwable) {
+                            // Surface to the test log + leave a visible paired-but-
+                            // sessionless shell (the test asserts the live BFF, so a
+                            // failed pairing fails the test).
+                            android.util.Log.e("GymLiveAdoption", "remote adopt FAILED", e)
+                        }
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("GymLiveAdoption", "local adopt FAILED", e)
+                }
+            }
+        }
 
         // Identity / security plane. Mock for emulator/dev; Live talks to the
         // real flagshipserver.com (identity claims, login/resolve, recovery,

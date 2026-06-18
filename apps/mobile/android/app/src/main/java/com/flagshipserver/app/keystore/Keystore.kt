@@ -80,6 +80,23 @@ object Keystore {
     @Volatile private var prefs: SharedPreferences? = null
     @Volatile private var activeProfileId: String? = null
 
+    /**
+     * GYM-ONLY override (the Kotlin mirror of iOS
+     * `Keystore.gymAdoptedIrkOverride`). The gym live-adopt seam installs the
+     * box's owner key here — the PROTOCOL (dot-form) IRK
+     * (`ServerKeys.deriveProtocolIrk`), which DIFFERS from this Keystore's
+     * slash-form `deriveIRK`. When set, EVERY box-op signer that calls the
+     * default `deriveIRK(reason)` (journal / power / front-page / install /
+     * add-paired-session) signs with the box's ACTUAL owner key, so the live
+     * e2e drives those flows UI-driven against the right key.
+     *
+     * NULL in production: the seam is gated on a gym-only launch extra
+     * (`flagship.gymAdoptSeed`), which a prod launch never carries — so this
+     * is dead in the live app. Mirrors the gym-override pattern used elsewhere.
+     */
+    @Volatile
+    var gymAdoptedIrkOverride: Ed25519Sign? = null
+
     /** Wire up the encrypted-prefs file. Idempotent. App init calls
      *  this from MainActivity.onCreate. */
     fun attach(context: Context) {
@@ -253,8 +270,14 @@ object Keystore {
      *  active version. See `deriveIRK(reason, version)` for the
      *  versioned variant used by Replace device (C7) and Wipe &
      *  restart (E4-E5). */
-    suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign =
-        deriveIRK(reason, currentIrkVersion())
+    suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign {
+        // Gym live-adopt: sign box ops with the box's actual owner key (the
+        // dot-form protocol IRK), bypassing the slash-form derivation + the
+        // biometric prompt (the headless e2e can't satisfy Face/PIN). Null in
+        // production, so this is a no-op there.
+        gymAdoptedIrkOverride?.let { return it }
+        return deriveIRK(reason, currentIrkVersion())
+    }
 
     /** Explicit-version IRK derivation. Used by the rotation
      *  ceremonies to derive BOTH the OLD (currentIrkVersion()) and

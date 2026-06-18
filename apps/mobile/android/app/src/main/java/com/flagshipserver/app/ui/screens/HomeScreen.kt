@@ -453,10 +453,12 @@ fun ServerRow(
             leading = FSListLeading.Icon("🖥", statusIconColor(liveness, pod.status)),
             title = pod.name,
             subtitle = serverSubtitle(pod, liveness),
-            modifier = Modifier.combinedClickable(
-                onClick = onTap,
-                onLongClick = { menuOpen = true },
-            ),
+            modifier = Modifier
+                .testTag("home-pod-row")
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = { menuOpen = true },
+                ),
             below = {
                 // Status pill (+ Leader badge) stacks UNDER the text on its own
                 // line — a long label like "Never came online" would be crushed
