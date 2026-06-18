@@ -366,18 +366,22 @@ async function runKeyfileImport(file) {
       // skip the takeover (the bug this fix closes).
       throw new Error("account key wasn't available after restore");
     }
-    const { signWithIrk, deriveIrkFromSeed, bytesToHex } = keystore;
+    const { deriveIrkFromSeed, deriveIrkVersioned, signWithIrkVersioned, bytesToHex } = keystore;
     const { runKeyfileImportTakeover, SecondFactorRequiredError } = await import(
       "../lib/keyfileImportTakeover.js"
     );
     const { addProfile } = await import("../lib/profiles.js");
     let takeover;
     try {
+      // ROTATE the IRK on import: old = the registered (v1) key, new = a fresh
+      // rotated device key. The re-pair handler rejects old==new, so inject the
+      // versioned derivers (mirrors Android + loginTakeover).
       takeover = await runKeyfileImportTakeover({
         username,
         seed: session.umk,
         deriveIrkFromSeed,
-        signWithIrk,
+        deriveIrkVersioned,
+        signWithIrkVersioned,
         bytesToHex,
         addProfile: (profile) => addProfile(profile),
       });
@@ -460,7 +464,18 @@ async function runImportGraceCountdown(takeover) {
     finishBtn.textContent = "Finishing…";
     try {
       const result = await finishTakeover(takeover, {
-        finalizeV2Irk: () => {},
+        // The re-pair ROTATED to takeover.newIrkVersion; once the swap
+        // completes server-side, persist that version locally so subsequent
+        // signing (push, orders, …) uses the rotated device key — mirrors
+        // Android's setPendingIrkRotationVersion + finalize.
+        finalizeV2Irk: async () => {
+          if (takeover?.newIrkVersion) {
+            try {
+              const { setCurrentIrkVersion } = await import("../keystore.js");
+              setCurrentIrkVersion(takeover.newIrkVersion);
+            } catch { /* best-effort — the swap already succeeded server-side */ }
+          }
+        },
         openAccount: async () => {
           close();
           await dispatchInitialView();

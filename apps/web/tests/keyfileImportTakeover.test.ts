@@ -6,10 +6,15 @@
 // mirroring iOS/Android `KeyfileImportViewModel`. The webapp used to install a
 // fresh local identity with NO server-side takeover at all.
 //
-// Asserts: the re-pair IS POSTed with the byte-identical envelope mobile sends
-// (new == old pubkey on a fresh device), the canonical bytes carry the
-// `flagship/re-pair-initiate/v1` tag, a 401+totpProof maps to the second-factor
-// guidance (route to sign-in), and the admin profile is recorded.
+// Asserts: the re-pair IS POSTed, and it ROTATES the IRK — old = the registered
+// key, new = a fresh rotated device key (old != new, new != the registered key)
+// so the control-plane re-pair handler accepts it. (It used to send old == new,
+// which the handler rejects with 400 "newIrkPub equals current IRK" — keyfile
+// recovery was dead on the webapp + iOS; Android already rotated. Found by the
+// gym account-recovery e2e, 2026-06-18.) Also: the canonical bytes carry the
+// `flagship/re-pair-initiate/v1` tag, the NEW (rotated) key signs, a 401+totpProof
+// maps to the second-factor guidance (route to sign-in), and the admin profile
+// is recorded.
 
 import { describe, expect, it, vi } from "vitest";
 import { resolve } from "node:path";
@@ -37,10 +42,13 @@ function jsonResponse(status: number, body: unknown = {}) {
 const toHex = (b: Uint8Array) =>
   Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 
-const NEW_PUB = new Uint8Array(32).fill(0xa1);
+// v1 (registered) vs the rotated device key. A keyfile import rotates: old = v1,
+// new = the next version, so they MUST differ.
+const OLD_PUB = new Uint8Array(32).fill(0xa1);
+const NEW_PUB = new Uint8Array(32).fill(0xb2);
 
 function fakeArgs(overrides: Record<string, any> = {}) {
-  const calls: Record<string, any> = { profiles: [], signedBytes: null };
+  const calls: Record<string, any> = { profiles: [], signedBytes: null, signedVersion: null };
   const seed = new Uint8Array(32).fill(7);
   const fetchMock = vi.fn().mockResolvedValue(
     jsonResponse(200, {
@@ -53,9 +61,14 @@ function fakeArgs(overrides: Record<string, any> = {}) {
   const args = {
     username: "harry",
     seed,
-    deriveIrkFromSeed: vi.fn(async (_s: Uint8Array) => ({ publicKey: NEW_PUB })),
-    signWithIrk: vi.fn(async (_s: Uint8Array, bytes: Uint8Array) => {
+    // OLD = the registered (v1) key under the recovered seed.
+    deriveIrkFromSeed: vi.fn(async (_s: Uint8Array) => ({ publicKey: OLD_PUB })),
+    // NEW = a fresh ROTATED device key (the real keystore's deriveIrkVersioned).
+    deriveIrkVersioned: vi.fn(async (_s: Uint8Array, _v: number) => ({ publicKey: NEW_PUB })),
+    // The NEW (rotated) key signs — record which version + bytes it signed.
+    signWithIrkVersioned: vi.fn(async (_s: Uint8Array, version: number, bytes: Uint8Array) => {
       calls.signedBytes = bytes;
+      calls.signedVersion = version;
       return new Uint8Array(64).fill(0xcc);
     }),
     bytesToHex: toHex,
@@ -68,7 +81,7 @@ function fakeArgs(overrides: Record<string, any> = {}) {
 }
 
 describe("keyfileImportTakeover — INITIATES the takeover re-pair (H6)", () => {
-  it("POSTs /re-pair with the same envelope mobile sends (new == old pubkey)", async () => {
+  it("POSTs /re-pair ROTATING the IRK (old = registered, new = rotated; old != new)", async () => {
     const { runKeyfileImportTakeover } = await loadLib();
     const { args, fetchMock } = fakeArgs();
 
@@ -80,31 +93,36 @@ describe("keyfileImportTakeover — INITIATES the takeover re-pair (H6)", () => 
     expect(String(url)).toContain("/api/users/harry/re-pair");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body);
-    // A fresh device doesn't hold the displaced key, so old == new (iOS parity).
-    const expectedPub = toHex(NEW_PUB);
-    expect(body.request.newIrkPub).toBe(expectedPub);
-    expect(body.request.oldIrkPub).toBe(expectedPub);
+    // ROTATION: old = the registered key, new = the rotated device key. The
+    // handler rejects old==new ("nothing to swap"), so they MUST differ.
+    expect(body.request.oldIrkPub).toBe(toHex(OLD_PUB));
+    expect(body.request.newIrkPub).toBe(toHex(NEW_PUB));
+    expect(body.request.newIrkPub).not.toBe(body.request.oldIrkPub);
     expect(body.request.username).toBe("harry");
     expect(body.request.issuedAt).toBe(1234567);
     expect(body.signature).toBe(toHex(new Uint8Array(64).fill(0xcc)));
     // No totpProof: a keyfile decrypt is single-device proof, like mobile.
     expect(body.totpProof).toBeUndefined();
 
-    // Returns the grace fields for the countdown + the admin label.
+    // Returns the grace fields for the countdown + the admin label + the rotated
+    // version the completion step must finalize.
     expect(out.rePair.completesAt).toBe(1000);
     expect(out.deviceLabel).toBe("admin");
+    expect(out.newIrkVersion).toBeGreaterThanOrEqual(2);
   });
 
-  it("signs the flagship/re-pair-initiate/v1 canonical bytes", async () => {
+  it("signs the flagship/re-pair-initiate/v1 canonical bytes with the NEW (rotated) key", async () => {
     const { runKeyfileImportTakeover, TAG_RE_PAIR_INITIATE } = await loadLib();
     const { args, calls } = fakeArgs();
-    await runKeyfileImportTakeover(args);
+    const out = await runKeyfileImportTakeover(args);
     const signed = new TextDecoder().decode(calls.signedBytes);
-    const expectedPub = toHex(NEW_PUB);
     expect(TAG_RE_PAIR_INITIATE).toBe("flagship/re-pair-initiate/v1");
+    // Canonical order: tag | username | newPub | oldPub | issuedAt.
     expect(signed).toBe(
-      ["flagship/re-pair-initiate/v1", "harry", expectedPub, expectedPub, 1234567].join("|"),
+      ["flagship/re-pair-initiate/v1", "harry", toHex(NEW_PUB), toHex(OLD_PUB), 1234567].join("|"),
     );
+    // The signer used the rotated version, not v1.
+    expect(calls.signedVersion).toBe(out.newIrkVersion);
   });
 
   it("records the device as the admin profile", async () => {

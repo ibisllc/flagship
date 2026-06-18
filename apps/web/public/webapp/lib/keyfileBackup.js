@@ -13,7 +13,11 @@
 // unit-testable in a DOM-less environment.
 
 import { wrapUmkToKeyfile, unwrapUmkFromKeyfile, KeyfileError } from "./keyfile.js";
-import { set as profileSet } from "./profilesStore.js";
+import {
+  set as profileSet,
+  ensureProfile,
+  setActiveCloudName,
+} from "./profilesStore.js";
 
 /** Approved verbatim copy — keep in sync with the iOS strings. */
 export const KEYFILE_COPY = {
@@ -141,12 +145,21 @@ export async function restoreFromBackupFile({
   }
   await keystore.bootstrapFromExistingSeed(localPassphrase, seed);
   if (meta.username) {
-    // `username` is marked device-wide-or-pre-profile, so profileSet will
-    // also write the legacy flat key for any boot-only consumer (keystore).
-    // This runs before the caller activates a profile, so the write lands
-    // on the legacy key only — the eventual unlockSession + ensureUsername
-    // chain promotes it to a per-profile slot once a cloud is active.
-    try { profileSet("username", meta.username); } catch { /* swallow */ }
+    // ACTIVATE the recovered cloud's profile so its per-profile slots
+    // (podBaseUrl, sessionToken, …) are immediately writable. Without this the
+    // import lands with NO active profile: pairing the recovered device to its
+    // box (setPodBaseUrl/setSessionToken) writes nowhere durable, so every
+    // /api/screens/* read finds an empty podBaseUrl and the recovered device
+    // can't actually USE the regained cloud. (Found by the gym account-recovery
+    // e2e, 2026-06-18 — the recovery view goes restore → takeover → Home and
+    // never runs the ensureUsername chain that would otherwise promote it.)
+    // `username` is also device-wide-or-pre-profile, so profileSet keeps the
+    // legacy flat key in sync for the keystore + boot-only readers.
+    try {
+      ensureProfile(meta.username);
+      setActiveCloudName(meta.username);
+      profileSet("username", meta.username);
+    } catch { /* swallow — storage disabled */ }
   }
   await unlockSession(seed, meta.username);
   return { username: meta.username, ...(meta.accountId ? { accountId: meta.accountId } : {}) };
