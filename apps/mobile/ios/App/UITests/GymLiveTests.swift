@@ -534,8 +534,329 @@ final class GymLiveTests: XCTestCase {
         XCTAssertTrue(pickerShown, "Server-detail should render the front-page picker for the live box.")
         gymShot(app, "live-frontpage-picker")
 
+        // ── 6. MANAGE the service — set an env var through the REAL UI ───────
+        // The owner navigates Services → the installed app → ⋯ → "Configure
+        // environment" → + → name/value → Save. The ServiceEnvScreen signs a
+        // SetServiceEnvRequest with the box owner IRK (the adopted UMK override,
+        // see Keystore.gymAdoptedIrkOverride) and POSTs it over the paired
+        // session to the box's `/api/screens/services/:id/env/set` BFF — which
+        // verifies the IRK signature and seals the value at rest. We then assert
+        // the EFFECT: the env-row NAME reappears after the screen reloads its
+        // list from the box's sealed store (a real `GET …/env` over the paired
+        // session). Names appearing there means the box genuinely stored it.
+        let envName = "GYMLIVE_KEY"
+        let envValue = "set-by-ios-live-\(Int(Date().timeIntervalSince1970) % 100000)"
+        try manageEnvThroughUI(app, slug: slug, name: envName, value: envValue)
+
+        // Independent box-side proof (B), out-of-band of the UI: sign a SECOND
+        // distinct env var with the box owner IRK in the TEST process and POST
+        // it to the box's DIRECT owner-IRK endpoint (`/api/services/:id/env`,
+        // the same trust root as install — no paired session needed). A 200
+        // proves the box's owner-IRK set-env path accepts + applies the order,
+        // verified entirely outside the app's UI.
+        try setEnvOnBoxDirect(slug: slug, name: "GYMLIVE_DIRECT", value: "direct-\(Int(Date().timeIntervalSince1970) % 100000)")
+
+        // ── 7. UNINSTALL ────────────────────────────────────────────────────
+        // iOS UI GAP: ServiceDetail DOES render a red "Remove service" button,
+        // but it is an UNWIRED STUB — `ServicesTab.ServiceDetailContainer` passes
+        // `onRemove: { toasts.warning("Remove flow not wired yet.") }`, so a tap
+        // only flashes that toast and does NOT uninstall. We first DEMONSTRATE
+        // that gap through the real UI (tap Remove → assert the "not wired" toast
+        // appears AND the service is still installed on the box), then perform the
+        // REAL uninstall via the signed order the app SHOULD send: an IRK-signed
+        // UninstallServiceRequest over the box's DIRECT owner-IRK transport
+        // (`DELETE /api/services/:id`), asserting the slug vanishes from the live
+        // `/api/services`.
+        try demonstrateRemoveStubIsNoOp(app, slug: slug)
+        try uninstallServiceOnBox(slug: slug)
+        gymShot(app, "live-after-uninstall-api")
+
+        // Re-open the Services tab; the freshly-uninstalled service must NO
+        // LONGER appear in the live apps-list (the box dropped the container +
+        // membership; the BFF list reflects it).
+        goHome(app)
+        openServicesTab(app)
+        // Pull-to-refresh a few times so the apps-list re-fetches post-uninstall.
+        var gone = false
+        for _ in 0..<5 {
+            app.swipeDown()
+            if !waitForAnyText(app, substrings: [slug], timeout: 8) { gone = true; break }
+        }
+        gymShot(app, "live-services-list-after-uninstall")
+        XCTAssertTrue(
+            gone,
+            "After the signed uninstall, '\(slug)' should be GONE from the LIVE Services list."
+        )
+
         // Final proof shot.
         gymShot(app, "live-slice-done")
+    }
+
+    // ── service-management helpers ───────────────────────────────────────────
+
+    /// Drive the REAL env editor UI to set one `name=value` on the installed
+    /// service, then assert the box reflects the NAME (the screen's reload reads
+    /// the box's sealed env store over the paired session). The value is SECRET
+    /// and never asserted on — by design it never leaves the box.
+    private func manageEnvThroughUI(_ app: XCUIApplication, slug: String, name: String, value: String) throws {
+        goHome(app)
+        openServicesTab(app)
+        // Tap the installed app's row → ServiceDetail. The row title is the
+        // capitalized slug (AppRow uses `app.slug.capitalized`).
+        let rowTitle = slug.prefix(1).uppercased() + slug.dropFirst()
+        let appRow = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", slug)).firstMatch
+        var openedDetail = false
+        for _ in 0..<4 {
+            if appRow.waitForExistence(timeout: 10) {
+                if !appRow.isHittable { app.swipeUp() }
+                appRow.tap()
+                openedDetail = true
+                break
+            }
+            app.swipeUp()
+        }
+        XCTAssertTrue(openedDetail, "Should open the installed service '\(rowTitle)' detail.")
+
+        // Open the ⋯ menu → "Configure environment". The item lives behind the
+        // SwiftUI toolbar `Menu` (label = the `ellipsis.circle` SF Symbol), so
+        // it's NOT in the tree until the menu popover is expanded. A SwiftUI Menu
+        // item surfaces as a menu/popUp element, NOT a plain Button — so we match
+        // it across element types (`menuItems` first, then buttons/staticTexts by
+        // the identifier OR its visible "Configure environment" label). Retry the
+        // whole open since a SwiftUI Menu tap occasionally no-ops on the first try.
+        gymShot(app, "live-service-detail-opened")
+        var menuOpened = false
+        var envMenuItem: XCUIElement = app.menuItems["service-detail-env-menu-item"]
+        for _ in 0..<4 where !menuOpened {
+            tapServiceDetailMenuTrigger(app)
+            // Wait for the menu popover to present (its items surface as
+            // menuItems). A re-tap before it presents would toggle it closed,
+            // so we wait here rather than re-tapping eagerly.
+            _ = app.menuItems.firstMatch.waitForExistence(timeout: 3)
+            if let found = findEnvMenuItem(app) { envMenuItem = found; menuOpened = true; break }
+            // Popover up but our query missed → dismiss before the next attempt.
+            if app.menuItems.count > 0 || app.collectionViews.count > 0 {
+                app.tap()
+            }
+        }
+        if !menuOpened {
+            gymShot(app, "live-env-menu-not-found")
+        }
+        XCTAssertTrue(menuOpened, "ServiceDetail ⋯ menu should expose 'Configure environment'.")
+        envMenuItem.tap()
+
+        // ServiceEnvScreen — tap + to open the add sheet, type name+value, Save.
+        let addBtn = app.buttons["service-env-add-btn"]
+        XCTAssertTrue(addBtn.waitForExistence(timeout: 12), "Env screen should render the + add button.")
+        addBtn.tap()
+        let nameField = app.textFields["service-env-name-field"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 8), "Add-env sheet should show the name field.")
+        nameField.tap()
+        nameField.typeText(name)
+        // The value field is a SecureField.
+        let valueField = app.secureTextFields["service-env-value-field"]
+        XCTAssertTrue(valueField.waitForExistence(timeout: 5), "Add-env sheet should show the value field.")
+        valueField.tap()
+        valueField.typeText(value)
+        gymShot(app, "live-env-add-sheet")
+        let saveBtn = app.buttons["service-env-save-btn"]
+        XCTAssertTrue(saveBtn.waitForExistence(timeout: 5), "Add-env sheet should show Save.")
+        saveBtn.tap()
+
+        // Back on the env list, the saved NAME should appear (the screen reloads
+        // its names from the box's sealed store over the paired session). Retry
+        // a couple of times in case the reload races the sheet dismissal.
+        let envRow = app.staticTexts["service-env-row-\(name)"]
+        var nameVisible = envRow.waitForExistence(timeout: 20)
+        for _ in 0..<3 where !nameVisible {
+            app.swipeDown()
+            nameVisible = envRow.waitForExistence(timeout: 10)
+        }
+        gymShot(app, "live-env-list")
+        XCTAssertTrue(
+            nameVisible,
+            "The set env var '\(name)' should appear in the env list (the box's sealed store, read over the paired session)."
+        )
+    }
+
+    /// Find the "Configure environment" menu item once the ⋯ Menu is open. A
+    /// SwiftUI `Menu` child surfaces as a menu/popUp element (not a plain
+    /// Button), so probe across element types: by the explicit identifier
+    /// (`service-detail-env-menu-item`) on menuItems/buttons, then by the visible
+    /// "Configure environment" label on menuItems/buttons/staticTexts. Returns
+    /// the first existing, hittable match — or nil if the menu isn't open yet.
+    private func findEnvMenuItem(_ app: XCUIApplication) -> XCUIElement? {
+        let candidates: [XCUIElement] = [
+            app.menuItems["service-detail-env-menu-item"],
+            app.buttons["service-detail-env-menu-item"],
+            app.menuItems["Configure environment"],
+            app.buttons["Configure environment"],
+            app.staticTexts["Configure environment"],
+            app.menuItems.matching(NSPredicate(format: "label CONTAINS[c] %@", "Configure environment")).firstMatch,
+            app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Configure environment")).firstMatch,
+        ]
+        for el in candidates where el.exists && el.isHittable { return el }
+        return nil
+    }
+
+    /// Tap the ServiceDetail toolbar ⋯ Menu trigger. The trigger is the trailing
+    /// nav-bar button (label "More", icon `ellipsis.circle`). It sits flush at
+    /// the top-right safe-area edge, so XCUITest reports it `isHittable == false`
+    /// and a plain `.tap()` is a no-op — we therefore tap by COORDINATE on the
+    /// resolved element's frame center, which bypasses the hittability gate.
+    private func tapServiceDetailMenuTrigger(_ app: XCUIApplication) {
+        let bar = app.navigationBars["Server"].exists ? app.navigationBars["Server"] : app.navigationBars.firstMatch
+        // Resolve the trigger element across label/icon variants.
+        let candidates: [XCUIElement] = [
+            bar.buttons.matching(NSPredicate(format: "label ==[c] %@", "More")).firstMatch,
+            bar.buttons["ellipsis.circle"],
+            bar.images["ellipsis.circle"],
+            bar.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "ellipsis")).firstMatch,
+        ]
+        var trigger: XCUIElement? = candidates.first(where: { $0.exists })
+        if trigger == nil, bar.buttons.count > 0 {
+            trigger = bar.buttons.element(boundBy: bar.buttons.count - 1)  // trailing button
+        }
+        guard let t = trigger, t.exists else { return }
+        if t.isHittable {
+            t.tap()
+        } else {
+            // Non-hittable (edge-clipped) — coordinate tap on its center.
+            t.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+    }
+
+    /// Demonstrate the iOS UI GAP: the "Remove service" button exists but is an
+    /// unwired stub. Navigate to the service detail, scroll to + tap the red
+    /// "Remove service" button, assert the "not wired yet" toast appears, and
+    /// confirm the box STILL lists the service (the tap did NOT uninstall).
+    private func demonstrateRemoveStubIsNoOp(_ app: XCUIApplication, slug: String) throws {
+        goHome(app)
+        openServicesTab(app)
+        let appRow = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", slug)).firstMatch
+        var opened = false
+        for _ in 0..<4 {
+            if appRow.waitForExistence(timeout: 10) {
+                if !appRow.isHittable { app.swipeUp() }
+                appRow.tap(); opened = true; break
+            }
+            app.swipeUp()
+        }
+        XCTAssertTrue(opened, "Should reopen the service detail to reach Remove.")
+        let removeBtn = app.buttons["Remove service"]
+        XCTAssertTrue(
+            revealBySwipe(app, removeBtn, tries: 8),
+            "ServiceDetail should render a 'Remove service' button (it exists, but is an unwired stub)."
+        )
+        gymShot(app, "live-remove-button-present")
+        removeBtn.tap()
+        // The stub raises a toast "Remove flow not wired yet." Confirm it shows —
+        // documenting that the UI affordance is present but inert.
+        let stubToast = waitForAnyText(app, substrings: ["not wired", "Remove flow"], timeout: 8)
+        gymShot(app, "live-remove-stub-toast")
+        if !stubToast {
+            // Toasts auto-dismiss fast; not seeing it isn't fatal to the gap
+            // claim. The load-bearing assertion is that the service is STILL
+            // installed (below) — proving the button did not uninstall.
+            NSLog("gym-live: 'Remove service' stub toast not captured (likely auto-dismissed before the snapshot)")
+        }
+        // The decisive proof the UI Remove is a no-op: the box still lists it.
+        let listUrl = URL(string: "https://\(box.fqdn)/api/services")!
+        let (listData, _) = try syncRequest(URLRequest(url: listUrl), timeout: 30)
+        let listText = String(data: listData, encoding: .utf8) ?? ""
+        XCTAssertTrue(
+            listText.contains("\"slug\":\"\(slug)\""),
+            "After tapping the UI 'Remove service' stub, the box must STILL list '\(slug)' (the button is inert): \(listText)"
+        )
+    }
+
+    /// Independent box-side set-env (B): sign a SetServiceEnvRequest with the box
+    /// owner IRK and POST it to the box's DIRECT owner-IRK endpoint
+    /// (`POST /api/services/:id/env`) — the same trust root as install, no paired
+    /// session involved. Asserts 200. Full-replace semantics: this env map is the
+    /// complete desired set for the order (run last among the env writes here, so
+    /// it doesn't clobber the UI-set var's user-visible assertion which ran first).
+    private func setEnvOnBoxDirect(slug: String, name: String, value: String) throws {
+        let irk = try Self.protocolIrk(umkSeedHex: box.umkSeedHex)
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        // canonicalSetServiceEnv: tag|serverId|creator|slug|<count>|<k=v sorted>…|issuedAt
+        let pairs = ["\(name)=\(value)"]   // single pair
+        let canonical = ([
+            "flagship/set-service-env/v1",
+            box.fqdn, box.username, slug, String(pairs.count),
+        ] + pairs + [String(issuedAt)]).joined(separator: "|")
+        let sig = try irk.signature(for: Data(canonical.utf8))
+        let body: [String: Any] = [
+            "request": [
+                "serverId": box.fqdn,
+                "creator": box.username,
+                "slug": slug,
+                "env": [name: value],
+                "issuedAt": issuedAt,
+            ],
+            "signature": Self.hex(sig),
+        ]
+        let serviceId = "\(box.username)-\(slug)"
+        let url = URL(string: "https://\(box.fqdn)/api/services/\(serviceId)/env")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        let (data, resp) = try syncRequest(req, timeout: 60)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        XCTAssertEqual(
+            code, 200,
+            "Box should accept the IRK-signed direct set-env: \(String(data: data, encoding: .utf8) ?? "")"
+        )
+    }
+
+    /// Uninstall the service on the live box via the REAL protocol mirror
+    /// (UninstallServiceRequest) + the box owner IRK + the DIRECT owner-IRK
+    /// transport (`DELETE /api/services/:id`). Asserts the daemon accepts it
+    /// (200) — a genuine container teardown + membership drop on the box.
+    ///
+    /// Canonical bytes (byte-identical to @flagship/protocol canonicalUninstallService):
+    ///   flagship/uninstall-service/v1|<serverId>|<creator>|<slug>|<issuedAt>
+    private func uninstallServiceOnBox(slug: String) throws {
+        let irk = try Self.protocolIrk(umkSeedHex: box.umkSeedHex)
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let canonical = [
+            "flagship/uninstall-service/v1",
+            box.fqdn, box.username, slug, String(issuedAt),
+        ].joined(separator: "|")
+        let sig = try irk.signature(for: Data(canonical.utf8))
+        let body: [String: Any] = [
+            "request": [
+                "serverId": box.fqdn,
+                "creator": box.username,
+                "slug": slug,
+                "issuedAt": issuedAt,
+            ],
+            "signature": Self.hex(sig),
+        ]
+        let serviceId = "\(box.username)-\(slug)"
+        let url = URL(string: "https://\(box.fqdn)/api/services/\(serviceId)")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        let (data, resp) = try syncRequest(req, timeout: 120)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        XCTAssertEqual(
+            code, 200,
+            "Live box should accept the IRK-signed uninstall: \(String(data: data, encoding: .utf8) ?? "")"
+        )
+        // Belt-and-suspenders: directly confirm the box's unauthenticated
+        // /api/services no longer lists the slug (the apps-list the UI reads).
+        let listUrl = URL(string: "https://\(box.fqdn)/api/services")!
+        let (listData, listResp) = try syncRequest(URLRequest(url: listUrl), timeout: 30)
+        let listCode = (listResp as? HTTPURLResponse)?.statusCode ?? 0
+        XCTAssertEqual(listCode, 200, "GET /api/services should be 200 after uninstall.")
+        let listText = String(data: listData, encoding: .utf8) ?? ""
+        XCTAssertFalse(
+            listText.contains("\"slug\":\"\(slug)\""),
+            "After uninstall the box's /api/services must not list '\(slug)': \(listText)"
+        )
     }
 
     // ── live-effect helpers ────────────────────────────────────────────────
