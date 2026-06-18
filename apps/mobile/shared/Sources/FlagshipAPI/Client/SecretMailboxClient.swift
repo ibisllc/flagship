@@ -785,8 +785,16 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public static var defaultBootBaseUrl: URL { Endpoints.bootBaseUrl }
 
     private let urlSession: URLSession
-    private let baseUrl: URL
-    private let bootBaseUrl: URL
+    /// Explicit base-URL override (tests). nil ⇒ resolve `Endpoints.controlBaseUrl`
+    /// PER CALL — so an apex override installed AFTER this client is constructed
+    /// (the gym `-apex-host` seam vs. this client being a stored-property
+    /// initializer that runs before the app's init body) is still honored. Prod
+    /// is byte-identical: no override ⇒ `Endpoints.controlBaseUrl` is the prod
+    /// literal either way.
+    private let baseUrlOverride: URL?
+    private var baseUrl: URL { baseUrlOverride ?? Endpoints.controlBaseUrl }
+    private let bootBaseUrlOverride: URL?
+    private var bootBaseUrl: URL { bootBaseUrlOverride ?? Endpoints.bootBaseUrl }
     /// A′ pinning — observer invoked with every decoded `/pods` response so
     /// the wiring layer can feed `FlagshipCore.CertPinRegistry`. LIVE-only
     /// by construction (the Mock never calls it ⇒ demo/mock sessions can
@@ -797,16 +805,18 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     /// (docs/account-read-token.md); nil sends none.
     private let readTokens: (any AccountReadTokenSource)?
 
+    /// `baseUrl` / `bootBaseUrl` nil ⇒ resolve from `Endpoints` per call (the
+    /// prod default + the gym override seam). Tests can still pin an explicit URL.
     public init(
         urlSession: URLSession = .shared,
-        baseUrl: URL = defaultBaseUrl,
-        bootBaseUrl: URL = defaultBootBaseUrl,
+        baseUrl: URL? = nil,
+        bootBaseUrl: URL? = nil,
         readTokens: (any AccountReadTokenSource)? = nil,
         onPods: (@Sendable (PodsDirectoryResponse) -> Void)? = nil
     ) {
         self.urlSession = urlSession
-        self.baseUrl = baseUrl
-        self.bootBaseUrl = bootBaseUrl
+        self.baseUrlOverride = baseUrl
+        self.bootBaseUrlOverride = bootBaseUrl
         self.readTokens = readTokens
         self.onPods = onPods
     }
