@@ -123,7 +123,58 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-18**.
 
-### 2026-06-18 (latest) — ⭐ LIVE gym Tier-2 box PROVEN online end-to-end (3 real fixes)
+### 2026-06-18 (latest) — ⭐ REAL-SERVER e2e suites (backend + frontend) built, run, GREEN
+
+**The gym's mocked Tier-1 had NO test that drove an actual server. Built two live
+suites that provision/drive REAL gym boxes + the real backend, ran them, and
+fixed every gap they surfaced** (all on `main`, pushed; `npx vitest run` **5666
+pass**, `tsc -b` clean):
+
+- **Backend live e2e — `tools/live-e2e/run.ts` (`npm run live-e2e`).** Provisions
+  a fresh gym Hetzner box (or `LIVE_E2E_REUSE_USER=` reuses one), then asserts the
+  whole chain against it: control-plane health, the box serves browser-trusted
+  TLS, the LE cert SANs cover the box apex + per-box wildcard, `/api/services`
+  (200 list or 503 when the docker platform is off), `/api/front-page`, the
+  control-plane directory shows it ONLINE, and the **owner-IRK-SIGNED** API — it
+  derives the deterministic demo owner IRK from `DEMO_IRK_KEK` and POSTs a real
+  signed `JournalRequest` (gets daemon log lines back) + asserts a forged sig is
+  rejected 403. **Reuse run 9/9, fresh-provision 11/11** (provision → online →
+  cert → serve → API → teardown, no lingering box).
+  - **Infra fix that unblocked the signed surface:** the demo cloud-init now
+    writes `/etc/flagship/config.json` (serverId/userId/bakPublicKey/irkPublicKey,
+    all from the install blob — `authCode.userPubKey` is the demo IRK) + sets
+    `FLAGSHIP_CONFIG`. Without a config the daemon logged *"FLAGSHIP_CONFIG not
+    provided; skipping local HTTP API"* and `wireOwnerHandlers()` short-circuited
+    on `cfg===null` → front-page / journal / power / dead-man all 404'd. Fails
+    closed (malformed config → no-cfg fallback), never blocks the cert bring-up.
+- **Frontend live e2e — `apps/web/e2e/live/` (`npm run live-e2e:web`).** Playwright
+  drives the ACTUAL deployed gym webapp (`web.gym.flagshipserver.com`) against the
+  ACTUAL gym backend. **2/2 green:** the live webapp serves + boots + resolves its
+  apex to the gym host, and it makes a successful real call to the gym control
+  plane (`gym.flagshipserver.com/api/maintainer-blessing → 200`). It surfaced +
+  fixed **3 real gym-env gaps** (all prod-preserving via `env.CONTROL_APEX`):
+  (1) `route.ts WEBAPP_HOST` was hardcoded to prod → the gym webapp host 307'd to
+  prod (`webappHost(env)` now apex-aware); (2) the webapp's username CLAIM POSTed
+  a RELATIVE `/api/username/claim` → hit the GET/HEAD-only webapp origin → 405
+  (fixed `openAccount.js`/`create-server.js` to use `controlApex()`); (3) the
+  control plane's CORS allowlist didn't include the gym webapp origin
+  (`isCorsAllowed(origin, env)` now allows `web.<CONTROL_APEX>`).
+
+**Open / documented findings (NOT blocking):**
+- **gym webapp full account CREATION is trust-gated.** The webapp's trust gate
+  verifies the control plane's `maintainer-blessing` against its baked
+  `MAINTAINER_PINNED_MANDATE_HASH`; the gym env doesn't yet serve a blessing that
+  verifies, so `isServerTrusted` is false and the mutating ops (claim/create) are
+  silently blocked (the form renders + the trust call fires, which the test
+  asserts). Standing up the gym maintainer-blessing is the follow-on to test
+  account creation through the UI.
+- **Demo boxes run NO service platform** (no docker/host-IRK) → `/api/services`
+  503 + the screens BFF / build-modes surfaces aren't wired. Testing those needs
+  the data-services stack enabled on the demo cloud-init (heavier follow-on).
+- Boxes bill (~$0.50/day) — the suites teardown what they provision; reused boxes
+  (e.g. `gymbox`) need a manual delete. Rotate the pasted test Hetzner token.
+
+### 2026-06-18 — ⭐ LIVE gym Tier-2 box PROVEN online end-to-end (3 real fixes)
 
 **A real gym box now provisions into the `gym.` test env and serves
 browser-trusted Let's Encrypt TLS at its gym FQDN — the live Tier-2 slice's
