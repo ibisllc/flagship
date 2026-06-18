@@ -66,8 +66,12 @@ import {
  * (#30 generalised; the iOS/Android ports hardcode the identical value
  * — #10).
  */
+// ⚠️ GYM TEST BRANCH ONLY — the gym's self-contained chain pin (the
+// sha256hex(canonicalMandate) of the gym root Mandate in
+// `@flagship/control-plane` gymTrustMaterial.ts). On `main` this is the prod
+// pin "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae".
 export const MAINTAINER_PINNED_MANDATE_HASH =
-  "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae";
+  "87f5ae60cd1cfc0629fdf10ab97a547d33bca68bf3a1426614096a3054d57ae7";
 
 export function maintainerPinConfigured(
   pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
