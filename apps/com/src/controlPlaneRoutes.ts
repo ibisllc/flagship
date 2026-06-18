@@ -2498,7 +2498,11 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           hetzner: gymHetzner,
           ...(gymSshKeyId ? { demoSshKeyId: gymSshKeyId } : {}),
-          defaultRegion: "fsn1",
+          // Hetzner stock-gates the CPX line (cpx31/41/51) to ash/hil — it is
+          // NOT available in fsn1, so a cpx* size + fsn1 fails Hetzner 422
+          // "unsupported location for server type". ash is the proven combo
+          // for the full-platform size below (validated live 2026-06-18).
+          defaultRegion: "ash",
           // Full-platform gym boxes run the data-services docker stack; cpx11
           // is too small for it (per docs/gym-recipe-to-hetzner.md + the
           // 2026-06-18 full-platform notes). cpx31 has the headroom.
