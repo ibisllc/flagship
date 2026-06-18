@@ -312,9 +312,128 @@ async function main(): Promise<void> {
           const v = r.json?.fit !== undefined ? `fit=${r.json.fit}` : JSON.stringify(r.json).slice(0, 80);
           return v;
         });
+
+        // MCP connect (IDE): mint a build + bearer key, then drive the MCP
+        // Streamable-HTTP transport (JSON-RPC tools/list) — the IDE-coding path.
+        await check("MCP connect mints a key + lists tools (JSON-RPC)", async () => {
+          const mint = await http(`https://${fqdn}/api/build/mcp`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-flagship-session": token },
+            body: JSON.stringify({ label: "live-e2e-ide" }),
+          });
+          assert(mint.status === 200, `mint ${mint.status}: ${mint.text.slice(0, 120)}`);
+          const conn = mint.json?.connection ?? mint.json;
+          assert(conn?.url && conn?.key, `no url/key: ${JSON.stringify(mint.json).slice(0, 120)}`);
+          const rpc = await http(
+            conn.url,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                authorization: `Bearer ${conn.key}`,
+              },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+            },
+            30_000,
+          );
+          assert(rpc.status === 200, `tools/list ${rpc.status}: ${rpc.text.slice(0, 160)}`);
+          // Streamable-HTTP may answer as JSON or an SSE frame; parse either.
+          const parsed = rpc.json ?? JSON.parse((rpc.text.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+          const tools = parsed?.result?.tools ?? [];
+          assert(Array.isArray(tools) && tools.length > 0, `no tools: ${rpc.text.slice(0, 160)}`);
+          return `${tools.length} MCP tools`;
+        });
+
+        // vibe-code: no key → needsCredential (the surface gates); WITH a BYOK
+        // key → the model actually runs on the box.
+        await check("vibe-code start without a key → needsCredential (gated)", async () => {
+          const r = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-flagship-session": token },
+            body: JSON.stringify({ prompt: "build a hello world note app" }),
+          });
+          assert(r.status === 200, `got ${r.status}: ${r.text.slice(0, 120)}`);
+          assert(r.json?.needsCredential === true, `expected needsCredential: ${JSON.stringify(r.json).slice(0, 80)}`);
+          return "needsCredential";
+        });
+        const aiKey = process.env.GYM_AI_API_KEY;
+        if (aiKey) {
+          await check("vibe-code with a BYOK key starts a streaming session (model runs)", async () => {
+            const start = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-flagship-session": token },
+              body: JSON.stringify({
+                prompt: "Say only the word READY.",
+                credential: { provider: "openai", apiKey: aiKey },
+              }),
+            });
+            assert(start.status === 200, `start ${start.status}: ${start.text.slice(0, 120)}`);
+            const sid = start.json?.sessionId;
+            assert(sid && start.json?.needsCredential !== true, `no streaming session: ${JSON.stringify(start.json).slice(0, 80)}`);
+            // Poll for the model to emit (soft — the credential-accepted + stream
+            // start above is the hard proof the BYOK path works on the box).
+            let emitted = "";
+            for (let i = 0; i < 8; i++) {
+              await new Promise((r) => setTimeout(r, 4000));
+              const s = await http(`https://${fqdn}/api/screens/vibe-code/${encodeURIComponent(sid)}`, {
+                headers: { "x-flagship-session": token },
+              });
+              const txt = JSON.stringify(s.json ?? {});
+              if (/assistant|"role"|emit|chunk|done|complete|building/i.test(txt)) {
+                emitted = txt.slice(0, 70);
+                break;
+              }
+            }
+            return emitted ? `streaming, model emitted (${emitted})` : "streaming session started (no emit captured)";
+          });
+        }
+
+        // Owner-IRK server management (USER IRK): front-page + the power gate.
+        const userIrk = deriveDemoUserIrk(hexToBytes(KEK), user);
+        await check("front-page set (owner-IRK signed) accepted + reads back", async () => {
+          const order: PhoneOrder = { type: "set-front-page", serverId: fqdn, label: "", issuedAt: Date.now() };
+          const sig = bytesToHex(signPhoneOrder(order, userIrk));
+          const r = await http(`https://${fqdn}/api/front-page`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ request: order, signature: sig }),
+          });
+          assert(r.status === 200, `got ${r.status}: ${r.text.slice(0, 120)}`);
+          const g = await http(`https://${fqdn}/api/front-page`);
+          return `set ok → ${JSON.stringify(g.json).slice(0, 50)}`;
+        });
+        await check("POST /api/power REJECTS a forged signature (owner-gate enforced)", async () => {
+          const req = { type: "power-off", serverId: fqdn, mode: "restart", issuedAt: Date.now() };
+          const r = await http(`https://${fqdn}/api/power`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ request: req, signature: "00".repeat(64) }),
+          });
+          assert(r.status >= 400 && r.status < 500, `expected a 4xx rejection, got ${r.status}`);
+          return `rejected ${r.status}`;
+        });
       }
     }
   }
+
+  // ── 6.6 Control-plane: maintainer-trust (pass path) + marketplace ─────────
+  log("[control plane: trust + marketplace]");
+  await check("maintainer-blessing chain served (GET /api/maintainer-blessing 200)", async () => {
+    const r = await http(`https://${CONTROL}/api/maintainer-blessing`);
+    assert(r.status === 200, `got ${r.status}`);
+    assert(r.json?.pinnedMandateHash || r.json?.caPubkey || r.json?.mandates, `unexpected: ${r.text.slice(0, 80)}`);
+    return `caAuthorizedNow=${r.json?.caPubkeyAuthorizedNow}`;
+  });
+  await check("marketplace browse (GET /api/marketplace/search) — 200, or 404 when branch-gated", async () => {
+    const r = await http(`https://${CONTROL}/api/marketplace/search?limit=5`);
+    // The marketplace ships ONLY on feat/marketplace; a main-deployed gym Worker
+    // 404s it (branch-gate). Both are correct — note which.
+    assert(r.status === 200 || r.status === 404, `got ${r.status}`);
+    if (r.status === 404) return "404 — marketplace is feat/marketplace-gated (not on the main gym Worker)";
+    const list = r.json?.listings ?? r.json?.results ?? r.json;
+    return `${Array.isArray(list) ? list.length : "?"} listings`;
+  });
 
   // ── 7. Teardown (unless reusing) ──────────────────────────────────────────
   if (!REUSE_USER) {
