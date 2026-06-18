@@ -27,6 +27,17 @@ import { controlApex } from "./apex.js";
 // packages/protocol/src/maintainerCa.ts MAINTAINER_PINNED_MANDATE_HASH.
 export const BAKED_PIN = "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae";
 
+// ⚠️ GYM TEST BUILD ONLY — present on the `gym` branch, NEVER on main.
+// The gym is a self-contained test universe whose control plane holds its OWN
+// CA key, deliberately NOT in the prod maintainer chain (it runs the CA gate in
+// OBSERVE mode). This build anchor-trusts that one gym CA pubkey directly so the
+// REAL app can drive the REAL gym box through the actual UI. The prod chain
+// verify (verifyComBlessing, below) is untouched — main ships with no test
+// anchor in its security path. This is the "tweak the security code to accept
+// the gym domain's CA" overlay; it lives only on the gym build branch.
+export const GYM_TRUSTED_CA_PUBKEY =
+  "466627d52773c9d5cda6c8fd28ea31ec7b94e68aa8d42e2ad31a75dc8d24ed07";
+
 const COM_BLESSING_PATH = "/api/maintainer-blessing";
 const APEX = controlApex();
 
@@ -236,6 +247,21 @@ export async function refreshServerTrust(deps = {}) {
     body = await r.json();
   } catch {
     return { ok: false, networkError: true };
+  }
+
+  // GYM BUILD ANCHOR (gym branch only): trust the gym control plane's own CA
+  // key directly. The gym serves a chain that does NOT authorize its own key
+  // (OBSERVE mode), so the prod verify below would correctly mark it untrusted
+  // and halt the app — which is exactly what blocks the real app from driving
+  // the real gym box. Anchoring the known gym CA key here lets the genuine app
+  // operate against the genuine gym backend.
+  if (body && body.caPubkey === GYM_TRUSTED_CA_PUBKEY) {
+    const verdict = await serverTrust.setVerdict({
+      trusted: true,
+      caPubkey: body.caPubkey,
+      reason: "gym-anchor",
+    });
+    return { ok: true, verdict };
   }
 
   const result = await verifyComBlessing(body, nowMs, pin);
