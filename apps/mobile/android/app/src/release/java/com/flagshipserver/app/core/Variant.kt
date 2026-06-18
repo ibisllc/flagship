@@ -27,6 +27,14 @@ object Variant : AppVariant {
 
     override fun rescueEnvironment(context: android.content.Context, username: String): com.flagshipserver.app.viewmodels.OfflineControlEnvironment? = null
 
+    override fun adoptLiveIdentity(
+        intent: Intent?,
+        appState: AppState,
+        store: com.flagshipserver.app.api.SessionStoring,
+        client: okhttp3.OkHttpClient,
+        scope: kotlinx.coroutines.CoroutineScope,
+    ) = Unit
+
     override val usesMockClients: Boolean get() = false
     override val forceAdminRoot: Boolean get() = false
     override val bypassBiometricGates: Boolean get() = false
