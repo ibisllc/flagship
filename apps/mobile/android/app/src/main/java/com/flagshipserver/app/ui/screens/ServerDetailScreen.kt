@@ -1260,6 +1260,7 @@ private fun JournalCard(serverDomain: String) {
                             text,
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            modifier = Modifier.semantics { contentDescription = "sd-journal-output" },
                         )
                     }
                 }

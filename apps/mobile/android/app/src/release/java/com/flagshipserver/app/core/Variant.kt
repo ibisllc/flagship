@@ -23,6 +23,14 @@ object Variant : AppVariant {
         trust: TrustCenter,
     ): GymLaunch? = null
 
+    override fun adoptLiveIdentity(
+        intent: Intent?,
+        appState: AppState,
+        store: com.flagshipserver.app.api.SessionStoring,
+        client: okhttp3.OkHttpClient,
+        scope: kotlinx.coroutines.CoroutineScope,
+    ) = Unit
+
     override val usesMockClients: Boolean get() = false
     override val forceAdminRoot: Boolean get() = false
     override val bypassBiometricGates: Boolean get() = false

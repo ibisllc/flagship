@@ -34,6 +34,16 @@ interface AppVariant {
         trust: TrustCenter,
     ): GymLaunch?
 
+    /** Gym live e2e (debug only): adopt a real box's owner identity when the
+     *  launch carries `flagship.gymAdoptSeed`. Nothing in release. */
+    fun adoptLiveIdentity(
+        intent: Intent?,
+        appState: AppState,
+        store: com.flagshipserver.app.api.SessionStoring,
+        client: okhttp3.OkHttpClient,
+        scope: kotlinx.coroutines.CoroutineScope,
+    )
+
     /** True while the app runs on mock clients (a debug gym run). */
     val usesMockClients: Boolean
 
