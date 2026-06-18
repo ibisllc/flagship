@@ -383,6 +383,12 @@ async function main(): Promise<void> {
         // turns the platform ON where those inputs exist.
         hostUsername: cfg?.userId,
         hostIrkPub: cfg?.irkPublicKey,
+        // The box's own daemon identity keypair — accepted as an ADDITIVE
+        // host-authority signer so a box-originated build-modes deploy
+        // (which signs installs with this key, since the owner IRK private
+        // half is phone-held) is accepted by ServicePlatform.install. The
+        // phone-signed install path still verifies the owner IRK.
+        hostIrk: identityKeypair,
         swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
         // The data-services compose stack writes its admin creds here on
         // first boot. If it's missing, the runtime degrades gracefully:

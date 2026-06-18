@@ -62,6 +62,17 @@ export interface ServicePlatformDeps {
   /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
   host: { username: string; irkPub: Bytes };
   /**
+   * The box's OWN daemon identity pubkey — an ADDITIONAL accepted signer for
+   * host-authority mutations (install / setEnv / uninstall). The owner IRK
+   * (`host.irkPub`) is phone-held, so a BOX-ORIGINATED deploy (a build-modes
+   * deploy: scratch / git-import / mcp, all gated upstream by the paired
+   * session) cannot sign with it — the box only holds its own identity key.
+   * Accepting the daemon identity here lets those box-internal deploys sign
+   * with a key the box actually has, WITHOUT weakening the phone path (the
+   * owner IRK still verifies). Omit ⇒ owner-IRK-only (unchanged behavior).
+   */
+  hostIdentityPub?: Bytes;
+  /**
    * Server Working Key — derives per-app secrets for member stable-id
    * derivation. Per `key_hierarchy.md` this is provisioned by the
    * phone at first boot. Until that's wired, callers pass an env-
@@ -130,6 +141,23 @@ export class ServicePlatform {
   constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
     this.now = deps.now ?? (() => Date.now());
+  }
+
+  /**
+   * Verify a host-authority mutation (install / setEnv / uninstall) against
+   * EITHER the owner IRK (phone-signed) OR the box's own daemon identity key
+   * (box-originated build-modes deploys, which can't reach the phone-held
+   * IRK). The owner IRK is always tried first; the daemon identity is an
+   * additive box-internal signer, only when configured.
+   */
+  private verifyHostAuthority<T>(
+    req: T,
+    sig: Bytes,
+    verify: (req: T, sig: Bytes, pub: Bytes) => boolean,
+  ): boolean {
+    if (verify(req, sig, this.deps.host.irkPub)) return true;
+    if (this.deps.hostIdentityPub && verify(req, sig, this.deps.hostIdentityPub)) return true;
+    return false;
   }
 
   /** Composite app id used as the container name + registry key.
@@ -209,7 +237,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     if (r.serverId.split(".")[1] !== this.deps.host.username && !r.serverId.startsWith(this.deps.host.username + ".")) {
@@ -411,7 +439,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     if (!this.deps.envStore) {
@@ -475,7 +503,7 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!verify(r, signature, this.deps.host.irkPub)) {
+    if (!this.verifyHostAuthority(r, signature, verify)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);

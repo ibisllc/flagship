@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ed,
   signInstallService,
+  verifyInstallService,
   signUninstallService,
   type Keypair,
 } from "@flagship/protocol";
@@ -200,6 +201,70 @@ describe("ServicePlatform.install", () => {
       signature: sig,
       verify: (req, sig, pub) => ed.verify(sig, new TextEncoder().encode(""), pub) || false,
     });
+    expect(r.ok).toBe(false);
+  });
+
+  it("accepts the box's own daemon identity key as a host-authority signer (box-originated deploy)", async () => {
+    // The owner IRK private half is phone-held, so a build-modes deploy on
+    // the box signs with the DAEMON IDENTITY key. With `hostIdentityPub` set
+    // to that key, the install is accepted; the owner IRK still verifies too.
+    const ownerIrk = makeKey();
+    const daemonIdentity = makeKey();
+    const { runner } = fakeRunner();
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: ownerIrk.publicKey },
+      hostIdentityPub: daemonIdentity.publicKey,
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: null,
+    });
+    const baseReq = {
+      serverId: HOST_FQDN,
+      creator: HOST_USERNAME,
+      slug: "static",
+      manifestJson: NO_DATA_MANIFEST,
+      addOwnerToMembership: true,
+      issuedAt: Date.now(),
+    };
+    // Signed with the DAEMON identity (what the box-originated deployer uses):
+    const sigDaemon = signInstallService(baseReq, daemonIdentity);
+    const rDaemon = await platform.install({ request: baseReq, signature: sigDaemon, verify: verifyInstallService });
+    expect(rDaemon.ok).toBe(true);
+
+    // Signed with the OWNER IRK (phone path) still works.
+    const ownerReq = { ...baseReq, slug: "static2", manifestJson: NO_DATA_MANIFEST, issuedAt: Date.now() };
+    const sigOwner = signInstallService(ownerReq, ownerIrk);
+    const rOwner = await platform.install({ request: ownerReq, signature: sigOwner, verify: verifyInstallService });
+    expect(rOwner.ok).toBe(true);
+
+    // A FOREIGN key (neither owner IRK nor daemon identity) is still rejected.
+    const attacker = makeKey();
+    const badReq = { ...baseReq, slug: "static3", issuedAt: Date.now() };
+    const sigBad = signInstallService(badReq, attacker);
+    const rBad = await platform.install({ request: badReq, signature: sigBad, verify: verifyInstallService });
+    expect(rBad.ok).toBe(false);
+  });
+
+  it("with NO hostIdentityPub, only the owner IRK is accepted (unchanged default)", async () => {
+    const ownerIrk = makeKey();
+    const daemonIdentity = makeKey();
+    const { runner } = fakeRunner();
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: ownerIrk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: null,
+    });
+    const req = {
+      serverId: HOST_FQDN,
+      creator: HOST_USERNAME,
+      slug: "static",
+      manifestJson: NO_DATA_MANIFEST,
+      addOwnerToMembership: true,
+      issuedAt: Date.now(),
+    };
+    // Daemon identity is NOT accepted when hostIdentityPub is unset.
+    const r = await platform.install({ request: req, signature: signInstallService(req, daemonIdentity), verify: verifyInstallService });
     expect(r.ok).toBe(false);
   });
 

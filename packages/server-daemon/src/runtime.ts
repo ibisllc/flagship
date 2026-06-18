@@ -1033,6 +1033,12 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     }
     servicePlatformRef.current = new ServicePlatform({
       host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
+      // The box's own daemon identity is an additive accepted signer for
+      // host-authority mutations, so a BOX-ORIGINATED build-modes deploy
+      // (which signs with the daemon identity — the box can't reach the
+      // phone-held owner IRK) is accepted. Phone-signed installs still
+      // verify against the owner IRK. Only set when a hostIrk is wired.
+      ...(apOpts.hostIrk ? { hostIdentityPub: apOpts.hostIrk.publicKey } : {}),
       swk: apOpts.swk,
       appRunner,
       dataProvisioner,
