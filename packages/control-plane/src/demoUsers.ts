@@ -26,6 +26,7 @@ import type {
 
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { ok, malformed, notFound, conflict } from "./types.js";
+import type { DnsDeleteClient } from "./cloudflareDns.js";
 
 // ──────────────────────────────────────────────────────────────────────
 // Domain configuration
@@ -80,6 +81,50 @@ export function demoServerFqdn(username: string): string {
   return `home.${username.toLowerCase()}.flagship.services`;
 }
 
+/**
+ * Delete the DNS records a demo server published at registration. A demo
+ * box always installs as serverName `home`, so its per-box records mirror
+ * the real `serverRegister` path (A/AAAA at `<serverDomain>` +
+ * `*.<serverDomain>`), and the per-user CAA + apex records mirror the
+ * `caaPublish` path. Best-effort: every delete is wrapped so a DNS-side
+ * failure can never block the box/row teardown (the row delete is the
+ * source of truth; DNS is cleanup). Logged via the audit sink when present.
+ */
+async function cleanupDemoUserDns(
+  deps: DemoUsersDeps,
+  username: string,
+): Promise<void> {
+  if (!deps.dns) return;
+  const apex = deps.apex ?? "flagship.services";
+  const u = username.toLowerCase();
+  const serverDomain = `home.${u}.${apex}`;
+  const userZone = `${u}.${apex}`;
+  // Each entry is [name, type]. Mirrors what registration published:
+  //   per-box A/AAAA at the box apex + its wildcard, and the per-user
+  //   CAA at the user zone + its wildcard. The user-zone wildcard also
+  //   gets an A/AAAA sweep so a stray model-C per-user record (if one
+  //   was ever published under this name) is reaped too.
+  const targets: Array<[string, string]> = [
+    [serverDomain, "A"],
+    [serverDomain, "AAAA"],
+    [`*.${serverDomain}`, "A"],
+    [`*.${serverDomain}`, "AAAA"],
+    [userZone, "CAA"],
+    [`*.${userZone}`, "A"],
+    [`*.${userZone}`, "AAAA"],
+    [`*.${userZone}`, "CAA"],
+  ];
+  let deleted = 0;
+  for (const [name, type] of targets) {
+    try {
+      deleted += await deps.dns.deleteByName(name, type);
+    } catch {
+      // best-effort — a DNS failure must not block teardown.
+    }
+  }
+  await audit(deps, u, "demo-vps-destroyed", `dns-records-deleted=${deleted}`);
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Hetzner client surface (structurally-typed)
 // ──────────────────────────────────────────────────────────────────────
@@ -125,6 +170,20 @@ export interface DemoUsersDeps {
   now?: () => number;
   /** Soft override for tests. Defaults to `MAX_CONCURRENT_DEMO_VPS`. */
   maxConcurrent?: number;
+  /**
+   * Optional. When wired, the per-box (and per-user) DNS records published
+   * for this demo server at registration are deleted on teardown so the
+   * `flagship.services` zone doesn't accumulate orphan records (and exhaust
+   * the zone's record quota — a leak that already broke cert issuance once).
+   * Best-effort: a DNS failure never blocks the row/box teardown.
+   */
+  dns?: DnsDeleteClient;
+  /**
+   * Services apex the demo server's DNS records live under (e.g.
+   * `flagship.services`). Used only to compute the names to delete on
+   * teardown. Defaults to `flagship.services`.
+   */
+  apex?: string;
 }
 
 function nowMs(deps: DemoUsersDeps): number {
@@ -336,11 +395,15 @@ export async function handleDeleteDemoUser(
       await deps.hetzner.destroyServer(row.activeServerId);
     } catch {
       // Drop a row update so cron retries on the next pass and emits
-      // `demo-vps-stuck` if it lingers.
+      // `demo-vps-stuck` if it lingers. Leave the DNS in place too — a
+      // retry of delete (after the box is gone) reaps it.
       await deps.storage.update(username, { state: "idle-pending-teardown" });
       return ok({ username, deleted: false, reason: "hetzner-destroy-failed" });
     }
   }
+  // The box is gone; reap its DNS so the zone doesn't accumulate orphan
+  // records. Best-effort — never blocks the row delete (source of truth).
+  await cleanupDemoUserDns(deps, username);
   await deps.storage.delete(username);
   await audit(deps, username, "demo-user-deleted", "");
   return ok({ username, deleted: true });

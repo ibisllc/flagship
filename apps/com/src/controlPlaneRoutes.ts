@@ -880,6 +880,19 @@ export async function tryControlPlane(
     // server record revoked, tears down every active boot-unlock
     // lease (the "brick on next boot" effect), and appends a
     // `server-revoked` audit row.
+    // DNS cleanup on revoke: delete the box's per-box A/AAAA records so
+    // the zone doesn't accumulate orphans (a leak that already exhausted
+    // the 200-record cap + broke cert issuance). Prefer the direct
+    // CloudflareDnsClient (it has deleteByName); the broker has no delete
+    // RPC. Omitted when the token isn't configured (the handler skips
+    // cleanup but still revokes).
+    const revokeDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
     return finish(
       await handleRevokeServer(
         {
@@ -888,6 +901,7 @@ export async function tryControlPlane(
           auditEvents: storage.auditEvents,
           autoUnlockLeases: storage.autoUnlockLeases,
           boxSealedLeases: storage.boxSealedLeases,
+          ...(revokeDns ? { dns: revokeDns } : {}),
         },
         await readJson(request),
       ),
@@ -2173,12 +2187,27 @@ export async function tryControlPlane(
         };
     const sshKeyIdRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
     const sshKeyId = sshKeyIdRaw ? parseInt(sshKeyIdRaw, 10) : 0;
+    // DNS cleanup on demo teardown: when the CF token is configured, hand
+    // the demo handlers a CloudflareDnsClient so deleting a demo user also
+    // reaps the per-box + per-user DNS records its server published —
+    // otherwise the zone accumulates orphans (the leak that exhausted the
+    // 200-record cap + broke cert issuance). Direct client (has
+    // deleteByName); the broker has no delete RPC.
+    const demoDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
     const demoDeps = {
       storage: storage.demoUsers,
       usernames: storage.usernames,
       hetzner: lazyHetzner,
       sshKeyId,
       audit: storage.auditEvents,
+      ...(demoDns ? { dns: demoDns } : {}),
+      apex: env.SERVICES_APEX ?? "flagship.services",
     };
     // The v2 admin routes additionally need the auth-codes, build-tickets,
     // and device-capability-grants storages PLUS the DEMO_IRK_KEK

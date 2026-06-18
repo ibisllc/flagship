@@ -34,6 +34,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
+import type { DnsDeleteClient } from "./cloudflareDns.js";
 import { hexToBytes } from "./hex.js";
 import {
   forbidden,
@@ -57,6 +58,15 @@ export interface ServerRevocationDeps {
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
+  /**
+   * Optional. When wired, the revoked server's per-box DNS records
+   * (A/AAAA at `<serverDomain>` and `*.<serverDomain>`) are deleted so the
+   * `flagship.services` zone doesn't accumulate orphan records and exhaust
+   * its record quota. Best-effort — a DNS failure never undoes the
+   * revocation that already landed. The user-zone CAA is deliberately NOT
+   * touched here: it's shared across all of the user's servers.
+   */
+  dns?: DnsDeleteClient;
   /** Replay-window in ms. Default 5 min, matching the Fly precedent. */
   maxAgeMs?: number;
   now?: () => number;
@@ -224,11 +234,34 @@ export async function handleRevokeServer(
     // swallow.
   }
 
+  // DNS cleanup: delete the per-box A/AAAA records published at
+  // registration so the zone doesn't accumulate orphans. Best-effort —
+  // the server record IS revoked; a DNS hiccup must not undo it. The
+  // box's serverDomain comes from the (just-revoked) target row.
+  let dnsRecordsDeleted = 0;
+  if (deps.dns) {
+    const serverDomain = target.serverDomain;
+    const targets: Array<[string, string]> = [
+      [serverDomain, "A"],
+      [serverDomain, "AAAA"],
+      [`*.${serverDomain}`, "A"],
+      [`*.${serverDomain}`, "AAAA"],
+    ];
+    for (const [name, type] of targets) {
+      try {
+        dnsRecordsDeleted += await deps.dns.deleteByName(name, type);
+      } catch {
+        // swallow — see comment above.
+      }
+    }
+  }
+
   return ok({
     ok: true,
     revokedAt: now,
     reason: r.reason,
     autoLeasesRevoked,
     boxSealedLeasesRevoked,
+    dnsRecordsDeleted,
   });
 }

@@ -29,6 +29,16 @@ export interface CloudflareDnsRecord {
   ttl: number;
 }
 
+/**
+ * Minimal delete surface for teardown cleanup. Structurally satisfied by
+ * {@link CloudflareDnsClient}. Handlers that only ever delete records
+ * (server revoke, demo-user teardown) depend on this narrow interface so
+ * they stay decoupled from the full client + are trivially faked in tests.
+ */
+export interface DnsDeleteClient {
+  deleteByName(name: string, type: string): Promise<number>;
+}
+
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 export class CloudflareDnsClient {

@@ -91,6 +91,21 @@ function deps(storage: InMemoryStorage) {
   };
 }
 
+/** Fake DNS-delete client that records every (name,type) deleteByName call.
+ *  Returns 1 per call by default (one record "deleted") so the response
+ *  count is assertable; `fail` makes it throw to prove best-effort. */
+function makeFakeDns(opts?: { fail?: boolean }) {
+  const calls: Array<[string, string]> = [];
+  return {
+    calls,
+    async deleteByName(name: string, type: string): Promise<number> {
+      calls.push([name, type]);
+      if (opts?.fail) throw new Error("CF DNS boom");
+      return 1;
+    },
+  };
+}
+
 describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
   it("happy path: marks the server revoked, writes audit row, returns 200", async () => {
     const storage = await setUpClaimedHarry();
@@ -307,5 +322,50 @@ describe("POST /api/server-registry/revoke (IRK-signed user-initiated)", () => {
     expect(
       verifyRevocation({ ...claim, reason: "lost" }, sig, harryIrk.publicKey),
     ).toBe(false);
+  });
+
+  it("DNS cleanup: deletes the per-box A/AAAA records (apex + wildcard), NOT the user-zone CAA", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const dns = makeFakeDns();
+
+    const { body } = revokeBody();
+    const r = await handleRevokeServer({ ...deps(storage), dns }, body);
+    expect(r.status).toBe(200);
+
+    // Exactly the four per-box records: <serverDomain> + *.<serverDomain>,
+    // each A and AAAA. No CAA, no user-zone names (CAA is shared).
+    expect(dns.calls.sort()).toEqual(
+      [
+        [DOMAIN, "A"],
+        [DOMAIN, "AAAA"],
+        [`*.${DOMAIN}`, "A"],
+        [`*.${DOMAIN}`, "AAAA"],
+      ].sort(),
+    );
+    expect(dns.calls.some(([, type]) => type === "CAA")).toBe(false);
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(4);
+  });
+
+  it("DNS cleanup is best-effort: a CF failure does NOT undo the revocation", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const dns = makeFakeDns({ fail: true });
+
+    const { body } = revokeBody();
+    const r = await handleRevokeServer({ ...deps(storage), dns }, body);
+    expect(r.status).toBe(200);
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(0);
+    // The server is still revoked even though every DNS delete threw.
+    expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
+  });
+
+  it("no dns dep wired → revocation succeeds with no cleanup", async () => {
+    const storage = await setUpClaimedHarry();
+    await seedServer(storage);
+    const { body } = revokeBody();
+    const r = await handleRevokeServer(deps(storage), body);
+    expect(r.status).toBe(200);
+    expect((r.body as { dnsRecordsDeleted: number }).dnsRecordsDeleted).toBe(0);
   });
 });

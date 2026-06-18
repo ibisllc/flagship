@@ -134,6 +134,21 @@ function mkHarness(): Harness {
   return { deps, hetzner, clock };
 }
 
+/** Fake DNS-delete client recording every (name,type) deleteByName call.
+ *  Returns 1 per call so the deleted count is assertable; `fail` makes it
+ *  throw to prove cleanup is best-effort (never blocks teardown). */
+function makeFakeDns(opts?: { fail?: boolean }) {
+  const calls: Array<[string, string]> = [];
+  return {
+    calls,
+    async deleteByName(name: string, type: string): Promise<number> {
+      calls.push([name, type]);
+      if (opts?.fail) throw new Error("CF DNS boom");
+      return 1;
+    },
+  };
+}
+
 async function seedDemoUser(
   deps: DemoUsersDeps,
   overrides: Partial<DemoUserRecord> = {},
@@ -330,6 +345,72 @@ describe("handleDeleteDemoUser", () => {
     const row = await h.deps.storage.get("demoalice");
     expect(row).toBeDefined();
     expect(row?.state).toBe("idle-pending-teardown");
+  });
+
+  it("reaps the demo server's DNS records after a successful teardown", async () => {
+    const h = mkHarness();
+    const dns = makeFakeDns();
+    h.deps.dns = dns;
+    await seedDemoUser(h.deps, { activeServerId: "555", state: "up" });
+    const res = await handleDeleteDemoUser(h.deps, { username: "demoalice" });
+    expect(res.status).toBe(200);
+    expect((res.body as Record<string, unknown>).deleted).toBe(true);
+
+    // Per-box A/AAAA at the box apex + its wildcard, the per-user CAA,
+    // and the user-zone wildcard A/AAAA/CAA sweep — exactly the four
+    // name/type groups the spec calls for.
+    const sd = "home.demoalice.flagship.services";
+    const uz = "demoalice.flagship.services";
+    expect(dns.calls.sort()).toEqual(
+      [
+        [sd, "A"],
+        [sd, "AAAA"],
+        [`*.${sd}`, "A"],
+        [`*.${sd}`, "AAAA"],
+        [uz, "CAA"],
+        [`*.${uz}`, "A"],
+        [`*.${uz}`, "AAAA"],
+        [`*.${uz}`, "CAA"],
+      ].sort(),
+    );
+    // The row is gone (DNS cleanup ran before the row delete).
+    expect(await h.deps.storage.get("demoalice")).toBeUndefined();
+  });
+
+  it("does NOT touch DNS when the Hetzner destroy fails (box still up)", async () => {
+    const h = mkHarness();
+    const dns = makeFakeDns();
+    h.deps.dns = dns;
+    await seedDemoUser(h.deps, { activeServerId: "555", state: "up" });
+    h.hetzner.failNextDestroy();
+    const res = await handleDeleteDemoUser(h.deps, { username: "demoalice" });
+    expect((res.body as Record<string, unknown>).deleted).toBe(false);
+    // Box wasn't destroyed → leave its DNS in place; a retry reaps it.
+    expect(dns.calls).toEqual([]);
+  });
+
+  it("DNS cleanup is best-effort: a CF failure still deletes the row", async () => {
+    const h = mkHarness();
+    const dns = makeFakeDns({ fail: true });
+    h.deps.dns = dns;
+    await seedDemoUser(h.deps, { activeServerId: "555", state: "up" });
+    const res = await handleDeleteDemoUser(h.deps, { username: "demoalice" });
+    expect(res.status).toBe(200);
+    expect((res.body as Record<string, unknown>).deleted).toBe(true);
+    expect(await h.deps.storage.get("demoalice")).toBeUndefined();
+    // All eight deletes were attempted even though each threw.
+    expect(dns.calls.length).toBe(8);
+  });
+
+  it("honours a custom apex when computing the names to delete", async () => {
+    const h = mkHarness();
+    const dns = makeFakeDns();
+    h.deps.dns = dns;
+    h.deps.apex = "gym.flagship.services";
+    await seedDemoUser(h.deps, { activeServerId: "555", state: "up" });
+    await handleDeleteDemoUser(h.deps, { username: "demoalice" });
+    expect(dns.calls).toContainEqual(["home.demoalice.gym.flagship.services", "A"]);
+    expect(dns.calls).toContainEqual(["demoalice.gym.flagship.services", "CAA"]);
   });
 });
 
