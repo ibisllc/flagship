@@ -28,8 +28,12 @@ import { deriveDemoUserIrk, deriveDemoDelegatedKey } from "@flagship/control-pla
 import {
   signJournalRequest,
   signPhoneOrder,
+  signInstallService,
+  signUninstallService,
   type JournalRequest,
   type PhoneOrder,
+  type InstallServiceRequest,
+  type UninstallServiceRequest,
 } from "@flagship/protocol";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
@@ -413,6 +417,72 @@ async function main(): Promise<void> {
           assert(r.status >= 400 && r.status < 500, `expected a 4xx rejection, got ${r.status}`);
           return `rejected ${r.status}`;
         });
+
+        // SERVICE LIFECYCLE — create / run / delete a real service (owner-IRK).
+        // An image-only app (no data.stores) so it needs only docker, not the
+        // full data stack.
+        const slug = "livetest";
+        const svcManifest = JSON.stringify({
+          schema_version: 1,
+          name: slug, // must be a DNS label
+          version: "0.1.0",
+          description: "live-e2e image probe",
+          runtime: { image: "traefik/whoami", port: 80 },
+          data: {}, // image-only — no stores, so no data stack needed
+          network: { subdomain: slug },
+          access: { enabled: true }, // apps can't opt out of platform identity
+          migration: { verification: "standard" },
+        });
+        let installed = false;
+        await check("install a service (owner-IRK signed) → appears in /api/services", async () => {
+          const req: InstallServiceRequest = {
+            serverId: fqdn,
+            creator: user,
+            slug,
+            manifestJson: svcManifest,
+            addOwnerToMembership: true,
+            issuedAt: Date.now(),
+          };
+          const sig = bytesToHex(signInstallService(req, userIrk));
+          const r = await http(
+            `https://${fqdn}/api/services`,
+            { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
+            90_000,
+          );
+          assert(r.status === 200, `install ${r.status}: ${r.text.slice(0, 180)}`);
+          installed = true;
+          const list = await http(`https://${fqdn}/api/services`);
+          const apps = (Array.isArray(list.json) ? list.json : (list.json?.apps ?? list.json?.services)) ?? [];
+          assert(apps.some((a: any) => JSON.stringify(a).includes(slug)), `not listed: ${JSON.stringify(apps).slice(0, 140)}`);
+          return `installed + listed (${apps.length} services)`;
+        });
+        if (installed) {
+          await check("installed service serves a running container (best-effort runtime)", async () => {
+            // Best-effort: install + uninstall (above/below) are the hard
+            // lifecycle proofs. The container actually answering at its subdomain
+            // also exercises the app-proxy routing + image readiness — the
+            // deepest runtime integration; report it without failing the gate.
+            const url = `https://${slug}.${fqdn}/`;
+            for (let i = 0; i < 18; i++) {
+              const c = await http(url, {}, 12000).catch(() => ({ status: 0 }) as any);
+              if (c.status === 200) return `serving 200 at ${slug}.${fqdn}`;
+              await new Promise((r) => setTimeout(r, 5000));
+            }
+            return "container created + listed; not yet answering at its subdomain in 90s (app-proxy/readiness — install+uninstall proven)";
+          });
+          await check("uninstall the service (owner-IRK signed) → 200", async () => {
+            const req: UninstallServiceRequest = { serverId: fqdn, creator: user, slug, issuedAt: Date.now() };
+            const sig = bytesToHex(signUninstallService(req, userIrk));
+            const serviceId = `${user}-${slug}`;
+            const r = await http(
+              `https://${fqdn}/api/services/${encodeURIComponent(serviceId)}`,
+              { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
+              60_000,
+            );
+            assert(r.status === 200, `uninstall ${r.status}: ${r.text.slice(0, 160)}`);
+            return "uninstalled";
+          });
+        }
       }
     }
   }

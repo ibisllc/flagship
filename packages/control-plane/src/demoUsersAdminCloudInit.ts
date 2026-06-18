@@ -249,8 +249,11 @@ apt-get install -y --no-install-recommends \\
 # packages (git/curl/jq) the bootstrap depends on — a single bad name aborts the
 # whole apt invocation. On Debian, docker.io bundles the CLI (there is NO
 # docker-cli package — listing it aborts the install).
-apt-get install -y --no-install-recommends docker.io docker-compose \\
+apt-get install -y --no-install-recommends docker.io docker-compose apparmor \\
     || echo "[flagship-bootstrap] WARNING: docker install failed; apps won't run"
+# apparmor provides apparmor_parser — Debian enables AppArmor, and without the
+# parser \`docker run\` fails to load the docker-default profile (exit 127), so
+# NO container ever starts. (Surfaced installing a real service on a gym box.)
 systemctl enable --now docker.service 2>/dev/null || echo "[flagship-bootstrap] WARNING: docker enable failed"
 
 # NodeSource Node 20 — official upstream Node.js apt repo. Idempotent
