@@ -30,8 +30,11 @@ public enum MaintainersTrust {
     /// (reject all, reason `no-pin`); a non-empty pin ⇒ verify forward
     /// from it; NEVER fall back to an env / previously-seen pin. This
     /// constant is the default pin the iOS verify-forward consumer uses.
+    /// ⚠️ GYM TEST BRANCH ONLY — the gym's self-contained chain pin
+    /// (sha256hex(canonicalMandate) of the gym root Mandate). On `main` this
+    /// is the prod pin "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae".
     public static let pinnedMandateHash =
-        "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae"
+        "87f5ae60cd1cfc0629fdf10ab97a547d33bca68bf3a1426614096a3054d57ae7"
 
     /// Shared-contract alias for `pinnedMandateHash` (the BAKED_PIN the
     /// maintainer-trust-enforcement feature names across all surfaces). Same
