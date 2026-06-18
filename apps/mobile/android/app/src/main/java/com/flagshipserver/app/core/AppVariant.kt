@@ -44,6 +44,16 @@ interface AppVariant {
     /** Gym: "Set up a box from a store" on a scripted box; null for the real radio (always in release). */
     fun retailClaimGym(): RetailClaimGym?
 
+    /** Gym live e2e (debug only): adopt a real box's owner identity when the
+     *  launch carries `flagship.gymAdoptSeed`. Nothing in release. */
+    fun adoptLiveIdentity(
+        intent: Intent?,
+        appState: AppState,
+        store: com.flagshipserver.app.api.SessionStoring,
+        client: okhttp3.OkHttpClient,
+        scope: kotlinx.coroutines.CoroutineScope,
+    )
+
     /** True while the app runs on mock clients (a debug gym run). */
     val usesMockClients: Boolean
 
