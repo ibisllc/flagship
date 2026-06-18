@@ -348,10 +348,29 @@ async function main(): Promise<void> {
           );
           assert(rpc.status === 200, `tools/list ${rpc.status}: ${rpc.text.slice(0, 160)}`);
           // Streamable-HTTP may answer as JSON or an SSE frame; parse either.
-          const parsed = rpc.json ?? JSON.parse((rpc.text.match(/\{[\s\S]*\}/) || ["{}"])[0]);
-          const tools = parsed?.result?.tools ?? [];
+          const parseRpc = (t: string, j: any) => j ?? JSON.parse((t.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+          const tools = parseRpc(rpc.text, rpc.json)?.result?.tools ?? [];
           assert(Array.isArray(tools) && tools.length > 0, `no tools: ${rpc.text.slice(0, 160)}`);
-          return `${tools.length} MCP tools`;
+          // EXECUTE a tool (not just list): get_contract is read-only and proves
+          // the MCP server actually services tool calls, not merely advertises.
+          const call = await http(
+            conn.url,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                authorization: `Bearer ${conn.key}`,
+              },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_contract", arguments: {} } }),
+            },
+            30_000,
+          );
+          assert(call.status === 200, `tools/call ${call.status}: ${call.text.slice(0, 160)}`);
+          const result = parseRpc(call.text, call.json)?.result;
+          const content = JSON.stringify(result?.content ?? result ?? "");
+          assert(content.length > 20 && !parseRpc(call.text, call.json)?.error, `get_contract empty/err: ${call.text.slice(0, 160)}`);
+          return `${tools.length} tools; get_contract returned ${content.length}B`;
         });
 
         // vibe-code: no key → needsCredential (the surface gates); WITH a BYOK
@@ -367,34 +386,77 @@ async function main(): Promise<void> {
           return "needsCredential";
         });
         const aiKey = process.env.GYM_AI_API_KEY;
+        const aiModel = process.env.GYM_AI_MODEL || "gpt-4o-mini";
         if (aiKey) {
-          await check("vibe-code with a BYOK key starts a streaming session (model runs)", async () => {
+          // ⭐ The LIVE BYOK model-run: the box opens the per-session credential
+          // and actually invokes the model. We pass an OpenAI model explicitly
+          // (the start API threads body.model into the session); the credential
+          // never leaves the box. HARD assert the model produced real output.
+          await check("vibe-code with a BYOK key RUNS the model on the box (real emit)", async () => {
             const start = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
               method: "POST",
               headers: { "content-type": "application/json", "x-flagship-session": token },
               body: JSON.stringify({
-                prompt: "Say only the word READY.",
+                prompt: "Build the smallest possible static site: a single index.html whose body contains exactly the text 'Hello Flagship'. Keep it minimal.",
+                model: aiModel,
                 credential: { provider: "openai", apiKey: aiKey },
               }),
             });
             assert(start.status === 200, `start ${start.status}: ${start.text.slice(0, 120)}`);
             const sid = start.json?.sessionId;
             assert(sid && start.json?.needsCredential !== true, `no streaming session: ${JSON.stringify(start.json).slice(0, 80)}`);
-            // Poll for the model to emit (soft — the credential-accepted + stream
-            // start above is the hard proof the BYOK path works on the box).
+            // Poll the session for real model output: assistant text, an
+            // emitted file, a manifest, a talkToUser turn, or a terminal state.
+            // No output in the window = the model did NOT run → hard fail.
             let emitted = "";
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 15; i++) {
               await new Promise((r) => setTimeout(r, 4000));
               const s = await http(`https://${fqdn}/api/screens/vibe-code/${encodeURIComponent(sid)}`, {
                 headers: { "x-flagship-session": token },
               });
               const txt = JSON.stringify(s.json ?? {});
-              if (/assistant|"role"|emit|chunk|done|complete|building/i.test(txt)) {
-                emitted = txt.slice(0, 70);
+              if (/assistant|hello flagship|index\.html|"emit"|manifest|"done"|complete|talkToUser|building|"file/i.test(txt)) {
+                emitted = txt.replace(/\s+/g, " ").slice(0, 90);
                 break;
               }
             }
-            return emitted ? `streaming, model emitted (${emitted})` : "streaming session started (no emit captured)";
+            assert(emitted, `model produced no output in 60s (key delivered but no emit) — model=${aiModel}`);
+            return `model (${aiModel}) ran + emitted: ${emitted}`;
+          });
+
+          // ⭐ git-ADAPT: clone a non-fit repo, then run the AI adapt pass — the
+          // box invokes the model to rewrite it to the Flagship contract. The
+          // box default model is OpenAI (cloud-init FLAGSHIP_LLM_DEFAULT_MODEL),
+          // so the adapt path (which takes no model param) uses the BYOK key.
+          await check("git-adapt RUNS the model to rewrite a non-fit repo (real files)", async () => {
+            const create = await http(
+              `https://${fqdn}/api/build/git`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-flagship-session": token },
+                body: JSON.stringify({
+                  gitUrl: "https://github.com/octocat/Hello-World",
+                  ref: "master",
+                  credential: { provider: "openai", apiKey: aiKey },
+                }),
+              },
+              60_000,
+            );
+            assert(create.status === 200, `git-create ${create.status}: ${create.text.slice(0, 140)}`);
+            const buildId = create.json?.buildId;
+            assert(buildId, `no buildId: ${JSON.stringify(create.json).slice(0, 100)}`);
+            const adapt = await http(
+              `https://${fqdn}/api/build/sessions/${encodeURIComponent(buildId)}/adapt`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json", "x-flagship-session": token },
+                body: JSON.stringify({ instructions: "Make this a minimal Flagship static site." }),
+              },
+              180_000,
+            );
+            assert(adapt.status === 200, `adapt ${adapt.status}: ${adapt.text.slice(0, 160)}`);
+            assert(adapt.json?.ok === true && (adapt.json?.fileCount ?? 0) > 0, `no files written: ${JSON.stringify(adapt.json).slice(0, 100)}`);
+            return `adapt model run → ${adapt.json.fileCount} files written`;
           });
         }
 
@@ -476,7 +538,12 @@ async function main(): Promise<void> {
           runtime: { image: "traefik/whoami", port: 80 },
           data: {}, // image-only — no stores, so no data stack needed
           network: { subdomain: slug },
-          access: { enabled: true }, // apps can't opt out of platform identity
+          // enabled:true (apps can't opt out of platform identity); public_routes
+          // opens "/" to anonymous traffic so an external GET reaches the
+          // container (serviceProxy: a public-route match returns "allow"). This
+          // lets us PROVE the container actually serves, not just that the gate
+          // 403s anonymous (private-by-default, which we also assert below).
+          access: { enabled: true, public_routes: ["/"] },
           migration: { verification: "standard" },
         });
         let installed = false;
@@ -534,18 +601,36 @@ async function main(): Promise<void> {
             assert(r.status >= 400 && r.status < 500, `expected a 4xx rejection, got ${r.status}`);
             return `rejected ${r.status}`;
           });
-          await check("installed service serves a running container (best-effort runtime)", async () => {
-            // Best-effort: install + uninstall (above/below) are the hard
-            // lifecycle proofs. The container actually answering at its subdomain
-            // also exercises the app-proxy routing + image readiness — the
-            // deepest runtime integration; report it without failing the gate.
+          await check("installed container actually SERVES 200 at its subdomain (full app-proxy path)", async () => {
+            // The deepest runtime proof: the container ANSWERS at its per-service
+            // subdomain. This exercises the whole path — Fly-hub SNI routing of
+            // `<slug>.<fqdn>` → the box's per-box wildcard cert → the daemon's
+            // app-proxy `byLabel()` → the access gate (public_routes:["/"] → allow)
+            // → the whoami container. A 200 here proves all of it. (A bare
+            // service with no public route correctly 403s anonymous — that's the
+            // private-by-default gate, verified by in-process serviceAccessGate
+            // tests.) The image (traefik/whoami) may need a few seconds to pull
+            // + start, so we poll up to 120s, then HARD-FAIL with a diagnosis.
             const url = `https://${slug}.${fqdn}/`;
-            for (let i = 0; i < 18; i++) {
-              const c = await http(url, {}, 12000).catch(() => ({ status: 0 }) as any);
-              if (c.status === 200) return `serving 200 at ${slug}.${fqdn}`;
+            let last = { status: 0, snippet: "" };
+            for (let i = 0; i < 24; i++) {
+              const c = await http(url, {}, 12000).catch(() => ({ status: 0, text: "fetch failed", json: null }) as any);
+              if (c.status === 200) {
+                const whoami = /Hostname|GET \/|RemoteAddr/i.test(String(c.text ?? "")) ? " (whoami body)" : "";
+                return `container serving 200 at ${slug}.${fqdn}${whoami} — full app-proxy path proven`;
+              }
+              last = { status: c.status, snippet: String(c.text ?? "").replace(/\s+/g, " ").slice(0, 60) };
               await new Promise((r) => setTimeout(r, 5000));
             }
-            return "container created + listed; not yet answering at its subdomain in 90s (app-proxy/readiness — install+uninstall proven)";
+            // No 200 in 120s — diagnose before failing (SSH-free): does the
+            // subdomain present the box's wildcard cert? If yes, routing+cert are
+            // fine and the issue is the container/proxy hop; if no, it's routing.
+            const c = certInfo(`${slug}.${fqdn}`);
+            const tlsOk = /Let's Encrypt/i.test(c.issuer) || c.sans.includes(`*.${fqdn}`);
+            const diag = tlsOk
+              ? `TLS+routing OK (cert ${c.issuer || c.sans.join(",")}) but HTTP ${last.status || "no-response"} ${last.snippet}`
+              : `TLS/routing did NOT complete (issuer=${c.issuer || "<none>"})`;
+            throw new Error(`container not serving 200 in 120s — ${diag}`);
           });
           await check("uninstall the service (owner-IRK signed) → 200", async () => {
             const req: UninstallServiceRequest = { serverId: fqdn, creator: user, slug, issuedAt: Date.now() };

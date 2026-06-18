@@ -450,6 +450,7 @@ FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
 FLAGSHIP_CONFIG=/etc/flagship/config.json
 FLAGSHIP_SWK_HEX=$(cat /var/flagship/swk.hex)
 FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY
+FLAGSHIP_LLM_DEFAULT_MODEL=gpt-4o-mini
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
