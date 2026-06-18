@@ -123,7 +123,41 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-18**.
 
-### 2026-06-18 (latest) — ⭐ REAL-SERVER e2e suites (backend + frontend) built, run, GREEN
+### 2026-06-18 (latest) — ⭐⭐ FULL-PLATFORM gym boxes: ServicePlatform + paired session + build, PROVEN
+
+**The gym can now test real app-platform features against real boxes** — services
+/ build / vibe / git / mcp, not just cert+serve. `npm run live-e2e` against a
+full-platform box is **12/12 OK** (pushed; `tsc -b` clean):
+`✓ ServicePlatform constructed (/api/services 200, not 503) · ✓ paired session
+minted (add-paired-session order, demo-delegated-key signed) · ✓ git-import ran a
+real clone + Flagship-fitness verdict over the paired session`, on top of the
+lifecycle/TLS/cert/journal checks.
+
+**⭐ Root-cause bug found + fixed (affected EVERY box):** `startDaemonRuntime`
+never passed `host{username,irkPub}+swk` to its `servicePlatform` opts, so the
+runtime gate (`runtime.ts:1013`) was always false → ServicePlatform was `null`
+everywhere → `/api/services` 503 and the entire build/deploy/screens/vibe surface
+(mounted only under `if (runtime.servicePlatform)`) never wired. Fixed in
+`index.ts` (prod-preserving: only activates with a config + SWK).
+
+**Full-platform demo box (cloud-init):** mints the SWK (nothing else did — it was
+meant to be phone-provisioned), sets `FLAGSHIP_PSK_PUB_HEX` (= the demo delegated
+pub, so `/api/orders-from-user` accepts an `add-paired-session` order a test signs
+via `deriveDemoDelegatedKey`), installs docker (on its OWN apt line — `docker-cli`
+is NOT a Debian pkg and aborted the whole apt → killed git/jq/xxd → bootstrap
+death; that cost a provision), and enables the `flagship-data-services` stack. Use
+`--size cpx31` (the data stack won't fit cpx11). Daemon fix + cloud-init both
+prod-preserving; cost: full boxes bill more (~cpx31) — torn down after each run.
+
+**Remaining feature matrix (builds on this foundation, incremental e2e each):**
+vibe-code with a BYOK key (the LLM build — `GYM_AI_API_KEY` is available), MCP
+IDE connect, marketplace/scratch service INSTALL (owner-IRK `/api/services` — needs
+a manifest + docker to actually run), manage service (env/uninstall), server
+delete, and expired-mandate handling (.com `pubkey-cert` 403 needs an in-process
+injected `now`; relay-trust is daemon lockdown state). The auth map + shapes are
+in this session's notes; the paired-session + owner-IRK seams are both proven.
+
+### 2026-06-18 — ⭐ REAL-SERVER e2e suites (backend + frontend) built, run, GREEN
 
 **The gym's mocked Tier-1 had NO test that drove an actual server. Built two live
 suites that provision/drive REAL gym boxes + the real backend, ran them, and
