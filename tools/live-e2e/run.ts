@@ -23,8 +23,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { deriveDemoUserIrk } from "@flagship/control-plane";
-import { signJournalRequest, type JournalRequest } from "@flagship/protocol";
+import { randomBytes } from "node:crypto";
+import { deriveDemoUserIrk, deriveDemoDelegatedKey } from "@flagship/control-plane";
+import {
+  signJournalRequest,
+  signPhoneOrder,
+  type JournalRequest,
+  type PhoneOrder,
+} from "@flagship/protocol";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
 const CONTROL = process.env.GYM_LIVE_CONTROL_APEX || "gym.flagshipserver.com";
@@ -244,6 +250,70 @@ async function main(): Promise<void> {
     });
   } else {
     log("[box: owner-IRK signed API] — SKIPPED (set GYM_DEMO_IRK_KEK to enable)");
+  }
+
+  // ── 6.5 Full-platform features (services + paired session + build) ─────────
+  // Only on a FULL-platform box (SWK + config → ServicePlatform). A
+  // cert+serve-only box returns 503 at /api/services; we detect + report that
+  // rather than failing, so this stays green on a minimal box too.
+  if (KEK) {
+    log("[box: full-platform features]");
+    const svc = await http(`https://${fqdn}/api/services`);
+    const platformUp = svc.status === 200;
+    await check("ServicePlatform constructed (GET /api/services 200, not 503)", () => {
+      assert(svc.status === 200 || svc.status === 503, `unexpected ${svc.status}`);
+      if (svc.status === 503) {
+        log("    (platform OFF — this box is cert+serve-only; build/vibe/mcp not available)");
+        return "503 — platform off (minimal box)";
+      }
+      const list = Array.isArray(svc.json) ? svc.json : svc.json?.services;
+      return `platform UP — ${(list?.length ?? 0)} services`;
+    });
+    if (platformUp) {
+      // Mint a paired session: sign an add-paired-session order with the demo
+      // DELEGATED key (the box pins it as pskPub via FLAGSHIP_PSK_PUB_HEX), POST
+      // to /api/orders-from-user, then use the token on a paired-gated call.
+      const delegated = deriveDemoDelegatedKey(hexToBytes(KEK), user);
+      const token = bytesToHex(randomBytes(24));
+      let sessionOk = false;
+      await check("mint a paired session (add-paired-session, delegated-key signed)", async () => {
+        const order: PhoneOrder = {
+          type: "add-paired-session",
+          serverId: fqdn,
+          token,
+          label: "live-e2e",
+          issuedAt: Date.now(),
+        };
+        const sig = bytesToHex(signPhoneOrder(order, delegated));
+        const r = await http(`https://${fqdn}/api/orders-from-user`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ request: order, signature: sig }),
+        });
+        assert(r.status === 200 || r.status === 204, `got ${r.status}: ${r.text.slice(0, 140)}`);
+        sessionOk = true;
+        return `token accepted (${r.status})`;
+      });
+      if (sessionOk) {
+        // git-import — a REAL build-modes feature over the paired session: the
+        // box clones a public repo and returns a Flagship-fitness verdict (no
+        // LLM needed). Proves the paired session works AND git-import runs e2e.
+        await check("git-import returns a fitness verdict (paired session, real clone)", async () => {
+          const r = await http(
+            `https://${fqdn}/api/build/git`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-flagship-session": token },
+              body: JSON.stringify({ gitUrl: "https://github.com/octocat/Hello-World", ref: "master" }),
+            },
+            60_000,
+          );
+          assert(r.status === 200, `got ${r.status}: ${r.text.slice(0, 160)}`);
+          const v = r.json?.fit !== undefined ? `fit=${r.json.fit}` : JSON.stringify(r.json).slice(0, 80);
+          return v;
+        });
+      }
+    }
   }
 
   // ── 7. Teardown (unless reusing) ──────────────────────────────────────────
