@@ -20,13 +20,20 @@ const PROMO_PROVIDER_ID = "flagship-promo";
 
 /* ---------- IndexedDB helpers (same DB the keystore uses) ---------- */
 
+// Shared `flagship-webapp` DB — see keystore.js: schema version is 2 and every
+// opener must open at the SAME version (a lower-version open throws
+// VersionError once a v2 store exists). Open at v2 + create every known store
+// so the first creator provisions them all.
+const DB_VERSION = 2;
 function openDb() {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
     r.onupgradeneeded = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains(DB_STORE)) {
-        db.createObjectStore(DB_STORE);
+      if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+      if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
+      if (!db.objectStoreNames.contains("buildDrafts")) {
+        db.createObjectStore("buildDrafts", { keyPath: "id" });
       }
     };
     r.onsuccess = () => resolve(r.result);

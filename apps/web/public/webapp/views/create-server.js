@@ -530,7 +530,12 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
-async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
+// Exported so the GYM-ONLY `window.__gymCreate` seam (app.js, gym branch only)
+// can drive the EXACT same compose+sign path the real "Deliver to homepage"
+// button uses — the app is the author of the signed recipe. No behaviour change
+// for the normal flow; this is purely making the genuine composer reusable by
+// the live-e2e harness (faithful "create via the app").
+export async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
   // §7a.1: only "approve" is carried on the wire; "auto" is the absent-field
   // default so legacy recipes stay byte-identical (see canonicalInstallBlob).
@@ -584,7 +589,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     code.issuedAt, code.expiresAt,
   ]);
   const acSig = await signWithIrk(session.umk, acMsg);
-  const issueResp = await fetch("/api/auth-code/issue", {
+  // Absolute control-plane URL — a relative POST hits the webapp origin
+  // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the claim call above
+  // and the sibling controlApex() calls in this file.
+  const issueResp = await fetch(`${controlApex()}/api/auth-code/issue`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -606,7 +614,9 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
   ]);
   const rckRegSig = await signWithIrk(session.umk, rckRegMsg);
-  const rckResp = await fetch("/api/routing/register-rck", {
+  // Absolute control-plane URL — same reason as the auth-code/issue call above:
+  // a relative POST hits the GET/HEAD-only webapp origin and 405s.
+  const rckResp = await fetch(`${controlApex()}/api/routing/register-rck`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

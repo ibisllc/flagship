@@ -26,8 +26,14 @@ function openDb() {
     const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
+      // Shared `flagship-webapp` DB (keystore.js / providers.js / buildDraft.js).
+      // Create EVERY known store so whichever opener creates the DB first
+      // provisions them all (a same-version open never re-runs this handler).
       if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains("buildDrafts")) {
+        db.createObjectStore("buildDrafts", { keyPath: "id" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

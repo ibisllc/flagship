@@ -96,14 +96,20 @@ async function importWrapped(file) {
 }
 
 function openDb() {
-  // Must match keystore.js's DB_NAME exactly. Bootstrap writes the
-  // wrapped UMK into "flagship-webapp", so export/import has to open
-  // the same database.
+  // Must match keystore.js's DB_NAME + VERSION exactly. The shared
+  // `flagship-webapp` DB is at version 2 (keystore.js / providers.js /
+  // labelBook.js / buildDraft.js); opening at a lower version throws
+  // VersionError once a v2 store exists. Create every known store so the
+  // first creator provisions them all.
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open("flagship-webapp", 1);
+    const r = indexedDB.open("flagship-webapp", 2);
     r.onupgradeneeded = () => {
       const db = r.result;
       if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+      if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
+      if (!db.objectStoreNames.contains("buildDrafts")) {
+        db.createObjectStore("buildDrafts", { keyPath: "id" });
+      }
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);

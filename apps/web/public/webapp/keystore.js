@@ -29,6 +29,26 @@ const DB_NAME = "flagship-webapp";
 const DB_STORE = "keystore";
 const RECORD_KEY = "wrappedUmk";
 
+// The `flagship-webapp` IndexedDB is SHARED across keystore.js / providers.js /
+// lib/labelBook.js / lib/buildDraft.js — all four open the SAME database. Its
+// schema version is 2 (labelBook + buildDraft bumped it from keystore.js's
+// original v1 to add their stores). Every opener MUST therefore open at the
+// SAME version: opening at a LOWER version than the DB already has throws
+// `VersionError`, so once a v2 store has been created (e.g. the user touched the
+// build-draft / label features) a stale v1 keystore open would break unlock /
+// PIN / providers. We open at v2 and create EVERY known store in the upgrade
+// handler so whichever module first creates the DB provisions all of them
+// (an opener at the same version never re-runs onupgradeneeded, so it would
+// otherwise find a sibling's store missing).
+const DB_VERSION = 2;
+function upgradeFlagshipWebappDb(db) {
+  if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+  if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
+  if (!db.objectStoreNames.contains("buildDrafts")) {
+    db.createObjectStore("buildDrafts", { keyPath: "id" });
+  }
+}
+
 /** Sentinel profileId that maps to the legacy {@link RECORD_KEY} record so
  *  pre-multi-profile installs read/write the same row they always did. */
 export const DEFAULT_PROFILE_ID = "__default__";
@@ -43,9 +63,9 @@ const AES_NONCE_BYTES = 12;
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
     r.onupgradeneeded = () => {
-      r.result.createObjectStore(DB_STORE);
+      upgradeFlagshipWebappDb(r.result);
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
