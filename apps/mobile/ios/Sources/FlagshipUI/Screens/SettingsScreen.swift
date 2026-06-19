@@ -91,6 +91,12 @@ public struct SettingsScreen: View {
     var onOpenPeerBackup: () -> Void = {}
     /// P14 — open the "Dock a browser" companion-pairing screen.
     var onOpenCompanionDock: () -> Void = {}
+    /// Web-experience gating — open "Open secured sessions" (browser QR-login
+    /// sessions this phone has authorized).
+    var onOpenSecuredSessions: () -> Void = {}
+    /// Web-experience gating — open "Process URL" (paste a `flagship://access`
+    /// link / "Get link" string to authorize a site).
+    var onOpenProcessUrl: () -> Void = {}
     /// P14 Phase 2 — open the Companion-requests inbox. The badge count
     /// next to the row reflects `pendingCompanionWritesCount`.
     var onOpenCompanionRequests: () -> Void = {}
@@ -157,6 +163,8 @@ public struct SettingsScreen: View {
         onOpenProfiles: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
+        onOpenSecuredSessions: @escaping () -> Void = {},
+        onOpenProcessUrl: @escaping () -> Void = {},
         onOpenCompanionRequests: @escaping () -> Void = {},
         pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
@@ -191,6 +199,8 @@ public struct SettingsScreen: View {
         self.onOpenProfiles = onOpenProfiles
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
+        self.onOpenSecuredSessions = onOpenSecuredSessions
+        self.onOpenProcessUrl = onOpenProcessUrl
         self.onOpenCompanionRequests = onOpenCompanionRequests
         self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
@@ -661,6 +671,8 @@ public struct SettingsScreen: View {
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
             FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
             FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
+            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", action: onOpenSecuredSessions),
+            FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
             FSSettingsRow(
                 icon: "tray.full",
                 title: "Companion requests",

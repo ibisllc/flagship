@@ -137,6 +137,8 @@ public struct SettingsTab: View {
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
+                    onOpenSecuredSessions: { path.append(.securedSessions) },
+                    onOpenProcessUrl: { path.append(.processUrl) },
                     onOpenCompanionRequests: { path.append(.companionRequests) },
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
@@ -407,6 +409,35 @@ public struct SettingsTab: View {
                 vm: $companionRequestsVm,
                 onPendingCountChanged: { count in pendingCompanionCount = count }
             )
+        case .securedSessions:
+            SecuredSessionsContainer()
+        case .processUrl:
+            ProcessUrlScreen()
+        }
+    }
+}
+
+/// Owns the SecuredSessionsViewModel lifecycle so the SettingsTab can navigate
+/// to "Open secured sessions" without keeping the VM alive after pop. Mirrors
+/// CompanionRequestsContainer; the client + store come from the environment.
+struct SecuredSessionsContainer: View {
+    @Environment(\.serviceAccessClient) private var serviceAccess
+    @Environment(\.securedSessionStore) private var store
+    @State private var vm: SecuredSessionsViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                SecuredSessionsScreen(vm: vm)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = SecuredSessionsViewModel(client: serviceAccess, store: store)
+            }
         }
     }
 }

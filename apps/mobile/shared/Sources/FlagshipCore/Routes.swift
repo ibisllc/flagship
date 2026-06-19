@@ -140,6 +140,15 @@ public enum SettingsRoute: Hashable, Sendable {
     /// approves (which IRK-signs + dispatches the destination call) or
     /// denies. Reached from Settings.
     case companionRequests
+    /// Web-experience gating (docs/service-access-gating.md) — "Open secured
+    /// sessions": the browser QR-login sessions THIS phone has authorized. Per
+    /// row: serviceUrl / browserAgent / started-at + a debounced Refresh
+    /// (online/offline) and a Stop (close + remove). Reached from Settings.
+    case securedSessions
+    /// Web-experience gating — "Process URL": a paste field that takes a
+    /// `flagship://access?…` deeplink (or the raw "Get link" string) from a
+    /// box's knock page and routes it into the same KnockAuthorize flow.
+    case processUrl
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad
