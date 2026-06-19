@@ -157,16 +157,19 @@ M2/M3/M4/M5/L. All 3 clients interop on the canonical invite link `<secret>&a=<a
 (fixed-string round-trip tests per surface). Gates: protocol 682 · backend 3137 · iOS 1146 · Android 989 ·
 webapp 1392 · tsc clean.
 
-**Remaining follow-ups (enhancements — the feature WORKS without them):**
-- **Manual-finalize is device-bound** — each client retains its own `{create, createSig}` locally (the box
-  strips them from the friend's `{pending}` redeem + `.com`'s list doesn't return them), so a manual invite
-  must be finalized on its CREATING device. Proper fix: the box re-fetches + verifies the create from `.com`
-  by inviteId at `/api/service-access/accept` (any-device finalize, drop the client caches).
-- **`/invite` web page** should emit the canonical `&a=`/`&i=` for the universal-link path (the
-  `flagship://invite` app hand-off already carries them).
-- **Acceptance-reply link** (`flagship://invite-accept?…`) cross-client interop not yet pinned with a vector
-  (the invite link is; verify when touching the finalize flow).
-- Retire the dual-accept IRK-create path once nothing else needs it (low priority — dual-accept is safe).
+**Follow-ups — DONE (`f7ad7a7d`):**
+- ✅ **Manual-finalize is now device-independent** — the box re-fetches + verifies the signed create from
+  `.com` by inviteId at `/api/service-access/accept` (STK-signed `GET …/service-invites/:inviteId/create`,
+  mirroring `revoked-since`); the author submits only `{accept, acceptSig}`, and the per-client create caches
+  (webapp `CREATE_STORE_KEY`, iOS `InviteCreateStore`, Android) were deleted. Finalize from any of the author's
+  devices.
+- ✅ **Acceptance-reply link** canonicalized — `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`, all
+  3 surfaces build+parse the identical frozen string (round-trip tests); legacy forms still decode.
+- ✅ **`/invite` web page** parses + forwards the canonical `#<secret>&a=<authorAID>&i=<inviteId>` (verified +
+  test-pinned).
+
+**Remaining (low-priority / owner):** retire the dual-accept IRK-create path once nothing needs it (safe to
+keep); deploy `.com` (the new by-inviteId fetch route) + rebuild the burner/apps to ship to real boxes/devices.
 
 ## v2 hardening — box-as-authority + pairwise AIDs + author-confirmed binding (2026-06-19, from the design critique)
 
