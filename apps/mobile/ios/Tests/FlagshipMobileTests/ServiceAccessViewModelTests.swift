@@ -64,10 +64,12 @@ final class ServiceAccessViewModelTests: XCTestCase {
         let vm = makeVM(mock, now: { 1700 })
         let link = await vm.addPerson(name: "Alex", photo: nil)
         XCTAssertNotNil(link)
-        // v2 link carries the secret AND the author AID (no iid for auto).
-        XCTAssertTrue(link!.hasPrefix("https://\(server)/invite#k="))
+        // Canonical v2 link: BARE leading secret (no k=) + the author AID, no
+        // inviteId for an auto invite.
+        XCTAssertNotNil(link!.range(of: "https://\(server)/invite#[0-9a-f]{64}&a=", options: .regularExpression))
         XCTAssertTrue(link!.contains("&a=\(HexUtil.encode(aid().publicKey.rawRepresentation))"))
-        XCTAssertFalse(link!.contains("iid="), "auto invite link omits the inviteId")
+        XCTAssertFalse(link!.contains("&i="), "auto invite link omits the inviteId")
+        XCTAssertFalse(link!.contains("k="), "canonical link has a bare secret, no k= prefix")
 
         XCTAssertEqual(mock.createCalls.count, 1)
         let call = mock.createCalls[0]
@@ -89,7 +91,7 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertEqual(inviteId.count, 64)
     }
 
-    func testAddManualInviteSetsApprovalModeAndIidInLink() async {
+    func testAddManualInviteSetsApprovalModeAndInviteIdInLink() async {
         let mock = MockServiceAccessClient()
         let store = InMemoryInviteCreateStore()
         let vm = makeVM(mock, now: { 1700 }, store: store)
@@ -97,9 +99,10 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertNotNil(link)
         let call = mock.createCalls[0]
         XCTAssertEqual(call.request["approvalMode"], "manual")
-        // The manual link carries the inviteId (the friend needs it to accept).
+        // The manual link carries the inviteId as the canonical `&i=` (the friend
+        // needs it to sign the acceptance).
         let inviteId = call.request["inviteId"]!
-        XCTAssertTrue(link!.contains("&iid=\(inviteId)"))
+        XCTAssertTrue(link!.contains("&i=\(inviteId)"))
         // The signed create is cached locally (so the author can finalize later).
         XCTAssertNotNil(store.get(inviteId: inviteId), "manual create must be persisted for finalize")
         XCTAssertEqual(store.get(inviteId: inviteId)?.createSigHex, call.signatureHex.lowercased())
