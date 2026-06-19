@@ -31,6 +31,7 @@ public enum ServiceInvite {
     public static let tagBundle = "flagship/service-invite/bundle/v1"
     public static let tagAccessMode = "flagship/service-access-mode/v1"
     public static let tagVisit = "flagship/service-visit/v1"
+    public static let tagKnock = "flagship/service-knock/v1"
 
     // ── Key derivation (mirror keys.ts: empty-salt HKDF-SHA256) ──────────
 
@@ -244,6 +245,38 @@ public enum ServiceInvite {
         try validateNoSepCtrl("serverId", serverId)
         try validateNoSepCtrl("serviceRef", serviceRef)
         return Data([tagVisit, serverId, serviceRef, HexUtil.encode(visitorAID), String(issuedAt)].joined(separator: "|").utf8)
+    }
+
+    /// `tagKnock | serverId | serviceRef | pageId | hex(visitorAID) | issuedAt`
+    /// — the web-experience-gating QR-login authorization (docs/service-access-
+    /// gating.md, "Web-experience gating"). The pageId is IN the signature so a
+    /// visit proof can never be replayed to authorize a different browser page.
+    /// Mirrors @flagship/protocol's `canonicalKnock`.
+    public static func canonicalKnock(
+        serverId: String,
+        serviceRef: String,
+        pageId: String,
+        visitorAID: Data,
+        issuedAt: Int64
+    ) throws -> Data {
+        try validateNoSepCtrl("serverId", serverId)
+        try validateNoSepCtrl("serviceRef", serviceRef)
+        try validateNoSepCtrl("pageId", pageId)
+        return Data([tagKnock, serverId, serviceRef, pageId, HexUtil.encode(visitorAID), String(issuedAt)].joined(separator: "|").utf8)
+    }
+
+    /// Ed25519-sign a `KnockAuthorization` over `canonicalKnock` with the
+    /// visitor's STABLE AID. Mirrors `signKnockAuthorization` in the protocol.
+    public static func signKnockAuthorization(
+        serverId: String,
+        serviceRef: String,
+        pageId: String,
+        visitorAID: Data,
+        issuedAt: Int64,
+        aid: Curve25519.Signing.PrivateKey
+    ) throws -> Data {
+        let bytes = try canonicalKnock(serverId: serverId, serviceRef: serviceRef, pageId: pageId, visitorAID: visitorAID, issuedAt: issuedAt)
+        return try aid.signature(for: bytes)
     }
 
     // ── Sign / verify helpers ────────────────────────────────────────────
