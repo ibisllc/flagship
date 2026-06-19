@@ -14,6 +14,10 @@ struct ContentView: View {
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.sessionStore) private var sessionStore
     @State private var pendingWatchers: PendingPodWatcherRegistry?
+    /// #91 — foreground long-poll for AI-chat alerts → local notification +
+    /// operations sliver. Lazily built once a pod is paired; gated on
+    /// paired+unlocked so nothing surfaces over the lock.
+    @State private var aiChatPoller: AiChatAlertPoller?
 
     var body: some View {
         ZStack {
@@ -42,6 +46,7 @@ struct ContentView: View {
             if paired { Task { await registerPush() } }
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            syncAiChatPoller()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
         }
@@ -63,6 +68,7 @@ struct ContentView: View {
         .task {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
+            syncAiChatPoller()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
@@ -106,6 +112,37 @@ struct ContentView: View {
             pendingWatchers = PendingPodWatcherRegistry(app: app, server: serverClient)
         }
         pendingWatchers?.sync()
+    }
+
+    /// #91 — lazily build + start the AI-chat alert poller on first paint after
+    /// pairing. Live-client only: the mock/demo client has no real box to drain
+    /// `/api/phone/alerts` from. The poller self-gates on paired+unlocked, so
+    /// it drains only while the app is usable (mirrors the sliver's
+    /// hide-under-lock). The notifier routes through the App-scope
+    /// `PushNotifications` so a tap deep-links to the chat, exactly like a real
+    /// Web-Push wake.
+    @MainActor
+    private func syncAiChatPoller() {
+        guard dev.useLiveClient else { return }
+        if aiChatPoller == nil {
+            let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
+            let client = LivePhoneAlertClient(urlSession: pinned, store: sessionStore)
+            let poller = AiChatAlertPoller(
+                operations: operations,
+                client: client,
+                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                notify: { sessionId, request in
+                    guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+                          let push = delegate.push else { return }
+                    push.notifyAiChatNeedsYou(
+                        sessionId: sessionId,
+                        isEnvVar: request == .requestEnvVar
+                    )
+                }
+            )
+            aiChatPoller = poller
+            poller.start()
+        }
     }
 
     /// Lazy push registration — only after the user has a paired pod

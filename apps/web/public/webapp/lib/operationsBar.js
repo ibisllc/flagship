@@ -50,6 +50,13 @@ async function navigateToTarget(target) {
       await resumeVibeCode(params);
       return;
     }
+    if (target.view === "view-vibecode-chat") {
+      // #91 — an AI-chat-needs-you alert: open the W10 chat at that session
+      // so the owner can answer the AI's question / set the env var.
+      const { enterVibeCodeChat } = await import("../views/vibecode-chat.js");
+      await enterVibeCodeChat(params.sessionId);
+      return;
+    }
     // Fallback — just show the view id if it's a plain router target.
     const { show } = await import("./router.js");
     show(target.view);

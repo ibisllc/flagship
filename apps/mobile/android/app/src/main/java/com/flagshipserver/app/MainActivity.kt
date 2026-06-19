@@ -181,6 +181,16 @@ class MainActivity : FragmentActivity() {
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
+        // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
+        // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session
+        // store with the screens client. The poller is built + started in
+        // setContent (where the live/session pivot + operations center are in
+        // scope), mirroring the deploy-sync LaunchedEffect.
+        val livePhoneAlerts = com.flagshipserver.app.api.LivePhoneAlertClient(
+            client = okHttp,
+            store = sessionStore,
+        )
+        val appContext = applicationContext
         val mockBuild = MockBuildClient()
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
@@ -249,6 +259,33 @@ class MainActivity : FragmentActivity() {
                     is TrustChecker.Outcome.Trusted -> trustCenter.markTrusted()
                     is TrustChecker.Outcome.Untrusted -> trustCenter.markUntrusted(listOf(outcome.failure))
                     is TrustChecker.Outcome.NoVerdict -> trustCenter.markNoVerdict()
+                }
+            }
+
+            // #91 — AI-chat alert foreground poll. Live + paired only: the mock
+            // client has no real box to drain. The poller self-gates on
+            // paired+unlocked (mirrors the sliver's hide-under-lock). The
+            // notifier routes through the FCM-channel local notification so a
+            // tap deep-links to the chat, exactly like a real push wake.
+            val aiChatPoller = remember {
+                com.flagshipserver.app.core.AiChatAlertPoller(
+                    operations = operations,
+                    client = livePhoneAlerts,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    notify = { sessionId, request ->
+                        FlagshipFcmService.showAiChatNotification(
+                            appContext,
+                            sessionId,
+                            isEnvVar = request == com.flagshipserver.app.api.AiChatRequest.REQUEST_ENV_VAR,
+                        )
+                    },
+                )
+            }
+            LaunchedEffect(useLive, sessionToken != null) {
+                if (useLive && sessionToken != null) {
+                    aiChatPoller.start(this)
+                } else {
+                    aiChatPoller.stop()
                 }
             }
 

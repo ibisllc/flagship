@@ -116,5 +116,12 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
     // different IRK pubkey is genuinely a new event.
     return a.newIrkPrefix === b.newIrkPrefix;
   }
+  if (a.kind === "ai-chat-needs-you" && b.kind === "ai-chat-needs-you") {
+    // #91 — one alert per (sessionId, toolUseId). The session pauses once
+    // per tool_use; a re-emit for the SAME pending tool (e.g. a notify hook
+    // re-firing) must not flood the sliver, but the NEXT tool the AI emits
+    // in the same session is a genuinely new "the AI needs you" event.
+    return a.toolUseId === b.toolUseId;
+  }
   return false;
 }

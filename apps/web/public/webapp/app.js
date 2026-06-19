@@ -18,6 +18,12 @@ import {
   refreshOperationsBar,
   setOperationsBarUnlockedResolver,
 } from "./lib/operationsBar.js";
+import {
+  startAiChatAlertPoll,
+  makeAiChatNotifier,
+} from "./lib/aiChatAlerts.js";
+import { enterVibeCodeChat } from "./views/vibecode-chat.js";
+import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
 import {
@@ -317,6 +323,61 @@ function wireServicesTabEntries() {
   wire("services-list-open-vibe-code", enterBuildSource);
 }
 
+/** #91 — true iff we're paired to a box (so the AI-chat poll has somewhere to
+ *  drain from). Swallows the not-paired case so the poll's `active` gate is a
+ *  cheap boolean. */
+function getPodBaseUrlSafe() {
+  try {
+    return getPodBaseUrl();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * #91 — raise a LOCAL notification for a paused AI build. Prefers the service
+ * worker's `showNotification` so a tap routes through the SW's
+ * `notificationclick` (DEEP_LINK → vibecode-chat); falls back to an inline
+ * `Notification` whose onclick opens the chat directly. Fully best-effort:
+ * no permission / no support is a silent no-op (the operations sliver already
+ * carries the signal). Never the pass/fail path — it's a courtesy wake.
+ * @param {{title:string, body:string, tag:string, sessionId:string}} n
+ */
+function showAiChatNotification(n) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+    const data = {
+      kind: "ai-chat-needs-you",
+      sessionId: n.sessionId,
+      deepLink: `/?view=vibecode-chat&sessionId=${encodeURIComponent(n.sessionId)}`,
+    };
+    if ("serviceWorker" in navigator && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(n.title, {
+          body: n.body,
+          tag: n.tag,
+          renotify: true,
+          icon: "/icon.svg",
+          data,
+        }))
+        .catch(() => { /* fall through is not possible post-await; best-effort */ });
+      return;
+    }
+    const notif = new Notification(n.title, { body: n.body, tag: n.tag, icon: "/icon.svg" });
+    notif.onclick = () => {
+      try {
+        window.focus();
+      } catch { /* ignore */ }
+      void enterVibeCodeChat(n.sessionId);
+      notif.close();
+    };
+  } catch {
+    /* notifications are a courtesy — never let one break the poll */
+  }
+}
+
 /**
  * The biometric/PIN-gated per-cert override. Tapping a red trust-sliver line
  * runs this: the browser has no biometric, so the gate is the tier-1 PIN
@@ -489,6 +550,19 @@ async function boot() {
   // lifecycle) and pins a teal strip the shell slides down to reveal.
   setOperationsBarUnlockedResolver(sliversUnlocked);
   initOperationsBar();
+
+  // #91 — AI-chat alerts: a foreground long-poll that drains the box's
+  // phone-pollable AlertInbox (GET /api/phone/alerts), surfaces a paused AI
+  // build in the operations sliver, and raises an app-initiated LOCAL
+  // notification. Gated on `sliversUnlocked` (so nothing shows over the lock)
+  // and only drains once paired to a box. The notifier prefers the service
+  // worker's showNotification (a tap then routes via the SW's notificationclick
+  // DEEP_LINK), falling back to an inline Notification whose onclick opens the
+  // chat. Best-effort throughout — a .com/box outage can never wedge the app.
+  startAiChatAlertPoll({
+    active: () => sliversUnlocked() && !!getPodBaseUrlSafe(),
+    notify: makeAiChatNotifier({ show: showAiChatNotification }),
+  });
 
   // ── Maintainer-trust enforcement (docs/maintainer-trust-enforcement.md) ──
   // The persistent ALARMING-RED top sliver: one non-dismissible line per

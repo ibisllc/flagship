@@ -58,6 +58,31 @@ public final class PushNotifications: NSObject {
     public func tokenAsHex() -> String? {
         deviceToken?.map { String(format: "%02x", $0) }.joined()
     }
+
+    /// #91 — raise an app-initiated LOCAL notification that an AI build chat
+    /// is waiting on the owner. Value-free copy (driven only by the pending
+    /// tool kind). The `userInfo` carries `kind: "vibecode-needs-you"` +
+    /// `sessionId`, so the existing tap-handler routes it to
+    /// `.vibeCodeChat(sessionId:)` exactly like a real Web-Push wake. Best-
+    /// effort: if authorization wasn't granted the system drops it silently —
+    /// the operations sliver already carries the signal.
+    public func notifyAiChatNeedsYou(sessionId: String, isEnvVar: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = "Flagship"
+        content.body = isEnvVar
+            ? "The AI needs an environment variable to continue."
+            : "The AI is asking you a question."
+        content.sound = .default
+        content.userInfo = ["kind": "vibecode-needs-you", "sessionId": sessionId]
+        // Per-session identifier so a re-fire for the same session replaces the
+        // prior banner rather than stacking.
+        let request = UNNotificationRequest(
+            identifier: "flagship-ai-chat-\(sessionId)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
 }
 
 extension PushNotifications: UNUserNotificationCenterDelegate {

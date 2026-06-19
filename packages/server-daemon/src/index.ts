@@ -999,6 +999,18 @@ async function wireRuntimeSurfaces(deps: {
       `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
         `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
     );
+    // #91 — queue a value-free AI-chat alert on the SAME phone-pollable
+    // AlertInbox the rest of the daemon→phone events ride. The phone's
+    // foreground long-poll (GET /api/phone/alerts) drains it, raises a
+    // LOCAL notification, and surfaces the session in the operations sliver
+    // with a deep link into the chat. This is the always-on baseline; the
+    // optional push relay below is an additional (operator-supplied) wake.
+    alertInbox.emit({
+      kind: "ai-chat-needs-you",
+      serviceId: sessionId,
+      request: kind,
+      toolUseId,
+    });
   });
 
   // ---- Build modes: git import + MCP (the two new create-service
@@ -1125,6 +1137,15 @@ async function wireRuntimeSurfaces(deps: {
         `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
           `→ owner-notify hook fired`,
       );
+      // #91 — this hook REPLACES the baseline above (setNotifyOwner is
+      // last-writer-wins), so re-emit the value-free AI-chat alert onto the
+      // phone-pollable AlertInbox here too, alongside the journal entry.
+      alertInbox.emit({
+        kind: "ai-chat-needs-you",
+        serviceId: sessionId,
+        request: kind,
+        toolUseId,
+      });
       void buildJournal
         .append(sessionId, {
           mode: "scratch",
