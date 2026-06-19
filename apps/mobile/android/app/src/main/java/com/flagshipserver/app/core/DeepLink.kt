@@ -51,8 +51,15 @@ sealed interface DeepLink {
      *  hand-off the box's /invite page offers (Android drops the URL fragment
      *  from App-Links, so the secret rides a query), and — when the fragment
      *  IS carried — the universal link
-     *  `https://<server>.<user>.flagship.services/invite#<secret>`. */
-    data class RedeemInvite(val serverDomain: String, val secretHex: String) : DeepLink
+     *  `https://<server>.<user>.flagship.services/invite#<secret>`.
+     *  v2: [authorAidHex] (optional, from `a=<64hex>` in the fragment/query) lets
+     *  the friend derive a PER-AUTHOR contact AID for the redeem; absent ⇒ the
+     *  friend falls back to the global AID (legacy links are grandfathered). */
+    data class RedeemInvite(
+        val serverDomain: String,
+        val secretHex: String,
+        val authorAidHex: String? = null,
+    ) : DeepLink
 
     /** Web-experience gating (docs/service-access-gating.md, "Web-experience
      *  gating") — the visitor's phone authorizes a SEPARATE browser's QR-login
@@ -80,7 +87,8 @@ sealed interface DeepLink {
                     (uri.path == "/invite" || uri.path == "/invite/")
                 ) {
                     val secret = secretFromFragment(uri.fragment)
-                    return if (secret != null) RedeemInvite(host, secret) else null
+                    val author = InviteLink.authorAidFromFragment(uri.fragment)
+                    return if (secret != null) RedeemInvite(host, secret, author) else null
                 }
                 return null
             }
@@ -102,7 +110,8 @@ sealed interface DeepLink {
                     val pathSecret = uri.path?.trim('/').orEmpty()
                     val candidate = params["k"] ?: params["secret"] ?: pathSecret
                     val secret = secretFromFragment(candidate)
-                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret) else null
+                    val author = params["a"]?.takeIf { Regex("^[0-9a-fA-F]{64}$").matches(it) }?.lowercase()
+                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author) else null
                 }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params
