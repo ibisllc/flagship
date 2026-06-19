@@ -915,14 +915,27 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: null,
       inviteId: null,
     });
-    // v2 context — carries the author AID + inviteId from the fragment.
-    const v2Hash = `#k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`;
+    // v2 context — carries the author AID + inviteId from the CANONICAL
+    // (bare-secret) fragment `#<secret>&a=…&i=…`.
+    const v2Hash = `#${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`;
     expect(si.inviteContextFromLocation({ pathname: "/invite", hash: v2Hash })).toEqual({
       secret: VECTORS.secretHex,
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
     });
-    // buildInviteLink round-trips both forms.
+    // Backward-compat: a legacy `k=<secret>` fragment still parses (old
+    // webapp-minted links + the mobile custom-scheme hand-off).
+    expect(
+      si.inviteContextFromLocation({
+        pathname: "/invite",
+        hash: `#k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`,
+      }),
+    ).toEqual({
+      secret: VECTORS.secretHex,
+      authorAID: VECTORS.derived.authorAidPubHex,
+      inviteId: VECTORS.inviteId,
+    });
+    // buildInviteLink round-trips both forms (v2 now BARE-secret, no k=).
     expect(si.buildInviteLink("https://home.alice.flagship.services", VECTORS.secretHex)).toBe(
       `https://home.alice.flagship.services/invite#${VECTORS.secretHex}`,
     );
@@ -932,5 +945,31 @@ describe("webapp serviceInvite — wire helpers", () => {
         inviteId: VECTORS.inviteId,
       }),
     ).toBe(`https://home.alice.flagship.services/invite${v2Hash}`);
+
+    // ── FROZEN cross-client canonical fragment (interop lock; identical
+    // string asserted on iOS DeepLink + Android InviteLink). ──────────────
+    const FROZEN_SECRET = "a".repeat(64);
+    const FROZEN_AUTHOR = "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640";
+    const FROZEN_INVITE = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
+    const FROZEN_FRAG = `${FROZEN_SECRET}&a=${FROZEN_AUTHOR}&i=${FROZEN_INVITE}`;
+    // build(secret,a,i) === the frozen fragment.
+    expect(
+      si.buildInviteLink("https://home.alice.flagship.services", FROZEN_SECRET, {
+        authorAID: FROZEN_AUTHOR,
+        inviteId: FROZEN_INVITE,
+      }),
+    ).toBe(`https://home.alice.flagship.services/invite#${FROZEN_FRAG}`);
+    // parse(frozen) === { secret, a, i }.
+    expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${FROZEN_FRAG}` })).toEqual({
+      secret: FROZEN_SECRET,
+      authorAID: FROZEN_AUTHOR,
+      inviteId: FROZEN_INVITE,
+    });
+    // parse(bare secret) === { secret only }.
+    expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${FROZEN_SECRET}` })).toEqual({
+      secret: FROZEN_SECRET,
+      authorAID: null,
+      inviteId: null,
+    });
   });
 });

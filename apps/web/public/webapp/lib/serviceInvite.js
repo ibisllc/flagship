@@ -406,12 +406,13 @@ function podBase(baseUrl) {
 }
 
 /**
- * Build the friend share-link `https://<server>.<user>/invite#k=<secret>&a=<authorAID>&i=<inviteId>`.
+ * Build the friend share-link `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>`.
  *
  * Everything rides the FRAGMENT (never sent to .com): the `secret` is the bearer
- * capability; the author's AID (`a`) lets the friend derive their PER-AUTHOR
- * contact identity (`deriveContactAccountId`) so they redeem under a pseudonym
- * unlinkable across authors; the inviteId (`i`) lets the friend's app emit the
+ * capability — the BARE leading token (canonical cross-client format, no `k=`
+ * prefix); the author's AID (`a`) lets the friend derive their PER-AUTHOR contact
+ * identity (`deriveContactAccountId`) so they redeem under a pseudonym unlinkable
+ * across authors; the inviteId (`i`) lets the friend's app emit the
  * manual-approve acceptance. `authorAID`/`inviteId` are OPTIONAL — omitting them
  * yields the v1 bare `#<secret>` form (the friend then redeems under the global
  * AID, no manual loop).
@@ -429,7 +430,8 @@ export function buildInviteLink(podBaseUrl, secretHex, ctx = {}) {
     // v1 bare form — keep it exactly as before.
     return `${base}/invite#${sec}`;
   }
-  const parts = [`k=${sec}`];
+  // Canonical v2: BARE leading secret, then &a=/&i= (matches iOS + Android).
+  const parts = [sec];
   if (authorHex) parts.push(`a=${authorHex.toLowerCase()}`);
   if (ctx.inviteId) parts.push(`i=${String(ctx.inviteId).toLowerCase()}`);
   return `${base}/invite#${parts.join("&")}`;
@@ -444,16 +446,22 @@ export function inviteSecretFromLocation(loc = typeof window !== "undefined" ? w
 /**
  * Parse the FULL invite context from a /invite landing: `{ secret, authorAID,
  * inviteId }`. `authorAID`/`inviteId` are present only for v2 links (the
- * `#k=…&a=…&i=…` shape); a v1 bare `#<secret>` yields them null. Returns null
- * when the path isn't /invite or there is no valid 64-hex secret.
+ * canonical `#<secret>&a=…&i=…` shape); a v1 bare `#<secret>` yields them null.
+ * Returns null when the path isn't /invite or there is no valid 64-hex secret.
+ *
+ * The secret is matched as the CANONICAL bare leading token (`#<secret>` or
+ * `#<secret>&…`), and — for backward-compat — also the legacy `k=<secret>` form
+ * (old webapp-minted links + the iOS/Android custom-scheme `flagship://invite?k=`
+ * hand-off, whose fragment-less query maps through the same parser).
  */
 export function inviteContextFromLocation(loc = typeof window !== "undefined" ? window.location : null) {
   if (!loc) return null;
   const path = loc.pathname ?? "";
   if (!/\/invite\/?$/.test(path)) return null;
   const hash = (loc.hash ?? "").replace(/^#/, "");
-  // Tolerate `#k=<secret>&a=…&i=…` (the share-link shape) or a bare hex secret.
-  const m = hash.match(/(?:^|[?&])k=([0-9a-f]{64})/i) || hash.match(/^([0-9a-f]{64})$/i);
+  // Canonical bare leading secret (`<secret>` or `<secret>&…`), or legacy `k=<secret>`.
+  const m =
+    hash.match(/^([0-9a-f]{64})(?:&|$)/i) || hash.match(/(?:^|[?&])k=([0-9a-f]{64})/i);
   if (!m) return null;
   const secret = m[1].toLowerCase();
   const a = hash.match(/(?:^|[?&])a=([0-9a-f]{64})/i);
