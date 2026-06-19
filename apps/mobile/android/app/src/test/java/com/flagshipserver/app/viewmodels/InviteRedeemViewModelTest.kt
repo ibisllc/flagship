@@ -77,8 +77,10 @@ class InviteRedeemViewModelTest {
     }
 
     @Test fun redeem_manualPending_emitsAcceptanceReply() = runTest {
-        // The box returns {pending} + the owner's relayed create.
-        val create = """{"inviteId":"inv1","authorAID":"$authorAidHex","serviceRef":"alice-notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
+        // The box returns {pending} + the owner's relayed create (used only to
+        // learn the inviteId/serviceRef to sign over — NOT shipped in the reply).
+        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        val create = """{"inviteId":"$iid","authorAID":"$authorAidHex","serviceRef":"alice-notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
         val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice-notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
         val vm = makeVM(t)
         vm.redeem()
@@ -86,14 +88,13 @@ class InviteRedeemViewModelTest {
         assertTrue(p is InviteRedeemPhase.AwaitingApproval)
         p as InviteRedeemPhase.AwaitingApproval
         assertEquals("alice-notes", p.serviceRef)
-        assertTrue(p.replyLink.startsWith("flagship://accept?b="))
+        // Canonical reply form (cross-client) carrying ONLY {accept, acceptSig}.
+        assertTrue(p.replyLink.startsWith("flagship://invite-accept?"))
         // The reply decodes back to a verifiable acceptance bound to THIS contact AID.
         val acc = InviteLink.decodeAcceptance(p.replyLink)!!
-        assertEquals("inv1", acc.accept["inviteId"]!!.jsonPrimitive.content)
+        assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
         assertEquals(HexUtil.encode(contactPub), acc.accept["contactAID"]!!.jsonPrimitive.content)
-        assertEquals("00", acc.create["encryptedBundle"]!!.jsonPrimitive.content)
-        assertEquals("b".repeat(128), acc.createSigHex)
-        val acceptBytes = ServiceInvite.canonicalAccept("inv1", "alice-notes", contactPub, 1700)
+        val acceptBytes = ServiceInvite.canonicalAccept(iid, "alice-notes", contactPub, 1700)
         assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
     }
 

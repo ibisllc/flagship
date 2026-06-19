@@ -78,33 +78,63 @@ class InviteLinkTest {
     }
 
     @Test fun acceptanceRoundTrips() {
+        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
         val accept = buildJsonObject {
-            put("inviteId", JsonPrimitive("inv1"))
+            put("inviteId", JsonPrimitive(iid))
             put("serviceRef", JsonPrimitive("alice-notes"))
             put("contactAID", JsonPrimitive("c".repeat(64)))
             put("acceptedAt", JsonPrimitive(1700L))
         }
-        val create = buildJsonObject {
-            put("inviteId", JsonPrimitive("inv1"))
-            put("authorAID", JsonPrimitive(author))
-            put("serviceRef", JsonPrimitive("alice-notes"))
-            put("secretHash", JsonPrimitive("d".repeat(64)))
-            put("encryptedBundle", JsonPrimitive("00"))
-            put("issuedAt", JsonPrimitive(1500L))
+        // The canonical reply carries ONLY {accept, acceptSig} — no create.
+        val reply = InviteLink.buildAcceptReply("home.alice.flagship.services", accept, "a".repeat(128))
+        assertTrue(reply.startsWith("flagship://invite-accept?"))
+        val acc = InviteLink.decodeAcceptance(reply)!!
+        assertEquals("home.alice.flagship.services", acc.serverDomain)
+        assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
+        assertEquals("alice-notes", acc.accept["serviceRef"]!!.jsonPrimitive.content)
+        assertEquals("c".repeat(64), acc.accept["contactAID"]!!.jsonPrimitive.content)
+        assertEquals(1700L, acc.accept["acceptedAt"]!!.jsonPrimitive.content.toLong())
+        assertEquals("a".repeat(128), acc.acceptSigHex)
+    }
+
+    /** FROZEN cross-client acceptance reply (interop lock — the IDENTICAL string
+     *  is pinned on the webapp serviceInvite test + iOS DeepLink). */
+    @Test fun frozenAcceptReplyInterop() {
+        val server = "home.alice.flagship.services"
+        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        val ref = "alice-notes"
+        val aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
+        val sig = "1f".repeat(64)
+        val at = 1_700_006_000_000L
+        val frozen = "flagship://invite-accept?server=$server&iid=$iid&ref=$ref&aid=$aid&sig=$sig&at=$at"
+        val accept = buildJsonObject {
+            put("inviteId", JsonPrimitive(iid))
+            put("serviceRef", JsonPrimitive(ref))
+            put("contactAID", JsonPrimitive(aid))
+            put("acceptedAt", JsonPrimitive(at))
         }
-        val body = InviteLink.encodeAcceptance(accept, "a".repeat(128), create, "b".repeat(128))
-        // decodes from the bare body AND from the flagship://accept?b=… wrapper.
-        for (raw in listOf(body, InviteLink.acceptanceLink(body))) {
-            val acc = InviteLink.decodeAcceptance(raw)!!
-            assertEquals("inv1", acc.accept["inviteId"]!!.jsonPrimitive.content)
-            assertEquals("a".repeat(128), acc.acceptSigHex)
-            assertEquals("00", acc.create["encryptedBundle"]!!.jsonPrimitive.content)
-            assertEquals("b".repeat(128), acc.createSigHex)
-        }
+        assertEquals(frozen, InviteLink.buildAcceptReply(server, accept, sig))
+        val acc = InviteLink.decodeAcceptance(frozen)!!
+        assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
+        assertEquals(aid, acc.accept["contactAID"]!!.jsonPrimitive.content)
+        assertEquals(sig, acc.acceptSigHex)
+    }
+
+    /** Back-compat: the legacy `flagship://accept?b=<base64url>` bundle still
+     *  decodes (the create is ignored — the box fetches it). */
+    @Test fun decodeAcceptanceAcceptsLegacyBundle() {
+        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        val legacyJson = """{"v":2,"accept":{"inviteId":"$iid","serviceRef":"alice-notes","contactAID":"${"c".repeat(64)}","acceptedAt":1700},"acceptSig":"${"a".repeat(128)}","create":{"inviteId":"$iid"},"createSig":"${"b".repeat(128)}"}"""
+        val b64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(legacyJson.toByteArray(Charsets.UTF_8))
+        val acc = InviteLink.decodeAcceptance("flagship://accept?b=$b64")!!
+        assertNull(acc.serverDomain)
+        assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
+        assertEquals("a".repeat(128), acc.acceptSigHex)
     }
 
     @Test fun decodeAcceptanceRejectsGarbage() {
         assertNull(InviteLink.decodeAcceptance("not-base64-or-a-link"))
         assertNull(InviteLink.decodeAcceptance(""))
+        assertNull(InviteLink.decodeAcceptance("flagship://invite-accept?iid=tooShort"))
     }
 }

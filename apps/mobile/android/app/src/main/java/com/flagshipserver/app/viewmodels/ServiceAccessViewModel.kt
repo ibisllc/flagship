@@ -229,12 +229,12 @@ class ServiceAccessViewModel(
         }
         _busyFinalize.value = true
         return try {
+            // ONLY {accept, acceptSig} — the box fetches the owner's signed create
+            // from .com by inviteId (any-device finalize; no local create cache).
             client.acceptInvite(
                 serverDomain,
                 accept = parsed.accept,
                 acceptSigHex = parsed.acceptSigHex,
-                create = parsed.create,
-                createSigHex = parsed.createSigHex,
             )
             refreshPeople()
             true

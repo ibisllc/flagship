@@ -199,23 +199,20 @@ class ServiceAccessClient(
 
     /**
      * AUTHOR-side finalize of a MANUAL-approve invite (v2 Phase 3 tier 2). POSTs
-     * the friend's AID-signed `AcceptServiceInvite` (`accept` + `acceptSig`) plus
-     * the owner's signed `create` (relayed from the friend's pending redeem and
-     * passed back through the friend-channel) to the AUTHOR's OWN box. The box
-     * verifies both, then binds the contact AID. Runs on Dispatchers.IO.
+     * ONLY the friend's AID-signed `AcceptServiceInvite` (`accept` + `acceptSig`)
+     * to the AUTHOR's OWN box. The box FETCHES the owner's signed create from .com
+     * by the acceptance's inviteId (STK-signed), verifies both, then binds the
+     * contact AID — so the author can finalize from ANY device. Runs on
+     * Dispatchers.IO.
      */
     suspend fun acceptInvite(
         serverDomain: String,
         accept: JsonObject,
         acceptSigHex: String,
-        create: JsonObject,
-        createSigHex: String,
     ): RedeemResult {
         val body = buildJsonObject {
             put("accept", accept)
             put("acceptSig", JsonPrimitive(acceptSigHex.lowercase()))
-            put("create", create)
-            put("createSig", JsonPrimitive(createSigHex.lowercase()))
         }
         val resp = boxTransport.execute(
             "POST", "${podBaseUrl(serverDomain)}/api/service-access/accept",

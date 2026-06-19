@@ -10,11 +10,16 @@
 //     hand-off is `flagship://invite?server=<host>&k=<secret>&a=<authorAID>`
 //     (a custom scheme can't carry a fragment, so both are queries there).
 //
-//  2. The ACCEPTANCE reply (MANUAL-approve, tier 2). The friend's app emits a
-//     self-contained, base64url'd JSON bundle { accept, acceptSig, create,
-//     createSig } that the friend sends BACK through the same private channel;
-//     the author opens it and submits it verbatim to their own box's
-//     /api/service-access/accept. Symmetric to the invite (also a link/QR).
+//  2. The ACCEPTANCE reply (MANUAL-approve, tier 2). The friend's app emits the
+//     canonical cross-client deep-link
+//       flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=
+//     carrying ONLY { accept, acceptSig } — the friend's contact-AID-signed
+//     AcceptServiceInvite + the box host. It carries NO create: the AUTHOR's box
+//     FETCHES the owner's signed create from .com by inviteId at finalize, so the
+//     author can finalize from ANY device. The friend sends this back through the
+//     same private channel; the author opens it and submits {accept, acceptSig}
+//     to their own box's /api/service-access/accept. Identical form on
+//     webapp/iOS/Android (a real deeplink the camera / share / QR opens).
 //
 // Pure-JVM by design (java.util.Base64 + string parsing, NO android.net.Uri /
 // android.util.Base64) so the viewmodels stay unit-testable without Robolectric.
@@ -85,60 +90,74 @@ object InviteLink {
 
     // ── acceptance reply (manual-approve loop) ────────────────────────────────
 
-    /** Encode the friend's acceptance bundle into a base64url string the friend
-     *  sends back to the author (who pastes/scans it). NO padding, URL-safe. */
-    fun encodeAcceptance(
-        accept: JsonObject,
-        acceptSigHex: String,
-        create: JsonObject,
-        createSigHex: String,
-    ): String {
-        val obj = buildJsonObject {
-            put("v", JsonPrimitive(2))
-            put("accept", accept)
-            put("acceptSig", JsonPrimitive(acceptSigHex.lowercase()))
-            put("create", create)
-            put("createSig", JsonPrimitive(createSigHex.lowercase()))
-        }
-        return Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(obj.toString().toByteArray(Charsets.UTF_8))
-    }
+    private val RE_HEX128 = Regex("^[0-9a-fA-F]{128}$")
 
+    /** The friend's parsed acceptance: the box host + the {accept, acceptSig}
+     *  pair (the friend's contact-AID-signed AcceptServiceInvite). NO create —
+     *  the author's box fetches the owner's create from .com at finalize. */
     data class Acceptance(
+        val serverDomain: String?,
         val accept: JsonObject,
         val acceptSigHex: String,
-        val create: JsonObject,
-        val createSigHex: String,
     )
 
-    /** Decode a pasted/scanned acceptance bundle. Tolerates a `flagship://accept?b=<...>`
-     *  wrapper or a bare base64url body. Returns null on anything malformed. */
-    fun decodeAcceptance(raw: String): Acceptance? {
-        val body = extractAcceptanceBody(raw) ?: return null
-        return try {
-            val bytes = Base64.getUrlDecoder().decode(body)
-            val obj = json.parseToJsonElement(String(bytes, Charsets.UTF_8)).jsonObject
-            val accept = obj["accept"] as? JsonObject ?: return null
-            val create = obj["create"] as? JsonObject ?: return null
-            val acceptSig = obj["acceptSig"]?.jsonPrimitive?.contentOrNull ?: return null
-            val createSig = obj["createSig"]?.jsonPrimitive?.contentOrNull ?: return null
-            Acceptance(accept, acceptSig, create, createSig)
-        } catch (_: Throwable) {
-            null
-        }
+    /** FRIEND: build the canonical acceptance reply deep-link
+     *  `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=` (cross-client;
+     *  identical on webapp/iOS). Carries ONLY {accept, acceptSig}. [accept] is the
+     *  `{inviteId, serviceRef, contactAID, acceptedAt}` object. */
+    fun buildAcceptReply(serverDomain: String, accept: JsonObject, acceptSigHex: String): String {
+        val iid = accept["inviteId"]?.jsonPrimitive?.contentOrNull ?: ""
+        val ref = accept["serviceRef"]?.jsonPrimitive?.contentOrNull ?: ""
+        val aid = accept["contactAID"]?.jsonPrimitive?.contentOrNull ?: ""
+        val at = accept["acceptedAt"]?.jsonPrimitive?.contentOrNull ?: ""
+        return "flagship://invite-accept?server=$serverDomain" +
+            "&iid=${iid.lowercase()}&ref=$ref&aid=${aid.lowercase()}&sig=${acceptSigHex.lowercase()}&at=$at"
     }
 
-    private fun extractAcceptanceBody(raw: String): String? {
+    /** Decode a pasted/scanned acceptance reply. Parses the canonical
+     *  `flagship://invite-accept?…` deep-link, OR (back-compat) the legacy
+     *  `flagship://accept?b=<base64url({v,accept,acceptSig,create,createSig})>`
+     *  bundle (the create is ignored — the box fetches it). Returns null on
+     *  anything malformed. */
+    fun decodeAcceptance(raw: String): Acceptance? {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return null
-        if (trimmed.startsWith("flagship://accept")) {
-            // pull `b=<...>` up to the next & (the body is base64url — no '&').
-            return Regex("[?&]b=([^&]+)").find(trimmed)?.groupValues?.get(1)
-        }
-        return trimmed
+        if (trimmed.startsWith("flagship://invite-accept")) return decodeCanonical(trimmed)
+        if (trimmed.startsWith("flagship://accept")) return decodeLegacy(trimmed)
+        // A bare base64url body (legacy share without the scheme wrapper).
+        return decodeLegacyBody(trimmed)
     }
 
-    /** Wrap an acceptance body in a `flagship://accept?b=<...>` scheme link (for
-     *  the friend's "send back" QR / share). */
-    fun acceptanceLink(body: String): String = "flagship://accept?b=$body"
+    private fun decodeCanonical(raw: String): Acceptance? {
+        fun param(k: String): String? = Regex("[?&]$k=([^&]*)").find(raw)?.groupValues?.get(1)
+        val iid = param("iid")?.lowercase() ?: return null
+        val ref = param("ref") ?: return null
+        val aid = param("aid")?.lowercase() ?: return null
+        val sig = param("sig")?.lowercase() ?: return null
+        val at = param("at")?.toLongOrNull() ?: return null
+        val server = param("server")?.removePrefix("https://")?.removePrefix("http://")?.trimEnd('/')
+        if (!RE_HEX64.matches(iid) || ref.isEmpty() || !RE_HEX64.matches(aid) || !RE_HEX128.matches(sig)) return null
+        val accept = buildJsonObject {
+            put("inviteId", JsonPrimitive(iid))
+            put("serviceRef", JsonPrimitive(ref))
+            put("contactAID", JsonPrimitive(aid))
+            put("acceptedAt", JsonPrimitive(at))
+        }
+        return Acceptance(server?.takeIf { it.isNotEmpty() }, accept, sig)
+    }
+
+    private fun decodeLegacy(raw: String): Acceptance? {
+        val body = Regex("[?&]b=([^&]+)").find(raw)?.groupValues?.get(1) ?: return null
+        return decodeLegacyBody(body)
+    }
+
+    private fun decodeLegacyBody(body: String): Acceptance? = try {
+        val bytes = Base64.getUrlDecoder().decode(body)
+        val obj = json.parseToJsonElement(String(bytes, Charsets.UTF_8)).jsonObject
+        val accept = obj["accept"] as? JsonObject ?: return null
+        val acceptSig = obj["acceptSig"]?.jsonPrimitive?.contentOrNull ?: return null
+        Acceptance(null, accept, acceptSig)
+    } catch (_: Throwable) {
+        null
+    }
 }

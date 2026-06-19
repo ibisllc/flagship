@@ -244,32 +244,26 @@ class ServiceAccessViewModelTest {
         assertNull(t.bodyJsonFor("/api/service-access/allow-remove"))
     }
 
-    @Test fun finalizeAcceptance_submitsAcceptBundle() = runTest {
-        // Build an acceptance reply (as the friend's app would) and feed it in.
+    @Test fun finalizeAcceptance_submitsOnlyTheAcceptance() = runTest {
+        // Build a canonical acceptance reply (as the friend's app would) + feed it.
+        val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
         val accept: JsonObject = buildJsonObject {
-            put("inviteId", JsonPrimitive("inv1"))
+            put("inviteId", JsonPrimitive(iid))
             put("serviceRef", JsonPrimitive(serviceRef))
             put("contactAID", JsonPrimitive("c".repeat(64)))
             put("acceptedAt", JsonPrimitive(1700L))
         }
-        val create: JsonObject = buildJsonObject {
-            put("inviteId", JsonPrimitive("inv1"))
-            put("authorAID", JsonPrimitive(HexUtil.encode(aidPub)))
-            put("serviceRef", JsonPrimitive(serviceRef))
-            put("secretHash", JsonPrimitive("d".repeat(64)))
-            put("encryptedBundle", JsonPrimitive("00"))
-            put("issuedAt", JsonPrimitive(1700L))
-        }
-        val body = InviteLink.encodeAcceptance(accept, "a".repeat(128), create, "b".repeat(128))
+        val reply = InviteLink.buildAcceptReply("home.alice.flagship.services", accept, "a".repeat(128))
         val t = FakeTransport(postBody = """{"bound":true,"serviceRef":"$serviceRef","boundAID":"${"c".repeat(64)}"}""")
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
-        val ok = vm.finalizeAcceptance(InviteLink.acceptanceLink(body))
+        val ok = vm.finalizeAcceptance(reply)
         assertTrue(ok)
         val submitted = t.bodyJsonFor("/api/service-access/accept")!!
-        assertEquals("inv1", submitted["accept"]!!.jsonObject["inviteId"]!!.jsonPrimitive.content)
+        assertEquals(iid, submitted["accept"]!!.jsonObject["inviteId"]!!.jsonPrimitive.content)
         assertEquals("a".repeat(128), submitted["acceptSig"]!!.jsonPrimitive.content)
-        assertEquals("00", submitted["create"]!!.jsonObject["encryptedBundle"]!!.jsonPrimitive.content)
-        assertEquals("b".repeat(128), submitted["createSig"]!!.jsonPrimitive.content)
+        // NO create / createSig — the box fetches the signed create from .com.
+        assertNull(submitted["create"])
+        assertNull(submitted["createSig"])
     }
 
     @Test fun finalizeAcceptance_malformed_failsBeforeNetwork() = runTest {

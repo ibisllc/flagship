@@ -123,18 +123,20 @@ class InviteRedeemViewModel(
     }
 
     /** Build the acceptance reply for the MANUAL-approve loop: sign an
-     *  AcceptServiceInvite with the SAME (contact) AID, bundle it with the owner's
-     *  relayed create, and surface a `flagship://accept?b=…` reply (link + QR). */
+     *  AcceptServiceInvite with the SAME (contact) AID and surface the canonical
+     *  `flagship://invite-accept?…` reply (link + QR) carrying ONLY {accept,
+     *  acceptSig}. The box-relayed create is used only to learn what to sign over
+     *  (inviteId / serviceRef) — it is NOT shipped (the author's box fetches the
+     *  signed create from .com at finalize). */
     private fun emitAcceptance(result: RedeemResult, contactPub: ByteArray, signer: Ed25519Sign) {
         val create = result.createJson
-        val createSig = result.createSigHex
         // The friend signs the acceptance over the inviteId the AUTHOR created the
         // invite under. The canonical source is the link's `i=` param; fall back to
         // the box-relayed create's inviteId for a legacy (no-`i=`) link.
         val inviteId = linkInviteId ?: create?.get("inviteId")?.jsonPrimitive?.contentOrNull
         val serviceRef = create?.get("serviceRef")?.jsonPrimitive?.contentOrNull ?: result.serviceRef
-        if (create == null || createSig == null || inviteId == null) {
-            // The box accepted the redeem as pending but didn't relay the create —
+        if (inviteId == null) {
+            // The box accepted the redeem as pending but the inviteId is unknown —
             // can't form a verifiable acceptance. Surface a clear failure.
             _phase.value = InviteRedeemPhase.Failed("This invite needs the owner's approval, but the server didn't return the details. Try again.")
             return
@@ -147,7 +149,7 @@ class InviteRedeemViewModel(
             put("contactAID", JsonPrimitive(HexUtil.encode(contactPub)))
             put("acceptedAt", JsonPrimitive(ts))
         }
-        val body = InviteLink.encodeAcceptance(accept, HexUtil.encode(acceptSig), create, createSig)
-        _phase.value = InviteRedeemPhase.AwaitingApproval(serviceRef, InviteLink.acceptanceLink(body), body)
+        val reply = InviteLink.buildAcceptReply(serverDomain, accept, HexUtil.encode(acceptSig))
+        _phase.value = InviteRedeemPhase.AwaitingApproval(serviceRef, reply, reply)
     }
 }
