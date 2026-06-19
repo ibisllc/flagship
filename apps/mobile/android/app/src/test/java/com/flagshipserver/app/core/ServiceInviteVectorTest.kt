@@ -122,6 +122,23 @@ class ServiceInviteVectorTest {
         assertEquals(sm.s("sigHex"), HexUtil.encode(ServiceInvite.sign(bytes, authorIrk(r))))
     }
 
+    @Test fun removeAllowSignatureVerifies() {
+        // Owner-IRK prune of a friend's bound AID from the box's allow-list — the
+        // `flagship/service-allow-remove/v1` shape. The admin app fires this
+        // alongside the `.com` revoke so a revoked friend is actually denied.
+        val r = root()
+        val ra = r.obj("removeAllow")
+        val bytes = ServiceInvite.canonicalRemoveServiceAllow(
+            r.s("serverId"), r.s("serviceRef"), ra.s("aid"), ra.l("issuedAt"),
+        )
+        val irkPub = HexUtil.decode(r.obj("derived").s("authorIrkPubHex"))!!
+        assertTrue(ServiceInvite.verify(HexUtil.decode(ra.s("sigHex"))!!, bytes, irkPub))
+        // Tink Ed25519 is RFC-8032 deterministic, so our signature byte-equals it.
+        assertEquals(ra.s("sigHex"), HexUtil.encode(ServiceInvite.signRemoveServiceAllow(
+            r.s("serverId"), r.s("serviceRef"), ra.s("aid"), ra.l("issuedAt"), authorIrk(r),
+        )))
+    }
+
     @Test fun visitSignatureVerifies() {
         val r = root()
         val v = r.obj("visit")

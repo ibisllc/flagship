@@ -133,6 +133,50 @@ class ServiceAccessViewModelTest {
         assertTrue(ServiceInvite.verify(sig, ServiceInvite.canonicalRevoke("deadbeef", 1700), irkKp.publicKey))
     }
 
+    @Test fun remove_withBoundAid_firesBoxPruneAndComRevoke() = runTest {
+        val aid = "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c"
+        val t = FakeTransport()
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        vm.remove("deadbeef", aid)
+
+        // .com revoke fired (author-IRK over canonicalRevoke).
+        val revokeBody = t.bodyJsonFor("/api/users/$username/service-invites/revoke")!!
+        val revokeReq = revokeBody["request"]!!.jsonObject
+        assertEquals("deadbeef", revokeReq["inviteId"]!!.jsonPrimitive.content)
+        val revokeSig = HexUtil.decode(revokeBody["signature"]!!.jsonPrimitive.content)!!
+        assertTrue(ServiceInvite.verify(revokeSig, ServiceInvite.canonicalRevoke("deadbeef", 1700), irkKp.publicKey))
+
+        // Box allow-remove ALSO fired (owner-IRK over canonicalRemoveServiceAllow).
+        val pruneBody = t.bodyJsonFor("/api/service-access/allow-remove")!!
+        val pruneReq = pruneBody["request"]!!.jsonObject
+        assertEquals(server, pruneReq["serverId"]!!.jsonPrimitive.content)
+        assertEquals(serviceRef, pruneReq["serviceRef"]!!.jsonPrimitive.content)
+        assertEquals(aid, pruneReq["aid"]!!.jsonPrimitive.content)
+        val pruneSig = HexUtil.decode(pruneBody["signature"]!!.jsonPrimitive.content)!!
+        val pruneBytes = ServiceInvite.canonicalRemoveServiceAllow(server, serviceRef, aid, 1700)
+        assertTrue(ServiceInvite.verify(pruneSig, pruneBytes, irkKp.publicKey))
+    }
+
+    @Test fun remove_unredeemed_skipsBoxPrune() = runTest {
+        val t = FakeTransport()
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        vm.remove("deadbeef", null)
+        // Only the .com revoke fired — no box prune for an unredeemed invite.
+        assertNotNull(t.bodyJsonFor("/api/users/$username/service-invites/revoke"))
+        assertNull(t.bodyJsonFor("/api/service-access/allow-remove"))
+    }
+
+    @Test fun remove_boxPruneFailureSurfaces() = runTest {
+        // .com revoke succeeds; the box prune fails → surface an error (the prune
+        // is the load-bearing step that actually denies the friend).
+        val aid = "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c"
+        val t = FakeTransport(failPostFor = "/api/service-access/allow-remove")
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        vm.remove("deadbeef", aid)
+        assertNotNull(t.bodyJsonFor("/api/users/$username/service-invites/revoke"))
+        assertTrue(vm.phase.value is ServiceAccessPhase.Failed)
+    }
+
     @Test fun setMode_failureSurfaces() = runTest {
         val t = FakeTransport(failPost = RuntimeException("403"))
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
@@ -146,13 +190,19 @@ class ServiceAccessViewModelTest {
     class FakeTransport(
         private val getJsonByUrl: Map<String, String> = emptyMap(),
         private val failPost: Throwable? = null,
+        /** Fail only POSTs whose url contains this substring (others succeed). */
+        private val failPostFor: String? = null,
         private val postStatus: Int = 200,
         private val postBody: String = "{}",
     ) : JsonHttpTransport {
         override val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
         var lastPostUrl: String? = null
         var lastPostBody: String? = null
+        val posts = mutableListOf<Pair<String, String?>>()
         fun lastBodyJson(): JsonObject? = lastPostBody?.let { json.parseToJsonElement(it).jsonObject }
+        /** The recorded POST body whose url contains [urlPart], as JSON. */
+        fun bodyJsonFor(urlPart: String): JsonObject? =
+            posts.firstOrNull { it.first.contains(urlPart) }?.second?.let { json.parseToJsonElement(it).jsonObject }
 
         override suspend fun execute(method: String, url: String, body: ByteArray?, contentType: String?, extraHeaders: Map<String, String>, accept: Set<Int>): HttpResponse {
             if (method == "GET") {
@@ -160,8 +210,10 @@ class ServiceAccessViewModelTest {
                 return HttpResponse(200, canned.toByteArray(), emptyMap())
             }
             failPost?.let { throw it }
+            failPostFor?.let { if (url.contains(it)) throw RuntimeException("403 $it") }
             lastPostUrl = url
             lastPostBody = body?.let { String(it, Charsets.UTF_8) }
+            posts.add(url to lastPostBody)
             return HttpResponse(postStatus, postBody.toByteArray(), emptyMap())
         }
         override suspend fun <T> postJson(url: String, body: T, serializer: KSerializer<T>, accept: Set<Int>, extraHeaders: Map<String, String>) = error("unused")
