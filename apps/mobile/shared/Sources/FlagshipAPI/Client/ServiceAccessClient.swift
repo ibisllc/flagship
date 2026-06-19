@@ -21,6 +21,13 @@ public protocol ServiceAccessClient: Sendable {
     // box
     func getAccessState(serverDomain: String, serviceRef: String) async throws -> ServiceAccessState
     func setAccessMode(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> String
+    /// Owner-IRK prune of one friend's AID from a service allow-list (the box
+    /// half of "remove person"). The `request` dict is already built
+    /// (serverId/serviceRef/aid/issuedAt); `signatureHex` is the owner-IRK
+    /// Ed25519 sig over the canonical remove-allow bytes. POSTs to the box's
+    /// pinned pipe; returns whether an entry was actually removed (idempotent —
+    /// a no-op prune still returns 200). 403 on a bad/stale/mismatch sig.
+    func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult
     func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult
     // .com
     func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws
@@ -74,6 +81,17 @@ public struct ServiceAccessState: Equatable, Sendable {
         self.allowCount = allowCount
     }
     public var isRestricted: Bool { mode == "restricted" }
+}
+
+/// Result of an owner-IRK allow-list prune. `removed` is false when the AID was
+/// already absent (the box treats the prune as idempotent + still returns 200).
+public struct RemoveAllowResult: Equatable, Sendable {
+    public let ok: Bool
+    public let removed: Bool
+    public init(ok: Bool, removed: Bool) {
+        self.ok = ok
+        self.removed = removed
+    }
 }
 
 public struct RedeemResult: Equatable, Sendable {
@@ -190,6 +208,23 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         let body = try ok(data, status)
         let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
         return (obj?["mode"] as? String) ?? ((request["mode"] as? String) ?? "open")
+    }
+
+    public func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/allow-remove") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["request": request, "signature": signatureHex], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        let body = try ok(data, status)
+        let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        return RemoveAllowResult(
+            ok: (obj?["ok"] as? Bool) ?? false,
+            removed: (obj?["removed"] as? Bool) ?? false
+        )
     }
 
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {
@@ -336,6 +371,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
 /// state / invite rows, and mock-binds on redeem.
 public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Sendable {
     public struct SetModeCall: Sendable { public let serverDomain: String; public let request: [String: String]; public let signatureHex: String }
+    public struct RemoveAllowCall: Sendable { public let serverDomain: String; public let request: [String: String]; public let signatureHex: String }
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
     public struct RevokeCall: Sendable { public let username: String; public let inviteId: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
@@ -345,6 +381,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     private let lock = NSLock()
     private var _setMode: [SetModeCall] = []
+    private var _removeAllow: [RemoveAllowCall] = []
     private var _create: [CreateCall] = []
     private var _revoke: [RevokeCall] = []
     private var _redeem: [RedeemCall] = []
@@ -352,6 +389,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     private var _sessionStatus: [SessionStatusCall] = []
     private var _closeSession: [CloseSessionCall] = []
     public var setModeCalls: [SetModeCall] { lock.withLock { _setMode } }
+    public var removeAllowCalls: [RemoveAllowCall] { lock.withLock { _removeAllow } }
     public var createCalls: [CreateCall] { lock.withLock { _create } }
     public var revokeCalls: [RevokeCall] { lock.withLock { _revoke } }
     public var redeemCalls: [RedeemCall] { lock.withLock { _redeem } }
@@ -360,6 +398,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var closeSessionCalls: [CloseSessionCall] { lock.withLock { _closeSession } }
 
     public var state = ServiceAccessState(mode: "open", allowCount: 0)
+    public var removeAllowResult = RemoveAllowResult(ok: true, removed: true)
     public var rows: [ServiceInviteRow] = []
     public var redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "00", firstBind: true)
     public var authorizeKnockResult = AuthorizeKnockResult(
@@ -384,6 +423,12 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         let mode = (request["mode"] as? String) ?? "open"
         state = ServiceAccessState(mode: mode, allowCount: state.allowCount)
         return mode
+    }
+
+    public func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult {
+        try maybeThrow()
+        lock.withLock { _removeAllow.append(RemoveAllowCall(serverDomain: serverDomain, request: flatten(request), signatureHex: signatureHex)) }
+        return removeAllowResult
     }
 
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {
