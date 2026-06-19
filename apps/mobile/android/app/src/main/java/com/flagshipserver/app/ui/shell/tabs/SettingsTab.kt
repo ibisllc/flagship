@@ -28,7 +28,9 @@ import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
 import com.flagshipserver.app.ui.screens.PrivacyScreen
+import com.flagshipserver.app.ui.screens.ProcessUrlScreen
 import com.flagshipserver.app.ui.screens.ProfilesScreen
+import com.flagshipserver.app.ui.screens.SecuredSessionsScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.ReplaceDeviceFinalizeScreen
@@ -108,6 +110,33 @@ fun SettingsTab() {
         composable("ai-keys") { AiKeysManagerScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
         composable("profiles") { ProfilesScreen(nav) }
+        // Web-experience gating — the browser QR-logins this phone authorized.
+        composable("secured-sessions") { SecuredSessionsScreen(nav) }
+        // Web-experience gating — paste a flagship://access link / "Get link".
+        composable("process-url") { ProcessUrlScreen(nav) }
+        // The authorize target ProcessUrl hands off to (same route shape as the
+        // ServicesTab deep-link target; svc is an optional query arg).
+        composable(
+            route = "knock-authorize/{server}/{ref}/{page}?svc={svc}",
+            arguments = listOf(
+                navArgument("server") { type = NavType.StringType },
+                navArgument("ref") { type = NavType.StringType },
+                navArgument("page") { type = NavType.StringType },
+                navArgument("svc") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val server = URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
+            val ref = URLDecoder.decode(entry.arguments?.getString("ref") ?: "", "UTF-8")
+            val page = URLDecoder.decode(entry.arguments?.getString("page") ?: "", "UTF-8")
+            val svc = URLDecoder.decode(entry.arguments?.getString("svc") ?: "", "UTF-8")
+            com.flagshipserver.app.ui.screens.KnockAuthorizeScreen(
+                serverId = server,
+                svc = svc,
+                serviceRef = ref,
+                pageId = page,
+                onDone = { nav.popBackStack() },
+            )
+        }
         // P9 — peer-backup management.
         composable("peer-backup") { PeerBackupScreen(nav) }
         // P14 — companion-dock (dock a browser).

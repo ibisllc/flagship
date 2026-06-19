@@ -301,6 +301,30 @@ fun SettingsScreen(nav: NavController) {
             ),
         )
 
+        Spacer(Modifier.height(FS.space.s4))
+
+        // Web-experience gating — the QR-login surfaces (authorize a browser
+        // for a restricted site + manage the sessions you authorized).
+        FSSettingsGroup(
+            header = "SECURED WEBSITES",
+            rows = listOf(
+                FSSettingsRowData(
+                    icon = "🌐",
+                    title = "Open secured sessions",
+                    subtitle = "Browser logins you authorized for restricted sites.",
+                    onClick = { nav.navigate("secured-sessions") },
+                    testTag = "settings-secured-sessions",
+                ),
+                FSSettingsRowData(
+                    icon = "🔗",
+                    title = "Process URL",
+                    subtitle = "Paste a site's access link to authorize it from here.",
+                    onClick = { nav.navigate("process-url") },
+                    testTag = "settings-process-url",
+                ),
+            ),
+        )
+
         if (devUnlocked) {
             Spacer(Modifier.height(FS.space.s4))
             FSSettingsGroup(
