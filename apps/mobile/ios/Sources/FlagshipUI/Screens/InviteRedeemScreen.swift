@@ -3,7 +3,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Friend-side redeem screen (docs/service-access-gating.md, "## v2 hardening").
-/// Reached from a `https://<server>/invite#k=<secret>&a=<authorAID>[&iid=…]`
+/// Reached from a `https://<server>/invite#<secret>&a=<authorAID>[&i=…]`
 /// deep-link. An "Accept this invite" CTA that AID-signs the redeem with the
 /// friend's PER-AUTHOR contact AID against the box, then a confirmation. For a
 /// MANUAL-approve invite the box returns {pending} and the screen shows the REPLY

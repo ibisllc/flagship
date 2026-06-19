@@ -15,7 +15,7 @@ import FlagshipCore
 ///   - manages the allow-list across the THREE invite tiers (personal auto /
 ///     personal manual / group multi-use): add a person/group (seal the bundle
 ///     under the household key → **AID-sign** the create → POST `.com` → return
-///     the `https://<server>/invite#k=<secret>&a=<authorAID>[&iid=…]` link),
+///     the `https://<server>/invite#<secret>&a=<authorAID>[&i=…]` link),
 ///     list (an OWNER-SIGNED `.com` query; decrypt the bundle locally; group =
 ///     one "label — k/N" row), and remove (**AID-signed** revoke on `.com` + an
 ///     owner-IRK prune of each bound AID on the box).

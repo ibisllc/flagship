@@ -7,7 +7,7 @@ import FlagshipCore
 
 /// Friend-side redeem orchestrator (docs/service-access-gating.md, "## v2 hardening").
 ///
-/// The owner shares `https://<server>/invite#k=<secret>&a=<authorAID>[&iid=…]`.
+/// The owner shares `https://<server>/invite#<secret>&a=<authorAID>[&i=…]`.
 /// The friend opens it (deep-link → InviteRedeem screen); this VM:
 ///   1. derives the friend's PER-AUTHOR contact AID
 ///      (`deriveContactAccountId(UMK, authorAID)`) from the link's authorAID —
