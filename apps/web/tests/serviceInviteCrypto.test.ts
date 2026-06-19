@@ -477,8 +477,9 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(calls[0]!.url).toBe(`${COM}/api/users/alice/service-invites`);
     expect(r.inviteId).toBe(VECTORS.inviteId);
     expect(r.secretHex).toBe(VECTORS.secretHex);
-    // The v2 share-link carries the author AID + inviteId in the fragment.
-    expect(r.link).toBe(`${POD}/invite#k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`);
+    // The v2 share-link carries the author AID + inviteId in the canonical
+    // (bare-secret) fragment.
+    expect(r.link).toBe(`${POD}/invite#${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`);
     // The author RETAINS the signed create (to finalize a manual acceptance later).
     expect(r.create.inviteId).toBe(VECTORS.inviteId);
     expect(r.createSig).toMatch(/^[0-9a-f]{128}$/);

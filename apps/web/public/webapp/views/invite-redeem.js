@@ -1,6 +1,6 @@
 // Service access gating — friend deep-link redeem (docs/service-access-gating.md).
 //
-// The owner shares `https://<server>.<user>/invite#k=<secret>&a=<authorAID>&i=<inviteId>`.
+// The owner shares `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>`.
 // The friend opens it; the webapp is served from the BOX origin, so this view
 // redeems against the SAME origin (location.origin = the box's pinned pipe):
 //
