@@ -31,6 +31,8 @@ import {
   verifyRevokeServiceInvite,
   signSetServiceAccessMode,
   verifySetServiceAccessMode,
+  signRemoveServiceAllow,
+  verifyRemoveServiceAllow,
   signServiceVisitProof,
   verifyServiceVisitProof,
   signKnockAuthorization,
@@ -72,6 +74,7 @@ const VECTORS = JSON.parse(
   redeem: { redeemedAt: number; sigHex: string };
   revoke: { issuedAt: number; sigHex: string };
   setAccessMode: { mode: "restricted"; issuedAt: number; sigHex: string };
+  removeAllow: { aid: string; issuedAt: number; sigHex: string };
   visit: { issuedAt: number; sigHex: string };
   knock: { pageId: string; issuedAt: number; sigHex: string };
   bundle: { name: string; photo?: string };
@@ -236,6 +239,17 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
     expect(verifySetServiceAccessMode(order, ed.sign(bytes, authorIrk.privateKey), authorIrk.publicKey)).toBe(true);
   });
 
+  it("remove-allow: owner-IRK-signed bytes verify + reproduce the pinned sig", async () => {
+    const si = await loadServiceInvite();
+    const order = { serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt };
+    // The pinned AID IS the friend's AID pub (the bound principal pruned).
+    expect(VECTORS.removeAllow.aid).toBe(VECTORS.derived.friendAidPubHex);
+    const bytes = si.canonicalRemoveServiceAllowBytes(order);
+    expect(ed.verify(signRemoveServiceAllow(order, authorIrk), bytes, authorIrk.publicKey)).toBe(true);
+    expect(bytesToHex(ed.sign(bytes, authorIrk.privateKey))).toBe(VECTORS.removeAllow.sigHex);
+    expect(verifyRemoveServiceAllow(order, ed.sign(bytes, authorIrk.privateKey), authorIrk.publicKey)).toBe(true);
+  });
+
   it("visit proof: AID-signed bytes verify + reproduce the pinned sig", async () => {
     const si = await loadServiceInvite();
     const visit = { serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, visitorAID: friendAid.publicKey, issuedAt: VECTORS.visit.issuedAt };
@@ -394,6 +408,38 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(r.mode).toBe("restricted");
   });
 
+  it("removeServiceAllow POSTs the owner-IRK prune to the box's allow-remove endpoint", async () => {
+    const si = await loadServiceInvite();
+    let captured: { url: string; body: any } | null = null;
+    const f = async (url: string, init: RequestInit) => {
+      captured = { url, body: JSON.parse(String(init.body)) };
+      return { ok: true, json: async () => ({ ok: true, removed: true }) } as Response;
+    };
+    const r = await si.removeServiceAllow(
+      { baseUrl: POD, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, umk: authorUmk.seed, signWithIrk: signIrk(authorIrk.privateKey) },
+      { fetch: f as unknown as typeof fetch, now: () => VECTORS.removeAllow.issuedAt },
+    );
+    expect(captured!.url).toBe(`${POD}/api/service-access/allow-remove`);
+    expect(captured!.body.request).toEqual({ serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt });
+    // The sig the box receives is exactly the pinned remove-allow signature.
+    expect(captured!.body.signature).toBe(VECTORS.removeAllow.sigHex);
+    const order = { serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt };
+    expect(verifyRemoveServiceAllow(order, hexToBytes(captured!.body.signature), authorIrk.publicKey)).toBe(true);
+    expect(r.removed).toBe(true);
+    // An uppercase AID is lowercased before signing (matches the box's parse).
+    let cap2: { body: any } | null = null;
+    const f2 = async (_url: string, init: RequestInit) => {
+      cap2 = { body: JSON.parse(String(init.body)) };
+      return { ok: true, json: async () => ({ ok: true, removed: false }) } as Response;
+    };
+    await si.removeServiceAllow(
+      { baseUrl: POD, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid.toUpperCase(), umk: authorUmk.seed, signWithIrk: signIrk(authorIrk.privateKey) },
+      { fetch: f2 as unknown as typeof fetch, now: () => VECTORS.removeAllow.issuedAt },
+    );
+    expect(cap2!.body.request.aid).toBe(VECTORS.removeAllow.aid);
+    expect(cap2!.body.signature).toBe(VECTORS.removeAllow.sigHex);
+  });
+
   it("buildVisitHeader is base64(JSON{proof,sig}) the box can parse + verify", async () => {
     const si = await loadServiceInvite();
     const header = await si.buildVisitHeader(
@@ -530,6 +576,7 @@ describe("webapp serviceInvite — wire helpers", () => {
     await expect(si.createInvite({ comBase: COM, username: "alice", podBaseUrl: POD, authorAID: authorAid.publicKey, authorDevicePub: authorIrk.publicKey, counter: 0, serviceRef: "x", bundle: { name: "y" }, householdKey: deriveHouseholdKey(authorUmk), umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
     await expect(si.redeemInvite({ baseUrl: POD, secretHex: VECTORS.secretHex, visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
     await expect(si.setServiceAccessMode({ baseUrl: POD, serviceRef: "x", mode: "open", umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
+    await expect(si.removeServiceAllow({ baseUrl: POD, serviceRef: "x", aid: VECTORS.removeAllow.aid, umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
     await expect(si.authorizeKnock({ serverId: VECTORS.serverId, serviceRef: "x", pageId: "p", svc: "s", visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
   });
 
