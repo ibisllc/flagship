@@ -177,6 +177,16 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/llm/sessions/\(sessionId)/reply", method: "POST", body: body)
     }
+    public func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
+        // The scratch deploy trigger is the daemon's legacy
+        // `/api/llm/sessions/<id>/deploy` (paired-session gated, same
+        // `x-flagship-session` auth the `request` helper applies) — the screens
+        // BFF has no deploy route, and the WS stream is a pure relay. The vibe
+        // session registry is shared between the screens-BFF start and this
+        // legacy handler, so a session started via /api/screens/vibe-code/start
+        // is deployable here.
+        return try await request("/api/llm/sessions/\(sessionId)/deploy", method: "POST", body: Data("{}".utf8))
+    }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
         try await request("/api/screens/peer-backup/status")

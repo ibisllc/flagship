@@ -457,6 +457,14 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         return VibeCodeReplyResponse(ok: true)
     }
+    public func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
+        try await tick()
+        return BuildDeployResponse(
+            ok: true,
+            serviceId: "harry-habits",
+            url: "https://habits.\(podContext).harry.flagship.services/"
+        )
+    }
 
     // MARK: - P9 peer-backup
 

@@ -29,6 +29,13 @@ public struct VibeCodeChatScreen: View {
     @State private var envValueDraft: String = ""
     @State private var submitting: Bool = false
     @State private var pollTask: Task<Void, Never>?
+    /// Deploy state. `ready-to-deploy` (the model finished emitting files +
+    /// no tool pending) surfaces the Deploy button; on success the deployed
+    /// URL renders. The scratch deploy has no other trigger (the WS stream is
+    /// a pure relay), so this button IS how a chat-built service ships.
+    @State private var deploying: Bool = false
+    @State private var deployedUrl: String?
+    @State private var deployedServiceId: String?
 
     public let sessionId: String
     public let serverFqdn: String
@@ -63,6 +70,7 @@ public struct VibeCodeChatScreen: View {
                     if let pending = s.pendingRequest {
                         replySection(state: s, pending: pending, c: c)
                     }
+                    deploySection(state: s, c: c)
                 } else if loading {
                     FSCard {
                         HStack {
@@ -79,6 +87,7 @@ public struct VibeCodeChatScreen: View {
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Vibe-code session")
         .navigationBarTitleDisplayMode(.inline)
@@ -89,6 +98,60 @@ public struct VibeCodeChatScreen: View {
         .onDisappear {
             pollTask?.cancel()
             pollTask = nil
+        }
+    }
+
+    /// Deploy affordance + result. Shown once the model has finished emitting
+    /// the app (`ready-to-deploy`) — the only point a scratch session can be
+    /// shipped, since the WS stream never auto-deploys. After a successful
+    /// deploy the canonical URL renders with an Open affordance.
+    @ViewBuilder
+    private func deploySection(state s: VibeCodeSessionPublicState, c: FSColors) -> some View {
+        if let url = deployedUrl ?? (s.status == "deployed" ? "" : nil), !(deployedUrl == nil && url.isEmpty) {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
+                        Text("Deployed").font(FS.font.h4()).foregroundColor(c.text)
+                    }
+                    Text(url).font(FS.font.mono()).foregroundColor(c.text)
+                        .lineLimit(1).truncationMode(.middle)
+                        .accessibilityIdentifier("vibecode-deployed-url")
+                }
+            }
+        } else if s.status == "ready-to-deploy" || s.status == "deploying" {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("Ready to deploy").font(FS.font.h4()).foregroundColor(c.text)
+                    Text("The AI finished writing your service. Deploy it to your box.")
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    FSPrimaryButton(
+                        (deploying || s.status == "deploying") ? "Deploying…" : "Deploy",
+                        enabled: !deploying && s.status == "ready-to-deploy",
+                        block: true
+                    ) {
+                        Task { await deploy() }
+                    }
+                    .accessibilityIdentifier("vibecode-deploy-btn")
+                }
+            }
+        }
+    }
+
+    private func deploy() async {
+        deploying = true
+        defer { deploying = false }
+        do {
+            let r = try await client.vibeCodeDeploy(sessionId: sessionId)
+            if r.ok {
+                deployedUrl = r.url
+                deployedServiceId = r.serviceId
+            } else {
+                errorMessage = "Deploy was rejected by the box."
+            }
+            await reload()
+        } catch {
+            errorMessage = String(describing: error)
         }
     }
 
@@ -286,8 +349,11 @@ public struct VibeCodeChatScreen: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if Task.isCancelled { break }
-                // Poll only if we're in a non-terminal state.
-                if let s = state, ["streaming", "awaiting-tool-response", "deploying"].contains(s.status) {
+                // Poll while the session is still moving toward a terminal
+                // state. `ready-to-deploy` is included so the screen keeps
+                // refreshing until the owner taps Deploy (and reflects a
+                // deploy that completed out-of-band).
+                if let s = state, ["streaming", "awaiting-tool-response", "ready-to-deploy", "deploying"].contains(s.status) {
                     do {
                         state = try await client.vibeCodeSessionState(sessionId: sessionId)
                     } catch {

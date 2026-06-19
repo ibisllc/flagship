@@ -84,6 +84,7 @@ private struct PromoBadge: View {
 public struct VibeCodeDescribeScreen: View {
     @State private var prompt: String = "A little site to track which of my houseplants I've watered, with a photo per plant. Send me a push when one's been thirsty 5+ days."
     @State private var name: String = "plants"
+    @FocusState private var promptFocused: Bool
     var onBuild: (String) -> Void = { _ in }
     public init(onBuild: @escaping (String) -> Void = { _ in }) { self.onBuild = onBuild }
 
@@ -98,7 +99,7 @@ public struct VibeCodeDescribeScreen: View {
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                     }
 
-                    PromptArea(prompt: $prompt)
+                    PromptArea(prompt: $prompt, focused: $promptFocused)
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: FS.space.s2) {
@@ -124,6 +125,18 @@ public struct VibeCodeDescribeScreen: View {
                 }
                 .padding(.horizontal, FS.space.s6)
             }
+            // A long description pushes "Build it" below the keyboard. Let a
+            // scroll dismiss it, AND give an explicit "Done" key so the button
+            // is always reachable (a dead "Build it" under the keyboard is a
+            // real UX trap).
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { promptFocused = false }
+                        .accessibilityIdentifier("describe-keyboard-done")
+                }
+            }
         }
     }
 }
@@ -131,10 +144,12 @@ public struct VibeCodeDescribeScreen: View {
 private struct PromptArea: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var prompt: String
+    var focused: FocusState<Bool>.Binding
     var body: some View {
         let c = FSColors.scheme(scheme)
         ZStack(alignment: .bottomTrailing) {
             TextEditor(text: $prompt)
+                .focused(focused)
                 .font(FS.font.body())
                 .padding(10)
                 .frame(height: 180)

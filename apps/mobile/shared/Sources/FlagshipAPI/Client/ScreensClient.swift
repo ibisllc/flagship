@@ -78,6 +78,13 @@ public protocol ScreensClient: Sendable {
     // awaiting a tool response (talkToUser or requestEnvVar ack).
     func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
+    /// Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
+    /// emitted manifest + files into a container and installs it on the box.
+    /// Hits the daemon's legacy `POST /api/llm/sessions/<id>/deploy` (the only
+    /// deploy trigger for scratch sessions — the WS stream is a pure relay and
+    /// never auto-deploys). Returns `{ok, serviceId, url}` (same shape as the
+    /// build-modes deploy).
+    func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse
 
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse

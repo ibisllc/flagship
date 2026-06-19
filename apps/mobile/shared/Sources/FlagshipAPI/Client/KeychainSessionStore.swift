@@ -23,9 +23,20 @@ public actor KeychainSessionStore {
         defaults.string(forKey: podBaseKey)
     }
 
+    /// UserDefaults fallback key for the token. Only used when the Keychain is
+    /// unavailable — notably an UNSIGNED app on the Simulator (UITest runs with
+    /// `CODE_SIGNING_ALLOWED=NO`), where `SecItemAdd`/`SecItemCopyMatching` fail
+    /// because there's no keychain-access-group entitlement, so a written token
+    /// reads back nil. On a real (signed) device the Keychain write succeeds and
+    /// this path is never taken — the token never lands in UserDefaults there.
+    private let tokenFallbackKey = "flagship.sessionToken.fallback"
+
     public var sessionToken: String? {
-        guard let data = readKeychain() else { return nil }
-        return String(data: data, encoding: .utf8)
+        if let data = readKeychain(), let s = String(data: data, encoding: .utf8) {
+            return s
+        }
+        // Keychain miss — fall back to the UserDefaults shadow (sim/UITest).
+        return defaults.string(forKey: tokenFallbackKey)
     }
 
     public func setPodBaseUrl(_ url: String?) {
@@ -34,15 +45,25 @@ public actor KeychainSessionStore {
     }
 
     public func setSessionToken(_ token: String?) {
-        if let token, let data = token.data(using: .utf8) {
-            writeKeychain(data: data)
-        } else {
+        guard let token, let data = token.data(using: .utf8) else {
             deleteKeychain()
+            defaults.removeObject(forKey: tokenFallbackKey)
+            return
+        }
+        let ok = writeKeychain(data: data)
+        if ok {
+            // Keychain is authoritative — make sure no stale shadow lingers.
+            defaults.removeObject(forKey: tokenFallbackKey)
+        } else {
+            // Keychain unavailable (unsigned sim/UITest) — shadow it so the
+            // session token survives for the live client.
+            defaults.set(token, forKey: tokenFallbackKey)
         }
     }
 
     public func clear() {
         defaults.removeObject(forKey: podBaseKey)
+        defaults.removeObject(forKey: tokenFallbackKey)
         deleteKeychain()
     }
 
@@ -61,7 +82,11 @@ public actor KeychainSessionStore {
         return status == errSecSuccess ? (item as? Data) : nil
     }
 
-    private func writeKeychain(data: Data) {
+    /// Returns true iff the token was actually written to the Keychain. A
+    /// non-success status (e.g. `errSecMissingEntitlement` on an unsigned sim)
+    /// signals the caller to use the UserDefaults shadow instead.
+    @discardableResult
+    private func writeKeychain(data: Data) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -71,7 +96,8 @@ public actor KeychainSessionStore {
         var add = base
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        let status = SecItemAdd(add as CFDictionary, nil)
+        return status == errSecSuccess
     }
 
     private func deleteKeychain() {

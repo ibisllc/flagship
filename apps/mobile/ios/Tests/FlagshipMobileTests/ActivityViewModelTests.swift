@@ -141,6 +141,9 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
         try await real.vibeCodeSessionReply(sessionId: sessionId, req)
     }
+    func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
+        try await real.vibeCodeDeploy(sessionId: sessionId)
+    }
     func appInviteIssue(_ req: AppInviteIssueRequest) async throws -> AppInviteIssueResponse {
         try await real.appInviteIssue(req)
     }

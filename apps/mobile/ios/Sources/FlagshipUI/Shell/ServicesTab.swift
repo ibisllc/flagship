@@ -150,7 +150,7 @@ public struct ServicesTab: View {
         case .vibeCodeDescribe:
             VibeCodeDescribeContainer(path: $path, holder: buildCred)
         case .vibeCodeGenerating(let sessionId):
-            VibeCodeGeneratingContainer(sessionId: sessionId)
+            VibeCodeGeneratingContainer(sessionId: sessionId, path: $path)
         case .vibeCodeChat(let sessionId):
             VibeCodeChatContainer(sessionId: sessionId)
         case .serviceEnv(let appId, let creator, let slug):
@@ -515,6 +515,7 @@ struct VibeCodeDescribeContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
     @Environment(\.screensClient) private var client
+    @Environment(ToastCenter.self) private var toasts
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt in
             Task {
@@ -534,7 +535,10 @@ struct VibeCodeDescribeContainer: View {
                     }
                     path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
                 } catch {
-                    // surface error toast later
+                    // Don't swallow — a tap that does nothing with no feedback
+                    // is a dead control. Surface the failure so the owner knows
+                    // the build didn't start (and a test can see why).
+                    toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
                 }
             }
         })
@@ -543,10 +547,13 @@ struct VibeCodeDescribeContainer: View {
 
 struct VibeCodeGeneratingContainer: View {
     let sessionId: String
+    @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(AppState.self) private var app
     @State private var vm: VibeCodeStreamViewModel?
+    @State private var routeTask: Task<Void, Never>?
+    @State private var routed = false
 
     var body: some View {
         ZStack {
@@ -567,6 +574,39 @@ struct VibeCodeGeneratingContainer: View {
                     operations: operations,
                     serverLabel: app.currentPod?.name
                 )
+            }
+            startStatusRouter()
+        }
+        .onDisappear {
+            routeTask?.cancel()
+            routeTask = nil
+        }
+    }
+
+    /// The WS stream is display-only and carries NO `talkToUser` frame and NO
+    /// deploy trigger. So we poll the session status here and hand off to the
+    /// chat surface the moment the AI needs the owner (`awaiting-tool-response`)
+    /// or the build is finished and shippable (`ready-to-deploy`/`deploying`/
+    /// `deployed`). The chat screen is where the owner replies to the AI AND
+    /// taps Deploy — making it the single interaction+deploy surface for a
+    /// scratch build.
+    private func startStatusRouter() {
+        routeTask?.cancel()
+        routeTask = Task { @MainActor in
+            while !Task.isCancelled && !routed {
+                do {
+                    let st = try await client.vibeCodeStatus(sessionId: sessionId)
+                    if ["awaiting-tool-response", "ready-to-deploy", "deploying", "deployed"].contains(st.status) {
+                        routed = true
+                        if path.last != .vibeCodeChat(sessionId: sessionId) {
+                            path.append(.vibeCodeChat(sessionId: sessionId))
+                        }
+                        break
+                    }
+                } catch {
+                    // transient — keep polling
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
     }
