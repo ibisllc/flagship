@@ -643,6 +643,16 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (typeof comBody.serviceRef !== "string" || typeof comBody.boundAID !== "string") {
       return bad(502, "incomplete upstream response");
     }
+    // Defense-in-depth (design-critique C1): only ever allow-list for a service
+    // THIS box actually hosts. Without this, a rogue/buggy `.com` could answer a
+    // redeem with any `serviceRef` and pollute the allow-list (and the deeper fix
+    // — the box verifying the author's signed create rather than trusting `.com`'s
+    // serviceRef/boundAID at all — is tracked as the architectural follow-up). The
+    // gate mirrors the `set-mode` invariant (a redeem for a non-hosted service is
+    // meaningless here).
+    if (!opts.serviceInstalled(comBody.serviceRef)) {
+      return bad(409, "invite is not for a service hosted on this box");
+    }
     // The bound AID is the authority's answer; add IT (not the request's claim)
     // to the allow-list, so a `.com` that bound a different AID can't be tricked
     // here. They match on the happy path.

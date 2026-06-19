@@ -256,13 +256,27 @@ describe("redeem endpoint (friend AID-signed → .com → allow-list)", () => {
   });
 
   it("adds the AID .com bound (not the request's claim) to the allow-list", async () => {
-    // .com authoritatively binds a DIFFERENT serviceRef/AID than requested.
+    // .com authoritatively binds a DIFFERENT AID than requested — for a HOSTED service.
+    const boundAID = hex(deriveAccountId({ seed: new Uint8Array(32).fill(44) }).publicKey);
+    const { access, store } = build({
+      fetchImpl: comFetch({ serviceRef: SERVICE, boundAID }) as unknown as typeof fetch,
+    });
+    await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBody() }));
+    expect(store.isAllowed(SERVICE, boundAID)).toBe(true);
+  });
+
+  it("C1 gate: rejects (409) a redeem whose .com serviceRef is NOT a service this box hosts", async () => {
+    // A rogue/buggy `.com` answering with a foreign serviceRef must not pollute
+    // the allow-list. `installed` only has SERVICE; `.com` returns alice-photos.
     const boundAID = hex(deriveAccountId({ seed: new Uint8Array(32).fill(44) }).publicKey);
     const { access, store } = build({
       fetchImpl: comFetch({ serviceRef: "alice-photos", boundAID }) as unknown as typeof fetch,
     });
-    await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBody() }));
-    expect(store.isAllowed("alice-photos", boundAID)).toBe(true);
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBody() }),
+    );
+    expect(res!.status).toBe(409);
+    expect(store.isAllowed("alice-photos", boundAID)).toBe(false);
   });
 });
 
