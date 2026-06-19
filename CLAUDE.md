@@ -121,9 +121,44 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-18**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-19**.
 
-### 2026-06-18 (latest) — ⭐⭐ FULL-PLATFORM gym boxes: ServicePlatform + paired session + build, PROVEN
+### 2026-06-19 (latest) — apps default to LIVE + two headline gym callables (`gym:locked` / `gym:total`)
+
+**Pre-hand-testing ergonomics, owner-directed, on `main`.** Two changes so the
+owner can hand-test against real boxes with one command each:
+
+- **The apps default to the LIVE client in EVERY build** (was: Debug→mock,
+  Release→live). iOS `DeveloperSettings.releaseDefaultUseLive` is now `true`
+  unconditionally; Android `getBoolean(KEY_LIVE, true)`. The mock/demo client is
+  now opt-in via the existing 3-tap Developer toggle (`flagship.dev.useLiveClient`),
+  and a persisted flip still wins across launches (a tester who taps to mock stays
+  on mock). Webapp was already always-live (no toggle). The iOS
+  `DeveloperSettingsTests` contract was updated to pin "live in every build".
+- **Two one-line callables** (the owner's framing):
+  - **`npm run gym:locked`** — FAST, no cloud. `gym total --mock-only`: the full
+    deterministic frontend matrix (web 45 · iOS/iPad 36 · Android 15), NO backend,
+    NO env probe. New `--mock-only` CLI flag drops the live slice entirely. The
+    "have we tested all frontend features" gate.
+  - **`npm run gym:total`** — OVERNIGHT, real cloud. New `scripts/gym-total.sh`:
+    runs the locked matrix, THEN (if `.gym-secrets.env` has `GYM_ADMIN_SECRET`)
+    provisions REAL gym Hetzner boxes and drives `tools/live-e2e/run.ts` (full
+    backend chain) + `tools/live-e2e/gating-drive.ts` (service-access gating),
+    each self-tearing-down its box (no leaked billing on an unattended run).
+    Degrades cleanly to the matrix-only when no secrets are present, so it's safe
+    anywhere. Verdict = AND of every phase that ran.
+
+  `gym:every-merge` + `gym:live` stay as the lower-level building blocks.
+
+Gates: `npx tsc -b` clean · gym harness vitest **60** · `gym:locked` web leg
+**45/45** with **0** `[LIVE]` lines (proves `--mock-only` skips the cloud slice) ·
+iOS `xcodebuild test` **1145 tests / 0 failures** (incl. the DeveloperSettings
+contract) · Android `:app:assembleDebug` + `:app:testDebugUnitTest` BUILD
+SUCCESSFUL. **Owner-side:** the iOS/Android binaries are freshly built; for a
+device install, do the usual Xcode Archive (iOS) — the Debug APK is at
+`apps/mobile/android/app/build/outputs/apk/debug/`.
+
+### 2026-06-18 — ⭐⭐ FULL-PLATFORM gym boxes: ServicePlatform + paired session + build, PROVEN
 
 **The gym can now test real app-platform features against real boxes** — services
 / build / vibe / git / mcp, not just cert+serve. `npm run live-e2e` against a
@@ -324,12 +359,17 @@ workers (web / iOS / Android / AI-quality), each in a disjoint per-surface
 registry lane (`tools/gym/src/suites/{web,ios,android,quality}.ts`), all
 integrated + gated green.
 
-- **One command, then wait:** `npm run gym:every-merge` (the fast merge gate, no
-  backend) · `npm run gym:total` (broad acceptance) · `npm run gym:live` (the
-  live Tier-2 slice; detect-and-skips until the env is deployed). Each writes
-  `gym-results/<ts>/` (summary.json + summary.txt + screenshots) and exits 0/1 on
-  the DETERMINISTIC verdict. `GYM_AI_API_KEY` turns on the advisory screenshot
-  judge (BYOK, anthropic-shaped, error-swallowing — NEVER the pass/fail oracle).
+- **One command, then wait** — the two headline callables (2026-06-19):
+  `npm run gym:locked` (FAST, no cloud — the full deterministic frontend matrix,
+  all surfaces, `gym total --mock-only`) · `npm run gym:total` (OVERNIGHT — the
+  locked matrix THEN real-cloud e2e: provisions real gym boxes + drives
+  `tools/live-e2e/run.ts` + `gating-drive.ts`, self-tearing-down; degrades to
+  the matrix alone with no `.gym-secrets.env`). Building blocks remain:
+  `gym:every-merge` (fast merge gate) · `gym:live` (the live Tier-2 slice;
+  detect-and-skips until the env is deployed). Each writes `gym-results/<ts>/`
+  (summary.json + summary.txt + screenshots) and exits 0/1 on the DETERMINISTIC
+  verdict. `GYM_AI_API_KEY` turns on the advisory screenshot judge (BYOK,
+  anthropic-shaped, error-swallowing — NEVER the pass/fail oracle).
 - **Coverage now:** web **45** scenarios (D1–D7), iOS/iPad **36** (incl. the iPad
   sidebar/reading-column adaptive checks + 3 D7 token/nav/dead-control gates),
   Android **15** (the net-new `app/src/androidTest/` instrumentation harness + a

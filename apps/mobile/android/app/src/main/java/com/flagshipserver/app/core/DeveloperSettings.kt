@@ -51,7 +51,10 @@ class DeveloperSettings(prefs: SharedPreferences) {
         }
     }
 
-    private val _useLiveClient = MutableStateFlow(store.getBoolean(KEY_LIVE, false))
+    // Default to the LIVE client in every build (owner request 2026-06-19):
+    // the app targets a real pod out of the box; the mock is opt-in via the
+    // 3-tap Developer toggle. Once flipped, the persisted value wins.
+    private val _useLiveClient = MutableStateFlow(store.getBoolean(KEY_LIVE, true))
     val useLiveClient: StateFlow<Boolean> = _useLiveClient.asStateFlow()
 
     /// "Developer" subsection in Settings is gated behind a 3-tap easter
