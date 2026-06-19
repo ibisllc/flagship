@@ -35,6 +35,23 @@ data class ServiceAccessState(val mode: String, val allowCount: Int) {
 
 data class RedeemResult(val serviceRef: String, val boundAidHex: String, val firstBind: Boolean)
 
+/** The box's response to a successful knock authorize — the phone-held
+ *  `secretId` is the only handle to the new browser session. */
+data class KnockAuthorizeResult(
+    val secretId: String,
+    val serviceRef: String,
+    val browserAgent: String,
+    val startedAt: Long,
+    val expiresAt: Long,
+)
+
+/** Distinct errors the knock-authorize surfaces so the UI can speak plainly. */
+sealed class KnockAuthorizeError(message: String) : RuntimeException(message) {
+    object NotAllowed : KnockAuthorizeError("not allow-listed")     // 401
+    object Refused : KnockAuthorizeError("refused")                 // 403
+    object PageExpired : KnockAuthorizeError("page expired")        // 404
+}
+
 /** A `.com` invite row (metadata only — `.com` never stores the secret). The
  *  bundle is ciphertext; decrypt it locally with the household key. */
 data class ServiceInviteRow(
@@ -123,6 +140,78 @@ class ServiceAccessClient(
             serviceRef = obj["serviceRef"]?.jsonPrimitive?.contentOrNull ?: "",
             boundAidHex = obj["boundAID"]?.jsonPrimitive?.contentOrNull ?: "",
             firstBind = obj["firstBind"]?.jsonPrimitive?.contentOrNull == "true",
+        )
+    }
+
+    // ── web-experience gating: knock authorize + session lifecycle ──────────
+
+    /**
+     * Phone AID-signed authorize of a browser's knock pageId
+     * (docs/service-access-gating.md, "Web-experience gating"). POSTs the signed
+     * `KnockAuthorization` to the BOX (over its pinned pipe — `.com` is never in
+     * the path). Maps the documented 401/403/404 to [KnockAuthorizeError].
+     */
+    suspend fun authorizeKnock(
+        request: JsonObject,
+        signatureHex: String,
+    ): KnockAuthorizeResult {
+        val serverId = request["serverId"]?.jsonPrimitive?.contentOrNull
+            ?: error("authorization.serverId required")
+        val body = buildJsonObject {
+            put("authorization", request)
+            put("signature", JsonPrimitive(signatureHex.lowercase()))
+            // The daemon reads `sig`; include both keys so a wire-name skew
+            // can't silently 400 (the box ignores the unknown one).
+            put("sig", JsonPrimitive(signatureHex.lowercase()))
+        }
+        val resp = boxTransport.execute(
+            "POST", "${podBaseUrl(serverId)}/api/service-access/knock/authorize",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200, 401, 403, 404),
+        )
+        when (resp.status) {
+            401 -> throw KnockAuthorizeError.NotAllowed
+            403 -> throw KnockAuthorizeError.Refused
+            404 -> throw KnockAuthorizeError.PageExpired
+        }
+        val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
+        return KnockAuthorizeResult(
+            secretId = obj["secretId"]?.jsonPrimitive?.contentOrNull ?: "",
+            serviceRef = obj["serviceRef"]?.jsonPrimitive?.contentOrNull ?: "",
+            browserAgent = obj["browserAgent"]?.jsonPrimitive?.contentOrNull ?: "",
+            startedAt = obj["startedAt"]?.jsonPrimitive?.longOrNull ?: 0L,
+            expiresAt = obj["expiresAt"]?.jsonPrimitive?.longOrNull ?: 0L,
+        )
+    }
+
+    /**
+     * Phone session status. secretId rides the BODY (never the URL). Returns
+     * "online" | "offline" (unknown ⇒ "offline" — no enumeration oracle). The
+     * box rate-limits ~1/min/secretId; a 429 throws [HttpException] (429) so the
+     * caller can keep its last-known state (debounce ≥60s client-side too).
+     */
+    suspend fun sessionStatus(serverDomain: String, secretId: String): String {
+        val body = buildJsonObject { put("secretId", JsonPrimitive(secretId.lowercase())) }
+        val resp = boxTransport.execute(
+            "POST", "${podBaseUrl(serverDomain)}/api/service-access/session/status",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+        val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
+        return obj["status"]?.jsonPrimitive?.contentOrNull ?: "offline"
+    }
+
+    /** Phone-initiated close (kills the browser cookie). Idempotent + oracle-free
+     *  (always 200 `{closed:true}`). */
+    suspend fun closeSession(serverDomain: String, secretId: String) {
+        val body = buildJsonObject { put("secretId", JsonPrimitive(secretId.lowercase())) }
+        boxTransport.execute(
+            "POST", "${podBaseUrl(serverDomain)}/api/service-access/session/close",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200),
         )
     }
 
