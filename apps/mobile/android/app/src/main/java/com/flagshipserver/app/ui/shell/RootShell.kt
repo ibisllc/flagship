@@ -80,6 +80,9 @@ fun RootShell(
             // #92 — a friend-redeem invite routes to the Apps tab, whose
             // NavHost pushes the redeem screen (account-agnostic entry).
             is com.flagshipserver.app.core.DeepLink.RedeemInvite -> RootDestination.APPS
+            // Web-experience gating — authorize a browser's QR-login. Routes
+            // to the Apps tab, whose NavHost pushes the authorize screen.
+            is com.flagshipserver.app.core.DeepLink.AuthorizeKnock -> RootDestination.APPS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so
