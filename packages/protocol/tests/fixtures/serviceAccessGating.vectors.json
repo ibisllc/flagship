@@ -45,6 +45,12 @@
     "signerKey": "friendAid",
     "sigHex": "49551d66a1174ea0eb23339c3fd85eed77d50903bb0bc03b63acee1ed60018c9e92a34bdf9c634015a2179a0c0ff3a2fcbda11dd01b6b4c4fb48f92dc3c3100f"
   },
+  "knock": {
+    "pageId": "cb2421036efeb738c6017d8ee92e7b89",
+    "issuedAt": 1700004000000,
+    "signerKey": "friendAid",
+    "sigHex": "8d01d3ff898993ec736002158dd4f454cfd37cb3ad41aea59aba1b7aafe44b1d04703d611d0d3b15a99e796e33d778a4457cb86209f31b87f8b1b2b26fe59701"
+  },
   "bundle": {
     "name": "Alex",
     "photo": "data:image/png;base64,AAAA"
