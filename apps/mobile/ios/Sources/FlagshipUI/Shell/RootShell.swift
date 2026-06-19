@@ -23,11 +23,23 @@ public struct RootShell: View {
     /// #92 — a friend redeem invite is presented as a full-screen cover
     /// (account-agnostic, independent of the tab nav stacks).
     @State private var pendingRedeem: RedeemTarget?
+    /// Web-experience gating — a knock-authorize (QR-login for a restricted
+    /// site) is presented the same way: a full-screen cover, account-agnostic,
+    /// gated behind the lock screen until the visitor unlocks (they AID-sign).
+    @State private var pendingKnock: KnockTarget?
 
     private struct RedeemTarget: Identifiable, Equatable {
         let serverDomain: String
         let secretHex: String
         var id: String { "\(serverDomain)#\(secretHex)" }
+    }
+
+    private struct KnockTarget: Identifiable, Equatable {
+        let serverDomain: String
+        let svc: String
+        let serviceRef: String
+        let pageId: String
+        var id: String { "\(serverDomain)#\(serviceRef)#\(pageId)" }
     }
 
     public init(initialDestination: RootDestination = .home) {
@@ -98,6 +110,22 @@ public struct RootShell: View {
                 }
             }
         }
+        .fullScreenCover(item: $pendingKnock) { target in
+            NavigationStack {
+                KnockAuthorizeScreen(
+                    serverDomain: target.serverDomain,
+                    svc: target.svc,
+                    serviceRef: target.serviceRef,
+                    pageId: target.pageId,
+                    onDone: { pendingKnock = nil }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") { pendingKnock = nil }
+                    }
+                }
+            }
+        }
         // B12 — re-lock when the app moves to background. The .inactive
         // intermediate state happens during transitions (notification
         // pull-down, control center) — we DON'T relock on .inactive
@@ -133,6 +161,14 @@ public struct RootShell: View {
             pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex)
             return
         }
+        if case let .knockAuthorize(serverDomain, svc, serviceRef, pageId) = link {
+            // Same as redeem: hold behind the lock screen until the visitor is
+            // unlocked (they AID-sign the authorization with their own AID).
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingKnock = KnockTarget(serverDomain: serverDomain, svc: svc, serviceRef: serviceRef, pageId: pageId)
+            return
+        }
         selected = tab(for: link)
     }
 
@@ -145,7 +181,7 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
-        case .inviteRedeem:                           return selected
+        case .inviteRedeem, .knockAuthorize:          return selected
         }
     }
 }
