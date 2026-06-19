@@ -6,6 +6,13 @@ import FlagshipAPI
 @MainActor
 public final class HomeViewModel {
     public private(set) var detail: LoadingState<ServerDetailResponse> = .idle
+    /// True when the LAST load failed specifically because this device has no
+    /// paired-session token (`ScreensClientError.noSessionToken`) — the BFF
+    /// can't auth until the owner pairs. The server-detail container reads this
+    /// to surface the one-tap "Pair this server" affordance instead of the
+    /// transient "Connecting…" placeholder (which would otherwise retry forever
+    /// without a token). Cleared on any successful load.
+    public private(set) var needsPairing = false
 
     private let client: any ScreensClient
     private let podContext: String?
@@ -30,7 +37,14 @@ public final class HomeViewModel {
             }
             let resp = try await client.serverDetail()
             detail = .loaded(resp)
+            needsPairing = false
         } catch {
+            // A missing paired-session token is NOT transient — retrying never
+            // helps until the owner pairs. Flag it so the container shows the
+            // pairing affordance; any other error stays the "Connecting…" path.
+            if case ScreensClientError.noSessionToken = error {
+                needsPairing = true
+            }
             // Keep showing the last successful detail on a transient refresh
             // failure; only fall back to the "Connecting…" state when we never
             // had detail to begin with.

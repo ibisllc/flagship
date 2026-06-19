@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Flagship
 import FlagshipCore
 import FlagshipAPI
@@ -618,12 +619,30 @@ struct DemoInstallProgressContainer: View {
 struct ServerDetailContainer: View {
     let podId: String
     @Environment(\.screensClient) private var client
+    @Environment(\.lockPowerClient) private var lockPower
+    @Environment(\.sessionStore) private var sessionStore
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+    @State private var pairVm: PodPairViewModel?
 
     private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
+
+    /// FQDN to pair against — the current pod's. The session store's base URL
+    /// is already pointed here by `PodSessionSync`; the pairing order's
+    /// `serverId` must equal the box's FQDN (the daemon enforces it).
+    private var pairFqdn: String? {
+        guard let fqdn = pod?.fqdn, !fqdn.isEmpty else { return nil }
+        return fqdn
+    }
+
+    private var isPairing: Bool {
+        if case .signing = pairVm?.phase { return true }
+        if case .posting = pairVm?.phase { return true }
+        return false
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -646,11 +665,18 @@ struct ServerDetailContainer: View {
                     // box that starts waiting AFTER the last /pods reconcile shows
                     // "waiting for approval" on Home but no Approve card here.
                     awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
+                    // The BFF said "no session token" → this device isn't paired.
+                    // Surface the one-tap pairing affordance (but only for a box
+                    // that's actually reachable — a dead box never paired and
+                    // never will, so it stays on the decommission path).
+                    notPaired: detailVm.needsPairing && pairFqdn != nil,
+                    pairing: isPairing,
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
-                    }
+                    },
+                    onPair: { Task { await pairThenReload(detailVm: detailVm) } }
                 )
             } else {
                 ProgressView()
@@ -675,11 +701,14 @@ struct ServerDetailContainer: View {
             // on "Connecting to your server…" until the user manually pulled to
             // refresh (the bug). Backoff 2s→15s. The loop exits when the view
             // goes away (`.task` cancels) — so it doubles as the keep-alive
-            // park that stops metrics polling on disappear.
+            // park that stops metrics polling on disappear. It ALSO stops once
+            // the BFF reports "not paired": retrying that never helps (it needs
+            // the owner to tap Pair), so we park and let the pairing card drive.
             var delay: UInt64 = 2_000_000_000
             while !Task.isCancelled {
                 await detailVm?.load()
                 if let d = detailVm?.detail, case .loaded = d { break }
+                if detailVm?.needsPairing == true { break }
                 try? await Task.sleep(nanoseconds: delay)
                 delay = min(delay * 2, 15_000_000_000)
             }
@@ -690,6 +719,32 @@ struct ServerDetailContainer: View {
             for await _ in parkUntilCancelled { }
         }
         .onDisappear { metricsVm?.stopPolling() }
+    }
+
+    /// One pairing attempt (Face ID → sign `add-paired-session` → POST →
+    /// persist token), then reload the BFF so the page fills in. Fired once per
+    /// tap from the "Pair this server" button — never auto-fired. Idempotent in
+    /// the VM (a present token no-ops without a biometric).
+    @MainActor
+    private func pairThenReload(detailVm: HomeViewModel) async {
+        guard let fqdn = pairFqdn else { return }
+        guard !isPairing else { return }
+        let vm = PodPairViewModel(
+            client: lockPower,
+            store: sessionStore,
+            serverDomain: fqdn,
+            label: UIDevice.current.name
+        )
+        pairVm = vm
+        await vm.pair()
+        switch vm.phase {
+        case .paired, .alreadyPaired:
+            await detailVm.load()
+        case .failed(let msg):
+            toasts.error(msg)
+        default:
+            break
+        }
     }
 }
 

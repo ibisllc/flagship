@@ -27,9 +27,20 @@ public struct ServerDetailScreen: View {
     /// box is definitely waiting for a boot-unlock approval, so the approval
     /// card must be offered REGARDLESS of whether the daemon BFF detail loaded.
     let awaitingUnlock: Bool
+    /// True when the BFF load failed specifically because this device has no
+    /// paired-session token. Distinct from the transient "Connecting…" failure:
+    /// retrying never helps until the owner pairs, so the failed state shows the
+    /// one-tap "Pair this server" affordance instead.
+    let notPaired: Bool
+    /// True while a pairing attempt is in flight (Face ID → sign → POST), so the
+    /// button shows progress and can't be double-fired.
+    let pairing: Bool
     var onOpenSessions: () -> Void = {}
     var onOpenTier: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    /// Run once per tap from the "Pair this server" button. NEVER fired
+    /// automatically on appearance — a biometric must be user-initiated.
+    var onPair: () -> Void = {}
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -38,9 +49,12 @@ public struct ServerDetailScreen: View {
         serverName: String? = nil,
         deadServerFqdn: String? = nil,
         awaitingUnlock: Bool = false,
+        notPaired: Bool = false,
+        pairing: Bool = false,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
-        onRefresh: @escaping () async -> Void = {}
+        onRefresh: @escaping () async -> Void = {},
+        onPair: @escaping () -> Void = {}
     ) {
         self.state = state
         self.metrics = metrics
@@ -48,9 +62,12 @@ public struct ServerDetailScreen: View {
         self.serverName = serverName
         self.deadServerFqdn = deadServerFqdn
         self.awaitingUnlock = awaitingUnlock
+        self.notPaired = notPaired
+        self.pairing = pairing
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
+        self.onPair = onPair
     }
 
     /// FQDN for the boot-unlock approval card: the loaded detail's own FQDN,
@@ -98,6 +115,12 @@ public struct ServerDetailScreen: View {
                         // instead of the transient "Connecting…" placeholder.
                         neverCameOnline(c: c)
                         DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName)
+                    } else if notPaired {
+                        // The box IS online, but this device never minted a
+                        // paired-session token, so the BFF 401s. Retrying won't
+                        // help — offer the one-tap pairing affordance (Face ID
+                        // fires only on the tap, never on appearance).
+                        notPairedCard(c: c)
                     } else {
                         // A BFF load failure here is transient (the box is online —
                         // that's why we opened its page — but its daemon hasn't
@@ -138,6 +161,37 @@ public struct ServerDetailScreen: View {
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await onRefresh() }
+    }
+
+    /// Shown when the BFF load failed because this device has no paired-session
+    /// token. The box is online; it just doesn't trust this device yet. One tap
+    /// signs an `add-paired-session` order (Face ID) and reloads. The biometric
+    /// fires ONLY on the tap — never on appearance.
+    private func notPairedCard(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "link.badge.plus")
+                        .imageScale(.large)
+                        .foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This server isn't paired with this device yet")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Pair it to manage this server here. Your phone will ask for Face ID once to approve.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                FSPrimaryButton(pairing ? "Pairing…" : "Pair this server", block: true, large: true) {
+                    onPair()
+                }
+                .disabled(pairing)
+                .accessibilityIdentifier("sd-pair-server")
+            }
+        }
+        .accessibilityIdentifier("server-detail-not-paired")
     }
 
     /// Graceful placeholder shown when the daemon BFF load fails. The server

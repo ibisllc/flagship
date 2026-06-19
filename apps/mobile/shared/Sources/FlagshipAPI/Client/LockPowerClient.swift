@@ -16,9 +16,20 @@ import Foundation
 /// (FlagshipCore depends on FlagshipAPI, not the reverse). The VM in
 /// FlagshipUI builds the canonical bytes + signs, then hands the wire shape
 /// here.
+///
+/// The pod-pairing mint (`add-paired-session` → `/api/orders-from-user`) also
+/// rides here: it is the SAME box-direct, signature-authed shape (the daemon
+/// verifies it against the config-pinned owner IRK), and reusing this client
+/// keeps the pairing POST on the box-pinned session so a rogue `.com` cert
+/// can't intercept the minted session token in flight.
 public protocol LockPowerClient: Sendable {
     /// POST a signed `power-off` PhoneOrder to the box. Throws on non-2xx.
     func sendPowerOff(serverDomain: String, request: [String: Any], signatureHex: String) async throws
+
+    /// POST a signed `add-paired-session` PhoneOrder to `/api/orders-from-user`
+    /// to mint the box's paired-session token. Throws on non-2xx — the caller
+    /// only persists the token after this returns.
+    func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws
 
     /// POST a signed `SetDeadManPolicy`. Returns the daemon's `{ ok, enabled }`.
     func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult
@@ -115,6 +126,10 @@ public final class LiveLockPowerClient: LockPowerClient, @unchecked Sendable {
         _ = try await post(serverDomain: serverDomain, path: "/api/power", request: request, signatureHex: signatureHex)
     }
 
+    public func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
+        _ = try await post(serverDomain: serverDomain, path: "/api/orders-from-user", request: request, signatureHex: signatureHex)
+    }
+
     public func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult {
         let data = try await post(serverDomain: serverDomain, path: "/api/deadman/policy", request: request, signatureHex: signatureHex)
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -185,6 +200,10 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
 
     public func sendPowerOff(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
         try record(serverDomain, "/api/power", request, signatureHex)
+    }
+
+    public func pairSession(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
+        try record(serverDomain, "/api/orders-from-user", request, signatureHex)
     }
 
     public func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult {
