@@ -85,7 +85,7 @@ final class KnockAuthorizeDeepLinkTests: XCTestCase {
         let raw = "flagship://invite?server=\(server)&k=\(secret)"
         XCTAssertEqual(
             DeepLink.parsePastedString(raw),
-            .inviteRedeem(serverDomain: server, secretHex: secret)
+            .inviteRedeem(serverDomain: server, secretHex: secret, authorAidHex: nil, inviteId: nil)
         )
     }
 }

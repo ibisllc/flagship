@@ -29,9 +29,17 @@ public protocol ServiceAccessClient: Sendable {
     /// a no-op prune still returns 200). 403 on a bad/stale/mismatch sig.
     func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult
     func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult
+    /// MANUAL-approve finalize (v2 tier 2): the AUTHOR POSTs the consumer's
+    /// `AcceptServiceInvite` (`accept` + `acceptSig`) + the owner's signed `create`
+    /// (`create` + `createSig`, from the author's own `.com` listing) to the box.
+    /// The box verifies BOTH, then binds the contact AID. All dicts are pre-built.
+    func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult
     // .com
     func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws
-    func listInvites(controlBase: URL, username: String, authorAidHex: String) async throws -> [ServiceInviteRow]
+    /// List the author's invites (v2 §C2: OWNER-SIGNED). `query` carries the
+    /// signed list-query params (`authorAID`/`scope`/`cursor`/`issuedAt`);
+    /// `signatureHex` is the AID/IRK sig over the canonical list-query bytes.
+    func listInvites(controlBase: URL, username: String, query: [String: String], signatureHex: String) async throws -> [ServiceInviteRow]
     func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws
     // box — web-experience gating (docs/service-access-gating.md, "Web-experience gating")
     /// AID-signed authorize of a browser's knock page. The `authorization`
@@ -98,10 +106,27 @@ public struct RedeemResult: Equatable, Sendable {
     public let serviceRef: String
     public let boundAidHex: String
     public let firstBind: Bool
-    public init(serviceRef: String, boundAidHex: String, firstBind: Bool) {
+    /// MANUAL-approve (v2 tier 2): the box returns `{pending}` with NO bind — the
+    /// consumer must emit an `AcceptServiceInvite` reply for the AUTHOR to
+    /// finalize. `boundAidHex`/`firstBind` are unset in this case.
+    public let pending: Bool
+    public init(serviceRef: String, boundAidHex: String, firstBind: Bool, pending: Bool = false) {
         self.serviceRef = serviceRef
         self.boundAidHex = boundAidHex
         self.firstBind = firstBind
+        self.pending = pending
+    }
+}
+
+/// Result of a successful author-finalized MANUAL-approve accept (v2 tier 2).
+public struct AcceptResult: Equatable, Sendable {
+    public let bound: Bool
+    public let serviceRef: String
+    public let boundAidHex: String
+    public init(bound: Bool, serviceRef: String, boundAidHex: String) {
+        self.bound = bound
+        self.serviceRef = serviceRef
+        self.boundAidHex = boundAidHex
     }
 }
 
@@ -115,8 +140,25 @@ public struct ServiceInviteRow: Equatable, Sendable, Identifiable {
     public let boundAt: Int64?
     public let createdAt: Int64?
     public let revokedAt: Int64?
+    /// v2 GROUP/multi-use: all bound AIDs (a group is a labeled set). For a
+    /// single-use invite this is `boundAidHex` (or empty). Drives the group prune
+    /// (every AID) + the "k/N" count.
+    public let boundAidsHex: [String]
+    /// v2 group cap (0 = unlimited). nil ⇒ a single-use personal invite.
+    public let maxRedemptions: Int?
+    /// v2 optional expiry (epoch-ms).
+    public let expiresAt: Int64?
+    /// v2 redemptions-used (group count).
+    public let redemptions: Int?
+    /// v2 approval policy: "auto" | "manual". nil ⇒ auto (v1 default).
+    public let approvalMode: String?
     public var id: String { inviteId }
-    public init(inviteId: String, serviceRef: String, encryptedBundleHex: String, boundAidHex: String?, boundAt: Int64?, createdAt: Int64?, revokedAt: Int64?) {
+    public init(
+        inviteId: String, serviceRef: String, encryptedBundleHex: String,
+        boundAidHex: String?, boundAt: Int64?, createdAt: Int64?, revokedAt: Int64?,
+        boundAidsHex: [String] = [], maxRedemptions: Int? = nil, expiresAt: Int64? = nil,
+        redemptions: Int? = nil, approvalMode: String? = nil
+    ) {
         self.inviteId = inviteId
         self.serviceRef = serviceRef
         self.encryptedBundleHex = encryptedBundleHex
@@ -124,7 +166,14 @@ public struct ServiceInviteRow: Equatable, Sendable, Identifiable {
         self.boundAt = boundAt
         self.createdAt = createdAt
         self.revokedAt = revokedAt
+        self.boundAidsHex = boundAidsHex
+        self.maxRedemptions = maxRedemptions
+        self.expiresAt = expiresAt
+        self.redemptions = redemptions
+        self.approvalMode = approvalMode
     }
+    /// True when this invite is a group/multi-use link (lower-trust tier).
+    public var isGroup: Bool { maxRedemptions != nil }
 }
 
 /// Distinct errors the redeem surfaces so the UI can speak plainly.
@@ -132,6 +181,10 @@ public enum ServiceAccessError: Error, Equatable {
     case inviteUnknown      // 404
     case inviteAlreadyBound // 409
     case inviteRevoked      // 403
+    case inviteExpiredOrFull // 410 — a group invite that expired or hit its cap
+    // MANUAL-approve author-finalize (v2 tier 2).
+    case acceptRejected      // 403 — the acceptance / owner create didn't verify
+    case acceptNotForThisBox // 409 — the invite is not for a service on this box
     // Web-experience-gating knock authorize.
     case knockNotAllowed    // 401 — this AID isn't allow-listed for the service
     case knockBadRequest    // 403 — bad/stale/sig-mismatch (refresh the page)
@@ -243,13 +296,42 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         let (data, status) = try await send(req, on: boxSession)
         if status == 404 { throw ServiceAccessError.inviteUnknown }
         if status == 409 { throw ServiceAccessError.inviteAlreadyBound }
+        if status == 410 { throw ServiceAccessError.inviteExpiredOrFull }
         if status == 403 { throw ServiceAccessError.inviteRevoked }
         let body = try ok(data, status)
         let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        // MANUAL-approve: the box returns {pending:true, serviceRef} with no bind.
+        let pending = (obj?["pending"] as? Bool) == true || (obj?["approvalMode"] as? String) == "manual"
         return RedeemResult(
             serviceRef: (obj?["serviceRef"] as? String) ?? "",
             boundAidHex: (obj?["boundAID"] as? String) ?? "",
-            firstBind: (obj?["firstBind"] as? Bool) ?? false
+            firstBind: (obj?["firstBind"] as? Bool) ?? false,
+            pending: pending
+        )
+    }
+
+    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/accept") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "accept": accept,
+            "acceptSig": acceptSigHex.lowercased(),
+            "create": create,
+            "createSig": createSigHex.lowercased(),
+        ], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        if status == 403 { throw ServiceAccessError.acceptRejected }
+        if status == 409 { throw ServiceAccessError.acceptNotForThisBox }
+        let body = try ok(data, status)
+        let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        return AcceptResult(
+            bound: (obj?["bound"] as? Bool) ?? false,
+            serviceRef: (obj?["serviceRef"] as? String) ?? "",
+            boundAidHex: (obj?["boundAID"] as? String) ?? ""
         )
     }
 
@@ -327,8 +409,15 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         _ = try ok(data, status)
     }
 
-    public func listInvites(controlBase: URL, username: String, authorAidHex: String) async throws -> [ServiceInviteRow] {
-        guard let url = Self.comUrl(controlBase, username, "", query: "authorAID=\(authorAidHex.lowercased())") else {
+    public func listInvites(controlBase: URL, username: String, query: [String: String], signatureHex: String) async throws -> [ServiceInviteRow] {
+        // v2 §C2: the list is OWNER-SIGNED. Carry authorAID/scope/cursor/issuedAt
+        // + the sig as query params (a GET — the box also polls revoked-since the
+        // same way).
+        var qp = query.map { (k, v) in
+            "\(k)=\((v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v))"
+        }
+        qp.append("sig=\(signatureHex.lowercased())")
+        guard let url = Self.comUrl(controlBase, username, "", query: qp.joined(separator: "&")) else {
             throw ScreensClientError.http(status: 0, message: "bad URL")
         }
         var req = URLRequest(url: url)
@@ -342,6 +431,8 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
                   let serviceRef = r["serviceRef"] as? String,
                   let bundle = r["encryptedBundle"] as? String else { return nil }
             func i64(_ k: String) -> Int64? { (r[k] as? NSNumber)?.int64Value }
+            func int(_ k: String) -> Int? { (r[k] as? NSNumber)?.intValue }
+            let boundAids = (r["boundAIDs"] as? [String]) ?? []
             return ServiceInviteRow(
                 inviteId: inviteId,
                 serviceRef: serviceRef,
@@ -349,7 +440,12 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
                 boundAidHex: r["boundAID"] as? String,
                 boundAt: i64("boundAt"),
                 createdAt: i64("createdAt"),
-                revokedAt: i64("revokedAt")
+                revokedAt: i64("revokedAt"),
+                boundAidsHex: boundAids,
+                maxRedemptions: int("maxRedemptions"),
+                expiresAt: i64("expiresAt"),
+                redemptions: int("redemptions"),
+                approvalMode: r["approvalMode"] as? String
             )
         }
     }
@@ -375,6 +471,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
     public struct RevokeCall: Sendable { public let username: String; public let inviteId: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
+    public struct AcceptCall: Sendable { public let serverDomain: String; public let accept: [String: String]; public let acceptSigHex: String; public let create: [String: String]; public let createSigHex: String }
+    public struct ListCall: Sendable { public let username: String; public let query: [String: String]; public let signatureHex: String }
     public struct AuthorizeKnockCall: Sendable { public let serverDomain: String; public let authorization: [String: String]; public let signatureHex: String }
     public struct SessionStatusCall: Sendable { public let serverDomain: String; public let secretId: String }
     public struct CloseSessionCall: Sendable { public let serverDomain: String; public let secretId: String }
@@ -385,6 +483,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     private var _create: [CreateCall] = []
     private var _revoke: [RevokeCall] = []
     private var _redeem: [RedeemCall] = []
+    private var _accept: [AcceptCall] = []
+    private var _list: [ListCall] = []
     private var _authorizeKnock: [AuthorizeKnockCall] = []
     private var _sessionStatus: [SessionStatusCall] = []
     private var _closeSession: [CloseSessionCall] = []
@@ -393,6 +493,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var createCalls: [CreateCall] { lock.withLock { _create } }
     public var revokeCalls: [RevokeCall] { lock.withLock { _revoke } }
     public var redeemCalls: [RedeemCall] { lock.withLock { _redeem } }
+    public var acceptCalls: [AcceptCall] { lock.withLock { _accept } }
+    public var listCalls: [ListCall] { lock.withLock { _list } }
     public var authorizeKnockCalls: [AuthorizeKnockCall] { lock.withLock { _authorizeKnock } }
     public var sessionStatusCalls: [SessionStatusCall] { lock.withLock { _sessionStatus } }
     public var closeSessionCalls: [CloseSessionCall] { lock.withLock { _closeSession } }
@@ -401,6 +503,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var removeAllowResult = RemoveAllowResult(ok: true, removed: true)
     public var rows: [ServiceInviteRow] = []
     public var redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "00", firstBind: true)
+    public var acceptResult = AcceptResult(bound: true, serviceRef: "alice-notes", boundAidHex: "00")
     public var authorizeKnockResult = AuthorizeKnockResult(
         secretId: String(repeating: "ab", count: 32),
         serviceRef: "alice-notes",
@@ -441,17 +544,27 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         return redeemResult
     }
 
+    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult {
+        lock.withLock { _accept.append(AcceptCall(serverDomain: serverDomain, accept: flatten(accept), acceptSigHex: acceptSigHex, create: flatten(create), createSigHex: createSigHex)) }
+        try maybeThrow()
+        return acceptResult
+    }
+
     public func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
         lock.withLock { _create.append(CreateCall(username: username, request: flatten(request), signatureHex: signatureHex)) }
     }
 
-    public func listInvites(controlBase: URL, username: String, authorAidHex: String) async throws -> [ServiceInviteRow] { try maybeThrow(); return rows }
+    public func listInvites(controlBase: URL, username: String, query: [String: String], signatureHex: String) async throws -> [ServiceInviteRow] {
+        lock.withLock { _list.append(ListCall(username: username, query: query, signatureHex: signatureHex)) }
+        try maybeThrow()
+        return rows
+    }
 
     public func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
         lock.withLock { _revoke.append(RevokeCall(username: username, inviteId: inviteId)) }
-        rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1) : $0 }
+        rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1, boundAidsHex: $0.boundAidsHex, maxRedemptions: $0.maxRedemptions, expiresAt: $0.expiresAt, redemptions: $0.redemptions, approvalMode: $0.approvalMode) : $0 }
     }
 
     public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {

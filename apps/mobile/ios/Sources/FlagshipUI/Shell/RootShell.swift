@@ -27,11 +27,26 @@ public struct RootShell: View {
     /// site) is presented the same way: a full-screen cover, account-agnostic,
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
+    /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
+    /// (`flagship://invite-accept?…`), presented as a full-screen cover.
+    @State private var pendingAccept: AcceptTarget?
 
     private struct RedeemTarget: Identifiable, Equatable {
         let serverDomain: String
         let secretHex: String
+        let authorAidHex: String?
+        let inviteId: String?
         var id: String { "\(serverDomain)#\(secretHex)" }
+    }
+
+    private struct AcceptTarget: Identifiable, Equatable {
+        let serverDomain: String
+        let inviteId: String
+        let serviceRef: String
+        let contactAidHex: String
+        let acceptSigHex: String
+        let acceptedAt: Int64
+        var id: String { "\(serverDomain)#\(inviteId)#\(contactAidHex)" }
     }
 
     private struct KnockTarget: Identifiable, Equatable {
@@ -100,12 +115,33 @@ public struct RootShell: View {
                 InviteRedeemScreen(
                     serverDomain: target.serverDomain,
                     secretHex: target.secretHex,
+                    authorAidHex: target.authorAidHex,
+                    inviteId: target.inviteId,
                     onOpenService: { _ in pendingRedeem = nil },
                     onDone: { pendingRedeem = nil }
                 )
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Close") { pendingRedeem = nil }
+                    }
+                }
+            }
+        }
+        .fullScreenCover(item: $pendingAccept) { target in
+            NavigationStack {
+                InviteAcceptScreen(
+                    serverDomain: target.serverDomain,
+                    inviteId: target.inviteId,
+                    serviceRef: target.serviceRef,
+                    contactAidHex: target.contactAidHex,
+                    acceptSigHex: target.acceptSigHex,
+                    acceptedAt: target.acceptedAt,
+                    username: app.currentUser ?? "",
+                    onDone: { pendingAccept = nil }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") { pendingAccept = nil }
                     }
                 }
             }
@@ -153,12 +189,21 @@ public struct RootShell: View {
     /// here into a full-screen cover (account-agnostic); every other link
     /// selects the owning tab and is consumed by that tab's own router.
     private func route(_ link: DeepLink) {
-        if case let .inviteRedeem(serverDomain, secretHex) = link {
+        if case let .inviteRedeem(serverDomain, secretHex, authorAidHex, inviteId) = link {
             // Hold the link behind the lock screen until the friend is
-            // unlocked (they sign the redeem with their own AID).
+            // unlocked (they sign the redeem with their own contact AID).
             guard app.isUnlocked else { return }
             _ = linker.consume()
-            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex)
+            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex, authorAidHex: authorAidHex, inviteId: inviteId)
+            return
+        }
+        if case let .inviteAccept(serverDomain, inviteId, serviceRef, contactAidHex, acceptSigHex, acceptedAt) = link {
+            // v2 manual-approve — THIS phone is the AUTHOR finalizing the
+            // consumer's reply. Hold behind the lock (the author IRK/AID signs +
+            // the lookup is biometric).
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingAccept = AcceptTarget(serverDomain: serverDomain, inviteId: inviteId, serviceRef: serviceRef, contactAidHex: contactAidHex, acceptSigHex: acceptSigHex, acceptedAt: acceptedAt)
             return
         }
         if case let .knockAuthorize(serverDomain, svc, serviceRef, pageId) = link {
@@ -181,7 +226,7 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
-        case .inviteRedeem, .knockAuthorize:          return selected
+        case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }
 }

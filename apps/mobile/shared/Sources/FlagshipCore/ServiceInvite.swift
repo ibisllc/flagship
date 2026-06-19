@@ -34,6 +34,7 @@ public enum ServiceInvite {
     public static let tagVisit = "flagship/service-visit/v1"
     public static let tagKnock = "flagship/service-knock/v1"
     public static let tagAllowRemove = "flagship/service-allow-remove/v1"
+    public static let tagListQuery = "flagship/service-invite-list/v1"
 
     // ── Key derivation (mirror keys.ts: empty-salt HKDF-SHA256) ──────────
 
@@ -294,6 +295,42 @@ public enum ServiceInvite {
     /// attribution stays in the stored `authorAID`. Mirrors `randomServiceInviteId`.
     public static func randomServiceInviteId() -> String {
         HexUtil.encode(randomData(32))
+    }
+
+    /// `tagListQuery | username | authorAID | scope | cursor | issuedAt` — the
+    /// owner-signed invite-LIST query (v2 §C2: the v1 list was an open graph
+    /// dump). `scope` is "list" (full listing) or "revoked-since"; `authorAID` is
+    /// lower-hex. Mirrors @flagship/protocol `canonicalListQuery`.
+    public static func canonicalListQuery(
+        username: String,
+        authorAID: String,
+        scope: String,
+        cursor: Int64,
+        issuedAt: Int64
+    ) throws -> Data {
+        try validateNoSepCtrl("username", username)
+        let aidLower = authorAID.lowercased()
+        try validateNoSepCtrl("authorAID", aidLower)
+        guard scope == "list" || scope == "revoked-since" else {
+            throw ServiceInviteError.field("scope must be 'list' or 'revoked-since'")
+        }
+        return Data([
+            tagListQuery, username, aidLower, scope, String(cursor), String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+
+    /// Ed25519-sign a `ServiceInviteListQuery` over `canonicalListQuery` with the
+    /// owner's AID (or IRK — `.com` dual-accepts during the transition).
+    public static func signServiceInviteListQuery(
+        username: String,
+        authorAID: String,
+        scope: String,
+        cursor: Int64,
+        issuedAt: Int64,
+        signer: Curve25519.Signing.PrivateKey
+    ) throws -> Data {
+        let bytes = try canonicalListQuery(username: username, authorAID: authorAID, scope: scope, cursor: cursor, issuedAt: issuedAt)
+        return try signer.signature(for: bytes)
     }
 
     /// `tagRedeem | secretHash | hex(visitorAID) | redeemedAt`

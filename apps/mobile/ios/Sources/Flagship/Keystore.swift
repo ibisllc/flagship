@@ -281,6 +281,40 @@ public struct Keystore {
         return (irk, aidPub, household)
     }
 
+    /// Gating v2 (Wave 3) author path: unwrap the UMK ONCE and return the author's
+    /// stable AID PRIVATE key + the household key in one biometric. v2 SIGNS the
+    /// create / revoke / list-query with the AID (not the rotating IRK), so the
+    /// box-as-authority can verify against the stable owner key after an IRK
+    /// rotation. The AID is also the listed/recorded inviter identity.
+    public static func deriveInviteAuthorAidKeys(
+        reason: String
+    ) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aid = ServiceInvite.deriveAccountId(umkSeed: umkData),
+              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
+        else {
+            throw KeystoreError.derivationFailed("invite author AID keys")
+        }
+        return (aid, household)
+    }
+
+    /// Gating v2 consumer path: the friend's PER-AUTHOR contact AID
+    /// (`deriveContactAccountId(UMK, authorAID)`) for a given author — the
+    /// redeem/visit/knock/accept signer they present (NOT the global AID). One
+    /// biometric. `authorAidPub` comes from the invite link.
+    public static func deriveContactAccountId(
+        authorAidPub: Data,
+        reason: String
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let contact = ServiceInvite.deriveContactAccountId(umkSeed: umkData, authorAidPub: authorAidPub) else {
+            throw KeystoreError.derivationFailed("contact account identity key")
+        }
+        return contact
+    }
+
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
     ///
     /// Reads `currentIrkVersion()` from Keychain (defaulting to v1 on
