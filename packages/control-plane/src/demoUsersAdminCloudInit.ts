@@ -56,6 +56,7 @@ import { bytesToHex } from "./hex.js";
 import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
+  deriveDemoUserAid,
   deriveDemoUserIrk,
   parseDiskEncryption,
   _internalDefaultDemoPrimaryScopes,
@@ -193,11 +194,27 @@ export function buildCloudConfigUserData(args: {
    * never ship the IRK priv.
    */
   demoUserIrkPrivHex: string;
+  /**
+   * gating v2 — the owner's STABLE AID pubkey (hex). Pinned into the box config
+   * (ownerAidPubHex) so the daemon verifies AID-signed service-invite create/
+   * revoke + the box-as-authority redeem. Deterministic-from-KEK for demo; a
+   * real install would carry it from the signed blob. OPTIONAL: absent ⇒ the
+   * config omits it and the box falls back to owner-IRK verification.
+   */
+  ownerAidPubHex?: string;
 }): string {
   const blobB64 = b64Utf8(args.installBlobJson);
   if (!/^[0-9a-f]{64}$/i.test(args.demoUserIrkPrivHex)) {
     throw new Error("buildCloudConfigUserData: demoUserIrkPrivHex must be 32-byte hex");
   }
+  if (args.ownerAidPubHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.ownerAidPubHex)) {
+    throw new Error("buildCloudConfigUserData: ownerAidPubHex must be 32-byte hex");
+  }
+  // Pinned at TEMPLATE time (deterministic-from-KEK, like the git-ref) — it is
+  // NOT in the install blob the bootstrap reads on the VPS.
+  const ownerAidConfigField = args.ownerAidPubHex
+    ? `,"ownerAidPubHex":"${args.ownerAidPubHex}"`
+    : "";
   // Validate git-ref shape inline (defense in depth — the operator
   // could only have set this via the Worker's wrangler.toml or
   // env-coded default, but the ref still gets shell-substituted in the
@@ -431,7 +448,7 @@ mkdir -p /etc/flagship
 # path (that's irkPublicKey). A malformed config fails closed (daemon falls back
 # to no-cfg), so this never blocks the cert/serving bring-up.
 cat > /etc/flagship/config.json <<CFGEOF
-{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"}
+{"serverId":"$SERVER_DOMAIN","userId":"$USERNAME","bakPublicKey":"$PHONE_DELEGATED_PUBKEY","irkPublicKey":"$USER_IRK_PUB"${ownerAidConfigField}}
 CFGEOF
 chmod 600 /etc/flagship/config.json
 # Sealing key (SWK). The daemon constructs the ServicePlatform — i.e. the whole
@@ -673,6 +690,7 @@ export async function handleAdminCloudInitNow(
   // path as handleAdminSnapshotNow, so trailer-free and ISO-based runs
   // sign with the exact same IRK.
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, u);
+  const userAid = deriveDemoUserAid(deps.demoIrkKek, u);
   const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, u);
   const rck = deriveDemoRckKey(deps.demoIrkKek, u);
   const userIrkHex = bytesToHex(userIrk.publicKey);
@@ -777,6 +795,10 @@ export async function handleAdminCloudInitNow(
     installBlobJson: blobJson,
     installerGitRef,
     demoUserIrkPrivHex: bytesToHex(userIrk.privateKey),
+    // gating v2 — the box pins the owner AID (deterministic-from-KEK for demo)
+    // so it can verify AID-signed service-invite create/revoke + the box-as-
+    // authority redeem. A real install would carry this from the signed blob.
+    ownerAidPubHex: bytesToHex(userAid.publicKey),
   });
 
   let prov: { serverId: string; ipv4: string | null };

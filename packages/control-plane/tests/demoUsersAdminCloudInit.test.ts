@@ -163,6 +163,44 @@ describe("buildCloudConfigUserData", () => {
     ).toThrow(/32-byte hex/);
   });
 
+  it("gating v2 — pins ownerAidPubHex into the box config.json when supplied", () => {
+    const aid = "cd".repeat(32);
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+      ownerAidPubHex: aid,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    // The config heredoc carries the AID field.
+    const m = bootstrap.match(/\{"serverId":[^\n]*"ownerAidPubHex":"([0-9a-f]{64})"\}/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe(aid);
+  });
+
+  it("omits ownerAidPubHex from config.json when not supplied (IRK fallback)", () => {
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    expect(bootstrap).not.toContain("ownerAidPubHex");
+  });
+
+  it("rejects an ownerAidPubHex that is not 32-byte hex", () => {
+    expect(() =>
+      buildCloudConfigUserData({
+        installBlobJson: "{}",
+        installerGitRef: "main",
+        demoUserIrkPrivHex: DEMO_IRK_PRIV,
+        ownerAidPubHex: "nothex",
+      }),
+    ).toThrow(/ownerAidPubHex must be 32-byte hex/);
+  });
+
   it("inlines the install-blob.json as decodable base64", () => {
     const blobJson = JSON.stringify({
       version: 1,
