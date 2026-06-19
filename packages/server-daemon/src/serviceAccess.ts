@@ -34,9 +34,11 @@ import {
   openInviteBundle,
   serviceInviteSecretHash,
   verifyRedeemServiceInvite,
+  verifyRemoveServiceAllow,
   verifyServiceVisitProof,
   verifySetServiceAccessMode,
   type InviteBundle,
+  type RemoveServiceAllow,
   type ServiceAccessMode,
   type ServiceVisitProof,
   type SetServiceAccessMode,
@@ -461,6 +463,12 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (req.path === "/api/service-access" && req.method === "POST") {
       return handleSetMode(req);
     }
+    // Owner-IRK prune of a single AID from a service's allow-list (revoke /
+    // "delete a friend"). `decide` re-checks the allow-list per request, so this
+    // also kills any live browser cookie bound to that AID.
+    if (req.path === "/api/service-access/allow-remove" && req.method === "POST") {
+      return handleRemoveAllow(req);
+    }
     // Friend's app/web establishes a browser cookie from an AID-signed proof.
     if (req.path === "/api/service-access/establish-session" && req.method === "POST") {
       return handleEstablishSession(req);
@@ -544,6 +552,28 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       serviceRef: order.serviceRef,
       mode: opts.store.mode(order.serviceRef),
     });
+  }
+
+  async function handleRemoveAllow(req: HttpRequest): Promise<HttpResponse> {
+    const env = parseEnvelope(req);
+    if (!env) return bad(400, "malformed body");
+    const order = parseRemoveAllow(env.request);
+    if (!order) return bad(400, "malformed remove-allow order");
+    if (order.serverId !== opts.serverId) return bad(403, "serverId mismatch");
+    if (Math.abs(now() - order.issuedAt) > maxAgeMs) return bad(403, "stale request");
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(env.signature);
+    } catch {
+      return bad(400, "invalid signature hex");
+    }
+    if (!verifyRemoveServiceAllow(order, sig, opts.ownerIrkPub)) {
+      return bad(403, "invalid signature");
+    }
+    const removed = await opts.store.removeAllowed(order.serviceRef, order.aid);
+    // Idempotent: a no-op prune (AID already absent) still returns ok. The next
+    // request from that AID is denied regardless (decide re-checks the list).
+    return jsonResponse(200, { ok: true, removed });
   }
 
   async function handleRedeem(req: HttpRequest): Promise<HttpResponse> {
@@ -724,6 +754,19 @@ function parseSetMode(r: Record<string, unknown>): SetServiceAccessMode | null {
     return null;
   }
   return { serverId: r.serverId, serviceRef: r.serviceRef, mode: r.mode, issuedAt: r.issuedAt };
+}
+
+function parseRemoveAllow(r: Record<string, unknown>): RemoveServiceAllow | null {
+  if (
+    typeof r.serverId !== "string" ||
+    typeof r.serviceRef !== "string" ||
+    typeof r.aid !== "string" ||
+    !/^[0-9a-f]{64}$/i.test(r.aid) ||
+    typeof r.issuedAt !== "number"
+  ) {
+    return null;
+  }
+  return { serverId: r.serverId, serviceRef: r.serviceRef, aid: r.aid.toLowerCase(), issuedAt: r.issuedAt };
 }
 
 /** The visit header is `base64(JSON({ proof, sig }))`. */

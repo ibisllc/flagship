@@ -12,9 +12,11 @@ import {
   signServiceVisitProof,
   signSetServiceAccessMode,
   signRedeemServiceInvite,
+  signRemoveServiceAllow,
   type ServiceVisitProof,
   type SetServiceAccessMode,
   type RedeemServiceInvite,
+  type RemoveServiceAllow,
 } from "@flagship/protocol";
 import {
   buildServiceAccessHttp,
@@ -685,5 +687,58 @@ describe("ServiceSessionStore", () => {
     await b.load();
     expect(b.lookup(live, NOW + 1_000)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
     expect(b.lookup(expired, NOW + 1_000)).toBeNull();
+  });
+});
+
+describe("POST /api/service-access/allow-remove (owner-IRK prune → revoke reaches the box)", () => {
+  function removeBody(aidHex: string, at = NOW, serviceRef = SERVICE, serverId = FQDN): Buffer {
+    const order: RemoveServiceAllow = { serverId, serviceRef, aid: aidHex, issuedAt: at };
+    const sig = signRemoveServiceAllow(order, ownerIrk);
+    return Buffer.from(JSON.stringify({ request: order, signature: hex(sig) }));
+  }
+  const friendHex = hex(friendAid.publicKey);
+
+  it("prunes an allow-listed AID so the next request is denied (the wired revoke path)", async () => {
+    const { access, store } = build();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, friendHex);
+    // Pre: an allow-listed AID's signed visit is allowed.
+    const before = access.decide(SERVICE, req({ headers: { host: FQDN, [VISIT_PROOF_HEADER]: visitHeader() } }));
+    expect(before).toEqual({ allow: true, reason: "allow-listed" });
+    // Owner prunes the AID.
+    const r = await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: removeBody(friendHex) }));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(String(r?.body)).removed).toBe(true);
+    expect(store.isAllowed(SERVICE, friendHex)).toBe(false);
+    // Post: the same signed visit is now denied (revocation reached the box).
+    const after = access.decide(SERVICE, req({ headers: { host: FQDN, [VISIT_PROOF_HEADER]: visitHeader() } }));
+    expect(after).toEqual({ allow: false, reason: "not-allowed" });
+  });
+
+  it("a pruned AID's live browser cookie also dies (decide re-checks the allow-list)", async () => {
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access, store } = build({ sessions });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, friendHex);
+    const token = await sessions.issue(SERVICE, friendHex, NOW, 60_000);
+    const withCookie = () => req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=${token}` } });
+    expect(access.decide(SERVICE, withCookie())).toEqual({ allow: true, reason: "cookie" });
+    await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: removeBody(friendHex) }));
+    expect(access.decide(SERVICE, withCookie()).allow).toBe(false);
+  });
+
+  it("rejects a forged signature (403) and a serverId mismatch (403); idempotent on an absent AID", async () => {
+    const { access, store } = build();
+    await store.setMode(SERVICE, "restricted");
+    const forged = Buffer.from(JSON.stringify({ request: { serverId: FQDN, serviceRef: SERVICE, aid: friendHex, issuedAt: NOW }, signature: "00".repeat(64) }));
+    const f = await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: forged }));
+    expect(f?.status).toBe(403);
+    const mism = await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: removeBody(friendHex, NOW, SERVICE, "evil.bob.flagship.services") }));
+    expect(mism?.status).toBe(403);
+    // Idempotent: pruning an AID that was never allow-listed still 200s (removed:false).
+    const r = await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: removeBody(friendHex) }));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(String(r?.body)).removed).toBe(false);
   });
 });

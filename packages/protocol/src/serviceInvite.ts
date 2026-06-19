@@ -38,6 +38,7 @@ const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
 const TAG_VISIT = "flagship/service-visit/v1";
 const TAG_KNOCK = "flagship/service-knock/v1";
+const TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1";
 
 // ──────────────────────────────────────────────────────────────────────
 // Invite id — `hash(AID_author) · hash(devicePub_author) · counter`.
@@ -395,6 +396,51 @@ export function verifyKnockAuthorization(
 ): boolean {
   try {
     return ed.verify(sig, canonicalKnock(k), visitorAidPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Remove-from-allow-list — owner-IRK-signed, served on the box's OWN pinned
+// pipe (the `set-service-access-mode` shape). Prunes a single AID from a
+// service's allow-list so a revoked / "deleted" friend is denied on their NEXT
+// request (`decide` re-checks the allow-list per request, so this also kills any
+// live browser cookie bound to that AID). The admin app fires this ALONGSIDE the
+// `.com` invite revoke (`.com` records the revocation; this is what actually
+// reaches the box — `.com` does not push to the daemon). The box verifies
+// against its config-pinned owner IRK.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface RemoveServiceAllow {
+  serverId: string;
+  /** `<creator>-<slug>` service id to prune the AID from. */
+  serviceRef: string;
+  /** Lower-hex AID pubkey to remove from the allow-list. */
+  aid: string;
+  issuedAt: number;
+}
+
+function canonicalRemoveServiceAllow(s: RemoveServiceAllow): Bytes {
+  validateNoSepCtrl("serverId", s.serverId);
+  validateNoSepCtrl("serviceRef", s.serviceRef);
+  validateNoSepCtrl("aid", s.aid);
+  return new TextEncoder().encode(
+    [TAG_ALLOW_REMOVE, s.serverId, s.serviceRef, s.aid, s.issuedAt].join("|"),
+  );
+}
+
+export function signRemoveServiceAllow(s: RemoveServiceAllow, irk: Keypair): Bytes {
+  return ed.sign(canonicalRemoveServiceAllow(s), irk.privateKey);
+}
+
+export function verifyRemoveServiceAllow(
+  s: RemoveServiceAllow,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalRemoveServiceAllow(s), irkPub);
   } catch {
     return false;
   }

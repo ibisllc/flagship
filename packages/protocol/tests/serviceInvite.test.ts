@@ -21,12 +21,15 @@ import {
   verifyServiceVisitProof,
   signKnockAuthorization,
   verifyKnockAuthorization,
+  signRemoveServiceAllow,
+  verifyRemoveServiceAllow,
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
   type SetServiceAccessMode,
   type ServiceVisitProof,
   type KnockAuthorization,
+  type RemoveServiceAllow,
 } from "../src/serviceInvite.js";
 
 const authorUmk = { seed: new Uint8Array(32).fill(11) };
@@ -36,6 +39,7 @@ const authorAid = deriveAccountId(authorUmk);
 const authorDevice = deriveIRK(authorUmk); // device key the inviteId binds
 const friendAid = deriveAccountId(friendUmk);
 const householdKey = deriveHouseholdKey(authorUmk);
+const hexOf = (b: Uint8Array): string => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 
 describe("serviceInviteId", () => {
   it("is a pinned, deterministic 64-hex digest", () => {
@@ -330,5 +334,31 @@ describe("knock authorization (AID-signed by the phone; binds the pageId)", () =
     const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(88) });
     const sig = signKnockAuthorization(knock, attacker);
     expect(verifyKnockAuthorization(knock, sig, knock.visitorAID)).toBe(false);
+  });
+});
+
+describe("remove-from-allow-list (owner-IRK-signed prune)", () => {
+  const remove: RemoveServiceAllow = {
+    serverId: "home.alice.flagship.services",
+    serviceRef: "alice-notes",
+    aid: hexOf(friendAid.publicKey),
+    issuedAt: 1_700_005_000_000,
+  };
+
+  it("signs + verifies under the owner IRK", () => {
+    const sig = signRemoveServiceAllow(remove, authorIrk);
+    expect(verifyRemoveServiceAllow(remove, sig, authorIrk.publicKey)).toBe(true);
+  });
+
+  it("rejects a different serviceRef / aid / serverId (each is in the signature)", () => {
+    const sig = signRemoveServiceAllow(remove, authorIrk);
+    expect(verifyRemoveServiceAllow({ ...remove, serviceRef: "alice-secret" }, sig, authorIrk.publicKey)).toBe(false);
+    expect(verifyRemoveServiceAllow({ ...remove, aid: "00".repeat(32) }, sig, authorIrk.publicKey)).toBe(false);
+    expect(verifyRemoveServiceAllow({ ...remove, serverId: "evil.bob.flagship.services" }, sig, authorIrk.publicKey)).toBe(false);
+  });
+
+  it("does not verify under a stranger key (only the owner IRK can prune)", () => {
+    const sig = signRemoveServiceAllow(remove, authorIrk);
+    expect(verifyRemoveServiceAllow(remove, sig, friendAid.publicKey)).toBe(false);
   });
 });
