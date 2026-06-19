@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +45,8 @@ import com.flagshipserver.app.api.VibeCodeStartRequest
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
@@ -168,13 +173,18 @@ fun VibeCodeDescribeScreen(nav: NavController) {
     var name by remember { mutableStateOf("plants") }
 
     val screens = LocalScreensClient.current
+    val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     // A credential picked at the AI-key step (BYOK path) — null for promo.
     val credential = remember { PendingBuildCredential.peek() }
     var starting by remember { mutableStateOf(false) }
+    val describeScroll = rememberScrollState()
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
+        // Scrollable: title + prompt (180dp) + examples + the two cards push the
+        // "Build it" button below the fold on shorter screens (and under the
+        // keyboard); a scroll keeps it reachable.
+        modifier = Modifier.fillMaxSize().verticalScroll(describeScroll).padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s12))
         Text(
@@ -205,7 +215,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 onValueChange = { prompt = it },
                 cursorBrush = SolidColor(FS.colors.primary),
                 textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp, lineHeight = 22.sp),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("vibe-describe-prompt"),
             )
             Box(
                 contentAlignment = Alignment.BottomEnd,
@@ -257,10 +267,17 @@ fun VibeCodeDescribeScreen(nav: NavController) {
 
         FSPrimaryButton(
             label = if (starting) "Starting…" else "Build it",
+            modifier = Modifier.testTag("vibe-describe-build"),
             onClick = {
                 if (starting) return@FSPrimaryButton
                 starting = true
-                scope.launch {
+                // Launch on Main so the post-call nav.navigate runs on the main
+                // thread. The network I/O hops to IO inside the client; only the
+                // UI work needs Main. (rememberCoroutineScope is Main in prod,
+                // but the Compose-UI-Test continuation interceptor can resume a
+                // bare launch off-main → 'addObserver/setCurrentState must be
+                // called on the main thread'. Pinning Main is correct + robust.)
+                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
                     try {
                         val cred = PendingBuildCredential.peek()?.let {
                             BuildCredential(it.provider, it.apiKey, it.baseUrl)
@@ -276,8 +293,15 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             PendingBuildCredential.take()
                             nav.navigate("vibe/generating/${resp.sessionId}")
                         }
-                    } catch (_: Exception) {
+                    } catch (t: Throwable) {
+                        // Don't swallow — a tap that does nothing with no
+                        // feedback is a dead control. Surface the failure (e.g.
+                        // the box paired session isn't ready) so the owner knows
+                        // the build didn't start. Mirror of iOS's un-swallowed
+                        // vibeCodeStart error. The owner can retry the tap.
                         starting = false
+                        android.util.Log.e("VibeCodeStart", "failed: ${t::class.java.name}: ${t.message}", t)
+                        toasts.error("Couldn't start the build: ${NetworkErrorHumanizer.humanize(t)}")
                     }
                 }
             },
@@ -366,6 +390,37 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
     DisposableEffect(sessionId) {
         vm.start()
         onDispose { vm.cancel() }
+    }
+
+    // The WS stream is display-only and carries NO talkToUser frame and NO
+    // deploy trigger. So we poll the session status here and hand off to the
+    // chat surface the moment the AI needs the owner (`awaiting-tool-response`)
+    // or the build is finished and shippable (`ready-to-deploy`/`deploying`/
+    // `deployed`). The chat screen is where the owner replies to the AI AND
+    // taps Deploy — making it the single interaction+deploy surface for a
+    // scratch build. Mirror of iOS VibeCodeGeneratingContainer.startStatusRouter.
+    LaunchedEffect(sessionId) {
+        if (sessionId.isEmpty()) return@LaunchedEffect
+        var routed = false
+        while (!routed) {
+            try {
+                val st = client.vibeCodeStatus(sessionId)
+                if (st.status in listOf("awaiting-tool-response", "ready-to-deploy", "deploying", "deployed")) {
+                    routed = true
+                    // nav.navigate must run on Main (the live call's
+                    // withContext(IO) + the test's continuation interceptor can
+                    // leave us off-main); launchSingleTop avoids a
+                    // generating⇄chat loop.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        nav.navigate("vibe-code-chat/$sessionId") { launchSingleTop = true }
+                    }
+                    break
+                }
+            } catch (_: Throwable) {
+                // transient — keep polling
+            }
+            kotlinx.coroutines.delay(1500)
+        }
     }
 
     val headline = when (status) {

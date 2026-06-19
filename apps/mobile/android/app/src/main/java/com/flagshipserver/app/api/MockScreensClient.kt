@@ -298,6 +298,15 @@ class MockScreensClient(
         return VibeCodeReplyResponse(ok = true)
     }
 
+    override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse {
+        tick()
+        return BuildDeployResponse(
+            ok = true,
+            serviceId = "harry-habits",
+            url = "https://habits.$podContext.harry.flagship.services/",
+        )
+    }
+
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
         tick()
         val day = 24L * 3600 * 1000

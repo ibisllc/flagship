@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
@@ -218,6 +219,10 @@ fun FSField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     enabled: Boolean = true,
+    // Optional testTag applied to the editable BasicTextField itself (where the
+    // RequestFocus / SetText semantics live) — a tag on the outer Column can't
+    // receive performTextInput. Inert in release.
+    fieldTag: String? = null,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -245,7 +250,9 @@ fun FSField(
                 cursorBrush = SolidColor(FS.colors.primary),
                 textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp),
                 visualTransformation = visualTransformation,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
             ) { inner ->
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
                     Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))

@@ -70,6 +70,14 @@ interface ScreensClient {
     suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState
     suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse
 
+    /** Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
+     *  emitted manifest + files into a container and installs it on the box.
+     *  Hits the daemon's legacy `POST /api/llm/sessions/<id>/deploy` — the only
+     *  deploy trigger for scratch sessions (the WS stream is a pure relay and
+     *  never auto-deploys). Returns `{ok, serviceId, url}` (same shape as the
+     *  build-modes deploy). Mirror of iOS ScreensClient.vibeCodeDeploy. */
+    suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse
+
     // P9 — peer-backup management.
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse

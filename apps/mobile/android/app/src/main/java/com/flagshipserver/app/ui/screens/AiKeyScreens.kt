@@ -128,6 +128,7 @@ fun AiKeyStepScreen(
                 label = if (showForm) "Hide" else "Use a different key",
                 onClick = { showForm = !showForm },
                 block = true,
+                modifier = Modifier.testTag("build-key-different"),
             )
         }
 
@@ -202,7 +203,14 @@ fun AiKeyEntryForm(
             Spacer(Modifier.height(FS.space.s2))
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 AiKeyStore.SUPPORTED_PROVIDERS.forEach { p ->
-                    ProviderPickChip(label = p, selected = p == provider, onClick = { provider = p })
+                    ProviderPickChip(
+                        label = p,
+                        selected = p == provider,
+                        onClick = { provider = p },
+                        // Stable per-provider tag so a UI test can pick e.g.
+                        // "openai" (`ai-key-provider-openai`).
+                        modifier = Modifier.testTag("ai-key-provider-$p"),
+                    )
                 }
             }
 
@@ -212,6 +220,9 @@ fun AiKeyEntryForm(
                 onValueChange = { apiKey = it },
                 label = "API key",
                 placeholder = "sk-…",
+                // Tag the editable field itself (not the Column wrapper) so a UI
+                // test's performTextInput finds a focusable node.
+                fieldTag = "ai-key-field",
             )
             Spacer(Modifier.height(FS.space.s2))
             FSField(
@@ -251,17 +262,23 @@ fun AiKeyEntryForm(
                 onClick = { onSubmit(provider, apiKey, label, baseUrl, save) },
                 enabled = apiKey.isNotBlank(),
                 block = true,
+                modifier = Modifier.testTag("build-key-use"),
             )
         }
     }
 }
 
 @Composable
-private fun ProviderPickChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ProviderPickChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val bg = if (selected) FS.colors.primary else FS.colors.surfaceSunken
     val fg = if (selected) Color.White else FS.colors.textMuted
     Box(
-        Modifier
+        modifier
             .clip(RoundedCornerShape(FS.radius.pill))
             .background(bg)
             .clickable(onClick = onClick)

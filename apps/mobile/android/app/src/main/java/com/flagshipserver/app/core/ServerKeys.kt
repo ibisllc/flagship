@@ -20,6 +20,27 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 object ServerKeys {
     private const val INFO_SWK = "flagship.swk.v1"
     private const val INFO_STK = "flagship.stk.v1"
+    private const val INFO_IRK = "flagship.irk.v1"
+
+    /** The owner IRK seed (32 bytes) derived from the UMK seed the PROTOCOL way
+     *  — Ed25519 over HKDF-SHA256(umkSeed, salt=empty, info="flagship.irk.v1").
+     *  This is DISTINCT from the Android Keystore's slash-form `deriveIRK`
+     *  (salt="flagship/irk/vN", info="ed25519-seed"); a box provisioned by
+     *  @flagship/protocol (the webapp / live gym) is owned by THIS derivation.
+     *  Mirrors ServerKeys.swift `deriveProtocolIrk` + protocol keys.ts. */
+    fun deriveProtocolIrkSeed(umkSeed: ByteArray): ByteArray {
+        require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
+        return hkdfSha256(umkSeed, INFO_IRK.toByteArray(Charsets.UTF_8))
+    }
+
+    /** A Tink Ed25519 signer over the protocol IRK seed (signs box orders /
+     *  journal / power / front-page for a protocol-provisioned box). */
+    fun deriveProtocolIrk(umkSeed: ByteArray): Ed25519Sign =
+        Ed25519Sign(deriveProtocolIrkSeed(umkSeed))
+
+    /** The protocol IRK Ed25519 PUBLIC key (32 bytes) for the UMK seed. */
+    fun deriveProtocolIrkPub(umkSeed: ByteArray): ByteArray =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveProtocolIrkSeed(umkSeed)).publicKey
 
     fun deriveSwk(umkSeed: ByteArray, serverId: String): ByteArray {
         require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
