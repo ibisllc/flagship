@@ -17,20 +17,24 @@ import {
   signCreateServiceInvite,
   signRedeemServiceInvite,
   signRevokeServiceInvite,
+  signServiceInviteCreateQuery,
   signServiceInviteListQuery,
   type CreateServiceInvite,
   type Keypair,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
+  type ServiceInviteCreateQuery,
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
   handleCreateServiceInvite,
+  handleFetchServiceInviteCreate,
   handleRedeemServiceInvite,
   handleRevokeServiceInvite,
   handleListServiceInvites,
   handleRevokedSinceServiceInvites,
+  type ServiceInviteCreateFetchAuth,
   type ServiceInviteListAuth,
 } from "../src/serviceInvites.js";
 
@@ -38,6 +42,12 @@ const NOW = 1_770_000_000_000;
 
 function hex(b: Uint8Array): string {
   return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+function hexBytes(s: string): Uint8Array {
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  return out;
 }
 
 const authorUmk = { seed: new Uint8Array(32).fill(11) };
@@ -555,6 +565,120 @@ describe("handleRevokedSinceServiceInvites (owner-signed poller)", () => {
     };
     const auth = { ...listAuth("revoked-since", stk), serverDomain };
     const res = await handleRevokedSinceServiceInvites(deps, "alice", auth);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("handleFetchServiceInviteCreate (box STK-signed, any-device finalize)", () => {
+  const SERVER_DOMAIN = "home.alice.flagship.services";
+  const INVITE_ID = serviceInviteId(authorAid.publicKey, authorDevice.publicKey, 0);
+
+  /** alice + a registered server (STK identity) + one manual invite created. */
+  async function depsWithServerAndInvite(stk: Keypair) {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    await storage.servers.put({
+      serverDomain: SERVER_DOMAIN,
+      username: "alice",
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: 1,
+    });
+    const deps = { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers, now: () => NOW };
+    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    return deps;
+  }
+
+  /** A signed create-fetch query as URL-param strings (mirrors the route). */
+  function fetchAuth(
+    stk: Keypair,
+    opts: { inviteId?: string; serverDomain?: string; issuedAt?: number } = {},
+  ): ServiceInviteCreateFetchAuth {
+    const query: ServiceInviteCreateQuery = {
+      username: "alice",
+      inviteId: (opts.inviteId ?? INVITE_ID).toLowerCase(),
+      serverDomain: opts.serverDomain ?? SERVER_DOMAIN,
+      issuedAt: opts.issuedAt ?? NOW,
+    };
+    return {
+      serverDomain: query.serverDomain,
+      issuedAt: String(query.issuedAt),
+      sig: hex(signServiceInviteCreateQuery(query, stk)),
+    };
+  }
+
+  it("returns {create, createSig} for a valid box STK-signed query", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(200) });
+    const deps = await depsWithServerAndInvite(stk);
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk));
+    expect(res.status).toBe(200);
+    const body = res.body as { create: { inviteId: string; serviceRef: string; secretHash: string; issuedAt: number }; createSig: string };
+    expect(body.create.inviteId).toBe(INVITE_ID);
+    expect(body.create.serviceRef).toBe("alice-notes");
+    expect(body.create.secretHash).toBe(SECRET_HASH);
+    expect(body.create.issuedAt).toBe(NOW);
+    expect(body.createSig).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it("the returned create + createSig verify as the owner's signed CreateServiceInvite", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(201) });
+    const deps = await depsWithServerAndInvite(stk);
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk));
+    const body = res.body as { create: Record<string, unknown>; createSig: string };
+    // Reconstruct the signed create + verify against the author's registered key.
+    const create: CreateServiceInvite = {
+      inviteId: body.create.inviteId as string,
+      authorAID: hexBytes(body.create.authorAID as string),
+      serviceRef: body.create.serviceRef as string,
+      secretHash: body.create.secretHash as string,
+      encryptedBundle: body.create.encryptedBundle as string,
+      issuedAt: body.create.issuedAt as number,
+    };
+    const { verifyCreateServiceInvite } = await import("@flagship/protocol");
+    expect(verifyCreateServiceInvite(create, hexBytes(body.createSig), authorIrk.publicKey)).toBe(true);
+  });
+
+  it("rejects (403) a query NOT signed by the registered server's STK", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(202) });
+    const deps = await depsWithServerAndInvite(stk);
+    const wrong = deriveIRK({ seed: new Uint8Array(32).fill(203) });
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(wrong));
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects (403) when the server belongs to a DIFFERENT user", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(204) });
+    await storage.servers.put({ serverDomain: "home.bob.flagship.services", username: "bob", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
+    const deps = { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers, now: () => NOW };
+    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk, { serverDomain: "home.bob.flagship.services" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 for an unknown inviteId", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(205) });
+    const deps = await depsWithServerAndInvite(stk);
+    const otherId = serviceInviteId(authorAid.publicKey, authorDevice.publicKey, 7);
+    const res = await handleFetchServiceInviteCreate(deps, "alice", otherId, fetchAuth(stk, { inviteId: otherId }));
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects (403) a stale query", async () => {
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(206) });
+    const deps = await depsWithServerAndInvite(stk);
+    const stale = NOW - 10 * 60_000;
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk, { issuedAt: stale }));
+    expect(res.status).toBe(403);
+  });
+
+  it("requires deps.servers (no STK path ⇒ 403)", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    const deps = { invites: storage.serviceInvites, usernames: storage.usernames, now: () => NOW };
+    await handleCreateServiceInvite(deps, "alice", createEnvelope({}, { approvalMode: "manual" }).body);
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(207) });
+    const res = await handleFetchServiceInviteCreate(deps, "alice", INVITE_ID, fetchAuth(stk));
     expect(res.status).toBe(403);
   });
 });

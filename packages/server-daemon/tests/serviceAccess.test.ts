@@ -15,8 +15,11 @@ import {
   signSetServiceAccessMode,
   signRedeemServiceInvite,
   signRemoveServiceAllow,
+  verifyServiceInviteCreateQuery,
   type AcceptServiceInvite,
   type CreateServiceInvite,
+  type Keypair,
+  type ServiceInviteCreateQuery,
   type ServiceVisitProof,
   type SetServiceAccessMode,
   type RedeemServiceInvite,
@@ -48,9 +51,18 @@ const ownerAid = deriveAccountId(ownerUmk);
 const ownerDevice = deriveIRK(ownerUmk);
 const friendAid = deriveAccountId(friendUmk);
 const householdKey = deriveHouseholdKey(ownerUmk);
+/** The box's STK — signs the by-inviteId create fetch (it holds no owner key). */
+const boxStk: Keypair = deriveIRK({ seed: new Uint8Array(32).fill(99) });
+const USERNAME = "alice";
 
 function hex(b: Uint8Array): string {
   return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+function hexBytes(s: string): Uint8Array {
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+  return out;
 }
 
 function tempStore(): ServiceAccessStore {
@@ -164,7 +176,7 @@ function comFetch(
     maxRedemptions?: number;
   } = {},
 ) {
-  return async (_url: string | URL, _init?: RequestInit): Promise<Response> => {
+  return async (url: string | URL, _init?: RequestInit): Promise<Response> => {
     const status = opts.status ?? 200;
     if (status !== 200) return new Response("", { status });
     const carrier = signedCreateCarrier({
@@ -172,6 +184,14 @@ function comFetch(
       secret: opts.secret,
       maxRedemptions: opts.maxRedemptions,
     });
+    // The by-inviteId create fetch (`…/service-invites/<id>/create`) returns ONLY
+    // `{create, createSig}` (the box re-verifies the owner authority itself).
+    if (String(url).includes("/create")) {
+      return new Response(JSON.stringify(carrier), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (opts.pending) {
       return new Response(
         JSON.stringify({ pending: true, approvalMode: "manual", serviceRef: opts.serviceRef ?? SERVICE, ...carrier }),
@@ -199,6 +219,8 @@ function build(opts: {
   installed?: Set<string>;
   household?: boolean;
   sessionTtlMs?: number;
+  /** Drop the STK-fetch box identity to exercise the body-supplied-create fallback. */
+  noFetchIdentity?: boolean;
 } = {}) {
   const store = opts.store ?? tempStore();
   const sessions = opts.sessions;
@@ -211,6 +233,9 @@ function build(opts: {
     serviceInstalled: (ref) => installed.has(ref),
     controlPlaneBaseUrl: "https://flagshipserver.com",
     fetchImpl: opts.fetchImpl ?? (comFetch() as unknown as typeof fetch),
+    // ANY-DEVICE manual-finalize: the box fetches the owner's signed create from
+    // `.com` by inviteId (STK-signed). Wired by default; opt-out tests the fallback.
+    ...(opts.noFetchIdentity ? {} : { username: USERNAME, serverDomain: FQDN, stk: boxStk }),
     householdKey: opts.household ? householdKey : undefined,
     sessionTtlMs: opts.sessionTtlMs,
     now: () => NOW,
@@ -965,11 +990,99 @@ describe("v2 — manual-approve accept (POST /api/service-access/accept)", () =>
     );
   }
 
+  /**
+   * The any-device finalize body: the author submits ONLY `{accept, acceptSig}`
+   * (NO create / createSig — the box fetches the signed create from `.com`).
+   */
+  function acceptBodyNoCreate(contactAid = friendAid, signer = friendAid, opts: { serviceRef?: string } = {}): Buffer {
+    const serviceRef = opts.serviceRef ?? SERVICE;
+    const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+    const accept: AcceptServiceInvite = {
+      inviteId,
+      serviceRef,
+      contactAID: contactAid.publicKey,
+      acceptedAt: NOW,
+    };
+    const acceptSig = hex(signAcceptServiceInvite(accept, signer));
+    return Buffer.from(
+      JSON.stringify({
+        accept: { inviteId, serviceRef, contactAID: hex(contactAid.publicKey), acceptedAt: NOW },
+        acceptSig,
+      }),
+    );
+  }
+
   it("binds the contact AID when both the owner create + friend acceptance verify", async () => {
     const { access, store } = build();
     const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody() }));
     expect(res!.status).toBe(200);
     expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+  });
+
+  it("ANY-DEVICE: author submits only {accept, acceptSig}; the box FETCHES the create from .com + binds", async () => {
+    // The fetch goes to `…/service-invites/<inviteId>/create`, STK-signed.
+    let fetchedUrl = "";
+    const fetchImpl = (async (url: string | URL): Promise<Response> => {
+      fetchedUrl = String(url);
+      return (comFetch() as unknown as (u: string | URL) => Promise<Response>)(url);
+    }) as unknown as typeof fetch;
+    const { access, store } = build({ fetchImpl });
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-access/accept", body: acceptBodyNoCreate() }),
+    );
+    expect(res!.status).toBe(200);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+    // It hit the by-inviteId create endpoint (not a cached/body create).
+    const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+    expect(fetchedUrl).toContain(`/service-invites/${inviteId}/create`);
+  });
+
+  it("STK-signs the create fetch with a verifiable ServiceInviteCreateQuery", async () => {
+    let captured: { serverDomain: string; issuedAt: number; sig: string; inviteId: string } | null = null;
+    const fetchImpl = (async (url: string | URL): Promise<Response> => {
+      const u = new URL(String(url));
+      const inviteId = decodeURIComponent(u.pathname.split("/").slice(-2, -1)[0]!);
+      captured = {
+        serverDomain: u.searchParams.get("serverDomain")!,
+        issuedAt: Number(u.searchParams.get("issuedAt")),
+        sig: u.searchParams.get("sig")!,
+        inviteId,
+      };
+      return (comFetch() as unknown as (u: string | URL) => Promise<Response>)(url);
+    }) as unknown as typeof fetch;
+    const { access } = build({ fetchImpl });
+    await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBodyNoCreate() }));
+    expect(captured).not.toBeNull();
+    const c = captured!;
+    const query: ServiceInviteCreateQuery = {
+      username: USERNAME,
+      inviteId: c.inviteId.toLowerCase(),
+      serverDomain: c.serverDomain,
+      issuedAt: c.issuedAt,
+    };
+    // The box signs with its STK; verifies against the box STK pub, not the owner key.
+    expect(verifyServiceInviteCreateQuery(query, hexBytes(c.sig), boxStk.publicKey)).toBe(true);
+    expect(verifyServiceInviteCreateQuery(query, hexBytes(c.sig), ownerIrk.publicKey)).toBe(false);
+  });
+
+  it("falls back to a body-supplied create when no STK-fetch identity is wired", async () => {
+    // Without username/serverDomain/stk the box can't fetch — the body create is used.
+    const { access, store } = build({
+      noFetchIdentity: true,
+      fetchImpl: comFetch({ status: 404 }) as unknown as typeof fetch,
+    });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody() }));
+    expect(res!.status).toBe(200);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+  });
+
+  it("rejects (403) a no-create finalize when .com can't serve the create AND no body create", async () => {
+    const { access, store } = build({ fetchImpl: comFetch({ status: 404 }) as unknown as typeof fetch });
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-access/accept", body: acceptBodyNoCreate() }),
+    );
+    expect(res!.status).toBe(403);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
   });
 
   it("rejects (403) an acceptance signed by a DIFFERENT key than the contact AID", async () => {
@@ -980,8 +1093,23 @@ describe("v2 — manual-approve accept (POST /api/service-access/accept)", () =>
     expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
   });
 
+  it("ANY-DEVICE: rejects (403) a forged acceptance even when the fetched create is valid", async () => {
+    const { access, store } = build();
+    const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(88) });
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-access/accept", body: acceptBodyNoCreate(friendAid, attacker) }),
+    );
+    expect(res!.status).toBe(403);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+
   it("rejects (409) an accept for a service this box does not host", async () => {
-    const { access } = build({ installed: new Set([SERVICE]) });
+    // SERVICE is installed; the create (fetched + body) is for the UN-hosted
+    // alice-photos, so the create verifies but the service isn't hosted → 409.
+    const { access } = build({
+      installed: new Set([SERVICE]),
+      fetchImpl: comFetch({ serviceRef: "alice-photos" }) as unknown as typeof fetch,
+    });
     const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody(friendAid, friendAid, { serviceRef: "alice-photos" }) }));
     expect(res!.status).toBe(409);
   });

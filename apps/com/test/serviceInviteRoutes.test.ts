@@ -19,9 +19,12 @@ import {
   sealInviteBundle,
   signCreateServiceInvite,
   signRedeemServiceInvite,
+  signServiceInviteCreateQuery,
   signServiceInviteListQuery,
   type CreateServiceInvite,
+  type Keypair,
   type RedeemServiceInvite,
+  type ServiceInviteCreateQuery,
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 
@@ -275,6 +278,46 @@ describe("service-invite routes — dispatch over real D1", () => {
         env,
       );
       expect(r!.status).toBe(404);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("GET /service-invites/:inviteId/create → returns {create, createSig} for a box STK-signed query", async () => {
+    const sqlite = createSqliteD1();
+    const storage = new D1Storage(sqlite as unknown as D1Database);
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    const stk: Keypair = deriveIRK({ seed: new Uint8Array(32).fill(150) });
+    const serverDomain = "home.alice.flagship.services";
+    await storage.servers.put({
+      serverDomain,
+      username: "alice",
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: 1,
+    });
+    const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database };
+    try {
+      const { inviteId, body: createBody } = createPayload();
+      await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/service-invites`, { method: "POST", body: JSON.stringify(createBody) }),
+        env,
+      );
+      const query: ServiceInviteCreateQuery = { username: "alice", inviteId, serverDomain, issuedAt: NOW };
+      const sig = hex(signServiceInviteCreateQuery(query, stk));
+      const url = `${ORIGIN}/api/users/alice/service-invites/${inviteId}/create?serverDomain=${encodeURIComponent(serverDomain)}&issuedAt=${NOW}&sig=${sig}`;
+      const res = await tryControlPlane(new Request(url, { method: "GET" }), env);
+      expect(res!.status).toBe(200);
+      const body = (await res!.json()) as { create: { inviteId: string; serviceRef: string }; createSig: string };
+      expect(body.create.inviteId).toBe(inviteId);
+      expect(body.create.serviceRef).toBe("alice-notes");
+      expect(body.createSig).toMatch(/^[0-9a-f]{128}$/);
+
+      // A query NOT signed by the registered STK is rejected (403).
+      const wrong = deriveIRK({ seed: new Uint8Array(32).fill(151) });
+      const badSig = hex(signServiceInviteCreateQuery(query, wrong));
+      const badUrl = `${ORIGIN}/api/users/alice/service-invites/${inviteId}/create?serverDomain=${encodeURIComponent(serverDomain)}&issuedAt=${NOW}&sig=${badSig}`;
+      const denied = await tryControlPlane(new Request(badUrl, { method: "GET" }), env);
+      expect(denied!.status).toBe(403);
     } finally {
       sqlite.close();
     }

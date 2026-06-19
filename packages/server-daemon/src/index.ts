@@ -1467,6 +1467,13 @@ async function wireOwnerHandlers(deps: {
     serviceInstalled: (ref) =>
       (deps.servicePlatformRef.current?.list() ?? []).some((a) => a.serviceId === ref),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+    // gating v2 ANY-DEVICE manual-finalize: the box fetches the owner's signed
+    // create from `.com` by inviteId at /api/service-access/accept (STK-signed),
+    // so the author needn't carry it on the creating device. The box holds no
+    // owner key — it authenticates the fetch with its STK against its server record.
+    username: cfg.userId,
+    serverDomain: env.serverFqdn,
+    stk: identityKeypair,
     householdKey: householdHex ? hexToBytes(householdHex.trim()) : undefined,
   });
   runtime.addHandler(access.handle);

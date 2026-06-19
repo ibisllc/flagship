@@ -579,6 +579,59 @@ export function verifyServiceInviteListQuery(
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Service-invite CREATE fetch — BOX-STK-signed (v2 box-as-authority,
+// any-device manual-finalize). When the AUTHOR finalizes a manual-approve
+// invite at `<box>/api/service-access/accept`, the box must verify the OWNER's
+// signed create — but the author shouldn't have to carry the signed create in a
+// local cache (that bound finalize to the creating device). Instead the box
+// FETCHES the signed create from `.com` by inviteId, authenticated as the box
+// with its STK (the box holds no owner key), EXACTLY like the `revoked-since`
+// poll. `.com` verifies the STK against the registered server + that the server
+// belongs to the username, then returns `{create, createSig}`.
+//
+// Distinct tag from the list query so a `revoked-since`/`list` signature can
+// never be replayed onto a create fetch and vice-versa. The query binds the
+// inviteId + the box's serverDomain (the principal `.com` resolves the STK
+// against). Only the box ever signs this — no client mirror is needed.
+// ──────────────────────────────────────────────────────────────────────
+
+const TAG_CREATE_FETCH = "flagship/service-invite-create-fetch/v1";
+
+export interface ServiceInviteCreateQuery {
+  username: string;
+  /** The invite whose signed create the box is fetching (lower-hex). */
+  inviteId: string;
+  /** The box's own FQDN — the server record `.com` resolves the STK against. */
+  serverDomain: string;
+  issuedAt: number;
+}
+
+function canonicalCreateQuery(q: ServiceInviteCreateQuery): Bytes {
+  validateNoSepCtrl("username", q.username);
+  validateNoSepCtrl("inviteId", q.inviteId);
+  validateNoSepCtrl("serverDomain", q.serverDomain);
+  return new TextEncoder().encode(
+    [TAG_CREATE_FETCH, q.username, q.inviteId, q.serverDomain, q.issuedAt].join("|"),
+  );
+}
+
+export function signServiceInviteCreateQuery(q: ServiceInviteCreateQuery, signer: Keypair): Bytes {
+  return ed.sign(canonicalCreateQuery(q), signer.privateKey);
+}
+
+export function verifyServiceInviteCreateQuery(
+  q: ServiceInviteCreateQuery,
+  sig: Bytes,
+  signerPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalCreateQuery(q), signerPub);
+  } catch {
+    return false;
+  }
+}
+
 /** SHA-256 hex of a 32-byte capability secret — the form `.com` stores + indexes. */
 export function serviceInviteSecretHash(secret: Bytes): string {
   return hex(sha256(secret));

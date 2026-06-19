@@ -33,6 +33,7 @@ import { dirname } from "node:path";
 import {
   openInviteBundle,
   serviceInviteSecretHash,
+  signServiceInviteCreateQuery,
   signServiceInviteListQuery,
   verifyAcceptServiceInvite,
   verifyCreateServiceInvite,
@@ -46,6 +47,7 @@ import {
   type Keypair,
   type RemoveServiceAllow,
   type ServiceAccessMode,
+  type ServiceInviteCreateQuery,
   type ServiceInviteListQuery,
   type ServiceVisitProof,
   type SetServiceAccessMode,
@@ -464,6 +466,20 @@ export interface ServiceAccessHttpOptions {
   serviceInstalled: (serviceRef: string) => boolean;
   /** Base URL of the control plane the box redeems against. */
   controlPlaneBaseUrl: string;
+  /**
+   * MANUAL-finalize create fetch (v2 box-as-authority, any-device finalize). The
+   * author no longer carries the signed create in a per-device cache — at
+   * `POST /api/service-access/accept` the box FETCHES the owner's signed create
+   * from `.com` by the acceptance's inviteId, STK-signing the query (it holds no
+   * owner key). These three are what that fetch needs. When ANY is absent the
+   * accept path falls back to accepting a client-supplied `{create, createSig}`
+   * in the body (back-compat / no-AID transition), so it never hard-breaks.
+   */
+  username?: string;
+  /** The box's own FQDN — the server record `.com` resolves the STK against. */
+  serverDomain?: string;
+  /** The box's STK keypair — signs the by-inviteId create fetch. */
+  stk?: Keypair;
   /** Injectable fetch (defaults to global). */
   fetchImpl?: typeof fetch;
   /**
@@ -923,13 +939,19 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
 
   /**
    * POST /api/service-access/accept — MANUAL-approve finalize (v2 Phase 3 tier 2).
-   * The AUTHOR submits the friend's AID-signed `AcceptServiceInvite` + the owner's
-   * signed create (relayed from the friend's pending redeem). The box verifies
-   * BOTH (the friend's contact-AID sig over the acceptance, AND the owner's create
-   * authority), confirms the create's secretHash matches the acceptance's invite,
-   * then binds the contact AID. The author finalizes, so a link-thief who never
-   * reached the author's friend-channel can't produce an acceptance the author
-   * will submit.
+   * The AUTHOR submits only the friend's AID-signed `AcceptServiceInvite`
+   * (`{accept, acceptSig}`); the box FETCHES the owner's signed create from `.com`
+   * by the acceptance's inviteId (STK-signed — box-as-authority, ANY-DEVICE
+   * finalize), verifies the owner's create authority AND the friend's contact-AID
+   * sig, confirms the create matches the acceptance's inviteId + serviceRef, then
+   * binds the contact AID. The author finalizes (so a link-thief who never reached
+   * the author's friend-channel can't produce an acceptance the author submits) —
+   * and can do so from ANY of their devices (no local create cache).
+   *
+   * Back-compat: when the box has no STK-fetch identity wired, OR the fetch can't
+   * resolve the create (an in-flight v1 row with no stored signature), it falls
+   * back to a client-supplied `{create, createSig}` in the body — so a transitional
+   * client that still carries the create never hard-fails.
    */
   async function handleAccept(req: HttpRequest): Promise<HttpResponse> {
     let body: {
@@ -956,9 +978,14 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     ) {
       return bad(400, "malformed acceptance");
     }
-    // Verify the owner's signed create FIRST (authority). It carries the
-    // secretHash; the acceptance is bound to the same inviteId + serviceRef.
-    const verified = verifyComCreate(body.create, body.createSig, undefined);
+
+    // Obtain the owner's SIGNED create. Primary path: fetch it from `.com` by the
+    // acceptance's inviteId (the author submits NO create). Fallback: a
+    // body-supplied create (a transitional client / a row `.com` can't serve).
+    const fetched = await fetchComCreate(a.inviteId);
+    const verified =
+      (fetched && verifyComCreate(fetched.create, fetched.createSig, undefined)) ||
+      verifyComCreate(body.create, body.createSig, undefined);
     if (!verified) return bad(403, "owner create signature did not verify");
     if (verified.inviteId !== a.inviteId || verified.serviceRef !== a.serviceRef) {
       return bad(403, "acceptance does not match the create");
@@ -989,6 +1016,52 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       return bad(409, "service allow-list is full");
     }
     return jsonResponse(200, { bound: true, serviceRef: verified.serviceRef, boundAID: contactAID });
+  }
+
+  /**
+   * Fetch the owner's signed create from `.com` by inviteId, STK-signing the
+   * query (box-as-authority any-device finalize). Returns the raw `{create,
+   * createSig}` the caller re-verifies, or null when the box has no STK-fetch
+   * identity wired or `.com` can't serve it. Best-effort: any failure (no
+   * identity / network / 404 / malformed) returns null so the body fallback runs.
+   */
+  async function fetchComCreate(
+    inviteId: string,
+  ): Promise<{ create: unknown; createSig: unknown } | null> {
+    if (!opts.username || !opts.serverDomain || !opts.stk) return null;
+    if (typeof inviteId !== "string" || !/^[0-9a-f]+$/i.test(inviteId) || inviteId.length % 2 !== 0) {
+      return null;
+    }
+    const query: ServiceInviteCreateQuery = {
+      username: opts.username,
+      inviteId: inviteId.toLowerCase(),
+      serverDomain: opts.serverDomain,
+      issuedAt: now(),
+    };
+    const sig = bytesToHex(signServiceInviteCreateQuery(query, opts.stk));
+    const params = new URLSearchParams({
+      serverDomain: query.serverDomain,
+      issuedAt: String(query.issuedAt),
+      sig,
+    });
+    let res: Response;
+    try {
+      res = await fetchImpl(
+        `${opts.controlPlaneBaseUrl}/api/users/${encodeURIComponent(opts.username)}/service-invites/${encodeURIComponent(query.inviteId)}/create?${params.toString()}`,
+        { method: "GET" } as RequestInit,
+      );
+    } catch {
+      return null;
+    }
+    if (!res.ok) return null;
+    let json: { create?: unknown; createSig?: unknown };
+    try {
+      json = (await res.json()) as typeof json;
+    } catch {
+      return null;
+    }
+    if (!json.create || typeof json.createSig !== "string") return null;
+    return { create: json.create, createSig: json.createSig };
   }
 
   /**

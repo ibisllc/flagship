@@ -27,10 +27,12 @@ import {
   verifyCreateServiceInvite,
   verifyRedeemServiceInvite,
   verifyRevokeServiceInvite,
+  verifyServiceInviteCreateQuery,
   verifyServiceInviteListQuery,
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
+  type ServiceInviteCreateQuery,
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 import type {
@@ -505,24 +507,36 @@ async function authorizeListQuery(
     typeof auth.serverDomain === "string" &&
     auth.serverDomain.length > 0
   ) {
-    const server = await deps.servers.get(auth.serverDomain);
-    if (
-      server &&
-      server.username.toLowerCase() === userV.label &&
-      server.revokedAt === undefined
-    ) {
-      let stkPub: Uint8Array;
-      try {
-        stkPub = hexToBytes(server.identityPubKeyHex);
-      } catch {
-        return { ok: false, res: forbidden("invalid signature") };
-      }
-      if (verifyServiceInviteListQuery(query, sig, stkPub)) {
-        return { ok: true, query, cursor: query.cursor };
-      }
+    const stkPub = await resolveServerStk(deps, userV.label, auth.serverDomain);
+    if (stkPub && verifyServiceInviteListQuery(query, sig, stkPub)) {
+      return { ok: true, query, cursor: query.cursor };
     }
   }
   return { ok: false, res: forbidden("invalid signature") };
+}
+
+/**
+ * Resolve a box's STK pubkey for a BOX-signed query: `serverDomain` must be a
+ * non-revoked server owned by `username`. Returns the server's identity pubkey
+ * (the STK the box signs with) or null when the server is absent / foreign /
+ * revoked / has unreadable key material. The box holds no owner key, so this is
+ * how `.com` authenticates a box poll (revoked-since) / fetch (create).
+ */
+async function resolveServerStk(
+  deps: ServiceInviteDeps,
+  username: string,
+  serverDomain: string,
+): Promise<Uint8Array | null> {
+  if (!deps.servers) return null;
+  const server = await deps.servers.get(serverDomain);
+  if (!server || server.username.toLowerCase() !== username || server.revokedAt !== undefined) {
+    return null;
+  }
+  try {
+    return hexToBytes(server.identityPubKeyHex);
+  } catch {
+    return null;
+  }
 }
 
 export async function handleListServiceInvites(
@@ -580,4 +594,81 @@ export async function handleRevokedSinceServiceInvites(
     })),
     cursor: nextCursor,
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// create fetch — GET /api/users/:u/service-invites/:inviteId/create
+//   ?serverDomain=<fqdn>&issuedAt=<ms>&sig=<hex>
+//
+// v2 box-as-authority + any-device manual-finalize: when the AUTHOR finalizes a
+// manual-approve invite, their box verifies the OWNER's signed create — and
+// FETCHES it here instead of the author carrying it in a per-device cache. The
+// box authenticates with its STK (it holds no owner key); `.com` verifies the
+// STK against the registered server + that the server belongs to this username,
+// then returns the author's signed `{create, createSig}` (NOT a secret — the
+// create is the author's own signed object, which the box re-verifies). 404 on
+// an unknown invite OR a v1 row with no stored signature.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ServiceInviteCreateFetchAuth {
+  serverDomain: string | null;
+  issuedAt: string | null;
+  sig: string | null;
+}
+
+export async function handleFetchServiceInviteCreate(
+  deps: ServiceInviteDeps,
+  username: string,
+  inviteId: string,
+  auth: ServiceInviteCreateFetchAuth,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? (() => Date.now()))();
+  const freshnessMs = deps.freshnessMs ?? 5 * 60_000;
+
+  const userV = validateUserLabel(username);
+  if (!userV.ok) return malformed(userV.reason);
+  if (typeof inviteId !== "string" || inviteId.length === 0 || inviteId.length > 256) {
+    return malformed("inviteId required");
+  }
+  if (!auth || typeof auth !== "object") return malformed("signed query params required");
+  if (typeof auth.serverDomain !== "string" || auth.serverDomain.length === 0) {
+    return malformed("serverDomain query param required");
+  }
+  if (typeof auth.sig !== "string" || !HEX128.test(auth.sig)) {
+    return malformed("sig query param (128-hex) required");
+  }
+  const issuedAt = Number(auth.issuedAt);
+  if (!Number.isFinite(issuedAt)) return malformed("issuedAt query param required");
+  if (Math.abs(now - issuedAt) > freshnessMs) return forbidden("stale request");
+
+  const userRec = await deps.usernames.get(userV.label);
+  if (!userRec) return notFound("username not registered");
+
+  // BOX-STK-signed only (the author's box fetches; a client never does). Verify
+  // the STK against the registered server owned by this username.
+  const stkPub = await resolveServerStk(deps, userV.label, auth.serverDomain);
+  if (!stkPub) return forbidden("invalid signature");
+  const query: ServiceInviteCreateQuery = {
+    username: userV.label,
+    inviteId: inviteId.toLowerCase(),
+    serverDomain: auth.serverDomain,
+    issuedAt,
+  };
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(auth.sig);
+  } catch {
+    return malformed("invalid signature hex");
+  }
+  if (!verifyServiceInviteCreateQuery(query, sig, stkPub)) {
+    return forbidden("invalid signature");
+  }
+
+  const existing = await deps.invites.get(query.inviteId);
+  if (!existing) return notFound("unknown invite");
+  // A v1 row with no persisted signature can't be box-verified — surface 404 so
+  // the box falls back (the author can re-issue). The signed create is REQUIRED.
+  if (!existing.createSig) return notFound("invite has no signed create");
+
+  return ok({ create: createCarrier(existing), createSig: existing.createSig });
 }

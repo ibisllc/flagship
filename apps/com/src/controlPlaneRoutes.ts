@@ -27,6 +27,7 @@ import {
   handleStoreTrustException,
   handleListTrustExceptions,
   handleCreateServiceInvite,
+  handleFetchServiceInviteCreate,
   handleRedeemServiceInvite,
   handleRevokeServiceInvite,
   handleListServiceInvites,
@@ -442,6 +443,7 @@ const ROUTE_RE = {
   // checked first; redeem is account-agnostic (the friend may be a stranger).
   SERVICE_INVITE_REVOKE: /^\/api\/users\/([^/]+)\/service-invites\/revoke$/,
   SERVICE_INVITE_REVOKED_SINCE: /^\/api\/users\/([^/]+)\/service-invites\/revoked-since$/,
+  SERVICE_INVITE_CREATE_FETCH: /^\/api\/users\/([^/]+)\/service-invites\/([^/]+)\/create$/,
   SERVICE_INVITES: /^\/api\/users\/([^/]+)\/service-invites$/,
   SERVICE_INVITE_REDEEM: /^\/api\/service-invites\/redeem$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -1033,6 +1035,25 @@ export async function tryControlPlane(
           issuedAt: url.searchParams.get("issuedAt"),
           sig: url.searchParams.get("sig"),
           serverDomain: url.searchParams.get("serverDomain"),
+        },
+      ),
+    );
+  }
+  // create fetch (GET) — the author's box re-fetches the OWNER's signed create by
+  // inviteId to verify it at manual-finalize (box-as-authority, any-device). Box
+  // STK-signed; checked BEFORE the base list path (a longer sub-path of the same
+  // prefix). The `[^/]+` inviteId segment can't collide with `revoke` /
+  // `revoked-since` (those are exact sub-paths already matched above).
+  if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITE_CREATE_FETCH))) {
+    return finish(
+      await handleFetchServiceInviteCreate(
+        { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        {
+          serverDomain: url.searchParams.get("serverDomain"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
         },
       ),
     );
