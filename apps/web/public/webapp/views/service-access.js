@@ -1,21 +1,31 @@
 // Service access gating — admin UI (docs/service-access-gating.md).
 //
 // Per-service open ⇄ restricted toggle + (when restricted) an allow-list
-// manager: add a person (name + optional photo → mint a capability invite via
-// .com → copyable link), the list of added people (decrypted from the
-// household-key-sealed bundle .com stores as ciphertext), and remove (revoke on
-// .com AND prune the bound AID on the box — the .com revoke alone doesn't reach
-// the box, whose allow-list is add-only, so the box prune is what enforces).
+// manager: ADD a person/group via a capability invite (one of THREE tiers —
+// personal auto-approve, personal manual-approve, or group/multi-use), the list
+// of added people/groups (decrypted from the household-key-sealed bundle .com
+// stores as ciphertext), and remove (revoke on .com AND prune the bound AID on
+// the box — the .com revoke alone doesn't reach the box, whose allow-list is
+// add-only, so the box prune is what enforces).
 //
-// Identity model: the access-mode change is OWNER-IRK-signed to the box's
-// pinned pipe (POST /api/service-access); the invite create/revoke are
-// IRK-signed to .com. The bound principal is the friend's STABLE AID. See
+// Identity model (v2 box-as-authority): create/revoke/list are now AID-signed —
+// the box verifies them against the owner's STABLE AID (the IRK rotates). The
+// access-mode change + the per-AID prune stay OWNER-IRK-signed to the box's
+// pinned pipe. The bound principal is the friend's per-author CONTACT AID. See
 // lib/serviceInvite.js for the wire + canonical bytes.
 //
-// Read-path note: the daemon exposes no GET for the current mode, so the
-// toggle is last-write-wins, persisted locally per service (the box's POST
-// response is the source of truth on change). The allow-list IS read
-// authoritatively from .com's listInvites (who is bound, decrypted locally).
+// THREE invite tiers (the create-time picker):
+//   - personal auto-approve  — first-bind (the casual-share default).
+//   - personal manual-approve — the friend's redeem is held {pending}; the
+//     friend replies an acceptance the AUTHOR finalizes here ("Finalize an
+//     acceptance"). Closes the link-theft race without learning the friend's id.
+//   - group / multi-use — one link, maxN (0=unlimited) + optional expiry,
+//     auto-approve, LOWER-TRUST. The guest list shows ONE "<label> — k/N" entry
+//     with a one-tap group-revoke (per-member removal kept as a bonus).
+//
+// The consumer's USERNAME is never disclosed to the author in ANY tier — the
+// author sees only the private label they themselves assigned (personal) or the
+// group label (group).
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
@@ -24,7 +34,6 @@ import { controlApex } from "../lib/apex.js";
 import {
   deriveAccountIdFromSeed,
   deriveHouseholdKeyFromSeed,
-  deriveIrkFromSeed,
   signWithIrk,
   signWithAccountId,
 } from "../keystore.js";
@@ -34,6 +43,8 @@ import {
   removeServiceAllow,
   revokeInvite,
   setServiceAccessMode,
+  submitAccept,
+  parseAcceptReply,
 } from "../lib/serviceInvite.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -45,8 +56,9 @@ let currentService = null;
 
 // localStorage key for the last-known access mode (the daemon has no GET).
 const MODE_KEY_PREFIX = "flagship.serviceAccessMode.";
-// localStorage counter for the monotonic per-(account,device) inviteId input.
-const COUNTER_KEY_PREFIX = "flagship.serviceInviteCounter.";
+// localStorage map of retained signed creates (by inviteId) — the AUTHOR needs
+// its own {create, createSig} to FINALIZE a manual-approve acceptance later.
+const CREATE_STORE_KEY = "flagship.serviceInviteCreates.v1";
 
 function modeKey(serviceRef) {
   return `${MODE_KEY_PREFIX}${serviceRef}`;
@@ -67,19 +79,25 @@ function rememberMode(serviceRef, mode) {
   }
 }
 
-/** Next monotonic invite counter for this account+device (best-effort local). */
-function nextInviteCounter(serviceRef) {
-  const key = `${COUNTER_KEY_PREFIX}${serviceRef}`;
-  let n = 0;
+/** Persist a signed create (by inviteId) so a manual acceptance can be finalized later. */
+function rememberCreate(inviteId, create, createSig) {
   try {
-    n = Number(localStorage.getItem(key)) || 0;
-    localStorage.setItem(key, String(n + 1));
+    const all = JSON.parse(localStorage.getItem(CREATE_STORE_KEY) || "{}");
+    all[inviteId] = { create, createSig };
+    localStorage.setItem(CREATE_STORE_KEY, JSON.stringify(all));
   } catch {
-    // Fall back to a time-derived counter so two adds in the same render don't
-    // collide on the inviteId (the daemon also dedups by inviteId).
-    n = Date.now() % 1_000_000_000;
+    /* private mode — manual finalize will need the create re-supplied */
   }
-  return n;
+}
+/** Recall a retained signed create for an inviteId, or null. */
+function recallCreate(inviteId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CREATE_STORE_KEY) || "{}");
+    const e = all[inviteId];
+    return e && e.create && typeof e.createSig === "string" ? e : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Box base URL of the currently-paired pod (canonical-bytes input). */
@@ -129,16 +147,31 @@ export async function renderServiceAccess(service) {
     </div>
 
     <div id="sa-allow-section" class="${restricted ? "" : "hidden"}">
-      <h2 class="mt-4">Add a person</h2>
+      <h2 class="mt-4">Add a person or group</h2>
       <div class="card">
         <p class="note">
           Names &amp; photos stay encrypted to your account — flagshipserver.com
-          stores only ciphertext and never sees them. The link is a bearer
-          capability: send it over a private channel. It locks to the first
-          account that opens it.
+          stores only ciphertext and never sees them. Their Flagship username is
+          never shown to you. Send the link over a private channel.
         </p>
-        <label>Name <span class="faint-sm">(only you and your servers see it)</span></label>
+
+        <label class="mt-1">How they get access</label>
+        <div id="sa-tier" class="mt-1">
+          <label class="inline-check"><input type="radio" name="sa-tier" value="auto" checked /> Personal — anyone with the link gets in (fastest)</label>
+          <label class="inline-check mt-1"><input type="radio" name="sa-tier" value="manual" /> Personal — you approve each one (sensitive)</label>
+          <label class="inline-check mt-1"><input type="radio" name="sa-tier" value="group" /> Group link — one link, many people <span class="faint-sm">(lower trust)</span></label>
+        </div>
+
+        <label class="mt-2">Name / label <span class="faint-sm">(only you and your servers see it)</span></label>
         <input id="sa-name" type="text" placeholder="Alex" autocomplete="off" maxlength="120" />
+
+        <div id="sa-group-opts" class="hidden mt-2">
+          <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
+          <input id="sa-maxn" type="number" min="0" step="1" value="10" />
+          <label class="mt-2">Expires in days <span class="faint-sm">(optional — a forever link is a liability)</span></label>
+          <input id="sa-expiry-days" type="number" min="0" step="1" placeholder="30" />
+        </div>
+
         <label class="mt-2">Photo <span class="faint-sm">(optional)</span></label>
         <input id="sa-photo" type="file" accept="image/*" />
         <div id="sa-photo-preview" class="mt-2"></div>
@@ -147,11 +180,29 @@ export async function renderServiceAccess(service) {
         <div id="sa-add-result" class="mt-2 hidden">
           <label>Shareable link</label>
           <input id="sa-link" type="text" readonly class="mt-1" />
+          <div id="sa-qr" class="mt-2" style="text-align:center;"></div>
           <div class="row-2 mt-2">
             <button id="sa-share" class="secondary">Share…</button>
             <button id="sa-copy" class="secondary">Copy link</button>
           </div>
+          <p id="sa-manual-hint" class="note mt-2 hidden">
+            This is approve-each. After they open the link, they'll send you back
+            an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo;
+            below to let them in.
+          </p>
         </div>
+      </div>
+
+      <h2 class="mt-4">Finalize an acceptance</h2>
+      <div class="card">
+        <p class="note">
+          For an <strong>approve-each</strong> invite: paste the acceptance code
+          (or link) your friend sent back. It never reveals who they are — you're
+          just confirming it really came from them.
+        </p>
+        <textarea id="sa-accept-input" rows="2" placeholder="flagship-accept:…" class="mt-1"></textarea>
+        <button id="sa-accept-go" class="full-width mt-2">Finalize &amp; grant access</button>
+        <div id="sa-accept-status" class="mt-2 text-sm"></div>
       </div>
 
       <h2 class="mt-4">People with access</h2>
@@ -165,12 +216,28 @@ export async function renderServiceAccess(service) {
       toast(humanError(e), "err");
     });
   });
+  // Tier radios: reveal/hide the group caps.
+  for (const r of root.querySelectorAll('input[name="sa-tier"]')) {
+    r.addEventListener("change", () => {
+      $("sa-group-opts")?.classList.toggle("hidden", selectedTier() !== "group");
+    });
+  }
   $("sa-photo")?.addEventListener("change", onPhotoPicked);
   $("sa-add-go")?.addEventListener("click", () => {
     onAddPerson(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
+  $("sa-accept-go")?.addEventListener("click", () => {
+    onFinalizeAccept(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
+  });
 
   if (restricted) await renderPeople(serviceRef);
+}
+
+/** The currently-selected invite tier ("auto" | "manual" | "group"). */
+function selectedTier() {
+  const el = document.querySelector('input[name="sa-tier"]:checked');
+  const v = el?.value;
+  return v === "manual" || v === "group" ? v : "auto";
 }
 
 /** OWNER-IRK-sign + POST the access-mode change to the box. */
@@ -232,7 +299,18 @@ function onPhotoPicked(ev) {
   reader.readAsDataURL(file);
 }
 
-/** Mint a capability invite for a new person and surface the share-link. */
+/** Render an inline QR of a link into `box` (in ADDITION to the link text). */
+async function renderQrInto(box, link) {
+  if (!box) return;
+  try {
+    const m = await import("/qrEncoder.js");
+    box.innerHTML = m.renderQrSvg(link, { size: 200, foreground: "#0f172a", background: "#ffffff" });
+  } catch {
+    box.innerHTML = ""; // the link text is the reliable fallback
+  }
+}
+
+/** Mint a capability invite (per the selected tier) and surface the share-link + QR. */
 async function onAddPerson(serviceRef) {
   const session = getSession();
   const status = $("sa-add-status");
@@ -246,6 +324,20 @@ async function onAddPerson(serviceRef) {
     }
     return;
   }
+  const tier = selectedTier();
+  // Group caps.
+  let maxRedemptions;
+  let expiresAt;
+  if (tier === "group") {
+    const maxN = Number($("sa-maxn")?.value);
+    maxRedemptions = Number.isInteger(maxN) && maxN >= 0 ? maxN : 0;
+    const days = Number($("sa-expiry-days")?.value);
+    if (Number.isFinite(days) && days > 0) {
+      expiresAt = Date.now() + Math.round(days) * 86_400_000;
+    }
+  }
+  const approvalMode = tier === "manual" ? "manual" : "auto";
+
   if (status) {
     status.className = "mt-2 text-sm";
     status.textContent = "creating…";
@@ -255,10 +347,9 @@ async function onAddPerson(serviceRef) {
     goBtn.textContent = "Creating…";
   }
   try {
-    const [aid, householdKey, device] = await Promise.all([
+    const [aid, householdKey] = await Promise.all([
       deriveAccountIdFromSeed(session.umk),
       deriveHouseholdKeyFromSeed(session.umk),
-      deriveIrkFromSeed(session.umk),
     ]);
     const bundle = pickedPhotoDataUri ? { name, photo: pickedPhotoDataUri } : { name };
     const r = await createInvite({
@@ -266,14 +357,17 @@ async function onAddPerson(serviceRef) {
       username: session.username,
       podBaseUrl: podBaseUrl(),
       authorAID: aid.publicKey,
-      authorDevicePub: device.publicKey,
-      counter: nextInviteCounter(serviceRef),
       serviceRef,
       bundle,
       householdKey,
+      approvalMode,
+      ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
       umk: session.umk,
-      signWithIrk,
+      signWithAccountId,
     });
+    // Retain the signed create so a manual acceptance can be finalized later.
+    rememberCreate(r.inviteId, r.create, r.createSig);
     if (status) {
       status.className = "mt-2 text-sm ok-text";
       status.textContent = `Invite for ${name} created.`;
@@ -282,6 +376,8 @@ async function onAddPerson(serviceRef) {
     const linkEl = $("sa-link");
     if (result) result.classList.remove("hidden");
     if (linkEl) linkEl.value = r.link;
+    $("sa-manual-hint")?.classList.toggle("hidden", tier !== "manual");
+    await renderQrInto($("sa-qr"), r.link);
     $("sa-share")?.addEventListener("click", () => shareIt(r.link));
     $("sa-copy")?.addEventListener("click", () => copyIt(r.link));
     // Clear the composer + refresh the people list (it now shows an unbound row).
@@ -304,6 +400,60 @@ async function onAddPerson(serviceRef) {
   }
 }
 
+/**
+ * MANUAL-approve finalize CORE — DOM-free + dependency-injected (mirrors
+ * runRemovePerson). Parses the friend's acceptance reply, pairs it with the
+ * AUTHOR's retained signed create (by inviteId), and submits both to the box's
+ * accept endpoint. Throws a tagged error when the reply is junk (`bad-accept`)
+ * or the create wasn't retained on this device (`no-create`).
+ */
+export async function runFinalizeAccept(
+  { raw },
+  { podBaseUrl, recallCreate, parseAcceptReply, submitAccept },
+) {
+  const parsed = parseAcceptReply(raw);
+  if (!parsed) throw err("That doesn't look like an acceptance code. Paste the whole thing.", "bad-accept");
+  const retained = recallCreate(parsed.accept.inviteId);
+  if (!retained) {
+    throw err(
+      "Couldn't find this invite on this device. Finalize from the device that created the link.",
+      "no-create",
+    );
+  }
+  const r = await submitAccept({
+    baseUrl: podBaseUrl(),
+    accept: parsed.accept,
+    acceptSig: parsed.acceptSig,
+    create: retained.create,
+    createSig: retained.createSig,
+  });
+  return { ok: true, serviceRef: r.serviceRef, boundAID: r.boundAID };
+}
+
+async function onFinalizeAccept(serviceRef) {
+  const status = $("sa-accept-status");
+  const btn = $("sa-accept-go");
+  if (btn?.disabled) return;
+  const raw = ($("sa-accept-input")?.value || "").trim();
+  if (!raw) {
+    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = "Paste the acceptance code first."; }
+    return;
+  }
+  if (status) { status.className = "mt-2 text-sm"; status.textContent = "finalizing…"; }
+  if (btn) { btn.disabled = true; btn.textContent = "Finalizing…"; }
+  try {
+    await runFinalizeAccept({ raw }, { podBaseUrl, recallCreate, parseAcceptReply, submitAccept });
+    if (status) { status.className = "mt-2 text-sm ok-text"; status.textContent = "Granted — they can open it now."; }
+    if ($("sa-accept-input")) $("sa-accept-input").value = "";
+    await renderPeople(serviceRef);
+  } catch (e) {
+    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = humanError(e); }
+    throw e;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Finalize & grant access"; }
+  }
+}
+
 /** Render the allow-list from .com (bundles decrypted locally). */
 async function renderPeople(serviceRef) {
   const root = $("sa-people");
@@ -320,39 +470,24 @@ async function renderPeople(serviceRef) {
       authorAID: aid.publicKey,
       householdKey,
       serviceRef,
+      umk: session.umk,
+      signWithAccountId,
     });
     const live = invites.filter((i) => !i.revokedAt);
     if (live.length === 0) {
       root.innerHTML = '<div class="card placeholder">No one added yet. Create an invite link above.</div>';
       return;
     }
-    root.innerHTML = live
-      .map((i) => {
-        const name = i.bundle?.name ?? "unknown";
-        const photo = i.bundle?.photo;
-        const bound = !!i.boundAID;
-        const statusText = bound ? "active" : "invite sent — not opened yet";
-        const avatar = photo
-          ? `<img src="${escapeHtml(photo)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" />`
-          : `<div class="avatar-mono" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-2,#1f2937);">${escapeHtml((name[0] || "?").toUpperCase())}</div>`;
-        return `
-          <div class="card">
-            <div class="row row-top">
-              <div class="row" style="gap:10px;align-items:center;">
-                ${avatar}
-                <div>
-                  <div class="weight-600">${escapeHtml(name)}</div>
-                  <div class="muted-sm text-xs">${escapeHtml(statusText)}</div>
-                </div>
-              </div>
-              <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}">Remove</button>
-            </div>
-          </div>`;
-      })
-      .join("");
+    root.innerHTML = live.map((i) => peopleRowHtml(i)).join("");
     root.querySelectorAll('[data-action="sa-remove"]').forEach((b) => {
       b.addEventListener("click", () =>
-        onRemovePerson(serviceRef, b.getAttribute("data-id"), b.getAttribute("data-name"), b.getAttribute("data-aid") || null).catch((e) => {
+        onRemovePerson(
+          serviceRef,
+          b.getAttribute("data-id"),
+          b.getAttribute("data-name"),
+          b.getAttribute("data-aid") || null,
+          b.getAttribute("data-group") === "1",
+        ).catch((e) => {
           console.error(e);
           toast(humanError(e), "err");
         }),
@@ -363,25 +498,56 @@ async function renderPeople(serviceRef) {
   }
 }
 
-/**
- * Remove a person: revoke the invite on .com AND (when they've bound an AID)
- * prune that AID from the box's allow-list. The .com revoke only records the
- * revocation — the box's allow-list is add-only, so the box prune is what
- * actually denies the friend's next request. Both legs run; an unredeemed invite
- * (no boundAID) is just the .com revoke (nothing to prune).
- */
+/** One allow-list row — a person (single bind) OR a group ("<label> — k/N"). */
+function peopleRowHtml(i) {
+  const name = i.bundle?.name ?? "unknown";
+  const photo = i.bundle?.photo;
+  const isGroup = i.maxRedemptions !== null && i.maxRedemptions !== undefined;
+  let statusText;
+  if (isGroup) {
+    const used = typeof i.redemptions === "number" ? i.redemptions : (Array.isArray(i.boundAIDs) ? i.boundAIDs.length : 0);
+    const cap = i.maxRedemptions === 0 ? "∞" : i.maxRedemptions;
+    statusText = `group — ${used}/${cap} joined`;
+    if (i.expiresAt) {
+      statusText += i.expiresAt <= Date.now() ? " · expired" : ` · expires ${new Date(i.expiresAt).toLocaleDateString()}`;
+    }
+  } else if (i.approvalMode === "manual" && !i.boundAID) {
+    statusText = "approve-each — waiting for their acceptance";
+  } else {
+    statusText = i.boundAID ? "active" : "invite sent — not opened yet";
+  }
+  const avatar = photo
+    ? `<img src="${escapeHtml(photo)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" />`
+    : `<div class="avatar-mono" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-2,#1f2937);">${escapeHtml((name[0] || (isGroup ? "#" : "?")).toUpperCase())}</div>`;
+  const removeLabel = isGroup ? "Revoke group" : "Remove";
+  return `
+    <div class="card">
+      <div class="row row-top">
+        <div class="row" style="gap:10px;align-items:center;">
+          ${avatar}
+          <div>
+            <div class="weight-600">${escapeHtml(name)}</div>
+            <div class="muted-sm text-xs">${escapeHtml(statusText)}</div>
+          </div>
+        </div>
+        <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>
+      </div>
+    </div>`;
+}
+
 /**
  * The two-leg remove CORE — DOM-free + dependency-injected, so it's testable
  * under Node (mirrors webappCompanionRequestsView's `runApprove`). Leg 1 records
- * the revocation on `.com`; leg 2 prunes the bound AID on the BOX (the leg that
- * actually enforces). Returns `{ ok, prunedBox }`; an unredeemed invite (no
- * boundAID) skips the box prune. A box-prune failure throws a
- * `box-prune-failed`-tagged error (the `.com` revoke already ran, so the admin
+ * the revocation on `.com` (AID-signed); leg 2 prunes the bound AID(s) on the BOX
+ * (the leg that actually enforces). For a GROUP invite, leg 2 prunes EVERY bound
+ * AID (the group is a labeled set). Returns `{ ok, prunedBox }`; an unredeemed
+ * invite (no boundAID/boundAIDs) skips the box prune. A box-prune failure throws
+ * a `box-prune-failed`-tagged error (the `.com` revoke already ran, so the admin
  * must know access may persist).
  */
 export async function runRemovePerson(
-  { serviceRef, inviteId, boundAID },
-  { getSession, controlApex, podBaseUrl, signWithIrk, humanError, revokeInvite, removeServiceAllow },
+  { serviceRef, inviteId, boundAID, boundAIDs, isGroup },
+  { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
 ) {
   const session = getSession();
   await revokeInvite({
@@ -389,45 +555,74 @@ export async function runRemovePerson(
     username: session.username,
     inviteId,
     umk: session.umk,
-    signWithIrk,
+    signWithAccountId,
   });
-  if (!boundAID) return { ok: true, prunedBox: false };
-  try {
-    await removeServiceAllow({
-      baseUrl: podBaseUrl(),
-      serviceRef,
-      aid: boundAID,
-      umk: session.umk,
-      signWithIrk,
-    });
-  } catch (e) {
-    throw err(
-      `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
-      "box-prune-failed",
-    );
+  // The AIDs to prune on the box: the whole group set, else the single bound AID.
+  const aids = isGroup && Array.isArray(boundAIDs) ? boundAIDs : boundAID ? [boundAID] : [];
+  if (aids.length === 0) return { ok: true, prunedBox: false };
+  for (const aid of aids) {
+    try {
+      await removeServiceAllow({
+        baseUrl: podBaseUrl(),
+        serviceRef,
+        aid,
+        umk: session.umk,
+        signWithIrk,
+      });
+    } catch (e) {
+      throw err(
+        `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
+        "box-prune-failed",
+      );
+    }
   }
   return { ok: true, prunedBox: true };
 }
 
-async function onRemovePerson(serviceRef, inviteId, name, boundAID) {
+async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
+  // For a group we don't carry boundAIDs in the click attrs (it can be many) —
+  // re-fetch the row's bound set from the list so leg 2 prunes everyone.
+  let boundAIDs = null;
+  if (isGroup) {
+    try {
+      const session = getSession();
+      const aid = await deriveAccountIdFromSeed(session.umk);
+      const householdKey = await deriveHouseholdKeyFromSeed(session.umk);
+      const invites = await listInvites({
+        comBase: controlApex(),
+        username: session.username,
+        authorAID: aid.publicKey,
+        householdKey,
+        serviceRef,
+        umk: session.umk,
+        signWithAccountId,
+      });
+      const row = invites.find((i) => i.inviteId === inviteId);
+      boundAIDs = row && Array.isArray(row.boundAIDs) ? row.boundAIDs : [];
+    } catch {
+      boundAIDs = [];
+    }
+  }
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
-    title: `Remove ${name || "this person"}?`,
-    message: "They'll lose access the next time they try to open it. You can re-add them later with a new link.",
-    okLabel: "Remove",
+    title: isGroup ? `Revoke the "${name}" group?` : `Remove ${name || "this person"}?`,
+    message: isGroup
+      ? "Everyone who joined through this link loses access the next time they try to open it."
+      : "They'll lose access the next time they try to open it. You can re-add them later with a new link.",
+    okLabel: isGroup ? "Revoke group" : "Remove",
     danger: true,
   });
   if (!ok) return;
   try {
     await runRemovePerson(
-      { serviceRef, inviteId, boundAID },
-      { getSession, controlApex, podBaseUrl, signWithIrk, humanError, revokeInvite, removeServiceAllow },
+      { serviceRef, inviteId, boundAID, boundAIDs, isGroup },
+      { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
     );
   } catch (e) {
     await renderPeople(serviceRef);
     throw e;
   }
-  toast("Removed.");
+  toast(isGroup ? "Group revoked." : "Removed.");
   await renderPeople(serviceRef);
 }
 

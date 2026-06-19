@@ -36,14 +36,42 @@ describe("service-access admin view", () => {
     // never reaches the box). The Remove button carries the bound AID.
     expect(r.body).toContain("removeServiceAllow");
     expect(r.body).toContain("data-aid=");
-    // Identity derivations come from the keystore (AID + household + IRK).
+    // Identity derivations come from the keystore (AID + household).
     expect(r.body).toContain("deriveAccountIdFromSeed");
     expect(r.body).toContain("deriveHouseholdKeyFromSeed");
-    // Sign mode-change with the IRK; the invite create/revoke too.
+    // v2: the access-mode change + box prune stay owner-IRK; create/revoke/list
+    // are now AID-signed (box-as-authority verifies against the stable AID).
     expect(r.body).toContain("signWithIrk");
-    // The copyable share-link + Web Share API + clipboard fallback.
+    expect(r.body).toContain("signWithAccountId");
+    // The copyable share-link + an inline QR + Web Share API + clipboard fallback.
     expect(r.body).toContain("navigator.share");
     expect(r.body).toContain("navigator.clipboard");
+    expect(r.body).toContain("/qrEncoder.js");
+    expect(r.body).toContain("renderQrSvg");
+  });
+
+  it("/views/service-access.js offers the THREE v2 invite tiers + the manual accept loop + group entry", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/service-access.js" });
+    expect(r.statusCode).toBe(200);
+    // The create-time tier picker (auto / manual / group).
+    expect(r.body).toContain('name="sa-tier"');
+    expect(r.body).toContain('value="auto"');
+    expect(r.body).toContain('value="manual"');
+    expect(r.body).toContain('value="group"');
+    // Group caps surfaced + threaded onto the create.
+    expect(r.body).toContain("sa-maxn");
+    expect(r.body).toContain("maxRedemptions");
+    expect(r.body).toContain("expiresAt");
+    expect(r.body).toContain("approvalMode");
+    // The manual-approve finalize (author submits the friend's acceptance).
+    expect(r.body).toContain("submitAccept");
+    expect(r.body).toContain("parseAcceptReply");
+    expect(r.body).toContain("runFinalizeAccept");
+    // The group guest-list entry shows one "k/N joined" line with a group-revoke.
+    expect(r.body).toContain("joined");
+    expect(r.body).toContain("Revoke group");
+    expect(r.body).toContain("boundAIDs");
   });
 
   it("/lib/serviceInvite.js exposes the crypto-mirror + wire surface", async () => {
@@ -54,22 +82,34 @@ describe("service-access admin view", () => {
     expect(r.body).toContain('"flagship/service-invite/create/v1"');
     expect(r.body).toContain('"flagship/service-invite/redeem/v1"');
     expect(r.body).toContain('"flagship/service-invite/revoke/v1"');
+    expect(r.body).toContain('"flagship/service-invite/accept/v1"');
     expect(r.body).toContain('"flagship/service-access-mode/v1"');
     expect(r.body).toContain('"flagship/service-allow-remove/v1"');
     expect(r.body).toContain('"flagship/service-visit/v1"');
+    expect(r.body).toContain('"flagship/service-invite-list/v1"');
     // AEAD bundle + canonical builders + wire helpers.
     expect(r.body).toContain("sealInviteBundle");
     expect(r.body).toContain("openInviteBundle");
     expect(r.body).toContain("serviceInviteId");
+    expect(r.body).toContain("randomServiceInviteId");
     expect(r.body).toContain("buildInviteLink");
     expect(r.body).toContain("inviteSecretFromLocation");
+    expect(r.body).toContain("inviteContextFromLocation");
+    // v2 crypto surface: contact AID (re-export), accept loop, group caps.
+    expect(r.body).toContain("deriveContactAccountId");
+    expect(r.body).toContain("canonicalAcceptBytes");
+    expect(r.body).toContain("signAcceptServiceInvite");
+    expect(r.body).toContain("buildAcceptReply");
+    expect(r.body).toContain("parseAcceptReply");
+    expect(r.body).toContain("submitAccept");
     // .com routes for create / list / revoke.
     expect(r.body).toContain("/service-invites");
     expect(r.body).toContain("/service-invites/revoke");
-    // The box redeem endpoint + the owner-IRK set-mode endpoint + the prune.
+    // The box redeem + owner set-mode + prune + the manual accept finalize.
     expect(r.body).toContain("/api/service-invites/redeem");
     expect(r.body).toContain("/api/service-access");
     expect(r.body).toContain("/api/service-access/allow-remove");
+    expect(r.body).toContain("/api/service-access/accept");
     expect(r.body).toContain("removeServiceAllow");
   });
 
@@ -80,9 +120,13 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("deriveAccountIdFromSeed");
     expect(r.body).toContain("deriveHouseholdKeyFromSeed");
     expect(r.body).toContain("signWithAccountId");
+    // v2 per-author contact identity + its signer.
+    expect(r.body).toContain("deriveContactAccountIdFromSeed");
+    expect(r.body).toContain("signWithContactAccountId");
     // The fixed HKDF infos (byte-identical to @flagship/protocol).
     expect(r.body).toContain("flagship/account-id/v1");
     expect(r.body).toContain("flagship/household-key/v1");
+    expect(r.body).toContain("flagship/contact-aid/v1");
   });
 });
 
@@ -95,6 +139,13 @@ describe("service-access friend redeem view + deep-link", () => {
     expect(r.body).toContain("redeemInvite");
     expect(r.body).toContain("deriveAccountIdFromSeed");
     expect(r.body).toContain("signWithAccountId");
+    // v2: redeem under the PER-AUTHOR contact AID (not the global AID).
+    expect(r.body).toContain("deriveContactAccountIdFromSeed");
+    expect(r.body).toContain("signWithContactAccountId");
+    // Manual-approve: the friend emits a contact-AID-signed acceptance reply (+ QR).
+    expect(r.body).toContain("signAcceptServiceInvite");
+    expect(r.body).toContain("buildAcceptReply");
+    expect(r.body).toContain("renderQrSvg");
     // Resume hooks consumed by the unlock/bootstrap detour.
     expect(r.body).toContain("hasPendingInviteRedeem");
     expect(r.body).toContain("resumePendingInviteRedeem");
@@ -108,11 +159,12 @@ describe("service-access friend redeem view + deep-link", () => {
     expect(r.body).toContain("resumePendingInviteRedeem");
   });
 
-  it("app.js wires the /invite#<secret> boot-handler + inits both views", async () => {
+  it("app.js wires the /invite#… boot-handler (with the v2 context) + inits both views", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/app.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("inviteSecretFromLocation");
+    // v2: parse the full context (secret + author AID + inviteId) from the fragment.
+    expect(r.body).toContain("inviteContextFromLocation");
     expect(r.body).toContain("enterInviteRedeem");
     expect(r.body).toContain("initServiceAccessView");
     expect(r.body).toContain("initInviteRedeemView");
@@ -152,6 +204,8 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     controlApex: () => "https://flagshipserver.com",
     podBaseUrl: () => "https://home.alice.flagship.services",
     signWithIrk: async () => new Uint8Array(64),
+    // v2: the .com revoke is AID-signed (the box prune stays IRK-signed).
+    signWithAccountId: async () => new Uint8Array(64),
     humanError: (e: unknown) => String((e as Error)?.message ?? e),
   });
 
@@ -164,15 +218,33 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
       { ...baseDeps(), revokeInvite, removeServiceAllow },
     );
     expect(out).toEqual({ ok: true, prunedBox: true });
-    // Leg 1: .com revoke, by inviteId.
+    // Leg 1: .com revoke, by inviteId, AID-signed (v2).
     expect(revokeInvite).toHaveBeenCalledTimes(1);
     expect(revokeInvite.mock.calls[0]![0]).toMatchObject({ username: "alice", inviteId: "inv-1" });
-    // Leg 2: the box prune, with the exact serviceRef + bound AID.
+    expect(typeof (revokeInvite.mock.calls[0]![0] as { signWithAccountId: unknown }).signWithAccountId).toBe("function");
+    // Leg 2: the box prune, with the exact serviceRef + bound AID, IRK-signed.
     expect(removeServiceAllow).toHaveBeenCalledTimes(1);
-    const pruneArg = removeServiceAllow.mock.calls[0]![0] as { baseUrl: string; serviceRef: string; aid: string };
+    const pruneArg = removeServiceAllow.mock.calls[0]![0] as { baseUrl: string; serviceRef: string; aid: string; signWithIrk: unknown };
     expect(pruneArg.serviceRef).toBe(SERVICE);
     expect(pruneArg.aid).toBe(AID);
     expect(pruneArg.baseUrl).toBe("https://home.alice.flagship.services");
+    expect(typeof pruneArg.signWithIrk).toBe("function");
+  });
+
+  it("a GROUP revoke → one .com revoke AND a box prune for EVERY bound AID", async () => {
+    const mod = await loadServiceAccessModule();
+    const revokeInvite = vi.fn(async () => ({ revoked: true }));
+    const removeServiceAllow = vi.fn(async () => ({ ok: true, removed: true }));
+    const aids = ["aa".repeat(32), "bb".repeat(32), "cc".repeat(32)];
+    const out = await mod.runRemovePerson(
+      { serviceRef: SERVICE, inviteId: "grp-1", boundAID: null, boundAIDs: aids, isGroup: true },
+      { ...baseDeps(), revokeInvite, removeServiceAllow },
+    );
+    expect(out).toEqual({ ok: true, prunedBox: true });
+    expect(revokeInvite).toHaveBeenCalledTimes(1);
+    // One prune per bound member.
+    expect(removeServiceAllow).toHaveBeenCalledTimes(3);
+    expect(removeServiceAllow.mock.calls.map((c) => (c[0] as { aid: string }).aid)).toEqual(aids);
   });
 
   it("an UNREDEEMED invite (no boundAID) → only the .com revoke, no box prune", async () => {
@@ -203,5 +275,69 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     ).rejects.toMatchObject({ code: "box-prune-failed" });
     // The .com revoke still ran (leg 1 succeeds before the box prune fails).
     expect(revokeInvite).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// runFinalizeAccept — the MANUAL-approve author finalize core (no DOM).
+// The author parses the friend's acceptance reply, pairs it with the RETAINED
+// signed create (by inviteId), and submits both to the box's accept endpoint.
+// ──────────────────────────────────────────────────────────────────────
+describe("service-access — runFinalizeAccept (manual-approve finalize)", () => {
+  const SERVICE = "alice-notes";
+  const INVITE = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
+  const CONTACT = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a";
+  const parsedReply = {
+    accept: { inviteId: INVITE, serviceRef: SERVICE, contactAID: CONTACT, acceptedAt: 1700006000000 },
+    acceptSig: "11".repeat(64),
+  };
+  const retainedCreate = { create: { inviteId: INVITE, serviceRef: SERVICE }, createSig: "22".repeat(64) };
+
+  it("parses the reply, pairs the retained create, and submits {accept, acceptSig, create, createSig}", async () => {
+    const mod = await loadServiceAccessModule();
+    const submitAccept = vi.fn(async () => ({ bound: true, serviceRef: SERVICE, boundAID: CONTACT }));
+    const out = await mod.runFinalizeAccept(
+      { raw: ` flagship-accept:whatever ` },
+      {
+        podBaseUrl: () => "https://home.alice.flagship.services",
+        recallCreate: (id: string) => (id === INVITE ? retainedCreate : null),
+        parseAcceptReply: () => parsedReply,
+        submitAccept,
+      },
+    );
+    expect(out).toEqual({ ok: true, serviceRef: SERVICE, boundAID: CONTACT });
+    expect(submitAccept).toHaveBeenCalledTimes(1);
+    const arg = submitAccept.mock.calls[0]![0] as {
+      baseUrl: string; accept: { inviteId: string }; acceptSig: string; create: unknown; createSig: string;
+    };
+    expect(arg.baseUrl).toBe("https://home.alice.flagship.services");
+    expect(arg.accept.inviteId).toBe(INVITE);
+    expect(arg.acceptSig).toBe(parsedReply.acceptSig);
+    expect(arg.create).toEqual(retainedCreate.create);
+    expect(arg.createSig).toBe(retainedCreate.createSig);
+  });
+
+  it("a junk reply → a tagged bad-accept error (no submit)", async () => {
+    const mod = await loadServiceAccessModule();
+    const submitAccept = vi.fn();
+    await expect(
+      mod.runFinalizeAccept(
+        { raw: "garbage" },
+        { podBaseUrl: () => "https://x", recallCreate: () => retainedCreate, parseAcceptReply: () => null, submitAccept },
+      ),
+    ).rejects.toMatchObject({ code: "bad-accept" });
+    expect(submitAccept).not.toHaveBeenCalled();
+  });
+
+  it("no retained create on this device → a tagged no-create error (no submit)", async () => {
+    const mod = await loadServiceAccessModule();
+    const submitAccept = vi.fn();
+    await expect(
+      mod.runFinalizeAccept(
+        { raw: "flagship-accept:whatever" },
+        { podBaseUrl: () => "https://x", recallCreate: () => null, parseAcceptReply: () => parsedReply, submitAccept },
+      ),
+    ).rejects.toMatchObject({ code: "no-create" });
+    expect(submitAccept).not.toHaveBeenCalled();
   });
 });

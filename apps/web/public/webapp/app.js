@@ -60,7 +60,7 @@ import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initServiceAccessView } from "./views/service-access.js";
 import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
-import { inviteSecretFromLocation } from "./lib/serviceInvite.js";
+import { inviteContextFromLocation } from "./lib/serviceInvite.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initSecuredSessionsView, enterSecuredSessions } from "./views/secured-sessions.js";
 import { initAccessAuthorizeView, enterAccessAuthorize } from "./views/access-authorize.js";
@@ -525,10 +525,15 @@ async function boot() {
   // itself drives the unlock / account-setup detour when the friend isn't
   // ready, and dispatchInitialView() resumes it once they have their key. The
   // secret lives only in the URL fragment — it is never sent to .com.
-  const inviteSecret = inviteSecretFromLocation();
-  if (inviteSecret) {
+  const inviteCtx = inviteContextFromLocation();
+  if (inviteCtx) {
     setSubtitle("invite");
-    await enterInviteRedeem(inviteSecret);
+    // The v2 fragment also carries the author AID + inviteId (for the friend's
+    // per-author contact identity + the manual-approve acceptance) — pass them.
+    await enterInviteRedeem(inviteCtx.secret, undefined, {
+      authorAID: inviteCtx.authorAID,
+      inviteId: inviteCtx.inviteId,
+    });
     return;
   }
 
