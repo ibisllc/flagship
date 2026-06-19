@@ -370,6 +370,45 @@ async function renderPeople(serviceRef) {
  * actually denies the friend's next request. Both legs run; an unredeemed invite
  * (no boundAID) is just the .com revoke (nothing to prune).
  */
+/**
+ * The two-leg remove CORE — DOM-free + dependency-injected, so it's testable
+ * under Node (mirrors webappCompanionRequestsView's `runApprove`). Leg 1 records
+ * the revocation on `.com`; leg 2 prunes the bound AID on the BOX (the leg that
+ * actually enforces). Returns `{ ok, prunedBox }`; an unredeemed invite (no
+ * boundAID) skips the box prune. A box-prune failure throws a
+ * `box-prune-failed`-tagged error (the `.com` revoke already ran, so the admin
+ * must know access may persist).
+ */
+export async function runRemovePerson(
+  { serviceRef, inviteId, boundAID },
+  { getSession, controlApex, podBaseUrl, signWithIrk, humanError, revokeInvite, removeServiceAllow },
+) {
+  const session = getSession();
+  await revokeInvite({
+    comBase: controlApex(),
+    username: session.username,
+    inviteId,
+    umk: session.umk,
+    signWithIrk,
+  });
+  if (!boundAID) return { ok: true, prunedBox: false };
+  try {
+    await removeServiceAllow({
+      baseUrl: podBaseUrl(),
+      serviceRef,
+      aid: boundAID,
+      umk: session.umk,
+      signWithIrk,
+    });
+  } catch (e) {
+    throw err(
+      `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
+      "box-prune-failed",
+    );
+  }
+  return { ok: true, prunedBox: true };
+}
+
 async function onRemovePerson(serviceRef, inviteId, name, boundAID) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
@@ -379,33 +418,14 @@ async function onRemovePerson(serviceRef, inviteId, name, boundAID) {
     danger: true,
   });
   if (!ok) return;
-  const session = getSession();
-  // 1) Record the revocation on .com (drops the invite from the authored list).
-  await revokeInvite({
-    comBase: controlApex(),
-    username: session.username,
-    inviteId,
-    umk: session.umk,
-    signWithIrk,
-  });
-  // 2) Prune the bound AID on the BOX — the leg that actually enforces. Surface a
-  //    clear error if it fails so the admin knows the friend may still have access.
-  if (boundAID) {
-    try {
-      await removeServiceAllow({
-        baseUrl: podBaseUrl(),
-        serviceRef,
-        aid: boundAID,
-        umk: session.umk,
-        signWithIrk,
-      });
-    } catch (e) {
-      await renderPeople(serviceRef);
-      throw err(
-        `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
-        "box-prune-failed",
-      );
-    }
+  try {
+    await runRemovePerson(
+      { serviceRef, inviteId, boundAID },
+      { getSession, controlApex, podBaseUrl, signWithIrk, humanError, revokeInvite, removeServiceAllow },
+    );
+  } catch (e) {
+    await renderPeople(serviceRef);
+    throw e;
   }
   toast("Removed.");
   await renderPeople(serviceRef);
