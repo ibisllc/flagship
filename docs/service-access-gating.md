@@ -189,11 +189,40 @@ derivation). Decide: the owner's own multi-box identity stays global vs per-box.
 invites; existing global-AID bindings grandfathered. Surfaces: protocol (`deriveContactAccountId` + redeem/
 visit/knock sign with it), all 3 clients, `.com` (already stores opaque AIDs).
 
-### Phase 3 — Author-confirmed binding (fixes H1: the bearer-link steal race)
-Today first-redeem-binds; a link-thief who redeems first binds it to THEIR AID and locks out the friend.
-Change: redeem creates a PENDING bind; the author APPROVES (sees the redeemer's AID + a spoken SAS) via the
-knock-confirm UI before the bind is active. Closes the steal-the-link window without an out-of-band AID
-exchange. Surfaces: `.com` (pending state), box, client UX (reuses the knock confirm machinery).
+### Phase 3 — Invite tiers + approval (fixes H1; owner-refined 2026-06-19)
+Three tiers, chosen at create/add time, all on the box-as-authority + pairwise-AID foundation. Across ALL
+tiers the consumer's Flagship username/domain is **never disclosed to the author** — the author sees only the
+private label they themselves assigned (personal) or a group label (group). (The owner explicitly rejected
+verifying by the consumer's username/domain on exactly this privacy ground.)
+
+1. **Personal, auto-approve** — first-bind (the original fast flow): send link → first redeemer binds. Accept
+   the casual-leak window; for low-sensitivity grants.
+2. **Personal, manual-approve (sensitive)** — closes the link-theft race WITHOUT disclosing the consumer's
+   identity, via an **out-of-band acceptance loop**: author sends the link → the friend's app accepts + emits
+   an **AID-signed acceptance** token (binds the inviteId + the friend's pairwise contact AID) → the friend
+   replies it back through the SAME private channel → the author's app opens it + submits it to the **author's
+   box**, which verifies the owner's create AND the friend's signature, then binds. The author FINALIZES the
+   loop. A thief who only grabbed the link can't produce an acceptance the author will open from their
+   friend-channel. NOTE the honest bound: this is channel-trust + author-finalization (defeats a casual
+   link-leak), NOT cryptographic against an attacker already inside the author↔friend private channel — which
+   matches the threat model. The acceptance reply is itself a link/QR (symmetric to the invite).
+3. **Group / multi-use** — one link, `maxN` redemptions (0 = unlimited), **auto-approve only** (per-person
+   confirm is impractical when you don't know who'll redeem). Lower-trust BY CONSTRUCTION (a leaked link admits
+   up to N) → must be clearly labeled in the UI. Guest list shows ONE entry ("Chess club — 4/10"); revoke the
+   whole group in one op (the box prunes all AIDs bound to that inviteId); per-member removal is a cheap bonus
+   (the group is a labeled set of bound AIDs). The live count is a leak signal; an **optional expiry** is
+   recommended (a forever-link is a standing liability).
+
+Surfaces: protocol (the AID-signed acceptance envelope; `maxN`/expiry on the create), `.com` (pending state
+for manual; redemption-count enforcement for group), box (verify + bind on the author's submission; group
+prune), client UX (the create-time tier picker, the accept→reply→open loop, the group guest-list entry).
+
+### Convenience — QR in the share (owner-requested 2026-06-19)
+When sending an invite (or an acceptance reply), populate the share (share-sheet / iMessage / email) with an
+inline **base64 QR image** of the link, IN ADDITION to the link text. Caveat: email clients (Gmail/Outlook)
+commonly STRIP data-URI `<img>` for security → the QR may not render in email; the **link text is the reliable
+fallback**, rich channels (share-sheet/iMessage) render the image, and for email an actual attachment beats a
+data-URI. Reuse the existing `qrSvg.ts` / `qrEncoder.js`.
 
 ### Contained hardenings (fold in alongside the phases)
 - **Owner-IRK-auth the invite `list`** (C2 — `handleListServiceInvites` is currently unauthenticated: anyone
