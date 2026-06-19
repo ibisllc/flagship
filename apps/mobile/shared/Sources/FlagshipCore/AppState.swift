@@ -143,6 +143,19 @@ public final class AppState {
         serversAwaitingApproval.contains(fqdn.lowercased())
     }
 
+    /// True when [pod] is actively waiting for a boot-unlock approval. The
+    /// SINGLE source the UI must use — the status badge AND the per-server
+    /// Approve card — so the two never disagree. It ORs two signals of
+    /// different freshness: the per-pod `awaitingUnlock` flag (refreshed only
+    /// by a full `/pods` reconcile) and the account-level `serversAwaitingApproval`
+    /// set (refreshed every 5s by `BootApprovalWatcher`). A box that STARTS
+    /// waiting after the last full reconcile has a stale-false per-pod flag but
+    /// a fresh set membership — reading the per-pod flag alone hid the Approve
+    /// card on server-detail while Home still showed "waiting for approval".
+    public func isAwaitingUnlock(_ pod: PodInfo) -> Bool {
+        pod.awaitingUnlock || hasLiveUnlockRequest(forFqdn: pod.fqdn)
+    }
+
     /// Liveness for [pod] using the account-level waiting set. Convenience over
     /// `PodInfo.livenessState(hasLiveUnlockRequest:)` so callsites don't repeat
     /// the set lookup.
@@ -150,8 +163,7 @@ public final class AppState {
         // The cheap directory `awaitingUnlock` flag OR the biometric-watcher set
         // — either one means the box is actively waiting, so it must not read as
         // "never came online" (and the decommission/delete must stay hidden).
-        let waiting = pod.awaitingUnlock || hasLiveUnlockRequest(forFqdn: pod.fqdn)
-        return pod.livenessState(hasLiveUnlockRequest: waiting)
+        return pod.livenessState(hasLiveUnlockRequest: isAwaitingUnlock(pod))
     }
 
     /// W3 — durable list of clouds this phone is a member of. The

@@ -483,7 +483,7 @@ struct PendingPodContainer: View {
     @State private var cancelling: Bool = false
 
     var body: some View {
-        PendingServerScreen(pod: pod, username: app.currentUser) {
+        PendingServerScreen(pod: pod, username: app.currentUser, awaitingUnlock: app.isAwaitingUnlock(pod)) {
             Task { await cancelOrder() }
         }
     }
@@ -641,7 +641,11 @@ struct ServerDetailContainer: View {
                     deadServer: pod.map { app.liveness(for: $0) == .dead } ?? false,
                     serverName: pod?.name,
                     deadServerFqdn: pod?.fqdn,
-                    awaitingUnlock: pod?.awaitingUnlock ?? false,
+                    // Use the LIVE awaiting-unlock signal (per-pod flag OR the
+                    // 5s watcher set), not the per-pod flag alone — otherwise a
+                    // box that starts waiting AFTER the last /pods reconcile shows
+                    // "waiting for approval" on Home but no Approve card here.
+                    awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
                     onRefresh: {
                         async let a: Void = detailVm.load()
                         async let b: Void = metricsVm.load()

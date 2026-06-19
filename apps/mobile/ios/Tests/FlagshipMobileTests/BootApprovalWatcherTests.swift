@@ -39,4 +39,25 @@ final class BootApprovalWatcherTests: XCTestCase {
         let set = await w.pollOnce()
         XCTAssertEqual(set, [domain])
     }
+
+    /// Regression: a box that STARTS waiting after the last /pods reconcile has
+    /// a stale-false per-pod `awaitingUnlock` flag, but the 5s watcher set is
+    /// fresh. `isAwaitingUnlock` MUST OR the two — otherwise Home showed
+    /// "waiting for approval" while server-detail hid the Approve card (the live
+    /// office.harry2 bug). Both the badge and the card now read this one source.
+    func test_isAwaitingUnlock_orsLiveWatcherSet_whenPerPodFlagStale() {
+        let app = AppState(currentUser: "demo1234")
+        let pod = PodInfo(
+            podId: PodInfo.podId(forFqdn: domain),
+            name: "Home",
+            description: nil,
+            fqdn: domain,
+            status: .online,            // registered; awaitingUnlock defaults false
+            pendingAuthCodeSerial: nil
+        )
+        XCTAssertFalse(app.isAwaitingUnlock(pod))   // not in the live set yet
+        app.serversAwaitingApproval = [domain]      // the 5s watcher catches up
+        XCTAssertTrue(app.isAwaitingUnlock(pod))    // surfaced (was the regression)
+        XCTAssertFalse(app.liveness(for: pod) == .dead) // and never reads as dead
+    }
 }
