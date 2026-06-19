@@ -29,11 +29,12 @@ public protocol ServiceAccessClient: Sendable {
     /// a no-op prune still returns 200). 403 on a bad/stale/mismatch sig.
     func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult
     func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult
-    /// MANUAL-approve finalize (v2 tier 2): the AUTHOR POSTs the consumer's
-    /// `AcceptServiceInvite` (`accept` + `acceptSig`) + the owner's signed `create`
-    /// (`create` + `createSig`, from the author's own `.com` listing) to the box.
-    /// The box verifies BOTH, then binds the contact AID. All dicts are pre-built.
-    func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult
+    /// MANUAL-approve finalize (v2 tier 2): the AUTHOR POSTs ONLY the consumer's
+    /// `AcceptServiceInvite` (`accept` + `acceptSig`) to the box. The box FETCHES the
+    /// owner's signed create from `.com` by the acceptance's inviteId (STK-signed),
+    /// verifies BOTH the owner authority + the friend's sig, then binds — so the
+    /// author can finalize from ANY of their devices (no local create cache).
+    func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String) async throws -> AcceptResult
     // .com
     func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws
     /// List the author's invites (v2 §C2: OWNER-SIGNED). `query` carries the
@@ -310,18 +311,17 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         )
     }
 
-    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult {
+    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String) async throws -> AcceptResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/accept") else {
             throw ScreensClientError.http(status: 0, message: "bad URL")
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
+        // ONLY {accept, acceptSig} — the box fetches the signed create from .com.
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "accept": accept,
             "acceptSig": acceptSigHex.lowercased(),
-            "create": create,
-            "createSig": createSigHex.lowercased(),
         ], options: [])
         let (data, status) = try await send(req, on: boxSession)
         if status == 403 { throw ServiceAccessError.acceptRejected }
@@ -471,7 +471,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
     public struct RevokeCall: Sendable { public let username: String; public let inviteId: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
-    public struct AcceptCall: Sendable { public let serverDomain: String; public let accept: [String: String]; public let acceptSigHex: String; public let create: [String: String]; public let createSigHex: String }
+    public struct AcceptCall: Sendable { public let serverDomain: String; public let accept: [String: String]; public let acceptSigHex: String }
     public struct ListCall: Sendable { public let username: String; public let query: [String: String]; public let signatureHex: String }
     public struct AuthorizeKnockCall: Sendable { public let serverDomain: String; public let authorization: [String: String]; public let signatureHex: String }
     public struct SessionStatusCall: Sendable { public let serverDomain: String; public let secretId: String }
@@ -544,8 +544,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         return redeemResult
     }
 
-    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String, create: [String: Any], createSigHex: String) async throws -> AcceptResult {
-        lock.withLock { _accept.append(AcceptCall(serverDomain: serverDomain, accept: flatten(accept), acceptSigHex: acceptSigHex, create: flatten(create), createSigHex: createSigHex)) }
+    public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String) async throws -> AcceptResult {
+        lock.withLock { _accept.append(AcceptCall(serverDomain: serverDomain, accept: flatten(accept), acceptSigHex: acceptSigHex)) }
         try maybeThrow()
         return acceptResult
     }

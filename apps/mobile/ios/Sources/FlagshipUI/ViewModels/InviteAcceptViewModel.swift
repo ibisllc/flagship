@@ -9,18 +9,15 @@ import FlagshipCore
 ///
 /// The CONSUMER sent back a reply link (`flagship://invite-accept?…`) carrying
 /// their contact-AID-signed `AcceptServiceInvite`. THIS phone is the AUTHOR: it
-///   1. looks up the SIGNED create it cached at create time (`InviteCreateStore`;
-///      `.com` never returns the create signature), keyed by the reply's inviteId,
-///   2. confirms the reply's serviceRef matches the cached create,
-///   3. POSTs `{accept, acceptSig, create, createSig}` to the AUTHOR's box, which
-///      verifies BOTH the consumer's signature AND the owner's create authority,
-///      then binds the contact AID. The author FINALIZES, so a link-thief who
-///      never reached the author's friend-channel can't produce an acceptance the
-///      author will submit.
+/// POSTs ONLY `{accept, acceptSig}` to the AUTHOR's box, which FETCHES the owner's
+/// signed create from `.com` by the acceptance's inviteId (STK-signed), verifies
+/// BOTH the consumer's signature AND the owner's create authority, then binds the
+/// contact AID. The author FINALIZES, so a link-thief who never reached the
+/// author's friend-channel can't produce an acceptance the author will submit —
+/// and can finalize this from ANY of their devices (no local create cache).
 ///
-/// No biometric: the AID/IRK aren't needed here (the box re-verifies the cached
-/// create signature + the consumer's signature). The author is just a courier of
-/// two already-signed artifacts.
+/// No biometric: the AID/IRK aren't needed here. The author is just a courier of
+/// the consumer's already-signed acceptance.
 @Observable
 @MainActor
 public final class InviteAcceptViewModel {
@@ -41,7 +38,6 @@ public final class InviteAcceptViewModel {
     private let contactAidHex: String
     private let acceptSigHex: String
     private let acceptedAt: Int64
-    private let createStore: any InviteCreateStore
 
     public init(
         client: any ServiceAccessClient,
@@ -50,8 +46,7 @@ public final class InviteAcceptViewModel {
         serviceRef: String,
         contactAidHex: String,
         acceptSigHex: String,
-        acceptedAt: Int64,
-        createStore: (any InviteCreateStore)? = nil
+        acceptedAt: Int64
     ) {
         self.client = client
         self.serverDomain = serverDomain
@@ -60,23 +55,10 @@ public final class InviteAcceptViewModel {
         self.contactAidHex = contactAidHex.lowercased()
         self.acceptSigHex = acceptSigHex.lowercased()
         self.acceptedAt = acceptedAt
-        self.createStore = createStore ?? UserDefaultsInviteCreateStore()
     }
-
-    /// True iff this device created the invite (so it can finalize). The author
-    /// must finalize on the device that holds the cached signed create.
-    public var canFinalize: Bool { createStore.get(inviteId: inviteId) != nil }
 
     public func finalize() async {
         if case .submitting = phase { return }
-        guard let stored = createStore.get(inviteId: inviteId) else {
-            phase = .failed("This approval is for an invite created on another device. Open it on the device you sent the invite from.")
-            return
-        }
-        guard stored.serviceRef == serviceRef else {
-            phase = .failed("This approval doesn't match the invite. Ask them to resend it.")
-            return
-        }
         phase = .submitting
         let accept: [String: Any] = [
             "inviteId": inviteId,
@@ -85,12 +67,11 @@ public final class InviteAcceptViewModel {
             "acceptedAt": acceptedAt,
         ]
         do {
+            // ONLY {accept, acceptSig} — the box fetches the owner's create from .com.
             let result = try await client.acceptInvite(
                 serverDomain: serverDomain,
                 accept: accept,
-                acceptSigHex: acceptSigHex,
-                create: stored.createDict,
-                createSigHex: stored.createSigHex)
+                acceptSigHex: acceptSigHex)
             if result.bound {
                 phase = .done(serviceRef: result.serviceRef.isEmpty ? serviceRef : result.serviceRef)
             } else {

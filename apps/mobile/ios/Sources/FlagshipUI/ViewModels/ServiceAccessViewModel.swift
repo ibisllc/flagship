@@ -104,9 +104,6 @@ public final class ServiceAccessViewModel {
     private let authorAidKeys: @MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data)
     /// Owner IRK signer — the box mode toggle + allow-remove (the box pins the IRK).
     private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
-    /// Local cache of the SIGNED create envelope (so the author can FINALIZE a
-    /// manual-approve invite later — `.com` never returns the create signature).
-    private let createStore: any InviteCreateStore
     private let now: () -> Int64
 
     public init(
@@ -115,7 +112,6 @@ public final class ServiceAccessViewModel {
         serviceRef: String,
         username: String,
         controlBase: URL = Endpoints.controlBaseUrl,
-        createStore: (any InviteCreateStore)? = nil,
         authorAidKeys: (@MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data))? = nil,
         irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
@@ -125,7 +121,6 @@ public final class ServiceAccessViewModel {
         self.serviceRef = serviceRef
         self.username = username
         self.controlBase = controlBase
-        self.createStore = createStore ?? UserDefaultsInviteCreateStore()
         self.now = now
         self.authorAidKeys = authorAidKeys ?? { reason in
             try await Keystore.deriveInviteAuthorAidKeys(reason: reason)
@@ -217,12 +212,9 @@ public final class ServiceAccessViewModel {
             if tier.isManual { request["approvalMode"] = "manual" }
             try await client.createInvite(controlBase: controlBase, username: username, request: request, signatureHex: HexUtil.encode(sig))
 
-            // Persist the SIGNED create so a manual-approve invite can be
-            // FINALIZED later (`.com`'s listing omits the create signature).
-            createStore.put(StoredInviteCreate(
-                inviteId: inviteId, authorAidHex: HexUtil.encode(aidPub), serviceRef: serviceRef,
-                secretHash: secretHash, encryptedBundle: encryptedBundle, issuedAt: ts,
-                maxRedemptions: maxN, expiresAt: expiresAt, createSigHex: HexUtil.encode(sig)))
+            // No local create cache: the author's box fetches the signed create
+            // from `.com` at manual-finalize, so an invite can be finalized from
+            // ANY of the author's devices.
 
             // The link carries the authorAID always; the inviteId only for manual
             // (the friend needs it to sign the out-of-band acceptance).
@@ -290,9 +282,6 @@ public final class ServiceAccessViewModel {
             phase = .failed("Removed from the directory, but couldn't reach the box to revoke access. Try again so they're fully removed.")
         } else if revokeFailed {
             phase = .failed("Couldn't remove them. Try again in a moment.")
-        } else {
-            // Fully removed — drop the cached signed create (no longer finalizable).
-            createStore.remove(inviteId: inviteId)
         }
     }
 

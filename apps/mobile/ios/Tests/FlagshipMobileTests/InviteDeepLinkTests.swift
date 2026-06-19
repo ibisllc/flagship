@@ -140,4 +140,26 @@ final class InviteDeepLinkTests: XCTestCase {
         let url = URL(string: "flagship://invite-accept?server=home.alice.flagship.services&iid=\(inviteId)&ref=alice-notes&aid=\(authorAid)&sig=tooShort&at=1")!
         XCTAssertNil(DeepLink.parse(url))
     }
+
+    /// FROZEN cross-client acceptance reply (interop lock — the IDENTICAL string
+    /// is pinned on the webapp serviceInvite test + Android InviteLink). The
+    /// canonical reply is `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`,
+    /// carrying ONLY {accept, acceptSig} (the box fetches the create from .com).
+    func testFrozenAcceptReplyInterop() {
+        let server = "home.alice.flagship.services"
+        let iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        let ref = "alice-notes"
+        let aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
+        let sig = String(repeating: "1f", count: 64) // 128-hex
+        let at: Int64 = 1_700_006_000_000
+        let frozen = "flagship://invite-accept?server=\(server)&iid=\(iid)&ref=\(ref)&aid=\(aid)&sig=\(sig)&at=\(at)"
+        // build === the frozen string.
+        XCTAssertEqual(
+            ServiceInviteLinks.acceptReplyLink(serverDomain: server, inviteId: iid, serviceRef: ref, contactAidHex: aid, acceptSigHex: sig, acceptedAt: at),
+            frozen)
+        // parse(frozen) === the structured acceptance.
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: frozen)!),
+            .inviteAccept(serverDomain: server, inviteId: iid, serviceRef: ref, contactAidHex: aid, acceptSigHex: sig, acceptedAt: at))
+    }
 }

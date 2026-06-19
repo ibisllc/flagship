@@ -4,9 +4,10 @@ import FlagshipCore
 
 /// Author-side MANUAL-approve finalize screen (docs/service-access-gating.md,
 /// "## v2 hardening", tier 2). Reached from a consumer's reply deeplink
-/// `flagship://invite-accept?…`. The author taps "Approve" → the box verifies the
-/// consumer's contact-AID signature + the owner's cached signed create, then
-/// binds the contact AID.
+/// `flagship://invite-accept?…`. The author taps "Approve" → the box fetches the
+/// owner's signed create from `.com` by inviteId + verifies the consumer's
+/// contact-AID signature, then binds the contact AID. Works from ANY of the
+/// author's devices (no local create cache).
 public struct InviteAcceptScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.serviceAccessClient) private var client
@@ -81,16 +82,10 @@ public struct InviteAcceptScreen: View {
                 Text("You sent an invite to \(serviceRef.isEmpty ? "a service" : serviceRef) and they accepted. Approving binds their access. (You won't see their username — only the label you gave them.)")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
-                if vm?.canFinalize == false {
-                    Text("This approval is for an invite created on another device. Open it on the device you sent the invite from.")
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.danger)
-                        .accessibilityIdentifier("invite-accept-wrong-device")
-                }
                 FSPrimaryButton(isSubmitting ? "Approving…" : "Approve", block: true, large: true) {
                     Task { await approve() }
                 }
-                .disabled(isSubmitting || vm?.canFinalize == false)
+                .disabled(isSubmitting)
                 .accessibilityIdentifier("invite-accept-approve")
                 if case .some(.failed(let msg)) = vm?.phase {
                     Text(msg)

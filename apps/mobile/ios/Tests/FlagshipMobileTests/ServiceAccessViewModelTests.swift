@@ -22,13 +22,11 @@ final class ServiceAccessViewModelTests: XCTestCase {
 
     private func makeVM(
         _ mock: MockServiceAccessClient,
-        now: @escaping () -> Int64 = { 1700 },
-        store: (any InviteCreateStore)? = nil
+        now: @escaping () -> Int64 = { 1700 }
     ) -> ServiceAccessViewModel {
         let k = irk(); let a = aid(); let hh = household
         return ServiceAccessViewModel(
             client: mock, serverDomain: server, serviceRef: serviceRef, username: username, controlBase: control,
-            createStore: store ?? InMemoryInviteCreateStore(),
             authorAidKeys: { _ in (a, hh) },
             irkSigner: { _ in k },
             now: now
@@ -93,19 +91,16 @@ final class ServiceAccessViewModelTests: XCTestCase {
 
     func testAddManualInviteSetsApprovalModeAndInviteIdInLink() async {
         let mock = MockServiceAccessClient()
-        let store = InMemoryInviteCreateStore()
-        let vm = makeVM(mock, now: { 1700 }, store: store)
+        let vm = makeVM(mock, now: { 1700 })
         let link = await vm.addPerson(name: "Sam", photo: nil, tier: .personalManual)
         XCTAssertNotNil(link)
         let call = mock.createCalls[0]
         XCTAssertEqual(call.request["approvalMode"], "manual")
         // The manual link carries the inviteId as the canonical `&i=` (the friend
-        // needs it to sign the acceptance).
+        // needs it to sign the acceptance). No local create cache — the author's
+        // box fetches the signed create from .com at finalize (any-device).
         let inviteId = call.request["inviteId"]!
         XCTAssertTrue(link!.contains("&i=\(inviteId)"))
-        // The signed create is cached locally (so the author can finalize later).
-        XCTAssertNotNil(store.get(inviteId: inviteId), "manual create must be persisted for finalize")
-        XCTAssertEqual(store.get(inviteId: inviteId)?.createSigHex, call.signatureHex.lowercased())
     }
 
     func testAddGroupInviteSetsCapsAndExpiry() async {
