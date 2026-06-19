@@ -234,12 +234,15 @@ final class ProvisionTimelineTests: XCTestCase {
         vm.stop()
     }
 
-    func test_directoryMode_flipsLiveWhenFqdnRegisters_andStops() async throws {
+    func test_directoryMode_flipsLiveOnlyWhenServing_andStops() async throws {
+        // Registered AND serving (a cert landed ⇒ cameOnline) is the terminal
+        // `live` rung.
         let directory = PodsDirectoryResponse(
             username: "harry",
             pods: [PodDirectoryEntry(
                 serverDomain: "abc.harry.flagship.services",
-                identityPubKey: String(repeating: "00", count: 32)
+                identityPubKey: String(repeating: "00", count: 32),
+                hasCert: true
             )],
             pending: []
         )
@@ -252,6 +255,34 @@ final class ProvisionTimelineTests: XCTestCase {
         vm.start()
         try await waitUntil(timeout: 2.0) { vm.isDone }
         XCTAssertEqual(vm.status?.phase, .live)
+        vm.stop()
+    }
+
+    func test_directoryMode_registeredButNotServing_doesNotFlipLive() async throws {
+        // The office.harry2 bug: registered (in /pods) but NOT serving — no
+        // cert, no heartbeat (cameOnline=false), awaiting a boot-unlock approval.
+        // The ladder must NOT read "complete"; it stays non-terminal until the
+        // box actually serves.
+        let directory = PodsDirectoryResponse(
+            username: "harry",
+            pods: [PodDirectoryEntry(
+                serverDomain: "abc.harry.flagship.services",
+                identityPubKey: String(repeating: "00", count: 32),
+                awaitingUnlock: true   // registered + locked, no cert/heartbeat
+            )],
+            pending: []
+        )
+        let vm = ProvisionTimelineViewModel(
+            username: "harry",
+            fqdn: "abc.harry.flagship.services",
+            fetchDirectory: { _ in directory },
+            pollIntervalNanos: 1_000_000
+        )
+        vm.start()
+        // Several poll cycles must pass without ever reaching the terminal rung.
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertFalse(vm.isDone)
+        XCTAssertNotEqual(vm.status?.phase, .live)
         vm.stop()
     }
 

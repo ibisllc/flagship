@@ -92,12 +92,14 @@ class ProvisionTimelineViewModelTest {
         assertFalse(vm.isDone)
     }
 
-    @Test fun directoryMode_flipsLiveWhenFqdnRegisters_andStops() = runTest {
+    @Test fun directoryMode_flipsLiveOnlyWhenServing_andStops() = runTest {
+        // Registered AND serving (lastReported set ⇒ cameOnline) is terminal.
         val dir = directory(
             pods = listOf(
                 PodDirectoryEntry(
                     serverDomain = "abc.harry.flagship.services",
                     identityPubKey = "00".repeat(32),
+                    lastReported = 1L,
                 ),
             ),
         )
@@ -105,6 +107,25 @@ class ProvisionTimelineViewModelTest {
         assertTrue(vm.pollOnce())
         assertEquals("live", vm.status.value?.phase)
         assertTrue(vm.isDone)
+    }
+
+    @Test fun directoryMode_registeredButNotServing_doesNotFlipLive() = runTest {
+        // The office.harry2 bug: registered (in /pods) but NOT serving — no cert,
+        // no heartbeat (cameOnline=false), awaiting a boot-unlock approval. The
+        // ladder must NOT read "complete".
+        val dir = directory(
+            pods = listOf(
+                PodDirectoryEntry(
+                    serverDomain = "abc.harry.flagship.services",
+                    identityPubKey = "00".repeat(32),
+                    awaitingUnlock = true,
+                ),
+            ),
+        )
+        val vm = ProvisionTimelineViewModel("harry", "abc.harry.flagship.services") { dir }
+        assertFalse(vm.pollOnce())
+        assertFalse(vm.status.value?.phase == "live")
+        assertFalse(vm.isDone)
     }
 
     @Test fun directoryMode_revokedRegistrationDoesNotFlipLive() = runTest {
