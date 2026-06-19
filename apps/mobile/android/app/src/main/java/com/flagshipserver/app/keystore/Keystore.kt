@@ -7,6 +7,7 @@ import android.security.keystore.KeyProperties
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.ServerKeys
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.X25519
 import java.security.SecureRandom
@@ -314,6 +315,30 @@ object Keystore {
         val hex = requirePrefs().getString(cacheKey, null)
             ?: error("no IRK seed cached for v$version — call deriveIRK first")
         return HexUtil.decode(hex) ?: error("corrupt IRK seed (v$version)")
+    }
+
+    /** Stable Account Identity Key (AID) signer for service-access gating
+     *  (docs/service-access-gating.md) — the NON-rotating account identity
+     *  `HKDF(umk, "flagship/account-id/v1")` (via ServerKeys), used by the
+     *  friend to sign the redeem/visit. Biometric-gated. Distinct from the
+     *  versioned IRK. */
+    suspend fun deriveAccountId(reason: String = "Authorize Flagship"): Ed25519Sign {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return ServerKeys.deriveAccountId(loadOrCreateUmkSeed())
+    }
+
+    /** The stable AID Ed25519 PUBLIC key (hex). Biometric-gated. */
+    suspend fun accountIdPubHex(reason: String = "Authorize Flagship"): String {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return HexUtil.encode(ServerKeys.deriveAccountIdPub(loadOrCreateUmkSeed()))
+    }
+
+    /** The household AEAD key (32 bytes) that seals the {name, photo?} invite
+     *  bundle — `HKDF(umk, "flagship/household-key/v1")` (via ServerKeys).
+     *  Biometric-gated. */
+    suspend fun deriveHouseholdKey(reason: String = "Authorize Flagship"): ByteArray {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return ServerKeys.deriveHouseholdKey(loadOrCreateUmkSeed())
     }
 
     data class X25519KeyPair(val privateKey: ByteArray, val publicKey: ByteArray)
