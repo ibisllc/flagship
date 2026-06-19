@@ -20,6 +20,15 @@ public struct RootShell: View {
     @Environment(PrivacySettings.self) private var privacy
 
     @State private var selected: RootDestination
+    /// #92 — a friend redeem invite is presented as a full-screen cover
+    /// (account-agnostic, independent of the tab nav stacks).
+    @State private var pendingRedeem: RedeemTarget?
+
+    private struct RedeemTarget: Identifiable, Equatable {
+        let serverDomain: String
+        let secretHex: String
+        var id: String { "\(serverDomain)#\(secretHex)" }
+    }
 
     public init(initialDestination: RootDestination = .home) {
         _selected = State(initialValue: initialDestination)
@@ -69,13 +78,24 @@ public struct RootShell: View {
             }
         }
         .onChange(of: linker.pending) { _, link in
-            if let link {
-                selected = tab(for: link)
-            }
+            if let link { route(link) }
         }
         .task(id: linker.pending) {
-            if let link = linker.pending {
-                selected = tab(for: link)
+            if let link = linker.pending { route(link) }
+        }
+        .fullScreenCover(item: $pendingRedeem) { target in
+            NavigationStack {
+                InviteRedeemScreen(
+                    serverDomain: target.serverDomain,
+                    secretHex: target.secretHex,
+                    onOpenService: { _ in pendingRedeem = nil },
+                    onDone: { pendingRedeem = nil }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") { pendingRedeem = nil }
+                    }
+                }
             }
         }
         // B12 — re-lock when the app moves to background. The .inactive
@@ -89,11 +109,31 @@ public struct RootShell: View {
                 app.relockForBackground()
             }
         }
+        // #92 — a redeem invite that arrived while locked is held in the
+        // linker; replay it once the friend unlocks (they sign with their AID).
+        .onChange(of: app.isUnlocked) { _, unlocked in
+            if unlocked, let link = linker.pending { route(link) }
+        }
         // Appearance override (Settings → Appearance). `auto` ⇒ nil ⇒ follow the
         // system; light/dark force the scheme app-wide. Every view that reads
         // `@Environment(\.colorScheme)` + `FSColors.scheme(scheme)` then resolves
         // to the chosen palette.
         .preferredColorScheme(privacy.themeMode.preferredColorScheme)
+    }
+
+    /// Route a freshly-arrived deep link. The friend-redeem invite is consumed
+    /// here into a full-screen cover (account-agnostic); every other link
+    /// selects the owning tab and is consumed by that tab's own router.
+    private func route(_ link: DeepLink) {
+        if case let .inviteRedeem(serverDomain, secretHex) = link {
+            // Hold the link behind the lock screen until the friend is
+            // unlocked (they sign the redeem with their own AID).
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex)
+            return
+        }
+        selected = tab(for: link)
     }
 
     /// Tab that owns a given deep-link target. Inner navigation
@@ -105,6 +145,7 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
+        case .inviteRedeem:                           return selected
         }
     }
 }

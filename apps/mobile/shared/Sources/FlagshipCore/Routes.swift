@@ -52,6 +52,10 @@ public enum AppsRoute: Hashable, Sendable {
     /// share secret + TTL once submitted; the client builds the share
     /// URL + opens the share sheet locally.
     case inviteIssue(serviceId: String)
+    /// #92 — per-service access gating (docs/service-access-gating.md): the
+    /// open ⇄ restricted toggle + the bearer-invite allow-list manager.
+    /// Reached from the service-detail "Who can open this" row.
+    case serviceAccess(serviceId: String)
 }
 
 /// What the AI-key step does once a credential is chosen. The credential

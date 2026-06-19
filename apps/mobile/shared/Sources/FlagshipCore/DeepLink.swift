@@ -36,6 +36,19 @@ public enum DeepLink: Equatable, Sendable {
     /// (also the `flagship://join?…` custom-scheme form).
     case joinAccount(sid: String, pk: String)
 
+    /// #92 — friend redeem of a service-access capability invite
+    /// (docs/service-access-gating.md). Carries the BOX host the `/invite`
+    /// link was served from + the 32-byte capability secret (64-hex). The
+    /// secret lives ONLY in the link fragment and is NEVER sent to `.com`;
+    /// it's POSTed to that box's own redeem endpoint. Reachable two ways:
+    ///   - the UNIVERSAL LINK the owner shares,
+    ///     `https://<server>.<user>.flagship.services/invite#<secret>` (or
+    ///     `#k=<secret>`), opened by the native browser/AASA, and
+    ///   - the `flagship://invite?server=<host>&k=<secret>` custom-scheme
+    ///     form the box's `/invite` page offers as "open in the app" (the
+    ///     fragment can't ride a custom scheme reliably, so it's a query).
+    case inviteRedeem(serverDomain: String, secretHex: String)
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
@@ -59,6 +72,20 @@ public enum DeepLink: Equatable, Sendable {
             }
             return nil
         }
+        // Universal link: a service-access invite served from a BOX —
+        // `https://<server>.<user>.flagship.services/invite#<secret>`. The
+        // host must live under the data-plane apex (a box), the path must be
+        // `/invite`, and the secret rides the FRAGMENT (never sent to .com).
+        if url.scheme == "https",
+           let host = url.host,
+           host.hasSuffix(".\(Endpoints.dataApex)"),
+           url.path == "/invite" || url.path == "/invite/" {
+            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            if let secret = Self.secretFromFragment(comps?.fragment) {
+                return .inviteRedeem(serverDomain: host, secretHex: secret)
+            }
+            return nil
+        }
         guard url.scheme == "flagship" else { return nil }
         let host = url.host ?? ""
         let params = (URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -78,6 +105,18 @@ public enum DeepLink: Equatable, Sendable {
             if let id = params["serviceId"] { return .appDetail(serviceId: id) }
         case "create-server":
             return .createServer
+        case "invite":
+            // flagship://invite?server=<host>&k=<64hex> — the "open in app"
+            // hand-off from the box's /invite page (a custom scheme can't carry
+            // the fragment, so the secret comes as the `k` query). Also accept
+            // the secret as the trailing path segment.
+            let server = params["server"] ?? params["host"] ?? ""
+            let pathSecret = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let candidate = params["k"] ?? params["secret"] ?? pathSecret
+            if let secret = Self.secretFromFragment(candidate), !server.isEmpty {
+                return .inviteRedeem(serverDomain: server, secretHex: secret)
+            }
+            return nil
         case "join":
             // Phase 3b — custom-scheme form of the pairing link.
             if let sid = params["sid"], !sid.isEmpty,
@@ -101,6 +140,25 @@ public enum DeepLink: Equatable, Sendable {
             return nil
         default:
             break
+        }
+        return nil
+    }
+
+    /// Pull a 64-hex capability secret from a fragment / candidate string.
+    /// Accepts a bare `<64hex>` or the `k=<64hex>` form (mirrors the webapp's
+    /// `inviteSecretFromLocation`). Returns the lowercased hex or nil.
+    static func secretFromFragment(_ raw: String?) -> String? {
+        guard var s = raw, !s.isEmpty else { return nil }
+        if s.hasPrefix("#") { s.removeFirst() }
+        // `k=<hex>` (optionally amid other params) or a bare hex.
+        if let r = s.range(of: "(?:^|[?&])k=([0-9a-fA-F]{64})", options: .regularExpression) {
+            let m = String(s[r])
+            if let eq = m.range(of: "k=") {
+                return String(m[eq.upperBound...]).lowercased()
+            }
+        }
+        if s.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil {
+            return s.lowercased()
         }
         return nil
     }

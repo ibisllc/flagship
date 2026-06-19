@@ -163,6 +163,8 @@ public struct ServicesTab: View {
             InviteManageContainer(serviceId: serviceId, path: $path)
         case .inviteIssue(let serviceId):
             InviteIssueContainer(serviceId: serviceId, path: $path)
+        case .serviceAccess(let serviceId):
+            ServiceAccessContainer(serviceId: serviceId)
         }
     }
 
@@ -385,7 +387,8 @@ struct ServiceDetailContainer: View {
                     onSave: { Task { await save(vm: vm) } },
                     onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
-                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) }
+                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
+                    onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -836,6 +839,35 @@ struct InviteManageContainer: View {
             return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
         }
         return serviceId
+    }
+}
+
+/// #92 — host for the per-service access-gating ("Who can open this") admin
+/// surface. Resolves the box this service runs on (the daemon there pins the
+/// owner IRK as `serverId`, so the set-mode + redeem envelopes target it,
+/// matching the env-editor / uninstall resolution) + the current username.
+struct ServiceAccessContainer: View {
+    let serviceId: String
+    @Environment(AppState.self) private var app
+
+    private var serverDomain: String {
+        app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown"
+    }
+
+    private var serviceLabel: String {
+        if let dashIdx = serviceId.firstIndex(of: "-") {
+            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        }
+        return serviceId
+    }
+
+    var body: some View {
+        ServiceAccessScreen(
+            serverDomain: serverDomain,
+            serviceRef: serviceId,
+            serviceLabel: serviceLabel,
+            username: app.currentUser ?? "you"
+        )
     }
 }
 

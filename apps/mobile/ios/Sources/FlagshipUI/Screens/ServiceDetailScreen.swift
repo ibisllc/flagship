@@ -31,6 +31,9 @@ public struct ServiceDetailScreen: View {
     /// P6 — push the collaborator-invite manage surface onto the nav
     /// stack. Unconditionally surfaced (independent of detail state).
     var onOpenCollaborators: () -> Void = {}
+    /// #92 — push the per-service access-gating ("Who can open this")
+    /// surface onto the nav stack.
+    var onOpenAccess: () -> Void = {}
 
     public init(
         vm: ServiceDetailViewModel,
@@ -40,7 +43,8 @@ public struct ServiceDetailScreen: View {
         onSave: @escaping () -> Void = {},
         onRemove: @escaping () -> Void = {},
         onOpenBrowserTabs: @escaping () -> Void = {},
-        onOpenCollaborators: @escaping () -> Void = {}
+        onOpenCollaborators: @escaping () -> Void = {},
+        onOpenAccess: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.username = username
@@ -50,6 +54,7 @@ public struct ServiceDetailScreen: View {
         self.onRemove = onRemove
         self.onOpenBrowserTabs = onOpenBrowserTabs
         self.onOpenCollaborators = onOpenCollaborators
+        self.onOpenAccess = onOpenAccess
     }
 
     public var body: some View {
@@ -67,6 +72,7 @@ public struct ServiceDetailScreen: View {
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
                     collaboratorsRow(c: c)
+                    accessRow(c: c)
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }
@@ -562,6 +568,28 @@ public struct ServiceDetailScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("service-detail-open-collaborators")
+        }
+    }
+
+    private func accessRow(c: FSColors) -> some View {
+        section("WHO CAN OPEN THIS", c: c) {
+            Button(action: onOpenAccess) {
+                FSCard {
+                    HStack(spacing: FS.space.s3) {
+                        Image(systemName: "lock.shield").foregroundColor(c.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Manage access").foregroundColor(c.text)
+                            Text("Open to anyone, or restrict to people you invite")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("service-detail-open-access")
         }
     }
 

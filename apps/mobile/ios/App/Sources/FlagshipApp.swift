@@ -60,6 +60,9 @@ struct FlagshipApp: App {
         // Owner-signed service uninstall (`DELETE /api/services/:id`) rides the
         // SAME box-pinned session so a rogue `.com` cert can't intercept it.
         self.liveServiceUninstall = LiveServiceUninstallClient(urlSession: pinnedSession)
+        // Box calls (set-mode/redeem) over the box-pinned session; `.com` calls
+        // (create/list/revoke) over the default public-CA session.
+        self.liveServiceAccess = LiveServiceAccessClient(boxSession: pinnedSession)
         // Maintainer-trust short-circuit: the live `.com` client refuses to
         // send when the control server is positively untrusted (and the owner
         // hasn't overridden). `.unknown`/`.trusted` + any network-error
@@ -312,6 +315,12 @@ struct FlagshipApp: App {
     // split as lock/power + front-page.
     private let mockServiceUninstall = MockServiceUninstallClient()
     private let liveServiceUninstall: any ServiceUninstallClient
+    // Per-service access gating (#92): box calls ride the SAME box-pinned
+    // session (set-mode + redeem are signature-authed daemon endpoints); the
+    // invite create/list/revoke calls hit `.com` over the default public-CA
+    // session. Live/mock split as the other box-direct clients.
+    private let mockServiceAccess = MockServiceAccessClient()
+    private let liveServiceAccess: any ServiceAccessClient
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -340,6 +349,9 @@ struct FlagshipApp: App {
     private var activeServiceUninstall: any ServiceUninstallClient {
         dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
     }
+    private var activeServiceAccess: any ServiceAccessClient {
+        dev.useLiveClient ? liveServiceAccess : mockServiceAccess
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -360,6 +372,7 @@ struct FlagshipApp: App {
                 .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
+                .environment(\.serviceAccessClient, activeServiceAccess)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
