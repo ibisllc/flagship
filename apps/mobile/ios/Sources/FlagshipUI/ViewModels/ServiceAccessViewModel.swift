@@ -36,6 +36,9 @@ public final class ServiceAccessViewModel {
         public let name: String
         public let photo: String?
         public let bound: Bool
+        /// The friend's allow-listed AID (lowercase hex) once they've redeemed;
+        /// nil for an unredeemed invite. Drives the box-side prune on remove.
+        public let boundAID: String?
         public var id: String { inviteId }
     }
 
@@ -175,17 +178,57 @@ public final class ServiceAccessViewModel {
         }
     }
 
-    /// IRK-signed revoke → the friend's next visit is denied.
+    /// Remove a person: owner-IRK revoke on `.com` (records the revocation) AND
+    /// — when the friend has redeemed (a bound AID) — an owner-IRK prune of that
+    /// AID from the box's allow-list. The box allow-list is add-only, so a `.com`
+    /// revoke alone never reaches it: a redeemed friend would keep access without
+    /// the prune. BOTH run (one biometric covers both signatures); an
+    /// unredeemed invite (no bound AID) is `.com`-revoke only. A failure of
+    /// EITHER leg surfaces — losing the box prune silently would leave the friend
+    /// with live access.
     public func remove(inviteId: String) async {
+        let boundAID = people.first(where: { $0.inviteId == inviteId })?.boundAID
+        let key: Curve25519.Signing.PrivateKey
         do {
-            let key = try await irkSigner("Remove this person from \(serviceRef)")
+            key = try await irkSigner("Remove this person from \(serviceRef)")
+        } catch {
+            phase = .failed("Couldn't remove them. Try again in a moment.")
+            return
+        }
+
+        var revokeFailed = false
+        var pruneFailed = false
+
+        // `.com` revoke (records the revocation; what the directory shows).
+        do {
             let ts = now()
             let bytes = try ServiceInvite.canonicalRevoke(inviteId: inviteId, issuedAt: ts)
             let sig = try ServiceInvite.sign(bytes, with: key)
             let request: [String: Any] = ["inviteId": inviteId, "issuedAt": ts]
             try await client.revokeInvite(controlBase: controlBase, username: username, inviteId: inviteId, request: request, signatureHex: HexUtil.encode(sig))
-            await refreshPeople()
         } catch {
+            revokeFailed = true
+        }
+
+        // Box prune (only meaningful once redeemed — an unredeemed invite was
+        // never added to the allow-list).
+        if let aid = boundAID, !aid.isEmpty {
+            do {
+                let ts = now()
+                let bytes = try ServiceInvite.canonicalRemoveServiceAllow(
+                    serverId: serverDomain, serviceRef: serviceRef, aid: aid, issuedAt: ts)
+                let sig = try ServiceInvite.sign(bytes, with: key)
+                let request: [String: Any] = ["serverId": serverDomain, "serviceRef": serviceRef, "aid": aid.lowercased(), "issuedAt": ts]
+                _ = try await client.removeServiceAllow(serverDomain: serverDomain, request: request, signatureHex: HexUtil.encode(sig))
+            } catch {
+                pruneFailed = true
+            }
+        }
+
+        await refreshPeople()
+        if pruneFailed {
+            phase = .failed("Removed from the directory, but couldn't reach the box to revoke access. Try again so they're fully removed.")
+        } else if revokeFailed {
             phase = .failed("Couldn't remove them. Try again in a moment.")
         }
     }
@@ -205,7 +248,7 @@ public final class ServiceAccessViewModel {
                         name = b.name
                         photo = b.photo
                     }
-                    return Person(inviteId: row.inviteId, name: name, photo: photo, bound: row.boundAidHex != nil)
+                    return Person(inviteId: row.inviteId, name: name, photo: photo, bound: row.boundAidHex != nil, boundAID: row.boundAidHex)
                 }
         } catch {
             // Keep the last-known list; the load-phase error is already surfaced.
