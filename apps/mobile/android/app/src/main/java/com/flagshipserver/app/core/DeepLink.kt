@@ -54,11 +54,16 @@ sealed interface DeepLink {
      *  `https://<server>.<user>.flagship.services/invite#<secret>`.
      *  v2: [authorAidHex] (optional, from `a=<64hex>` in the fragment/query) lets
      *  the friend derive a PER-AUTHOR contact AID for the redeem; absent ⇒ the
-     *  friend falls back to the global AID (legacy links are grandfathered). */
+     *  friend falls back to the global AID (legacy links are grandfathered).
+     *  [inviteIdHex] (optional, from `i=<64hex>`) is required for a manual-approve
+     *  invite — the friend's acceptance is signed over it; harmless for auto/group.
+     *  The canonical fragment is the BARE secret then `&a=`/`&i=` (identical across
+     *  webapp/iOS/Android). */
     data class RedeemInvite(
         val serverDomain: String,
         val secretHex: String,
         val authorAidHex: String? = null,
+        val inviteIdHex: String? = null,
     ) : DeepLink
 
     /** Web-experience gating (docs/service-access-gating.md, "Web-experience
@@ -88,7 +93,8 @@ sealed interface DeepLink {
                 ) {
                     val secret = secretFromFragment(uri.fragment)
                     val author = InviteLink.authorAidFromFragment(uri.fragment)
-                    return if (secret != null) RedeemInvite(host, secret, author) else null
+                    val invite = InviteLink.inviteIdFromFragment(uri.fragment)
+                    return if (secret != null) RedeemInvite(host, secret, author, invite) else null
                 }
                 return null
             }
@@ -103,15 +109,18 @@ sealed interface DeepLink {
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
                 "invite" -> {
-                    // flagship://invite?server=<host>&k=<64hex> — the "open in
-                    // app" hand-off from the box's /invite page (a custom scheme
-                    // can't carry the fragment, so the secret is a `k` query).
+                    // flagship://invite?server=<host>&k=<64hex>&a=<authorAID>&i=<inviteId>
+                    // — the "open in app" hand-off from the box's /invite page (a
+                    // custom scheme can't carry the fragment, so the secret is a
+                    // `k` query).
                     val server = params["server"] ?: params["host"] ?: ""
                     val pathSecret = uri.path?.trim('/').orEmpty()
                     val candidate = params["k"] ?: params["secret"] ?: pathSecret
                     val secret = secretFromFragment(candidate)
-                    val author = params["a"]?.takeIf { Regex("^[0-9a-fA-F]{64}$").matches(it) }?.lowercase()
-                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author) else null
+                    val hex64 = Regex("^[0-9a-fA-F]{64}$")
+                    val author = params["a"]?.takeIf { hex64.matches(it) }?.lowercase()
+                    val invite = params["i"]?.takeIf { hex64.matches(it) }?.lowercase()
+                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author, invite) else null
                 }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params

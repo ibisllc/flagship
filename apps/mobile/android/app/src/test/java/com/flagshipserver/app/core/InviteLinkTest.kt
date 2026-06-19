@@ -21,17 +21,32 @@ class InviteLinkTest {
     private val server = "home.alice.flagship.services"
     private val secret = "07".repeat(32)
     private val author = "b4".repeat(32)
+    private val invite = "ea".repeat(32)
 
     @Test fun shareLinkEmbedsSecretAndAuthor() {
         val link = InviteLink.shareLink(server, secret, author)
         assertEquals("https://$server/invite#$secret&a=$author", link)
         assertEquals(author, InviteLink.authorAidFromLink(link))
+        assertNull(InviteLink.inviteIdFromLink(link)) // no i= for auto/group
+    }
+
+    @Test fun shareLinkEmbedsInviteIdWhenManual() {
+        val link = InviteLink.shareLink(server, secret, author, invite)
+        assertEquals("https://$server/invite#$secret&a=$author&i=$invite", link)
+        assertEquals(author, InviteLink.authorAidFromLink(link))
+        assertEquals(invite, InviteLink.inviteIdFromLink(link))
     }
 
     @Test fun appLinkEmbedsAuthorQuery() {
         val link = InviteLink.appLink(server, secret, author)
         assertTrue(link.startsWith("flagship://invite?server=$server"))
         assertEquals(author, InviteLink.authorAidFromLink(link))
+        assertNull(InviteLink.inviteIdFromLink(link))
+    }
+
+    @Test fun appLinkEmbedsInviteIdWhenManual() {
+        val link = InviteLink.appLink(server, secret, author, invite)
+        assertEquals(invite, InviteLink.inviteIdFromLink(link))
     }
 
     @Test fun authorAidFromFragmentVariants() {
@@ -39,6 +54,27 @@ class InviteLinkTest {
         assertEquals(author, InviteLink.authorAidFromFragment("#a=$author&k=$secret"))
         assertNull(InviteLink.authorAidFromFragment(secret)) // no a= param
         assertNull(InviteLink.authorAidFromFragment(null))
+    }
+
+    @Test fun inviteIdFromFragmentVariants() {
+        assertEquals(invite, InviteLink.inviteIdFromFragment("$secret&a=$author&i=$invite"))
+        assertEquals(invite, InviteLink.inviteIdFromFragment("#i=$invite&k=$secret"))
+        assertNull(InviteLink.inviteIdFromFragment("$secret&a=$author")) // no i= param
+        assertNull(InviteLink.inviteIdFromFragment(null))
+    }
+
+    /** FROZEN cross-client canonical fragment (interop lock — the IDENTICAL
+     *  string is pinned on the webapp serviceInvite test + iOS DeepLink). */
+    @Test fun frozenCanonicalFragmentInterop() {
+        val s = "a".repeat(64)
+        val a = "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640"
+        val i = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        val frag = "$s&a=$a&i=$i"
+        // build(secret,a,i) === the frozen fragment.
+        assertEquals("https://$server/invite#$frag", InviteLink.shareLink(server, s, a, i))
+        // parse(frozen) === { secret, a, i }.
+        assertEquals(a, InviteLink.authorAidFromFragment(frag))
+        assertEquals(i, InviteLink.inviteIdFromFragment(frag))
     }
 
     @Test fun acceptanceRoundTrips() {

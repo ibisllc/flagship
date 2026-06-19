@@ -49,6 +49,10 @@ class InviteRedeemViewModel(
     private val secretHex: String,
     /** Author AID (hex) parsed from the invite link, or null for a legacy link. */
     private val authorAidHex: String? = null,
+    /** Invite id (hex) parsed from the link's `i=` param (manual-approve tier).
+     *  The friend signs the acceptance over THIS id; null for an auto/group or a
+     *  legacy link (then the box-relayed create's inviteId is used). */
+    private val inviteIdHex: String? = null,
     private val client: ServiceAccessClient = ServiceAccessClient(),
     /** Friend's GLOBAL AID (fallback when a legacy link carries no author AID). */
     private val globalAidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
@@ -66,6 +70,7 @@ class InviteRedeemViewModel(
     val serverHost: String get() = serverDomain
     private val secret = secretHex.lowercase()
     private val authorAid = authorAidHex?.lowercase()?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) }
+    private val linkInviteId = inviteIdHex?.lowercase()?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) }
 
     suspend fun redeem() {
         if (_phase.value is InviteRedeemPhase.Redeeming) return
@@ -123,7 +128,10 @@ class InviteRedeemViewModel(
     private fun emitAcceptance(result: RedeemResult, contactPub: ByteArray, signer: Ed25519Sign) {
         val create = result.createJson
         val createSig = result.createSigHex
-        val inviteId = create?.get("inviteId")?.jsonPrimitive?.contentOrNull
+        // The friend signs the acceptance over the inviteId the AUTHOR created the
+        // invite under. The canonical source is the link's `i=` param; fall back to
+        // the box-relayed create's inviteId for a legacy (no-`i=`) link.
+        val inviteId = linkInviteId ?: create?.get("inviteId")?.jsonPrimitive?.contentOrNull
         val serviceRef = create?.get("serviceRef")?.jsonPrimitive?.contentOrNull ?: result.serviceRef
         if (create == null || createSig == null || inviteId == null) {
             // The box accepted the redeem as pending but didn't relay the create —

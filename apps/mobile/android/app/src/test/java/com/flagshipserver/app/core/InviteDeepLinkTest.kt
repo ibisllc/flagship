@@ -60,13 +60,20 @@ class InviteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("flagship://invite?server=home.alice.flagship.services&k=notahex")))
     }
 
-    // ── v2: author AID carried in the link ──────────────────────────────────
+    // ── v2: author AID + inviteId carried in the link ───────────────────────
 
     private val authorAid = "b4".repeat(32) // 64-hex
+    private val inviteId = "ea".repeat(32)  // 64-hex
 
     @Test fun universalLinkCarriesAuthorAidFromFragment() {
         val link = DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$secret&a=$authorAid"))
         assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid), link)
+    }
+
+    @Test fun universalLinkCarriesAuthorAidAndInviteId() {
+        // Canonical: BARE leading secret, then &a=/&i=.
+        val link = DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$secret&a=$authorAid&i=$inviteId"))
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid, inviteId), link)
     }
 
     @Test fun customSchemeCarriesAuthorAidQuery() {
@@ -74,9 +81,31 @@ class InviteDeepLinkTest {
         assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid), link)
     }
 
+    @Test fun customSchemeCarriesAuthorAidAndInviteIdQuery() {
+        val link = DeepLink.parse(Uri.parse("flagship://invite?server=home.alice.flagship.services&k=$secret&a=$authorAid&i=$inviteId"))
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid, inviteId), link)
+    }
+
     @Test fun universalLinkWithoutAuthorHasNullAuthor() {
         val link = DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$secret"))
-        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, null), link)
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, null, null), link)
+    }
+
+    /** FROZEN cross-client canonical fragment (interop lock — the IDENTICAL
+     *  string is pinned on the webapp serviceInvite test + iOS DeepLink). */
+    @Test fun frozenCanonicalFragmentParses() {
+        val s = "a".repeat(64)
+        val a = "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640"
+        val i = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
+        assertEquals(
+            DeepLink.RedeemInvite("home.alice.flagship.services", s, a, i),
+            DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$s&a=$a&i=$i")),
+        )
+        // Bare secret → secret only.
+        assertEquals(
+            DeepLink.RedeemInvite("home.alice.flagship.services", s, null, null),
+            DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$s")),
+        )
     }
 
     @Test fun secretFromFragmentHelper() {

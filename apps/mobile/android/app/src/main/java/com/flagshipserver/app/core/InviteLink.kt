@@ -34,18 +34,28 @@ object InviteLink {
     private val json = Json { ignoreUnknownKeys = true }
     private val RE_HEX64 = Regex("^[0-9a-fA-F]{64}$")
     private val RE_A_PARAM = Regex("(?:^|[?&#])a=([0-9a-fA-F]{64})")
+    private val RE_I_PARAM = Regex("(?:^|[?&#])i=([0-9a-fA-F]{64})")
 
-    /** Build the friend share-link. The capability [secretHex] is in the fragment
-     *  (never leaves the browser); [authorAidHex] rides next to it so the friend
-     *  derives their per-author contact AID before redeeming (v2). */
-    fun shareLink(serverDomain: String, secretHex: String, authorAidHex: String): String =
-        "https://$serverDomain/invite#${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
+    /** Build the friend share-link. The capability [secretHex] is the BARE leading
+     *  fragment token (canonical cross-client format — never leaves the browser);
+     *  [authorAidHex] rides next to it so the friend derives their per-author
+     *  contact AID before redeeming (v2). [inviteIdHex], when present, is appended
+     *  as `&i=` so a manual-approve invite's friend can sign the acceptance over
+     *  the same id the author created it under. */
+    fun shareLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null): String {
+        var frag = "${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
+        if (inviteIdHex != null) frag += "&i=${inviteIdHex.lowercase()}"
+        return "https://$serverDomain/invite#$frag"
+    }
 
     /** The same hand-off as a `flagship://invite` app-scheme link (a custom
-     *  scheme can't carry a fragment → secret + author ride as queries). Useful
-     *  for the QR / "open in app" affordance. */
-    fun appLink(serverDomain: String, secretHex: String, authorAidHex: String): String =
-        "flagship://invite?server=$serverDomain&k=${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
+     *  scheme can't carry a fragment → secret + author [+ inviteId] ride as
+     *  queries). Useful for the QR / "open in app" affordance. */
+    fun appLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null): String {
+        var s = "flagship://invite?server=$serverDomain&k=${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
+        if (inviteIdHex != null) s += "&i=${inviteIdHex.lowercase()}"
+        return s
+    }
 
     /** Pull the optional author AID (64-hex) from anywhere in an invite link (the
      *  fragment `#<secret>&a=<authorAID>` or an `a=<authorAID>` query). Returns
@@ -58,6 +68,19 @@ object InviteLink {
     fun authorAidFromFragment(fragment: String?): String? {
         val f = fragment?.takeIf { it.isNotEmpty() } ?: return null
         return RE_A_PARAM.find(f)?.groupValues?.get(1)?.lowercase()
+    }
+
+    /** Pull the optional inviteId (64-hex) from anywhere in an invite link (the
+     *  fragment `#<secret>&a=…&i=<inviteId>` or an `i=<inviteId>` query). Required
+     *  for a manual-approve invite (the friend's acceptance is signed over it);
+     *  null/ignored for auto + group. Pure string scan (no Uri parse). */
+    fun inviteIdFromLink(raw: String): String? =
+        RE_I_PARAM.find(raw)?.groupValues?.get(1)?.lowercase()
+
+    /** Pull `i=<64hex>` from a fragment string (with or without a leading '#'). */
+    fun inviteIdFromFragment(fragment: String?): String? {
+        val f = fragment?.takeIf { it.isNotEmpty() } ?: return null
+        return RE_I_PARAM.find(f)?.groupValues?.get(1)?.lowercase()
     }
 
     // ── acceptance reply (manual-approve loop) ────────────────────────────────

@@ -69,7 +69,8 @@ fun ServicesTab() {
                 val s = java.net.URLEncoder.encode(link.serverDomain, "UTF-8")
                 val k = java.net.URLEncoder.encode(link.secretHex, "UTF-8")
                 val a = java.net.URLEncoder.encode(link.authorAidHex.orEmpty(), "UTF-8")
-                nav.navigate("invite-redeem/$s/$k?a=$a")
+                val i = java.net.URLEncoder.encode(link.inviteIdHex.orEmpty(), "UTF-8")
+                nav.navigate("invite-redeem/$s/$k?a=$a&i=$i")
             }
             // Web-experience gating — authorize a browser's QR-login for a
             // restricted service's website. All four params URL-encoded into
@@ -177,20 +178,23 @@ fun ServicesTab() {
         // the optional `a` query carries the author AID so the friend redeems with
         // a per-author contact AID (empty ⇒ legacy global-AID fallback).
         composable(
-            route = "invite-redeem/{server}/{secret}?a={a}",
+            route = "invite-redeem/{server}/{secret}?a={a}&i={i}",
             arguments = listOf(
                 navArgument("server") { type = NavType.StringType },
                 navArgument("secret") { type = NavType.StringType },
                 navArgument("a") { type = NavType.StringType; defaultValue = "" },
+                navArgument("i") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
             val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
             val secret = java.net.URLDecoder.decode(entry.arguments?.getString("secret") ?: "", "UTF-8")
             val authorAid = java.net.URLDecoder.decode(entry.arguments?.getString("a") ?: "", "UTF-8").ifEmpty { null }
+            val inviteId = java.net.URLDecoder.decode(entry.arguments?.getString("i") ?: "", "UTF-8").ifEmpty { null }
             InviteRedeemScreen(
                 serverDomain = server,
                 secretHex = secret,
                 authorAidHex = authorAid,
+                inviteIdHex = inviteId,
                 onOpenService = { nav.popBackStack() },
                 onDone = { nav.popBackStack() },
             )

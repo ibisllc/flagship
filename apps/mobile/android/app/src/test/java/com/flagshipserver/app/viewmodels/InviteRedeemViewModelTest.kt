@@ -37,9 +37,9 @@ class InviteRedeemViewModelTest {
     private val contactPub = ServerKeys.deriveContactAccountIdPub(friendUmk, authorAidPub)
     private val globalPub = ServerKeys.deriveAccountIdPub(friendUmk)
 
-    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, secretHex: String = secret, now: () -> Long = { 1700 }) =
+    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, inviteIdHex: String? = null, secretHex: String = secret, now: () -> Long = { 1700 }) =
         InviteRedeemViewModel(
-            serverDomain = server, secretHex = secretHex, authorAidHex = authorHex,
+            serverDomain = server, secretHex = secretHex, authorAidHex = authorHex, inviteIdHex = inviteIdHex,
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
             globalAidSigner = { ServerKeys.deriveAccountId(friendUmk) },
             globalAidPubHex = { HexUtil.encode(globalPub) },
@@ -94,6 +94,22 @@ class InviteRedeemViewModelTest {
         assertEquals("00", acc.create["encryptedBundle"]!!.jsonPrimitive.content)
         assertEquals("b".repeat(128), acc.createSigHex)
         val acceptBytes = ServiceInvite.canonicalAccept("inv1", "alice-notes", contactPub, 1700)
+        assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
+    }
+
+    @Test fun redeem_manualPending_signsOverLinkInviteId() = runTest {
+        // The canonical inviteId is the one carried in the link's `i=` param; the
+        // friend signs the acceptance over it (here it differs from whatever the
+        // box happens to echo in the relayed create — the LINK wins).
+        val linkInviteId = "ea".repeat(32)
+        val create = """{"inviteId":"$linkInviteId","authorAID":"$authorAidHex","serviceRef":"alice-notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
+        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice-notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
+        val vm = makeVM(t, inviteIdHex = linkInviteId)
+        vm.redeem()
+        val p = vm.phase.value as InviteRedeemPhase.AwaitingApproval
+        val acc = InviteLink.decodeAcceptance(p.replyLink)!!
+        assertEquals(linkInviteId, acc.accept["inviteId"]!!.jsonPrimitive.content)
+        val acceptBytes = ServiceInvite.canonicalAccept(linkInviteId, "alice-notes", contactPub, 1700)
         assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
     }
 

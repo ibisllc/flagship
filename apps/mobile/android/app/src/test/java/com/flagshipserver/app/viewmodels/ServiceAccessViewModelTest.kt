@@ -85,6 +85,8 @@ class ServiceAccessViewModelTest {
         assertTrue(link!!.startsWith("https://$server/invite#"))
         // The author AID is embedded so the friend derives a per-author contact AID.
         assertEquals(HexUtil.encode(aidPub), InviteLink.authorAidFromLink(link))
+        // An auto invite link carries NO inviteId (only the manual tier needs it).
+        assertNull(InviteLink.inviteIdFromLink(link))
 
         assertTrue(t.lastPostUrl!!.endsWith("/api/users/$username/service-invites"))
         val env = t.lastBodyJson()!!
@@ -107,10 +109,14 @@ class ServiceAccessViewModelTest {
     @Test fun addPerson_manual_setsApprovalMode() = runTest {
         val t = FakeTransport()
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
-        vm.addPerson("Sam", null, InviteTier.PERSONAL_MANUAL)
+        val link = vm.addPerson("Sam", null, InviteTier.PERSONAL_MANUAL)
         val req = t.lastBodyJson()!!["request"]!!.jsonObject
         assertEquals("manual", req["approvalMode"]!!.jsonPrimitive.content)
         assertNull(req["maxRedemptions"])
+        // The manual link MUST carry the inviteId (&i=) — the friend signs the
+        // acceptance over it. It equals the created invite's id.
+        val inviteId = req["inviteId"]!!.jsonPrimitive.content
+        assertEquals(inviteId, InviteLink.inviteIdFromLink(link!!))
     }
 
     @Test fun addPerson_group_commitsMaxNAndExpiryInSignedBytes() = runTest {

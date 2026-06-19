@@ -1,6 +1,6 @@
 // Friend-side redeem screen (docs/service-access-gating.md §v2 hardening). Mirror
 // of iOS InviteRedeemScreen + the webapp views/invite-redeem.js. Reached from a
-// `https://<server>.<user>.flagship.services/invite#<secret>&a=<authorAID>`
+// `https://<server>.<user>.flagship.services/invite#<secret>&a=<authorAID>[&i=<inviteId>]`
 // universal link (or the flagship://invite scheme). "Accept" signs the redeem
 // with the friend's PER-AUTHOR contact AID against the box; an AUTO invite
 // confirms immediately, an APPROVE (manual) invite produces a confirmation reply
@@ -59,14 +59,15 @@ fun InviteRedeemScreen(
     serverDomain: String,
     secretHex: String,
     authorAidHex: String? = null,
+    inviteIdHex: String? = null,
     onOpenService: (String) -> Unit,
     onDone: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
-    val vm = remember(serverDomain, secretHex, authorAidHex) {
-        InviteRedeemViewModel(serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorAidHex)
+    val vm = remember(serverDomain, secretHex, authorAidHex, inviteIdHex) {
+        InviteRedeemViewModel(serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorAidHex, inviteIdHex = inviteIdHex)
     }
     val phase by vm.phase.collectAsState()
 

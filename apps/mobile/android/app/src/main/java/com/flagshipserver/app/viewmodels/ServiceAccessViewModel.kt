@@ -199,7 +199,10 @@ class ServiceAccessViewModel(
                 if (groupExp != null) put("expiresAt", JsonPrimitive(groupExp))
             }
             client.createInvite(username, request, HexUtil.encode(sig))
-            val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid))
+            // Carry the inviteId (&i=) ONLY for a manual-approve invite — the
+            // friend signs the acceptance over it. Auto/group links stay bare.
+            val linkInviteId = if (tier == InviteTier.PERSONAL_MANUAL) inviteId else null
+            val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId)
             _lastLink.value = link
             refreshPeople()
             link
