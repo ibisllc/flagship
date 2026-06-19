@@ -36,6 +36,7 @@ import {
   buildAccessEnforcementHandler,
   buildServiceAccessHttp,
   ServiceAccessStore,
+  ServiceSessionStore,
 } from "./serviceAccess.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
@@ -1422,6 +1423,10 @@ async function wireOwnerHandlers(deps: {
   // are unaffected until the owner restricts one.
   const accessStore = new ServiceAccessStore();
   await accessStore.load();
+  // Browser-session cookie store: lets a redeemed friend reach a restricted
+  // service's WEBSITE in a plain browser (which can't sign the visit header).
+  const sessionStore = new ServiceSessionStore();
+  await sessionStore.load();
   const householdHex =
     process.env.FLAGSHIP_HOUSEHOLD_KEY_HEX ??
     (await tryReadFile("/var/flagship/household-key.hex"));
@@ -1429,6 +1434,7 @@ async function wireOwnerHandlers(deps: {
     serverId: env.serverFqdn,
     ownerIrkPub: cfg.irkPublicKey,
     store: accessStore,
+    sessions: sessionStore,
     serviceInstalled: (ref) =>
       (deps.servicePlatformRef.current?.list() ?? []).some((a) => a.serviceId === ref),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl,
@@ -1997,7 +2003,9 @@ export {
   buildAccessEnforcementHandler,
   decideServiceAccess,
   ServiceAccessStore,
+  ServiceSessionStore,
   VISIT_PROOF_HEADER,
+  SESSION_COOKIE,
   type ServiceAccessHttp,
   type ServiceAccessHttpOptions,
   type AccessDecision,

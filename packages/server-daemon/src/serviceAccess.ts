@@ -27,6 +27,7 @@
  * when the household key has been provisioned to the box.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
@@ -145,8 +146,102 @@ export class ServiceAccessStore {
   }
 }
 
+/**
+ * Cookie a browser carries the box-issued session under. Mirrors the existing
+ * `Flagship-App-Session` bearer cookie (`serviceAccessGate.ts`, #84): the box
+ * mints an OPAQUE random token (NOT a self-validating MAC — there is no new MAC
+ * scheme) and looks it up server-side. A browser cannot set the AID-signed
+ * `x-flagship-visit` header, so once a friend has redeemed (over their app/web)
+ * the box hands them this cookie to reach the restricted service's WEBSITE.
+ */
+export const SESSION_COOKIE = "Flagship-App-Session";
+
+/** Default browser-session lifetime — short-lived; re-issued via establish-session / a fresh redeem. */
+const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60_000;
+
+interface SessionEntry {
+  /** `<creator>-<slug>` this session is scoped to. A token reaches ONLY its service. */
+  serviceRef: string;
+  /** Lower-hex bound AID — re-checked against the allow-list on every request (so a revoke kills the cookie). */
+  aid: string;
+  /** Epoch-ms expiry. */
+  expiresAt: number;
+}
+
+type SessionPersistShape = Record<string, SessionEntry>;
+
+/**
+ * Box-local browser-session store: an opaque token → { serviceRef, AID, expiry }.
+ * Same atomically-replaced mode-0600 JSON file as `ServiceAccessStore`; reloaded
+ * on boot so an in-flight browser session survives a daemon restart. Expired
+ * rows are pruned lazily on lookup + eagerly on issue.
+ */
+export class ServiceSessionStore {
+  private byToken = new Map<string, SessionEntry>();
+  private readonly statePath: string;
+
+  constructor(statePath = "/var/flagship/service-sessions.json") {
+    this.statePath = statePath;
+  }
+
+  async load(): Promise<void> {
+    try {
+      const raw = JSON.parse(await readFile(this.statePath, "utf8")) as SessionPersistShape;
+      this.byToken.clear();
+      for (const [tok, e] of Object.entries(raw ?? {})) {
+        if (
+          !e ||
+          typeof e.serviceRef !== "string" ||
+          typeof e.aid !== "string" ||
+          typeof e.expiresAt !== "number"
+        ) {
+          continue;
+        }
+        this.byToken.set(tok, { serviceRef: e.serviceRef, aid: e.aid.toLowerCase(), expiresAt: e.expiresAt });
+      }
+    } catch {
+      this.byToken.clear();
+    }
+  }
+
+  /** Mint + persist a session token for an AID scoped to a service. Returns the opaque token. */
+  async issue(serviceRef: string, aidHex: string, now: number, ttlMs: number): Promise<string> {
+    this.pruneExpired(now);
+    const token = bytesToHex(randomBytes(32));
+    this.byToken.set(token, { serviceRef, aid: aidHex.toLowerCase(), expiresAt: now + ttlMs });
+    await this.persist();
+    return token;
+  }
+
+  /** Look up a live session for a token, or null if absent/expired. Does NOT check the allow-list. */
+  lookup(token: string, now: number): { serviceRef: string; aid: string } | null {
+    const e = this.byToken.get(token);
+    if (!e) return null;
+    if (e.expiresAt <= now) {
+      this.byToken.delete(token);
+      return null;
+    }
+    return { serviceRef: e.serviceRef, aid: e.aid };
+  }
+
+  private pruneExpired(now: number): void {
+    for (const [tok, e] of this.byToken) {
+      if (e.expiresAt <= now) this.byToken.delete(tok);
+    }
+  }
+
+  private async persist(): Promise<void> {
+    const out: SessionPersistShape = {};
+    for (const [tok, e] of this.byToken) out[tok] = e;
+    await mkdir(dirname(this.statePath), { recursive: true });
+    const tmp = `${this.statePath}.tmp`;
+    await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
+    await rename(tmp, this.statePath);
+  }
+}
+
 export type AccessDecision =
-  | { allow: true; reason: "open" | "allow-listed" }
+  | { allow: true; reason: "open" | "allow-listed" | "cookie" }
   | { allow: false; reason: "no-proof" | "bad-proof" | "not-allowed" | "stale-proof" };
 
 export interface ServiceAccessHttpOptions {
@@ -167,18 +262,35 @@ export interface ServiceAccessHttpOptions {
    * absent, `decryptBundle` returns null (the feature degrades, like SWK).
    */
   householdKey?: Uint8Array;
+  /**
+   * Browser-session store for the `Flagship-App-Session` cookie seam. When
+   * present, a successful redeem (and `POST /api/service-access/establish-session`)
+   * issues a cookie, and `decide` accepts it as well as the signed header — so a
+   * friend who redeemed can reach the restricted service's WEBSITE in a plain
+   * browser. Optional: absent ⇒ header-only enforcement (no behavior change).
+   */
+  sessions?: ServiceSessionStore;
   now?: () => number;
   /** Replay window for owner + visit + redeem envelopes. Default 5 min. */
   maxAgeMs?: number;
+  /** Browser-session lifetime. Default 12h. */
+  sessionTtlMs?: number;
 }
 
 /**
  * The serve-path decision: is this request allowed to reach `serviceRef`?
- * `open` ⇒ always; `restricted` ⇒ the request MUST carry a fresh AID-signed
- * visit proof (header `x-flagship-visit`) for an allow-listed AID.
+ * `open` ⇒ always; `restricted` ⇒ the request MUST carry EITHER a fresh
+ * AID-signed visit proof (header `x-flagship-visit`, for app/web clients that
+ * can sign) OR a live box-issued `Flagship-App-Session` cookie (for a plain
+ * BROWSER, which cannot set the header). Either path must resolve to an AID
+ * that is STILL in the service's allow-list (so a `.com` revoke kills both).
  */
 export function decideServiceAccess(
-  opts: Pick<ServiceAccessHttpOptions, "serverId" | "store"> & { now?: () => number; maxAgeMs?: number },
+  opts: Pick<ServiceAccessHttpOptions, "serverId" | "store"> & {
+    sessions?: ServiceSessionStore;
+    now?: () => number;
+    maxAgeMs?: number;
+  },
   serviceRef: string,
   req: HttpRequest,
 ): AccessDecision {
@@ -187,7 +299,19 @@ export function decideServiceAccess(
   const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
 
   const header = req.headers[VISIT_PROOF_HEADER];
-  if (typeof header !== "string" || header.length === 0) return { allow: false, reason: "no-proof" };
+  if (typeof header !== "string" || header.length === 0) {
+    // No signed header — try a browser session cookie before denying.
+    if (opts.sessions) {
+      const token = readSessionCookie(req.headers.cookie);
+      if (token) {
+        const sess = opts.sessions.lookup(token, now);
+        if (sess && sess.serviceRef === serviceRef && opts.store.isAllowed(serviceRef, sess.aid)) {
+          return { allow: true, reason: "cookie" };
+        }
+      }
+    }
+    return { allow: false, reason: "no-proof" };
+  }
   let parsed: { proof: ServiceVisitProof; sig: Uint8Array } | null;
   try {
     parsed = parseVisitHeader(header);
@@ -220,15 +344,22 @@ export interface ServiceAccessHttp {
    */
   decryptBundle: (encryptedBundleHex: string, inviteId: string) => InviteBundle | null;
   store: ServiceAccessStore;
+  /** The browser-session store, when the cookie seam is enabled (else undefined). */
+  sessions?: ServiceSessionStore;
 }
 
 export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceAccessHttp {
   const now = opts.now ?? (() => Date.now());
   const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
+  const sessionTtlMs = opts.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const fetchImpl = opts.fetchImpl ?? fetch;
 
   const decide = (serviceRef: string, req: HttpRequest): AccessDecision =>
-    decideServiceAccess({ serverId: opts.serverId, store: opts.store, now, maxAgeMs }, serviceRef, req);
+    decideServiceAccess(
+      { serverId: opts.serverId, store: opts.store, sessions: opts.sessions, now, maxAgeMs },
+      serviceRef,
+      req,
+    );
 
   const decryptBundle = (encryptedBundleHex: string, inviteId: string): InviteBundle | null => {
     if (!opts.householdKey) return null;
@@ -243,10 +374,62 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (req.path === "/api/service-access" && req.method === "POST") {
       return handleSetMode(req);
     }
+    // Friend's app/web establishes a browser cookie from an AID-signed proof.
+    if (req.path === "/api/service-access/establish-session" && req.method === "POST") {
+      return handleEstablishSession(req);
+    }
+    // Access-state read: GET /api/service-access/<serviceRef>. Unauthenticated
+    // (the mode is already behaviorally observable; only the AID COUNT, never
+    // the AIDs themselves, is exposed) so every client renders the true toggle
+    // without a signature on a plain refresh.
+    if (req.path.startsWith("/api/service-access/") && req.method === "GET") {
+      const serviceRef = decodeURIComponent(req.path.slice("/api/service-access/".length));
+      if (serviceRef.length === 0 || serviceRef.includes("/")) return bad(404, "not found");
+      return jsonResponse(200, {
+        serviceRef,
+        mode: opts.store.mode(serviceRef),
+        allowCount: opts.store.allowList(serviceRef).length,
+      });
+    }
     if (req.path === "/api/service-invites/redeem" && req.method === "POST") {
       return handleRedeem(req);
     }
     return null;
+  }
+
+  /**
+   * POST /api/service-access/establish-session — a friend who already redeemed
+   * (their AID is allow-listed) presents the SAME AID-signed `ServiceVisitProof`
+   * the `x-flagship-visit` header carries (base64 body); the box mints a browser
+   * cookie so a plain browser can then reach the restricted service. 400 on an
+   * unparseable proof; 403 on a serverId/stale/signature failure; 401 if the AID
+   * is not allow-listed for that restricted service; 404 when sessions are off.
+   */
+  async function handleEstablishSession(req: HttpRequest): Promise<HttpResponse> {
+    if (!opts.sessions) return bad(404, "sessions not enabled");
+    let parsed: { proof: ServiceVisitProof; sig: Uint8Array } | null;
+    try {
+      parsed = parseVisitHeader(req.body.toString("utf8"));
+    } catch {
+      parsed = null;
+    }
+    if (!parsed) return bad(400, "malformed visit proof");
+    const { proof, sig } = parsed;
+    if (proof.serverId !== opts.serverId) return bad(403, "serverId mismatch");
+    if (Math.abs(now() - proof.issuedAt) > maxAgeMs) return bad(403, "stale request");
+    if (!verifyServiceVisitProof(proof, sig, proof.visitorAID)) return bad(403, "invalid signature");
+    const aidHex = bytesToHex(proof.visitorAID);
+    // A cookie is only useful for a RESTRICTED service whose allow-list holds
+    // this AID — issuing one otherwise would be a bearer token to nothing.
+    if (opts.store.mode(proof.serviceRef) !== "restricted" || !opts.store.isAllowed(proof.serviceRef, aidHex)) {
+      return bad(401, "not allow-listed for this service");
+    }
+    const token = await opts.sessions.issue(proof.serviceRef, aidHex, now(), sessionTtlMs);
+    return {
+      status: 200,
+      headers: { ...H, "set-cookie": sessionSetCookie(token, sessionTtlMs) },
+      body: JSON.stringify({ established: true, serviceRef: proof.serviceRef, expiresInMs: sessionTtlMs }),
+    };
   }
 
   async function handleSetMode(req: HttpRequest): Promise<HttpResponse> {
@@ -347,15 +530,28 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // to the allow-list, so a `.com` that bound a different AID can't be tricked
     // here. They match on the happy path.
     await opts.store.addAllowed(comBody.serviceRef, comBody.boundAID);
-    return jsonResponse(200, {
-      redeemed: true,
-      firstBind: comBody.firstBind === true,
-      serviceRef: comBody.serviceRef,
-      boundAID: comBody.boundAID,
-    });
+    // Hand the redeemer a browser cookie bound to their AID + this service, so
+    // they can reach the restricted service's WEBSITE in a plain browser (which
+    // can't set the signed `x-flagship-visit` header). Harmless on an OPEN
+    // service — `decide` short-circuits to "open" before ever reading a cookie.
+    const responseHeaders: Record<string, string> = { ...H };
+    if (opts.sessions) {
+      const token = await opts.sessions.issue(comBody.serviceRef, comBody.boundAID, now(), sessionTtlMs);
+      responseHeaders["set-cookie"] = sessionSetCookie(token, sessionTtlMs);
+    }
+    return {
+      status: 200,
+      headers: responseHeaders,
+      body: JSON.stringify({
+        redeemed: true,
+        firstBind: comBody.firstBind === true,
+        serviceRef: comBody.serviceRef,
+        boundAID: comBody.boundAID,
+      }),
+    };
   }
 
-  return { handle, decide, decryptBundle, store: opts.store };
+  return { handle, decide, decryptBundle, store: opts.store, sessions: opts.sessions };
 
   // Local: verify the AID sig over the redeem tuple (mirrors .com's check; the
   // box does it first so it never relays a forged binding request upstream).
@@ -460,6 +656,33 @@ function parseVisitHeader(header: string): { proof: ServiceVisitProof; sig: Uint
     },
     sig: hexToBytes(obj.sig),
   };
+}
+
+/**
+ * Extract the `Flagship-App-Session` token from a Cookie header (RFC-loose,
+ * same parsing shape as `serviceAccessGate.ts`). Returns null if absent.
+ */
+function readSessionCookie(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const t = part.trim();
+    if (t.startsWith(`${SESSION_COOKIE}=`)) {
+      const v = t.slice(SESSION_COOKIE.length + 1);
+      return v.length > 0 ? v : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build the `Set-Cookie` value for a freshly issued browser session. HttpOnly
+ * (no JS read), Secure (the box is HTTPS-only), SameSite=Lax (the friend lands
+ * on the service from the redeem/deep-link), Path=/ (whole service origin),
+ * Max-Age = the session lifetime.
+ */
+function sessionSetCookie(token: string, ttlMs: number): string {
+  const maxAgeSec = Math.floor(ttlMs / 1000);
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSec}`;
 }
 
 function bad(status: number, error: string): HttpResponse {

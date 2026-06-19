@@ -69,6 +69,30 @@ Key usage (the owner's asymmetry):
    redeems (AID) → reaches the restricted service → admin revokes → denied. Plus cross-app
    reuse + a "rotate the friend's IRK, access still honored (AID unchanged)" assertion.
 
+## Daemon HTTP surface (built — `packages/server-daemon/src/serviceAccess.ts`)
+- `POST /api/service-access` — owner-IRK `set-service-access-mode` envelope (open/restricted).
+- `GET  /api/service-access/<serviceRef>` — access-state read: `{ serviceRef, mode, allowCount }`.
+  **Unauthenticated** (mirrors `GET /api/front-page`): the mode is already behaviorally
+  observable (a restricted service 403s anonymous traffic), so it's not a secret — and ONLY the
+  integer `allowCount` is exposed, NEVER the allow-listed AIDs (those are the friend graph). Lets
+  iOS/Android/webapp render the TRUE toggle without a signature on a plain refresh.
+- `POST /api/service-invites/redeem` — friend AID-signed redeem → `.com` binding → allow-list add.
+  On success, **also issues a `Flagship-App-Session` cookie** bound to the redeemer's AID + this
+  service (when the cookie seam is enabled).
+- `POST /api/service-access/establish-session` — a friend who already redeemed presents the SAME
+  AID-signed `ServiceVisitProof` the `x-flagship-visit` header carries (base64 body); the box mints
+  the cookie. 401 if the AID isn't allow-listed for that (restricted) service; 403 on a bad proof.
+- **Browser cookie seam.** A plain BROWSER can't set the AID-signed `x-flagship-visit` header, so a
+  restricted service's WEBSITE is unreachable from one — closed by an opaque `Flagship-App-Session`
+  cookie (the SAME bearer-cookie shape as the older #84 `serviceAccessGate.ts`: a random token
+  looked up server-side, **NOT a new MAC**), `HttpOnly; Secure; SameSite=Lax; Path=/`, default 12h,
+  persisted box-local (`ServiceSessionStore`, atomic mode-0600 JSON, restart-survivable). The
+  serve-path `decide` accepts **cookie OR header**: either must resolve to an AID STILL in the
+  allow-list (a `.com` revoke that prunes the AID kills the cookie too — re-checked per request).
+  `open` is unchanged (decide short-circuits before reading any cookie). Client follow-up: the
+  friend's webapp should call `establish-session` (browser-driven, signed from the in-page UMK→AID)
+  so the `Set-Cookie` lands in that browser.
+
 ## Notes
 - AID is a NEW UMK-derived key (parallel to the versioned IRK). Add `deriveAccountId` to
   `@flagship/protocol` (`keys.ts`) + the Swift/Kotlin/webapp keystores (follow-up for clients).

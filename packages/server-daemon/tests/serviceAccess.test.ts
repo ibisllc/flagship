@@ -21,6 +21,8 @@ import {
   buildAccessEnforcementHandler,
   decideServiceAccess,
   ServiceAccessStore,
+  ServiceSessionStore,
+  SESSION_COOKIE,
   VISIT_PROOF_HEADER,
 } from "../src/serviceAccess.js";
 import type { HttpRequest } from "../src/runtime.js";
@@ -43,6 +45,17 @@ function hex(b: Uint8Array): string {
 
 function tempStore(): ServiceAccessStore {
   return new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json"));
+}
+
+function tempSessions(): ServiceSessionStore {
+  return new ServiceSessionStore(join(mkdtempSync(join(tmpdir(), "ss-")), "service-sessions.json"));
+}
+
+/** Pull the `Flagship-App-Session` token out of a Set-Cookie header. */
+function cookieToken(setCookie: string | undefined): string | null {
+  if (!setCookie) return null;
+  const m = new RegExp(`${SESSION_COOKIE}=([^;]+)`).exec(setCookie);
+  return m ? m[1]! : null;
 }
 
 function req(over: Partial<HttpRequest>): HttpRequest {
@@ -90,23 +103,28 @@ function comFetch(opts: { status?: number; serviceRef?: string; boundAID?: strin
 
 function build(opts: {
   store?: ServiceAccessStore;
+  sessions?: ServiceSessionStore;
   fetchImpl?: typeof fetch;
   installed?: Set<string>;
   household?: boolean;
+  sessionTtlMs?: number;
 } = {}) {
   const store = opts.store ?? tempStore();
+  const sessions = opts.sessions;
   const installed = opts.installed ?? new Set([SERVICE]);
   const access = buildServiceAccessHttp({
     serverId: FQDN,
     ownerIrkPub: ownerIrk.publicKey,
     store,
+    sessions,
     serviceInstalled: (ref) => installed.has(ref),
     controlPlaneBaseUrl: "https://flagshipserver.com",
     fetchImpl: opts.fetchImpl ?? (comFetch() as unknown as typeof fetch),
     householdKey: opts.household ? householdKey : undefined,
+    sessionTtlMs: opts.sessionTtlMs,
     now: () => NOW,
   });
-  return { access, store, installed };
+  return { access, store, sessions, installed };
 }
 
 describe("ServiceAccessStore", () => {
@@ -418,5 +436,254 @@ describe("household-key bundle decrypt", () => {
     const sealed = sealInviteBundle({ name: "Alex" }, householdKey, inviteId);
     const other = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 1);
     expect(access.decryptBundle(sealed, other)).toBeNull();
+  });
+});
+
+describe("GET /api/service-access/:serviceRef (access-state read)", () => {
+  it("reports OPEN (default) with a zero allow-count", async () => {
+    const { access } = build();
+    const res = await access.handle(req({ method: "GET", path: `/api/service-access/${SERVICE}` }));
+    expect(res!.status).toBe(200);
+    expect(JSON.parse(res!.body as string)).toEqual({ serviceRef: SERVICE, mode: "open", allowCount: 0 });
+  });
+
+  it("reports RESTRICTED + the allow-count after a set + redeem", async () => {
+    const store = tempStore();
+    const { access } = build({ store });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const res = await access.handle(req({ method: "GET", path: `/api/service-access/${SERVICE}` }));
+    expect(res!.status).toBe(200);
+    expect(JSON.parse(res!.body as string)).toEqual({ serviceRef: SERVICE, mode: "restricted", allowCount: 1 });
+  });
+
+  it("never leaks the AIDs themselves (count only)", async () => {
+    const store = tempStore();
+    const { access } = build({ store });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const res = await access.handle(req({ method: "GET", path: `/api/service-access/${SERVICE}` }));
+    expect(res!.body as string).not.toContain(hex(friendAid.publicKey));
+  });
+
+  it("404s an empty / nested serviceRef path", async () => {
+    const { access } = build();
+    expect((await access.handle(req({ method: "GET", path: "/api/service-access/" })))!.status).toBe(404);
+    expect((await access.handle(req({ method: "GET", path: "/api/service-access/a/b" })))!.status).toBe(404);
+  });
+});
+
+describe("browser cookie seam — issuance", () => {
+  function redeemBody(aid = friendAid, signer = friendAid, at = NOW) {
+    const secret = new Uint8Array(32).fill(7);
+    const secretHash = serviceInviteSecretHash(secret);
+    const redeem: RedeemServiceInvite = { secretHash, visitorAID: aid.publicKey, redeemedAt: at };
+    const sig = signRedeemServiceInvite(redeem, signer);
+    return Buffer.from(
+      JSON.stringify({ secretHash, visitorAID: hex(aid.publicKey), aidSig: hex(sig), redeemedAt: at }),
+    );
+  }
+
+  it("issues a bound Flagship-App-Session cookie on a successful redeem", async () => {
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ sessions });
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBody() }),
+    );
+    expect(res!.status).toBe(200);
+    const setCookie = (res!.headers as Record<string, string>)["set-cookie"];
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toContain(`${SESSION_COOKIE}=`);
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("Secure");
+    expect(setCookie).toContain("SameSite=Lax");
+    // the token resolves to the friend's AID scoped to the service
+    const token = cookieToken(setCookie)!;
+    expect(sessions.lookup(token, NOW)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
+  });
+
+  it("does NOT set a cookie when the session store is absent (header-only mode unchanged)", async () => {
+    const { access } = build(); // no sessions
+    const res = await access.handle(
+      req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBody() }),
+    );
+    expect(res!.status).toBe(200);
+    expect((res!.headers as Record<string, string>)["set-cookie"]).toBeUndefined();
+  });
+
+  it("establish-session issues a cookie for an allow-listed AID-signed proof", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ store, sessions });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const res = await access.handle(
+      req({
+        method: "POST",
+        path: "/api/service-access/establish-session",
+        body: Buffer.from(visitHeader()),
+      }),
+    );
+    expect(res!.status).toBe(200);
+    const token = cookieToken((res!.headers as Record<string, string>)["set-cookie"])!;
+    expect(sessions.lookup(token, NOW)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
+  });
+
+  it("establish-session 401s an AID that is NOT allow-listed", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ store, sessions });
+    await store.setMode(SERVICE, "restricted"); // no addAllowed
+    const res = await access.handle(
+      req({
+        method: "POST",
+        path: "/api/service-access/establish-session",
+        body: Buffer.from(visitHeader()),
+      }),
+    );
+    expect(res!.status).toBe(401);
+  });
+
+  it("establish-session 403s a forged proof (sig by a non-AID key)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ store, sessions });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(77) });
+    const res = await access.handle(
+      req({
+        method: "POST",
+        path: "/api/service-access/establish-session",
+        body: Buffer.from(visitHeader(friendAid, attacker)),
+      }),
+    );
+    expect(res!.status).toBe(403);
+  });
+});
+
+describe("browser cookie seam — enforcement (cookie OR header)", () => {
+  const TTL = 12 * 60 * 60_000;
+
+  it("RESTRICTED + cookie-bearing allow-listed AID → allowed (reason: cookie)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const token = await sessions.issue(SERVICE, hex(friendAid.publicKey), NOW, TTL);
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `x=1; ${SESSION_COOKIE}=${token}; y=2` } }),
+    );
+    expect(d).toEqual({ allow: true, reason: "cookie" });
+  });
+
+  it("RESTRICTED + header-bearing allow-listed AID → still allowed (reason: allow-listed)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, [VISIT_PROOF_HEADER]: visitHeader() } }),
+    );
+    expect(d).toEqual({ allow: true, reason: "allow-listed" });
+  });
+
+  it("RESTRICTED + neither cookie nor header → denied (no-proof)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await store.setMode(SERVICE, "restricted");
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN } }),
+    );
+    expect(d).toEqual({ allow: false, reason: "no-proof" });
+  });
+
+  it("RESTRICTED + cookie for an AID that was REVOKED from the allow-list → denied", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const token = await sessions.issue(SERVICE, hex(friendAid.publicKey), NOW, TTL);
+    // a .com revoke prunes the AID; the still-live cookie must stop working
+    await store.removeAllowed(SERVICE, hex(friendAid.publicKey));
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=${token}` } }),
+    );
+    expect(d).toEqual({ allow: false, reason: "no-proof" });
+  });
+
+  it("RESTRICTED + a stale/forged cookie token → denied", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    // (a) an unknown/forged token
+    const forged = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=${"ab".repeat(32)}` } }),
+    );
+    expect(forged).toEqual({ allow: false, reason: "no-proof" });
+    // (b) an EXPIRED token (issued with a 1ms TTL, evaluated later)
+    const token = await sessions.issue(SERVICE, hex(friendAid.publicKey), NOW, 1);
+    const expired = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW + 10_000 },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=${token}` } }),
+    );
+    expect(expired).toEqual({ allow: false, reason: "no-proof" });
+  });
+
+  it("a cookie for a DIFFERENT service does not unlock this one", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    // cookie scoped to "alice-other", presented at SERVICE
+    const token = await sessions.issue("alice-other", hex(friendAid.publicKey), NOW, 12 * 60 * 60_000);
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=${token}` } }),
+    );
+    expect(d).toEqual({ allow: false, reason: "no-proof" });
+  });
+
+  it("OPEN service: a cookie is irrelevant — always allowed", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    const d = decideServiceAccess(
+      { serverId: FQDN, store, sessions, now: () => NOW },
+      SERVICE,
+      req({ headers: { host: FQDN, cookie: `${SESSION_COOKIE}=whatever` } }),
+    );
+    expect(d).toEqual({ allow: true, reason: "open" });
+  });
+});
+
+describe("ServiceSessionStore", () => {
+  it("persists a live session across a reload; drops expired on reload-lookup", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ss-")), "service-sessions.json");
+    const a = new ServiceSessionStore(path);
+    await a.load();
+    const live = await a.issue(SERVICE, hex(friendAid.publicKey), NOW, 60_000);
+    const expired = await a.issue(SERVICE, hex(friendAid.publicKey), NOW, 1);
+    const b = new ServiceSessionStore(path);
+    await b.load();
+    expect(b.lookup(live, NOW + 1_000)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
+    expect(b.lookup(expired, NOW + 1_000)).toBeNull();
   });
 });
