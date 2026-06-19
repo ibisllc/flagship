@@ -140,3 +140,93 @@ export function buildVibeCodeStartStreaming(
     });
   };
 }
+
+/**
+ * Produces a `resumeStreaming` thunk: re-invokes the model after the owner
+ * answered a `talkToUser` question (or acked a `requestEnvVar`).
+ *
+ * WHY THIS EXISTS: the `/reply` (+ legacy `/user-reply`) handlers append the
+ * owner's reply to the session and flip its status back to `streaming`, but on
+ * their own they do NOT re-invoke the LLM — so a chat-guided build stalled
+ * forever after the FIRST clarifying question (the model never continued).
+ * This resumes the conversation: it rebuilds the `ChatRequest` from the FULL
+ * accumulated history (`session.conversation()`) — the original prompt, the
+ * model's partial reply, and the owner's answer — so the model picks up where
+ * it left off and emits the files.
+ *
+ * Same secret contract as `startStreaming`: the BYOK credential is opened
+ * just-in-time, env-var NAMES only (never values) enter the prompt, and
+ * flagshipserver.com is never in the path.
+ */
+export function buildVibeCodeResumeStreaming(
+  args: BuildVibeCodeStartStreamingArgs,
+): (sessionId: string, model?: string) => Promise<void> {
+  return async function resumeStreaming(
+    sessionId: string,
+    model?: string,
+  ): Promise<void> {
+    const session = args.registry.get(sessionId);
+    if (!session) return;
+
+    const credential = await args.credentials.get(sessionId);
+    if (!credential) {
+      session.fail("no AI credential set for this session", true);
+      return;
+    }
+
+    // The prior turn marked the parser `done` (endAssistant → parser.end);
+    // reset it so the resumed file output is actually parsed (otherwise the
+    // session reaches ready-to-deploy with no files → deploy 502).
+    session.prepareForResume();
+
+    const serviceId = args.resolveAppId(sessionId);
+    const appEnvNames = serviceId ? await args.appEnvStore.names(serviceId) : [];
+    const systemMessage =
+      buildUserContext({
+        ...args.context,
+        existingApps: args.existingAppsSnapshot(),
+        appEnvNames,
+      }) +
+      "\n\n" +
+      TOOL_USE_PROMPT_SUPPLEMENT;
+
+    // Rebuild the running conversation. The model sees its own earlier output
+    // (incl. the question it asked, narrated as assistant text) followed by the
+    // owner's answer, and continues. Synthetic `[tool_result:…]` env-var-ack
+    // entries are value-free by construction (see vibeCodeSession).
+    const history = session.conversation();
+    const messages: ChatRequest["messages"] = [
+      { role: "system", content: systemMessage },
+      ...history.map((h) => ({
+        role: h.role,
+        content: h.content,
+        ...(h.attachments && h.attachments.length > 0
+          ? { attachments: h.attachments }
+          : {}),
+      })),
+    ];
+    const request: ChatRequest = {
+      model: model ?? args.defaultModel,
+      messages,
+      tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
+    };
+
+    await args.harness.chatStream(credential, request, (e: ChatStreamEvent) => {
+      if (e.kind === "delta") {
+        session.feedAssistant(e.text);
+        return;
+      }
+      if (e.kind === "tool_use") {
+        session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
+        return;
+      }
+      if (e.kind === "end") {
+        session.endAssistant();
+        return;
+      }
+      if (e.kind === "error") {
+        session.fail(e.message, true);
+      }
+    });
+  };
+}

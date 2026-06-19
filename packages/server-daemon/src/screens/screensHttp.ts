@@ -292,6 +292,17 @@ export interface VibeCodeRuntime {
     attachments?: Attachment[];
   }) => Promise<void>;
   /**
+   * Re-invoke the model after the owner answered a `talkToUser` question or
+   * acked a `requestEnvVar`. Without this, a reply appends to the session and
+   * flips it back to `streaming` but the LLM is never resumed — so a
+   * chat-guided build stalls forever after the first question. The thunk
+   * rebuilds the request from the FULL conversation history so the model
+   * continues. Same box-only / value-free contract as `startStreaming`.
+   * Optional: when omitted, replies are recorded but the model is not resumed
+   * (the pre-existing behaviour).
+   */
+  resumeStreaming?: (sessionId: string, model?: string) => Promise<void>;
+  /**
    * Value-free journal hook for a scratch chat turn. The daemon wires
    * this to the shared build journal (buildId = the vibe sessionId) so
    * scratch turns appear alongside git/mcp builds. `attachmentSummaries`
@@ -1044,6 +1055,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           text: body.text,
           attachmentSummaries: attach.attachments.map(summarizeAttachment),
         });
+        // Resume the model so the conversation actually continues — the reply
+        // alone only flips the session back to `streaming`; without this the
+        // build stalls forever after the first clarifying question.
+        if (deps.vibeCode.resumeStreaming) {
+          void deps.vibeCode.resumeStreaming(session.meta.sessionId).catch(
+            (e: Error) => session.fail(e.message ?? "resume failed", true),
+          );
+        }
         const out: VibeCodeReplyResponse = { ok: true };
         return jok(out);
       }
@@ -1073,6 +1092,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       };
       const r = session.pushEnvVarAck({ toolUseId: pending.toolUseId, ack });
       if (!r.ok) return jerr(409, r.reason ?? "ack rejected");
+      // Resume the model so it incorporates the env-var ack and continues.
+      if (deps.vibeCode.resumeStreaming) {
+        void deps.vibeCode.resumeStreaming(session.meta.sessionId).catch(
+          (e: Error) => session.fail(e.message ?? "resume failed", true),
+        );
+      }
       const out: VibeCodeReplyResponse = { ok: true };
       return jok(out);
     }

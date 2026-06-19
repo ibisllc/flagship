@@ -66,7 +66,7 @@ import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
 import { LlmHarness } from "./llmHarness.js";
 import { FileBuildCredentialStore } from "./llm/buildCredentialStore.js";
-import { buildVibeCodeStartStreaming } from "./llm/vibeCodeStartStreaming.js";
+import { buildVibeCodeStartStreaming, buildVibeCodeResumeStreaming } from "./llm/vibeCodeStartStreaming.js";
 import { FileBuildJournal } from "./buildmodes/buildJournal.js";
 import { FileMcpKeyStore } from "./buildmodes/mcpKeyStore.js";
 import { GitImporter } from "./buildmodes/gitImport.js";
@@ -975,6 +975,9 @@ async function wireRuntimeSurfaces(deps: {
     serverFqdn: env.serverFqdn,
     deploySession,
     recordScratchTurn,
+    // Resume-after-reply is wired below where the streaming thunks are built
+    // (the screens BFF reply path carries it); see `vibeCode.resumeStreaming`.
+    // The legacy /api/llm/sessions surface is not the phone's path.
   });
   runtime.addHandler(vibeCodeHandle);
 
@@ -1182,8 +1185,8 @@ async function wireRuntimeSurfaces(deps: {
   // only, and streams the model reply through the harness. Only wired
   // when a deploy session exists (otherwise there's no app surface to
   // build into).
-  const vibeStartStreaming = deploySession && runtime.envStore
-    ? buildVibeCodeStartStreaming({
+  const vibeStreamArgs = deploySession && runtime.envStore
+    ? {
         registry: vibeRegistry,
         harness: llmHarness,
         credentials: llmCredentials,
@@ -1192,7 +1195,7 @@ async function wireRuntimeSurfaces(deps: {
         context: {
           username,
           hostname: env.serverFqdn.split(".")[0] ?? "home",
-          tier: "free",
+          tier: "free" as const,
           availableProviders: llmHarness.listStreamingProviders(),
         },
         existingAppsSnapshot: () =>
@@ -1205,7 +1208,16 @@ async function wireRuntimeSurfaces(deps: {
             stores: "",
           })),
         defaultModel: defaultLlmModel,
-      })
+      }
+    : undefined;
+  const vibeStartStreaming = vibeStreamArgs
+    ? buildVibeCodeStartStreaming(vibeStreamArgs)
+    : undefined;
+  // Resume the model after a talkToUser reply / requestEnvVar ack so a
+  // chat-guided build actually continues (the reply alone never re-invokes
+  // the LLM).
+  const vibeResumeStreaming = vibeStreamArgs
+    ? buildVibeCodeResumeStreaming(vibeStreamArgs)
     : undefined;
 
   const screensHandle = buildScreensHttp({
@@ -1227,6 +1239,7 @@ async function wireRuntimeSurfaces(deps: {
           recordScratchTurn,
           credentials: llmCredentials,
           ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
+          ...(vibeResumeStreaming ? { resumeStreaming: vibeResumeStreaming } : {}),
         }
       : null,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
