@@ -87,10 +87,8 @@ public final class ServiceAccessViewModel {
         }
         self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
         self.readKeys = readKeys ?? { reason in
-            // One biometric, then derive both from the same unwrap.
-            let aid = try await Keystore.deriveAccountId(reason: reason)
-            let household = try await Keystore.deriveHouseholdKey(reason: reason)
-            return (aid.publicKey.rawRepresentation, household)
+            // One biometric → both the AID pub and the household key.
+            try await Keystore.deriveAidPubAndHousehold(reason: reason)
         }
         self.counter = counter ?? ServiceInviteCounter.next
     }

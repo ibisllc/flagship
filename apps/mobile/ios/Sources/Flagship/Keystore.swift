@@ -248,6 +248,20 @@ public struct Keystore {
         return key
     }
 
+    /// Service-access READ path: unwrap the UMK ONCE and return the author's
+    /// stable AID pub + the household key, so listing/decrypting the allow-list
+    /// prompts Face ID exactly once (not twice — one per derivation).
+    public static func deriveAidPubAndHousehold(reason: String) async throws -> (aidPub: Data, household: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umkData),
+              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
+        else {
+            throw KeystoreError.derivationFailed("AID + household")
+        }
+        return (aidPub, household)
+    }
+
     /// Account-open fast path for service-access gating: unwrap the UMK ONCE
     /// and return the author's IRK signer + their stable AID pub + the household
     /// key, so creating an invite (IRK-sign the create + seal the bundle + show
