@@ -30,6 +30,7 @@ export const TAG_INVITE_ID = "flagship/service-invite/id/v1";
 export const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 export const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
 export const TAG_VISIT = "flagship/service-visit/v1";
+export const TAG_KNOCK = "flagship/service-knock/v1";
 
 /** Allowed per-service access modes (canonical literals). */
 export const ACCESS_MODES = ["open", "restricted"];
@@ -248,6 +249,14 @@ export function canonicalVisitBytes(v) {
   validateNoSepCtrl("serverId", v.serverId);
   validateNoSepCtrl("serviceRef", v.serviceRef);
   return enc.encode([TAG_VISIT, v.serverId, v.serviceRef, bytesToHex(v.visitorAID), v.issuedAt].join("|"));
+}
+
+/** flagship/service-knock/v1 | serverId | serviceRef | pageId | hex(visitorAID) | issuedAt */
+export function canonicalKnockBytes(k) {
+  validateNoSepCtrl("serverId", k.serverId);
+  validateNoSepCtrl("serviceRef", k.serviceRef);
+  validateNoSepCtrl("pageId", k.pageId);
+  return enc.encode([TAG_KNOCK, k.serverId, k.serviceRef, k.pageId, bytesToHex(k.visitorAID), k.issuedAt].join("|"));
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -543,4 +552,214 @@ export async function buildVisitHeader(args, deps = {}) {
   // btoa over the UTF-8 bytes (serverId/serviceRef are ASCII DNS-ish).
   const b64 = typeof btoa === "function" ? btoa(json) : Buffer.from(json, "utf8").toString("base64");
   return b64;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Web-experience gating — QR-login knock authorization
+// (docs/service-access-gating.md, "Web-experience gating").
+//
+// A plain browser can't AID-sign the visit header, so a restricted service's
+// website is unreachable from one. The box serves a "knock page" carrying a
+// deeplink (`flagship://access?server=&svc=&ref=&page=`); a Flagship client
+// AUTHORIZES it by AID-signing `{serverId, serviceRef, pageId, visitorAID,
+// issuedAt}` and POSTing it to the box. The pageId is IN the signature, so a
+// visit proof can never be replayed to authorize a different page.
+//
+// The webapp is a BROWSER (it can't own the `flagship://` scheme), so its role
+// is the PASTE path: the user copies the deeplink from the knock page's "Get
+// link" affordance and pastes it into Settings → "Process URL".
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a `flagship://access?server=&svc=&ref=&page=` deeplink. Tolerates
+ * surrounding whitespace (it's pasted) and percent-encoded params. Returns
+ * `{ serverId, svc, serviceRef, pageId }` or null when it isn't an access link
+ * or is missing a required field.
+ *
+ * @param {string} raw  the pasted link
+ * @returns {{serverId:string, svc:string, serviceRef:string, pageId:string}|null}
+ */
+export function parseAccessDeepLink(raw) {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim();
+  // Scheme check (case-insensitive) before handing to URL — `flagship:` is a
+  // non-special scheme, so URLSearchParams over the query is the reliable path.
+  if (!/^flagship:\/\/access\b/i.test(s)) return null;
+  const q = s.indexOf("?");
+  if (q < 0) return null;
+  let params;
+  try {
+    params = new URLSearchParams(s.slice(q + 1));
+  } catch {
+    return null;
+  }
+  const serverId = (params.get("server") || "").trim();
+  const svc = (params.get("svc") || "").trim();
+  const serviceRef = (params.get("ref") || "").trim();
+  const pageId = (params.get("page") || "").trim();
+  if (!serverId || !serviceRef || !pageId) return null;
+  // The signed fields can't contain the canonical separator / control chars.
+  try {
+    validateNoSepCtrl("serverId", serverId);
+    validateNoSepCtrl("serviceRef", serviceRef);
+    validateNoSepCtrl("pageId", pageId);
+  } catch {
+    return null;
+  }
+  return { serverId, svc, serviceRef, pageId };
+}
+
+/** The tier-1 canonical URL of the service behind a knock — `https://<svc>.<server>`. */
+export function serviceUrlFromDeepLink(parsed) {
+  if (!parsed || !parsed.svc || !parsed.serverId) return null;
+  return `https://${parsed.svc}.${parsed.serverId}`;
+}
+
+/**
+ * AID-sign a `KnockAuthorization`. Byte-exact mirror of @flagship/protocol's
+ * `signKnockAuthorization` — the box verifies Ed25519 over the SAME pre-image
+ * (`canonicalKnockBytes`). `signWithAccountId` is the injected
+ * `(umk, bytes) => Promise<Uint8Array>` AID signer (keystore.js provides it).
+ *
+ * @param {object} args
+ * @param {string} args.serverId
+ * @param {string} args.serviceRef
+ * @param {string} args.pageId
+ * @param {Uint8Array} args.visitorAID   the in-page account AID pub (32 B)
+ * @param {number} args.issuedAt
+ * @param {Uint8Array} args.umk
+ * @param {(umk,bytes)=>Promise<Uint8Array>} signWithAccountId
+ * @returns {Promise<Uint8Array>} the 64-byte Ed25519 signature
+ */
+export async function signKnockAuthorization(args, signWithAccountId) {
+  const { serverId, serviceRef, pageId, visitorAID, issuedAt, umk } = args;
+  if (!umk || typeof signWithAccountId !== "function") throw err("unlock the webapp first", "400");
+  return signWithAccountId(umk, canonicalKnockBytes({ serverId, serviceRef, pageId, visitorAID, issuedAt }));
+}
+
+/**
+ * Authorize a browser's knock: AID-sign the `KnockAuthorization` and POST it to
+ * the box's `…/knock/authorize`. The box re-verifies sig + allow-list and mints
+ * a browser session; the secretId comes back to US (the phone/webapp), never to
+ * the knocking browser. Maps the documented status codes to clear errors.
+ *
+ * @param {object} args
+ * @param {string} args.serverId         the box fqdn (the authorize target host)
+ * @param {string} args.serviceRef
+ * @param {string} args.pageId
+ * @param {string} [args.svc]            the url-label (carried through for the SecuredSession url)
+ * @param {Uint8Array} args.visitorAID
+ * @param {Uint8Array} args.umk
+ * @param {(umk,bytes)=>Promise<Uint8Array>} args.signWithAccountId
+ * @param {{ fetch?, now? }} [deps]
+ * @returns {Promise<{secretId:string, serviceRef:string, browserAgent:string, startedAt:number, expiresAt:number, serverId:string, svc?:string}>}
+ */
+export async function authorizeKnock(args, deps = {}) {
+  const { serverId, serviceRef, pageId, svc, visitorAID, umk, signWithAccountId } = args;
+  if (!umk || typeof signWithAccountId !== "function") throw err("unlock the webapp first", "400");
+  const base = podBase(`https://${serverId}`);
+  const now = (deps.now || Date.now)();
+  const f = deps.fetch || fetch;
+  const authorization = { serverId, serviceRef, pageId, visitorAID, issuedAt: now };
+  const sig = await signWithAccountId(umk, canonicalKnockBytes(authorization));
+  let resp;
+  try {
+    resp = await f(`${base}/api/service-access/knock/authorize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        authorization: {
+          serverId,
+          serviceRef,
+          pageId,
+          visitorAID: bytesToHex(visitorAID),
+          issuedAt: now,
+        },
+        sig: bytesToHex(sig),
+      }),
+    });
+  } catch {
+    throw err("could not reach the server", "network");
+  }
+  if (resp.status === 401) throw err("You don't have access to this service.", "401");
+  if (resp.status === 403) throw err("Couldn't authorize — try refreshing the page.", "403");
+  if (resp.status === 404) throw err("The page expired — refresh it and try again.", "404");
+  if (resp.status === 409) throw err("That page was already authorized.", "409");
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw err(`authorize failed (${resp.status}): ${text}`.trim(), String(resp.status));
+  }
+  const body = await resp.json().catch(() => ({}));
+  if (!body || body.authorized !== true || typeof body.secretId !== "string") {
+    throw err("Couldn't authorize — try refreshing the page.", "403");
+  }
+  return {
+    secretId: body.secretId,
+    serviceRef: body.serviceRef ?? serviceRef,
+    browserAgent: typeof body.browserAgent === "string" ? body.browserAgent : "",
+    startedAt: typeof body.startedAt === "number" ? body.startedAt : now,
+    expiresAt: typeof body.expiresAt === "number" ? body.expiresAt : now,
+    serverId,
+    svc,
+  };
+}
+
+/**
+ * Query a held session's liveness. secretId rides the BODY (never the URL — so
+ * it can't land in access logs). The box rate-limits ~1/min/secretId (429), and
+ * an UNKNOWN secretId returns `offline` (no enumeration oracle). Maps 429 to a
+ * dedicated code so the caller can keep showing the last-known status.
+ *
+ * @returns {Promise<"online"|"offline">}
+ */
+export async function sessionStatus(args, deps = {}) {
+  const { serverId, secretId } = args;
+  if (typeof secretId !== "string" || !/^[0-9a-f]{64}$/i.test(secretId)) throw err("invalid session", "400");
+  const base = podBase(`https://${serverId}`);
+  const f = deps.fetch || fetch;
+  let resp;
+  try {
+    resp = await f(`${base}/api/service-access/session/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secretId: secretId.toLowerCase() }),
+    });
+  } catch {
+    throw err("could not reach the server", "network");
+  }
+  if (resp.status === 429) throw err("Checked too recently — try again in a moment.", "429");
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw err(`status failed (${resp.status}): ${text}`.trim(), String(resp.status));
+  }
+  const body = await resp.json().catch(() => ({}));
+  return body.status === "online" ? "online" : "offline";
+}
+
+/**
+ * Close a held session — kills the browser's cookie. secretId rides the BODY.
+ * Idempotent + oracle-free on the box (always 200 {closed:true}).
+ *
+ * @returns {Promise<{closed:boolean}>}
+ */
+export async function closeSession(args, deps = {}) {
+  const { serverId, secretId } = args;
+  if (typeof secretId !== "string" || !/^[0-9a-f]{64}$/i.test(secretId)) throw err("invalid session", "400");
+  const base = podBase(`https://${serverId}`);
+  const f = deps.fetch || fetch;
+  let resp;
+  try {
+    resp = await f(`${base}/api/service-access/session/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secretId: secretId.toLowerCase() }),
+    });
+  } catch {
+    throw err("could not reach the server", "network");
+  }
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw err(`close failed (${resp.status}): ${text}`.trim(), String(resp.status));
+  }
+  return resp.json().catch(() => ({ closed: true }));
 }
