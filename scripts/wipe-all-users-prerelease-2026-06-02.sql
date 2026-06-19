@@ -15,6 +15,11 @@
 -- stripe_events (0053), app_purchases (0054). Keep this list in sync as
 -- migrations land, until the mass-wipe is disarmed before real users (see
 -- CLAUDE.md open-work #11).
+-- Re-audited 2026-06-19 through 0057: added trust_exceptions (0055),
+-- service_invites + service_invite_bindings (0056/0057). build_tickets stays
+-- OUT (dropped in 0033). The runner now requires WIPE_CONFIRM=<env> + --yes and
+-- prints a row-count preview (scripts/wipe-all-users.sh) — see CLAUDE.md GA
+-- close-out TODO item 1.
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -44,6 +49,8 @@ DELETE FROM install_events;
 DELETE FROM install_policy_fanout;
 DELETE FROM custom_domain_orders;
 DELETE FROM nfc_rendezvous;
+DELETE FROM service_invites;
+DELETE FROM service_invite_bindings;
 
 -- Cert authority + mint
 DELETE FROM acme_account_key_grants;
@@ -64,6 +71,7 @@ DELETE FROM boot_nonces;
 DELETE FROM webauthn_recovery_records;
 DELETE FROM recovery_shards;
 DELETE FROM pending_re_pairs;
+DELETE FROM trust_exceptions;
 
 -- Devices + delegation + push
 DELETE FROM device_capability_grants;
