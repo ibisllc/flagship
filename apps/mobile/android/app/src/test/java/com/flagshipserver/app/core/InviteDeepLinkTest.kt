@@ -60,6 +60,25 @@ class InviteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("flagship://invite?server=home.alice.flagship.services&k=notahex")))
     }
 
+    // ── v2: author AID carried in the link ──────────────────────────────────
+
+    private val authorAid = "b4".repeat(32) // 64-hex
+
+    @Test fun universalLinkCarriesAuthorAidFromFragment() {
+        val link = DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$secret&a=$authorAid"))
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid), link)
+    }
+
+    @Test fun customSchemeCarriesAuthorAidQuery() {
+        val link = DeepLink.parse(Uri.parse("flagship://invite?server=home.alice.flagship.services&k=$secret&a=$authorAid"))
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, authorAid), link)
+    }
+
+    @Test fun universalLinkWithoutAuthorHasNullAuthor() {
+        val link = DeepLink.parse(Uri.parse("https://home.alice.flagship.services/invite#$secret"))
+        assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret, null), link)
+    }
+
     @Test fun secretFromFragmentHelper() {
         assertEquals(secret, DeepLink.secretFromFragment(secret))
         assertEquals(secret, DeepLink.secretFromFragment("#$secret"))
