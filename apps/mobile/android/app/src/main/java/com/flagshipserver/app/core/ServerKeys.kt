@@ -21,6 +21,37 @@ object ServerKeys {
     private const val INFO_SWK = "flagship.swk.v1"
     private const val INFO_STK = "flagship.stk.v1"
     private const val INFO_IRK = "flagship.irk.v1"
+    private const val INFO_ACCOUNT_ID = "flagship/account-id/v1"
+    private const val INFO_HOUSEHOLD_KEY = "flagship/household-key/v1"
+
+    /** Stable Account Identity Key (AID) SEED (32 bytes) — the NON-rotating
+     *  account identity for service-access gating (docs/service-access-gating.md).
+     *  Ed25519 over HKDF-SHA256(umkSeed, salt=empty, info="flagship/account-id/v1").
+     *  Survives the IRK's rotations (re-pair / wipe-restart derive a fresh IRK
+     *  from the same UMK); resets only on a brand-new account. Mirrors
+     *  ServiceInvite.swift `deriveAccountIdSeed` + protocol keys.ts. */
+    fun deriveAccountIdSeed(umkSeed: ByteArray): ByteArray {
+        require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
+        return hkdfSha256(umkSeed, INFO_ACCOUNT_ID.toByteArray(Charsets.UTF_8))
+    }
+
+    /** A Tink Ed25519 signer over the AID seed (the friend's redeem/visit
+     *  signer; the author's recorded identity). */
+    fun deriveAccountId(umkSeed: ByteArray): Ed25519Sign =
+        Ed25519Sign(deriveAccountIdSeed(umkSeed))
+
+    /** The stable AID Ed25519 PUBLIC key (32 bytes) — the allow-list/invite key. */
+    fun deriveAccountIdPub(umkSeed: ByteArray): ByteArray =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAccountIdSeed(umkSeed)).publicKey
+
+    /** The household AEAD key (32 bytes) — HKDF-SHA256(umkSeed, salt=empty,
+     *  info="flagship/household-key/v1"). Every device of the account derives
+     *  the same key (so a sibling opens the sealed bundle); .com never holds the
+     *  UMK -> stores ciphertext only. */
+    fun deriveHouseholdKey(umkSeed: ByteArray): ByteArray {
+        require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
+        return hkdfSha256(umkSeed, INFO_HOUSEHOLD_KEY.toByteArray(Charsets.UTF_8))
+    }
 
     /** The owner IRK seed (32 bytes) derived from the UMK seed the PROTOCOL way
      *  — Ed25519 over HKDF-SHA256(umkSeed, salt=empty, info="flagship.irk.v1").
