@@ -46,6 +46,7 @@ object ServiceInvite {
     const val TAG_INVITE_ID = "flagship/service-invite/id/v1"
     const val TAG_BUNDLE = "flagship/service-invite/bundle/v1"
     const val TAG_ACCESS_MODE = "flagship/service-access-mode/v1"
+    const val TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1"
     const val TAG_VISIT = "flagship/service-visit/v1"
     const val TAG_KNOCK = "flagship/service-knock/v1"
 
@@ -192,6 +193,29 @@ object ServiceInvite {
         return listOf(TAG_ACCESS_MODE, serverId, serviceRef, mode, issuedAt.toString())
             .joinToString("|").toByteArray(Charsets.UTF_8)
     }
+
+    /** Canonical bytes for an owner-IRK remove-from-allow-list order — the box's
+     *  `flagship/service-allow-remove/v1` shape. Prunes ONE bound AID (lowercase
+     *  hex) from a service's allow-list so a revoked friend is denied on their
+     *  next request. Mirrors @flagship/protocol `canonicalRemoveServiceAllow`. */
+    fun canonicalRemoveServiceAllow(serverId: String, serviceRef: String, aid: String, issuedAt: Long): ByteArray {
+        validateNoSepCtrl("serverId", serverId)
+        validateNoSepCtrl("serviceRef", serviceRef)
+        validateNoSepCtrl("aid", aid)
+        return listOf(TAG_ALLOW_REMOVE, serverId, serviceRef, aid, issuedAt.toString())
+            .joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    /** Owner-IRK-sign a remove-from-allow-list order (Ed25519 over
+     *  [canonicalRemoveServiceAllow]). RFC-8032 deterministic ⇒ byte-equals the
+     *  TS/webapp/iOS twin. */
+    fun signRemoveServiceAllow(
+        serverId: String,
+        serviceRef: String,
+        aid: String,
+        issuedAt: Long,
+        irk: Ed25519Sign,
+    ): ByteArray = irk.sign(canonicalRemoveServiceAllow(serverId, serviceRef, aid, issuedAt))
 
     fun canonicalVisit(serverId: String, serviceRef: String, visitorAID: ByteArray, issuedAt: Long): ByteArray {
         validateNoSepCtrl("serverId", serverId)

@@ -35,6 +35,10 @@ data class AccessPerson(
     val name: String,
     val photo: String?,
     val bound: Boolean,
+    /** The friend's bound AID (lowercase hex) once they've redeemed; null while
+     *  the invite is unredeemed. Removing a BOUND person also prunes this AID
+     *  from the box's allow-list. */
+    val boundAidHex: String? = null,
 )
 
 class ServiceAccessViewModel(
@@ -156,11 +160,19 @@ class ServiceAccessViewModel(
         }
     }
 
-    /** IRK-signed revoke -> the friend's next visit is denied. */
-    suspend fun remove(inviteId: String) {
-        try {
+    /** Revoke a person's access. Always records the revocation on `.com`
+     *  (author-IRK `revoke`). When the person has REDEEMED (a bound AID), ALSO
+     *  owner-IRK-prunes that AID from the box's allow-list — `.com` does NOT push
+     *  to the daemon, so this box call is what actually denies the friend on
+     *  their next request (it also kills any live browser cookie bound to that
+     *  AID). An unredeemed invite (no bound AID) is just the `.com` revoke.
+     *  Both calls run; a box-prune failure surfaces an error since that is the
+     *  load-bearing step. */
+    suspend fun remove(inviteId: String, boundAidHex: String? = null) {
+        val ts = now()
+        // 1) `.com` revoke — records the revocation (author-IRK signed).
+        val comOk = try {
             val key = irkSigner("Remove this person from $serviceRef")
-            val ts = now()
             val bytes = ServiceInvite.canonicalRevoke(inviteId, ts)
             val sig = key.sign(bytes)
             val request: JsonObject = buildJsonObject {
@@ -168,10 +180,35 @@ class ServiceAccessViewModel(
                 put("issuedAt", JsonPrimitive(ts))
             }
             client.revokeInvite(username, request, HexUtil.encode(sig))
-            refreshPeople()
+            true
         } catch (e: Throwable) {
             _phase.value = ServiceAccessPhase.Failed("Couldn't remove them. Try again in a moment.")
+            false
         }
+
+        // 2) Box allow-list prune — only when the friend has redeemed (bound
+        //    AID). This is what actually reaches the box and denies them.
+        val aid = boundAidHex?.lowercase()
+        var boxOk = true
+        if (!aid.isNullOrEmpty()) {
+            boxOk = try {
+                val key = irkSigner("Remove this person from $serviceRef")
+                val sig = ServiceInvite.signRemoveServiceAllow(serverDomain, serviceRef, aid, ts, key)
+                val request: JsonObject = buildJsonObject {
+                    put("serverId", JsonPrimitive(serverDomain))
+                    put("serviceRef", JsonPrimitive(serviceRef))
+                    put("aid", JsonPrimitive(aid))
+                    put("issuedAt", JsonPrimitive(ts))
+                }
+                client.removeServiceAllow(serverDomain, request, HexUtil.encode(sig))
+                true
+            } catch (e: Throwable) {
+                _phase.value = ServiceAccessPhase.Failed("Removed them, but the server is still catching up. Try again in a moment.")
+                false
+            }
+        }
+
+        if (comOk && boxOk) refreshPeople()
     }
 
     /** List the author's live invites for this service from .com, decrypting
@@ -188,7 +225,7 @@ class ServiceAccessViewModel(
                     var photo: String? = null
                     runCatching { ServiceInvite.openBundle(row.encryptedBundleHex, hh, row.inviteId) }
                         .getOrNull()?.let { name = it.name; photo = it.photo }
-                    AccessPerson(row.inviteId, name, photo, row.boundAidHex != null)
+                    AccessPerson(row.inviteId, name, photo, row.boundAidHex != null, row.boundAidHex)
                 }
         } catch (e: Throwable) {
             // keep the last list; load-phase error already surfaced

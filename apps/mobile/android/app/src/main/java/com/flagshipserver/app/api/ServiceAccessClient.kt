@@ -110,6 +110,26 @@ class ServiceAccessClient(
             ?: request["mode"]?.jsonPrimitive?.contentOrNull ?: "open"
     }
 
+    /** POST a signed owner-IRK remove-from-allow-list envelope to the BOX (the
+     *  pinned pipe — `.com` is never in this path). Prunes ONE bound AID from the
+     *  service's allow-list so a revoked friend is denied on their next request.
+     *  Returns the box's `removed` flag (idempotent: a no-op prune still 200s).
+     *  The OkHttp transport runs the call on Dispatchers.IO. */
+    suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean {
+        val body = buildJsonObject {
+            put("request", request)
+            put("signature", JsonPrimitive(signatureHex))
+        }
+        val resp = boxTransport.execute(
+            "POST", "${podBaseUrl(serverDomain)}/api/service-access/allow-remove",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+        val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
+        return obj["removed"]?.jsonPrimitive?.contentOrNull == "true"
+    }
+
     /** Friend AID-signed redeem. Maps 404/409/403 to ServiceAccessError. */
     suspend fun redeemInvite(
         serverDomain: String,

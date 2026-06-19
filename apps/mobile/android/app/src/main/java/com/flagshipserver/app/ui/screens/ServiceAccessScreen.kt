@@ -259,7 +259,7 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                     val p = person
                     confirmRemove = null
                     scope.launch {
-                        vm.remove(p.inviteId)
+                        vm.remove(p.inviteId, p.boundAidHex)
                         toasts.success("Removed.")
                     }
                 }) { Text("Remove") }
