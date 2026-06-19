@@ -269,6 +269,29 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     }
                 }
 
+                // ── Who can open this (#92) ────────────────────────────
+                Spacer(Modifier.height(FS.space.s4))
+                SectionHeader("Who can open this")
+                FSCard(
+                    padding = PaddingValues(FS.space.s4),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { testTag = "service-detail-access-row" }
+                        .clickable { nav.navigate("service-access/$serviceId") },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Manage access", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                            Text(
+                                "Open to anyone, or restrict to people you invite",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            )
+                        }
+                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+                    }
+                }
+
                 // ── Configure environment ──────────────────────────────
                 Spacer(Modifier.height(FS.space.s4))
                 SectionHeader("Environment")

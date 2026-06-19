@@ -77,6 +77,9 @@ fun RootShell(
             // adding a SECOND profile to this phone. Route to Settings,
             // which hosts the join-device-link surface.
             is com.flagshipserver.app.core.DeepLink.JoinDevice -> RootDestination.SETTINGS
+            // #92 — a friend-redeem invite routes to the Apps tab, whose
+            // NavHost pushes the redeem screen (account-agnostic entry).
+            is com.flagshipserver.app.core.DeepLink.RedeemInvite -> RootDestination.APPS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

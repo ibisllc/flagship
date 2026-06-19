@@ -14,6 +14,7 @@
 package com.flagshipserver.app.api
 
 import com.flagshipserver.app.core.Endpoints
+import com.flagshipserver.app.core.HttpClientFactory
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import com.flagshipserver.app.core.OkHttpJsonTransport
@@ -53,10 +54,11 @@ sealed class ServiceAccessError(message: String) : RuntimeException(message) {
     object InviteRevoked : ServiceAccessError("invite revoked")          // 403
 }
 
-/** Box calls ride the box transport (the pod-pinned OkHttp); `.com` calls ride
- *  a separate (public-CA) transport. Pluggable for tests. */
+/** Box calls ride the box transport (the pod-pinned OkHttp — set-mode/redeem
+ *  are signature-authed daemon endpoints, so a rogue cert must not intercept);
+ *  `.com` calls ride a separate (public-CA) transport. Pluggable for tests. */
 class ServiceAccessClient(
-    private val boxTransport: JsonHttpTransport = OkHttpJsonTransport(),
+    private val boxTransport: JsonHttpTransport = OkHttpJsonTransport(HttpClientFactory.build()),
     private val comTransport: JsonHttpTransport = OkHttpJsonTransport(),
     private val podBaseUrl: (serverDomain: String) -> String = { "https://$it" },
     private val controlBase: () -> String = { Endpoints.controlBaseUrl },

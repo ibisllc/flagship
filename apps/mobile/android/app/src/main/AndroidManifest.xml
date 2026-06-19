@@ -44,6 +44,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="join" />
             </intent-filter>
+            <!-- #92 — service-access invite "open in app" hand-off
+                 (flagship://invite?server=<host>&k=<secret>). The box's
+                 /invite page offers this; Android drops the URL fragment from
+                 App-Links so the secret rides a query param. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="invite" />
+            </intent-filter>
         </activity>
 
         <!-- FCM messaging service -->

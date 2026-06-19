@@ -43,11 +43,34 @@ sealed interface DeepLink {
      *  join params; the host re-parses them into a [JoinLink]. */
     data class JoinDevice(val sid: String, val pk: String) : DeepLink
 
+    /** #92 — friend redeem of a service-access capability invite
+     *  (docs/service-access-gating.md). Carries the BOX host the `/invite` link
+     *  was served from + the 32-byte capability secret (64-hex). The secret is
+     *  POSTed to that box's OWN redeem endpoint, never to `.com`. Reachable two
+     *  ways: the `flagship://invite?server=<host>&k=<secret>` "open in app"
+     *  hand-off the box's /invite page offers (Android drops the URL fragment
+     *  from App-Links, so the secret rides a query), and — when the fragment
+     *  IS carried — the universal link
+     *  `https://<server>.<user>.flagship.services/invite#<secret>`. */
+    data class RedeemInvite(val serverDomain: String, val secretHex: String) : DeepLink
+
     companion object {
-        /// Parse a `flagship://...` URI. Keep in sync with iOS
-        /// DeepLink.parse and the webapp's lib/router.js. Returns null
-        /// when the host/scheme is not one we route.
+        /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
+        /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
+        /// Returns null when the host/scheme is not one we route.
         fun parse(uri: Uri): DeepLink? {
+            // Universal link: a service-access invite served from a BOX —
+            // `https://<server>.<user>.flagship.services/invite#<secret>`.
+            if (uri.scheme == "https") {
+                val host = uri.host
+                if (host != null && host.endsWith(".${Endpoints.dataApex}") &&
+                    (uri.path == "/invite" || uri.path == "/invite/")
+                ) {
+                    val secret = secretFromFragment(uri.fragment)
+                    return if (secret != null) RedeemInvite(host, secret) else null
+                }
+                return null
+            }
             if (uri.scheme != "flagship") return null
             val host = uri.host ?: return null
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
@@ -58,6 +81,16 @@ sealed interface DeepLink {
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
+                "invite" -> {
+                    // flagship://invite?server=<host>&k=<64hex> — the "open in
+                    // app" hand-off from the box's /invite page (a custom scheme
+                    // can't carry the fragment, so the secret is a `k` query).
+                    val server = params["server"] ?: params["host"] ?: ""
+                    val pathSecret = uri.path?.trim('/').orEmpty()
+                    val candidate = params["k"] ?: params["secret"] ?: pathSecret
+                    val secret = secretFromFragment(candidate)
+                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret) else null
+                }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params
                     // required; a malformed link is NOT routed (returns
@@ -76,6 +109,17 @@ sealed interface DeepLink {
                 }
                 else -> null
             }
+        }
+
+        /** Pull a 64-hex capability secret from a fragment / candidate string.
+         *  Accepts a bare `<64hex>` or the `k=<64hex>` form (mirrors the
+         *  webapp's inviteSecretFromLocation + iOS secretFromFragment). */
+        fun secretFromFragment(raw: String?): String? {
+            var s = raw?.takeIf { it.isNotEmpty() } ?: return null
+            if (s.startsWith("#")) s = s.substring(1)
+            Regex("(?:^|[?&])k=([0-9a-fA-F]{64})").find(s)?.let { return it.groupValues[1].lowercase() }
+            if (Regex("^[0-9a-fA-F]{64}$").matches(s)) return s.lowercase()
+            return null
         }
     }
 }

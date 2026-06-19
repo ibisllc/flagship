@@ -28,6 +28,8 @@ import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
 import com.flagshipserver.app.ui.screens.InviteIssueScreen
 import com.flagshipserver.app.ui.screens.InviteManageScreen
+import com.flagshipserver.app.ui.screens.InviteRedeemScreen
+import com.flagshipserver.app.ui.screens.ServiceAccessScreen
 
 @Composable
 fun ServicesTab() {
@@ -55,6 +57,15 @@ fun ServicesTab() {
             is DeepLink.BuildJournal -> {
                 deepLinker.consume()
                 nav.navigate("build/journal/${link.buildId}")
+            }
+            // #92 — friend redeem of a service-access invite. server + secret
+            // are URL-encoded into the route (the secret is 64-hex; the host is
+            // DNS-safe, but encode both for safety).
+            is DeepLink.RedeemInvite -> {
+                deepLinker.consume()
+                val s = java.net.URLEncoder.encode(link.serverDomain, "UTF-8")
+                val k = java.net.URLEncoder.encode(link.secretHex, "UTF-8")
+                nav.navigate("invite-redeem/$s/$k")
             }
             else -> { /* not for this tab */ }
         }
@@ -138,6 +149,23 @@ fun ServicesTab() {
         composable("invite-issue/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             InviteIssueScreen(nav, serviceId = sid)
+        }
+        // #92 — per-service access gating ("Who can open this"): open/restricted
+        // toggle + the bearer-invite allow-list manager.
+        composable("service-access/{serviceId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            ServiceAccessScreen(nav, serviceId = sid)
+        }
+        // #92 — friend redeem of a service-access invite (deep-link target).
+        composable("invite-redeem/{server}/{secret}") { entry ->
+            val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
+            val secret = java.net.URLDecoder.decode(entry.arguments?.getString("secret") ?: "", "UTF-8")
+            InviteRedeemScreen(
+                serverDomain = server,
+                secretHex = secret,
+                onOpenService = { nav.popBackStack() },
+                onDone = { nav.popBackStack() },
+            )
         }
     }
 }
