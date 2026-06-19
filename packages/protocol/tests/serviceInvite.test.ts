@@ -19,11 +19,14 @@ import {
   verifySetServiceAccessMode,
   signServiceVisitProof,
   verifyServiceVisitProof,
+  signKnockAuthorization,
+  verifyKnockAuthorization,
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
   type SetServiceAccessMode,
   type ServiceVisitProof,
+  type KnockAuthorization,
 } from "../src/serviceInvite.js";
 
 const authorUmk = { seed: new Uint8Array(32).fill(11) };
@@ -287,5 +290,45 @@ describe("service-visit proof (AID-signed by the friend)", () => {
     const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(77) });
     const sig = signServiceVisitProof(visit, attacker);
     expect(verifyServiceVisitProof(visit, sig, visit.visitorAID)).toBe(false);
+  });
+});
+
+describe("knock authorization (AID-signed by the phone; binds the pageId)", () => {
+  const knock: KnockAuthorization = {
+    serverId: "home.alice.flagship.services",
+    serviceRef: "alice-notes",
+    pageId: "cb2421036efeb738c6017d8ee92e7b89",
+    visitorAID: friendAid.publicKey,
+    issuedAt: 1_700_004_000_000,
+  };
+
+  it("signs + verifies under the friend's AID", () => {
+    const sig = signKnockAuthorization(knock, friendAid);
+    expect(verifyKnockAuthorization(knock, sig, friendAid.publicKey)).toBe(true);
+  });
+
+  it("the pageId is IN the signature — a different pageId fails (no replay onto another page)", () => {
+    const sig = signKnockAuthorization(knock, friendAid);
+    expect(
+      verifyKnockAuthorization({ ...knock, pageId: "00000000000000000000000000000000" }, sig, friendAid.publicKey),
+    ).toBe(false);
+  });
+
+  it("rejects a different serverId / serviceRef", () => {
+    const sig = signKnockAuthorization(knock, friendAid);
+    expect(verifyKnockAuthorization({ ...knock, serverId: "evil.bob.flagship.services" }, sig, friendAid.publicKey)).toBe(false);
+    expect(verifyKnockAuthorization({ ...knock, serviceRef: "alice-secret" }, sig, friendAid.publicKey)).toBe(false);
+  });
+
+  it("does not verify under the friend's IRK (knock is AID-signed)", () => {
+    const friendIrk = deriveIRK(friendUmk);
+    const sig = signKnockAuthorization(knock, friendAid);
+    expect(verifyKnockAuthorization(knock, sig, friendIrk.publicKey)).toBe(false);
+  });
+
+  it("a forged visitorAID (signed by a stranger) fails", () => {
+    const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(88) });
+    const sig = signKnockAuthorization(knock, attacker);
+    expect(verifyKnockAuthorization(knock, sig, knock.visitorAID)).toBe(false);
   });
 });

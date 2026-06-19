@@ -38,6 +38,7 @@ import {
   ServiceAccessStore,
   ServiceSessionStore,
 } from "./serviceAccess.js";
+import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -1454,20 +1455,35 @@ async function wireOwnerHandlers(deps: {
     householdKey: householdHex ? hexToBytes(householdHex.trim()) : undefined,
   });
   runtime.addHandler(access.handle);
+  // Web-experience gating (docs "Web-experience gating"): QR-login for a
+  // restricted service's WEBSITE (a browser can't AID-sign). Shares the access +
+  // session stores. Its endpoints (knock poll / phone authorize / session
+  // status+close) are registered BEFORE enforcement so they're never gated.
+  const accessWeb = buildServiceAccessWeb({
+    serverId: env.serverFqdn,
+    store: accessStore,
+    sessions: sessionStore,
+  });
+  runtime.addHandler(accessWeb.handle);
   // Enforcement: a restricted service's per-label reverse proxy is fronted by
   // this guard. A request to `<urlLabel>.<serverFqdn>` resolves to its
   // installed `<creator>-<slug>`; OPEN services + unknown labels fall through.
+  // On a DENY, a top-level browser navigation gets the QR-login knock page.
   runtime.addHandler(
-    buildAccessEnforcementHandler(access, (req) => {
-      const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
-      const suffix = `.${env.serverFqdn.toLowerCase()}`;
-      if (!host.endsWith(suffix) || host.length === suffix.length) return null;
-      const label = host.slice(0, host.length - suffix.length);
-      // Only the leftmost single label is a service label (no nested dots).
-      if (label.includes(".")) return null;
-      const svc = deps.servicePlatformRef.current?.byLabel(label);
-      return svc ? svc.serviceId : null;
-    }),
+    buildAccessEnforcementHandler(
+      access,
+      (req) => {
+        const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
+        const suffix = `.${env.serverFqdn.toLowerCase()}`;
+        if (!host.endsWith(suffix) || host.length === suffix.length) return null;
+        const label = host.slice(0, host.length - suffix.length);
+        // Only the leftmost single label is a service label (no nested dots).
+        if (label.includes(".")) return null;
+        const svc = deps.servicePlatformRef.current?.byLabel(label);
+        return svc ? svc.serviceId : null;
+      },
+      accessWeb.maybeServeKnock,
+    ),
   );
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());
@@ -2022,7 +2038,15 @@ export {
   type ServiceAccessHttp,
   type ServiceAccessHttpOptions,
   type AccessDecision,
+  type SessionView,
 } from "./serviceAccess.js";
+export {
+  buildServiceAccessWeb,
+  PendingKnockStore,
+  KNOCK_HOLDER_COOKIE,
+  type ServiceAccessWeb,
+  type ServiceAccessWebOptions,
+} from "./serviceAccessWeb.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,

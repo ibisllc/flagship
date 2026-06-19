@@ -166,6 +166,29 @@ interface SessionEntry {
   aid: string;
   /** Epoch-ms expiry. */
   expiresAt: number;
+  /**
+   * Phone-held opaque handle for the QR-login flow (docs "Web-experience
+   * gating"). The PHONE authorizes a SEPARATE browser's session and holds THIS
+   * id; it queries status + closes by it. Absent for sessions the friend's own
+   * browser established (redeem / establish-session — no phone correlation).
+   */
+  secretId?: string;
+  /** Browser UA recorded when the knock page was served — shown in "Open secured sessions". */
+  browserAgent?: string;
+  /** Session start (epoch-ms) — defaults to issue time. */
+  startedAt?: number;
+  /** Phone-initiated close: kills the browser cookie regardless of expiry. */
+  closed?: boolean;
+}
+
+/** A phone-facing view of a session, addressed by its secretId. */
+export interface SessionView {
+  serviceRef: string;
+  aid: string;
+  browserAgent: string;
+  startedAt: number;
+  expiresAt: number;
+  closed: boolean;
 }
 
 type SessionPersistShape = Record<string, SessionEntry>;
@@ -178,6 +201,8 @@ type SessionPersistShape = Record<string, SessionEntry>;
  */
 export class ServiceSessionStore {
   private byToken = new Map<string, SessionEntry>();
+  /** secretId → cookie token (the phone addresses a session by its secretId). */
+  private bySecretId = new Map<string, string>();
   private readonly statePath: string;
 
   constructor(statePath = "/var/flagship/service-sessions.json") {
@@ -188,6 +213,7 @@ export class ServiceSessionStore {
     try {
       const raw = JSON.parse(await readFile(this.statePath, "utf8")) as SessionPersistShape;
       this.byToken.clear();
+      this.bySecretId.clear();
       for (const [tok, e] of Object.entries(raw ?? {})) {
         if (
           !e ||
@@ -197,36 +223,97 @@ export class ServiceSessionStore {
         ) {
           continue;
         }
-        this.byToken.set(tok, { serviceRef: e.serviceRef, aid: e.aid.toLowerCase(), expiresAt: e.expiresAt });
+        const entry: SessionEntry = {
+          serviceRef: e.serviceRef,
+          aid: e.aid.toLowerCase(),
+          expiresAt: e.expiresAt,
+        };
+        if (typeof e.secretId === "string" && e.secretId.length > 0) entry.secretId = e.secretId;
+        if (typeof e.browserAgent === "string") entry.browserAgent = e.browserAgent;
+        if (typeof e.startedAt === "number") entry.startedAt = e.startedAt;
+        if (e.closed === true) entry.closed = true;
+        this.byToken.set(tok, entry);
+        if (entry.secretId) this.bySecretId.set(entry.secretId, tok);
       }
     } catch {
       this.byToken.clear();
+      this.bySecretId.clear();
     }
   }
 
-  /** Mint + persist a session token for an AID scoped to a service. Returns the opaque token. */
-  async issue(serviceRef: string, aidHex: string, now: number, ttlMs: number): Promise<string> {
+  /**
+   * Mint + persist a session token for an AID scoped to a service. Returns the
+   * opaque cookie token. `extra` carries the QR-login fields — a `secretId`
+   * (the phone's handle for the session) + the recorded `browserAgent`.
+   */
+  async issue(
+    serviceRef: string,
+    aidHex: string,
+    now: number,
+    ttlMs: number,
+    extra?: { secretId?: string; browserAgent?: string; startedAt?: number },
+  ): Promise<string> {
     this.pruneExpired(now);
     const token = bytesToHex(randomBytes(32));
-    this.byToken.set(token, { serviceRef, aid: aidHex.toLowerCase(), expiresAt: now + ttlMs });
+    const entry: SessionEntry = {
+      serviceRef,
+      aid: aidHex.toLowerCase(),
+      expiresAt: now + ttlMs,
+      startedAt: extra?.startedAt ?? now,
+    };
+    if (extra?.secretId) entry.secretId = extra.secretId;
+    if (extra?.browserAgent !== undefined) entry.browserAgent = extra.browserAgent;
+    this.byToken.set(token, entry);
+    if (entry.secretId) this.bySecretId.set(entry.secretId, token);
     await this.persist();
     return token;
   }
 
-  /** Look up a live session for a token, or null if absent/expired. Does NOT check the allow-list. */
+  /** Look up a live session for a cookie token, or null if absent/expired/closed. Does NOT check the allow-list. */
   lookup(token: string, now: number): { serviceRef: string; aid: string } | null {
     const e = this.byToken.get(token);
     if (!e) return null;
-    if (e.expiresAt <= now) {
-      this.byToken.delete(token);
+    if (e.closed || e.expiresAt <= now) {
+      if (e.expiresAt <= now) this.drop(token);
       return null;
     }
     return { serviceRef: e.serviceRef, aid: e.aid };
   }
 
+  /** A phone-facing view of the session a secretId addresses, or null if unknown. */
+  lookupBySecretId(secretId: string): SessionView | null {
+    const token = this.bySecretId.get(secretId);
+    if (!token) return null;
+    const e = this.byToken.get(token);
+    if (!e) return null;
+    return {
+      serviceRef: e.serviceRef,
+      aid: e.aid,
+      browserAgent: e.browserAgent ?? "",
+      startedAt: e.startedAt ?? 0,
+      expiresAt: e.expiresAt,
+      closed: e.closed === true,
+    };
+  }
+
+  /** Phone-initiated close — kills the browser cookie. Idempotent; returns whether a session was closed. */
+  async closeBySecretId(secretId: string): Promise<boolean> {
+    const token = this.bySecretId.get(secretId);
+    if (!token) return false;
+    this.drop(token);
+    await this.persist();
+    return true;
+  }
+
+  private drop(token: string): void {
+    const e = this.byToken.get(token);
+    this.byToken.delete(token);
+    if (e?.secretId) this.bySecretId.delete(e.secretId);
+  }
+
   private pruneExpired(now: number): void {
     for (const [tok, e] of this.byToken) {
-      if (e.expiresAt <= now) this.byToken.delete(tok);
+      if (e.expiresAt <= now) this.drop(tok);
     }
   }
 
@@ -588,6 +675,13 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
 export function buildAccessEnforcementHandler(
   access: Pick<ServiceAccessHttp, "decide" | "store">,
   resolveServiceRef: (req: HttpRequest) => string | null,
+  /**
+   * Web-experience hook: on a DENY, this gets first refusal. For a top-level
+   * browser navigation it returns the QR-login knock page (200 HTML); for an
+   * API/asset request it returns null and the 403 JSON below is used. Absent ⇒
+   * always 403 (no behavior change).
+   */
+  maybeServeKnock?: (serviceRef: string, req: HttpRequest) => HttpResponse | null,
 ): (req: HttpRequest) => Promise<HttpResponse | null> {
   return async (req: HttpRequest): Promise<HttpResponse | null> => {
     const serviceRef = resolveServiceRef(req);
@@ -595,6 +689,8 @@ export function buildAccessEnforcementHandler(
     if (access.store.mode(serviceRef) === "open") return null;
     const decision = access.decide(serviceRef, req);
     if (decision.allow) return null;
+    const knock = maybeServeKnock?.(serviceRef, req);
+    if (knock) return knock;
     return {
       status: 403,
       headers: H,

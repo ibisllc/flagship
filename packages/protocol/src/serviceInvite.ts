@@ -37,6 +37,7 @@ const TAG_INVITE_ID = "flagship/service-invite/id/v1";
 const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
 const TAG_VISIT = "flagship/service-visit/v1";
+const TAG_KNOCK = "flagship/service-knock/v1";
 
 // ──────────────────────────────────────────────────────────────────────
 // Invite id — `hash(AID_author) · hash(devicePub_author) · counter`.
@@ -349,6 +350,51 @@ export function verifyServiceVisitProof(
 ): boolean {
   try {
     return ed.verify(sig, canonicalServiceVisit(v), visitorAidPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Knock authorization — AID-signed by the visitor's PHONE to authorize a
+// SEPARATE browser's QR-login session (docs/service-access-gating.md,
+// "Web-experience gating"). A plain browser hitting a restricted service gets a
+// knock page carrying a high-entropy single-use `pageId`; the phone verifies its
+// AID is allow-listed, then signs THIS envelope (binding the pageId, so a visit
+// proof can never be replayed to authorize a different page) and POSTs it to the
+// box. The box checks the signature + that `visitorAID` is allow-listed, then
+// binds the browser session to that pageId. Short replay window on `issuedAt`.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface KnockAuthorization {
+  serverId: string;
+  serviceRef: string;
+  /** The browser's knock-page id this authorization is bound to. */
+  pageId: string;
+  visitorAID: Bytes;
+  issuedAt: number;
+}
+
+function canonicalKnock(k: KnockAuthorization): Bytes {
+  validateNoSepCtrl("serverId", k.serverId);
+  validateNoSepCtrl("serviceRef", k.serviceRef);
+  validateNoSepCtrl("pageId", k.pageId);
+  return new TextEncoder().encode(
+    [TAG_KNOCK, k.serverId, k.serviceRef, k.pageId, hex(k.visitorAID), k.issuedAt].join("|"),
+  );
+}
+
+export function signKnockAuthorization(k: KnockAuthorization, visitorAid: Keypair): Bytes {
+  return ed.sign(canonicalKnock(k), visitorAid.privateKey);
+}
+
+export function verifyKnockAuthorization(
+  k: KnockAuthorization,
+  sig: Bytes,
+  visitorAidPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalKnock(k), visitorAidPub);
   } catch {
     return false;
   }
