@@ -99,3 +99,42 @@ Key usage (the owner's asymmetry):
 - Layers on existing `ServiceEntitlement` (IRK-signed cert) + service `membership`.
 - Bearer-link threat model: whoever holds the link can redeem; first-bind locks it to one AID;
   the author sees who bound it + can revoke. Send over a private channel.
+
+## Web-experience gating (browser access via QR-login + session management) — owner-designed 2026-06-19
+A restricted service's WEBSITE must gate plain browser visitors (a browser can't AID-sign). Pattern =
+**QR-login** (à la WhatsApp Web): a knock page; the phone authorizes; the server binds the browser session.
+
+### Knock page
+A visitor hitting a restricted service with no valid session gets a non-threatening knock page: *"This page
+is on a Flagship cloud and access is restricted — authenticate to view."* (minimal disclosure — NO owner/
+content). It carries a high-entropy, short-lived, single-use **pageId** (re-rolled per load / ~minute), a
+**button** (same-device deeplink `flagship://access?pageId=…&svc=…`), and a **QR** (cross-device: same
+deeplink). The page POLLS the box for `pageId` authorization.
+
+### Authorize (phone)
+deeplink/scan → app verifies the visitor's **AID** ∈ the service allow-list → on yes the phone **AID-SIGNS**
+`{pageId, aid, serviceRef, nonce, exp}` and POSTs it to the box. The box verifies the **signature + allow-list
+membership** (NOT a plaintext "who I am" GET param — the security must-fix), then: creates a **session**
+`{secretId, aid, serviceRef, browserAgent, startTime, status:online}`; the browser's next poll for `pageId`
+→ authorized → the box sets the access **cookie** on the BROWSER (transitions off the QR to the content);
+returns the **session secretId** to the PHONE (never to the browser). A "go back to the website" toast nudges
+the cross-device case (the browser auto-transitions regardless).
+
+### Fallbacks
+No app / no access on this device → the button stays as the QR (scan with another phone). "Get link" → copy
+the code → app Settings → **"Process URL"** paste. Never deactivate the page — a stale pageId just re-rolls.
+
+### Session management (the phone holds the secretId, not the browser)
+- `GET  /api/service-access/session/:secretId/status` → `{online|offline}`, **rate-limited ~1/min/session**,
+  **default offline for unknown** (no enumeration oracle).
+- `POST /api/service-access/session/:secretId/close` (secretId-authed) → kills the browser cookie.
+- The service (or the harness) can stop a session anytime.
+- Settings → **"Open secured sessions"** lists `{serviceUrl, browserAgent, startTime}` per held secretId + Stop.
+
+### Maps to the built backend (extends, doesn't replace)
+On main already: AID binding (redeem), the `Flagship-App-Session` cookie, `establish-session` (phone
+AID-signed visit-proof → box mints a cookie). This ADDS: (a) the **pageId correlation** (the phone authorizes
+a SEPARATE browser's pageId, vs its own client) + the knock page + the browser poll; (b) the **session store**
+carrying `{secretId, status, serviceUrl, browserAgent, startTime}` + the phone status/close API (rate-limited,
+default-offline) + the Settings list. Build it as the next gating chunk (daemon knock+authorize+session +
+webapp knock page + the iOS/Android authorize + "Open secured sessions" UI).
