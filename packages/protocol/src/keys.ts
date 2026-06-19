@@ -9,6 +9,8 @@ const INFO_SWK = "flagship.swk.v1";
 const INFO_STK = "flagship.stk.v1";
 const INFO_APP_SECRET = "flagship.app-secret.v1";
 const INFO_APP_MEMBER = "flagship.app-member.v1";
+const INFO_ACCOUNT_ID = "flagship/account-id/v1";
+const INFO_HOUSEHOLD_KEY = "flagship/household-key/v1";
 
 export function generateUMK(rng: () => Bytes = randomBytes): UserMasterKey {
   const seed = rng();
@@ -32,6 +34,43 @@ function seedToKeypair(seed: Bytes): Keypair {
 
 export function deriveIRK(umk: UserMasterKey): Keypair {
   return seedToKeypair(derive(umk, INFO_IRK));
+}
+
+/**
+ * Account Identity Key (AID) — the STABLE, NON-rotating account identity.
+ *
+ * Anchored to the UMK (the account root, preserved through every recovery)
+ * under a FIXED HKDF info — unlike `deriveIRK`, which is VERSIONED
+ * (`flagship.irk.v1`, and re-pair / Wipe & restart derive a fresh IRK from
+ * the same shared UMK). Because the IRK rotates it is a signing/device key,
+ * useless as a long-lived identifier; the AID never rotates (it changes only
+ * when the UMK does — i.e. a brand-new account), so it is the right primitive
+ * for allow-lists, capability-invite bindings, and author/friend attribution.
+ *
+ * The IRK stays the signer for the author's ACTIVE orders (an order from a
+ * compromised device dies when its IRK rotates); the AID identifies WHO the
+ * author and the friend are. A friend proves control of their account by
+ * signing the redeem (and later visits) with their AID.
+ */
+export function deriveAccountId(umk: UserMasterKey): Keypair {
+  return seedToKeypair(derive(umk, INFO_ACCOUNT_ID));
+}
+
+/**
+ * Household encryption key — a symmetric AEAD key derived from the UMK under
+ * a FIXED info, so EVERY device of the account (which all share the UMK) can
+ * independently derive the same key, and it can be provisioned to the author's
+ * own servers over their pinned pipe. It seals the capability-invite bundle
+ * (`{ name, photo? }`): flagshipserver.com only ever stores the ciphertext and
+ * NEVER holds the UMK, so it cannot read the friend's name/photo.
+ *
+ * UMK-derived (not server-key-derived) on purpose: the bundle must be openable
+ * by a sibling device the author pairs LATER and by any of the author's boxes,
+ * all of which derive this same key from the one shared UMK — no per-device
+ * key exchange, and no dependency on a particular server's SWK.
+ */
+export function deriveHouseholdKey(umk: UserMasterKey): Bytes {
+  return derive(umk, INFO_HOUSEHOLD_KEY);
 }
 
 export function deriveBAK(umk: UserMasterKey, serverId: ServerId): Keypair {

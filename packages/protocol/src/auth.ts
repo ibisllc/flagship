@@ -37,6 +37,7 @@ export * from "./deadMan.js";
 export * from "./recovery.js";
 export * from "./totp.js";
 export * from "./serviceLifecycle.js";
+export * from "./serviceInvite.js";
 export * from "./serverIdentity.js";
 export * from "./provisioning.js";
 export * from "./userRegistration.js";
