@@ -57,6 +57,27 @@
     "signerKey": "authorIrk",
     "sigHex": "8e572f9bbe7b62ea3d6aca2241e902ab0e7628cc1ee948ccb8c8b95786a76e60818bf69db19331ba85ae634b9ef692faf4b1566b7b6a702cfa53024539527406"
   },
+  "_v2_comment": "Gating v2 (docs §v2 hardening). contactAid = deriveContactAccountId(friendUmk, authorAid.pub) — the friend's PER-AUTHOR pseudonym (unlinkable across authors). accept = the friend's contact-AID-signed manual-approve acceptance. createMaxN = a group/multi-use create (maxRedemptions+expiresAt appended to the canonical bytes), authorIrk-signed; a create WITHOUT maxN/exp must sign byte-identically to the v1 `create` vector above (backward-compat).",
+  "contactAid": {
+    "authorAidPubHex": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+    "contactAidPubHex": "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
+  },
+  "accept": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "serviceRef": "alice-notes",
+    "acceptedAt": 1700006000000,
+    "signerKey": "friendContactAid",
+    "sigHex": "1c54021039b6698f5d8d9d5b002c0528f5f82d90fb2de05ecde79082a9f5838c445e23907f4826ec53a061cec8581baaf0fc7fb7ee5234873bfe18ebea81f808"
+  },
+  "createMaxN": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "maxRedemptions": 10,
+    "expiresAt": 1700009999999,
+    "signerKey": "authorIrk",
+    "sigHex": "785641620cb5378afa127819a19f4e1ff110c0bea35678da3365327cf539aa3e148e3eab2246245c9ede4270dec85c4e166b88887a9988fa065f5d7ded06ce02"
+  },
   "bundle": {
     "name": "Alex",
     "photo": "data:image/png;base64,AAAA"

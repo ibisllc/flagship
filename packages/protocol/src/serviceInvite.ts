@@ -33,6 +33,7 @@ import type { Bytes, Keypair } from "./types.js";
 const TAG_CREATE = "flagship/service-invite/create/v1";
 const TAG_REDEEM = "flagship/service-invite/redeem/v1";
 const TAG_REVOKE = "flagship/service-invite/revoke/v1";
+const TAG_ACCEPT = "flagship/service-invite/accept/v1";
 const TAG_INVITE_ID = "flagship/service-invite/id/v1";
 const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
@@ -164,6 +165,16 @@ export interface CreateServiceInvite {
   /** Hex of the sealed `{name, photo?}` bundle (`.com` stores ciphertext only). */
   encryptedBundle: string;
   issuedAt: number;
+  /**
+   * GROUP / multi-use cap (v2): max redemptions, 0 = unlimited. ABSENT ⇒ a
+   * single-use personal invite (the v1 behavior). Group links are auto-approve
+   * by construction (no per-person confirm) + lower-trust; `maxN` bounds the
+   * blast radius of a leaked link. Appended to the canonical bytes only when
+   * present, so a v1 (no-maxN) create signs/verifies byte-identically.
+   */
+  maxRedemptions?: number;
+  /** Optional expiry (epoch-ms) — recommended for group links. Same append rule. */
+  expiresAt?: number;
 }
 
 function canonicalCreate(c: CreateServiceInvite): Bytes {
@@ -171,17 +182,30 @@ function canonicalCreate(c: CreateServiceInvite): Bytes {
   validateNoSepCtrl("serviceRef", c.serviceRef);
   validateNoSepCtrl("secretHash", c.secretHash);
   validateNoSepCtrl("encryptedBundle", c.encryptedBundle);
-  return new TextEncoder().encode(
-    [
-      TAG_CREATE,
-      c.inviteId,
-      hex(c.authorAID),
-      c.serviceRef,
-      c.secretHash,
-      c.encryptedBundle,
-      c.issuedAt,
-    ].join("|"),
-  );
+  const parts: (string | number)[] = [
+    TAG_CREATE,
+    c.inviteId,
+    hex(c.authorAID),
+    c.serviceRef,
+    c.secretHash,
+    c.encryptedBundle,
+    c.issuedAt,
+  ];
+  // Backward-compatible: append ONLY when present (absent ⇒ v1 bytes). Order is
+  // fixed (maxN then exp) so the pre-image is deterministic.
+  if (c.maxRedemptions !== undefined) {
+    if (!Number.isInteger(c.maxRedemptions) || c.maxRedemptions < 0) {
+      throw new Error("maxRedemptions must be a non-negative integer");
+    }
+    parts.push(`maxN=${c.maxRedemptions}`);
+  }
+  if (c.expiresAt !== undefined) {
+    if (!Number.isInteger(c.expiresAt) || c.expiresAt < 0) {
+      throw new Error("expiresAt must be a non-negative integer");
+    }
+    parts.push(`exp=${c.expiresAt}`);
+  }
+  return new TextEncoder().encode(parts.join("|"));
 }
 
 export function signCreateServiceInvite(c: CreateServiceInvite, irk: Keypair): Bytes {
@@ -239,6 +263,66 @@ export function verifyRedeemServiceInvite(
   } catch {
     return false;
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Accept — the MANUAL-APPROVE out-of-band loop (v2 Phase 3, tier 2).
+//
+// For a "sensitive" personal invite the author wants to confirm it's really
+// their friend WITHOUT learning the friend's username (the owner-privacy
+// requirement). Flow: author sends the link → the friend's app emits THIS
+// acceptance (signed by the friend's PER-AUTHOR contact AID) → the friend
+// replies it back through the SAME private channel → the author's app opens it
+// and submits it to the AUTHOR'S OWN box, which verifies the friend's signature
+// + the owner's create, then binds the contact AID. The author FINALIZES the
+// loop, so a thief who only grabbed the link can't produce an acceptance the
+// author will open from their friend-channel (channel-trust + author-finalization,
+// not cryptographic against an in-channel attacker — matches the threat model).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AcceptServiceInvite {
+  inviteId: string;
+  /** `<creator>-<slug>` the invite grants — binds the acceptance to its service. */
+  serviceRef: string;
+  /** The friend's PER-AUTHOR contact AID pubkey to be bound (`deriveContactAccountId`). */
+  contactAID: Bytes;
+  acceptedAt: number;
+}
+
+function canonicalAccept(a: AcceptServiceInvite): Bytes {
+  validateNoSepCtrl("inviteId", a.inviteId);
+  validateNoSepCtrl("serviceRef", a.serviceRef);
+  return new TextEncoder().encode(
+    [TAG_ACCEPT, a.inviteId, a.serviceRef, hex(a.contactAID), a.acceptedAt].join("|"),
+  );
+}
+
+export function signAcceptServiceInvite(a: AcceptServiceInvite, contactAid: Keypair): Bytes {
+  return ed.sign(canonicalAccept(a), contactAid.privateKey);
+}
+
+export function verifyAcceptServiceInvite(
+  a: AcceptServiceInvite,
+  sig: Bytes,
+  contactAidPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalAccept(a), contactAidPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A random 128-bit invite id (32 hex chars × 2 = 64-char lowercase hex), the v2
+ * replacement for the structured `serviceInviteId` (which baked `hash(devicePub)`
+ * into the id — a device-fingerprint leak via the listing, v2 §M2). Carries the
+ * same uniqueness with zero metadata; attribution stays in the stored `authorAID`.
+ */
+export function randomServiceInviteId(): string {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return hex(b);
 }
 
 // ──────────────────────────────────────────────────────────────────────

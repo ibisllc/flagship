@@ -85,6 +85,7 @@ const HKDF_DEVICE_IRK_SALT = "flagship-demo-device-irk-v1";
 const HKDF_DEVICE_IRK_INFO = "device-irk";
 const HKDF_DELEGATED_INFO = "delegated";
 const HKDF_RCK_INFO = "rck";
+const HKDF_USER_AID_INFO = "user-aid";
 
 /**
  * HKDF-SHA256 wrapper. Returns the requested L bytes.
@@ -147,6 +148,23 @@ export function deriveDemoUserIrk(
 ): Keypair {
   const ikm = deriveUserIkm(kek, username);
   const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_USER_IRK_INFO, 32);
+  return seedToKeypair(seed);
+}
+
+/**
+ * Derive the deterministic demo account **AID** (the stable, non-rotating
+ * account identity) for a demo username. A real account derives its AID from the
+ * UMK (`deriveAccountId`); the demo path has no UMK (only KEK-derived keys), so
+ * the gating v2 box-as-authority flow gets a deterministic demo AID here —
+ * registered with `.com` + pinned on the box so it can verify AID-signed
+ * create/revoke. Distinct `info` so it never collides with the demo IRK.
+ */
+export function deriveDemoUserAid(
+  kek: Uint8Array,
+  username: string,
+): Keypair {
+  const ikm = deriveUserIkm(kek, username);
+  const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_USER_AID_INFO, 32);
   return seedToKeypair(seed);
 }
 
