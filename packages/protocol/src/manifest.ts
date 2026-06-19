@@ -250,15 +250,19 @@ export function parseManifest(input: unknown): ManifestParseResult {
   }
 
   const runtime = parseRuntime(m.runtime, e);
-  // `data` is OPTIONAL: a static site / a service with no data stores legitimately
-  // omits it. Absent ⇒ an empty AppData (identical to `data:{}`, which already
-  // validated), so the manifest always carries a data object downstream and an
-  // AI-authored minimal manifest no longer fails deploy with "data must be an
-  // object". A PRESENT-but-malformed `data` (e.g. a string) still errors.
+  // Only `runtime` (image+port) is genuinely required to RUN. The rest default to
+  // their sensible/mandatory minimum when ABSENT, so a minimal AI-authored manifest
+  // (a static site) no longer fails deploy with "<field> must be an object". A
+  // PRESENT-but-malformed field (e.g. a string, a bad role) still errors.
+  //   - data    ⇒ {} (no data stores; identical to data:{}, which already validated)
+  //   - network ⇒ {} (no subdomain hint; the daemon derives the url label from the name)
+  //   - access  ⇒ {enabled:true} — apps cannot OPT OUT of platform identity, so absent
+  //               is treated as the only valid value (enabled:true), not a rejection.
+  //   - migration ⇒ {verification:"standard"}
   const data = parseData(m.data ?? {}, e);
-  const network = parseNetwork(m.network, e);
-  const access = parseAccess(m.access, e);
-  const migration = parseMigration(m.migration, e);
+  const network = parseNetwork(m.network ?? {}, e);
+  const access = parseAccess(m.access ?? { enabled: true }, e);
+  const migration = parseMigration(m.migration ?? { verification: "standard" }, e);
   const browser = parseBrowser(m.browser, e);
   const distribution = parseDistribution(m.distribution, e);
 
@@ -412,12 +416,19 @@ function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefine
     return undefined;
   }
   const n = v as Record<string, unknown>;
-  const sub = stringField(n, "network.subdomain", e, "subdomain");
-  if (sub && !SUBDOMAIN_RE.test(sub)) {
-    e("network.subdomain must be a DNS label");
+  // subdomain is OPTIONAL — it's a cosmetic hint; the daemon derives the url label
+  // from the service slug, not from here. Absent ⇒ no subdomain (no error). Present
+  // ⇒ it must be a valid DNS label.
+  if (n.subdomain === undefined) return undefined;
+  if (typeof n.subdomain !== "string" || n.subdomain.length === 0) {
+    e("network.subdomain must be a non-empty string");
+    return undefined;
   }
-  if (!sub) return undefined;
-  return { subdomain: sub };
+  if (!SUBDOMAIN_RE.test(n.subdomain)) {
+    e("network.subdomain must be a DNS label");
+    return undefined;
+  }
+  return { subdomain: n.subdomain };
 }
 
 function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined {

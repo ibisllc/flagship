@@ -53,6 +53,21 @@ describe("parseManifest — happy path", () => {
     expect(r.manifest.data.stores).toBeUndefined();
   });
 
+  it("accepts a FULLY minimal manifest (only name + version + runtime) — an AI static site", () => {
+    const m = {
+      schema_version: 1,
+      name: "hello-gate",
+      version: "0.0.1",
+      runtime: { image: "nginx:alpine", port: 80 },
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // The mandatory platform-identity default is applied; the rest are empty/derived.
+    expect(r.manifest.access.enabled).toBe(true);
+    expect(r.manifest.migration.verification).toBe("standard");
+  });
+
   it("still REJECTS a present-but-non-object data (a malformed field is an error, absence is not)", () => {
     const m = valid() as Record<string, unknown>;
     m.data = "nope";
