@@ -34,6 +34,7 @@ import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
 import {
   buildAccessEnforcementHandler,
+  buildRevocationPoller,
   buildServiceAccessHttp,
   ServiceAccessStore,
   ServiceSessionStore,
@@ -471,6 +472,7 @@ async function main(): Promise<void> {
     autoUnlockSuppressor,
     hostPowerRunner,
     servicePlatformRef: servicePlatformRefForServer,
+    identityKeypair,
   });
 
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
@@ -1389,8 +1391,10 @@ async function wireOwnerHandlers(deps: {
   autoUnlockSuppressor: AutoUnlockSuppressor;
   hostPowerRunner: HostPowerRunner;
   servicePlatformRef: ServicePlatformRef;
+  /** The box's STK (identity) keypair — signs the gating-v2 revocation poll. */
+  identityKeypair: Keypair;
 }): Promise<void> {
-  const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner } = deps;
+  const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
 
   const deadMan = new DeadManController({
@@ -1435,7 +1439,15 @@ async function wireOwnerHandlers(deps: {
   // over its pinned pipe like the SWK; absent ⇒ bundle decrypt is unavailable
   // (the gating itself still works). Default mode is OPEN, so existing services
   // are unaffected until the owner restricts one.
-  const accessStore = new ServiceAccessStore();
+  // M4 — fail-open alert: if the access-state file is present-but-corrupt the
+  // store falls open (so an OPEN service is never bricked) but raises a visible
+  // owner-facing flag instead of failing silently.
+  const accessStore = new ServiceAccessStore("/var/flagship/service-access.json", {
+    onFailOpen: ({ error }) =>
+      console.error(
+        `[daemon] ⚠️  service-access state corrupt (${error}); restricted services FELL OPEN — owner action required`,
+      ),
+  });
   await accessStore.load();
   // Browser-session cookie store: lets a redeemed friend reach a restricted
   // service's WEBSITE in a plain browser (which can't sign the visit header).
@@ -1447,6 +1459,9 @@ async function wireOwnerHandlers(deps: {
   const access = buildServiceAccessHttp({
     serverId: env.serverFqdn,
     ownerIrkPub: cfg.irkPublicKey,
+    // gating v2 box-as-authority: verify the .com-relayed signed create against
+    // the config-pinned owner AID (preferred) OR the owner IRK (transition).
+    ...(cfg.ownerAidPub ? { ownerAidPub: cfg.ownerAidPub } : {}),
     store: accessStore,
     sessions: sessionStore,
     serviceInstalled: (ref) =>
@@ -1455,6 +1470,23 @@ async function wireOwnerHandlers(deps: {
     householdKey: householdHex ? hexToBytes(householdHex.trim()) : undefined,
   });
   runtime.addHandler(access.handle);
+  // gating v2 revocation convergence: poll `.com` revoked-since on the
+  // daemon-status heartbeat cadence + self-prune (the instant owner-prune stays
+  // the primary path). Needs the owner AID (the authorAID the invites are scoped
+  // to) — only runs when it's pinned; the box STK-signs the poll.
+  if (cfg.ownerAidPub) {
+    const poller = buildRevocationPoller({
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      username: cfg.userId,
+      authorAidHex: bytesToHexStr(cfg.ownerAidPub),
+      serverDomain: env.serverFqdn,
+      stk: identityKeypair,
+      store: accessStore,
+    });
+    poller.start();
+    process.once("SIGTERM", () => poller.stop());
+    process.once("SIGINT", () => poller.stop());
+  }
   // Web-experience gating (docs "Web-experience gating"): QR-login for a
   // restricted service's WEBSITE (a browser can't AID-sign). Shares the access +
   // session stores. Its endpoints (knock poll / phone authorize / session

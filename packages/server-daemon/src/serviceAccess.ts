@@ -33,13 +33,20 @@ import { dirname } from "node:path";
 import {
   openInviteBundle,
   serviceInviteSecretHash,
+  signServiceInviteListQuery,
+  verifyAcceptServiceInvite,
+  verifyCreateServiceInvite,
   verifyRedeemServiceInvite,
   verifyRemoveServiceAllow,
   verifyServiceVisitProof,
   verifySetServiceAccessMode,
+  type AcceptServiceInvite,
+  type CreateServiceInvite,
   type InviteBundle,
+  type Keypair,
   type RemoveServiceAllow,
   type ServiceAccessMode,
+  type ServiceInviteListQuery,
   type ServiceVisitProof,
   type SetServiceAccessMode,
 } from "@flagship/protocol";
@@ -54,9 +61,18 @@ interface ServiceAccessEntry {
   mode: ServiceAccessMode;
   /** Lower-hex bound AIDs allowed to reach a restricted service. */
   allow: string[];
+  /**
+   * GROUP membership: inviteId → the AIDs bound via that (multi-use) invite, so
+   * a `.com` group revoke can prune the whole set in one op (v2 §Phase 3). A
+   * personal invite contributes one entry; the AIDs also live in `allow`.
+   */
+  groups: Record<string, string[]>;
 }
 
 type PersistShape = Record<string, ServiceAccessEntry>;
+
+/** Allow-list size cap per service (M5) — bounds a runaway/abusive group link. */
+export const ALLOW_LIST_CAP = 5000;
 
 /**
  * Persisted per-service access state — mode + AID allow-list. Default mode is
@@ -65,27 +81,72 @@ type PersistShape = Record<string, ServiceAccessEntry>;
 export class ServiceAccessStore {
   private byService = new Map<string, ServiceAccessEntry>();
   private readonly statePath: string;
+  /**
+   * M4 fail-open alert: set true when `load` hit absent/corrupt state and fell
+   * open (every service back to OPEN). Surfaced to the owner so a silent revert
+   * to OPEN is visible, not hidden. Distinguished from a genuinely-empty store.
+   */
+  private loadFellOpen = false;
+  private loadError: string | null = null;
+  private readonly onFailOpen?: (info: { error: string }) => void;
 
-  constructor(statePath = "/var/flagship/service-access.json") {
+  constructor(
+    statePath = "/var/flagship/service-access.json",
+    opts: { onFailOpen?: (info: { error: string }) => void } = {},
+  ) {
     this.statePath = statePath;
+    this.onFailOpen = opts.onFailOpen;
   }
 
   async load(): Promise<void> {
+    let raw: PersistShape;
     try {
-      const raw = JSON.parse(await readFile(this.statePath, "utf8")) as PersistShape;
+      raw = JSON.parse(await readFile(this.statePath, "utf8")) as PersistShape;
+    } catch (e) {
+      // A genuinely-absent file (first boot, no restricted service yet) is the
+      // normal empty case — NOT an alert. A PRESENT-but-corrupt file is the M4
+      // case: we fall open (so an existing OPEN service is never bricked) but
+      // RAISE a visible owner flag instead of failing silently.
+      const code = (e as NodeJS.ErrnoException)?.code;
       this.byService.clear();
-      for (const [ref, e] of Object.entries(raw ?? {})) {
-        if (!e || (e.mode !== "open" && e.mode !== "restricted")) continue;
-        const allow = Array.isArray(e.allow)
-          ? e.allow.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
-          : [];
-        this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)] });
+      this.loadFellOpen = code !== "ENOENT";
+      this.loadError = this.loadFellOpen ? String((e as Error)?.message ?? e) : null;
+      if (this.loadFellOpen) {
+        console.error(
+          `[service-access] state file unreadable (${this.loadError}); FAILING OPEN — restricted services revert to open until repaired`,
+        );
+        this.onFailOpen?.({ error: this.loadError ?? "corrupt state" });
       }
-    } catch {
-      // Absent / corrupt → everything defaults to open (fail-open: this
-      // feature must never make an existing OPEN service unreachable).
-      this.byService.clear();
+      return;
     }
+    this.byService.clear();
+    this.loadFellOpen = false;
+    this.loadError = null;
+    for (const [ref, e] of Object.entries(raw ?? {})) {
+      if (!e || (e.mode !== "open" && e.mode !== "restricted")) continue;
+      const allow = Array.isArray(e.allow)
+        ? e.allow.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
+        : [];
+      const groups: Record<string, string[]> = {};
+      if (e.groups && typeof e.groups === "object") {
+        for (const [gid, members] of Object.entries(e.groups)) {
+          if (Array.isArray(members)) {
+            groups[gid] = [...new Set(members.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase()))];
+          }
+        }
+      }
+      this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)], groups });
+    }
+  }
+
+  /** M4 — true iff the last load fell open because the state file was corrupt. */
+  failedOpen(): boolean {
+    return this.loadFellOpen;
+  }
+
+  /** M4 — the load error message when `failedOpen()`, else null. */
+  failOpenError(): string | null {
+    return this.loadError;
   }
 
   mode(serviceRef: string): ServiceAccessMode {
@@ -105,7 +166,7 @@ export class ServiceAccessStore {
   private entry(serviceRef: string): ServiceAccessEntry {
     let e = this.byService.get(serviceRef);
     if (!e) {
-      e = { mode: "open", allow: [] };
+      e = { mode: "open", allow: [], groups: {} };
       this.byService.set(serviceRef, e);
     }
     return e;
@@ -116,31 +177,84 @@ export class ServiceAccessStore {
     await this.persist();
   }
 
-  /** Add an AID to a service's allow-list (idempotent). Returns whether it was new. */
-  async addAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
+  /**
+   * Add an AID to a service's allow-list (idempotent). When `inviteId` is given
+   * the AID is ALSO recorded under that group so a group-revoke can prune the
+   * whole set. Returns whether the AID was newly added. Rejects (false) once the
+   * list hits {@link ALLOW_LIST_CAP} unless the AID is already present.
+   */
+  async addAllowed(serviceRef: string, visitorAidHex: string, inviteId?: string): Promise<boolean> {
     const e = this.entry(serviceRef);
     const aid = visitorAidHex.toLowerCase();
-    if (e.allow.includes(aid)) return false;
-    e.allow.push(aid);
-    await this.persist();
-    return true;
+    const already = e.allow.includes(aid);
+    if (!already && e.allow.length >= ALLOW_LIST_CAP) {
+      console.error(`[service-access] ${serviceRef} allow-list at cap (${ALLOW_LIST_CAP}); refusing add`);
+      return false;
+    }
+    let changed = false;
+    if (!already) {
+      e.allow.push(aid);
+      changed = true;
+    }
+    if (inviteId) {
+      const g = (e.groups[inviteId] ??= []);
+      if (!g.includes(aid)) {
+        g.push(aid);
+        changed = true;
+      }
+    }
+    if (changed) await this.persist();
+    return !already;
   }
 
-  /** Remove an AID from a service's allow-list (idempotent). */
+  /** Remove an AID from a service's allow-list (idempotent). Also drops it from any group. */
   async removeAllowed(serviceRef: string, visitorAidHex: string): Promise<boolean> {
     const e = this.byService.get(serviceRef);
     if (!e) return false;
     const aid = visitorAidHex.toLowerCase();
     const before = e.allow.length;
     e.allow = e.allow.filter((x) => x !== aid);
+    for (const gid of Object.keys(e.groups)) {
+      e.groups[gid] = (e.groups[gid] ?? []).filter((x) => x !== aid);
+      if (e.groups[gid]!.length === 0) delete e.groups[gid];
+    }
     if (e.allow.length === before) return false;
     await this.persist();
     return true;
   }
 
+  /**
+   * Group-prune: revoke EVERY AID bound via `inviteId` across a service (v2 group
+   * revoke). Removes them from the allow-list + drops the group. Returns the count
+   * pruned. `serviceRef` is optional — when omitted, prunes the group from every
+   * service that carries it (the box revocation poller doesn't always know which).
+   */
+  async revokeGroup(inviteId: string, serviceRef?: string): Promise<number> {
+    let pruned = 0;
+    let changed = false;
+    const refs = serviceRef ? [serviceRef] : [...this.byService.keys()];
+    for (const ref of refs) {
+      const e = this.byService.get(ref);
+      if (!e) continue;
+      const members = e.groups[inviteId];
+      if (!members || members.length === 0) continue;
+      for (const aid of members) {
+        const before = e.allow.length;
+        e.allow = e.allow.filter((x) => x !== aid);
+        if (e.allow.length !== before) pruned++;
+      }
+      delete e.groups[inviteId];
+      changed = true;
+    }
+    if (changed) await this.persist();
+    return pruned;
+  }
+
   private async persist(): Promise<void> {
     const out: PersistShape = {};
-    for (const [ref, e] of this.byService) out[ref] = { mode: e.mode, allow: e.allow };
+    for (const [ref, e] of this.byService) {
+      out[ref] = { mode: e.mode, allow: e.allow, groups: e.groups };
+    }
     await mkdir(dirname(this.statePath), { recursive: true });
     const tmp = `${this.statePath}.tmp`;
     await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
@@ -337,6 +451,14 @@ export interface ServiceAccessHttpOptions {
   /** The box fqdn — the `serverId` the owner/visitor envelopes are bound to. */
   serverId: string;
   ownerIrkPub: Uint8Array;
+  /**
+   * The owner's STABLE AID pubkey (config-pinned `ownerAidPubHex`). v2
+   * box-as-authority: the box verifies the `.com`-relayed signed create against
+   * THIS (or the owner IRK, for the transition) before allow-listing — so a
+   * rogue `.com` can't fabricate a binding by forging the owner's authority.
+   * Optional: absent ⇒ the box verifies the create against the owner IRK only.
+   */
+  ownerAidPub?: Uint8Array;
   store: ServiceAccessStore;
   /** Resolve `serviceRef` (`<creator>-<slug>`) → installed? Guards set-mode (422 if not). */
   serviceInstalled: (serviceRef: string) => boolean;
@@ -344,6 +466,12 @@ export interface ServiceAccessHttpOptions {
   controlPlaneBaseUrl: string;
   /** Injectable fetch (defaults to global). */
   fetchImpl?: typeof fetch;
+  /**
+   * Per-endpoint rate limit (M5): max requests per IP+endpoint per window.
+   * Default 30/min. Applies to redeem / establish-session / accept (the knock
+   * surface is rate-limited in serviceAccessWeb).
+   */
+  rateLimitPerMin?: number;
   /**
    * Household key provisioned to the box over its pinned pipe (UMK-derived;
    * flagshipserver.com never holds it). When present, the box can decrypt the
@@ -437,11 +565,75 @@ export interface ServiceAccessHttp {
   sessions?: ServiceSessionStore;
 }
 
+/** Header a client presents the establish-session nonce-challenge answer under. */
+export const ESTABLISH_NONCE_HEADER = "x-flagship-establish-nonce";
+
+/**
+ * In-memory single-use nonce store for the establish-session challenge (M3). A
+ * captured 5-min visit proof shouldn't mint a 12h transferable cookie, so
+ * establish-session is a two-step handshake: the client first GETs a fresh
+ * short-lived nonce bound to its connection, then presents the SAME nonce inside
+ * the signed proof body — the nonce is consumed on use (no replay), and the
+ * cookie is additionally pinned to a client fingerprint (UA) so a lifted cookie
+ * doesn't travel.
+ */
+class EstablishNonceStore {
+  private nonces = new Map<string, number>(); // nonce → expiresAt
+  constructor(private readonly ttlMs = 2 * 60_000) {}
+  mint(now: number): string {
+    this.prune(now);
+    const nonce = bytesToHex(randomBytes(16));
+    this.nonces.set(nonce, now + this.ttlMs);
+    return nonce;
+  }
+  /** Consume a nonce (single-use). Returns true iff it was live. */
+  consume(nonce: string, now: number): boolean {
+    const exp = this.nonces.get(nonce);
+    if (exp === undefined) return false;
+    this.nonces.delete(nonce);
+    return exp > now;
+  }
+  private prune(now: number): void {
+    for (const [n, exp] of this.nonces) if (exp <= now) this.nonces.delete(n);
+  }
+}
+
+/** Simple fixed-window per-key rate limiter (M5). */
+class RateLimiter {
+  private hits = new Map<string, { count: number; resetAt: number }>();
+  constructor(private readonly maxPerWindow: number, private readonly windowMs = 60_000) {}
+  /** Returns true iff this call is allowed (under the limit). */
+  allow(key: string, now: number): boolean {
+    const e = this.hits.get(key);
+    if (!e || e.resetAt <= now) {
+      this.hits.set(key, { count: 1, resetAt: now + this.windowMs });
+      this.prune(now);
+      return true;
+    }
+    if (e.count >= this.maxPerWindow) return false;
+    e.count++;
+    return true;
+  }
+  private prune(now: number): void {
+    if (this.hits.size < 4096) return;
+    for (const [k, e] of this.hits) if (e.resetAt <= now) this.hits.delete(k);
+  }
+}
+
+/** Best-effort client key for rate-limiting / cookie-pinning (no real IP on the box loopback). */
+function clientKey(req: HttpRequest): string {
+  const fwd = req.headers["x-forwarded-for"];
+  const ip = typeof fwd === "string" ? fwd.split(",")[0]!.trim() : "";
+  return ip || req.headers["user-agent"] || "anon";
+}
+
 export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceAccessHttp {
   const now = opts.now ?? (() => Date.now());
   const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
   const sessionTtlMs = opts.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const establishNonces = new EstablishNonceStore();
+  const rateLimiter = new RateLimiter(opts.rateLimitPerMin ?? 30);
 
   const decide = (serviceRef: string, req: HttpRequest): AccessDecision =>
     decideServiceAccess(
@@ -469,9 +661,21 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (req.path === "/api/service-access/allow-remove" && req.method === "POST") {
       return handleRemoveAllow(req);
     }
+    // M3 — establish-session nonce challenge: a client GETs a fresh single-use
+    // nonce, then echoes it inside the signed proof body on the POST below.
+    if (req.path === "/api/service-access/establish-session/nonce" && req.method === "GET") {
+      return jsonResponse(200, { nonce: establishNonces.mint(now()) });
+    }
     // Friend's app/web establishes a browser cookie from an AID-signed proof.
     if (req.path === "/api/service-access/establish-session" && req.method === "POST") {
+      if (!rateLimiter.allow(`establish:${clientKey(req)}`, now())) return bad(429, "rate limited");
       return handleEstablishSession(req);
+    }
+    // MANUAL-approve: the AUTHOR submits the friend's AID-signed acceptance + the
+    // owner's signed create; the box verifies both, then binds the contact AID.
+    if (req.path === "/api/service-access/accept" && req.method === "POST") {
+      if (!rateLimiter.allow(`accept:${clientKey(req)}`, now())) return bad(429, "rate limited");
+      return handleAccept(req);
     }
     // Access-state read: GET /api/service-access/<serviceRef>. Unauthenticated
     // (the mode is already behaviorally observable; only the AID COUNT, never
@@ -487,6 +691,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       });
     }
     if (req.path === "/api/service-invites/redeem" && req.method === "POST") {
+      if (!rateLimiter.allow(`redeem:${clientKey(req)}`, now())) return bad(429, "rate limited");
       return handleRedeem(req);
     }
     return null;
@@ -502,6 +707,13 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
    */
   async function handleEstablishSession(req: HttpRequest): Promise<HttpResponse> {
     if (!opts.sessions) return bad(404, "sessions not enabled");
+    // M3 — single-use nonce challenge: the client must first GET a nonce and
+    // present it here, so a captured visit proof can't be replayed into a fresh
+    // long-lived cookie. The nonce is consumed (no replay) before any minting.
+    const nonce = req.headers[ESTABLISH_NONCE_HEADER];
+    if (typeof nonce !== "string" || !establishNonces.consume(nonce, now())) {
+      return bad(403, "missing or stale establish nonce");
+    }
     let parsed: { proof: ServiceVisitProof; sig: Uint8Array } | null;
     try {
       parsed = parseVisitHeader(req.body.toString("utf8"));
@@ -519,7 +731,11 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (opts.store.mode(proof.serviceRef) !== "restricted" || !opts.store.isAllowed(proof.serviceRef, aidHex)) {
       return bad(401, "not allow-listed for this service");
     }
-    const token = await opts.sessions.issue(proof.serviceRef, aidHex, now(), sessionTtlMs);
+    // Pin the cookie to the requesting client (UA) so a lifted token doesn't
+    // travel to a different agent (M3 client-bind; re-checked in `decide`).
+    const token = await opts.sessions.issue(proof.serviceRef, aidHex, now(), sessionTtlMs, {
+      browserAgent: req.headers["user-agent"] ?? "",
+    });
     return {
       status: 200,
       headers: { ...H, "set-cookie": sessionSetCookie(token, sessionTtlMs) },
@@ -617,8 +833,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     const proofOk = verifyServiceVisitRedeem(secretHash, visitorAID, body.redeemedAt, body.aidSig);
     if (!proofOk) return bad(403, "invalid AID signature");
 
-    // Delegate the binding decision to `.com` (the authority on first-bind /
-    // same-AID-idempotent / reject-different-AID).
+    // Delegate the first-bind arbitration to `.com`, which returns the owner's
+    // SIGNED create so the box verifies the owner's authority ITSELF (it does NOT
+    // trust `.com`'s serviceRef/boundAID alone — box-as-authority, v2 Phase 1).
     let comRes: Response;
     try {
       comRes = await fetchImpl(`${opts.controlPlaneBaseUrl}/api/service-invites/redeem`, {
@@ -632,38 +849,63 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (comRes.status === 404) return bad(404, "unknown invite");
     if (comRes.status === 409) return bad(409, "already bound to another account");
     if (comRes.status === 403) return bad(403, "invite revoked");
+    if (comRes.status === 410) return bad(410, "invite expired or full");
     if (!comRes.ok) return bad(502, "redeem rejected upstream");
 
-    let comBody: { serviceRef?: unknown; boundAID?: unknown; firstBind?: unknown };
+    let comBody: {
+      pending?: unknown;
+      approvalMode?: unknown;
+      serviceRef?: unknown;
+      boundAID?: unknown;
+      firstBind?: unknown;
+      create?: unknown;
+      createSig?: unknown;
+    };
     try {
       comBody = (await comRes.json()) as typeof comBody;
     } catch {
       return bad(502, "bad upstream response");
     }
-    if (typeof comBody.serviceRef !== "string" || typeof comBody.boundAID !== "string") {
-      return bad(502, "incomplete upstream response");
-    }
-    // Defense-in-depth (design-critique C1): only ever allow-list for a service
-    // THIS box actually hosts. Without this, a rogue/buggy `.com` could answer a
-    // redeem with any `serviceRef` and pollute the allow-list (and the deeper fix
-    // — the box verifying the author's signed create rather than trusting `.com`'s
-    // serviceRef/boundAID at all — is tracked as the architectural follow-up). The
-    // gate mirrors the `set-mode` invariant (a redeem for a non-hosted service is
-    // meaningless here).
-    if (!opts.serviceInstalled(comBody.serviceRef)) {
+
+    // Verify the owner's signed create (box-as-authority): a rogue `.com` cannot
+    // forge the owner's AID/IRK signature, so it cannot fabricate a binding for a
+    // service the owner never invited to. The create's secretHash MUST match the
+    // redeemed secret (else `.com` could substitute a DIFFERENT real create).
+    const verified = verifyComCreate(comBody.create, comBody.createSig, secretHash);
+    if (!verified) return bad(403, "owner create signature did not verify");
+    if (!opts.serviceInstalled(verified.serviceRef)) {
       return bad(409, "invite is not for a service hosted on this box");
     }
-    // The bound AID is the authority's answer; add IT (not the request's claim)
-    // to the allow-list, so a `.com` that bound a different AID can't be tricked
-    // here. They match on the happy path.
-    await opts.store.addAllowed(comBody.serviceRef, comBody.boundAID);
-    // Hand the redeemer a browser cookie bound to their AID + this service, so
-    // they can reach the restricted service's WEBSITE in a plain browser (which
-    // can't set the signed `x-flagship-visit` header). Harmless on an OPEN
-    // service — `decide` short-circuits to "open" before ever reading a cookie.
+
+    // MANUAL-approve: `.com` returns {pending} with NO bind. The box does NOT
+    // allow-list here — the author finalizes via POST /api/service-access/accept.
+    if (comBody.pending === true || comBody.approvalMode === "manual") {
+      return jsonResponse(200, {
+        pending: true,
+        approvalMode: "manual",
+        serviceRef: verified.serviceRef,
+      });
+    }
+
+    if (typeof comBody.boundAID !== "string" || !/^[0-9a-f]{64}$/i.test(comBody.boundAID)) {
+      return bad(502, "incomplete upstream response");
+    }
+    // The bound AID is the authority's answer; add IT (not the request's claim).
+    // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
+    // so a group revoke can prune the whole set.
+    const boundAID = comBody.boundAID.toLowerCase();
+    const inviteId = verified.maxRedemptions !== undefined ? verified.inviteId : undefined;
+    const added = await opts.store.addAllowed(verified.serviceRef, boundAID, inviteId);
+    if (!added && !opts.store.isAllowed(verified.serviceRef, boundAID)) {
+      // The add was refused (allow-list at cap) and the AID is not already in.
+      return bad(409, "service allow-list is full");
+    }
+    // Hand the redeemer a browser cookie bound to their AID + this service.
     const responseHeaders: Record<string, string> = { ...H };
     if (opts.sessions) {
-      const token = await opts.sessions.issue(comBody.serviceRef, comBody.boundAID, now(), sessionTtlMs);
+      const token = await opts.sessions.issue(verified.serviceRef, boundAID, now(), sessionTtlMs, {
+        browserAgent: req.headers["user-agent"] ?? "",
+      });
       responseHeaders["set-cookie"] = sessionSetCookie(token, sessionTtlMs);
     }
     return {
@@ -671,10 +913,138 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       headers: responseHeaders,
       body: JSON.stringify({
         redeemed: true,
+        approvalMode: "auto",
         firstBind: comBody.firstBind === true,
-        serviceRef: comBody.serviceRef,
-        boundAID: comBody.boundAID,
+        serviceRef: verified.serviceRef,
+        boundAID,
       }),
+    };
+  }
+
+  /**
+   * POST /api/service-access/accept — MANUAL-approve finalize (v2 Phase 3 tier 2).
+   * The AUTHOR submits the friend's AID-signed `AcceptServiceInvite` + the owner's
+   * signed create (relayed from the friend's pending redeem). The box verifies
+   * BOTH (the friend's contact-AID sig over the acceptance, AND the owner's create
+   * authority), confirms the create's secretHash matches the acceptance's invite,
+   * then binds the contact AID. The author finalizes, so a link-thief who never
+   * reached the author's friend-channel can't produce an acceptance the author
+   * will submit.
+   */
+  async function handleAccept(req: HttpRequest): Promise<HttpResponse> {
+    let body: {
+      accept?: { inviteId?: unknown; serviceRef?: unknown; contactAID?: unknown; acceptedAt?: unknown };
+      acceptSig?: unknown;
+      create?: unknown;
+      createSig?: unknown;
+    };
+    try {
+      body = JSON.parse(req.body.toString("utf8"));
+    } catch {
+      return bad(400, "invalid json");
+    }
+    const a = body.accept;
+    if (
+      !a ||
+      typeof a.inviteId !== "string" ||
+      typeof a.serviceRef !== "string" ||
+      typeof a.contactAID !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(a.contactAID) ||
+      typeof a.acceptedAt !== "number" ||
+      typeof body.acceptSig !== "string" ||
+      !/^[0-9a-f]{128}$/i.test(body.acceptSig)
+    ) {
+      return bad(400, "malformed acceptance");
+    }
+    // Verify the owner's signed create FIRST (authority). It carries the
+    // secretHash; the acceptance is bound to the same inviteId + serviceRef.
+    const verified = verifyComCreate(body.create, body.createSig, undefined);
+    if (!verified) return bad(403, "owner create signature did not verify");
+    if (verified.inviteId !== a.inviteId || verified.serviceRef !== a.serviceRef) {
+      return bad(403, "acceptance does not match the create");
+    }
+    if (!opts.serviceInstalled(verified.serviceRef)) {
+      return bad(409, "invite is not for a service hosted on this box");
+    }
+    // Verify the FRIEND's contact-AID signature over the acceptance.
+    const accept: AcceptServiceInvite = {
+      inviteId: a.inviteId,
+      serviceRef: a.serviceRef,
+      contactAID: hexToBytes(a.contactAID),
+      acceptedAt: a.acceptedAt,
+    };
+    let acceptOk = false;
+    try {
+      acceptOk = verifyAcceptServiceInvite(accept, hexToBytes(body.acceptSig), hexToBytes(a.contactAID));
+    } catch {
+      acceptOk = false;
+    }
+    if (!acceptOk) return bad(403, "invalid acceptance signature");
+
+    const contactAID = a.contactAID.toLowerCase();
+    // Always bind under the inviteId so a later (group or single) revoke can find
+    // + prune this acceptance.
+    const added = await opts.store.addAllowed(verified.serviceRef, contactAID, verified.inviteId);
+    if (!added && !opts.store.isAllowed(verified.serviceRef, contactAID)) {
+      return bad(409, "service allow-list is full");
+    }
+    return jsonResponse(200, { bound: true, serviceRef: verified.serviceRef, boundAID: contactAID });
+  }
+
+  /**
+   * Verify the `.com`-relayed signed create against the owner's AID (preferred)
+   * OR the owner's IRK (transition), and — when `expectSecretHash` is given —
+   * that the create's secretHash matches the redeemed secret. Returns the
+   * validated create fields, or null on any failure.
+   */
+  function verifyComCreate(
+    rawCreate: unknown,
+    rawSig: unknown,
+    expectSecretHash: string | undefined,
+  ): { inviteId: string; serviceRef: string; secretHash: string; maxRedemptions?: number } | null {
+    if (!rawCreate || typeof rawCreate !== "object") return null;
+    if (typeof rawSig !== "string" || !/^[0-9a-f]{128}$/i.test(rawSig)) return null;
+    const c = rawCreate as Record<string, unknown>;
+    if (
+      typeof c.inviteId !== "string" ||
+      typeof c.authorAID !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(c.authorAID) ||
+      typeof c.serviceRef !== "string" ||
+      typeof c.secretHash !== "string" ||
+      !/^[0-9a-f]{64}$/i.test(c.secretHash) ||
+      typeof c.encryptedBundle !== "string" ||
+      typeof c.issuedAt !== "number"
+    ) {
+      return null;
+    }
+    if (expectSecretHash !== undefined && c.secretHash.toLowerCase() !== expectSecretHash) {
+      return null;
+    }
+    const create: CreateServiceInvite = {
+      inviteId: c.inviteId,
+      authorAID: hexToBytes(c.authorAID),
+      serviceRef: c.serviceRef,
+      secretHash: c.secretHash,
+      encryptedBundle: c.encryptedBundle,
+      issuedAt: c.issuedAt,
+      ...(typeof c.maxRedemptions === "number" ? { maxRedemptions: c.maxRedemptions } : {}),
+      ...(typeof c.expiresAt === "number" ? { expiresAt: c.expiresAt } : {}),
+    };
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(rawSig);
+    } catch {
+      return null;
+    }
+    // Owner authority: AID first (stable, survives IRK rotation), then IRK.
+    const aidOk = opts.ownerAidPub ? verifyCreateServiceInvite(create, sig, opts.ownerAidPub) : false;
+    const irkOk = aidOk ? true : verifyCreateServiceInvite(create, sig, opts.ownerIrkPub);
+    if (!aidOk && !irkOk) return null;
+    return {
+      inviteId: create.inviteId,
+      serviceRef: create.serviceRef,
+      secretHash: create.secretHash.toLowerCase(),
+      ...(create.maxRedemptions !== undefined ? { maxRedemptions: create.maxRedemptions } : {}),
     };
   }
 
@@ -700,6 +1070,120 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       return false;
     }
   }
+}
+
+export interface RevocationPollerOptions {
+  controlPlaneBaseUrl: string;
+  /** The account username (the `.com` path segment). */
+  username: string;
+  /** The owner's STABLE AID (hex) — the authorAID the invites are scoped to. */
+  authorAidHex: string;
+  /** The box's own FQDN — `.com` resolves the STK against this server record. */
+  serverDomain: string;
+  /** The box's STK keypair — the box holds NO owner key, so it STK-signs the poll. */
+  stk: Keypair;
+  store: ServiceAccessStore;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  /** Poll cadence (ms) — reuses the daemon-status heartbeat cadence. Default 5 min. */
+  intervalMs?: number;
+}
+
+export interface RevocationPoller {
+  /** Poll `.com` once + self-prune. Returns the number of AIDs pruned. */
+  pollOnce(): Promise<number>;
+  /** Start the heartbeat-cadence poll loop. */
+  start(): void;
+  /** Stop the loop. */
+  stop(): void;
+}
+
+/**
+ * v2 box-as-authority revocation convergence: the box POLLS `.com`'s
+ * `revoked-since` on a heartbeat cadence and self-prunes the revoked AIDs (a
+ * group revoke prunes the whole inviteId set), so a `.com` revoke is SUFFICIENT
+ * and multi-box self-heals. The instant owner-prune (`allow-remove`) stays as the
+ * PRIMARY path; this is the convergence backstop. The box authenticates with its
+ * STK (it holds no owner key); `.com` verifies the STK against the registered
+ * server record + that the server belongs to this username.
+ */
+export function buildRevocationPoller(opts: RevocationPollerOptions): RevocationPoller {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const now = opts.now ?? (() => Date.now());
+  const intervalMs = opts.intervalMs ?? 5 * 60_000;
+  let cursor = 0;
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  async function pollOnce(): Promise<number> {
+    const query: ServiceInviteListQuery = {
+      username: opts.username,
+      authorAID: opts.authorAidHex.toLowerCase(),
+      scope: "revoked-since",
+      cursor,
+      issuedAt: now(),
+    };
+    const sig = bytesToHex(signServiceInviteListQuery(query, opts.stk));
+    const params = new URLSearchParams({
+      authorAID: query.authorAID,
+      scope: "revoked-since",
+      cursor: String(cursor),
+      issuedAt: String(query.issuedAt),
+      sig,
+      serverDomain: opts.serverDomain,
+    });
+    let res: Response;
+    try {
+      res = await fetchImpl(
+        `${opts.controlPlaneBaseUrl}/api/users/${encodeURIComponent(opts.username)}/service-invites/revoked-since?${params.toString()}`,
+        { method: "GET" } as RequestInit,
+      );
+    } catch {
+      return 0; // best-effort; the instant owner-prune is the primary path
+    }
+    if (!res.ok) return 0;
+    let body: {
+      revoked?: { inviteId?: unknown; serviceRef?: unknown; boundAIDs?: unknown }[];
+      cursor?: unknown;
+    };
+    try {
+      body = (await res.json()) as typeof body;
+    } catch {
+      return 0;
+    }
+    let pruned = 0;
+    for (const r of body.revoked ?? []) {
+      if (typeof r.inviteId !== "string") continue;
+      const serviceRef = typeof r.serviceRef === "string" ? r.serviceRef : undefined;
+      // Group-prune by inviteId (covers personal + group; a personal invite is a
+      // group of one). Falls back to per-AID removal for any AID the group map
+      // didn't capture (e.g. an older bind recorded before group tracking).
+      pruned += await opts.store.revokeGroup(r.inviteId, serviceRef);
+      if (Array.isArray(r.boundAIDs) && serviceRef) {
+        for (const aid of r.boundAIDs) {
+          if (typeof aid === "string" && (await opts.store.removeAllowed(serviceRef, aid))) pruned++;
+        }
+      }
+    }
+    if (typeof body.cursor === "number" && body.cursor > cursor) cursor = body.cursor;
+    return pruned;
+  }
+
+  return {
+    pollOnce,
+    start() {
+      if (timer) return;
+      timer = setInterval(() => {
+        void pollOnce().catch(() => {});
+      }, intervalMs);
+      if (typeof timer.unref === "function") timer.unref();
+    },
+    stop() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    },
+  };
 }
 
 /**

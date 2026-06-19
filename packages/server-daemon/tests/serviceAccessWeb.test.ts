@@ -178,11 +178,14 @@ describe("web-experience gating — authorize + poll", () => {
     );
     expect(decision).toEqual({ allow: true, reason: "cookie" });
 
-    // Single-use: a second poll of the consumed page is unknown (no second cookie).
+    // Single-use: a second poll of the consumed page returns "pending" (NOT a
+    // distinct "unknown" — the L fix removes the pageId-existence oracle) and no
+    // second cookie.
     const poll2 = (await web.handle(
       req({ path: `/__flagship/knock/${pageId}/status`, headers: { host: `notes.${FQDN}`, cookie: `${KNOCK_HOLDER_COOKIE}=${holder}` } }),
     ))!;
-    expect(JSON.parse(String(poll2.body)).status).toBe("unknown");
+    expect(JSON.parse(String(poll2.body)).status).toBe("pending");
+    expect((poll2.headers as Record<string, string>)["set-cookie"]).toBeUndefined();
   });
 
   it("a NON-holder poller never receives the session cookie (race-fix)", async () => {
@@ -304,5 +307,41 @@ describe("web-experience gating — session management", () => {
     setClock(NOW + 61_000);
     const st = (await web.handle(req({ method: "POST", path: "/api/service-access/session/status", body: Buffer.from(JSON.stringify({ secretId })) })))!;
     expect(JSON.parse(String(st.body)).status).toBe("offline");
+  });
+});
+
+describe("v2 — web hardenings (L poll-oracle + M5 rate limit)", () => {
+  it("L — an UNKNOWN pageId polls as 'pending' (not 'unknown'), no oracle", async () => {
+    const { web } = await harness();
+    const res = (await web.handle(
+      req({ path: "/__flagship/knock/deadbeefdeadbeefdeadbeefdeadbeef/status", headers: { host: `notes.${FQDN}` } }),
+    ))!;
+    expect(res.status).toBe(200);
+    expect(JSON.parse(String(res.body)).status).toBe("pending");
+  });
+
+  it("M5 — knock authorize is rate-limited per client", async () => {
+    const store = tempStore();
+    await store.load();
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, friendAidHex);
+    const sessions = tempSessions();
+    await sessions.load();
+    const web = buildServiceAccessWeb({ serverId: FQDN, store, sessions, now: () => NOW, rateLimitPerMin: 3 });
+    // Hammer authorize from one client (unknown pageId → 404/403, but the rate
+    // limiter is hit BEFORE the handler). After the cap it's 429.
+    let saw429 = false;
+    for (let i = 0; i < 6; i++) {
+      const r = (await web.handle(
+        req({
+          method: "POST",
+          path: "/api/service-access/knock/authorize",
+          headers: { host: FQDN, "x-forwarded-for": "203.0.113.7" },
+          body: Buffer.from(JSON.stringify({ authorization: {}, sig: "00".repeat(64) })),
+        }),
+      ))!;
+      if (r.status === 429) saw429 = true;
+    }
+    expect(saw429).toBe(true);
   });
 });

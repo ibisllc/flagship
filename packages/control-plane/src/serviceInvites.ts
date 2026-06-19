@@ -34,6 +34,7 @@ import {
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 import type {
+  ServerStorage,
   ServiceInviteApprovalMode,
   ServiceInviteStorage,
   UsernameStorage,
@@ -56,6 +57,14 @@ const HEX_RE = /^[0-9a-f]*$/i;
 export interface ServiceInviteDeps {
   invites: ServiceInviteStorage;
   usernames: UsernameStorage;
+  /**
+   * Server directory — OPTIONAL. When present, the revoked-since poll accepts a
+   * BOX STK-signed query (the box holds no owner key, so it can't owner-sign):
+   * `.com` verifies the STK against the registered server's identity pubkey +
+   * that the server belongs to this username. Absent ⇒ revoked-since is
+   * owner-signed only (the box poller won't authenticate).
+   */
+  servers?: ServerStorage;
   now?: () => number;
   /** Replay window for the signed create / revoke / list envelopes. Default 5 min. */
   freshnessMs?: number;
@@ -418,6 +427,12 @@ export interface ServiceInviteListAuth {
   cursor: string | null;
   issuedAt: string | null;
   sig: string | null;
+  /**
+   * BOX-poll path (revoked-since only): the box's own FQDN. When present, the
+   * query may be STK-signed (verified against the registered server's identity
+   * pubkey) instead of owner-signed — the box holds no owner key.
+   */
+  serverDomain?: string | null;
 }
 
 /** Parse + verify the signed list/revoked-since query. Returns the validated
@@ -477,10 +492,37 @@ async function authorizeListQuery(
   } catch {
     return { ok: false, res: malformed("invalid signature hex") };
   }
-  if (!verifyAccountSigned(userRec, (pub) => verifyServiceInviteListQuery(query, sig, pub))) {
-    return { ok: false, res: forbidden("invalid signature") };
+  // Owner-signed path (clients / UI): verify against the account AID OR IRK.
+  if (verifyAccountSigned(userRec, (pub) => verifyServiceInviteListQuery(query, sig, pub))) {
+    return { ok: true, query, cursor: query.cursor };
   }
-  return { ok: true, query, cursor: query.cursor };
+  // BOX-poll path (revoked-since): the box holds no owner key, so it STK-signs.
+  // Accept it iff `serverDomain` resolves to a non-revoked server owned by THIS
+  // username and the STK sig verifies against that server's identity pubkey.
+  if (
+    scope === "revoked-since" &&
+    deps.servers &&
+    typeof auth.serverDomain === "string" &&
+    auth.serverDomain.length > 0
+  ) {
+    const server = await deps.servers.get(auth.serverDomain);
+    if (
+      server &&
+      server.username.toLowerCase() === userV.label &&
+      server.revokedAt === undefined
+    ) {
+      let stkPub: Uint8Array;
+      try {
+        stkPub = hexToBytes(server.identityPubKeyHex);
+      } catch {
+        return { ok: false, res: forbidden("invalid signature") };
+      }
+      if (verifyServiceInviteListQuery(query, sig, stkPub)) {
+        return { ok: true, query, cursor: query.cursor };
+      }
+    }
+  }
+  return { ok: false, res: forbidden("invalid signature") };
 }
 
 export async function handleListServiceInvites(

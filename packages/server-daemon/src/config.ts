@@ -6,6 +6,14 @@ export interface ServerConfig {
   userId: string;
   bakPublicKey: Bytes;
   irkPublicKey: Bytes;
+  /**
+   * Service-access gating v2 — the owner's STABLE AID pubkey (`ownerAidPubHex`).
+   * Pinned at provision so the box verifies AID-signed service-invite create/
+   * revoke + the box-as-authority redeem against it. OPTIONAL: absent ⇒ the box
+   * falls back to owner-IRK verification (a malformed value is ignored, never
+   * blocking config load).
+   */
+  ownerAidPub?: Bytes;
 }
 
 export async function loadConfig(path: string): Promise<ServerConfig> {
@@ -24,11 +32,19 @@ export function parseConfig(data: unknown): ServerConfig {
   if (typeof d.irkPublicKey !== "string" || !/^[0-9a-f]{64}$/.test(d.irkPublicKey)) {
     throw new Error("config.irkPublicKey must be 32-byte hex");
   }
+  // gating v2 — ownerAidPub is OPTIONAL + non-blocking: a malformed value is
+  // simply dropped (the box falls back to owner-IRK verification) rather than
+  // failing the whole config load + bricking the owner API.
+  const ownerAidPub =
+    typeof d.ownerAidPubHex === "string" && /^[0-9a-f]{64}$/.test(d.ownerAidPubHex)
+      ? hexToBytes(d.ownerAidPubHex)
+      : undefined;
   return {
     serverId: d.serverId,
     userId: d.userId,
     bakPublicKey: hexToBytes(d.bakPublicKey),
     irkPublicKey: hexToBytes(d.irkPublicKey),
+    ...(ownerAidPub ? { ownerAidPub } : {}),
   };
 }
 

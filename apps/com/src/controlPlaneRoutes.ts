@@ -1024,7 +1024,7 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKED_SINCE))) {
     return finish(
       await handleRevokedSinceServiceInvites(
-        { invites: storage.serviceInvites, usernames: storage.usernames },
+        { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers },
         decodeURIComponent(m[1]!),
         {
           authorAID: url.searchParams.get("authorAID"),
@@ -1032,6 +1032,7 @@ export async function tryControlPlane(
           cursor: url.searchParams.get("cursor"),
           issuedAt: url.searchParams.get("issuedAt"),
           sig: url.searchParams.get("sig"),
+          serverDomain: url.searchParams.get("serverDomain"),
         },
       ),
     );

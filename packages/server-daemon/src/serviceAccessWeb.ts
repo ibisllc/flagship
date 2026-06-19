@@ -142,6 +142,8 @@ export interface ServiceAccessWebOptions {
   sessionTtlMs?: number;
   /** Phone status-query rate limit per secretId. Default 60s. */
   statusRateMs?: number;
+  /** M5 — max knock authorize/close requests per client per minute. Default 30. */
+  rateLimitPerMin?: number;
 }
 
 export interface ServiceAccessWeb {
@@ -165,6 +167,26 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
   const knocks = opts.knocks ?? new PendingKnockStore();
   // Per-secretId last-query timestamp for the status rate limit (bounded; pruned opportunistically).
   const statusLastQuery = new Map<string, number>();
+  // M5 — fixed-window per-client rate limit for authorize/close.
+  const rateMax = opts.rateLimitPerMin ?? 30;
+  const rateHits = new Map<string, { count: number; resetAt: number }>();
+  function rateAllow(key: string): boolean {
+    const t = now();
+    const e = rateHits.get(key);
+    if (!e || e.resetAt <= t) {
+      rateHits.set(key, { count: 1, resetAt: t + 60_000 });
+      if (rateHits.size > 4096) for (const [k, v] of rateHits) if (v.resetAt <= t) rateHits.delete(k);
+      return true;
+    }
+    if (e.count >= rateMax) return false;
+    e.count++;
+    return true;
+  }
+  function clientKey(req: HttpRequest): string {
+    const fwd = req.headers["x-forwarded-for"];
+    const ip = typeof fwd === "string" ? fwd.split(",")[0]!.trim() : "";
+    return ip || req.headers["user-agent"] || "anon";
+  }
 
   function maybeServeKnock(serviceRef: string, req: HttpRequest): HttpResponse | null {
     // Only a top-level browser navigation gets HTML; everything else (XHR,
@@ -202,12 +224,14 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
       return handlePoll(pageId, req);
     }
     if (req.path === "/api/service-access/knock/authorize" && req.method === "POST") {
+      if (!rateAllow(`authorize:${clientKey(req)}`)) return bad(429, "rate limited");
       return handleAuthorize(req);
     }
     if (req.path === "/api/service-access/session/status" && req.method === "POST") {
       return handleSessionStatus(req);
     }
     if (req.path === "/api/service-access/session/close" && req.method === "POST") {
+      if (!rateAllow(`close:${clientKey(req)}`)) return bad(429, "rate limited");
       return handleSessionClose(req);
     }
     return null;
@@ -216,7 +240,9 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
   /** Browser poll. Delivers the session cookie ONLY to the holder, single-use. */
   function handlePoll(pageId: string, req: HttpRequest): HttpResponse {
     const knock = knocks.get(pageId, now());
-    if (!knock) return jsonResponse(200, { status: "unknown" });
+    // L — report an UNKNOWN/expired pageId as "pending" (NOT "unknown"), so the
+    // poll endpoint isn't a pageId-existence oracle. The page just keeps polling.
+    if (!knock) return jsonResponse(200, { status: "pending" });
     if (knock.status !== "authorized" || !knock.cookieToken) {
       return jsonResponse(200, { status: "pending" });
     }

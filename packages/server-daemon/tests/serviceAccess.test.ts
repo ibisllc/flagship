@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,10 +9,14 @@ import {
   sealInviteBundle,
   serviceInviteId,
   serviceInviteSecretHash,
+  signAcceptServiceInvite,
+  signCreateServiceInvite,
   signServiceVisitProof,
   signSetServiceAccessMode,
   signRedeemServiceInvite,
   signRemoveServiceAllow,
+  type AcceptServiceInvite,
+  type CreateServiceInvite,
   type ServiceVisitProof,
   type SetServiceAccessMode,
   type RedeemServiceInvite,
@@ -21,13 +25,17 @@ import {
 import {
   buildServiceAccessHttp,
   buildAccessEnforcementHandler,
+  buildRevocationPoller,
   decideServiceAccess,
   ServiceAccessStore,
   ServiceSessionStore,
+  ALLOW_LIST_CAP,
+  ESTABLISH_NONCE_HEADER,
   SESSION_COOKIE,
   VISIT_PROOF_HEADER,
+  type ServiceAccessHttp,
 } from "../src/serviceAccess.js";
-import type { HttpRequest } from "../src/runtime.js";
+import type { HttpRequest, HttpResponse } from "../src/runtime.js";
 
 const FQDN = "home.alice.flagship.services";
 const NOW = 1_700_000_000_000;
@@ -64,6 +72,25 @@ function req(over: Partial<HttpRequest>): HttpRequest {
   return { method: "GET", path: "/", headers: { host: FQDN }, body: Buffer.alloc(0), ...over };
 }
 
+/**
+ * Run the M3 establish-session handshake: GET a fresh single-use nonce, then POST
+ * the visit-proof body with the nonce header. Returns the POST response.
+ */
+async function establishWithNonce(access: ServiceAccessHttp, body: string): Promise<HttpResponse | null> {
+  const nonceRes = await access.handle(
+    req({ method: "GET", path: "/api/service-access/establish-session/nonce" }),
+  );
+  const nonce = JSON.parse(String(nonceRes!.body)).nonce as string;
+  return access.handle(
+    req({
+      method: "POST",
+      path: "/api/service-access/establish-session",
+      headers: { host: FQDN, [ESTABLISH_NONCE_HEADER]: nonce },
+      body: Buffer.from(body),
+    }),
+  );
+}
+
 function setModeBody(mode: "open" | "restricted", at = NOW, serviceRef = SERVICE): Buffer {
   const order: SetServiceAccessMode = { serverId: FQDN, serviceRef, mode, issuedAt: at };
   const sig = signSetServiceAccessMode(order, ownerIrk);
@@ -86,17 +113,79 @@ function visitHeader(aidKeypair = friendAid, signer = friendAid, at = NOW, servi
   ).toString("base64");
 }
 
-/** A stub `.com` fetch that returns a redeem result for a known secretHash. */
-function comFetch(opts: { status?: number; serviceRef?: string; boundAID?: string; firstBind?: boolean } = {}) {
+/**
+ * Build a `.com`-relayed signed create carrier (box-as-authority): the box now
+ * verifies the owner's signed create on redeem, so the stub `.com` returns one
+ * signed by the OWNER IRK (which the box verifies against `ownerIrkPub`). The
+ * create's secretHash matches the redeemed secret (default fill(7)).
+ */
+function signedCreateCarrier(opts: {
+  serviceRef?: string;
+  secret?: Uint8Array;
+  maxRedemptions?: number;
+} = {}): { create: Record<string, unknown>; createSig: string } {
+  const serviceRef = opts.serviceRef ?? SERVICE;
+  const secret = opts.secret ?? new Uint8Array(32).fill(7);
+  const secretHash = serviceInviteSecretHash(secret);
+  const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+  const create: CreateServiceInvite = {
+    inviteId,
+    authorAID: ownerAid.publicKey,
+    serviceRef,
+    secretHash,
+    encryptedBundle: sealInviteBundle({ name: "Alex" }, householdKey, inviteId),
+    issuedAt: NOW,
+    ...(opts.maxRedemptions !== undefined ? { maxRedemptions: opts.maxRedemptions } : {}),
+  };
+  const sig = signCreateServiceInvite(create, ownerIrk);
+  return {
+    create: {
+      inviteId: create.inviteId,
+      authorAID: hex(create.authorAID),
+      serviceRef: create.serviceRef,
+      secretHash: create.secretHash,
+      encryptedBundle: create.encryptedBundle,
+      issuedAt: create.issuedAt,
+      ...(opts.maxRedemptions !== undefined ? { maxRedemptions: opts.maxRedemptions } : {}),
+    },
+    createSig: hex(sig),
+  };
+}
+
+/** A stub `.com` fetch that returns a redeem result (incl. the signed create) for a known secretHash. */
+function comFetch(
+  opts: {
+    status?: number;
+    serviceRef?: string;
+    boundAID?: string;
+    firstBind?: boolean;
+    secret?: Uint8Array;
+    pending?: boolean;
+    maxRedemptions?: number;
+  } = {},
+) {
   return async (_url: string | URL, _init?: RequestInit): Promise<Response> => {
     const status = opts.status ?? 200;
     if (status !== 200) return new Response("", { status });
+    const carrier = signedCreateCarrier({
+      serviceRef: opts.serviceRef,
+      secret: opts.secret,
+      maxRedemptions: opts.maxRedemptions,
+    });
+    if (opts.pending) {
+      return new Response(
+        JSON.stringify({ pending: true, approvalMode: "manual", serviceRef: opts.serviceRef ?? SERVICE, ...carrier }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
     return new Response(
       JSON.stringify({
         redeemed: true,
+        approvalMode: "auto",
         firstBind: opts.firstBind ?? true,
         serviceRef: opts.serviceRef ?? SERVICE,
         boundAID: opts.boundAID ?? hex(friendAid.publicKey),
+        ...carrier,
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
@@ -535,6 +624,19 @@ describe("browser cookie seam — issuance", () => {
     const { access } = build({ store, sessions });
     await store.setMode(SERVICE, "restricted");
     await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const res = await establishWithNonce(access, visitHeader());
+    expect(res!.status).toBe(200);
+    const token = cookieToken((res!.headers as Record<string, string>)["set-cookie"])!;
+    expect(sessions.lookup(token, NOW)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
+  });
+
+  it("establish-session WITHOUT the nonce is rejected (M3 — 403)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ store, sessions });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
     const res = await access.handle(
       req({
         method: "POST",
@@ -542,9 +644,27 @@ describe("browser cookie seam — issuance", () => {
         body: Buffer.from(visitHeader()),
       }),
     );
-    expect(res!.status).toBe(200);
-    const token = cookieToken((res!.headers as Record<string, string>)["set-cookie"])!;
-    expect(sessions.lookup(token, NOW)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
+    expect(res!.status).toBe(403);
+  });
+
+  it("establish-session NONCE is single-use (a replayed nonce is rejected)", async () => {
+    const store = tempStore();
+    const sessions = tempSessions();
+    await sessions.load();
+    const { access } = build({ store, sessions });
+    await store.setMode(SERVICE, "restricted");
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey));
+    const nonce = JSON.parse(
+      String((await access.handle(req({ method: "GET", path: "/api/service-access/establish-session/nonce" })))!.body),
+    ).nonce as string;
+    const ok = await access.handle(
+      req({ method: "POST", path: "/api/service-access/establish-session", headers: { host: FQDN, [ESTABLISH_NONCE_HEADER]: nonce }, body: Buffer.from(visitHeader()) }),
+    );
+    expect(ok!.status).toBe(200);
+    const replay = await access.handle(
+      req({ method: "POST", path: "/api/service-access/establish-session", headers: { host: FQDN, [ESTABLISH_NONCE_HEADER]: nonce }, body: Buffer.from(visitHeader()) }),
+    );
+    expect(replay!.status).toBe(403);
   });
 
   it("establish-session 401s an AID that is NOT allow-listed", async () => {
@@ -553,13 +673,7 @@ describe("browser cookie seam — issuance", () => {
     await sessions.load();
     const { access } = build({ store, sessions });
     await store.setMode(SERVICE, "restricted"); // no addAllowed
-    const res = await access.handle(
-      req({
-        method: "POST",
-        path: "/api/service-access/establish-session",
-        body: Buffer.from(visitHeader()),
-      }),
-    );
+    const res = await establishWithNonce(access, visitHeader());
     expect(res!.status).toBe(401);
   });
 
@@ -571,13 +685,7 @@ describe("browser cookie seam — issuance", () => {
     await store.setMode(SERVICE, "restricted");
     await store.addAllowed(SERVICE, hex(friendAid.publicKey));
     const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(77) });
-    const res = await access.handle(
-      req({
-        method: "POST",
-        path: "/api/service-access/establish-session",
-        body: Buffer.from(visitHeader(friendAid, attacker)),
-      }),
-    );
+    const res = await establishWithNonce(access, visitHeader(friendAid, attacker));
     expect(res!.status).toBe(403);
   });
 });
@@ -754,5 +862,249 @@ describe("POST /api/service-access/allow-remove (owner-IRK prune → revoke reac
     const r = await access.handle(req({ method: "POST", path: "/api/service-access/allow-remove", body: removeBody(friendHex) }));
     expect(r?.status).toBe(200);
     expect(JSON.parse(String(r?.body)).removed).toBe(false);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// v2 hardening — box-as-authority + manual-approve + group + M4/M5
+// ──────────────────────────────────────────────────────────────────────
+
+function redeemBodyV2(secret = new Uint8Array(32).fill(7), aid = friendAid, signer = friendAid, at = NOW): Buffer {
+  const secretHash = serviceInviteSecretHash(secret);
+  const redeem: RedeemServiceInvite = { secretHash, visitorAID: aid.publicKey, redeemedAt: at };
+  const sig = signRedeemServiceInvite(redeem, signer);
+  return Buffer.from(JSON.stringify({ secretHash, visitorAID: hex(aid.publicKey), aidSig: hex(sig), redeemedAt: at }));
+}
+
+describe("v2 — box-as-authority redeem (verify the owner's signed create)", () => {
+  it("rejects (403) a redeem whose .com create is signed by a NON-owner key", async () => {
+    // `.com` returns a create signed by a STRANGER, not the owner — the box's
+    // ownerIrkPub/ownerAidPub verification fails, so no binding is fabricated.
+    const stranger = deriveIRK(friendUmk);
+    const fetchImpl = (async (): Promise<Response> => {
+      const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+      const create: CreateServiceInvite = {
+        inviteId,
+        authorAID: ownerAid.publicKey,
+        serviceRef: SERVICE,
+        secretHash: serviceInviteSecretHash(new Uint8Array(32).fill(7)),
+        encryptedBundle: sealInviteBundle({ name: "X" }, householdKey, inviteId),
+        issuedAt: NOW,
+      };
+      const sig = signCreateServiceInvite(create, stranger);
+      return new Response(
+        JSON.stringify({
+          redeemed: true,
+          serviceRef: SERVICE,
+          boundAID: hex(friendAid.publicKey),
+          create: { ...create, authorAID: hex(create.authorAID) },
+          createSig: hex(sig),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const { access, store } = build({ fetchImpl });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
+    expect(res!.status).toBe(403);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+
+  it("rejects (403) when the create's secretHash does NOT match the redeemed secret", async () => {
+    // A rogue `.com` substitutes a DIFFERENT real owner-signed create (whose
+    // secretHash is for a different invite). The mismatch is caught.
+    const fetchImpl = comFetch({ secret: new Uint8Array(32).fill(9) }) as unknown as typeof fetch; // create for fill(9)…
+    const { access, store } = build({ fetchImpl });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() })); // …redeem fill(7)
+    expect(res!.status).toBe(403);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+
+  it("accepts a valid owner-signed create whose secretHash matches → binds", async () => {
+    const { access, store } = build({ fetchImpl: comFetch() as unknown as typeof fetch });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
+    expect(res!.status).toBe(200);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+  });
+
+  it("MANUAL-approve redeem returns {pending} with NO bind", async () => {
+    const { access, store } = build({ fetchImpl: comFetch({ pending: true }) as unknown as typeof fetch });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
+    expect(res!.status).toBe(200);
+    expect(JSON.parse(String(res!.body)).pending).toBe(true);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+});
+
+describe("v2 — manual-approve accept (POST /api/service-access/accept)", () => {
+  function acceptBody(contactAid = friendAid, signer = friendAid, opts: { serviceRef?: string } = {}): Buffer {
+    const serviceRef = opts.serviceRef ?? SERVICE;
+    const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+    const create: CreateServiceInvite = {
+      inviteId,
+      authorAID: ownerAid.publicKey,
+      serviceRef,
+      secretHash: serviceInviteSecretHash(new Uint8Array(32).fill(7)),
+      encryptedBundle: sealInviteBundle({ name: "X" }, householdKey, inviteId),
+      issuedAt: NOW,
+    };
+    const createSig = hex(signCreateServiceInvite(create, ownerIrk));
+    const accept: AcceptServiceInvite = {
+      inviteId,
+      serviceRef,
+      contactAID: contactAid.publicKey,
+      acceptedAt: NOW,
+    };
+    const acceptSig = hex(signAcceptServiceInvite(accept, signer));
+    return Buffer.from(
+      JSON.stringify({
+        accept: { inviteId, serviceRef, contactAID: hex(contactAid.publicKey), acceptedAt: NOW },
+        acceptSig,
+        create: { ...create, authorAID: hex(create.authorAID) },
+        createSig,
+      }),
+    );
+  }
+
+  it("binds the contact AID when both the owner create + friend acceptance verify", async () => {
+    const { access, store } = build();
+    const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody() }));
+    expect(res!.status).toBe(200);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+  });
+
+  it("rejects (403) an acceptance signed by a DIFFERENT key than the contact AID", async () => {
+    const { access, store } = build();
+    const attacker = deriveAccountId({ seed: new Uint8Array(32).fill(88) });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody(friendAid, attacker) }));
+    expect(res!.status).toBe(403);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+
+  it("rejects (409) an accept for a service this box does not host", async () => {
+    const { access } = build({ installed: new Set([SERVICE]) });
+    const res = await access.handle(req({ method: "POST", path: "/api/service-access/accept", body: acceptBody(friendAid, friendAid, { serviceRef: "alice-photos" }) }));
+    expect(res!.status).toBe(409);
+  });
+});
+
+describe("v2 — group binding + group-prune", () => {
+  it("a GROUP redeem binds under the inviteId; revokeGroup prunes the whole set", async () => {
+    const store = tempStore();
+    await store.load();
+    const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+    const other = hex(deriveAccountId({ seed: new Uint8Array(32).fill(55) }).publicKey);
+    expect(await store.addAllowed(SERVICE, hex(friendAid.publicKey), inviteId)).toBe(true);
+    expect(await store.addAllowed(SERVICE, other, inviteId)).toBe(true);
+    expect(store.allowList(SERVICE).length).toBe(2);
+    const pruned = await store.revokeGroup(inviteId);
+    expect(pruned).toBe(2);
+    expect(store.allowList(SERVICE).length).toBe(0);
+  });
+
+  it("revokeGroup without a serviceRef prunes the group across services", async () => {
+    const store = tempStore();
+    await store.load();
+    const inviteId = "deadbeef";
+    await store.addAllowed("svc-a", hex(friendAid.publicKey), inviteId);
+    await store.addAllowed("svc-b", hex(friendAid.publicKey), inviteId);
+    const pruned = await store.revokeGroup(inviteId);
+    expect(pruned).toBe(2);
+  });
+});
+
+describe("v2 — M4 fail-open alert + M5 allow-list cap", () => {
+  it("M4 — a CORRUPT state file fails open AND raises the owner flag", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json");
+    // First write a valid restricted state, then corrupt the file.
+    const a = new ServiceAccessStore(path);
+    await a.load();
+    await a.setMode(SERVICE, "restricted");
+    writeFileSync(path, "{ this is not json");
+    let alerted: { error: string } | null = null;
+    const b = new ServiceAccessStore(path, { onFailOpen: (info) => (alerted = info) });
+    await b.load();
+    expect(b.failedOpen()).toBe(true);
+    expect(alerted).not.toBeNull();
+    expect(b.mode(SERVICE)).toBe("open"); // fell open
+  });
+
+  it("M4 — a genuinely-ABSENT file is the normal empty case (no alert)", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "sa-")), "missing.json");
+    let alerted = false;
+    const store = new ServiceAccessStore(path, { onFailOpen: () => (alerted = true) });
+    await store.load();
+    expect(store.failedOpen()).toBe(false);
+    expect(alerted).toBe(false);
+  });
+
+  it("M5 — addAllowed refuses once the allow-list hits the cap", async () => {
+    // Pre-load a state file already at the cap (one write, not CAP addAllowed
+    // calls — same observable behavior, far cheaper).
+    const path = join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json");
+    const full = Array.from({ length: ALLOW_LIST_CAP }, (_, i) => i.toString(16).padStart(64, "0"));
+    writeFileSync(path, JSON.stringify({ [SERVICE]: { mode: "restricted", allow: full, groups: {} } }));
+    const store = new ServiceAccessStore(path);
+    await store.load();
+    expect(store.allowList(SERVICE).length).toBe(ALLOW_LIST_CAP);
+    const overflow = await store.addAllowed(SERVICE, "ff".repeat(32));
+    expect(overflow).toBe(false);
+    expect(store.allowList(SERVICE).length).toBe(ALLOW_LIST_CAP);
+  });
+});
+
+describe("v2 — revocation poller", () => {
+  it("polls .com revoked-since + group-prunes the returned invites", async () => {
+    const store = tempStore();
+    await store.load();
+    const inviteId = "abc123";
+    await store.addAllowed(SERVICE, hex(friendAid.publicKey), inviteId);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
+
+    let polledUrl = "";
+    const fetchImpl = (async (url: string | URL): Promise<Response> => {
+      polledUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          revoked: [{ inviteId, serviceRef: SERVICE, boundAIDs: [hex(friendAid.publicKey)], revokedAt: NOW }],
+          cursor: NOW,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const poller = buildRevocationPoller({
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      username: "alice",
+      authorAidHex: hex(ownerAid.publicKey),
+      serverDomain: FQDN,
+      stk: ownerDevice, // any keypair — the box signs with its STK
+      store,
+      fetchImpl,
+      now: () => NOW,
+    });
+    const pruned = await poller.pollOnce();
+    expect(pruned).toBeGreaterThanOrEqual(1);
+    expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+    // It signs the query + sends the box serverDomain for the STK auth path.
+    expect(polledUrl).toContain("scope=revoked-since");
+    expect(polledUrl).toContain(`serverDomain=${encodeURIComponent(FQDN)}`);
+    expect(polledUrl).toContain("sig=");
+  });
+
+  it("a .com error is best-effort (returns 0, the instant owner-prune is primary)", async () => {
+    const store = tempStore();
+    await store.load();
+    const fetchImpl = (async (): Promise<Response> => new Response("", { status: 500 })) as unknown as typeof fetch;
+    const poller = buildRevocationPoller({
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      username: "alice",
+      authorAidHex: hex(ownerAid.publicKey),
+      serverDomain: FQDN,
+      stk: ownerDevice,
+      store,
+      fetchImpl,
+      now: () => NOW,
+    });
+    expect(await poller.pollOnce()).toBe(0);
   });
 });

@@ -506,4 +506,55 @@ describe("handleRevokedSinceServiceInvites (owner-signed poller)", () => {
     const res = await handleRevokedSinceServiceInvites(deps, "alice", listAuth("revoked-since", stranger));
     expect(res.status).toBe(403);
   });
+
+  it("accepts a BOX STK-signed poll verified against the registered server", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    // Register a server for alice with a known STK identity pubkey.
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(123) });
+    const serverDomain = "home.alice.flagship.services";
+    await storage.servers.put({
+      serverDomain,
+      username: "alice",
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: 1,
+    });
+    const deps = {
+      invites: storage.serviceInvites,
+      usernames: storage.usernames,
+      servers: storage.servers,
+      now: () => NOW,
+    };
+    // Create + revoke an invite so revoked-since has a row.
+    await handleCreateServiceInvite(deps, "alice", createEnvelope().body);
+    const inviteId = serviceInviteId(authorAid.publicKey, authorDevice.publicKey, 0);
+    await handleRevokeServiceInvite(deps, "alice", revokeBody(inviteId));
+    // The box signs the query with its STK + presents serverDomain.
+    const auth = { ...listAuth("revoked-since", stk), serverDomain };
+    const res = await handleRevokedSinceServiceInvites(deps, "alice", auth);
+    expect(res.status).toBe(200);
+    expect((res.body as { revoked: unknown[] }).revoked).toHaveLength(1);
+  });
+
+  it("rejects a BOX STK-signed poll when the server belongs to a DIFFERENT user (403)", async () => {
+    const storage = new InMemoryStorage();
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(authorIrk.publicKey), claimedAt: 1 });
+    const stk = deriveIRK({ seed: new Uint8Array(32).fill(124) });
+    const serverDomain = "home.bob.flagship.services";
+    await storage.servers.put({
+      serverDomain,
+      username: "bob", // NOT alice
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: 1,
+    });
+    const deps = {
+      invites: storage.serviceInvites,
+      usernames: storage.usernames,
+      servers: storage.servers,
+      now: () => NOW,
+    };
+    const auth = { ...listAuth("revoked-since", stk), serverDomain };
+    const res = await handleRevokedSinceServiceInvites(deps, "alice", auth);
+    expect(res.status).toBe(403);
+  });
 });
