@@ -49,7 +49,11 @@ import {
 } from "@flagship/protocol";
 
 const CONTROL = process.env.LIVE_E2E_CONTROL || "gym.flagshipserver.com";
-const SERVICES = process.env.LIVE_E2E_SERVICES || "flagship.services";
+// The gym DATA-plane apex is gym.flagship.services (NOT flagship.services — that's
+// prod). Boxes register + serve under <server>.<user>.gym.flagship.services. Match
+// run.ts's GYM_LIVE_SERVICES_APEX so the bring-up poll checks the domain the box
+// actually serves.
+const SERVICES = process.env.GYM_LIVE_SERVICES_APEX || process.env.LIVE_E2E_SERVICES || "gym.flagship.services";
 const ADMIN = process.env.GYM_ADMIN_SECRET || process.env.FLAGSHIP_ADMIN_SECRET || "";
 const KEK = process.env.GYM_DEMO_IRK_KEK || "";
 const AI_KEY = process.env.GYM_AI_API_KEY || "";
