@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     await step("vibe-code start → model runs (BYOK)", async () => {
       const r = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
         method: "POST", headers: sessionHdr,
-        body: JSON.stringify({ prompt: "Build the smallest possible static site: a single index.html whose body is exactly the text 'hello gate'. One file only.", model: AI_MODEL, credential: { provider: "openai", apiKey: AI_KEY } }),
+        body: JSON.stringify({ prompt: "Build a minimal static website that serves the text 'hello gate'. Produce an index.html AND a Dockerfile that SERVES it over HTTP — use `FROM nginx:alpine`, COPY index.html into /usr/share/nginx/html/, and the container listens on port 80. The flagship.app.json runtime.port MUST be 80. The site must return HTTP 200 with 'hello gate' in the body at '/'.", model: AI_MODEL, credential: { provider: "openai", apiKey: AI_KEY } }),
       });
       assert(r.status === 200, `start ${r.status}: ${r.text.slice(0, 120)}`);
       sid = r.json?.sessionId;
@@ -375,7 +375,8 @@ async function main(): Promise<void> {
       // a fresh AID-authorize now fails — the AID is no longer allow-listed
       const k = await svcGet();
       const pageId = (/[?&]page=([0-9a-f]+)/.exec(k.text) || [])[1];
-      const knock: KnockAuthorization = { serverId: fqdn, serviceRef, pageId: pageId!, visitorAID: friendAid.publicKey, issuedAt: Date.now() };
+      assert(pageId, `no knock page to re-authorize against (service serving? status=${k.status}) — the prune itself returned removed:true`);
+      const knock: KnockAuthorization = { serverId: fqdn, serviceRef, pageId, visitorAID: friendAid.publicKey, issuedAt: Date.now() };
       const sig2 = bytesToHex(signKnockAuthorization(knock, friendAid));
       const auth = await http(`https://${fqdn}/api/service-access/knock/authorize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ authorization: { ...knock, visitorAID: bytesToHex(knock.visitorAID) }, sig: sig2 }) });
       assert(auth.status === 401, `expected 401 (not allow-listed), got ${auth.status}`);
