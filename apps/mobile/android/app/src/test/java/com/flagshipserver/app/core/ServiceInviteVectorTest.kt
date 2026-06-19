@@ -131,6 +131,23 @@ class ServiceInviteVectorTest {
         assertEquals(v.s("sigHex"), HexUtil.encode(ServiceInvite.sign(bytes, friendAid(r))))
     }
 
+    @Test fun knockSignatureVerifies() {
+        // Web-experience gating: the visitor's PHONE AID-signs a
+        // KnockAuthorization to authorize a browser's QR-login. The pageId is
+        // in the signature.
+        val r = root()
+        val k = r.obj("knock")
+        val friendAidPub = ServerKeys.deriveAccountIdPub(friendUmk(r))
+        val bytes = ServiceInvite.canonicalKnock(
+            r.s("serverId"), r.s("serviceRef"), k.s("pageId"), friendAidPub, k.l("issuedAt"),
+        )
+        assertTrue(ServiceInvite.verify(HexUtil.decode(k.s("sigHex"))!!, bytes, friendAidPub))
+        // Tink Ed25519 is RFC-8032 deterministic, so our signature byte-equals it.
+        assertEquals(k.s("sigHex"), HexUtil.encode(ServiceInvite.signKnockAuthorization(
+            r.s("serverId"), r.s("serviceRef"), k.s("pageId"), friendAidPub, k.l("issuedAt"), friendAid(r),
+        )))
+    }
+
     @Test fun bundleSealOpenRoundtrip() {
         val r = root()
         val household = ServerKeys.deriveHouseholdKey(authorUmk(r))

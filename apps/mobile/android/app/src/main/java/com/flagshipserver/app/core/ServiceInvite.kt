@@ -47,6 +47,7 @@ object ServiceInvite {
     const val TAG_BUNDLE = "flagship/service-invite/bundle/v1"
     const val TAG_ACCESS_MODE = "flagship/service-access-mode/v1"
     const val TAG_VISIT = "flagship/service-visit/v1"
+    const val TAG_KNOCK = "flagship/service-knock/v1"
 
     private val rng = SecureRandom()
 
@@ -198,6 +199,30 @@ object ServiceInvite {
         return listOf(TAG_VISIT, serverId, serviceRef, HexUtil.encode(visitorAID), issuedAt.toString())
             .joinToString("|").toByteArray(Charsets.UTF_8)
     }
+
+    /** Canonical bytes for a KnockAuthorization — the visitor's PHONE AID-signs
+     *  THIS to authorize a SEPARATE browser's QR-login session
+     *  (docs/service-access-gating.md, "Web-experience gating"). The `pageId` is
+     *  IN the signature, so a visit proof can never be replayed to authorize a
+     *  different page. Mirrors @flagship/protocol `canonicalKnock` exactly. */
+    fun canonicalKnock(serverId: String, serviceRef: String, pageId: String, visitorAID: ByteArray, issuedAt: Long): ByteArray {
+        validateNoSepCtrl("serverId", serverId)
+        validateNoSepCtrl("serviceRef", serviceRef)
+        validateNoSepCtrl("pageId", pageId)
+        return listOf(TAG_KNOCK, serverId, serviceRef, pageId, HexUtil.encode(visitorAID), issuedAt.toString())
+            .joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    /** AID-sign a KnockAuthorization (Ed25519 over [canonicalKnock]). The byte
+     *  output is RFC-8032 deterministic, so it equals the TS/webapp/iOS twin. */
+    fun signKnockAuthorization(
+        serverId: String,
+        serviceRef: String,
+        pageId: String,
+        visitorAID: ByteArray,
+        issuedAt: Long,
+        aid: Ed25519Sign,
+    ): ByteArray = aid.sign(canonicalKnock(serverId, serviceRef, pageId, visitorAID, issuedAt))
 
     // ── sign / verify ──────────────────────────────────────────────────────
 
