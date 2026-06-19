@@ -33,6 +33,8 @@ import {
   verifySetServiceAccessMode,
   signServiceVisitProof,
   verifyServiceVisitProof,
+  signKnockAuthorization,
+  verifyKnockAuthorization,
   type CreateServiceInvite,
 } from "@flagship/protocol";
 
@@ -71,6 +73,7 @@ const VECTORS = JSON.parse(
   revoke: { issuedAt: number; sigHex: string };
   setAccessMode: { mode: "restricted"; issuedAt: number; sigHex: string };
   visit: { issuedAt: number; sigHex: string };
+  knock: { pageId: string; issuedAt: number; sigHex: string };
   bundle: { name: string; photo?: string };
 };
 
@@ -242,12 +245,41 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
     expect(verifyServiceVisitProof(visit, ed.sign(bytes, friendAid.privateKey), friendAid.publicKey)).toBe(true);
   });
 
+  it("knock authorization: AID-signed bytes verify + reproduce the pinned sig", async () => {
+    const si = await loadServiceInvite();
+    const knock = {
+      serverId: VECTORS.serverId,
+      serviceRef: VECTORS.serviceRef,
+      pageId: VECTORS.knock.pageId,
+      visitorAID: friendAid.publicKey,
+      issuedAt: VECTORS.knock.issuedAt,
+    };
+    const bytes = si.canonicalKnockBytes(knock);
+    // 1) protocol signs, webapp bytes verify under the friend AID pub
+    expect(ed.verify(signKnockAuthorization(knock, friendAid), bytes, friendAid.publicKey)).toBe(true);
+    // 2) webapp bytes signed with the friend AID reproduce the PINNED cross-platform sig
+    expect(bytesToHex(ed.sign(bytes, friendAid.privateKey))).toBe(VECTORS.knock.sigHex);
+    // 3) protocol's verifier accepts the webapp-produced signature
+    expect(verifyKnockAuthorization(knock, ed.sign(bytes, friendAid.privateKey), friendAid.publicKey)).toBe(true);
+    // 4) the webapp's signKnockAuthorization helper (injected AID signer) emits the SAME pinned sig
+    const signAidLocal = (priv: Uint8Array) => async (_umk: Uint8Array, b: Uint8Array) => ed.sign(b, priv);
+    const sig = await si.signKnockAuthorization(
+      { ...knock, umk: friendUmk.seed },
+      signAidLocal(friendAid.privateKey),
+    );
+    expect(bytesToHex(sig)).toBe(VECTORS.knock.sigHex);
+  });
+
   it("rejects separator/control injection in serviceRef at build time", async () => {
     const si = await loadServiceInvite();
     expect(() =>
       si.canonicalSetAccessModeBytes({ serverId: VECTORS.serverId, serviceRef: "a|b", mode: "open", issuedAt: 1 }),
     ).toThrow();
     expect(() => si.canonicalSetAccessModeBytes({ serverId: VECTORS.serverId, serviceRef: "x", mode: "weird", issuedAt: 1 })).toThrow();
+    // The knock builder guards its signed fields too (separator + control chars).
+    expect(() =>
+      si.canonicalKnockBytes({ serverId: VECTORS.serverId, serviceRef: "x", pageId: "a|b", visitorAID: friendAid.publicKey, issuedAt: 1 }),
+    ).toThrow();
   });
 });
 
@@ -376,11 +408,129 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(verifyServiceVisitProof(visit, hexToBytes(obj.sig), friendAid.publicKey)).toBe(true);
   });
 
-  it("locked webapp guards (no umk / signer) on create + redeem + set-mode", async () => {
+  it("authorizeKnock POSTs the AID-signed authorization to the box + returns the secretId on 200", async () => {
+    const si = await loadServiceInvite();
+    const SECRET = "a".repeat(64);
+    let captured: { url: string; body: any } | null = null;
+    const f = async (url: string, init: RequestInit) => {
+      captured = { url, body: JSON.parse(String(init.body)) };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          authorized: true,
+          secretId: SECRET,
+          serviceRef: VECTORS.serviceRef,
+          browserAgent: "Mozilla/5.0 (TestBrowser)",
+          startedAt: VECTORS.knock.issuedAt,
+          expiresAt: VECTORS.knock.issuedAt + 43_200_000,
+        }),
+      } as Response;
+    };
+    const r = await si.authorizeKnock(
+      {
+        serverId: VECTORS.serverId,
+        serviceRef: VECTORS.serviceRef,
+        pageId: VECTORS.knock.pageId,
+        svc: "notes",
+        visitorAID: friendAid.publicKey,
+        umk: friendUmk.seed,
+        signWithAccountId: signAid(friendAid.privateKey),
+      },
+      { fetch: f as unknown as typeof fetch, now: () => VECTORS.knock.issuedAt },
+    );
+    expect(captured!.url).toBe(`https://${VECTORS.serverId}/api/service-access/knock/authorize`);
+    expect(captured!.body.authorization).toEqual({
+      serverId: VECTORS.serverId,
+      serviceRef: VECTORS.serviceRef,
+      pageId: VECTORS.knock.pageId,
+      visitorAID: VECTORS.derived.friendAidPubHex,
+      issuedAt: VECTORS.knock.issuedAt,
+    });
+    // The sig the box receives is exactly the pinned knock signature.
+    expect(captured!.body.sig).toBe(VECTORS.knock.sigHex);
+    const knock = {
+      serverId: VECTORS.serverId,
+      serviceRef: VECTORS.serviceRef,
+      pageId: VECTORS.knock.pageId,
+      visitorAID: friendAid.publicKey,
+      issuedAt: VECTORS.knock.issuedAt,
+    };
+    expect(verifyKnockAuthorization(knock, hexToBytes(captured!.body.sig), friendAid.publicKey)).toBe(true);
+    expect(r.secretId).toBe(SECRET);
+    expect(r.serverId).toBe(VECTORS.serverId);
+    expect(r.svc).toBe("notes");
+    expect(r.browserAgent).toBe("Mozilla/5.0 (TestBrowser)");
+  });
+
+  it("authorizeKnock maps 401/403/404 to clear messages", async () => {
+    const si = await loadServiceInvite();
+    const base = {
+      serverId: VECTORS.serverId,
+      serviceRef: VECTORS.serviceRef,
+      pageId: VECTORS.knock.pageId,
+      visitorAID: friendAid.publicKey,
+      umk: friendUmk.seed,
+      signWithAccountId: signAid(friendAid.privateKey),
+    };
+    const resp = (status: number) => async () => ({ ok: false, status, text: async () => "" }) as Response;
+    await expect(si.authorizeKnock(base, { fetch: resp(401) as unknown as typeof fetch })).rejects.toMatchObject({ code: "401" });
+    await expect(si.authorizeKnock(base, { fetch: resp(403) as unknown as typeof fetch })).rejects.toMatchObject({ code: "403" });
+    await expect(si.authorizeKnock(base, { fetch: resp(404) as unknown as typeof fetch })).rejects.toMatchObject({ code: "404" });
+  });
+
+  it("sessionStatus + closeSession POST the secretId in the BODY (never the URL)", async () => {
+    const si = await loadServiceInvite();
+    const SECRET = "b".repeat(64);
+    let statusCap: { url: string; body: any } | null = null;
+    const fStatus = async (url: string, init: RequestInit) => {
+      statusCap = { url, body: JSON.parse(String(init.body)) };
+      return { ok: true, status: 200, json: async () => ({ status: "online" }) } as Response;
+    };
+    const status = await si.sessionStatus({ serverId: VECTORS.serverId, secretId: SECRET }, { fetch: fStatus as unknown as typeof fetch });
+    expect(statusCap!.url).toBe(`https://${VECTORS.serverId}/api/service-access/session/status`);
+    expect(statusCap!.url).not.toContain(SECRET); // never in the URL
+    expect(statusCap!.body).toEqual({ secretId: SECRET });
+    expect(status).toBe("online");
+
+    // 429 → dedicated code so the caller keeps the last-known status.
+    const f429 = async () => ({ ok: false, status: 429, text: async () => "" }) as Response;
+    await expect(si.sessionStatus({ serverId: VECTORS.serverId, secretId: SECRET }, { fetch: f429 as unknown as typeof fetch })).rejects.toMatchObject({ code: "429" });
+
+    let closeCap: { url: string; body: any } | null = null;
+    const fClose = async (url: string, init: RequestInit) => {
+      closeCap = { url, body: JSON.parse(String(init.body)) };
+      return { ok: true, status: 200, json: async () => ({ closed: true }) } as Response;
+    };
+    const closed = await si.closeSession({ serverId: VECTORS.serverId, secretId: SECRET }, { fetch: fClose as unknown as typeof fetch });
+    expect(closeCap!.url).toBe(`https://${VECTORS.serverId}/api/service-access/session/close`);
+    expect(closeCap!.body).toEqual({ secretId: SECRET });
+    expect(closed.closed).toBe(true);
+  });
+
+  it("parseAccessDeepLink parses a flagship://access link (tolerating pasted whitespace) + rejects junk", async () => {
+    const si = await loadServiceInvite();
+    const link = `flagship://access?server=${encodeURIComponent(VECTORS.serverId)}&svc=notes&ref=${encodeURIComponent(VECTORS.serviceRef)}&page=${VECTORS.knock.pageId}`;
+    expect(si.parseAccessDeepLink(`  \n${link}\t `)).toEqual({
+      serverId: VECTORS.serverId,
+      svc: "notes",
+      serviceRef: VECTORS.serviceRef,
+      pageId: VECTORS.knock.pageId,
+    });
+    expect(si.serviceUrlFromDeepLink(si.parseAccessDeepLink(link))).toBe(`https://notes.${VECTORS.serverId}`);
+    // Wrong scheme / missing required fields / not a link → null.
+    expect(si.parseAccessDeepLink("https://example.com/?server=x&ref=y&page=z")).toBeNull();
+    expect(si.parseAccessDeepLink("flagship://access?server=x&svc=s")).toBeNull(); // no ref/page
+    expect(si.parseAccessDeepLink("nonsense")).toBeNull();
+    expect(si.parseAccessDeepLink("")).toBeNull();
+  });
+
+  it("locked webapp guards (no umk / signer) on create + redeem + set-mode + authorize", async () => {
     const si = await loadServiceInvite();
     await expect(si.createInvite({ comBase: COM, username: "alice", podBaseUrl: POD, authorAID: authorAid.publicKey, authorDevicePub: authorIrk.publicKey, counter: 0, serviceRef: "x", bundle: { name: "y" }, householdKey: deriveHouseholdKey(authorUmk), umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
     await expect(si.redeemInvite({ baseUrl: POD, secretHex: VECTORS.secretHex, visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
     await expect(si.setServiceAccessMode({ baseUrl: POD, serviceRef: "x", mode: "open", umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
+    await expect(si.authorizeKnock({ serverId: VECTORS.serverId, serviceRef: "x", pageId: "p", svc: "s", visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
   });
 
   it("inviteSecretFromLocation parses a /invite#<secret> landing (and rejects other paths)", async () => {
