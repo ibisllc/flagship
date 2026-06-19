@@ -680,7 +680,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // app, forward the request to its container (gated by membership);
     // otherwise fall back to the daemon's own HTTP surface.
     const sni = ((typeof socket.servername === "string" ? socket.servername : null) ?? opts.serverFqdn).toLowerCase();
-    const leftmost = leftmostLabel(sni, opts.serverFqdn);
+    // TIER-1 per-box name `<svc>.<server>.<user>` (under the box wildcard) OR
+    // TIER-2 leader-routed short name `<svc>.<user>` (the hub routes its SNI to
+    // whichever box holds the slot; the box terminates TLS with the tier-2 cert
+    // and must serve the SAME app). Both forms put the app's urlLabel in the
+    // leftmost label, so resolve either and look the app up by it.
+    const leftmost =
+      leftmostLabel(sni, opts.serverFqdn) ?? tier2ServiceLabel(sni, opts.serverFqdn);
     const app = leftmost && servicePlatformRef.current
       ? servicePlatformRef.current.byLabel(leftmost)
       : undefined;
@@ -981,6 +987,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       store,
       certManager,
       serverFqdn: opts.serverFqdn,
+      ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
     });
     for (const fqdn of rehydrated) {
       console.log(`[runtime] rehydrated tier-2 service cert for ${fqdn}`);
@@ -996,6 +1003,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         certManager,
         store,
         dnsWriterWithAuthority: (grant) => dns.withServiceCertAuthority(grant),
+        ...(apexFromBoxFqdn(opts.serverFqdn) ? { apex: apexFromBoxFqdn(opts.serverFqdn)! } : {}),
       }),
     );
     console.log(`[runtime] mounted /api/service-certs/* handlers`);
@@ -1831,14 +1839,30 @@ export function disambiguationResponse(sni: string): HttpResponse {
  * kept as the canonical parser for user-zone (tier-2) name handling.
  */
 export function userZoneOf(serverFqdn: string): string | null {
+  const apex = apexFromBoxFqdn(serverFqdn);
+  if (!apex) return null;
   const lower = serverFqdn.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
+  const head = lower.slice(0, -(apex.length + 1));
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
   if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
-  return `${user}.flagship.services`;
+  return `${user}.${apex}`;
+}
+
+/**
+ * The data-plane apex this box lives under, derived from its own FQDN.
+ * A box FQDN is `<server>.<user>.<apex>`, so the apex is everything after
+ * the first two labels — `flagship.services` in prod, `gym.flagship.services`
+ * in the test env. Returns null for a malformed FQDN (fewer than 3 labels).
+ * This is the single apex source for the tier-2 service-cert handlers so they
+ * are NOT hardcoded to the prod apex (which 403'd every tier-2 mint under the
+ * gym apex).
+ */
+export function apexFromBoxFqdn(serverFqdn: string): string | null {
+  const parts = serverFqdn.toLowerCase().split(".");
+  if (parts.length < 4) return null; // <server>.<user>.<≥2-label apex>
+  return parts.slice(2).join(".");
 }
 
 /**
@@ -1865,6 +1889,29 @@ export function tunnelDomainsFor(serverFqdn: string, wantWildcard: boolean): str
 function leftmostLabel(sni: string, serverFqdn: string): string | null {
   const suffix = `.${serverFqdn.toLowerCase()}`;
   const lower = sni.toLowerCase();
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, lower.length - suffix.length);
+  if (head.length === 0 || head.includes(".")) return null;
+  return head;
+}
+
+/**
+ * The service label of a TIER-2 leader-routed SNI `<svc>.<user>.<apex>` for
+ * THIS box's own user zone — i.e. one label short of the box's per-box wildcard
+ * (`leftmostLabel` covers `<svc>.<server>.<user>`). The hub routes a tier-2
+ * SNI's traffic to whichever box holds the `<svc>.<user>` slot; that box
+ * terminates TLS and must serve the same app, so map `<svc>.<userZone>` → `<svc>`
+ * for the app lookup. Returns null for anything that isn't exactly
+ * `<label>.<this-box's-user-zone>`.
+ */
+function tier2ServiceLabel(sni: string, serverFqdn: string): string | null {
+  const lower = sni.toLowerCase();
+  // The box's own FQDN (`<server>.<user>`) is ALSO `<label>.<userZone>`; it is
+  // the daemon's own surface, never an app — let leftmostLabel/own-host handle it.
+  if (lower === serverFqdn.toLowerCase()) return null;
+  const userZone = userZoneOf(serverFqdn);
+  if (!userZone) return null;
+  const suffix = `.${userZone.toLowerCase()}`;
   if (!lower.endsWith(suffix)) return null;
   const head = lower.slice(0, lower.length - suffix.length);
   if (head.length === 0 || head.includes(".")) return null;

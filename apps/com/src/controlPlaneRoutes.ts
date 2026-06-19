@@ -214,6 +214,16 @@ export interface ControlPlaneEnv {
    * Worker to set its own identity apex.)
    */
   CONTROL_APEX?: string;
+  /**
+   * Host (optionally with a path prefix) that minted voi.ci short links point
+   * at. Prod leaves this unset ⇒ the canonical `voi.ci` redirector. The gym
+   * test env has no `voi.ci` zone, so it sets `<CONTROL_APEX>/s` here and the
+   * Worker serves the same redirect at `https://<CONTROL_APEX>/s/<code>` from
+   * the gym D1 (see route.ts). When unset but `CONTROL_APEX` IS set, the same
+   * `<CONTROL_APEX>/s` default applies so a test env never mints a dead
+   * `voi.ci` link.
+   */
+  VOICI_SHORT_BASE?: string;
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
@@ -1030,7 +1040,11 @@ export async function tryControlPlane(
     });
     const handler = ROUTE_RE.DNS01_PUBLISH.test(path) ? handleDns01Publish : handleDns01Delete;
     const res = await handler(
-      { servers: storage.servers, dns, apex: env.SERVICES_APEX },
+      // `usernames` is required for the tier-2 service-cert DNS-01 path
+      // (resolving the user IRK to verify a phone-issued ServiceCertAuthority).
+      // Without it, a `<svc>.<user>` challenge 403s "service-cert authority not
+      // supported here". The gym uses this legacy direct-CF path (no broker).
+      { servers: storage.servers, usernames: storage.usernames, dns, apex: env.SERVICES_APEX },
       await readJson(request),
     );
     return finishPlain(res);
@@ -1838,9 +1852,18 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
+    // Mint at the env-configured short host. Prod ⇒ undefined ⇒ `voi.ci`.
+    // Gym (CONTROL_APEX set, no voi.ci zone) ⇒ `<CONTROL_APEX>/s` so the link
+    // resolves at the gym Worker's own `/s/<code>` path reading gym D1.
+    const voiciShortHost =
+      env.VOICI_SHORT_BASE ?? (env.CONTROL_APEX ? `${env.CONTROL_APEX}/s` : undefined);
     return finish(
       await handleVoiciShorten(
-        { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
+        {
+          usernames: storage.usernames,
+          voiciLinks: storage.voiciLinks,
+          ...(voiciShortHost ? { shortHost: voiciShortHost } : {}),
+        },
         await readJson(request),
       ),
     );

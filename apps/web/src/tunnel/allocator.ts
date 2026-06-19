@@ -209,6 +209,28 @@ export class AppUserAllocator {
       // additionally the slot the SNI router walks for direct pod
       // URLs (no shortening).
       enqueueCandidate(set, canonical, podCanonical);
+      // TIER-2 leader-route: a presented canonical that is a SHORT
+      // `<svc>.<user>` name (exactly two labels under the apex) and is NOT the
+      // pod's own root is a leader-routed service name the pod declared in its
+      // ServiceEntitlement. Unlike a derived shortened it isn't in
+      // `derivableShorteneds`, so the second loop never claims it — it would
+      // land in members/candidateQueue but NEVER in `slotHolders`, and
+      // `findHolderByFqdn` (which reads ONLY slotHolders for non-pod-canonical
+      // names) would return undefined → the SNI router has no route → the
+      // connection resets. Claim it FCFS here, mirroring the derived-shortened
+      // path, so the entitled box actually receives traffic for it. A
+      // `<svc>.<server>.<user>` tier-1 name (3+ labels under apex) is NOT a
+      // shared leader-route — it's box-specific (covered by the per-box
+      // wildcard + routed via the one-label strip), and a sibling box must
+      // never inherit it on failover; so we gate strictly on the short form.
+      if (
+        canonical !== podCanonical &&
+        isShortServiceCanonical(canonical, this.apex) &&
+        !set.slotHolders.has(canonical)
+      ) {
+        set.slotHolders.set(canonical, podCanonical);
+        shortenedsHeld.push(canonical);
+      }
     }
 
     // Try to allocate any free derivable shortened. The shortened may
@@ -600,6 +622,23 @@ export function derivableShorteneds(canonical: string, apex: string = DEFAULT_AP
     out.push(`${slug}.${parts[parts.length - 2]}.${user}.${apex}`);
   }
   return out;
+}
+
+/**
+ * Is `fqdn` a SHORT tier-2 service canonical `<svc>.<user>.<apex>` — exactly
+ * two plain DNS labels under the apex? This is the hardware-agnostic
+ * leader-routed form; a `<svc>.<server>.<user>` tier-1 name has three and is
+ * NOT one (it's box-specific). Wildcards never qualify.
+ */
+function isShortServiceCanonical(fqdn: string, apex: string): boolean {
+  const apexSuffix = "." + apex;
+  const lower = fqdn.toLowerCase();
+  if (!lower.endsWith(apexSuffix)) return false;
+  const head = lower.slice(0, -apexSuffix.length);
+  if (head.length === 0 || head.includes("*")) return false;
+  const parts = head.split(".");
+  if (parts.length !== 2) return false;
+  return parts.every((p) => labelOk(p)) && userOk(parts[1]!);
 }
 
 /** Slug / generic DNS label — hyphens allowed in the interior. */

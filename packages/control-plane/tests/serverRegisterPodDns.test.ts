@@ -206,16 +206,20 @@ describe("serverRegister — per-box DNS publishing (cert model A′)", () => {
       },
     );
     expect(r.status).toBe(200);
-    // PER-BOX DNS (cert model A′): TWO records, both scoped to this box —
-    // the apex `home.alice` and the wildcard `*.home.alice` (which resolves
-    // every `<service>.home.alice` name). The model-C user-zone pair is gone.
+    // PER-BOX DNS (cert model A′): the box apex `home.alice` + its wildcard
+    // `*.home.alice` (resolves every `<service>.home.alice`), PLUS the per-USER
+    // wildcard `*.alice` for TIER-2 leader-routed service names (`<svc>.alice` is
+    // hardware-agnostic — no per-box wildcard covers it; it must resolve to the
+    // same hub IP so the hub can route it to the leader box). The user-zone APEX
+    // (`alice.flagship.services`, a NON-wildcard A) is still NOT published (the
+    // model-C user-zone box A record is gone — only the tier-2 wildcard is added).
     const names = fakeDns.upserted.map((u) => u.name).sort();
     expect(names).toEqual([
+      "*.alice.flagship.services",
       "*.home.alice.flagship.services",
       "home.alice.flagship.services",
     ]);
     expect(names).not.toContain("alice.flagship.services");
-    expect(names).not.toContain("*.alice.flagship.services");
     for (const u of fakeDns.upserted) {
       expect(u.type).toBe("A");
       expect(u.content).toBe("203.0.113.42");

@@ -299,7 +299,19 @@ export async function handleServerRegister(
   if (deps.dns) {
     const podApex = authCode.serverDomain;
     const userZone = userZoneOf(podApex, deps.apex ?? "flagship.services");
+    // PER-USER wildcard for TIER-2 leader-routed service names: a tier-2
+    // canonical `<svc>.<user>.<apex>` is hardware-agnostic (no per-box wildcard
+    // covers it — `*.<server>.<user>` only covers `<x>.<server>.<user>`). It
+    // must resolve to the same `.services` SNI-passthrough hub IP so the hub can
+    // route it to whichever box currently holds the `<svc>.<user>` leader slot.
+    // One idempotent `*.<user>.<apex>` A/AAAA per user does that for EVERY tier-2
+    // name under the user (RFC 1034 wildcard). The CAA at the user zone already
+    // covers it (tree-climb). A second box under the same user re-asserts the
+    // same record (no-op). The cert for each `<svc>.<user>` is still minted
+    // box-local under phone authority (Phase 5) — this is purely the A-record so
+    // the name resolves; routing + TLS are gated separately by the hub + cert.
     const names = [podApex, `*.${podApex}`];
+    if (userZone) names.push(`*.${userZone}`);
     try {
       for (const name of names) {
         const a = await deps.dns.client.upsert({

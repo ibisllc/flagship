@@ -29,9 +29,16 @@ describe("userZoneOf", () => {
     expect(userZoneOf("home.alice.flagship.services")).toBe("alice.flagship.services");
   });
 
-  it("returns null on shape mismatch", () => {
+  it("is apex-relative — works under a deeper (gym) apex too", () => {
+    // De-hardcoded from `.flagship.services`: the apex is derived from the box's
+    // own FQDN (everything after `<server>.<user>`), so a gym box resolves its
+    // own user zone correctly instead of returning null.
+    expect(userZoneOf("home.alice.gym.flagship.services")).toBe("alice.gym.flagship.services");
+  });
+
+  it("returns null on shape mismatch (too few labels)", () => {
+    // `<user>.<apex>` (3 labels) and a bare apex have no `<server>.<user>` head.
     expect(userZoneOf("alice.flagship.services")).toBeNull();
-    expect(userZoneOf("home.alice.flagship.com")).toBeNull();
     expect(userZoneOf("flagship.services")).toBeNull();
   });
 

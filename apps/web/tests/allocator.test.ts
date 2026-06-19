@@ -203,6 +203,36 @@ describe("AppUserAllocator — addPod", () => {
     expect(holder).toBe(KITCHEN); // first registrant still holds
   });
 
+  it("claims a DIRECTLY-presented tier-2 `<svc>.<user>` canonical as a routable slot (leader-route)", () => {
+    // A box that presents a short `<svc>.<user>` canonical in its
+    // ServiceEntitlement (NOT derivable from its 2-label root canonical) must
+    // become the SNI route holder for it — otherwise `findHolderByFqdn` returns
+    // undefined and the SNI router resets the connection (the tier-2 routing
+    // bug). It is held FCFS like a derived shortened.
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    const r = a.addPod({
+      podCanonical: KITCHEN, // kitchen.john.flagship.services (the pod root)
+      canonicals: [KITCHEN, "blog.john.flagship.services"],
+    });
+    expect(r.shortenedsHeld).toContain("blog.john.flagship.services");
+    expect(a.findHolderByFqdn("blog.john.flagship.services")).toBe(KITCHEN);
+    // The pod's own root is still routed via the pods map, never a contended slot.
+    expect(a.findHolderByFqdn(KITCHEN)).toBe(KITCHEN);
+  });
+
+  it("does NOT claim a tier-1 `<svc>.<server>.<user>` (3-label) canonical as a shared slot", () => {
+    // A 3-label service-on-box canonical is box-specific (per-box wildcard +
+    // one-label-strip routing); it must never become a shared leader-route slot
+    // that a sibling box could inherit on failover.
+    const a = new AppUserAllocator({ now: () => 1_000 });
+    const r = a.addPod({
+      podCanonical: KITCHEN,
+      canonicals: [KITCHEN, "messenger.kitchen.john.flagship.services"],
+    });
+    expect(r.shortenedsHeld).not.toContain("messenger.kitchen.john.flagship.services");
+    expect(a.findHolderByFqdn("messenger.kitchen.john.flagship.services")).toBeUndefined();
+  });
+
   it("two different apps coexist in different sets", () => {
     const a = new AppUserAllocator({ now: () => 1_000 });
     a.addPod({
