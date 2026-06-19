@@ -79,11 +79,19 @@ public final class BootUnlockApprovalViewModel {
     public init(
         serverDomain: String,
         makeCoordinator: @escaping () -> ApprovalSource?,
-        store: BootUnlockStore = BootUnlockStore()
+        store: BootUnlockStore = BootUnlockStore(),
+        initialAwaiting: Bool = false
     ) {
         self.serverDomain = serverDomain
         self.makeCoordinator = makeCoordinator
         self.store = store
+        // Seed the state from the directory flag so the FIRST body render is
+        // already the request card (a non-empty view) when the box is waiting —
+        // instead of an `EmptyView` (.idle) that depends on `.onAppear` firing to
+        // flip it (a zero-size view's onAppear can silently no-op inside a
+        // ScrollView; that left the Approve card permanently blank for a box that
+        // was already waiting when the screen opened — the live office.harry2 bug).
+        if initialAwaiting { self.state = .requestPending }
     }
 
     /// Directory-driven surfacing — NO biometric, NO network. The card calls

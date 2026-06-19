@@ -44,6 +44,25 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         BootUnlockApprovalViewModel(serverDomain: domain, makeCoordinator: { source }, store: store)
     }
 
+    /// Regression: a box already waiting when the card is constructed must show
+    /// the request prompt on the FIRST render — the seed, not a deferred
+    /// `.onAppear` flip (a zero-size EmptyView's onAppear can miss in a
+    /// ScrollView, which left the card permanently blank). The live office.harry2
+    /// bug: directory awaitingUnlock=true, yet no Approve card surfaced.
+    func test_initialAwaiting_seedsRequestPending_onFirstRender() {
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, makeCoordinator: { nil }, initialAwaiting: true
+        )
+        XCTAssertEqual(vm.state, .requestPending)
+    }
+
+    func test_initialAwaiting_false_staysIdle() {
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, makeCoordinator: { nil }, initialAwaiting: false
+        )
+        XCTAssertEqual(vm.state, .idle)
+    }
+
     // MARK: - Directory-driven surfacing (NO biometric)
 
     func test_awaitingTrue_armsRequestPending() {

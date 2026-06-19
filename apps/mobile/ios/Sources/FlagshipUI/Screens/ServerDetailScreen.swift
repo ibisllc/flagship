@@ -469,7 +469,8 @@ struct BootUnlockApprovalCard: View {
         // Face ID fires only when the owner taps Approve.
         let model = vm ?? BootUnlockApprovalViewModel(
             serverDomain: serverDomain,
-            makeCoordinator: makeCoordinator
+            makeCoordinator: makeCoordinator,
+            initialAwaiting: awaitingUnlock
         )
         return content(vm: model, c: c)
             .onAppear {
