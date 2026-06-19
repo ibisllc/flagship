@@ -671,7 +671,7 @@ public struct SettingsScreen: View {
             FSSettingsRow(icon: "doc.badge.arrow.up.fill", title: "Back up your account key", subtitle: "Save an encrypted key file", action: onOpenKeyfileBackup),
             FSSettingsRow(icon: "person.2.circle.fill", title: "Profiles", subtitle: "Switch between your clouds", action: onOpenProfiles),
             FSSettingsRow(icon: "laptopcomputer", title: "Dock a browser", subtitle: "Read-only desktop companion (4h)", action: onOpenCompanionDock),
-            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", action: onOpenSecuredSessions),
+            FSSettingsRow(icon: "lock.open.laptopcomputer", title: "Open secured sessions", subtitle: "Sites you've signed a browser into", accessibilityId: "settings-open-secured-sessions", action: onOpenSecuredSessions),
             FSSettingsRow(icon: "link", title: "Process URL", subtitle: "Open a sign-in link you copied", action: onOpenProcessUrl),
             FSSettingsRow(
                 icon: "tray.full",
