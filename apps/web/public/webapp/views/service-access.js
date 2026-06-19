@@ -3,8 +3,9 @@
 // Per-service open ⇄ restricted toggle + (when restricted) an allow-list
 // manager: add a person (name + optional photo → mint a capability invite via
 // .com → copyable link), the list of added people (decrypted from the
-// household-key-sealed bundle .com stores as ciphertext), and remove (revoke →
-// drops their access on the box).
+// household-key-sealed bundle .com stores as ciphertext), and remove (revoke on
+// .com AND prune the bound AID on the box — the .com revoke alone doesn't reach
+// the box, whose allow-list is add-only, so the box prune is what enforces).
 //
 // Identity model: the access-mode change is OWNER-IRK-signed to the box's
 // pinned pipe (POST /api/service-access); the invite create/revoke are
@@ -30,6 +31,7 @@ import {
 import {
   createInvite,
   listInvites,
+  removeServiceAllow,
   revokeInvite,
   setServiceAccessMode,
 } from "../lib/serviceInvite.js";
@@ -343,14 +345,14 @@ async function renderPeople(serviceRef) {
                   <div class="muted-sm text-xs">${escapeHtml(statusText)}</div>
                 </div>
               </div>
-              <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-name="${escapeHtml(name)}">Remove</button>
+              <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}">Remove</button>
             </div>
           </div>`;
       })
       .join("");
     root.querySelectorAll('[data-action="sa-remove"]').forEach((b) => {
       b.addEventListener("click", () =>
-        onRemovePerson(serviceRef, b.getAttribute("data-id"), b.getAttribute("data-name")).catch((e) => {
+        onRemovePerson(serviceRef, b.getAttribute("data-id"), b.getAttribute("data-name"), b.getAttribute("data-aid") || null).catch((e) => {
           console.error(e);
           toast(humanError(e), "err");
         }),
@@ -361,8 +363,14 @@ async function renderPeople(serviceRef) {
   }
 }
 
-/** Revoke an invite (IRK-signed to .com) → the friend's next visit is denied. */
-async function onRemovePerson(serviceRef, inviteId, name) {
+/**
+ * Remove a person: revoke the invite on .com AND (when they've bound an AID)
+ * prune that AID from the box's allow-list. The .com revoke only records the
+ * revocation — the box's allow-list is add-only, so the box prune is what
+ * actually denies the friend's next request. Both legs run; an unredeemed invite
+ * (no boundAID) is just the .com revoke (nothing to prune).
+ */
+async function onRemovePerson(serviceRef, inviteId, name, boundAID) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
     title: `Remove ${name || "this person"}?`,
@@ -372,6 +380,7 @@ async function onRemovePerson(serviceRef, inviteId, name) {
   });
   if (!ok) return;
   const session = getSession();
+  // 1) Record the revocation on .com (drops the invite from the authored list).
   await revokeInvite({
     comBase: controlApex(),
     username: session.username,
@@ -379,8 +388,34 @@ async function onRemovePerson(serviceRef, inviteId, name) {
     umk: session.umk,
     signWithIrk,
   });
+  // 2) Prune the bound AID on the BOX — the leg that actually enforces. Surface a
+  //    clear error if it fails so the admin knows the friend may still have access.
+  if (boundAID) {
+    try {
+      await removeServiceAllow({
+        baseUrl: podBaseUrl(),
+        serviceRef,
+        aid: boundAID,
+        umk: session.umk,
+        signWithIrk,
+      });
+    } catch (e) {
+      await renderPeople(serviceRef);
+      throw err(
+        `Revoked on flagshipserver.com, but couldn't remove their access on your server (${humanError(e)}). They may still have access — try again.`,
+        "box-prune-failed",
+      );
+    }
+  }
   toast("Removed.");
   await renderPeople(serviceRef);
+}
+
+/** Tag an Error with a code (mirrors lib/serviceInvite.js's `err`). */
+function err(message, code) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
 }
 
 async function shareIt(link) {
