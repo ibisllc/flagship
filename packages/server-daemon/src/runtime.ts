@@ -580,7 +580,7 @@ export function defaultApexPage(serverFqdn: string): string {
     text-decoration: none;
     border-bottom: 1px solid transparent;
   }
-  .wordmark:hover { color: var(--teal-bright); }
+  .wordmark .gy { color: var(--code-ink); }
   .reveal { opacity: 0; transform: translateY(10px); animation: reveal 600ms var(--ease-out) forwards; }
   .reveal:nth-child(2) { animation-delay: 70ms; }
   .reveal:nth-child(3) { animation-delay: 140ms; }
@@ -607,7 +607,7 @@ export function defaultApexPage(serverFqdn: string): string {
   <div class="reveal">
     <hr>
     <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. flagship.services relays ciphertext it cannot read.</p>
-    <a class="wordmark" href="https://flagshipserver.com" rel="noopener">FLAGSHIP&nbsp;&rarr;</a>
+    <div class="wordmark">Get yours at <span class="gy">flagshipserver.com</span></div>
   </div>
 </main>
 </body>

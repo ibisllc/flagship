@@ -547,7 +547,17 @@ export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
     : buildBootstrapScriptPlain(args);
   // Production by default: strip the debug account + banner unless this is an
   // explicit debug build. This is the ONLY switch that keeps them.
-  return args.debugMode ? script : stripDebugFeatures(script);
+  if (args.debugMode) {
+    // DEBUG build: keep the debug account/banner AND drop the /boot marker that
+    // re-enables boot-stage's console "manual" passphrase fallback for bring-up.
+    // A production burn never gets it, so the unlock has no offline bypass.
+    return (
+      script +
+      "\n# DEBUG-ONLY: enable boot-stage's console 'manual' unlock fallback.\n" +
+      ": > /boot/flagship-debug-mode 2>/dev/null || true\n"
+    );
+  }
+  return stripDebugFeatures(script);
 }
 
 /**
@@ -664,7 +674,7 @@ cat > /etc/issue <<'FLAGSHIP_ISSUE'
   ##     ##     ##  ## ##  ##     ## ##  ##   ##   ##
   ##     ###### ##  ## ###### ###### ##  ## ###### ##
 
-  This is a Flagship box - your personal cloud. You hold the keys.
+  This is a Flagship server - your personal cloud. You hold the keys.
 FLAGSHIP_ISSUE
 printf '  Get yours at \\033[96mflagshipserver.com\\033[0m\\n' >> /etc/issue
 cat >> /etc/issue <<'FLAGSHIP_ISSUE'

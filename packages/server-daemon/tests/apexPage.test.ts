@@ -16,16 +16,19 @@ describe("defaultApexPage (the box's unassigned-apex landing)", () => {
     expect(page).toContain("ciphertext");
   });
 
-  it("is fully self-contained — visitors are never sent to flagshipserver.com for assets", () => {
-    // The ONLY outbound reference is the visible wordmark anchor. No remote
-    // fonts, stylesheets, scripts, or images: loading any asset from .com
-    // would leak the box's visitors to the mothership.
+  it("is fully self-contained with ZERO outbound references — never leaks visitors to .com", () => {
+    // No remote fonts, stylesheets, scripts, or images (loading any asset from
+    // .com would leak the box's visitors), AND no clickable link to .com either:
+    // the wordmark is plain text ("Get yours at flagshipserver.com"), so a click
+    // can't send a Referer carrying this box's hostname to the mothership.
     const outbound = (page.match(/https?:\/\/[^"'\s)]+/g) ?? []).filter(
       // The SVG xmlns in the favicon data URI is an identifier, not a fetch.
       (u) => !u.startsWith("http://www.w3.org/"),
     );
-    expect(outbound).toEqual(["https://flagshipserver.com"]);
+    expect(outbound).toEqual([]);
     expect(page).not.toContain("<script");
+    expect(page).not.toContain('href="https://flagshipserver.com"');
+    expect(page).toContain("Get yours at");
     expect(page).toContain('href="data:image/svg+xml');
   });
 

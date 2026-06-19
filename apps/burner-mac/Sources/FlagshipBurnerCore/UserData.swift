@@ -769,7 +769,7 @@ public enum UserData {
     /// Mirrors userdata.ts buildBootstrapScript.
     static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto", bootHost: String = defaultBootHost, family: String = "ubuntu", wifiSSID: String? = nil, wifiPassword: String? = nil, debugMode: Bool = false) -> String {
         let plain = bootstrapScriptPlain(ref: ref, repoURL: repoURL, wifiSSID: wifiSSID, wifiPassword: wifiPassword)
-        guard encryptRoot else { return debugMode ? plain : stripDebugFeatures(plain) }
+        guard encryptRoot else { return debugMode ? withDebugManualMarker(plain) : stripDebugFeatures(plain) }
         // Boot-unlock policy is baked into the LUKS block; only "approve" is the
         // critical-server path; anything else ⇒ "auto" (mirror userdata.ts).
         let mode = bootUnlockMode == "approve" ? "approve" : "auto"
@@ -789,7 +789,15 @@ public enum UserData {
         let assembled = String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode, bootHost: bootHost, family: fam, wifiSSID: wifiSSID ?? "", wifiPassword: wifiPassword ?? "") + tail
         // Production by default: strip the debug account + banner unless this is an
         // explicit debug build. Mirror of userdata.ts buildBootstrapScript.
-        return debugMode ? assembled : stripDebugFeatures(assembled)
+        return debugMode ? withDebugManualMarker(assembled) : stripDebugFeatures(assembled)
+    }
+
+    /// DEBUG-only: append the /boot marker that re-enables boot-stage's console
+    /// "manual" passphrase unlock fallback. Byte-identical to userdata.ts.
+    static func withDebugManualMarker(_ script: String) -> String {
+        script
+            + "\n# DEBUG-ONLY: enable boot-stage's console 'manual' unlock fallback.\n"
+            + ": > /boot/flagship-debug-mode 2>/dev/null || true\n"
     }
 
     /// Strip every DEBUG-only feature from an assembled bootstrap, leaving a
@@ -885,7 +893,7 @@ public enum UserData {
           ##     ##     ##  ## ##  ##     ## ##  ##   ##   ##
           ##     ###### ##  ## ###### ###### ##  ## ###### ##
 
-          This is a Flagship box - your personal cloud. You hold the keys.
+          This is a Flagship server - your personal cloud. You hold the keys.
         FLAGSHIP_ISSUE
         printf '  Get yours at \\033[96mflagshipserver.com\\033[0m\\n' >> /etc/issue
         cat >> /etc/issue <<'FLAGSHIP_ISSUE'

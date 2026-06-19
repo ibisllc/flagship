@@ -1109,7 +1109,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "0ed08629d5cd7751785e2c1b1de8aff8e5fbcad64f9cdef60d40999a165c0b59",
+      "2f8fc01119fbe5f9e738972e563a1244dd98c1ed384b4955f0a4de3475ceec64",
     );
   });
 
@@ -1132,7 +1132,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "a6ee44f31bee7c7004e8556b6b591cc3c9103958b7931c7b797c4bb2903cf5bf",
+      "9bed6e09955da352c0d44915a05c94a26bd80d3304360b8678d195f80db11654",
     );
   });
 
