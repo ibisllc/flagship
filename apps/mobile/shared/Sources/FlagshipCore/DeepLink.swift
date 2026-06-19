@@ -49,6 +49,21 @@ public enum DeepLink: Equatable, Sendable {
     ///     fragment can't ride a custom scheme reliably, so it's a query).
     case inviteRedeem(serverDomain: String, secretHex: String)
 
+    /// Web-experience gating — QR-login for a restricted service's WEBSITE
+    /// (docs/service-access-gating.md, "Web-experience gating"). A plain
+    /// browser hitting a restricted service gets a knock page carrying this
+    /// deeplink (also a QR for cross-device + a copyable "Get link" string);
+    /// THIS phone authorizes it by AID-signing a `KnockAuthorization` bound to
+    /// the page. Carries the box `server` fqdn, the URL `svc` label (display
+    /// only), the `ref` serviceRef (a `<creator>-<slug>` the box keys its
+    /// allow-list on), and the single-use `page` id (the box-minted pageId the
+    /// authorization signature binds). Reachable two ways:
+    ///   - the box's `flagship://access?server=…&svc=…&ref=…&page=…` deeplink
+    ///     (same-device "Access site" button + cross-device QR), and
+    ///   - Settings → "Process URL", which pastes either that deeplink OR the
+    ///     raw "Get link" string into the same handler.
+    case knockAuthorize(serverDomain: String, svc: String, serviceRef: String, pageId: String)
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
@@ -124,6 +139,19 @@ public enum DeepLink: Equatable, Sendable {
                 return .joinAccount(sid: sid, pk: pk)
             }
             return nil
+        case "access":
+            // flagship://access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>
+            // — the web-experience-gating knock authorization (the box's knock
+            // page hands this to a browser; THIS phone authorizes it). `svc` is
+            // display-only and may be empty; server/ref/page are required.
+            let server = params["server"] ?? params["host"] ?? ""
+            let svc = params["svc"] ?? ""
+            let ref = params["ref"] ?? ""
+            let page = params["page"] ?? ""
+            if !server.isEmpty, !ref.isEmpty, !page.isEmpty {
+                return .knockAuthorize(serverDomain: server, svc: svc, serviceRef: ref, pageId: page)
+            }
+            return nil
         case "vibecode":
             // Two URL shapes accepted:
             //   flagship://vibecode/<sessionId>           (path)
@@ -161,6 +189,18 @@ public enum DeepLink: Equatable, Sendable {
             return s.lowercased()
         }
         return nil
+    }
+
+    /// Parse a pasted "Process URL" string into a DeepLink. The knock page's
+    /// "Get link to paste in the app" copies the VERBATIM `flagship://access?…`
+    /// deeplink, so a paste is just that URL with possible surrounding
+    /// whitespace. Trims, then defers to `parse`. Returns nil for anything we
+    /// don't recognize (the Settings field surfaces a "couldn't read that link"
+    /// message). Any recognized deeplink shape is accepted, not only `access`.
+    public static func parsePastedString(_ raw: String) -> DeepLink? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return nil }
+        return parse(url)
     }
 }
 
