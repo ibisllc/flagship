@@ -150,15 +150,66 @@ function envFromProcess(): Partial<RuntimeEnv> {
   };
 }
 
-async function tryLoadConfig(): Promise<ServerConfig | null> {
-  const path = process.env.FLAGSHIP_CONFIG;
-  if (!path) return null;
+/**
+ * Fallback config source: derive the owner ServerConfig from the InstallBlob the
+ * installer always writes to /var/flagship/install-blob.json. The normal burn
+ * never wrote a FLAGSHIP_CONFIG file (only the demo cloud-init did), so without
+ * this `cfg` was null on EVERY real box and the entire owner-signed HTTP API —
+ * /api/orders-from-user (paired-session mint), /api/power, /api/journal,
+ * /api/front-page, dead-man — 404'd (the cfg===null short-circuit). Every field
+ * the config needs is in the blob: serverDomain, username, phoneDelegatedPubKey
+ * (reused as bakPublicKey, exactly as the demo cloud-init does), and
+ * authCode.userPubKey (the account IRK — the real owner-signing key). Fails
+ * closed (returns null) on a missing/malformed blob.
+ */
+async function configFromInstallBlob(): Promise<ServerConfig | null> {
+  const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
+  const raw = await tryReadFile(blobPath);
+  if (!raw) return null;
   try {
-    return await loadConfig(path);
-  } catch (e) {
-    console.error(`[daemon] config load failed: ${(e as Error).message}`);
+    const b = JSON.parse(raw) as {
+      serverDomain?: unknown;
+      username?: unknown;
+      phoneDelegatedPubKey?: unknown;
+      ownerAidPubHex?: unknown;
+      authCode?: { userPubKey?: unknown };
+    };
+    const serverId = b.serverDomain;
+    const userId = b.username;
+    const bak = b.phoneDelegatedPubKey;
+    const irk = b.authCode?.userPubKey;
+    const isHex32 = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
+    if (typeof serverId !== "string" || typeof userId !== "string" || !isHex32(bak) || !isHex32(irk)) {
+      return null;
+    }
+    const ownerAid = b.ownerAidPubHex;
+    return {
+      serverId,
+      userId,
+      bakPublicKey: hexToBytes(bak),
+      irkPublicKey: hexToBytes(irk),
+      ...(isHex32(ownerAid) ? { ownerAidPub: hexToBytes(ownerAid) } : {}),
+    };
+  } catch {
     return null;
   }
+}
+
+async function tryLoadConfig(): Promise<ServerConfig | null> {
+  const path = process.env.FLAGSHIP_CONFIG;
+  if (path) {
+    try {
+      return await loadConfig(path);
+    } catch (e) {
+      console.error(`[daemon] config load failed: ${(e as Error).message}; trying install-blob`);
+      // fall through to the install-blob fallback
+    }
+  }
+  const fromBlob = await configFromInstallBlob();
+  if (fromBlob) {
+    console.log("[daemon] owner config derived from /var/flagship/install-blob.json (no FLAGSHIP_CONFIG)");
+  }
+  return fromBlob;
 }
 
 async function main(): Promise<void> {
