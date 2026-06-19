@@ -78,6 +78,19 @@
     "signerKey": "authorIrk",
     "sigHex": "785641620cb5378afa127819a19f4e1ff110c0bea35678da3365327cf539aa3e148e3eab2246245c9ede4270dec85c4e166b88887a9988fa065f5d7ded06ce02"
   },
+  "_v2_signing_comment": "Gating v2 Wave 3: clients switch create/revoke from IRK-signing to AID-signing (box-as-authority verifies against the owner AID; .com dual-accepts AID|IRK during transition). createAid/revokeAid = the SAME create/revoke pre-images as the v1 `create`/`revoke` vectors but signed by authorAID instead of authorIrk.",
+  "createAid": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "signerKey": "authorAid",
+    "sigHex": "aa47bd89b8ff460c0165505a89fafab99fb36105ac71933756cac5ede0b3b2e2efe1ec5fec0b3e5e863c39655aa6072ec2b8c6b053a7e803c3fb530466261200"
+  },
+  "revokeAid": {
+    "issuedAt": 1700001000000,
+    "signerKey": "authorAid",
+    "sigHex": "2b001e035ffd63035de6d8c9ccf73a26b159f3025e6a82faa211cd59d767525d3ed4a889e2a75f3c7177e06a06cc59b197f9ce301c680a44f026a2e744607a0a"
+  },
   "bundle": {
     "name": "Alex",
     "photo": "data:image/png;base64,AAAA"
