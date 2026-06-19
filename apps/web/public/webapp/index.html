@@ -209,6 +209,8 @@
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-process-url"><span class="fs-row-icon icon" data-row-icon="processurl"></span><span class="fs-row-body"><span class="fs-row-title">Process URL</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
@@ -329,6 +331,29 @@
       <section id="view-invite-redeem" class="hidden">
         <h2>Invite</h2>
         <div id="invite-redeem-content"></div>
+      </section>
+
+      <!-- Web-experience gating: "Process URL" authorize (paste a flagship://access link) -->
+      <section id="view-access-authorize" class="hidden">
+        <h2>Authorize a site</h2>
+        <div id="access-authorize-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="access-authorize-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- Web-experience gating: held secured sessions (status / stop) -->
+      <section id="view-secured-sessions" class="hidden">
+        <h2>Secured sessions</h2>
+        <p class="note">
+          Browsers you let into restricted sites with "Process URL". Refresh to
+          check if one's still in, or Stop to sign it out.
+        </p>
+        <div id="secured-sessions-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="secured-sessions-refresh">Refresh</button>
+          <button class="secondary" id="secured-sessions-back">← Back</button>
+        </div>
       </section>
 
       <!-- View 10: Browser sessions (P2.8) -->

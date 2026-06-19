@@ -62,6 +62,8 @@ import { initServiceAccessView } from "./views/service-access.js";
 import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
 import { inviteSecretFromLocation } from "./lib/serviceInvite.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
+import { initSecuredSessionsView, enterSecuredSessions } from "./views/secured-sessions.js";
+import { initAccessAuthorizeView, enterAccessAuthorize } from "./views/access-authorize.js";
 import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initCompanionDockView, enterCompanionDock } from "./views/companion-dock.js";
 import {
@@ -137,6 +139,8 @@ const SUB_VIEW_TABS = {
   "view-recovery": "settings",
   "view-post-recovery": "settings",
   "view-paired-sessions": "settings",
+  "view-secured-sessions": "settings",
+  "view-access-authorize": "settings",
   "view-peer-backup": "settings",
   "view-companion-dock": "settings",
   "view-companion-requests": "settings",
@@ -158,6 +162,8 @@ const SETTINGS_ROW_ICONS = {
   recovery: keyIcon,
   devices: usersIcon,
   sessions: monitorIcon,
+  secured: shieldIcon,
+  processurl: monitorIcon,
   backup: hardDriveIcon,
   dock: monitorIcon,
   requests: usersIcon,
@@ -272,6 +278,8 @@ function wireSettingsTabEntries() {
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
+  wire("settings-tab-secured-sessions", enterSecuredSessions);
+  wire("settings-tab-process-url", () => enterAccessAuthorize());
   wire("settings-tab-peer-backup", enterPeerBackup);
   wire("settings-tab-companion-dock", enterCompanionDock);
   wire("settings-tab-companion-requests", enterCompanionRequests);
@@ -404,6 +412,8 @@ async function boot() {
   initServiceAccessView();
   initInviteRedeemView();
   initPairedSessionsView();
+  initSecuredSessionsView();
+  initAccessAuthorizeView();
   initPeerBackupView();
   initCompanionDockView();
   initCompanionRequestsView();

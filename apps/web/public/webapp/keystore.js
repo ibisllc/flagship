@@ -614,6 +614,15 @@ export async function resetDevice(profileId = activeProfileId()) {
   } catch {
     /* pinLock unavailable / no PIN — nothing to clear */
   }
+  // Forget any held service-access "secured sessions" (the phone-held secretId
+  // handles) — they're tied to this device's identity, so a device reset should
+  // drop them too. Best-effort; dynamic import avoids a static cycle.
+  try {
+    const { clearSecuredSessions } = await import("./lib/securedSessions.js");
+    clearSecuredSessions();
+  } catch {
+    /* securedSessions unavailable — nothing to clear */
+  }
 }
 
 /** Persist a UMK seed under a SPECIFIC profile's record, scoping the
