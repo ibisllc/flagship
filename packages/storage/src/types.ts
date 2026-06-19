@@ -964,6 +964,7 @@ export interface Storage {
   acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   ctAlerts: CtAlertStorage;
   trustExceptions: TrustExceptionStorage;
+  serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
 }
 
@@ -1044,6 +1045,101 @@ export interface TrustExceptionStorage {
   listForUser(username: string): Promise<TrustExceptionRecord[]>;
   /** A single exception by (username, certHash), or undefined. */
   get(username: string, certHash: string): Promise<TrustExceptionRecord | undefined>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Service-access capability invites (docs/service-access-gating.md)
+//
+// A bearer-link invite that gates access to a pod-resident service to a
+// specific person, binding (on first redeem) to the redeemer's STABLE
+// account identity (AID = deriveAccountId(UMK)), NOT the rotatable IRK. The
+// row is keyed by `inviteId` (= hash(AID_author)·hash(devicePub)·counter).
+//
+// `.com` stores ONLY:
+//   - `secretHash` (SHA-256 of the link's 32-byte secret; the secret never
+//     reaches `.com`),
+//   - `encryptedBundle` (AEAD `{name, photo?}` under the author's UMK-derived
+//     household key — `.com` holds no UMK, so it cannot read the name/photo),
+//   - the stable AID pubkeys (author + bound friend) for attribution.
+// The create envelope is IRK-signed by the author; redeem is AID-signed by
+// the friend; revoke is IRK-signed by the author (verified at the handler).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ServiceInviteRecord {
+  /** hash(AID_author)·hash(devicePub_author)·counter — the row key + revoke key. */
+  inviteId: string;
+  /** Author's STABLE account identity (AID) pubkey, hex. */
+  authorAID: string;
+  /** The gated service — `<creator>-<slug>` or canonical FQDN. */
+  serviceRef: string;
+  /** Hex of the household-key-sealed `{name, photo?}` bundle (ciphertext only). */
+  encryptedBundle: string;
+  /** SHA-256 hex of the link secret (redeem lookup key; the secret is never stored). */
+  secretHash: string;
+  /** Friend's AID pubkey (hex), bound on FIRST redeem. NULL until redeemed. */
+  boundAID: string | null;
+  /** ms since epoch of the first redeem, or NULL. */
+  boundAt: number | null;
+  createdAt: number;
+  /** ms since epoch when revoked, or NULL. A revoked invite denies access. */
+  revokedAt: number | null;
+}
+
+/** Result of a redeem attempt against `.com`. */
+export type ServiceInviteRedeemResult =
+  | {
+      ok: true;
+      /** True only on the FIRST redeem (the bind); false on an idempotent re-redeem. */
+      firstBind: boolean;
+      record: ServiceInviteRecord;
+    }
+  | {
+      ok: false;
+      /** "unknown secret" | "revoked" | "already bound" (different AID). */
+      reason: string;
+    };
+
+export interface ServiceInviteStorage {
+  /**
+   * Create an invite. Keyed by `inviteId`. Returns ok=false `'duplicate
+   * inviteId'` if one already exists (the creating device must mint a fresh
+   * monotonic counter per invite). Idempotent on a byte-identical re-create
+   * of the SAME inviteId (same author/service/secretHash) — returns ok.
+   */
+  create(rec: {
+    inviteId: string;
+    authorAID: string;
+    serviceRef: string;
+    encryptedBundle: string;
+    secretHash: string;
+    createdAt: number;
+  }): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Atomically redeem by `secretHash`, binding to `visitorAID`:
+   *   - unknown secretHash            → ok=false 'unknown secret'
+   *   - revoked invite                → ok=false 'revoked'
+   *   - first redeem                  → binds boundAID/boundAt, ok+firstBind:true
+   *   - re-redeem by the SAME AID     → idempotent, ok+firstBind:false
+   *   - re-redeem by a DIFFERENT AID  → ok=false 'already bound'
+   * The caller has already verified the friend's AID signature over the redeem.
+   */
+  redeem(
+    secretHash: string,
+    visitorAID: string,
+    now: number,
+  ): Promise<ServiceInviteRedeemResult>;
+  /**
+   * Revoke by `inviteId`. Sets revokedAt (idempotent — re-revoke keeps the
+   * first revokedAt). Returns whether a row existed. The caller has verified
+   * the author's IRK signature over the revoke.
+   */
+  revoke(inviteId: string, now: number): Promise<boolean>;
+  /** A single invite by id, or undefined. */
+  get(inviteId: string): Promise<ServiceInviteRecord | undefined>;
+  /** Lookup by secretHash (redeem-path read), or undefined. */
+  getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined>;
+  /** Every invite an author created, createdAt DESC. */
+  listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

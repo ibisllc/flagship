@@ -800,6 +800,105 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // serviceInvites (service_invites) — the UNIQUE(secret_hash) index + the
+  // conditional first-bind UPDATE (atomic redeem) are the classic
+  // UNIQUE/conditional-UPDATE divergence risk (D1 relies on meta.changes;
+  // InMemory checks explicitly).
+  // ────────────────────────────────────────────────────────────────────
+  describe("serviceInvites", () => {
+    const mk = (id: string, secret: string, extra: { authorAID?: string; createdAt?: number } = {}) => ({
+      inviteId: id,
+      authorAID: extra.authorAID ?? "aa".repeat(32),
+      serviceRef: "alice-notes",
+      encryptedBundle: "deadbeef",
+      secretHash: secret,
+      createdAt: extra.createdAt ?? 1000,
+    });
+
+    it("create idempotent-same / reject-id-clash / reject-secret-reuse", async () => {
+      const r = await bothAdapters(async (s) => {
+        const first = await s.serviceInvites.create(mk("id1", "11".repeat(32)));
+        const same = await s.serviceInvites.create(mk("id1", "11".repeat(32)));
+        const idClash = await s.serviceInvites.create({ ...mk("id1", "99".repeat(32)), serviceRef: "x" });
+        const secretReuse = await s.serviceInvites.create(mk("id2", "11".repeat(32)));
+        return {
+          first,
+          same,
+          idClashOk: idClash.ok,
+          secretReuseOk: secretReuse.ok,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ first: { ok: true }, same: { ok: true }, idClashOk: false, secretReuseOk: false });
+    });
+
+    it("redeem: first-bind, same-AID idempotent, different-AID rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create(mk("id1", "11".repeat(32)));
+        const first = await s.serviceInvites.redeem("11".repeat(32), "bb".repeat(32), 2000);
+        const sameAid = await s.serviceInvites.redeem("11".repeat(32), "bb".repeat(32), 9999);
+        const diffAid = await s.serviceInvites.redeem("11".repeat(32), "cc".repeat(32), 3000);
+        const unknown = await s.serviceInvites.redeem("ff".repeat(32), "bb".repeat(32), 1);
+        const bound = (await s.serviceInvites.get("id1"))!;
+        return {
+          firstBind: first.ok && first.firstBind,
+          firstBoundAt: first.ok ? first.record.boundAt : null,
+          sameBind: sameAid.ok && sameAid.firstBind,
+          diffAid,
+          unknown,
+          boundAID: bound.boundAID,
+          boundAt: bound.boundAt,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        firstBind: true,
+        firstBoundAt: 2000,
+        sameBind: false,
+        diffAid: { ok: false, reason: "already bound" },
+        unknown: { ok: false, reason: "unknown secret" },
+        boundAID: "bb".repeat(32),
+        boundAt: 2000,
+      });
+    });
+
+    it("revoke denies redeem; revoke idempotent; unknown id → false", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create(mk("id1", "11".repeat(32)));
+        const rev = await s.serviceInvites.revoke("id1", 1500);
+        const revAgain = await s.serviceInvites.revoke("id1", 9999);
+        const denied = await s.serviceInvites.redeem("11".repeat(32), "bb".repeat(32), 2000);
+        const revokedAt = (await s.serviceInvites.get("id1"))!.revokedAt;
+        const unknownRevoke = await s.serviceInvites.revoke("nope", 1);
+        return { rev, revAgain, denied, revokedAt, unknownRevoke };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        rev: true,
+        revAgain: true,
+        denied: { ok: false, reason: "revoked" },
+        revokedAt: 1500,
+        unknownRevoke: false,
+      });
+    });
+
+    it("listForAuthor is createdAt DESC, scoped per author", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create(mk("a", "01".repeat(32), { createdAt: 10 }));
+        await s.serviceInvites.create(mk("b", "02".repeat(32), { createdAt: 30 }));
+        await s.serviceInvites.create(mk("c", "03".repeat(32), { createdAt: 20 }));
+        await s.serviceInvites.create(mk("d", "04".repeat(32), { authorAID: "cc".repeat(32), createdAt: 99 }));
+        return {
+          mine: (await s.serviceInvites.listForAuthor("aa".repeat(32))).map((x) => x.inviteId),
+          theirs: (await s.serviceInvites.listForAuthor("cc".repeat(32))).map((x) => x.inviteId),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ mine: ["b", "c", "a"], theirs: ["d"] });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // Harness self-check: the SQLite DB is the REAL prod schema (every
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────

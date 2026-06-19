@@ -5,6 +5,9 @@ import type {
   CtAlertStorage,
   TrustExceptionRecord,
   TrustExceptionStorage,
+  ServiceInviteRecord,
+  ServiceInviteStorage,
+  ServiceInviteRedeemResult,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -1143,6 +1146,7 @@ export class InMemoryStorage implements Storage {
   acmeAccountKeyDelivery = new InMemoryAcmeAccountKeyDeliveryStorage();
   ctAlerts = new InMemoryCtAlertStorage();
   trustExceptions = new InMemoryTrustExceptionStorage();
+  serviceInvites = new InMemoryServiceInviteStorage();
   namespace = new InMemoryNamespaceStorage();
 }
 
@@ -1507,6 +1511,105 @@ export class InMemoryNamespaceStorage implements NamespaceStorage {
     return [...this.byKey.values()]
       .filter((r) => r.username.toLowerCase() === u)
       .sort((a, b) => a.claimedAt - b.claimedAt)
+      .map((r) => ({ ...r }));
+  }
+}
+
+/**
+ * In-memory ServiceInviteStorage — bearer-link service-access capability
+ * invites bound to the redeemer's stable AID (docs/service-access-gating.md).
+ * Keyed by `inviteId`; `secretHash` + `authorAID` are lower-cased so lookups
+ * match the D1 adapter's `lower()` index semantics. `redeem` is the first-bind
+ * / same-AID-idempotent / reject-different-AID primitive that the D1 adapter
+ * mirrors with a conditional UPDATE.
+ */
+export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
+  private byId = new Map<string, ServiceInviteRecord>();
+
+  async create(rec: {
+    inviteId: string;
+    authorAID: string;
+    serviceRef: string;
+    encryptedBundle: string;
+    secretHash: string;
+    createdAt: number;
+  }): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const sh = rec.secretHash.toLowerCase();
+    const existing = this.byId.get(rec.inviteId);
+    if (existing) {
+      // Idempotent only on a byte-identical re-create of the same id.
+      if (
+        existing.authorAID === rec.authorAID.toLowerCase() &&
+        existing.serviceRef === rec.serviceRef &&
+        existing.secretHash === sh
+      ) {
+        return { ok: true };
+      }
+      return { ok: false, reason: "duplicate inviteId" };
+    }
+    // Mirror the D1 UNIQUE(secret_hash) index: a DIFFERENT invite reusing a
+    // secret already in use is rejected (a hash clash is a bug, not a feature).
+    for (const r of this.byId.values()) {
+      if (r.secretHash === sh) return { ok: false, reason: "duplicate secret" };
+    }
+    this.byId.set(rec.inviteId, {
+      inviteId: rec.inviteId,
+      authorAID: rec.authorAID.toLowerCase(),
+      serviceRef: rec.serviceRef,
+      encryptedBundle: rec.encryptedBundle,
+      secretHash: rec.secretHash.toLowerCase(),
+      boundAID: null,
+      boundAt: null,
+      createdAt: rec.createdAt,
+      revokedAt: null,
+    });
+    return { ok: true };
+  }
+
+  async redeem(
+    secretHash: string,
+    visitorAID: string,
+    now: number,
+  ): Promise<ServiceInviteRedeemResult> {
+    const sh = secretHash.toLowerCase();
+    const aid = visitorAID.toLowerCase();
+    const rec = [...this.byId.values()].find((r) => r.secretHash === sh);
+    if (!rec) return { ok: false, reason: "unknown secret" };
+    if (rec.revokedAt !== null) return { ok: false, reason: "revoked" };
+    if (rec.boundAID === null) {
+      rec.boundAID = aid;
+      rec.boundAt = now;
+      return { ok: true, firstBind: true, record: { ...rec } };
+    }
+    if (rec.boundAID === aid) {
+      return { ok: true, firstBind: false, record: { ...rec } };
+    }
+    return { ok: false, reason: "already bound" };
+  }
+
+  async revoke(inviteId: string, now: number): Promise<boolean> {
+    const rec = this.byId.get(inviteId);
+    if (!rec) return false;
+    if (rec.revokedAt === null) rec.revokedAt = now;
+    return true;
+  }
+
+  async get(inviteId: string): Promise<ServiceInviteRecord | undefined> {
+    const r = this.byId.get(inviteId);
+    return r ? { ...r } : undefined;
+  }
+
+  async getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined> {
+    const sh = secretHash.toLowerCase();
+    const r = [...this.byId.values()].find((x) => x.secretHash === sh);
+    return r ? { ...r } : undefined;
+  }
+
+  async listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]> {
+    const a = authorAID.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.authorAID === a)
+      .sort((x, y) => y.createdAt - x.createdAt)
       .map((r) => ({ ...r }));
   }
 }
