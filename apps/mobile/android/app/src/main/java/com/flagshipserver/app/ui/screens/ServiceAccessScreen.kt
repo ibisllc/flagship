@@ -1,9 +1,12 @@
 // Admin "Who can open this" screen for per-service access gating
-// (docs/service-access-gating.md). Mirror of iOS ServiceAccessScreen + the
-// webapp views/service-access.js: an open <-> restricted toggle (reads the TRUE
-// mode from the box; sets it with an owner-IRK envelope) and, when restricted,
-// the allow-list manager (add a person -> mint a capability invite via .com ->
-// copyable/shareable link; list w/ locally-decrypted bundle; remove -> revoke).
+// (docs/service-access-gating.md §v2 hardening). Mirror of iOS ServiceAccessScreen
+// + the webapp views/service-access.js: an open <-> restricted toggle (reads the
+// TRUE mode from the box; sets it with an owner-IRK envelope) and, when
+// restricted, the allow-list manager — add a person across THREE tiers (personal
+// auto / personal manual / group multi-use) -> mint a capability invite via .com
+// -> copyable/shareable link + inline QR; list w/ locally-decrypted bundle (a
+// group is ONE "label — k/N" entry); remove -> AID revoke + owner-IRK box prune;
+// and CONFIRM a manual-approve reply a friend sent back.
 
 package com.flagshipserver.app.ui.screens
 
@@ -25,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -44,15 +48,19 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.QrImage
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.AccessPerson
+import com.flagshipserver.app.viewmodels.InviteTier
 import com.flagshipserver.app.viewmodels.ServiceAccessPhase
 import com.flagshipserver.app.viewmodels.ServiceAccessViewModel
 import kotlinx.coroutines.launch
@@ -86,10 +94,15 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
     val lastLink by vm.lastInviteLink.collectAsState()
     val busyMode by vm.busyMode.collectAsState()
     val busyAdd by vm.busyAdd.collectAsState()
+    val busyFinalize by vm.busyFinalize.collectAsState()
 
     var name by remember { mutableStateOf("") }
     var photoDataUri by remember { mutableStateOf<String?>(null) }
-    var confirmRemove by remember { mutableStateOf<com.flagshipserver.app.viewmodels.AccessPerson?>(null) }
+    var tier by remember { mutableStateOf(InviteTier.PERSONAL_AUTO) }
+    var maxRedemptionsText by remember { mutableStateOf("0") }
+    var expiryDaysText by remember { mutableStateOf("") }
+    var confirmRemove by remember { mutableStateOf<AccessPerson?>(null) }
+    var replyText by remember { mutableStateOf("") }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -170,20 +183,64 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                     Text("Add a person", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+
+                    // ── invite tier picker ──
+                    Text("How should this invite work?", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        TierChip("Auto", tier == InviteTier.PERSONAL_AUTO, "service-access-tier-auto") { tier = InviteTier.PERSONAL_AUTO }
+                        TierChip("Approve", tier == InviteTier.PERSONAL_MANUAL, "service-access-tier-manual") { tier = InviteTier.PERSONAL_MANUAL }
+                        TierChip("Group", tier == InviteTier.GROUP, "service-access-tier-group") { tier = InviteTier.GROUP }
+                    }
                     Text(
-                        "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. The link is a bearer capability: send it over a private channel. It locks to the first account that opens it.",
+                        when (tier) {
+                            InviteTier.PERSONAL_AUTO -> "Personal link. The first account that opens it gets access. Send it privately."
+                            InviteTier.PERSONAL_MANUAL -> "Personal, with your approval. They open it, then send you back a confirmation you finalize below — closes the link-theft window without revealing who they are."
+                            InviteTier.GROUP -> "One link for several people (lower-trust — a leaked link admits up to the limit). Set a redemption limit and an optional expiry."
+                        },
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                    )
+
+                    Text(
+                        "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. The consumer's username is never shown to you.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                     )
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Name (only you + your servers see it)") },
+                        label = { Text(if (tier == InviteTier.GROUP) "Group label (only you + your servers see it)" else "Name (only you + your servers see it)") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .semantics { testTag = "service-access-name-field" },
                     )
+
+                    if (tier == InviteTier.GROUP) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                            OutlinedTextField(
+                                value = maxRedemptionsText,
+                                onValueChange = { maxRedemptionsText = it.filter { c -> c.isDigit() } },
+                                label = { Text("Limit (0 = unlimited)") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics { testTag = "service-access-group-max" },
+                            )
+                            OutlinedTextField(
+                                value = expiryDaysText,
+                                onValueChange = { expiryDaysText = it.filter { c -> c.isDigit() } },
+                                label = { Text("Expires in days (optional)") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics { testTag = "service-access-group-expiry" },
+                            )
+                        }
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(onClick = {
                             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -201,9 +258,12 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                         large = true,
                         onClick = {
                             scope.launch {
-                                val link = vm.addPerson(name, photoDataUri)
+                                val maxN = maxRedemptionsText.toIntOrNull() ?: 0
+                                val expiryDays = expiryDaysText.toLongOrNull()
+                                val expiresAt = expiryDays?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 86_400_000L }
+                                val link = vm.addPerson(name, photoDataUri, tier, maxN, expiresAt)
                                 if (link != null) {
-                                    toasts.success("Invite for ${name.trim()} created.")
+                                    toasts.success(if (tier == InviteTier.GROUP) "Group invite created." else "Invite for ${name.trim()} created.")
                                     name = ""
                                     photoDataUri = null
                                 } else {
@@ -221,6 +281,40 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                 }
             }
 
+            // confirm a manual-approve reply (the author finalizes the loop)
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text("Confirm someone you approved", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                    Text(
+                        "For an Approve-tier invite: paste the confirmation your contact sent back to grant them access.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                    )
+                    OutlinedTextField(
+                        value = replyText,
+                        onValueChange = { replyText = it },
+                        label = { Text("Paste the confirmation reply") },
+                        singleLine = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { testTag = "service-access-accept-reply-field" },
+                    )
+                    FSPrimaryButton(
+                        label = if (busyFinalize) "Confirming…" else "Confirm access",
+                        enabled = !busyFinalize && replyText.trim().isNotEmpty(),
+                        block = true,
+                        onClick = {
+                            scope.launch {
+                                val ok = vm.finalizeAcceptance(replyText.trim())
+                                if (ok) { toasts.success("Access confirmed."); replyText = "" }
+                                else toasts.error("Couldn't confirm them. Check the reply and try again.")
+                            }
+                        },
+                        modifier = Modifier.semantics { testTag = "service-access-accept-finalize" },
+                    )
+                }
+            }
+
             // people list
             Text("People with access", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             if (people.isEmpty()) {
@@ -229,19 +323,11 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                 }
             } else {
                 people.forEach { person ->
-                    FSCard(padding = PaddingValues(FS.space.s4)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(person.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                                Text(
-                                    if (person.bound) "active" else "invite sent — not opened yet",
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 13.sp),
-                                )
-                            }
-                            FSDangerButton(label = "Remove", onClick = { confirmRemove = person })
-                        }
-                    }
+                    PersonRow(
+                        person = person,
+                        onRemove = { confirmRemove = person },
+                        onRemoveMember = { aid -> scope.launch { vm.removeGroupMember(aid); toasts.success("Member removed.") } },
+                    )
                 }
             }
         }
@@ -252,14 +338,19 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
     confirmRemove?.let { person ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmRemove = null },
-            title = { Text("Remove ${person.name}?") },
-            text = { Text("They'll lose access the next time they try to open it. You can re-add them later with a new link.") },
+            title = { Text(if (person.isGroup) "Remove the group \"${person.name}\"?" else "Remove ${person.name}?") },
+            text = {
+                Text(
+                    if (person.isGroup) "Everyone in this group loses access the next time they try to open it."
+                    else "They'll lose access the next time they try to open it. You can re-add them later with a new link.",
+                )
+            },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     val p = person
                     confirmRemove = null
                     scope.launch {
-                        vm.remove(p.inviteId, p.boundAidHex)
+                        vm.remove(p.inviteId, p.boundAidHex, p.memberAids)
                         toasts.success("Removed.")
                     }
                 }) { Text("Remove") }
@@ -272,6 +363,60 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
 }
 
 @Composable
+private fun TierChip(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        modifier = Modifier.semantics { testTag = tag },
+    )
+}
+
+@Composable
+private fun PersonRow(person: AccessPerson, onRemove: () -> Unit, onRemoveMember: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(person.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                    val sub = if (person.isGroup) {
+                        val cap = if (person.maxRedemptions == 0) "∞" else person.maxRedemptions.toString()
+                        "group · ${person.redemptions}/$cap"
+                    } else if (person.bound) "active" else "invite sent — not opened yet"
+                    Text(
+                        sub,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { testTag = if (person.isGroup) "service-access-group-row" else "service-access-person-row" },
+                    )
+                }
+                FSDangerButton(label = if (person.isGroup) "Remove group" else "Remove", onClick = onRemove)
+            }
+            if (person.isGroup && person.memberAids.isNotEmpty()) {
+                androidx.compose.material3.TextButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },
+                ) { Text(if (expanded) "Hide members" else "Manage members (${person.memberAids.size})") }
+                if (expanded) {
+                    person.memberAids.forEach { aid ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "member ${aid.take(8)}…",
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.weight(1f),
+                            )
+                            androidx.compose.material3.TextButton(onClick = { onRemoveMember(aid) }) { Text("Remove") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TextButtonClear(onClick: () -> Unit) {
     androidx.compose.material3.TextButton(onClick = onClick) { Text("Remove photo") }
 }
@@ -280,6 +425,13 @@ private fun TextButtonClear(onClick: () -> Unit) {
 private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
         Text("Shareable link", color = FS.colors.text, style = TextStyle(fontSize = 13.sp))
+        // Inline QR (the rich-channel artifact; the link text below is the fallback).
+        QrImage(
+            payload = link,
+            size = 180.dp,
+            contentDescription = "Invite QR",
+            modifier = Modifier.semantics { testTag = "service-access-share-qr" },
+        )
         Text(
             link,
             color = FS.colors.text,
