@@ -84,6 +84,17 @@ export interface UsernameRecord {
    * RecoveryWipePolicy on read.
    */
   recoveryWipePolicy?: RecoveryWipePolicy;
+  /**
+   * Service-access gating v2 — the account's STABLE Account Identity Key
+   * (AID) pubkey, hex (`deriveAccountId(UMK)`; demo: `deriveDemoUserAid`).
+   * Registered alongside the IRK so `.com` can verify AID-signed
+   * service-invite create/revoke against it (dual-accept with the IRK
+   * during the client transition — docs/service-access-gating.md v2). The
+   * AID never rotates (unlike the versioned IRK), so it is the right
+   * principal for the box-as-authority create signature. Absent on pre-v2
+   * rows ⇒ `.com` falls back to IRK-verify only.
+   */
+  aidPubHex?: string;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -1065,6 +1076,9 @@ export interface TrustExceptionStorage {
 // the friend; revoke is IRK-signed by the author (verified at the handler).
 // ──────────────────────────────────────────────────────────────────────
 
+/** Invite approval tier (docs/service-access-gating.md v2 §Phase 3). */
+export type ServiceInviteApprovalMode = "auto" | "manual";
+
 export interface ServiceInviteRecord {
   /** hash(AID_author)·hash(devicePub_author)·counter — the row key + revoke key. */
   inviteId: string;
@@ -1083,28 +1097,68 @@ export interface ServiceInviteRecord {
   createdAt: number;
   /** ms since epoch when revoked, or NULL. A revoked invite denies access. */
   revokedAt: number | null;
+  // ── v2 hardening (migration 0057; all backward-compatible) ──────────
+  /**
+   * The author's create-envelope signature, hex (IRK- OR AID-signed). v2
+   * box-as-authority: released to the box on redeem so the box verifies the
+   * owner's create ITSELF (demoting `.com` to a blind store). NULL on a v1
+   * row created before the signature was persisted.
+   */
+  createSig: string | null;
+  /**
+   * GROUP / multi-use cap: NULL ⇒ personal single-use (v1); 0 ⇒ unlimited;
+   * N ⇒ at most N distinct AIDs may bind.
+   */
+  maxRedemptions: number | null;
+  /** Optional invite expiry (epoch-ms); NULL ⇒ never. */
+  expiresAt: number | null;
+  /** Count of distinct AIDs bound (group accounting). 0 until first redeem. */
+  redemptions: number;
+  /** 'auto' (first-bind) | 'manual' (author-confirmed loop). Defaults 'auto'. */
+  approvalMode: ServiceInviteApprovalMode;
+  /**
+   * Every AID bound to this invite (lower-hex), in bind order — `[boundAID]`
+   * for a personal invite, the full set for a GROUP invite. Drives the
+   * revoked-since list + the box-side group-prune. Empty until first bind.
+   */
+  boundAIDs: string[];
 }
 
 /** Result of a redeem attempt against `.com`. */
 export type ServiceInviteRedeemResult =
   | {
       ok: true;
-      /** True only on the FIRST redeem (the bind); false on an idempotent re-redeem. */
+      /** True only when THIS redeem newly bound the AID; false on an idempotent re-redeem. */
       firstBind: boolean;
       record: ServiceInviteRecord;
     }
   | {
       ok: false;
-      /** "unknown secret" | "revoked" | "already bound" (different AID). */
+      /**
+       * "unknown secret" | "revoked" | "already bound" (different AID on a
+       * single-use invite) | "max redemptions reached" | "expired".
+       */
       reason: string;
     };
+
+/** One revoked invite + its bound AIDs, for the box revocation poller. */
+export interface RevokedInviteRecord {
+  inviteId: string;
+  serviceRef: string;
+  /** Every AID that was bound (lower-hex) — the box prunes ALL of these. */
+  boundAIDs: string[];
+  revokedAt: number;
+}
 
 export interface ServiceInviteStorage {
   /**
    * Create an invite. Keyed by `inviteId`. Returns ok=false `'duplicate
    * inviteId'` if one already exists (the creating device must mint a fresh
-   * monotonic counter per invite). Idempotent on a byte-identical re-create
-   * of the SAME inviteId (same author/service/secretHash) — returns ok.
+   * monotonic counter / random id per invite). Idempotent on a byte-identical
+   * re-create of the SAME inviteId (same author/service/secretHash). The v2
+   * fields (createSig / maxRedemptions / expiresAt / approvalMode) are
+   * optional — absent ⇒ the v1 defaults (no sig, single-use, never-expires,
+   * auto-approve).
    */
   create(rec: {
     inviteId: string;
@@ -1113,15 +1167,24 @@ export interface ServiceInviteStorage {
     encryptedBundle: string;
     secretHash: string;
     createdAt: number;
+    createSig?: string;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
   }): Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
    * Atomically redeem by `secretHash`, binding to `visitorAID`:
-   *   - unknown secretHash            → ok=false 'unknown secret'
-   *   - revoked invite                → ok=false 'revoked'
-   *   - first redeem                  → binds boundAID/boundAt, ok+firstBind:true
-   *   - re-redeem by the SAME AID     → idempotent, ok+firstBind:false
-   *   - re-redeem by a DIFFERENT AID  → ok=false 'already bound'
+   *   - unknown secretHash                 → ok=false 'unknown secret'
+   *   - revoked invite                     → ok=false 'revoked'
+   *   - past expiresAt                     → ok=false 'expired'
+   *   - personal invite, first redeem      → binds, ok+firstBind:true
+   *   - personal, re-redeem SAME AID       → idempotent, ok+firstBind:false
+   *   - personal, re-redeem DIFFERENT AID  → ok=false 'already bound'
+   *   - GROUP (maxN), new AID under cap    → binds, ok+firstBind:true
+   *   - GROUP, re-redeem an already-bound  → idempotent, ok+firstBind:false
+   *   - GROUP, new AID over cap            → ok=false 'max redemptions reached'
    * The caller has already verified the friend's AID signature over the redeem.
+   * `now` stamps the bind + is the expiry comparison point.
    */
   redeem(
     secretHash: string,
@@ -1131,7 +1194,7 @@ export interface ServiceInviteStorage {
   /**
    * Revoke by `inviteId`. Sets revokedAt (idempotent — re-revoke keeps the
    * first revokedAt). Returns whether a row existed. The caller has verified
-   * the author's IRK signature over the revoke.
+   * the author's IRK/AID signature over the revoke.
    */
   revoke(inviteId: string, now: number): Promise<boolean>;
   /** A single invite by id, or undefined. */
@@ -1140,6 +1203,13 @@ export interface ServiceInviteStorage {
   getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined>;
   /** Every invite an author created, createdAt DESC. */
   listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]>;
+  /**
+   * v2 — every invite the author REVOKED strictly after `cursor` (epoch-ms),
+   * with the AIDs that were bound to it, revokedAt ASC. The box polls this on
+   * a heartbeat cadence and prunes the returned AIDs so a `.com` revoke is
+   * SUFFICIENT (multi-box self-heals). Pass 0 to read from the start.
+   */
+  revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

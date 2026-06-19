@@ -69,6 +69,8 @@ import type {
   ServiceInviteRecord,
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
+  ServiceInviteApprovalMode,
+  RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -130,6 +132,9 @@ interface UsernameRow {
   // v2.1 — recovery-wipe policy column (migration 0032). Nullable for
   // pre-migration safety; the rowTo* helper defaults to 'graceful'.
   recovery_wipe_policy?: string | null;
+  // gating v2 — stable AID pubkey (migration 0057). Nullable; absent ⇒
+  // .com verifies service-invite create/revoke against the IRK only.
+  aid_pub_hex?: string | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -182,6 +187,7 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
       ? { recoveryCodesHashesJson: r.recovery_codes_hashes_json }
       : {}),
     ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
+    ...(r.aid_pub_hex != null ? { aidPubHex: r.aid_pub_hex } : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -232,8 +238,11 @@ export class D1UsernameStorage implements UsernameStorage {
     await this.db
       .prepare(
         "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          // ON CONFLICT updates only claimed_at — like is_demo / the v1.2
+          // cascade fields, aid_pub_hex survives a benign re-claim (a fresh
+          // value is set via the explicit setAidPub path, not the put path).
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
       .bind(
@@ -246,6 +255,7 @@ export class D1UsernameStorage implements UsernameStorage {
         rec.recoveryCodesHashesJson ?? null,
         rec.totpEnrolledAt ?? null,
         rec.recoveryWipePolicy ?? "graceful",
+        rec.aidPubHex ?? null,
       )
       .run();
     return { ok: true as const };
@@ -2796,9 +2806,15 @@ interface ServiceInviteRow {
   bound_at: number | null;
   created_at: number;
   revoked_at: number | null;
+  // v2 (migration 0057). Nullable so a SELECT against a pre-0057 DB decodes.
+  create_sig?: string | null;
+  max_redemptions?: number | null;
+  expires_at?: number | null;
+  redemptions?: number | null;
+  approval_mode?: string | null;
 }
 
-function rowToServiceInvite(r: ServiceInviteRow): ServiceInviteRecord {
+function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceInviteRecord {
   return {
     inviteId: r.invite_id,
     authorAID: r.author_aid,
@@ -2809,20 +2825,48 @@ function rowToServiceInvite(r: ServiceInviteRow): ServiceInviteRecord {
     boundAt: r.bound_at,
     createdAt: r.created_at,
     revokedAt: r.revoked_at,
+    createSig: r.create_sig ?? null,
+    maxRedemptions: r.max_redemptions ?? null,
+    expiresAt: r.expires_at ?? null,
+    redemptions: r.redemptions ?? 0,
+    approvalMode: r.approval_mode === "manual" ? "manual" : "auto",
+    boundAIDs,
   };
 }
+
+const SERVICE_INVITE_COLS =
+  `invite_id, author_aid, service_ref, encrypted_bundle, secret_hash,
+   bound_aid, bound_at, created_at, revoked_at,
+   create_sig, max_redemptions, expires_at, redemptions, approval_mode`;
 
 /**
  * D1 ServiceInviteStorage — bearer-link service-access capability invites
  * bound to the redeemer's stable AID (docs/service-access-gating.md). PRIMARY
- * KEY invite_id; UNIQUE secret_hash (the redeem lookup key). `redeem` is the
- * first-bind / same-AID-idempotent / reject-different-AID primitive, made
- * atomic by a conditional `UPDATE ... WHERE bound_aid IS NULL` whose
- * `meta.changes` distinguishes the winning first-binder from a concurrent
- * loser (which then re-reads to classify idempotent vs. already-bound).
+ * KEY invite_id; UNIQUE secret_hash (the redeem lookup key). `redeem` binds
+ * via the `service_invite_bindings` ledger (`INSERT OR IGNORE`, whose
+ * `meta.changes` distinguishes a new bind from an idempotent re-redeem),
+ * supporting GROUP / multi-use invites (the `bound_aid`/`bound_at` columns
+ * stay the FIRST bind for v1-compatible reads). v2 adds the create signature,
+ * maxRedemptions/expiry caps, approval mode, and `revokedSince`.
  */
 export class D1ServiceInviteStorage implements ServiceInviteStorage {
   constructor(private readonly db: D1Database) {}
+
+  /** Bound AIDs for an invite (bind order), from the ledger. */
+  private async boundAIDsFor(inviteId: string): Promise<string[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT aid FROM service_invite_bindings
+           WHERE invite_id = ?1 ORDER BY bound_at ASC, aid ASC`,
+      )
+      .bind(inviteId)
+      .all<{ aid: string }>();
+    return (rs.results ?? []).map((r) => r.aid);
+  }
+
+  private async hydrate(row: ServiceInviteRow): Promise<ServiceInviteRecord> {
+    return rowToServiceInvite(row, await this.boundAIDsFor(row.invite_id));
+  }
 
   async create(rec: {
     inviteId: string;
@@ -2831,6 +2875,10 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     encryptedBundle: string;
     secretHash: string;
     createdAt: number;
+    createSig?: string;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     // INSERT OR IGNORE so a byte-identical re-create is idempotent; a
     // DIFFERENT invite reusing the id (or the same secret_hash via the
@@ -2839,8 +2887,9 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
       .prepare(
         `INSERT OR IGNORE INTO service_invites
            (invite_id, author_aid, service_ref, encrypted_bundle,
-            secret_hash, bound_aid, bound_at, created_at, revoked_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL)`,
+            secret_hash, bound_aid, bound_at, created_at, revoked_at,
+            create_sig, max_redemptions, expires_at, redemptions, approval_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, 0, ?10)`,
       )
       .bind(
         rec.inviteId,
@@ -2849,6 +2898,10 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         rec.encryptedBundle,
         rec.secretHash.toLowerCase(),
         rec.createdAt,
+        rec.createSig ?? null,
+        rec.maxRedemptions ?? null,
+        rec.expiresAt ?? null,
+        rec.approvalMode ?? "auto",
       )
       .run();
     if ((res.meta.changes ?? 0) > 0) return { ok: true };
@@ -2875,33 +2928,53 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     const current = await this.getBySecretHash(sh);
     if (!current) return { ok: false, reason: "unknown secret" };
     if (current.revokedAt !== null) return { ok: false, reason: "revoked" };
-
-    if (current.boundAID === null) {
-      // Atomic first-bind: only the row that is still unbound + unrevoked.
-      const res = await this.db
-        .prepare(
-          `UPDATE service_invites
-             SET bound_aid = ?2, bound_at = ?3
-           WHERE secret_hash = ?1 AND bound_aid IS NULL AND revoked_at IS NULL`,
-        )
-        .bind(sh, aid, now)
-        .run();
-      if ((res.meta.changes ?? 0) > 0) {
-        const rec = await this.getBySecretHash(sh);
-        return { ok: true, firstBind: true, record: rec! };
-      }
-      // Lost the race (or got revoked between read + write) — reclassify.
-      const after = await this.getBySecretHash(sh);
-      if (!after) return { ok: false, reason: "unknown secret" };
-      if (after.revokedAt !== null) return { ok: false, reason: "revoked" };
-      if (after.boundAID === aid) return { ok: true, firstBind: false, record: after };
-      return { ok: false, reason: "already bound" };
+    if (current.expiresAt !== null && now > current.expiresAt) {
+      return { ok: false, reason: "expired" };
     }
-
-    if (current.boundAID === aid) {
+    // Already bound to this AID ⇒ idempotent (personal AND group).
+    if (current.boundAIDs.includes(aid)) {
       return { ok: true, firstBind: false, record: current };
     }
-    return { ok: false, reason: "already bound" };
+    // A NEW AID — enforce the cap before binding. Single-use (max NULL) with
+    // an existing bind ⇒ already bound to someone else; group ⇒ count < cap.
+    if (current.maxRedemptions === null) {
+      if (current.boundAIDs.length > 0) return { ok: false, reason: "already bound" };
+    } else if (
+      current.maxRedemptions > 0 &&
+      current.boundAIDs.length >= current.maxRedemptions
+    ) {
+      return { ok: false, reason: "max redemptions reached" };
+    }
+    // Atomic bind: INSERT OR IGNORE into the ledger; meta.changes>0 ⇒ we won.
+    const ins = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO service_invite_bindings (invite_id, aid, bound_at)
+         VALUES (?1, ?2, ?3)`,
+      )
+      .bind(current.inviteId, aid, now)
+      .run();
+    if ((ins.meta.changes ?? 0) === 0) {
+      // Lost the race to another concurrent redeem of the SAME AID — idempotent.
+      const after = await this.get(current.inviteId);
+      return after
+        ? { ok: true, firstBind: false, record: after }
+        : { ok: false, reason: "unknown secret" };
+    }
+    // Set bound_aid/bound_at to the FIRST bind (only when still unset), and
+    // keep the redemptions counter in step with the ledger size.
+    const count = (await this.boundAIDsFor(current.inviteId)).length;
+    await this.db
+      .prepare(
+        `UPDATE service_invites
+           SET bound_aid = COALESCE(bound_aid, ?2),
+               bound_at  = COALESCE(bound_at, ?3),
+               redemptions = ?4
+         WHERE invite_id = ?1`,
+      )
+      .bind(current.inviteId, aid, now, count)
+      .run();
+    const rec = await this.get(current.inviteId);
+    return { ok: true, firstBind: true, record: rec! };
   }
 
   async revoke(inviteId: string, now: number): Promise<boolean> {
@@ -2923,39 +2996,52 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
 
   async get(inviteId: string): Promise<ServiceInviteRecord | undefined> {
     const r = await this.db
-      .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE invite_id = ?1 LIMIT 1`,
-      )
+      .prepare(`SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE invite_id = ?1 LIMIT 1`)
       .bind(inviteId)
       .first<ServiceInviteRow>();
-    return r ? rowToServiceInvite(r) : undefined;
+    return r ? this.hydrate(r) : undefined;
   }
 
   async getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined> {
     const r = await this.db
-      .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE secret_hash = ?1 LIMIT 1`,
-      )
+      .prepare(`SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE secret_hash = ?1 LIMIT 1`)
       .bind(secretHash.toLowerCase())
       .first<ServiceInviteRow>();
-    return r ? rowToServiceInvite(r) : undefined;
+    return r ? this.hydrate(r) : undefined;
   }
 
   async listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]> {
     const rs = await this.db
       .prepare(
-        `SELECT invite_id, author_aid, service_ref, encrypted_bundle,
-                secret_hash, bound_aid, bound_at, created_at, revoked_at
-           FROM service_invites WHERE author_aid = ?1
+        `SELECT ${SERVICE_INVITE_COLS} FROM service_invites WHERE author_aid = ?1
            ORDER BY created_at DESC`,
       )
       .bind(authorAID.toLowerCase())
       .all<ServiceInviteRow>();
-    return (rs.results ?? []).map(rowToServiceInvite);
+    const out: ServiceInviteRecord[] = [];
+    for (const row of rs.results ?? []) out.push(await this.hydrate(row));
+    return out;
+  }
+
+  async revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT invite_id, service_ref, revoked_at FROM service_invites
+           WHERE author_aid = ?1 AND revoked_at IS NOT NULL AND revoked_at > ?2
+           ORDER BY revoked_at ASC`,
+      )
+      .bind(authorAID.toLowerCase(), cursor)
+      .all<{ invite_id: string; service_ref: string; revoked_at: number }>();
+    const out: RevokedInviteRecord[] = [];
+    for (const r of rs.results ?? []) {
+      out.push({
+        inviteId: r.invite_id,
+        serviceRef: r.service_ref,
+        boundAIDs: await this.boundAIDsFor(r.invite_id),
+        revokedAt: r.revoked_at,
+      });
+    }
+    return out;
   }
 }
 

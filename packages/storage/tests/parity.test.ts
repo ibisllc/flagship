@@ -114,6 +114,24 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1).toMatchObject({ accountType: "multi", claimedAt: 9 });
     });
 
+    it("gating v2 — aidPubHex round-trips + survives a benign re-claim", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({
+          username: "dave",
+          irkPubHex: "ab",
+          claimedAt: 1,
+          aidPubHex: "cd".repeat(32),
+        });
+        const set = await s.usernames.get("dave");
+        // re-put WITHOUT aidPubHex must not drop the stored AID
+        await s.usernames.put({ username: "dave", irkPubHex: "ab", claimedAt: 9 });
+        const after = await s.usernames.get("dave");
+        return { set: set?.aidPubHex, after: after?.aidPubHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ set: "cd".repeat(32), after: "cd".repeat(32) });
+    });
+
     it("swapIrkPub CAS: matches old → true; stale old → false", async () => {
       const r = await bothAdapters(async (s) => {
         await s.usernames.put({ username: "dave", irkPubHex: "aa", claimedAt: 1 });
@@ -895,6 +913,91 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1).toEqual({ mine: ["b", "c", "a"], theirs: ["d"] });
+    });
+
+    // v2 hardening (migration 0057): the v2 columns + the bindings ledger +
+    // GROUP multi-bind + expiry + revokedSince must read identically on both.
+    it("v2 fields round-trip + group multi-bind + cap + expiry + revokedSince", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create(mk("p", "11".repeat(32)));
+        await s.serviceInvites.create({
+          inviteId: "g",
+          authorAID: "aa".repeat(32),
+          serviceRef: "alice-notes",
+          encryptedBundle: "deadbeef",
+          secretHash: "22".repeat(32),
+          createdAt: 1000,
+          createSig: "ab".repeat(64),
+          maxRedemptions: 2,
+          expiresAt: 9000,
+          approvalMode: "manual",
+        });
+        const pDefaults = (await s.serviceInvites.get("p"))!;
+        const gMeta = (await s.serviceInvites.get("g"))!;
+        const b1 = await s.serviceInvites.redeem("22".repeat(32), "bb".repeat(32), 100);
+        const b2 = await s.serviceInvites.redeem("22".repeat(32), "cc".repeat(32), 200);
+        const b3 = await s.serviceInvites.redeem("22".repeat(32), "dd".repeat(32), 300);
+        const dupe = await s.serviceInvites.redeem("22".repeat(32), "bb".repeat(32), 400);
+        const gBound = (await s.serviceInvites.get("g"))!;
+        await s.serviceInvites.create({
+          inviteId: "e",
+          authorAID: "aa".repeat(32),
+          serviceRef: "x",
+          encryptedBundle: "ff",
+          secretHash: "33".repeat(32),
+          createdAt: 1,
+          expiresAt: 1000,
+        });
+        const expired = await s.serviceInvites.redeem("33".repeat(32), "bb".repeat(32), 1001);
+        await s.serviceInvites.revoke("g", 5000);
+        const revoked = await s.serviceInvites.revokedSince("aa".repeat(32), 0);
+        return {
+          pSig: pDefaults.createSig,
+          pMax: pDefaults.maxRedemptions,
+          pMode: pDefaults.approvalMode,
+          gSig: gMeta.createSig,
+          gMax: gMeta.maxRedemptions,
+          gExp: gMeta.expiresAt,
+          gMode: gMeta.approvalMode,
+          b1First: b1.ok && b1.firstBind,
+          b2First: b2.ok && b2.firstBind,
+          b3,
+          dupeFirst: dupe.ok && dupe.firstBind,
+          gBoundFirst: gBound.boundAID,
+          gBoundAt: gBound.boundAt,
+          gBoundAIDs: gBound.boundAIDs,
+          gRedemptions: gBound.redemptions,
+          expired,
+          revoked,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        pSig: null,
+        pMax: null,
+        pMode: "auto",
+        gSig: "ab".repeat(64),
+        gMax: 2,
+        gExp: 9000,
+        gMode: "manual",
+        b1First: true,
+        b2First: true,
+        b3: { ok: false, reason: "max redemptions reached" },
+        dupeFirst: false,
+        gBoundFirst: "bb".repeat(32),
+        gBoundAt: 100,
+        gBoundAIDs: ["bb".repeat(32), "cc".repeat(32)],
+        gRedemptions: 2,
+        expired: { ok: false, reason: "expired" },
+        revoked: [
+          {
+            inviteId: "g",
+            serviceRef: "alice-notes",
+            boundAIDs: ["bb".repeat(32), "cc".repeat(32)],
+            revokedAt: 5000,
+          },
+        ],
+      });
     });
   });
 

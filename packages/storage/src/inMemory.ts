@@ -8,6 +8,8 @@ import type {
   ServiceInviteRecord,
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
+  ServiceInviteApprovalMode,
+  RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -113,6 +115,9 @@ export class InMemoryUsernameStorage implements UsernameStorage {
         rec.recoveryWipePolicy ??
         existing?.recoveryWipePolicy ??
         "graceful",
+      // gating v2 — the stable AID survives a benign re-put, mirroring the
+      // demo/TOTP fields (a recovery-flow re-claim must not drop it).
+      aidPubHex: rec.aidPubHex ?? existing?.aidPubHex,
     });
     return { ok: true as const };
   }
@@ -1533,6 +1538,10 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     encryptedBundle: string;
     secretHash: string;
     createdAt: number;
+    createSig?: string;
+    maxRedemptions?: number;
+    expiresAt?: number;
+    approvalMode?: ServiceInviteApprovalMode;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     const sh = rec.secretHash.toLowerCase();
     const existing = this.byId.get(rec.inviteId);
@@ -1562,6 +1571,12 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
       boundAt: null,
       createdAt: rec.createdAt,
       revokedAt: null,
+      createSig: rec.createSig ?? null,
+      maxRedemptions: rec.maxRedemptions ?? null,
+      expiresAt: rec.expiresAt ?? null,
+      redemptions: 0,
+      approvalMode: rec.approvalMode ?? "auto",
+      boundAIDs: [],
     });
     return { ok: true };
   }
@@ -1576,15 +1591,28 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     const rec = [...this.byId.values()].find((r) => r.secretHash === sh);
     if (!rec) return { ok: false, reason: "unknown secret" };
     if (rec.revokedAt !== null) return { ok: false, reason: "revoked" };
+    if (rec.expiresAt !== null && now > rec.expiresAt) {
+      return { ok: false, reason: "expired" };
+    }
+    // Already bound to this AID ⇒ idempotent (personal AND group).
+    if (rec.boundAIDs.includes(aid)) {
+      return { ok: true, firstBind: false, record: { ...rec, boundAIDs: [...rec.boundAIDs] } };
+    }
+    // A NEW AID. Single-use (maxRedemptions null) with an existing bind ⇒
+    // already bound to someone else. Group ⇒ enforce the cap (0 = unlimited).
+    if (rec.maxRedemptions === null) {
+      if (rec.boundAIDs.length > 0) return { ok: false, reason: "already bound" };
+    } else if (rec.maxRedemptions > 0 && rec.boundAIDs.length >= rec.maxRedemptions) {
+      return { ok: false, reason: "max redemptions reached" };
+    }
+    rec.boundAIDs.push(aid);
+    rec.redemptions = rec.boundAIDs.length;
+    // The main row's boundAID/boundAt stay the FIRST bind (v1-compatible reads).
     if (rec.boundAID === null) {
       rec.boundAID = aid;
       rec.boundAt = now;
-      return { ok: true, firstBind: true, record: { ...rec } };
     }
-    if (rec.boundAID === aid) {
-      return { ok: true, firstBind: false, record: { ...rec } };
-    }
-    return { ok: false, reason: "already bound" };
+    return { ok: true, firstBind: true, record: { ...rec, boundAIDs: [...rec.boundAIDs] } };
   }
 
   async revoke(inviteId: string, now: number): Promise<boolean> {
@@ -1596,13 +1624,13 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
 
   async get(inviteId: string): Promise<ServiceInviteRecord | undefined> {
     const r = this.byId.get(inviteId);
-    return r ? { ...r } : undefined;
+    return r ? { ...r, boundAIDs: [...r.boundAIDs] } : undefined;
   }
 
   async getBySecretHash(secretHash: string): Promise<ServiceInviteRecord | undefined> {
     const sh = secretHash.toLowerCase();
     const r = [...this.byId.values()].find((x) => x.secretHash === sh);
-    return r ? { ...r } : undefined;
+    return r ? { ...r, boundAIDs: [...r.boundAIDs] } : undefined;
   }
 
   async listForAuthor(authorAID: string): Promise<ServiceInviteRecord[]> {
@@ -1610,6 +1638,19 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     return [...this.byId.values()]
       .filter((r) => r.authorAID === a)
       .sort((x, y) => y.createdAt - x.createdAt)
-      .map((r) => ({ ...r }));
+      .map((r) => ({ ...r, boundAIDs: [...r.boundAIDs] }));
+  }
+
+  async revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]> {
+    const a = authorAID.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.authorAID === a && r.revokedAt !== null && r.revokedAt > cursor)
+      .sort((x, y) => (x.revokedAt ?? 0) - (y.revokedAt ?? 0))
+      .map((r) => ({
+        inviteId: r.inviteId,
+        serviceRef: r.serviceRef,
+        boundAIDs: [...r.boundAIDs],
+        revokedAt: r.revokedAt!,
+      }));
   }
 }

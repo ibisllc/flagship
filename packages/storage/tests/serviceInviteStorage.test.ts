@@ -198,6 +198,108 @@ describe("ServiceInviteStorage parity", () => {
           expect(await store.getBySecretHash("ff".repeat(32))).toBeUndefined();
           expect(await store.listForAuthor("ee".repeat(32))).toEqual([]);
         }));
+
+      // ── v2 hardening (migration 0057) ───────────────────────────────
+      it("v1-shaped create lands the v2 defaults (no sig, single-use, auto, 0)", () =>
+        run(async (store) => {
+          await store.create(mk());
+          const got = (await store.get("id1"))!;
+          expect(got.createSig).toBeNull();
+          expect(got.maxRedemptions).toBeNull();
+          expect(got.expiresAt).toBeNull();
+          expect(got.redemptions).toBe(0);
+          expect(got.approvalMode).toBe("auto");
+          expect(got.boundAIDs).toEqual([]);
+        }));
+
+      it("create persists createSig + maxRedemptions + expiresAt + approvalMode", () =>
+        run(async (store) => {
+          await store.create({
+            ...mk(),
+            createSig: "ab".repeat(64),
+            maxRedemptions: 3,
+            expiresAt: 5000,
+            approvalMode: "manual",
+          });
+          const got = (await store.get("id1"))!;
+          expect(got.createSig).toBe("ab".repeat(64));
+          expect(got.maxRedemptions).toBe(3);
+          expect(got.expiresAt).toBe(5000);
+          expect(got.approvalMode).toBe("manual");
+        }));
+
+      it("a GROUP invite (maxN) binds multiple AIDs; boundAID stays the first", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), maxRedemptions: 3 });
+          const a = await store.redeem("11".repeat(32), FRIEND, 100);
+          const b = await store.redeem("11".repeat(32), OTHER, 200);
+          expect(a.ok && a.firstBind).toBe(true);
+          expect(b.ok && b.firstBind).toBe(true);
+          const got = (await store.get("id1"))!;
+          expect(got.boundAID).toBe(FRIEND); // FIRST bind, v1-compatible
+          expect(got.boundAt).toBe(100);
+          expect(got.boundAIDs).toEqual([FRIEND, OTHER]);
+          expect(got.redemptions).toBe(2);
+        }));
+
+      it("GROUP re-redeem of an already-bound AID is idempotent (firstBind:false)", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), maxRedemptions: 3 });
+          await store.redeem("11".repeat(32), FRIEND, 100);
+          const again = await store.redeem("11".repeat(32), FRIEND, 999);
+          expect(again.ok && again.firstBind).toBe(false);
+          expect((await store.get("id1"))!.redemptions).toBe(1);
+        }));
+
+      it("GROUP enforces the cap: a new AID over maxN is rejected", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), maxRedemptions: 2 });
+          await store.redeem("11".repeat(32), FRIEND, 100);
+          await store.redeem("11".repeat(32), OTHER, 200);
+          const third = await store.redeem("11".repeat(32), "dd".repeat(32), 300);
+          expect(third).toEqual({ ok: false, reason: "max redemptions reached" });
+          expect((await store.get("id1"))!.boundAIDs).toEqual([FRIEND, OTHER]);
+        }));
+
+      it("maxRedemptions:0 is unlimited", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), maxRedemptions: 0 });
+          for (let i = 0; i < 5; i++) {
+            const r = await store.redeem("11".repeat(32), `0${i}`.repeat(32), 10 + i);
+            expect(r.ok).toBe(true);
+          }
+          expect((await store.get("id1"))!.redemptions).toBe(5);
+        }));
+
+      it("an expired invite rejects redeem", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), expiresAt: 1000 });
+          const ok = await store.redeem("11".repeat(32), FRIEND, 999); // before expiry
+          expect(ok.ok).toBe(true);
+          await store.create({ ...mk({ inviteId: "id2", secretHash: "22".repeat(32) }), expiresAt: 1000 });
+          const late = await store.redeem("22".repeat(32), FRIEND, 1001); // after expiry
+          expect(late).toEqual({ ok: false, reason: "expired" });
+        }));
+
+      it("revokedSince returns revoked invites + their bound AIDs after the cursor, ASC", () =>
+        run(async (store) => {
+          await store.create({ ...mk({ inviteId: "g1", secretHash: "a1".repeat(32) }), maxRedemptions: 5 });
+          await store.redeem("a1".repeat(32), FRIEND, 50);
+          await store.redeem("a1".repeat(32), OTHER, 60);
+          await store.create(mk({ inviteId: "p1", secretHash: "a2".repeat(32) }));
+          await store.redeem("a2".repeat(32), "ee".repeat(32), 70);
+          // revoke p1 first (older), then g1 (newer)
+          await store.revoke("p1", 100);
+          await store.revoke("g1", 200);
+          const all = await store.revokedSince(AUTHOR, 0);
+          expect(all.map((r) => r.inviteId)).toEqual(["p1", "g1"]); // revokedAt ASC
+          expect(all[1]!.boundAIDs).toEqual([FRIEND, OTHER]);
+          // cursor excludes p1 (revokedAt 100)
+          const after = await store.revokedSince(AUTHOR, 100);
+          expect(after.map((r) => r.inviteId)).toEqual(["g1"]);
+          // scoped per author
+          expect(await store.revokedSince(OTHER, 0)).toEqual([]);
+        }));
     });
   }
 });
