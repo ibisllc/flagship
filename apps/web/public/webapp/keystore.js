@@ -433,6 +433,43 @@ export async function deriveAccountIdFromSeed(umkSeed) {
 }
 
 /**
+ * Contact Account Id (per-author pseudonym) — the v2 redemption identity the
+ * CONSUMER (friend) presents to a given author's services, mirroring
+ * `deriveContactAccountId` in @flagship/protocol byte-for-byte: HKDF-SHA256 over
+ * the consumer's UMK seed under the info `flagship/contact-aid/v1|<hex(authorAID)>`.
+ *
+ * Stable with that author (survives the consumer's IRK rotations + new devices,
+ * re-redeem idempotent), but UNLINKABLE across authors (each author's id is an
+ * independent pseudonym), so neither the authors nor flagshipserver.com can
+ * cross-link the same person across hosts (docs/service-access-gating.md v2 §H3).
+ * The friend signs the redeem / visit / knock / acceptance for THIS author with
+ * this key instead of the global AID.
+ *
+ * @param {Uint8Array} umkSeed        the consumer's 32-byte UMK seed
+ * @param {Uint8Array} authorAidPub   the AUTHOR's stable AID pubkey (32 B)
+ * @returns {Promise<{privateKey: CryptoKey, publicKey: Uint8Array}>}
+ */
+export async function deriveContactAccountIdFromSeed(umkSeed, authorAidPub) {
+  if (!(authorAidPub instanceof Uint8Array) || authorAidPub.length !== 32) {
+    throw new Error("authorAID pub must be a 32-byte Uint8Array");
+  }
+  return irkFromInfoSeed(umkSeed, `flagship/contact-aid/v1|${bytesToHex(authorAidPub)}`);
+}
+
+/**
+ * Sign canonical-bytes with the PER-AUTHOR contact AID (v2). Mirrors
+ * {@link signWithAccountId} but derives the per-author pseudonym via
+ * {@link deriveContactAccountIdFromSeed}, so the consumer's redemption / visit /
+ * acceptance is unlinkable across authors.
+ */
+export async function signWithContactAccountId(umkSeed, authorAidPub, canonicalBytes) {
+  const contact = await deriveContactAccountIdFromSeed(umkSeed, authorAidPub);
+  return new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, contact.privateKey, canonicalBytes),
+  );
+}
+
+/**
  * Household encryption key — a 32-byte symmetric AEAD key derived from the UMK
  * under the FIXED info `flagship/household-key/v1`, byte-identical to
  * `deriveHouseholdKey` in @flagship/protocol. Every device of the account (all

@@ -37,7 +37,13 @@ import {
   verifyServiceVisitProof,
   signKnockAuthorization,
   verifyKnockAuthorization,
+  deriveContactAccountId,
+  signAcceptServiceInvite,
+  verifyAcceptServiceInvite,
+  randomServiceInviteId,
+  verifyServiceInviteListQuery,
   type CreateServiceInvite,
+  type AcceptServiceInvite,
 } from "@flagship/protocol";
 
 function webappPath(...p: string[]) {
@@ -77,6 +83,19 @@ const VECTORS = JSON.parse(
   removeAllow: { aid: string; issuedAt: number; sigHex: string };
   visit: { issuedAt: number; sigHex: string };
   knock: { pageId: string; issuedAt: number; sigHex: string };
+  // v2 gating (Wave 3)
+  contactAid: { authorAidPubHex: string; contactAidPubHex: string };
+  accept: { inviteId: string; serviceRef: string; acceptedAt: number; sigHex: string };
+  createMaxN: {
+    inviteId: string;
+    encryptedBundlePlaceholder: string;
+    issuedAt: number;
+    maxRedemptions: number;
+    expiresAt: number;
+    sigHex: string;
+  };
+  createAid: { inviteId: string; encryptedBundlePlaceholder: string; issuedAt: number; sigHex: string };
+  revokeAid: { issuedAt: number; sigHex: string };
   bundle: { name: string; photo?: string };
 };
 
@@ -127,6 +146,25 @@ describe("webapp keystore — AID + household interop with @flagship/protocol", 
     expect(bytesToHex(hh)).toBe(bytesToHex(deriveHouseholdKey(authorUmk)));
     expect(bytesToHex(hh)).toBe(VECTORS.derived.householdKeyHex);
     expect(hh.length).toBe(32);
+  });
+
+  it("deriveContactAccountIdFromSeed (v2) matches @flagship/protocol + the pinned contactAid vector", async () => {
+    const k = await loadKeystore();
+    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
+    // The friend's PER-AUTHOR pseudonym over the AUTHOR's AID.
+    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
+    expect(bytesToHex(contact.publicKey)).toBe(
+      bytesToHex(deriveContactAccountId(friendUmk, authorAidPub).publicKey),
+    );
+    expect(bytesToHex(contact.publicKey)).toBe(VECTORS.contactAid.contactAidPubHex);
+    // It is DISTINCT from the friend's GLOBAL AID (the whole privacy point).
+    const globalAid = await k.deriveAccountIdFromSeed(friendUmk.seed);
+    expect(bytesToHex(contact.publicKey)).not.toBe(bytesToHex(globalAid.publicKey));
+    // UNLINKABLE: a different author → a different contact id for the SAME friend.
+    const otherAuthor = await k.deriveAccountIdFromSeed(authorUmk.seed); // same vector author here, so use friend-as-author for a 2nd
+    const otherContact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, globalAid.publicKey);
+    expect(bytesToHex(otherContact.publicKey)).not.toBe(bytesToHex(contact.publicKey));
+    void otherAuthor;
   });
 });
 
@@ -284,6 +322,109 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
     expect(bytesToHex(sig)).toBe(VECTORS.knock.sigHex);
   });
 
+  // ── v2 gating (Wave 3) — AID-signed create/revoke, accept loop, group caps ──
+
+  it("createAid: the create bytes signed by the AUTHOR AID reproduce the pinned createAid sig", async () => {
+    const si = await loadServiceInvite();
+    const create: CreateServiceInvite = {
+      inviteId: VECTORS.createAid.inviteId,
+      authorAID: authorAid.publicKey,
+      serviceRef: VECTORS.serviceRef,
+      secretHash: VECTORS.secretHash,
+      encryptedBundle: VECTORS.createAid.encryptedBundlePlaceholder,
+      issuedAt: VECTORS.createAid.issuedAt,
+    };
+    const bytes = si.canonicalCreateBytes(create);
+    // Same pre-image as the v1 `create` vector — only the signer differs (AID vs IRK).
+    expect(bytes).toEqual(si.canonicalCreateBytes({ ...create }));
+    expect(bytesToHex(ed.sign(bytes, authorAid.privateKey))).toBe(VECTORS.createAid.sigHex);
+    // The protocol verifier accepts the AID-signed create against the author AID pub.
+    expect(verifyCreateServiceInvite(create, ed.sign(bytes, authorAid.privateKey), authorAid.publicKey)).toBe(true);
+    // The keystore's AID signer (what createInvite calls) emits the SAME pinned sig.
+    const k = await loadKeystore();
+    expect(bytesToHex(await k.signWithAccountId(authorUmk.seed, bytes))).toBe(VECTORS.createAid.sigHex);
+  });
+
+  it("revokeAid: the revoke bytes signed by the AUTHOR AID reproduce the pinned revokeAid sig", async () => {
+    const si = await loadServiceInvite();
+    const revoke = { inviteId: VECTORS.inviteId, issuedAt: VECTORS.revokeAid.issuedAt };
+    const bytes = si.canonicalRevokeBytes(revoke);
+    expect(bytesToHex(ed.sign(bytes, authorAid.privateKey))).toBe(VECTORS.revokeAid.sigHex);
+    expect(verifyRevokeServiceInvite(revoke, ed.sign(bytes, authorAid.privateKey), authorAid.publicKey)).toBe(true);
+    const k = await loadKeystore();
+    expect(bytesToHex(await k.signWithAccountId(authorUmk.seed, bytes))).toBe(VECTORS.revokeAid.sigHex);
+  });
+
+  it("createMaxN: the GROUP create (maxN + exp appended) reproduces the pinned sig (IRK-signed)", async () => {
+    const si = await loadServiceInvite();
+    const create: CreateServiceInvite = {
+      inviteId: VECTORS.createMaxN.inviteId,
+      authorAID: authorAid.publicKey,
+      serviceRef: VECTORS.serviceRef,
+      secretHash: VECTORS.secretHash,
+      encryptedBundle: VECTORS.createMaxN.encryptedBundlePlaceholder,
+      issuedAt: VECTORS.createMaxN.issuedAt,
+      maxRedemptions: VECTORS.createMaxN.maxRedemptions,
+      expiresAt: VECTORS.createMaxN.expiresAt,
+    };
+    const bytes = si.canonicalCreateBytes(create);
+    // Group caps ARE in the signed bytes → the sig differs from the no-caps create.
+    expect(bytes).not.toEqual(
+      si.canonicalCreateBytes({ ...create, maxRedemptions: undefined, expiresAt: undefined }),
+    );
+    expect(bytesToHex(ed.sign(bytes, authorIrk.privateKey))).toBe(VECTORS.createMaxN.sigHex);
+    expect(verifyCreateServiceInvite(create, ed.sign(bytes, authorIrk.privateKey), authorIrk.publicKey)).toBe(true);
+    // A no-caps create signs byte-identically to the v1 create vector (backward-compat).
+    const v1Bytes = si.canonicalCreateBytes({
+      inviteId: VECTORS.inviteId,
+      authorAID: authorAid.publicKey,
+      serviceRef: VECTORS.serviceRef,
+      secretHash: VECTORS.secretHash,
+      encryptedBundle: VECTORS.create.encryptedBundlePlaceholder,
+      issuedAt: VECTORS.create.issuedAt,
+    });
+    expect(bytesToHex(ed.sign(v1Bytes, authorIrk.privateKey))).toBe(VECTORS.create.sigHex);
+  });
+
+  it("accept: the friend's CONTACT-AID acceptance reproduces the pinned accept sig", async () => {
+    const si = await loadServiceInvite();
+    const k = await loadKeystore();
+    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
+    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
+    expect(bytesToHex(contact.publicKey)).toBe(VECTORS.contactAid.contactAidPubHex);
+    const accept: AcceptServiceInvite = {
+      inviteId: VECTORS.accept.inviteId,
+      serviceRef: VECTORS.accept.serviceRef,
+      contactAID: contact.publicKey,
+      acceptedAt: VECTORS.accept.acceptedAt,
+    };
+    const bytes = si.canonicalAcceptBytes(accept);
+    // 1) protocol signs, webapp bytes verify under the contact AID pub
+    const protoContact = deriveContactAccountId(friendUmk, authorAidPub);
+    expect(ed.verify(signAcceptServiceInvite(accept, protoContact), bytes, contact.publicKey)).toBe(true);
+    // 2) webapp bytes signed with the contact AID reproduce the PINNED sig
+    expect(bytesToHex(ed.sign(bytes, protoContact.privateKey))).toBe(VECTORS.accept.sigHex);
+    // 3) protocol's verifier accepts the webapp-produced signature
+    expect(verifyAcceptServiceInvite(accept, ed.sign(bytes, protoContact.privateKey), contact.publicKey)).toBe(true);
+    // 4) the webapp's signAcceptServiceInvite helper (injected contact signer) emits the SAME pinned sig
+    const sig = await si.signAcceptServiceInvite(
+      { ...accept, authorAID: authorAidPub, umk: friendUmk.seed },
+      k.signWithContactAccountId,
+    );
+    expect(bytesToHex(sig)).toBe(VECTORS.accept.sigHex);
+  });
+
+  it("randomServiceInviteId is a fresh 64-hex id each call", async () => {
+    const si = await loadServiceInvite();
+    const a = si.randomServiceInviteId();
+    const b = si.randomServiceInviteId();
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(b).toMatch(/^[0-9a-f]{64}$/);
+    expect(a).not.toBe(b);
+    // Mirrors the protocol shape.
+    expect(randomServiceInviteId()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it("rejects separator/control injection in serviceRef at build time", async () => {
     const si = await loadServiceInvite();
     expect(() =>
@@ -310,7 +451,7 @@ describe("webapp serviceInvite — wire helpers", () => {
   const signIrk = (priv: Uint8Array) => async (_umk: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, priv);
   const signAid = (priv: Uint8Array) => async (_umk: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, priv);
 
-  it("createInvite POSTs the IRK-signed envelope .com verifies + returns a /invite#<secret> link", async () => {
+  it("createInvite (v2) POSTs the AUTHOR-AID-signed envelope .com verifies + returns the v2 link + retained create", async () => {
     const si = await loadServiceInvite();
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const f = async (url: string, init: RequestInit) => {
@@ -324,24 +465,27 @@ describe("webapp serviceInvite — wire helpers", () => {
         username: "alice",
         podBaseUrl: POD,
         authorAID: authorAid.publicKey,
-        authorDevicePub: authorIrk.publicKey,
-        counter: 0,
+        inviteId: VECTORS.inviteId, // pin the id so the sig is deterministic
         serviceRef: VECTORS.serviceRef,
         bundle: { name: "Alex" },
         householdKey: deriveHouseholdKey(authorUmk),
         umk: authorUmk.seed,
-        signWithIrk: signIrk(authorIrk.privateKey),
+        signWithAccountId: signAid(authorAid.privateKey),
       },
       { fetch: f as unknown as typeof fetch, now: () => VECTORS.create.issuedAt, randomBytes: () => fixedSecret },
     );
     expect(calls[0]!.url).toBe(`${COM}/api/users/alice/service-invites`);
     expect(r.inviteId).toBe(VECTORS.inviteId);
     expect(r.secretHex).toBe(VECTORS.secretHex);
-    expect(r.link).toBe(`${POD}/invite#${VECTORS.secretHex}`);
+    // The v2 share-link carries the author AID + inviteId in the fragment.
+    expect(r.link).toBe(`${POD}/invite#k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`);
+    // The author RETAINS the signed create (to finalize a manual acceptance later).
+    expect(r.create.inviteId).toBe(VECTORS.inviteId);
+    expect(r.createSig).toMatch(/^[0-9a-f]{128}$/);
     const body = JSON.parse(String(calls[0]!.init.body));
     expect(body.request.authorAID).toBe(VECTORS.derived.authorAidPubHex);
     expect(body.request.secretHash).toBe(VECTORS.secretHash);
-    // The signature .com receives is over the create canonical bytes (the pinned form differs only in encryptedBundle).
+    // The signature .com receives verifies over the create canonical bytes under the AUTHOR AID.
     const create: CreateServiceInvite = {
       inviteId: body.request.inviteId,
       authorAID: hexToBytes(body.request.authorAID),
@@ -351,7 +495,70 @@ describe("webapp serviceInvite — wire helpers", () => {
       issuedAt: body.request.issuedAt,
     };
     const sig = hexToBytes(body.signature);
-    expect(verifyCreateServiceInvite(create, sig, authorIrk.publicKey)).toBe(true);
+    expect(verifyCreateServiceInvite(create, sig, authorAid.publicKey)).toBe(true);
+    // The retained create + createSig verify together (what /api/service-access/accept re-checks).
+    expect(verifyCreateServiceInvite({ ...create, encryptedBundle: r.create.encryptedBundle }, hexToBytes(r.createSig), authorAid.publicKey)).toBe(true);
+  });
+
+  it("createInvite (group tier) signs maxRedemptions+expiresAt + forwards approvalMode (unsigned policy)", async () => {
+    const si = await loadServiceInvite();
+    let captured: { body: any } | null = null;
+    const f = async (_url: string, init: RequestInit) => {
+      captured = { body: JSON.parse(String(init.body)) };
+      return { ok: true, json: async () => ({ created: true }) } as Response;
+    };
+    const r = await si.createInvite(
+      {
+        comBase: COM,
+        username: "alice",
+        podBaseUrl: POD,
+        authorAID: authorAid.publicKey,
+        inviteId: VECTORS.createMaxN.inviteId,
+        serviceRef: VECTORS.serviceRef,
+        bundle: { name: "Chess club" },
+        householdKey: deriveHouseholdKey(authorUmk),
+        maxRedemptions: VECTORS.createMaxN.maxRedemptions,
+        expiresAt: VECTORS.createMaxN.expiresAt,
+        approvalMode: "auto",
+        umk: authorUmk.seed,
+        signWithAccountId: signAid(authorAid.privateKey),
+      },
+      { fetch: f as unknown as typeof fetch, now: () => VECTORS.createMaxN.issuedAt, randomBytes: () => new Uint8Array(32).fill(7) },
+    );
+    // maxN/exp are in the SIGNED request; approvalMode is the .com policy field.
+    expect(captured!.body.request.maxRedemptions).toBe(VECTORS.createMaxN.maxRedemptions);
+    expect(captured!.body.request.expiresAt).toBe(VECTORS.createMaxN.expiresAt);
+    expect(captured!.body.request.approvalMode).toBe("auto");
+    const create: CreateServiceInvite = {
+      inviteId: captured!.body.request.inviteId,
+      authorAID: hexToBytes(captured!.body.request.authorAID),
+      serviceRef: captured!.body.request.serviceRef,
+      secretHash: captured!.body.request.secretHash,
+      encryptedBundle: captured!.body.request.encryptedBundle,
+      issuedAt: captured!.body.request.issuedAt,
+      maxRedemptions: captured!.body.request.maxRedemptions,
+      expiresAt: captured!.body.request.expiresAt,
+    };
+    expect(verifyCreateServiceInvite(create, hexToBytes(captured!.body.signature), authorAid.publicKey)).toBe(true);
+    expect(r.approvalMode).toBe("auto");
+  });
+
+  it("createInvite without an explicit id mints a random 128-bit id (v2 §M2 — no device fingerprint)", async () => {
+    const si = await loadServiceInvite();
+    const f = async () => ({ ok: true, json: async () => ({ created: true }) } as Response);
+    const mk = () =>
+      si.createInvite(
+        {
+          comBase: COM, username: "alice", podBaseUrl: POD, authorAID: authorAid.publicKey,
+          serviceRef: VECTORS.serviceRef, bundle: { name: "X" }, householdKey: deriveHouseholdKey(authorUmk),
+          umk: authorUmk.seed, signWithAccountId: signAid(authorAid.privateKey),
+        },
+        { fetch: f as unknown as typeof fetch },
+      );
+    const a = await mk();
+    const b = await mk();
+    expect(a.inviteId).toMatch(/^[0-9a-f]{64}$/);
+    expect(a.inviteId).not.toBe(b.inviteId);
   });
 
   it("redeemInvite sends the raw secret + an AID sig the box/.com verify, and maps 409", async () => {
@@ -376,12 +583,15 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(captured!.body.visitorAID).toBe(VECTORS.derived.friendAidPubHex);
     expect(r.firstBind).toBe(true);
     expect(r.serviceRef).toBe(VECTORS.serviceRef);
+    // AUTO-approve return shape.
+    expect(r.pending).toBe(false);
+    expect(r.approvalMode).toBe("auto");
     // The AID sig the box receives is exactly the pinned redeem signature.
     expect(captured!.body.aidSig).toBe(VECTORS.redeem.sigHex);
     const redeem = { secretHash: VECTORS.secretHash, visitorAID: friendAid.publicKey, redeemedAt: VECTORS.redeem.redeemedAt };
     expect(verifyRedeemServiceInvite(redeem, hexToBytes(captured!.body.aidSig), friendAid.publicKey)).toBe(true);
 
-    // 409 maps to a friendly "already linked" error.
+    // 409 maps to a friendly "already linked" error; 410 to expired/limit.
     const f409 = async () => ({ ok: false, status: 409, text: async () => "" }) as Response;
     await expect(
       si.redeemInvite(
@@ -389,6 +599,27 @@ describe("webapp serviceInvite — wire helpers", () => {
         { fetch: f409 as unknown as typeof fetch },
       ),
     ).rejects.toMatchObject({ code: "409" });
+    const f410 = async () => ({ ok: false, status: 410, text: async () => "" }) as Response;
+    await expect(
+      si.redeemInvite(
+        { baseUrl: POD, secretHex: VECTORS.secretHex, visitorAID: friendAid.publicKey, umk: friendUmk.seed, signWithAccountId: signAid(friendAid.privateKey) },
+        { fetch: f410 as unknown as typeof fetch },
+      ),
+    ).rejects.toMatchObject({ code: "410" });
+  });
+
+  it("redeemInvite surfaces the MANUAL-approve {pending} state (no bind yet)", async () => {
+    const si = await loadServiceInvite();
+    const f = async () =>
+      ({ ok: true, status: 200, json: async () => ({ pending: true, approvalMode: "manual", serviceRef: VECTORS.serviceRef }) }) as Response;
+    const r = await si.redeemInvite(
+      { baseUrl: POD, secretHex: VECTORS.secretHex, visitorAID: friendAid.publicKey, umk: friendUmk.seed, signWithAccountId: signAid(friendAid.privateKey) },
+      { fetch: f as unknown as typeof fetch, now: () => VECTORS.redeem.redeemedAt },
+    );
+    expect(r.pending).toBe(true);
+    expect(r.approvalMode).toBe("manual");
+    expect(r.serviceRef).toBe(VECTORS.serviceRef);
+    expect(r.boundAID).toBeUndefined();
   });
 
   it("setServiceAccessMode POSTs to the box's pinned pipe with the owner-IRK envelope", async () => {
@@ -571,20 +802,135 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(si.parseAccessDeepLink("")).toBeNull();
   });
 
-  it("locked webapp guards (no umk / signer) on create + redeem + set-mode + authorize", async () => {
+  it("locked webapp guards (no umk / signer) on create + redeem + list + set-mode + authorize", async () => {
     const si = await loadServiceInvite();
-    await expect(si.createInvite({ comBase: COM, username: "alice", podBaseUrl: POD, authorAID: authorAid.publicKey, authorDevicePub: authorIrk.publicKey, counter: 0, serviceRef: "x", bundle: { name: "y" }, householdKey: deriveHouseholdKey(authorUmk), umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
+    await expect(si.createInvite({ comBase: COM, username: "alice", podBaseUrl: POD, authorAID: authorAid.publicKey, serviceRef: "x", bundle: { name: "y" }, householdKey: deriveHouseholdKey(authorUmk), umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
     await expect(si.redeemInvite({ baseUrl: POD, secretHex: VECTORS.secretHex, visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
+    await expect(si.listInvites({ comBase: COM, username: "alice", authorAID: authorAid.publicKey, householdKey: deriveHouseholdKey(authorUmk), umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
+    await expect(si.revokeInvite({ comBase: COM, username: "alice", inviteId: VECTORS.inviteId, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
     await expect(si.setServiceAccessMode({ baseUrl: POD, serviceRef: "x", mode: "open", umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
     await expect(si.removeServiceAllow({ baseUrl: POD, serviceRef: "x", aid: VECTORS.removeAllow.aid, umk: null, signWithIrk: null })).rejects.toThrow(/unlock/i);
     await expect(si.authorizeKnock({ serverId: VECTORS.serverId, serviceRef: "x", pageId: "p", svc: "s", visitorAID: friendAid.publicKey, umk: null, signWithAccountId: null })).rejects.toThrow(/unlock/i);
   });
 
-  it("inviteSecretFromLocation parses a /invite#<secret> landing (and rejects other paths)", async () => {
+  it("listInvites (v2 §C2) AID-signs the query .com verifies + surfaces group fields", async () => {
     const si = await loadServiceInvite();
+    let captured: { url: string } | null = null;
+    const f = async (url: string) => {
+      captured = { url };
+      return {
+        ok: true,
+        json: async () => ({
+          invites: [
+            { inviteId: VECTORS.inviteId, serviceRef: VECTORS.serviceRef, encryptedBundle: "00", boundAID: null, maxRedemptions: 10, expiresAt: 1700009999999, redemptions: 3, boundAIDs: ["aa".repeat(32)], approvalMode: "auto" },
+          ],
+        }),
+      } as Response;
+    };
+    const rows = await si.listInvites(
+      { comBase: COM, username: "Alice", authorAID: authorAid.publicKey, householdKey: deriveHouseholdKey(authorUmk), serviceRef: VECTORS.serviceRef, umk: authorUmk.seed, signWithAccountId: signAid(authorAid.privateKey) },
+      { fetch: f as unknown as typeof fetch, now: () => 1700002222222 },
+    );
+    const u = new URL(captured!.url);
+    expect(u.pathname).toBe("/api/users/Alice/service-invites");
+    expect(u.searchParams.get("authorAID")).toBe(VECTORS.derived.authorAidPubHex);
+    expect(u.searchParams.get("scope")).toBe("list");
+    expect(u.searchParams.get("cursor")).toBe("0");
+    expect(u.searchParams.get("issuedAt")).toBe("1700002222222");
+    // The sig verifies under the AUTHOR AID over the LOWERCASED username canonical bytes.
+    const query = { username: "alice", authorAID: VECTORS.derived.authorAidPubHex, scope: "list" as const, cursor: 0, issuedAt: 1700002222222 };
+    const bytes = si.canonicalListQueryBytes(query);
+    expect(verifyServiceInviteListQuery(query, hexToBytes(u.searchParams.get("sig")!), authorAid.publicKey)).toBe(true);
+    void bytes;
+    // The row surfaces the v2 group fields the UI renders ("k/N").
+    expect(rows[0]!.maxRedemptions).toBe(10);
+    expect(rows[0]!.redemptions).toBe(3);
+    expect(rows[0]!.boundAIDs).toEqual(["aa".repeat(32)]);
+    expect(rows[0]!.approvalMode).toBe("auto");
+  });
+
+  it("MANUAL accept loop: friend emits the contact-AID acceptance reply; author parses + submits it", async () => {
+    const si = await loadServiceInvite();
+    const k = await loadKeystore();
+    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
+    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
+    // FRIEND emits the acceptance reply (contact-AID signed) — symmetric link/code.
+    const acceptSig = await si.signAcceptServiceInvite(
+      { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: contact.publicKey, authorAID: authorAidPub, acceptedAt: VECTORS.accept.acceptedAt, umk: friendUmk.seed },
+      k.signWithContactAccountId,
+    );
+    expect(bytesToHex(acceptSig)).toBe(VECTORS.accept.sigHex);
+    const reply = si.buildAcceptReply(
+      { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: bytesToHex(contact.publicKey), acceptedAt: VECTORS.accept.acceptedAt },
+      bytesToHex(acceptSig),
+    );
+    expect(reply.startsWith("flagship-accept:")).toBe(true);
+    // AUTHOR parses the reply (tolerating pasted whitespace).
+    const parsed = si.parseAcceptReply(`  \n${reply}\t `);
+    expect(parsed.accept.inviteId).toBe(VECTORS.accept.inviteId);
+    expect(parsed.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
+    expect(parsed.acceptSig).toBe(VECTORS.accept.sigHex);
+    // The acceptance verifies under the contact AID (what the box re-checks).
+    const accept: AcceptServiceInvite = {
+      inviteId: parsed.accept.inviteId,
+      serviceRef: parsed.accept.serviceRef,
+      contactAID: hexToBytes(parsed.accept.contactAID),
+      acceptedAt: parsed.accept.acceptedAt,
+    };
+    expect(verifyAcceptServiceInvite(accept, hexToBytes(parsed.acceptSig), contact.publicKey)).toBe(true);
+    // AUTHOR submits {accept, acceptSig, create, createSig} to ITS box's accept endpoint.
+    let captured: { url: string; body: any } | null = null;
+    const f = async (url: string, init: RequestInit) => {
+      captured = { url, body: JSON.parse(String(init.body)) };
+      return { ok: true, status: 200, json: async () => ({ bound: true, serviceRef: VECTORS.serviceRef, boundAID: VECTORS.contactAid.contactAidPubHex }) } as Response;
+    };
+    const create = { inviteId: VECTORS.accept.inviteId, authorAID: VECTORS.contactAid.authorAidPubHex, serviceRef: VECTORS.serviceRef, secretHash: VECTORS.secretHash, encryptedBundle: "00", issuedAt: VECTORS.create.issuedAt };
+    const createSig = bytesToHex(ed.sign(si.canonicalCreateBytes({ ...create, authorAID: authorAidPub }), authorAid.privateKey));
+    const r = await si.submitAccept(
+      { baseUrl: POD, accept: parsed.accept, acceptSig: parsed.acceptSig, create, createSig },
+      { fetch: f as unknown as typeof fetch },
+    );
+    expect(captured!.url).toBe(`${POD}/api/service-access/accept`);
+    expect(captured!.body.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
+    expect(captured!.body.acceptSig).toBe(VECTORS.accept.sigHex);
+    expect(captured!.body.create.inviteId).toBe(VECTORS.accept.inviteId);
+    expect(captured!.body.createSig).toBe(createSig);
+    expect(r.bound).toBe(true);
+    expect(r.boundAID).toBe(VECTORS.contactAid.contactAidPubHex);
+    // A bad / non-acceptance reply parses to null.
+    expect(si.parseAcceptReply("flagship-accept:!!notbase64!!")).toBeNull();
+    expect(si.parseAcceptReply("nonsense")).toBeNull();
+  });
+
+  it("inviteSecretFromLocation + inviteContextFromLocation parse v1 + v2 /invite landings", async () => {
+    const si = await loadServiceInvite();
+    // v1 bare secret.
     expect(si.inviteSecretFromLocation({ pathname: "/invite", hash: `#${VECTORS.secretHex}` })).toBe(VECTORS.secretHex);
     expect(si.inviteSecretFromLocation({ pathname: "/invite/", hash: `#k=${VECTORS.secretHex}` })).toBe(VECTORS.secretHex);
     expect(si.inviteSecretFromLocation({ pathname: "/home", hash: `#${VECTORS.secretHex}` })).toBeNull();
     expect(si.inviteSecretFromLocation({ pathname: "/invite", hash: "#nothex" })).toBeNull();
+    // v1 context — secret only.
+    expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${VECTORS.secretHex}` })).toEqual({
+      secret: VECTORS.secretHex,
+      authorAID: null,
+      inviteId: null,
+    });
+    // v2 context — carries the author AID + inviteId from the fragment.
+    const v2Hash = `#k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`;
+    expect(si.inviteContextFromLocation({ pathname: "/invite", hash: v2Hash })).toEqual({
+      secret: VECTORS.secretHex,
+      authorAID: VECTORS.derived.authorAidPubHex,
+      inviteId: VECTORS.inviteId,
+    });
+    // buildInviteLink round-trips both forms.
+    expect(si.buildInviteLink("https://home.alice.flagship.services", VECTORS.secretHex)).toBe(
+      `https://home.alice.flagship.services/invite#${VECTORS.secretHex}`,
+    );
+    expect(
+      si.buildInviteLink("https://home.alice.flagship.services", VECTORS.secretHex, {
+        authorAID: hexToBytes(VECTORS.derived.authorAidPubHex),
+        inviteId: VECTORS.inviteId,
+      }),
+    ).toBe(`https://home.alice.flagship.services/invite${v2Hash}`);
   });
 });
