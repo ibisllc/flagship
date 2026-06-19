@@ -51,6 +51,12 @@
     "signerKey": "friendAid",
     "sigHex": "8d01d3ff898993ec736002158dd4f454cfd37cb3ad41aea59aba1b7aafe44b1d04703d611d0d3b15a99e796e33d778a4457cb86209f31b87f8b1b2b26fe59701"
   },
+  "removeAllow": {
+    "aid": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+    "issuedAt": 1700005000000,
+    "signerKey": "authorIrk",
+    "sigHex": "8e572f9bbe7b62ea3d6aca2241e902ab0e7628cc1ee948ccb8c8b95786a76e60818bf69db19331ba85ae634b9ef692faf4b1566b7b6a702cfa53024539527406"
+  },
   "bundle": {
     "name": "Alex",
     "photo": "data:image/png;base64,AAAA"
