@@ -8,6 +8,12 @@
 > transcript, or screenshots). Update this file as proofs land. Last updated
 > **2026-06-18**.
 >
+> **POLICY (owner, 2026-06-18): EVERY improvement gets logged here AND merged to
+> `main`** — do NOT strand prod fixes/features on feature or worker branches.
+> Gym-only test scaffolding (drivers, `__gymAdopt`/`__gymCreate` seams, the gym
+> pin, `wrangler.gym.toml`) stays gym-side; everything that improves the product
+> lands on `main`.
+>
 > Conventions: boxes are `home.<user>.gym.flagship.services` (gym env). Commits
 > are on `main` unless tagged `(gym)`. Evidence lives under a worker's
 > `gym-results/<area>/` (gitignored — local artifacts). Secrets:
@@ -54,7 +60,7 @@ pipe; flagshipserver.com never in the credential path). All boxes torn down afte
   - **Multi-tier URLs (#88) — BUILT + PROVEN in gym (boxes wapk13lvf→wapk4bdk5, 2026-06-18):** ALL THREE tiers now work in gym for an AI-built service. **canonical** `<svc>.home.<user>` → 200 (per-box wildcard). **short-canonical `<svc>.<user>` (tier-2 leader-routed)** → `curl -i` **200** (LE cert `CN=tiny-greeter.wapk4bdk5.gym.flagship.services`, YR2) — `gym-results/tier2-build-proof/short-canonical.txt`. **voi.ci-style** `gym.flagshipserver.com/s/<code>` → **302** → 200 — `voici.txt`. (voi.ci/* itself is prod-only + its origin 523s, so gym uses `/s/<code>` on the gym apex.)
     - The tier-2 build closed 4 gaps + found **2 MORE prod routing bugs**: the hub allocator never slot-held a directly-presented short canonical → `SSL_ERROR_SYSCALL`; the DNS-broker policy denied the `service-cert` authority (wire types existed, dispatch fell through).
     - **5 prod-mechanism hunks on `origin/finale-tier2` (tsc clean, 338 tests):** `server-daemon/runtime.ts` (apex threading + `tier2ServiceLabel` — serve the app on its tier-2 SNI), `apps/web/src/tunnel/allocator.ts` (short-canonical slot claim, 2-label-gated, +tests), `apps/dns-broker/src/policy.ts` (service-cert authority dispatch), `apps/com/controlPlaneRoutes.ts` (usernames→dns01), `control-plane/serverRegister.ts` (publish per-user `*.<user>` wildcard A/AAAA, +tests). Gym-only: `route.ts` `/s/<code>` + `wrangler.gym.toml` + drivers (`tier2-drive.ts` etc.).
-    - **MAIN-LANDING HELD pending owner nod** — these complete the on-main cert-model A′ tier-2 (Phase 5) + are what A′ meant by "weigh the per-user A record with tier-2 work", BUT landing them changes PROD DNS/hub routing, and the tier-2 CLIENT mint/install UX is still missing (the standing follow-up), so prod tier-2 isn't user-usable yet — only the mechanism. Gym is tier-2-enabled NOW (gym Worker deployed; provision with `installerGitRef=finale-tier2` for the tier-2 daemon). The earlier "blocked" finding (box wapk13lvf, `finale-multitier`/`multitier-drive.ts`) is what drove this build.
+    - **LANDED ON MAIN (`4acfea3d`, 2026-06-18)** — tsc clean, 1406 touched-area tests pass (incl. F's revocation enforcement coexisting). Completes the on-main cert-model A′ tier-2 (Phase 5). The tier-2 CLIENT mint/install UX is still the standing follow-up (the box self-mints + the driver delivers the entitlement in gym), so prod tier-2 isn't user-usable yet — only the mechanism. Gym is tier-2-enabled (gym Worker deployed; provision with `installerGitRef=finale-tier2` for the tier-2 daemon — fold that into `main` once the box pulls the tier-2 daemon from `main`). Gym-only `/s` redirect route + drivers stay on `origin/finale-tier2`.
   - **iOS vibe-code CHAT drive** vs a real box — a real chat turn guiding the live AI → deploy → 200 (native XCUITest, full-platform box, live streaming through the client + the app's AI-key step for BYOK).
   - **Android vibe-code CHAT drive** vs a real box (Compose UI test). NOTE: never run iOS + Android native builds concurrently (16GB Mac → DerivedData lock / OOM).
   - **Notifications** (AI-chat alerts) — must work via **(a) manufacturer push (APNs/FCM)** AND **(b) long-poll, foreground AND background → app-initiated LOCAL notification**, surfaced in the **teal top sliver** (`ActiveOperationsCenter`). Real APNs/FCM delivery to a device needs TestFlight/Play (owner-gated; not on a store yet) — the long-poll → local → sliver path is testable now; the push path is a seam to wire/verify.
