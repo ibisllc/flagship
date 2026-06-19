@@ -147,6 +147,27 @@ the code → app Settings → **"Process URL"** paste. Never deactivate the page
 - The service (or the harness) can stop a session anytime.
 - Settings → **"Open secured sessions"** lists `{serviceUrl, browserAgent, startTime}` per held secretId + Stop.
 
+## v2 hardening — STATUS: BUILT on main (2026-06-19)
+The full v2 redesign is integrated + green on main (protocol `21a9de5d` → backend `6280ec88` → clients
+Android/iOS/webapp → link reconciliation `189d93e2`). Closes the verified critique findings: **C1** (box
+verifies the owner's signed create + secretHash-match — `.com` can't forge a binding), **C2** (owner-auth on
+the invite list), **H3** (pairwise contact AIDs — no cleartext friend-graph on `.com`), **H4** (revocation
+convergence poller + instant prune), **H1** (3 invite tiers incl. the manual out-of-band accept-loop), plus
+M2/M3/M4/M5/L. All 3 clients interop on the canonical invite link `<secret>&a=<authorAID>&i=<inviteId>`
+(fixed-string round-trip tests per surface). Gates: protocol 682 · backend 3137 · iOS 1146 · Android 989 ·
+webapp 1392 · tsc clean.
+
+**Remaining follow-ups (enhancements — the feature WORKS without them):**
+- **Manual-finalize is device-bound** — each client retains its own `{create, createSig}` locally (the box
+  strips them from the friend's `{pending}` redeem + `.com`'s list doesn't return them), so a manual invite
+  must be finalized on its CREATING device. Proper fix: the box re-fetches + verifies the create from `.com`
+  by inviteId at `/api/service-access/accept` (any-device finalize, drop the client caches).
+- **`/invite` web page** should emit the canonical `&a=`/`&i=` for the universal-link path (the
+  `flagship://invite` app hand-off already carries them).
+- **Acceptance-reply link** (`flagship://invite-accept?…`) cross-client interop not yet pinned with a vector
+  (the invite link is; verify when touching the finalize flow).
+- Retire the dual-accept IRK-create path once nothing else needs it (low priority — dual-accept is safe).
+
 ## v2 hardening — box-as-authority + pairwise AIDs + author-confirmed binding (2026-06-19, from the design critique)
 
 A skeptical design review (findings verified against the code) surfaced the v1 gap: the design
