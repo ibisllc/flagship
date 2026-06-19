@@ -248,39 +248,6 @@ public struct Keystore {
         return key
     }
 
-    /// Service-access READ path: unwrap the UMK ONCE and return the author's
-    /// stable AID pub + the household key, so listing/decrypting the allow-list
-    /// prompts Face ID exactly once (not twice — one per derivation).
-    public static func deriveAidPubAndHousehold(reason: String) async throws -> (aidPub: Data, household: Data) {
-        let umk = try await unwrappedUMK(reason: reason)
-        let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umkData),
-              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
-        else {
-            throw KeystoreError.derivationFailed("AID + household")
-        }
-        return (aidPub, household)
-    }
-
-    /// Account-open fast path for service-access gating: unwrap the UMK ONCE
-    /// and return the author's IRK signer + their stable AID pub + the household
-    /// key, so creating an invite (IRK-sign the create + seal the bundle + show
-    /// the inviteId bound to the AID) prompts Face ID exactly once.
-    public static func deriveInviteAuthorKeys(
-        reason: String
-    ) async throws -> (irk: Curve25519.Signing.PrivateKey, aidPub: Data, household: Data) {
-        let umk = try await unwrappedUMK(reason: reason)
-        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
-        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
-        let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umkData),
-              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
-        else {
-            throw KeystoreError.derivationFailed("invite author keys")
-        }
-        return (irk, aidPub, household)
-    }
-
     /// Gating v2 (Wave 3) author path: unwrap the UMK ONCE and return the author's
     /// stable AID PRIVATE key + the household key in one biometric. v2 SIGNS the
     /// create / revoke / list-query with the AID (not the rotating IRK), so the
