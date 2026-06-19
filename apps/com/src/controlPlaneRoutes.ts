@@ -26,6 +26,10 @@ import {
   handleHubBlessing,
   handleStoreTrustException,
   handleListTrustExceptions,
+  handleCreateServiceInvite,
+  handleRedeemServiceInvite,
+  handleRevokeServiceInvite,
+  handleListServiceInvites,
   handleCleanupApex,
   handleCompleteRePair,
   handleDeviceDisconnect,
@@ -432,6 +436,12 @@ const ROUTE_RE = {
   HUB_BLESSING: /^\/api\/services\/hub-blessing$/,
   // Owner-signed, per-cert maintainer-trust exceptions, synced via `.com`.
   TRUST_EXCEPTIONS: /^\/api\/users\/([^/]+)\/trust-exceptions$/,
+  // Service-access capability invites (docs/service-access-gating.md).
+  // create (POST) + list (GET) on the base path; revoke is a distinct sub-path
+  // checked first; redeem is account-agnostic (the friend may be a stranger).
+  SERVICE_INVITE_REVOKE: /^\/api\/users\/([^/]+)\/service-invites\/revoke$/,
+  SERVICE_INVITES: /^\/api\/users\/([^/]+)\/service-invites$/,
+  SERVICE_INVITE_REDEEM: /^\/api\/service-invites\/redeem$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
@@ -973,6 +983,46 @@ export async function tryControlPlane(
       await handleListTrustExceptions(
         { storage: storage.trustExceptions },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+
+  // Service-access capability invites (docs/service-access-gating.md). create +
+  // revoke are author-IRK-signed + gated on the registered IRK; redeem is
+  // friend-AID-signed + account-agnostic. `.com` stores ciphertext + the
+  // secretHash only; the box does the authoritative allow-list write at redeem.
+  if (method === "POST" && ROUTE_RE.SERVICE_INVITE_REDEEM.test(path)) {
+    return finish(
+      await handleRedeemServiceInvite(
+        { invites: storage.serviceInvites, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKE))) {
+    return finish(
+      await handleRevokeServiceInvite(
+        { invites: storage.serviceInvites, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
+    return finish(
+      await handleCreateServiceInvite(
+        { invites: storage.serviceInvites, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
+    return finish(
+      await handleListServiceInvites(
+        { invites: storage.serviceInvites, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("authorAID"),
       ),
     );
   }
