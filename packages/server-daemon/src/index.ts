@@ -250,9 +250,24 @@ async function main(): Promise<void> {
   const autoUnlockSuppressor: AutoUnlockSuppressor = new BootUnlockModeSuppressor();
   const hostPowerRunner: HostPowerRunner = new SystemctlPowerRunner();
 
-  const orders = pskPubHex
+  // The orders endpoint verifies phone orders against a "phone signing key".
+  // Historically that was a per-server delegated key persisted to
+  // /var/flagship/psk.pub.hex — but the phone discards its private half AND the
+  // installer never writes the file, so on a real box the endpoint was
+  // permanently disabled (no paired sessions ⇒ the /api/screens/* BFF 401s ⇒
+  // the app's server pages never load). The phone + webapp actually sign owner
+  // orders (add-paired-session, …) with the OWNER IRK, so fall the verification
+  // key back to the config-pinned owner IRK — the same root authority that
+  // /api/power, /api/journal, and /api/front-page already verify against. This
+  // is what lets a real box mint the paired session its BFF needs.
+  const ordersVerifyPub: Uint8Array | null = pskPubHex
+    ? hexToBytes(pskPubHex.trim())
+    : cfg
+      ? cfg.irkPublicKey
+      : null;
+  const orders = ordersVerifyPub
     ? {
-        pskPub: hexToBytes(pskPubHex.trim()),
+        pskPub: ordersVerifyPub,
         executor: defaultExecutor({
           backupLoop,
           identity: identityKeypair,
@@ -413,8 +428,11 @@ async function main(): Promise<void> {
       updateServer,
     });
     servicePlatformRefForServer.current = runtime.servicePlatform;
-    if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
-    else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
+    if (orders) {
+      console.log(
+        `[daemon] orders-from-user endpoint enabled (verify key: ${pskPubHex ? "psk.pub.hex" : "owner IRK"})`,
+      );
+    } else console.log(`[daemon] no owner IRK / psk; orders endpoint disabled`);
     console.log(
       `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,
     );
