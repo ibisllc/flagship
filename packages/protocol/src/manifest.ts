@@ -250,7 +250,12 @@ export function parseManifest(input: unknown): ManifestParseResult {
   }
 
   const runtime = parseRuntime(m.runtime, e);
-  const data = parseData(m.data, e);
+  // `data` is OPTIONAL: a static site / a service with no data stores legitimately
+  // omits it. Absent ⇒ an empty AppData (identical to `data:{}`, which already
+  // validated), so the manifest always carries a data object downstream and an
+  // AI-authored minimal manifest no longer fails deploy with "data must be an
+  // object". A PRESENT-but-malformed `data` (e.g. a string) still errors.
+  const data = parseData(m.data ?? {}, e);
   const network = parseNetwork(m.network, e);
   const access = parseAccess(m.access, e);
   const migration = parseMigration(m.migration, e);
