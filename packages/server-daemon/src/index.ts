@@ -32,6 +32,11 @@ import {
 import { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 import { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 import { buildJournalHttp, JournalctlReader } from "./journalHttp.js";
+import {
+  buildAccessEnforcementHandler,
+  buildServiceAccessHttp,
+  ServiceAccessStore,
+} from "./serviceAccess.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -1409,6 +1414,42 @@ async function wireOwnerHandlers(deps: {
       reader: new JournalctlReader(),
     }),
   );
+  // Per-service access gating (docs/service-access-gating.md): the owner-IRK
+  // set-mode endpoint + the friend redeem endpoint + the serve-path enforcement.
+  // The household key (for the invite-bundle decrypt) is provisioned to the box
+  // over its pinned pipe like the SWK; absent ⇒ bundle decrypt is unavailable
+  // (the gating itself still works). Default mode is OPEN, so existing services
+  // are unaffected until the owner restricts one.
+  const accessStore = new ServiceAccessStore();
+  await accessStore.load();
+  const householdHex =
+    process.env.FLAGSHIP_HOUSEHOLD_KEY_HEX ??
+    (await tryReadFile("/var/flagship/household-key.hex"));
+  const access = buildServiceAccessHttp({
+    serverId: env.serverFqdn,
+    ownerIrkPub: cfg.irkPublicKey,
+    store: accessStore,
+    serviceInstalled: (ref) =>
+      (deps.servicePlatformRef.current?.list() ?? []).some((a) => a.serviceId === ref),
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+    householdKey: householdHex ? hexToBytes(householdHex.trim()) : undefined,
+  });
+  runtime.addHandler(access.handle);
+  // Enforcement: a restricted service's per-label reverse proxy is fronted by
+  // this guard. A request to `<urlLabel>.<serverFqdn>` resolves to its
+  // installed `<creator>-<slug>`; OPEN services + unknown labels fall through.
+  runtime.addHandler(
+    buildAccessEnforcementHandler(access, (req) => {
+      const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
+      const suffix = `.${env.serverFqdn.toLowerCase()}`;
+      if (!host.endsWith(suffix) || host.length === suffix.length) return null;
+      const label = host.slice(0, host.length - suffix.length);
+      // Only the leftmost single label is a service label (no nested dots).
+      if (label.includes(".")) return null;
+      const svc = deps.servicePlatformRef.current?.byLabel(label);
+      return svc ? svc.serviceId : null;
+    }),
+  );
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());
   console.log(
@@ -1951,6 +1992,16 @@ export type {
 export { buildDeadManHttp, buildPowerHttp } from "./deadManHttp.js";
 export { buildFrontPageHttp, FrontPageStore } from "./frontPage.js";
 export { buildJournalHttp, JournalctlReader, type JournalReader } from "./journalHttp.js";
+export {
+  buildServiceAccessHttp,
+  buildAccessEnforcementHandler,
+  decideServiceAccess,
+  ServiceAccessStore,
+  VISIT_PROOF_HEADER,
+  type ServiceAccessHttp,
+  type ServiceAccessHttpOptions,
+  type AccessDecision,
+} from "./serviceAccess.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
   buildInviteHandler,
