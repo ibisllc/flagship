@@ -29,6 +29,7 @@ export const TAG_REVOKE = "flagship/service-invite/revoke/v1";
 export const TAG_INVITE_ID = "flagship/service-invite/id/v1";
 export const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 export const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
+export const TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1";
 export const TAG_VISIT = "flagship/service-visit/v1";
 export const TAG_KNOCK = "flagship/service-knock/v1";
 
@@ -242,6 +243,14 @@ export function canonicalSetAccessModeBytes(s) {
     throw err(`service access mode must be 'open' or 'restricted'`, "400");
   }
   return enc.encode([TAG_ACCESS_MODE, s.serverId, s.serviceRef, s.mode, s.issuedAt].join("|"));
+}
+
+/** flagship/service-allow-remove/v1 | serverId | serviceRef | aid | issuedAt */
+export function canonicalRemoveServiceAllowBytes(s) {
+  validateNoSepCtrl("serverId", s.serverId);
+  validateNoSepCtrl("serviceRef", s.serviceRef);
+  validateNoSepCtrl("aid", s.aid);
+  return enc.encode([TAG_ALLOW_REMOVE, s.serverId, s.serviceRef, s.aid, s.issuedAt].join("|"));
 }
 
 /** flagship/service-visit/v1 | serverId | serviceRef | hex(visitorAID) | issuedAt */
@@ -479,6 +488,44 @@ export async function setServiceAccessMode(args, deps = {}) {
   }
   const body = await resp.json().catch(() => ({}));
   return { ok: true, serverId, serviceRef, mode, body };
+}
+
+/**
+ * OWNER-IRK-sign + POST a single-AID prune to the box's pinned pipe
+ * (POST <pod>/api/service-access/allow-remove). The `.com` invite revoke records
+ * the revocation but never reaches the box (the box's allow-list is add-only),
+ * so the admin fires THIS alongside it — it's what actually drops the friend's
+ * access (the box re-checks the allow-list per request, so a live browser cookie
+ * bound to that AID dies too). `aid` = the friend's bound AID (lowercase hex).
+ * Mirrors setServiceAccessMode's envelope.
+ */
+export async function removeServiceAllow(args, deps = {}) {
+  const { baseUrl, serviceRef, aid, umk, signWithIrk } = args;
+  if (!umk || typeof signWithIrk !== "function") throw err("unlock the webapp first", "400");
+  if (typeof aid !== "string" || !/^[0-9a-f]{64}$/i.test(aid)) throw err("invalid AID", "400");
+  const base = podBase(baseUrl);
+  const serverId = new URL(base).host;
+  const aidLower = aid.toLowerCase();
+  const now = (deps.now || Date.now)();
+  const f = deps.fetch || fetch;
+  const order = { serverId, serviceRef, aid: aidLower, issuedAt: now };
+  const sig = await signWithIrk(umk, canonicalRemoveServiceAllowBytes(order));
+  let resp;
+  try {
+    resp = await f(`${base}/api/service-access/allow-remove`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request: order, signature: bytesToHex(sig) }),
+    });
+  } catch {
+    throw err("could not reach the server", "network");
+  }
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw err(`request failed (${resp.status}): ${text}`.trim(), String(resp.status));
+  }
+  const body = await resp.json().catch(() => ({}));
+  return { ok: true, serverId, serviceRef, aid: aidLower, removed: body.removed === true, body };
 }
 
 /**
