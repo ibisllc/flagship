@@ -151,6 +151,21 @@ class ServiceInviteVectorTest {
         assertNull(openedNameOnly.photo)
     }
 
+    @Test fun opensTsSealedBundle() {
+        // Cross-IMPLEMENTATION open: a bundle sealed by @flagship/protocol (TS)
+        // opens on Kotlin under the SAME household key + inviteId (the box stores
+        // TS/webapp-sealed ciphertext; the phone must read it). Hex produced by
+        // sealInviteBundle in the TS protocol over the fixture household key.
+        val r = root()
+        val household = ServerKeys.deriveHouseholdKey(authorUmk(r))
+        val inviteId = r.s("inviteId")
+        val tsSealed = "cf6bb0370255d5d892aede3f0f676681d6753e5baba18fe47f4905401110fed5" +
+            "5e1d6e2878d1afb4aea9228fe186578c184c6164fd32fa35eaf5585c1f0a5101f9be11ad350eb85aed93f82754578583"
+        val opened = ServiceInvite.openBundle(tsSealed, household, inviteId)
+        assertEquals("Alex", opened.name)
+        assertEquals("data:image/png;base64,AAAA", opened.photo)
+    }
+
     @Test fun bundlePlaintextEscapesLikeProtocol() {
         val r = root()
         val household = ServerKeys.deriveHouseholdKey(authorUmk(r))

@@ -233,6 +233,22 @@ final class ServiceInviteVectorTests: XCTestCase {
         XCTAssertNil(openedNameOnly.photo)
     }
 
+    /// Cross-IMPLEMENTATION open: a bundle sealed by @flagship/protocol (TS)
+    /// must open on Swift under the SAME household key + inviteId. This is the
+    /// real interop guarantee (the box stores TS/webapp-sealed ciphertext; the
+    /// phone must read it). The hex was produced by sealInviteBundle in the TS
+    /// protocol over the fixture household key + inviteId.
+    func testOpensTsSealedBundle() throws {
+        let v = try load()
+        let household = ServiceInvite.deriveHouseholdKey(umkSeed: authorUmk(v))!
+        let inviteId = v.root["inviteId"] as! String
+        // {name:"Alex", photo:"data:image/png;base64,AAAA"} sealed by TS.
+        let tsSealed = "cf6bb0370255d5d892aede3f0f676681d6753e5baba18fe47f4905401110fed55e1d6e2878d1afb4aea9228fe186578c184c6164fd32fa35eaf5585c1f0a5101f9be11ad350eb85aed93f82754578583"
+        let opened = try ServiceInvite.openBundle(tsSealed, householdKey: household, inviteId: inviteId)
+        XCTAssertEqual(opened.name, "Alex")
+        XCTAssertEqual(opened.photo, "data:image/png;base64,AAAA")
+    }
+
     /// The plaintext we seal must be byte-identical to @flagship/protocol's
     /// (name first, photo only when present) — assert the exact JSON shape, the
     /// one byte-sensitive part the random nonce doesn't cover.
