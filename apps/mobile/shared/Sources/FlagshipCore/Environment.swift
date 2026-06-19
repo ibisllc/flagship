@@ -118,6 +118,22 @@ public extension EnvironmentValues {
     }
 }
 
+/// Per-service access gating (docs/service-access-gating.md): the owner-IRK
+/// toggle + allow-list manager (box + `.com`) and the friend AID-signed redeem
+/// (box). Box calls ride the pinned canonical pipe; `.com` calls (invite
+/// create/list/revoke) ride a public-CA session. Defaults to the in-process
+/// Mock so previews/tests are inert.
+private struct ServiceAccessClientKey: EnvironmentKey {
+    static let defaultValue: any ServiceAccessClient = MockServiceAccessClient()
+}
+
+public extension EnvironmentValues {
+    var serviceAccessClient: any ServiceAccessClient {
+        get { self[ServiceAccessClientKey.self] }
+        set { self[ServiceAccessClientKey.self] = newValue }
+    }
+}
+
 /// Box-direct delivery for the owner-signed service uninstall
 /// (`DELETE /api/services/:id`). Same pinned canonical pipe + IRK-signature
 /// trust posture as the front-page / lock-power clients. Defaults to the

@@ -220,6 +220,53 @@ public struct Keystore {
         return (irk, stkPub)
     }
 
+    /// Stable Account Identity Key (AID) — the NON-rotating account identity
+    /// (`HKDF(umk, "flagship/account-id/v1")`, via `ServiceInvite`), used for
+    /// service-access gating: the friend signs the redeem/visit with it, and an
+    /// author's recorded identity in invites. Distinct from the versioned IRK
+    /// (which signs active orders). Behind one biometric. See
+    /// docs/service-access-gating.md.
+    public static func deriveAccountId(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aid = ServiceInvite.deriveAccountId(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("account identity key (AID)")
+        }
+        return aid
+    }
+
+    /// The household AEAD key (`HKDF(umk, "flagship/household-key/v1")`, via
+    /// `ServiceInvite`) that seals the `{name, photo?}` invite bundle. Every
+    /// device of the account derives the same key (so a sibling can open it);
+    /// `.com` never holds the UMK → stores ciphertext only.
+    public static func deriveHouseholdKey(reason: String) async throws -> Data {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let key = ServiceInvite.deriveHouseholdKey(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("household key")
+        }
+        return key
+    }
+
+    /// Account-open fast path for service-access gating: unwrap the UMK ONCE
+    /// and return the author's IRK signer + their stable AID pub + the household
+    /// key, so creating an invite (IRK-sign the create + seal the bundle + show
+    /// the inviteId bound to the AID) prompts Face ID exactly once.
+    public static func deriveInviteAuthorKeys(
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, aidPub: Data, household: Data) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let aidPub = ServiceInvite.deriveAccountIdPub(umkSeed: umkData),
+              let household = ServiceInvite.deriveHouseholdKey(umkSeed: umkData)
+        else {
+            throw KeystoreError.derivationFailed("invite author keys")
+        }
+        return (irk, aidPub, household)
+    }
+
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
     ///
     /// Reads `currentIrkVersion()` from Keychain (defaulting to v1 on
