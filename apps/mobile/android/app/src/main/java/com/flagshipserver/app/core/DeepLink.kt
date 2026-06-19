@@ -147,13 +147,16 @@ sealed interface DeepLink {
         }
 
         /** Pull a 64-hex capability secret from a fragment / candidate string.
-         *  Accepts a bare `<64hex>` or the `k=<64hex>` form (mirrors the
-         *  webapp's inviteSecretFromLocation + iOS secretFromFragment). */
+         *  Accepts a bare `<64hex>`, the `k=<64hex>` form, or a LEADING bare
+         *  `<64hex>` followed by other params (v2: `#<secret>&a=<authorAID>`).
+         *  Mirrors the webapp's inviteSecretFromLocation + iOS secretFromFragment. */
         fun secretFromFragment(raw: String?): String? {
             var s = raw?.takeIf { it.isNotEmpty() } ?: return null
             if (s.startsWith("#")) s = s.substring(1)
             Regex("(?:^|[?&])k=([0-9a-fA-F]{64})").find(s)?.let { return it.groupValues[1].lowercase() }
             if (Regex("^[0-9a-fA-F]{64}$").matches(s)) return s.lowercase()
+            // Leading bare secret with trailing params (e.g. `<secret>&a=<author>`).
+            Regex("^([0-9a-fA-F]{64})(?:[&?]|$)").find(s)?.let { return it.groupValues[1].lowercase() }
             return null
         }
     }
