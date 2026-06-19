@@ -62,6 +62,13 @@ class ServiceInviteVectorTest {
     private fun authorIrk(r: JsonObject) = ServerKeys.deriveProtocolIrk(authorUmk(r))
     private fun friendAid(r: JsonObject) = ServerKeys.deriveAccountId(friendUmk(r))
 
+    // v2 Wave 3 signers: the author's STABLE AID (create/revoke move to it) and
+    // the friend's PER-AUTHOR contact AID (the redemption identity).
+    private fun authorAid(r: JsonObject) = ServerKeys.deriveAccountId(authorUmk(r))
+    private fun authorAidPub(r: JsonObject) = ServerKeys.deriveAccountIdPub(authorUmk(r))
+    private fun friendContactAid(r: JsonObject) =
+        ServerKeys.deriveContactAccountId(friendUmk(r), authorAidPub(r))
+
     @Test fun derivedKeysMatchFixture() {
         val r = root()
         val d = r.obj("derived")
@@ -216,5 +223,91 @@ class ServiceInviteVectorTest {
         val bytes = ServiceInvite.canonicalRevoke(r.s("inviteId"), 1700)
         val irkPub = HexUtil.decode(r.obj("derived").s("authorIrkPubHex"))!!
         assertFalse(ServiceInvite.verify(ByteArray(64), bytes, irkPub))
+    }
+
+    // ── v2 Wave 3 ─────────────────────────────────────────────────────────
+
+    @Test fun contactAccountIdMatchesFixture() {
+        // contactAid = deriveContactAccountId(friendUmk, authorAid.pub) — the
+        // friend's PER-AUTHOR pseudonym (unlinkable across authors).
+        val r = root()
+        val ca = r.obj("contactAid")
+        // The fixture pins the author AID pub it derives the contact id from.
+        assertEquals(ca.s("authorAidPubHex"), HexUtil.encode(authorAidPub(r)))
+        assertEquals(
+            ca.s("contactAidPubHex"),
+            HexUtil.encode(ServerKeys.deriveContactAccountIdPub(friendUmk(r), authorAidPub(r))),
+        )
+    }
+
+    @Test fun createAidSignatureVerifies() {
+        // Wave 3: clients sign create with the STABLE AID (box-as-authority verifies
+        // against the owner AID). Same pre-image as the v1 `create` vector.
+        val r = root()
+        val c = r.obj("createAid")
+        val bytes = ServiceInvite.canonicalCreate(
+            r.s("inviteId"), authorAidPub(r), r.s("serviceRef"), r.s("secretHash"),
+            c.s("encryptedBundlePlaceholder"), c.l("issuedAt"),
+        )
+        assertTrue(ServiceInvite.verify(HexUtil.decode(c.s("sigHex"))!!, bytes, authorAidPub(r)))
+        assertEquals(c.s("sigHex"), HexUtil.encode(ServiceInvite.sign(bytes, authorAid(r))))
+    }
+
+    @Test fun revokeAidSignatureVerifies() {
+        val r = root()
+        val rv = r.obj("revokeAid")
+        val bytes = ServiceInvite.canonicalRevoke(r.s("inviteId"), rv.l("issuedAt"))
+        assertTrue(ServiceInvite.verify(HexUtil.decode(rv.s("sigHex"))!!, bytes, authorAidPub(r)))
+        assertEquals(rv.s("sigHex"), HexUtil.encode(ServiceInvite.sign(bytes, authorAid(r))))
+    }
+
+    @Test fun acceptSignatureVerifies() {
+        // The MANUAL-approve acceptance is signed by the friend's contact AID over
+        // { inviteId, serviceRef, contactAID, acceptedAt }.
+        val r = root()
+        val a = r.obj("accept")
+        val contactPub = ServerKeys.deriveContactAccountIdPub(friendUmk(r), authorAidPub(r))
+        val bytes = ServiceInvite.canonicalAccept(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"))
+        assertTrue(ServiceInvite.verify(HexUtil.decode(a.s("sigHex"))!!, bytes, contactPub))
+        assertEquals(
+            a.s("sigHex"),
+            HexUtil.encode(ServiceInvite.signAcceptServiceInvite(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"), friendContactAid(r))),
+        )
+    }
+
+    @Test fun createMaxNSignatureVerifies() {
+        // A GROUP create: maxRedemptions + expiresAt appended to the canonical
+        // bytes (authorIrk-signed in the fixture; the bytes are what we pin).
+        val r = root()
+        val c = r.obj("createMaxN")
+        val bytes = ServiceInvite.canonicalCreate(
+            c.s("inviteId"), authorAidPub(r), r.s("serviceRef"), r.s("secretHash"),
+            c.s("encryptedBundlePlaceholder"), c.l("issuedAt"),
+            c.l("maxRedemptions").toInt(), c.l("expiresAt"),
+        )
+        val irkPub = HexUtil.decode(r.obj("derived").s("authorIrkPubHex"))!!
+        assertTrue(ServiceInvite.verify(HexUtil.decode(c.s("sigHex"))!!, bytes, irkPub))
+        assertEquals(c.s("sigHex"), HexUtil.encode(ServiceInvite.sign(bytes, authorIrk(r))))
+    }
+
+    @Test fun createWithoutMaxN_isV1ByteIdentical() {
+        // A create with no maxN/exp must sign byte-identically to the v1 `create`.
+        val r = root()
+        val c = r.obj("create")
+        val v1 = ServiceInvite.canonicalCreate(
+            r.s("inviteId"), authorAidPub(r), r.s("serviceRef"), r.s("secretHash"),
+            c.s("encryptedBundlePlaceholder"), c.l("issuedAt"),
+        )
+        val v1Again = ServiceInvite.canonicalCreate(
+            r.s("inviteId"), authorAidPub(r), r.s("serviceRef"), r.s("secretHash"),
+            c.s("encryptedBundlePlaceholder"), c.l("issuedAt"), null, null,
+        )
+        assertEquals(HexUtil.encode(v1), HexUtil.encode(v1Again))
+    }
+
+    @Test fun randomInviteId_is64Hex() {
+        val id = ServiceInvite.randomInviteId()
+        assertTrue(Regex("^[0-9a-f]{64}$").matches(id))
+        assertTrue(id != ServiceInvite.randomInviteId())
     }
 }

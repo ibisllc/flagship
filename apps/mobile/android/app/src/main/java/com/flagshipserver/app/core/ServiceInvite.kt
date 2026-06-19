@@ -43,12 +43,14 @@ object ServiceInvite {
     const val TAG_CREATE = "flagship/service-invite/create/v1"
     const val TAG_REDEEM = "flagship/service-invite/redeem/v1"
     const val TAG_REVOKE = "flagship/service-invite/revoke/v1"
+    const val TAG_ACCEPT = "flagship/service-invite/accept/v1"
     const val TAG_INVITE_ID = "flagship/service-invite/id/v1"
     const val TAG_BUNDLE = "flagship/service-invite/bundle/v1"
     const val TAG_ACCESS_MODE = "flagship/service-access-mode/v1"
     const val TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1"
     const val TAG_VISIT = "flagship/service-visit/v1"
     const val TAG_KNOCK = "flagship/service-knock/v1"
+    const val TAG_LIST_QUERY = "flagship/service-invite-list/v1"
 
     private val rng = SecureRandom()
 
@@ -66,6 +68,13 @@ object ServiceInvite {
         ).joinToString("|")
         return HexUtil.encode(sha256(pre.toByteArray(Charsets.UTF_8)))
     }
+
+    /** A random 128-bit invite id (64-char lowercase hex), the v2 replacement for
+     *  the structured [inviteId] (which baked sha256(devicePub) into the id — a
+     *  device-fingerprint leak via the listing, v2 §M2). Same uniqueness, zero
+     *  metadata; attribution stays in the stored authorAID. Mirrors protocol
+     *  `randomServiceInviteId`. */
+    fun randomInviteId(): String = HexUtil.encode(ByteArray(32).also(rng::nextBytes))
 
     /** SHA-256 hex of a 32-byte capability secret — the form .com stores/indexes. */
     fun secretHash(secret: ByteArray): String = HexUtil.encode(sha256(secret))
@@ -157,6 +166,9 @@ object ServiceInvite {
 
     // ── Canonical bytes (mirror @flagship/protocol exactly) ───────────────
 
+    /** Canonical create bytes. v2: [maxRedemptions] + [expiresAt] are appended
+     *  (in that fixed order) ONLY when non-null — a v1 (both null) create signs
+     *  byte-identically. Mirrors @flagship/protocol `canonicalCreate`. */
     fun canonicalCreate(
         inviteId: String,
         authorAID: ByteArray,
@@ -164,15 +176,26 @@ object ServiceInvite {
         secretHash: String,
         encryptedBundle: String,
         issuedAt: Long,
+        maxRedemptions: Int? = null,
+        expiresAt: Long? = null,
     ): ByteArray {
         validateNoSepCtrl("inviteId", inviteId)
         validateNoSepCtrl("serviceRef", serviceRef)
         validateNoSepCtrl("secretHash", secretHash)
         validateNoSepCtrl("encryptedBundle", encryptedBundle)
-        return listOf(
+        val parts = mutableListOf(
             TAG_CREATE, inviteId, HexUtil.encode(authorAID), serviceRef, secretHash,
             encryptedBundle, issuedAt.toString(),
-        ).joinToString("|").toByteArray(Charsets.UTF_8)
+        )
+        if (maxRedemptions != null) {
+            require(maxRedemptions >= 0) { "maxRedemptions must be a non-negative integer" }
+            parts.add("maxN=$maxRedemptions")
+        }
+        if (expiresAt != null) {
+            require(expiresAt >= 0) { "expiresAt must be a non-negative integer" }
+            parts.add("exp=$expiresAt")
+        }
+        return parts.joinToString("|").toByteArray(Charsets.UTF_8)
     }
 
     fun canonicalRedeem(secretHash: String, visitorAID: ByteArray, redeemedAt: Long): ByteArray {
@@ -185,6 +208,27 @@ object ServiceInvite {
         validateNoSepCtrl("inviteId", inviteId)
         return listOf(TAG_REVOKE, inviteId, issuedAt.toString()).joinToString("|").toByteArray(Charsets.UTF_8)
     }
+
+    /** Canonical bytes for an AcceptServiceInvite — the MANUAL-approve out-of-band
+     *  acceptance the friend's app emits (signed by the friend's PER-AUTHOR contact
+     *  AID), replied back to the author who finalizes the bind on their own box
+     *  (v2 Phase 3 tier 2). Mirrors @flagship/protocol `canonicalAccept`. */
+    fun canonicalAccept(inviteId: String, serviceRef: String, contactAID: ByteArray, acceptedAt: Long): ByteArray {
+        validateNoSepCtrl("inviteId", inviteId)
+        validateNoSepCtrl("serviceRef", serviceRef)
+        return listOf(TAG_ACCEPT, inviteId, serviceRef, HexUtil.encode(contactAID), acceptedAt.toString())
+            .joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    /** Contact-AID-sign an AcceptServiceInvite (Ed25519 over [canonicalAccept]).
+     *  RFC-8032 deterministic ⇒ byte-equals the TS/webapp/iOS twin. */
+    fun signAcceptServiceInvite(
+        inviteId: String,
+        serviceRef: String,
+        contactAID: ByteArray,
+        acceptedAt: Long,
+        contactAid: Ed25519Sign,
+    ): ByteArray = contactAid.sign(canonicalAccept(inviteId, serviceRef, contactAID, acceptedAt))
 
     fun canonicalSetAccessMode(serverId: String, serviceRef: String, mode: String, issuedAt: Long): ByteArray {
         validateNoSepCtrl("serverId", serverId)
@@ -247,6 +291,29 @@ object ServiceInvite {
         issuedAt: Long,
         aid: Ed25519Sign,
     ): ByteArray = aid.sign(canonicalKnock(serverId, serviceRef, pageId, visitorAID, issuedAt))
+
+    /** Canonical bytes for a ServiceInviteListQuery — the OWNER-SIGNED list / poll
+     *  query (v2 §C2; the v1 list was an open graph dump). `scope` is "list" (the
+     *  full author listing) or "revoked-since" (the box poller). Mirrors
+     *  @flagship/protocol `canonicalListQuery`. */
+    fun canonicalListQuery(username: String, authorAID: String, scope: String, cursor: Long, issuedAt: Long): ByteArray {
+        validateNoSepCtrl("username", username)
+        validateNoSepCtrl("authorAID", authorAID)
+        require(scope == "list" || scope == "revoked-since") { "scope must be list or revoked-since" }
+        return listOf(TAG_LIST_QUERY, username, authorAID, scope, cursor.toString(), issuedAt.toString())
+            .joinToString("|").toByteArray(Charsets.UTF_8)
+    }
+
+    /** Owner-sign (AID or IRK) a ServiceInviteListQuery (Ed25519 over
+     *  [canonicalListQuery]). `.com` dual-accepts AID|IRK during the transition. */
+    fun signServiceInviteListQuery(
+        username: String,
+        authorAID: String,
+        scope: String,
+        cursor: Long,
+        issuedAt: Long,
+        signer: Ed25519Sign,
+    ): ByteArray = signer.sign(canonicalListQuery(username, authorAID, scope, cursor, issuedAt))
 
     // ── sign / verify ──────────────────────────────────────────────────────
 

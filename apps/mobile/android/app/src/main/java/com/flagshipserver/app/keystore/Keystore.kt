@@ -333,6 +333,23 @@ object Keystore {
         return HexUtil.encode(ServerKeys.deriveAccountIdPub(loadOrCreateUmkSeed()))
     }
 
+    /** Per-author Contact Account Id signer (v2 redemption identity,
+     *  docs/service-access-gating.md §H3) — `deriveContactAccountId(UMK,
+     *  authorAID)`. The friend signs the redeem / visit / knock / acceptance for a
+     *  GIVEN author with THIS key (not the global AID), so two authors can't
+     *  cross-link them. Biometric-gated. */
+    suspend fun deriveContactAccountId(authorAidPub: ByteArray, reason: String = "Authorize Flagship"): Ed25519Sign {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return ServerKeys.deriveContactAccountId(loadOrCreateUmkSeed(), authorAidPub)
+    }
+
+    /** The per-author contact-AID Ed25519 PUBLIC key (hex) for [authorAidPub] —
+     *  the per-author pseudonym presented at redemption. Biometric-gated. */
+    suspend fun contactAccountIdPubHex(authorAidPub: ByteArray, reason: String = "Authorize Flagship"): String {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return HexUtil.encode(ServerKeys.deriveContactAccountIdPub(loadOrCreateUmkSeed(), authorAidPub))
+    }
+
     /** The household AEAD key (32 bytes) that seals the {name, photo?} invite
      *  bundle — `HKDF(umk, "flagship/household-key/v1")` (via ServerKeys).
      *  Biometric-gated. */
