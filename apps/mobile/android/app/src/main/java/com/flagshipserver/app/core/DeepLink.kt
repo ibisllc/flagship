@@ -54,6 +54,19 @@ sealed interface DeepLink {
      *  `https://<server>.<user>.flagship.services/invite#<secret>`. */
     data class RedeemInvite(val serverDomain: String, val secretHex: String) : DeepLink
 
+    /** Web-experience gating (docs/service-access-gating.md, "Web-experience
+     *  gating") — the visitor's phone authorizes a SEPARATE browser's QR-login
+     *  for a restricted service's website. Carried by the knock page's
+     *  `flagship://access?server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
+     *  deeplink (also a QR for cross-device, and a copyable "Get link" string).
+     *  All four params are required; a malformed link is NOT routed. */
+    data class AuthorizeKnock(
+        val serverId: String,
+        val svc: String,
+        val serviceRef: String,
+        val pageId: String,
+    ) : DeepLink
+
     companion object {
         /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
         /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
@@ -98,6 +111,19 @@ sealed interface DeepLink {
                     val sid = params["sid"].orEmpty()
                     val pk = params["pk"].orEmpty()
                     if (sid.isEmpty() || pk.isEmpty()) null else JoinDevice(sid, pk)
+                }
+                "access" -> {
+                    // flagship://access?server=<serverFqdn>&svc=<urlLabel>
+                    //   &ref=<serviceRef>&page=<pageId> — the knock page's
+                    // "Access site" hand-off (same-device deeplink + QR + "Get
+                    // link"). server/ref/page are load-bearing (page is IN the
+                    // signature); svc is display-only and may be empty.
+                    val server = params["server"].orEmpty()
+                    val svc = params["svc"].orEmpty()
+                    val ref = params["ref"].orEmpty()
+                    val page = params["page"].orEmpty()
+                    if (server.isEmpty() || ref.isEmpty() || page.isEmpty()) null
+                    else AuthorizeKnock(serverId = server, svc = svc, serviceRef = ref, pageId = page)
                 }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`

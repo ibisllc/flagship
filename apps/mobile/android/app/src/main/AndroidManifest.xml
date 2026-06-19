@@ -54,6 +54,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="invite" />
             </intent-filter>
+            <!-- Web-experience gating — the visitor authorizes a browser's
+                 QR-login for a restricted service's WEBSITE
+                 (flagship://access?server=…&svc=…&ref=…&page=…). The box's
+                 knock page offers this as the same-device "Access site"
+                 button (and a QR for cross-device). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="access" />
+            </intent-filter>
         </activity>
 
         <!-- FCM messaging service -->
