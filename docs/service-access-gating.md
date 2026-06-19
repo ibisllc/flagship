@@ -124,6 +124,22 @@ the cross-device case (the browser auto-transitions regardless).
 No app / no access on this device → the button stays as the QR (scan with another phone). "Get link" → copy
 the code → app Settings → **"Process URL"** paste. Never deactivate the page — a stale pageId just re-rolls.
 
+### Refinements over the original sketch (owner design was ~right; these are the catches folded in)
+1. **AID-SIGNED authorize, not a plaintext "who I am" GET param.** The original "phone reaches the server with a
+   link that has a get parameter telling who this is" would let anyone assert any identity. The phone instead
+   **AID-signs** `{pageId, serviceRef, …}`; the box verifies the signature + allow-list. (Security must-fix.)
+2. **pageId = high-entropy, single-use, short-lived** (128-bit, consumed on cookie delivery, re-rolled per load)
+   — a correlation token, never a guessable counter.
+3. **Holder binding closes the pageId-theft race.** The knock page sets a host-scoped `Flagship-Knock` holder
+   cookie; ONLY that browser can pick up the session cookie. A shoulder-surfed QR/pageId yields nothing.
+4. **Two distinct artifacts:** the browser gets an opaque `Flagship-App-Session` **cookie**; the phone gets the
+   **secretId** (never the browser). Closing by secretId kills the cookie.
+5. **Minimal disclosure** on the knock page (no owner / service name / content) + `noindex` + fully
+   self-contained (no remote asset — never leaks the visitor to another origin).
+6. **secretId rides the request BODY, not the URL path** (the sketch wrote `/session/:secretId/status`) — a
+   32-byte secret in a URL lands in access/proxy logs; the body keeps it out. Status stays rate-limited
+   ~1/min + default-offline for unknown (both as the owner specified — those were already right).
+
 ### Session management (the phone holds the secretId, not the browser)
 - `GET  /api/service-access/session/:secretId/status` → `{online|offline}`, **rate-limited ~1/min/session**,
   **default offline for unknown** (no enumeration oracle).
@@ -136,5 +152,31 @@ On main already: AID binding (redeem), the `Flagship-App-Session` cookie, `estab
 AID-signed visit-proof → box mints a cookie). This ADDS: (a) the **pageId correlation** (the phone authorizes
 a SEPARATE browser's pageId, vs its own client) + the knock page + the browser poll; (b) the **session store**
 carrying `{secretId, status, serviceUrl, browserAgent, startTime}` + the phone status/close API (rate-limited,
-default-offline) + the Settings list. Build it as the next gating chunk (daemon knock+authorize+session +
-webapp knock page + the iOS/Android authorize + "Open secured sessions" UI).
+default-offline) + the Settings list.
+
+### Daemon backend — BUILT (`3343aeb9`, on main, tested)
+- **`packages/server-daemon/src/serviceAccessWeb.ts`** — `PendingKnockStore` (in-memory, ephemeral) +
+  `buildServiceAccessWeb({serverId, store, sessions})`:
+  - `maybeServeKnock(serviceRef, req)` — the enforcement layer (`buildAccessEnforcementHandler`'s new 3rd arg)
+    calls it on a DENY; returns the self-contained knock page (200 HTML + holder cookie) for a top-level
+    browser GET/HEAD with `Accept: text/html`, else null (→ the existing 403 JSON for XHR/assets).
+  - `GET /__flagship/knock/<pageId>/status` — browser poll; delivers the session `Set-Cookie` **only to the
+    holder** (matching `Flagship-Knock` cookie), single-use (the pageId is consumed on delivery).
+  - `POST /api/service-access/knock/authorize` — the phone's AID-signed `KnockAuthorization`
+    (`flagship/service-knock/v1`; the **pageId is in the signature**, so a visit proof can't be replayed onto
+    another page). Verifies sig + serverId + replay + allow-list; mints the session cookie + a phone-held
+    `secretId`; returns the secretId to the PHONE only.
+  - `POST /api/service-access/session/status` + `…/close` — **secretId in the BODY, never the URL** (so it
+    can't land in access logs); status is rate-limited ~1/min/secretId + default-offline for unknown (no
+    enumeration oracle); close kills the browser cookie.
+- **`packages/server-daemon/src/qrSvg.ts`** — server-side QR (strict-TS port of the webapp `qrEncoder.js`,
+  byte-for-byte identical) so the knock page bakes the QR in without fetching a remote asset.
+- **Protocol**: `KnockAuthorization` envelope (`signKnockAuthorization` / `verifyKnockAuthorization`); pinned
+  cross-platform vector in `serviceAccessGating.vectors.json` → `"knock"`.
+- **`ServiceSessionStore`** gained the `secretId` index + `closeBySecretId` + `lookupBySecretId`.
+
+### Clients — in flight (iOS / Android / webapp)
+The deeplink the knock page hands the phone is `flagship://access?server=&svc=&ref=&page=`. Each client adds:
+`signKnockAuthorization` (mirror, fixture-pinned) + the deeplink/paste → KnockAuthorize confirm → authorize
+call + a local `SecuredSession` store + a Settings **"Open secured sessions"** list (status/close). The webapp
+authorizes via a pasted link ("Process URL") since a browser can't own the `flagship://` scheme.
