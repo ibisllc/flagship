@@ -29,6 +29,7 @@ final class ServiceInviteVectorTests: XCTestCase {
         let revoke: [String: Any]
         let setAccessMode: [String: Any]
         let visit: [String: Any]
+        let knock: [String: Any]
         let bundle: [String: Any]
     }
 
@@ -62,6 +63,7 @@ final class ServiceInviteVectorTests: XCTestCase {
             revoke: root["revoke"] as! [String: Any],
             setAccessMode: root["setAccessMode"] as! [String: Any],
             visit: root["visit"] as! [String: Any],
+            knock: root["knock"] as! [String: Any],
             bundle: root["bundle"] as! [String: Any]
         )
     }
@@ -210,6 +212,34 @@ final class ServiceInviteVectorTests: XCTestCase {
         let sig = HexUtil.decode(v.visit["sigHex"] as! String)!
         XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: friendAid), "pinned visit sig must verify under friendAID")
         XCTAssertTrue(ServiceInvite.verify(try ServiceInvite.sign(bytes, with: friendAidKey(v)), bytes, pub: friendAid), "our visit sig must verify under friendAID")
+    }
+
+    func testKnockSignatureVerifies() throws {
+        let v = try load()
+        let friendAid = ServiceInvite.deriveAccountIdPub(umkSeed: friendUmk(v))!
+        let bytes = try ServiceInvite.canonicalKnock(
+            serverId: v.root["serverId"] as! String,
+            serviceRef: v.root["serviceRef"] as! String,
+            pageId: v.knock["pageId"] as! String,
+            visitorAID: friendAid,
+            issuedAt: (v.knock["issuedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.knock["sigHex"] as! String)!
+        // The recorded (noble RFC-8032) knock sig verifies under OUR canonical
+        // bytes + the friendAID pub ⇒ our pre-image is byte-identical.
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: friendAid), "pinned knock sig must verify under friendAID")
+        // And our own signKnockAuthorization helper produces a valid sig over
+        // the SAME bytes (CryptoKit's Ed25519 is randomized, so verify — don't
+        // byte-compare).
+        let mine = try ServiceInvite.signKnockAuthorization(
+            serverId: v.root["serverId"] as! String,
+            serviceRef: v.root["serviceRef"] as! String,
+            pageId: v.knock["pageId"] as! String,
+            visitorAID: friendAid,
+            issuedAt: (v.knock["issuedAt"] as! NSNumber).int64Value,
+            aid: friendAidKey(v)
+        )
+        XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: friendAid), "our knock sig must verify under friendAID")
     }
 
     // MARK: bundle seal/open
