@@ -164,3 +164,20 @@ public extension EnvironmentValues {
         set { self[InviteLabelBookKey.self] = newValue }
     }
 }
+
+/// Web-experience gating (docs/service-access-gating.md): the local store of
+/// browser QR-login sessions THIS phone has authorized. Drives Settings →
+/// "Open secured sessions" (list / refresh online-offline / stop). NEVER leaves
+/// the device — the secretId is the box's poll/close handle, nothing more. The
+/// default value is the UserDefaults-backed implementation; tests + previews
+/// inject the in-memory variant.
+private struct SecuredSessionStoreKey: EnvironmentKey {
+    static let defaultValue: any SecuredSessionStoring = UserDefaultsSecuredSessionStore()
+}
+
+public extension EnvironmentValues {
+    var securedSessionStore: any SecuredSessionStoring {
+        get { self[SecuredSessionStoreKey.self] }
+        set { self[SecuredSessionStoreKey.self] = newValue }
+    }
+}

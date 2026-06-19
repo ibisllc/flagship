@@ -26,6 +26,42 @@ public protocol ServiceAccessClient: Sendable {
     func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws
     func listInvites(controlBase: URL, username: String, authorAidHex: String) async throws -> [ServiceInviteRow]
     func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws
+    // box — web-experience gating (docs/service-access-gating.md, "Web-experience gating")
+    /// AID-signed authorize of a browser's knock page. The `authorization`
+    /// dict is already built (serverId/serviceRef/pageId/visitorAID/issuedAt);
+    /// `signatureHex` is the Ed25519 sig over the canonical knock bytes. On
+    /// success the box returns the phone-held secretId + the started session.
+    func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult
+    /// Poll a held session's `online`/`offline` (the secretId rides the BODY,
+    /// never the URL — so it can't land in access logs). Rate-limited ~1/min;
+    /// a 429 surfaces as `ServiceAccessError.statusRateLimited`.
+    func sessionStatus(serverDomain: String, secretId: String) async throws -> SecuredSessionStatus
+    /// Close a held session (kills the browser cookie). Idempotent + oracle-free.
+    func closeSession(serverDomain: String, secretId: String) async throws
+}
+
+/// Result of a successful knock authorize — the phone keeps the secretId to
+/// later poll/close the browser session it just authorized.
+public struct AuthorizeKnockResult: Equatable, Sendable {
+    public let secretId: String
+    public let serviceRef: String
+    public let browserAgent: String
+    public let startedAt: Int64
+    public let expiresAt: Int64
+    public init(secretId: String, serviceRef: String, browserAgent: String, startedAt: Int64, expiresAt: Int64) {
+        self.secretId = secretId
+        self.serviceRef = serviceRef
+        self.browserAgent = browserAgent
+        self.startedAt = startedAt
+        self.expiresAt = expiresAt
+    }
+}
+
+/// A held browser session's liveness as the box reports it. Unknown / closed /
+/// expired all collapse to `.offline` (the box gives no enumeration oracle).
+public enum SecuredSessionStatus: String, Equatable, Sendable {
+    case online
+    case offline
 }
 
 public struct ServiceAccessState: Equatable, Sendable {
@@ -78,6 +114,12 @@ public enum ServiceAccessError: Error, Equatable {
     case inviteUnknown      // 404
     case inviteAlreadyBound // 409
     case inviteRevoked      // 403
+    // Web-experience-gating knock authorize.
+    case knockNotAllowed    // 401 — this AID isn't allow-listed for the service
+    case knockBadRequest    // 403 — bad/stale/sig-mismatch (refresh the page)
+    case knockPageExpired   // 404 — the knock page expired (refresh + retry)
+    /// 429 from the session-status poll — checked too recently (debounce ≥60s).
+    case statusRateLimited
 }
 
 /// URLSession-backed implementation. The BOX session must be the box-pinned
@@ -176,6 +218,57 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         )
     }
 
+    public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/knock/authorize") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["authorization": authorization, "sig": signatureHex.lowercased()], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        if status == 401 { throw ServiceAccessError.knockNotAllowed }
+        if status == 403 { throw ServiceAccessError.knockBadRequest }
+        if status == 404 { throw ServiceAccessError.knockPageExpired }
+        let body = try ok(data, status)
+        let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        func i64(_ k: String) -> Int64 { (obj?[k] as? NSNumber)?.int64Value ?? 0 }
+        return AuthorizeKnockResult(
+            secretId: (obj?["secretId"] as? String) ?? "",
+            serviceRef: (obj?["serviceRef"] as? String) ?? "",
+            browserAgent: (obj?["browserAgent"] as? String) ?? "",
+            startedAt: i64("startedAt"),
+            expiresAt: i64("expiresAt")
+        )
+    }
+
+    public func sessionStatus(serverDomain: String, secretId: String) async throws -> SecuredSessionStatus {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/session/status") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["secretId": secretId.lowercased()], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        if status == 429 { throw ServiceAccessError.statusRateLimited }
+        let body = try ok(data, status)
+        let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        return (obj?["status"] as? String) == "online" ? .online : .offline
+    }
+
+    public func closeSession(serverDomain: String, secretId: String) async throws {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/session/close") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["secretId": secretId.lowercased()], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        _ = try ok(data, status)
+    }
+
     // ── .com ────────────────────────────────────────────────────────────────
 
     private static func comUrl(_ base: URL, _ username: String, _ suffix: String, query: String? = nil) -> URL? {
@@ -246,20 +339,37 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
     public struct RevokeCall: Sendable { public let username: String; public let inviteId: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
+    public struct AuthorizeKnockCall: Sendable { public let serverDomain: String; public let authorization: [String: String]; public let signatureHex: String }
+    public struct SessionStatusCall: Sendable { public let serverDomain: String; public let secretId: String }
+    public struct CloseSessionCall: Sendable { public let serverDomain: String; public let secretId: String }
 
     private let lock = NSLock()
     private var _setMode: [SetModeCall] = []
     private var _create: [CreateCall] = []
     private var _revoke: [RevokeCall] = []
     private var _redeem: [RedeemCall] = []
+    private var _authorizeKnock: [AuthorizeKnockCall] = []
+    private var _sessionStatus: [SessionStatusCall] = []
+    private var _closeSession: [CloseSessionCall] = []
     public var setModeCalls: [SetModeCall] { lock.withLock { _setMode } }
     public var createCalls: [CreateCall] { lock.withLock { _create } }
     public var revokeCalls: [RevokeCall] { lock.withLock { _revoke } }
     public var redeemCalls: [RedeemCall] { lock.withLock { _redeem } }
+    public var authorizeKnockCalls: [AuthorizeKnockCall] { lock.withLock { _authorizeKnock } }
+    public var sessionStatusCalls: [SessionStatusCall] { lock.withLock { _sessionStatus } }
+    public var closeSessionCalls: [CloseSessionCall] { lock.withLock { _closeSession } }
 
     public var state = ServiceAccessState(mode: "open", allowCount: 0)
     public var rows: [ServiceInviteRow] = []
     public var redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "00", firstBind: true)
+    public var authorizeKnockResult = AuthorizeKnockResult(
+        secretId: String(repeating: "ab", count: 32),
+        serviceRef: "alice-notes",
+        browserAgent: "Mozilla/5.0 (Macintosh)",
+        startedAt: 1_700_000_000_000,
+        expiresAt: 1_700_000_000_000 + 12 * 60 * 60_000
+    )
+    public var sessionStatusResult: SecuredSessionStatus = .online
     public var nextError: Error?
 
     public init() {}
@@ -293,5 +403,22 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         try maybeThrow()
         lock.withLock { _revoke.append(RevokeCall(username: username, inviteId: inviteId)) }
         rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1) : $0 }
+    }
+
+    public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {
+        lock.withLock { _authorizeKnock.append(AuthorizeKnockCall(serverDomain: serverDomain, authorization: flatten(authorization), signatureHex: signatureHex)) }
+        try maybeThrow()
+        return authorizeKnockResult
+    }
+
+    public func sessionStatus(serverDomain: String, secretId: String) async throws -> SecuredSessionStatus {
+        lock.withLock { _sessionStatus.append(SessionStatusCall(serverDomain: serverDomain, secretId: secretId)) }
+        try maybeThrow()
+        return sessionStatusResult
+    }
+
+    public func closeSession(serverDomain: String, secretId: String) async throws {
+        lock.withLock { _closeSession.append(CloseSessionCall(serverDomain: serverDomain, secretId: secretId)) }
+        try maybeThrow()
     }
 }
