@@ -122,6 +122,15 @@ export async function renderServiceDetail(serviceId) {
           <button id="sd-invite-manage" class="secondary">Manage invites</button>
         </div>
       </div>
+      <h2 class="mt-4">Access</h2>
+      <div class="card">
+        <p class="note">
+          Keep this service open to anyone with the link, or restrict it to an
+          allow-list of people you add by name. Their access follows their
+          account, surviving a phone change.
+        </p>
+        <button id="sd-access" class="full-width mt-2">Manage who can open this</button>
+      </div>
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
@@ -167,6 +176,10 @@ export async function renderServiceDetail(serviceId) {
     $("sd-invite-manage")?.addEventListener("click", async () => {
       const { enterInviteManage } = await import("./invite-manage.js");
       await enterInviteManage(s);
+    });
+    $("sd-access")?.addEventListener("click", async () => {
+      const { enterServiceAccess } = await import("./service-access.js");
+      await enterServiceAccess(s);
     });
     bindWebDomainsHandlers(s);
     bindCustomDomainsHandlers();

@@ -415,6 +415,51 @@ export async function deriveIrkVersioned(umkSeed, version) {
   return irkFromInfoSeed(umkSeed, irkInfo(version));
 }
 
+/**
+ * Account Identity Key (AID) — the STABLE, NON-rotating account identity,
+ * mirroring `deriveAccountId` in @flagship/protocol byte-for-byte (HKDF-SHA256
+ * over the UMK seed under the FIXED info `flagship/account-id/v1`). Unlike the
+ * IRK (versioned, rotates on re-pair / Wipe & restart), the AID is a pure
+ * function of the UMK, so it survives every IRK rotation and is the right
+ * identifier for service-access allow-lists + capability-invite bindings
+ * (docs/service-access-gating.md). The friend signs the redeem + each visit
+ * proof with this key; the author records it as the bound principal.
+ *
+ * Returns `{ privateKey: CryptoKey (sign), publicKey: Uint8Array(32) }`, the
+ * same shape `deriveIrkFromSeed` returns.
+ */
+export async function deriveAccountIdFromSeed(umkSeed) {
+  return irkFromInfoSeed(umkSeed, "flagship/account-id/v1");
+}
+
+/**
+ * Household encryption key — a 32-byte symmetric AEAD key derived from the UMK
+ * under the FIXED info `flagship/household-key/v1`, byte-identical to
+ * `deriveHouseholdKey` in @flagship/protocol. Every device of the account (all
+ * share the UMK) derives the same key, so it seals the capability-invite
+ * `{ name, photo? }` bundle that flagshipserver.com only ever stores as
+ * ciphertext (it holds no UMK → cannot read the friend's name/photo).
+ *
+ * Returns the raw 32 key bytes (not a CryptoKey) — lib/serviceInvite.js seals
+ * with WebCrypto AES-256-GCM, whose ciphertext||tag layout matches the
+ * @noble/ciphers GCM the protocol uses, so a bundle is openable on either side.
+ */
+export async function deriveHouseholdKeyFromSeed(umkSeed) {
+  return hkdf32(umkSeed, "flagship/household-key/v1");
+}
+
+/**
+ * Sign canonical-bytes with the account AID (stable). Mirrors `signWithIrk`
+ * but uses {@link deriveAccountIdFromSeed} — the friend's redeem + visit
+ * proofs are AID-signed (the IRK rotates; the AID does not).
+ */
+export async function signWithAccountId(umkSeed, canonicalBytes) {
+  const aid = await deriveAccountIdFromSeed(umkSeed);
+  return new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, aid.privateKey, canonicalBytes),
+  );
+}
+
 export async function deriveBakFromSeed(umkSeed, serverId) {
   const seed = await hkdf32(umkSeed, `flagship.bak.v1|${serverId}`);
   const pkcs8 = pkcs8FromSeed(seed);

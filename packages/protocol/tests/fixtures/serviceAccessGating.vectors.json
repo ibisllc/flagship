@@ -1,0 +1,52 @@
+{
+  "_comment": "Cross-platform pinned vectors for service-access gating (docs/service-access-gating.md). The webapp keystore/serviceInvite mirror is verified against these; iOS (Swift) + Android (Kotlin) mirrors MUST verify against the SAME bytes. Generated from @flagship/protocol: authorUMK seed = 0x0b repeated 32x, friendUMK seed = 0x16 repeated 32x; the inviteId device key = the author IRK; the capability secret = 0x07 repeated 32x. All signatures are Ed25519 over the canonical pre-image. The bundle seal uses a random 12-byte nonce, so the SEAL ciphertext is NOT pinned — only the plaintext seal->open roundtrip + a cross-implementation open are asserted. The create signature is over a fixed encryptedBundle placeholder ('00') so it is deterministic and does not depend on the random nonce.",
+  "seeds": {
+    "authorUmkSeedHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "friendUmkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616"
+  },
+  "derived": {
+    "authorAidPubHex": "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+    "authorIrkPubHex": "150faed2621074accb854faca6811def4a7954529785d48d352fcd4ec65c15aa",
+    "authorDevicePubHex": "150faed2621074accb854faca6811def4a7954529785d48d352fcd4ec65c15aa",
+    "friendAidPubHex": "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c",
+    "friendIrkPubHex": "7e046d5cbd758fd48007b69cf8ad4610219720679d0040979cf945cd0918fb26",
+    "householdKeyHex": "347e8005f450b4234dc8eb65b5b3da4edf662e3d84c906592b121915bc6256f8"
+  },
+  "secretHex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "secretHash": "4bb06f8e4e3a7715d201d573d0aa423762e55dabd61a2c02278fa56cc6d294e0",
+  "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+  "inviteIdCounter1": "d598c933945705dbd1889989ceee5f2a50c8a62533ff9a5d9186190c49d00d7b",
+  "serviceRef": "alice-notes",
+  "serverId": "home.alice.flagship.services",
+  "create": {
+    "encryptedBundlePlaceholder": "00",
+    "issuedAt": 1700000000000,
+    "signerKey": "authorIrk",
+    "sigHex": "90359a5a49f1da7272850e991b03e2533b12d42b90dd26cf62cd77a0dcae23464d683d3d92aa4374a476b4029e0639a63864ed10104b4ffd2f0a2f9fba780700"
+  },
+  "redeem": {
+    "redeemedAt": 1700000500000,
+    "signerKey": "friendAid",
+    "sigHex": "d79e8574a430e3fe6d4b5154ceac394d10715347c6fc92569c6a3c9b2b7f082f54e8e58ee6b54e6eb1dc7cb2d1b52abf16b3bcba4121a7063e664412fc5b080d"
+  },
+  "revoke": {
+    "issuedAt": 1700001000000,
+    "signerKey": "authorIrk",
+    "sigHex": "e264e00a748b4079f4076330f507d89440a46ff6ddf50a5f73af09cc8d114ad96b5ea5ebf56b8b22190c092e0920d1e7bf9447d32fe31aee23b806709a9f270c"
+  },
+  "setAccessMode": {
+    "mode": "restricted",
+    "issuedAt": 1700002000000,
+    "signerKey": "authorIrk",
+    "sigHex": "8ec133292d73c932ea401c0f8fec55d26c00bdccf0f888f95f58f231710c66f59f43aae6fad2e3a6435336cb97578be45a8981d1bad3576e759d449fc01fa804"
+  },
+  "visit": {
+    "issuedAt": 1700003000000,
+    "signerKey": "friendAid",
+    "sigHex": "49551d66a1174ea0eb23339c3fd85eed77d50903bb0bc03b63acee1ed60018c9e92a34bdf9c634015a2179a0c0ff3a2fcbda11dd01b6b4c4fb48f92dc3c3100f"
+  },
+  "bundle": {
+    "name": "Alex",
+    "photo": "data:image/png;base64,AAAA"
+  }
+}

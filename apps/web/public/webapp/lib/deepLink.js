@@ -14,6 +14,22 @@ import { humanError } from "./humanError.js";
 import { toast } from "./toast.js";
 
 export async function dispatchInitialView() {
+  // Service-access friend deep-link: if this load was a /invite#<secret>
+  // landing that detoured through bootstrap/unlock/PIN/recovery to get the
+  // friend's key, resume the redeem now instead of the normal dispatch
+  // (docs/service-access-gating.md). Best-effort + non-fatal.
+  try {
+    const { hasPendingInviteRedeem, resumePendingInviteRedeem } = await import(
+      "../views/invite-redeem.js"
+    );
+    if (hasPendingInviteRedeem()) {
+      await resumePendingInviteRedeem();
+      return;
+    }
+  } catch {
+    /* invite-redeem not loaded / no pending redeem — fall through */
+  }
+
   const q = parseViewQuery();
   clearViewQuery();
   if (!q?.view) {

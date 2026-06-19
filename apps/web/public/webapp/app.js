@@ -58,6 +58,9 @@ import { initServicesListView, enterServicesList } from "./views/services-list.j
 import { initServiceDetailView } from "./views/service-detail.js";
 import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
+import { initServiceAccessView } from "./views/service-access.js";
+import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
+import { inviteSecretFromLocation } from "./lib/serviceInvite.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initCompanionDockView, enterCompanionDock } from "./views/companion-dock.js";
@@ -115,6 +118,7 @@ const SUB_VIEW_TABS = {
   "view-service-detail": "apps",
   "view-invite-issue": "apps",
   "view-invite-manage": "apps",
+  "view-service-access": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
@@ -397,6 +401,8 @@ async function boot() {
   initServiceDetailView();
   initInviteIssueView();
   initInviteManageView();
+  initServiceAccessView();
+  initInviteRedeemView();
   initPairedSessionsView();
   initPeerBackupView();
   initCompanionDockView();
@@ -502,6 +508,19 @@ async function boot() {
     try { await refreshServerTrust(); } catch { /* no verdict on error */ }
     try { await loadAndApplyExceptions(username); } catch { /* best-effort */ }
   })();
+
+  // Service-access friend deep-link: a /invite#<secret> landing (served from
+  // the BOX origin) routes straight into the redeem flow, BEFORE the normal
+  // unlock/first-run dispatch (docs/service-access-gating.md). The redeem view
+  // itself drives the unlock / account-setup detour when the friend isn't
+  // ready, and dispatchInitialView() resumes it once they have their key. The
+  // secret lives only in the URL fragment — it is never sent to .com.
+  const inviteSecret = inviteSecretFromLocation();
+  if (inviteSecret) {
+    setSubtitle("invite");
+    await enterInviteRedeem(inviteSecret);
+    return;
+  }
 
   // Phase 3b — cross-device QR pairing: a /join?sid=&pk= deep-link routes
   // straight into the add-profile pairing receiver, BEFORE the normal
