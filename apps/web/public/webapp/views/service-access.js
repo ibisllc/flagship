@@ -56,9 +56,6 @@ let currentService = null;
 
 // localStorage key for the last-known access mode (the daemon has no GET).
 const MODE_KEY_PREFIX = "flagship.serviceAccessMode.";
-// localStorage map of retained signed creates (by inviteId) — the AUTHOR needs
-// its own {create, createSig} to FINALIZE a manual-approve acceptance later.
-const CREATE_STORE_KEY = "flagship.serviceInviteCreates.v1";
 
 function modeKey(serviceRef) {
   return `${MODE_KEY_PREFIX}${serviceRef}`;
@@ -76,27 +73,6 @@ function rememberMode(serviceRef, mode) {
     localStorage.setItem(modeKey(serviceRef), mode);
   } catch {
     /* private mode — the box POST response remains the source of truth */
-  }
-}
-
-/** Persist a signed create (by inviteId) so a manual acceptance can be finalized later. */
-function rememberCreate(inviteId, create, createSig) {
-  try {
-    const all = JSON.parse(localStorage.getItem(CREATE_STORE_KEY) || "{}");
-    all[inviteId] = { create, createSig };
-    localStorage.setItem(CREATE_STORE_KEY, JSON.stringify(all));
-  } catch {
-    /* private mode — manual finalize will need the create re-supplied */
-  }
-}
-/** Recall a retained signed create for an inviteId, or null. */
-function recallCreate(inviteId) {
-  try {
-    const all = JSON.parse(localStorage.getItem(CREATE_STORE_KEY) || "{}");
-    const e = all[inviteId];
-    return e && e.create && typeof e.createSig === "string" ? e : null;
-  } catch {
-    return null;
   }
 }
 
@@ -366,8 +342,8 @@ async function onAddPerson(serviceRef) {
       umk: session.umk,
       signWithAccountId,
     });
-    // Retain the signed create so a manual acceptance can be finalized later.
-    rememberCreate(r.inviteId, r.create, r.createSig);
+    // No local create cache: the author's box fetches the signed create from
+    // .com at manual-finalize, so an invite can be finalized from ANY device.
     if (status) {
       status.className = "mt-2 text-sm ok-text";
       status.textContent = `Invite for ${name} created.`;
@@ -402,30 +378,21 @@ async function onAddPerson(serviceRef) {
 
 /**
  * MANUAL-approve finalize CORE — DOM-free + dependency-injected (mirrors
- * runRemovePerson). Parses the friend's acceptance reply, pairs it with the
- * AUTHOR's retained signed create (by inviteId), and submits both to the box's
- * accept endpoint. Throws a tagged error when the reply is junk (`bad-accept`)
- * or the create wasn't retained on this device (`no-create`).
+ * runRemovePerson). Parses the friend's acceptance reply and submits ONLY
+ * `{accept, acceptSig}` to the AUTHOR's box; the box fetches the owner's signed
+ * create from `.com` by inviteId (so finalize works from ANY device — no local
+ * create cache). Throws a tagged error when the reply is junk (`bad-accept`).
  */
 export async function runFinalizeAccept(
   { raw },
-  { podBaseUrl, recallCreate, parseAcceptReply, submitAccept },
+  { podBaseUrl, parseAcceptReply, submitAccept },
 ) {
   const parsed = parseAcceptReply(raw);
   if (!parsed) throw err("That doesn't look like an acceptance code. Paste the whole thing.", "bad-accept");
-  const retained = recallCreate(parsed.accept.inviteId);
-  if (!retained) {
-    throw err(
-      "Couldn't find this invite on this device. Finalize from the device that created the link.",
-      "no-create",
-    );
-  }
   const r = await submitAccept({
     baseUrl: podBaseUrl(),
     accept: parsed.accept,
     acceptSig: parsed.acceptSig,
-    create: retained.create,
-    createSig: retained.createSig,
   });
   return { ok: true, serviceRef: r.serviceRef, boundAID: r.boundAID };
 }
@@ -442,7 +409,7 @@ async function onFinalizeAccept(serviceRef) {
   if (status) { status.className = "mt-2 text-sm"; status.textContent = "finalizing…"; }
   if (btn) { btn.disabled = true; btn.textContent = "Finalizing…"; }
   try {
-    await runFinalizeAccept({ raw }, { podBaseUrl, recallCreate, parseAcceptReply, submitAccept });
+    await runFinalizeAccept({ raw }, { podBaseUrl, parseAcceptReply, submitAccept });
     if (status) { status.className = "mt-2 text-sm ok-text"; status.textContent = "Granted — they can open it now."; }
     if ($("sa-accept-input")) $("sa-accept-input").value = "";
     await renderPeople(serviceRef);

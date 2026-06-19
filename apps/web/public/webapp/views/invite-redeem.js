@@ -252,7 +252,17 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
     umk,
   };
   const sig = await signAcceptServiceInvite(accept, signWithContactAccountId);
+  // Canonical deep-link reply carrying ONLY {accept, acceptSig} (the author's box
+  // fetches the owner's create from .com). The box host is this /invite's origin.
+  const replyHost = (() => {
+    try {
+      return boxOrigin ? new URL(boxOrigin).host : location.host;
+    } catch {
+      return location.host;
+    }
+  })();
   const reply = buildAcceptReply(
+    replyHost,
     { inviteId: pendingInviteId, serviceRef, contactAID: bytesToHex(contactAID), acceptedAt },
     bytesToHex(sig),
   );

@@ -280,27 +280,27 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
 
 // ──────────────────────────────────────────────────────────────────────
 // runFinalizeAccept — the MANUAL-approve author finalize core (no DOM).
-// The author parses the friend's acceptance reply, pairs it with the RETAINED
-// signed create (by inviteId), and submits both to the box's accept endpoint.
+// The author parses the friend's acceptance reply and submits ONLY {accept,
+// acceptSig} to the box's accept endpoint; the box fetches the owner's create
+// from .com by inviteId (any-device finalize — NO local create cache).
 // ──────────────────────────────────────────────────────────────────────
 describe("service-access — runFinalizeAccept (manual-approve finalize)", () => {
   const SERVICE = "alice-notes";
   const INVITE = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
   const CONTACT = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a";
   const parsedReply = {
+    serverDomain: "home.alice.flagship.services",
     accept: { inviteId: INVITE, serviceRef: SERVICE, contactAID: CONTACT, acceptedAt: 1700006000000 },
     acceptSig: "11".repeat(64),
   };
-  const retainedCreate = { create: { inviteId: INVITE, serviceRef: SERVICE }, createSig: "22".repeat(64) };
 
-  it("parses the reply, pairs the retained create, and submits {accept, acceptSig, create, createSig}", async () => {
+  it("parses the reply and submits ONLY {accept, acceptSig} (no create)", async () => {
     const mod = await loadServiceAccessModule();
     const submitAccept = vi.fn(async () => ({ bound: true, serviceRef: SERVICE, boundAID: CONTACT }));
     const out = await mod.runFinalizeAccept(
-      { raw: ` flagship-accept:whatever ` },
+      { raw: ` flagship://invite-accept?server=home.alice.flagship.services&iid=${INVITE} ` },
       {
         podBaseUrl: () => "https://home.alice.flagship.services",
-        recallCreate: (id: string) => (id === INVITE ? retainedCreate : null),
         parseAcceptReply: () => parsedReply,
         submitAccept,
       },
@@ -308,13 +308,14 @@ describe("service-access — runFinalizeAccept (manual-approve finalize)", () =>
     expect(out).toEqual({ ok: true, serviceRef: SERVICE, boundAID: CONTACT });
     expect(submitAccept).toHaveBeenCalledTimes(1);
     const arg = submitAccept.mock.calls[0]![0] as {
-      baseUrl: string; accept: { inviteId: string }; acceptSig: string; create: unknown; createSig: string;
+      baseUrl: string; accept: { inviteId: string }; acceptSig: string; create?: unknown; createSig?: string;
     };
     expect(arg.baseUrl).toBe("https://home.alice.flagship.services");
     expect(arg.accept.inviteId).toBe(INVITE);
     expect(arg.acceptSig).toBe(parsedReply.acceptSig);
-    expect(arg.create).toEqual(retainedCreate.create);
-    expect(arg.createSig).toBe(retainedCreate.createSig);
+    // No create / createSig — the box fetches the signed create from .com.
+    expect(arg.create).toBeUndefined();
+    expect(arg.createSig).toBeUndefined();
   });
 
   it("a junk reply → a tagged bad-accept error (no submit)", async () => {
@@ -323,21 +324,9 @@ describe("service-access — runFinalizeAccept (manual-approve finalize)", () =>
     await expect(
       mod.runFinalizeAccept(
         { raw: "garbage" },
-        { podBaseUrl: () => "https://x", recallCreate: () => retainedCreate, parseAcceptReply: () => null, submitAccept },
+        { podBaseUrl: () => "https://x", parseAcceptReply: () => null, submitAccept },
       ),
     ).rejects.toMatchObject({ code: "bad-accept" });
-    expect(submitAccept).not.toHaveBeenCalled();
-  });
-
-  it("no retained create on this device → a tagged no-create error (no submit)", async () => {
-    const mod = await loadServiceAccessModule();
-    const submitAccept = vi.fn();
-    await expect(
-      mod.runFinalizeAccept(
-        { raw: "flagship-accept:whatever" },
-        { podBaseUrl: () => "https://x", recallCreate: () => null, parseAcceptReply: () => parsedReply, submitAccept },
-      ),
-    ).rejects.toMatchObject({ code: "no-create" });
     expect(submitAccept).not.toHaveBeenCalled();
   });
 });

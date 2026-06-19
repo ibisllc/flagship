@@ -866,16 +866,30 @@ export async function redeemInvite(args, deps = {}) {
 // link-thief who never reached the author↔friend channel can't get bound.
 // ──────────────────────────────────────────────────────────────────────
 
+// ──────────────────────────────────────────────────────────────────────
+// CANONICAL acceptance-reply form (cross-client): the friend's app emits, and
+// the AUTHOR opens, a deep-link
+//
+//   flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=
+//
+// carrying ONLY `{accept, acceptSig}` — the friend's contact-AID-signed
+// `AcceptServiceInvite` (inviteId/serviceRef/contactAID/acceptedAt + sig) + the
+// box host. It carries NO create: the AUTHOR's box now FETCHES the owner's signed
+// create from `.com` by inviteId at finalize, so the reply needn't ship it. Same
+// shape on webapp/iOS/Android (a real deeplink the native camera / share / QR can
+// open; the webapp can't own the scheme, so it parses a pasted/typed URL). The
+// friend's USERNAME never appears — only the box-derived contact pseudonym.
+// ──────────────────────────────────────────────────────────────────────
+
 /**
- * FRIEND: build the encoded acceptance reply — `flagship-accept:<base64url(JSON)>`.
- * The friend's contact-AID-signed `AcceptServiceInvite` rides as base64url JSON
- * (the friend's USERNAME is never in it — only the inviteId, serviceRef, contact
- * AID, time, and sig). Symmetric to the invite link; the author pastes/opens it.
- *
- * @param {object} accept   { inviteId, serviceRef, contactAID(hex), acceptedAt }
- * @param {string} acceptSig  128-hex contact-AID signature
+ * FRIEND: build the canonical acceptance reply deep-link.
+ * @param {string} serverDomain  the AUTHOR's box host (the finalize target)
+ * @param {object} accept        { inviteId, serviceRef, contactAID(hex), acceptedAt }
+ * @param {string} acceptSig     128-hex contact-AID signature
  */
-export function buildAcceptReply(accept, acceptSig) {
+export function buildAcceptReply(serverDomain, accept, acceptSig) {
+  const host = String(serverDomain || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  if (!host) throw err("missing the server host", "400");
   if (!accept || typeof accept.inviteId !== "string" || typeof accept.serviceRef !== "string") {
     throw err("malformed acceptance", "400");
   }
@@ -885,87 +899,116 @@ export function buildAcceptReply(accept, acceptSig) {
   if (typeof acceptSig !== "string" || !/^[0-9a-f]{128}$/i.test(acceptSig)) {
     throw err("malformed acceptance signature", "400");
   }
-  const payload = {
-    v: 1,
-    accept: {
-      inviteId: accept.inviteId.toLowerCase(),
-      serviceRef: accept.serviceRef,
-      contactAID: accept.contactAID.toLowerCase(),
-      acceptedAt: accept.acceptedAt,
-    },
-    acceptSig: acceptSig.toLowerCase(),
-  };
-  return `flagship-accept:${base64urlEncode(JSON.stringify(payload))}`;
+  const q = new URLSearchParams({
+    server: host,
+    iid: accept.inviteId.toLowerCase(),
+    ref: accept.serviceRef,
+    aid: accept.contactAID.toLowerCase(),
+    sig: acceptSig.toLowerCase(),
+    at: String(accept.acceptedAt),
+  });
+  return `flagship://invite-accept?${q.toString()}`;
 }
 
 /**
- * AUTHOR: parse a `flagship-accept:<base64url(JSON)>` reply (tolerating pasted
- * whitespace). Returns `{ accept, acceptSig }` or null when it isn't a valid
- * acceptance reply. (`accept.contactAID` stays hex; the caller binds it.)
+ * AUTHOR: parse a `flagship://invite-accept?…` reply (tolerating pasted
+ * whitespace). Returns `{ serverDomain, accept, acceptSig }` or null when it
+ * isn't a valid acceptance reply. (`accept.contactAID` stays hex; the caller
+ * binds it.) Back-compat: also accepts the legacy `flagship-accept:<base64url>`
+ * form (which had no server host — the caller supplies the box origin then).
  */
 export function parseAcceptReply(raw) {
   if (typeof raw !== "string") return null;
   const s = raw.trim();
-  const m = s.match(/^flagship-accept:([A-Za-z0-9_-]+)=*$/);
-  if (!m) return null;
-  let obj;
+  // Legacy base64url form (no server host).
+  const legacy = s.match(/^flagship-accept:([A-Za-z0-9_-]+)=*$/);
+  if (legacy) {
+    let obj;
+    try {
+      obj = JSON.parse(dec.decode(base64urlDecode(legacy[1])));
+    } catch {
+      return null;
+    }
+    const a = obj && obj.accept;
+    if (!validAcceptShape(a, obj && obj.acceptSig)) return null;
+    return {
+      serverDomain: null,
+      accept: normalizeAccept(a),
+      acceptSig: obj.acceptSig.toLowerCase(),
+    };
+  }
+  // Canonical deep-link form.
+  let url;
   try {
-    obj = JSON.parse(dec.decode(base64urlDecode(m[1])));
+    url = new URL(s);
   } catch {
     return null;
   }
-  const a = obj && obj.accept;
-  if (
-    !a ||
-    typeof a.inviteId !== "string" ||
-    !/^[0-9a-f]{64}$/i.test(a.inviteId) ||
-    typeof a.serviceRef !== "string" ||
-    a.serviceRef.length === 0 ||
-    typeof a.contactAID !== "string" ||
-    !/^[0-9a-f]{64}$/i.test(a.contactAID) ||
-    typeof a.acceptedAt !== "number" ||
-    typeof obj.acceptSig !== "string" ||
-    !/^[0-9a-f]{128}$/i.test(obj.acceptSig)
-  ) {
-    return null;
-  }
+  if (url.protocol !== "flagship:") return null;
+  // `new URL("flagship://invite-accept?…")` puts `invite-accept` in host.
+  const kind = (url.host || url.pathname.replace(/^\/+/, "")).toLowerCase();
+  if (kind !== "invite-accept") return null;
+  const p = url.searchParams;
+  const accept = {
+    inviteId: p.get("iid"),
+    serviceRef: p.get("ref"),
+    contactAID: p.get("aid"),
+    acceptedAt: Number(p.get("at")),
+  };
+  if (!validAcceptShape(accept, p.get("sig"))) return null;
+  const host = String(p.get("server") || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
   return {
-    accept: {
-      inviteId: a.inviteId.toLowerCase(),
-      serviceRef: a.serviceRef,
-      contactAID: a.contactAID.toLowerCase(),
-      acceptedAt: a.acceptedAt,
-    },
-    acceptSig: obj.acceptSig.toLowerCase(),
+    serverDomain: host || null,
+    accept: normalizeAccept(accept),
+    acceptSig: String(p.get("sig")).toLowerCase(),
+  };
+}
+
+/** Validate the `{inviteId, serviceRef, contactAID, acceptedAt}` + sig shape. */
+function validAcceptShape(a, sig) {
+  return !!(
+    a &&
+    typeof a.inviteId === "string" &&
+    /^[0-9a-f]{64}$/i.test(a.inviteId) &&
+    typeof a.serviceRef === "string" &&
+    a.serviceRef.length > 0 &&
+    typeof a.contactAID === "string" &&
+    /^[0-9a-f]{64}$/i.test(a.contactAID) &&
+    Number.isFinite(a.acceptedAt) &&
+    typeof sig === "string" &&
+    /^[0-9a-f]{128}$/i.test(sig)
+  );
+}
+
+function normalizeAccept(a) {
+  return {
+    inviteId: a.inviteId.toLowerCase(),
+    serviceRef: a.serviceRef,
+    contactAID: a.contactAID.toLowerCase(),
+    acceptedAt: a.acceptedAt,
   };
 }
 
 /**
- * AUTHOR: finalize a manual-approve acceptance. POST `{accept, acceptSig, create,
- * createSig}` to the box's `/api/service-access/accept`. `create`/`createSig` are
- * the signed create the author RETAINED at create-time (the box verifies the
- * owner's authority from them, then the friend's contact-AID signature, then
- * binds the contact AID). No phone/IRK signature here — both signatures already
- * ride in the body.
+ * AUTHOR: finalize a manual-approve acceptance. POST ONLY `{accept, acceptSig}`
+ * to the box's `/api/service-access/accept`; the box FETCHES the owner's signed
+ * create from `.com` by inviteId (STK-signed) and re-verifies the owner authority
+ * itself, then the friend's contact-AID signature, then binds — so the author can
+ * finalize from ANY of their devices (no local create cache). No phone/IRK
+ * signature here — the friend's signature already rides in the body.
  *
  * @param {object} args
  * @param {string} args.baseUrl           the AUTHOR's box base URL
  * @param {object} args.accept            { inviteId, serviceRef, contactAID(hex), acceptedAt }
  * @param {string} args.acceptSig         128-hex friend contact-AID signature
- * @param {object} args.create            the retained signed-create envelope (.com carrier shape)
- * @param {string} args.createSig         128-hex owner create signature
  * @param {{ fetch? }} [deps]
  * @returns {Promise<{bound:boolean, serviceRef:string, boundAID:string}>}
  */
 export async function submitAccept(args, deps = {}) {
-  const { baseUrl, accept, acceptSig, create, createSig } = args;
+  const { baseUrl, accept, acceptSig } = args;
   if (!accept || typeof accept.inviteId !== "string") throw err("malformed acceptance", "400");
   if (typeof acceptSig !== "string" || !/^[0-9a-f]{128}$/i.test(acceptSig)) {
     throw err("malformed acceptance signature", "400");
-  }
-  if (!create || typeof create.inviteId !== "string") throw err("missing the signed create", "400");
-  if (typeof createSig !== "string" || !/^[0-9a-f]{128}$/i.test(createSig)) {
-    throw err("missing the create signature", "400");
   }
   const base = podBase(baseUrl);
   const f = deps.fetch || fetch;
@@ -982,8 +1025,6 @@ export async function submitAccept(args, deps = {}) {
           acceptedAt: accept.acceptedAt,
         },
         acceptSig: acceptSig.toLowerCase(),
-        create,
-        createSig: createSig.toLowerCase(),
       }),
     });
   } catch {

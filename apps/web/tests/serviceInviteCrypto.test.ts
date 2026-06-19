@@ -861,13 +861,17 @@ describe("webapp serviceInvite — wire helpers", () => {
       k.signWithContactAccountId,
     );
     expect(bytesToHex(acceptSig)).toBe(VECTORS.accept.sigHex);
+    // Canonical reply = the `flagship://invite-accept?…` deep-link carrying ONLY
+    // {accept, acceptSig} (no create — the box fetches it from .com).
     const reply = si.buildAcceptReply(
+      "home.alice.flagship.services",
       { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: bytesToHex(contact.publicKey), acceptedAt: VECTORS.accept.acceptedAt },
       bytesToHex(acceptSig),
     );
-    expect(reply.startsWith("flagship-accept:")).toBe(true);
+    expect(reply.startsWith("flagship://invite-accept?")).toBe(true);
     // AUTHOR parses the reply (tolerating pasted whitespace).
     const parsed = si.parseAcceptReply(`  \n${reply}\t `);
+    expect(parsed.serverDomain).toBe("home.alice.flagship.services");
     expect(parsed.accept.inviteId).toBe(VECTORS.accept.inviteId);
     expect(parsed.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
     expect(parsed.acceptSig).toBe(VECTORS.accept.sigHex);
@@ -879,28 +883,35 @@ describe("webapp serviceInvite — wire helpers", () => {
       acceptedAt: parsed.accept.acceptedAt,
     };
     expect(verifyAcceptServiceInvite(accept, hexToBytes(parsed.acceptSig), contact.publicKey)).toBe(true);
-    // AUTHOR submits {accept, acceptSig, create, createSig} to ITS box's accept endpoint.
+    // AUTHOR submits ONLY {accept, acceptSig} to ITS box's accept endpoint (the
+    // box fetches the create from .com — no create in the body).
     let captured: { url: string; body: any } | null = null;
     const f = async (url: string, init: RequestInit) => {
       captured = { url, body: JSON.parse(String(init.body)) };
       return { ok: true, status: 200, json: async () => ({ bound: true, serviceRef: VECTORS.serviceRef, boundAID: VECTORS.contactAid.contactAidPubHex }) } as Response;
     };
-    const create = { inviteId: VECTORS.accept.inviteId, authorAID: VECTORS.contactAid.authorAidPubHex, serviceRef: VECTORS.serviceRef, secretHash: VECTORS.secretHash, encryptedBundle: "00", issuedAt: VECTORS.create.issuedAt };
-    const createSig = bytesToHex(ed.sign(si.canonicalCreateBytes({ ...create, authorAID: authorAidPub }), authorAid.privateKey));
     const r = await si.submitAccept(
-      { baseUrl: POD, accept: parsed.accept, acceptSig: parsed.acceptSig, create, createSig },
+      { baseUrl: POD, accept: parsed.accept, acceptSig: parsed.acceptSig },
       { fetch: f as unknown as typeof fetch },
     );
     expect(captured!.url).toBe(`${POD}/api/service-access/accept`);
     expect(captured!.body.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
     expect(captured!.body.acceptSig).toBe(VECTORS.accept.sigHex);
-    expect(captured!.body.create.inviteId).toBe(VECTORS.accept.inviteId);
-    expect(captured!.body.createSig).toBe(createSig);
+    // The body carries NO create / createSig (the box fetches it).
+    expect(captured!.body.create).toBeUndefined();
+    expect(captured!.body.createSig).toBeUndefined();
     expect(r.bound).toBe(true);
     expect(r.boundAID).toBe(VECTORS.contactAid.contactAidPubHex);
     // A bad / non-acceptance reply parses to null.
-    expect(si.parseAcceptReply("flagship-accept:!!notbase64!!")).toBeNull();
+    expect(si.parseAcceptReply("flagship://invite-accept?iid=zzz")).toBeNull();
     expect(si.parseAcceptReply("nonsense")).toBeNull();
+    // Legacy base64url form still parses (back-compat; no server host).
+    const legacyJson = JSON.stringify({ v: 1, accept: { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.serviceRef, contactAID: VECTORS.contactAid.contactAidPubHex, acceptedAt: VECTORS.accept.acceptedAt }, acceptSig: VECTORS.accept.sigHex });
+    const legacyB64 = Buffer.from(legacyJson, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const lp = si.parseAcceptReply(`flagship-accept:${legacyB64}`);
+    expect(lp.serverDomain).toBeNull();
+    expect(lp.accept.inviteId).toBe(VECTORS.accept.inviteId);
+    expect(lp.acceptSig).toBe(VECTORS.accept.sigHex);
   });
 
   it("inviteSecretFromLocation + inviteContextFromLocation parse v1 + v2 /invite landings", async () => {
@@ -972,5 +983,33 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: null,
       inviteId: null,
     });
+  });
+
+  it("acceptance-reply canonical deep-link round-trips + is frozen cross-client", async () => {
+    const si = await loadServiceInvite();
+    // ── FROZEN cross-client acceptance reply (interop lock; the identical
+    // string is asserted on iOS DeepLink + Android InviteLink). The canonical
+    // form is `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`,
+    // carrying ONLY {accept, acceptSig} (the box fetches the create from .com). ──
+    const SERVER = "home.alice.flagship.services";
+    const IID = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
+    const REF = "alice-notes";
+    const AID = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a";
+    const SIG = "1f".repeat(64);
+    const AT = 1700006000000;
+    const FROZEN_REPLY =
+      `flagship://invite-accept?server=${SERVER}&iid=${IID}&ref=${REF}&aid=${AID}&sig=${SIG}&at=${AT}`;
+    // build === the frozen string.
+    expect(
+      si.buildAcceptReply(SERVER, { inviteId: IID, serviceRef: REF, contactAID: AID, acceptedAt: AT }, SIG),
+    ).toBe(FROZEN_REPLY);
+    // parse(frozen) === the structured acceptance + the box host.
+    expect(si.parseAcceptReply(FROZEN_REPLY)).toEqual({
+      serverDomain: SERVER,
+      accept: { inviteId: IID, serviceRef: REF, contactAID: AID, acceptedAt: AT },
+      acceptSig: SIG,
+    });
+    // Tolerates surrounding whitespace + an https:// prefix on the server param.
+    expect(si.parseAcceptReply(`  ${FROZEN_REPLY}  `)!.accept.inviteId).toBe(IID);
   });
 });
