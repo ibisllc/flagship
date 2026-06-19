@@ -32,6 +32,7 @@ public enum ServiceInvite {
     public static let tagAccessMode = "flagship/service-access-mode/v1"
     public static let tagVisit = "flagship/service-visit/v1"
     public static let tagKnock = "flagship/service-knock/v1"
+    public static let tagAllowRemove = "flagship/service-allow-remove/v1"
 
     // ── Key derivation (mirror keys.ts: empty-salt HKDF-SHA256) ──────────
 
@@ -233,6 +234,38 @@ public enum ServiceInvite {
         try validateNoSepCtrl("serviceRef", serviceRef)
         guard mode == "open" || mode == "restricted" else { throw ServiceInviteError.badMode }
         return Data([tagAccessMode, serverId, serviceRef, mode, String(issuedAt)].joined(separator: "|").utf8)
+    }
+
+    /// `tagAllowRemove | serverId | serviceRef | aid | issuedAt` — the owner-IRK
+    /// prune of a single friend's AID from a service's allow-list (the box-side
+    /// half of a "remove person" that a `.com` revoke alone never reaches).
+    /// `aid` is the friend's bound AID, lowercase hex. Mirrors @flagship/protocol
+    /// `canonicalRemoveServiceAllow`.
+    public static func canonicalRemoveServiceAllow(
+        serverId: String,
+        serviceRef: String,
+        aid: String,
+        issuedAt: Int64
+    ) throws -> Data {
+        try validateNoSepCtrl("serverId", serverId)
+        try validateNoSepCtrl("serviceRef", serviceRef)
+        let aidLower = aid.lowercased()
+        try validateNoSepCtrl("aid", aidLower)
+        return Data([tagAllowRemove, serverId, serviceRef, aidLower, String(issuedAt)].joined(separator: "|").utf8)
+    }
+
+    /// Ed25519-sign a `RemoveServiceAllow` over `canonicalRemoveServiceAllow`
+    /// with the OWNER IRK (the box verifies against its config-pinned owner IRK).
+    /// Mirrors @flagship/protocol `signRemoveServiceAllow`.
+    public static func signRemoveServiceAllow(
+        serverId: String,
+        serviceRef: String,
+        aid: String,
+        issuedAt: Int64,
+        irk: Curve25519.Signing.PrivateKey
+    ) throws -> Data {
+        let bytes = try canonicalRemoveServiceAllow(serverId: serverId, serviceRef: serviceRef, aid: aid, issuedAt: issuedAt)
+        return try irk.signature(for: bytes)
     }
 
     /// `tagVisit | serverId | serviceRef | hex(visitorAID) | issuedAt`
