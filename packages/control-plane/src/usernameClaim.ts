@@ -14,6 +14,15 @@ export interface UsernameClaimDeps {
 export interface UsernameClaimBody {
   request?: { username?: string; irkPub?: string; issuedAt?: number };
   signature?: string;
+  /**
+   * Service-access gating v2 — the account's STABLE AID pubkey (hex,
+   * `deriveAccountId(UMK)`). OPTIONAL + additive: it is NOT part of the
+   * IRK-signed claim canonical bytes (so existing client signing is unchanged),
+   * it is merely recorded next to the IRK so `.com` can later verify AID-signed
+   * service-invite create/revoke against it (dual-accept with the IRK). A
+   * malformed value is ignored, never rejected — it can't block a claim.
+   */
+  aidPub?: string;
 }
 
 export async function handleUsernameClaim(
@@ -51,10 +60,18 @@ export async function handleUsernameClaim(
   const v = validateUserLabel(r.username);
   if (!v.ok) return malformed(v.reason);
 
+  // gating v2 — record the stable AID alongside the IRK when the client
+  // supplies a well-formed one. Ignored if absent/malformed (never blocks).
+  const aidPubHex =
+    typeof body.aidPub === "string" && HEX64.test(body.aidPub)
+      ? body.aidPub.toLowerCase()
+      : undefined;
+
   const out = await deps.storage.put({
     username: v.label,
     irkPubHex: bytesToHex(irkPub),
     claimedAt: now,
+    ...(aidPubHex ? { aidPubHex } : {}),
   });
   if (!out.ok) return conflict(out.reason);
   return ok({ ok: true, username: v.label });

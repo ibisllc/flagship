@@ -2808,6 +2808,7 @@ interface ServiceInviteRow {
   revoked_at: number | null;
   // v2 (migration 0057). Nullable so a SELECT against a pre-0057 DB decodes.
   create_sig?: string | null;
+  create_issued_at?: number | null;
   max_redemptions?: number | null;
   expires_at?: number | null;
   redemptions?: number | null;
@@ -2826,6 +2827,7 @@ function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceIn
     createdAt: r.created_at,
     revokedAt: r.revoked_at,
     createSig: r.create_sig ?? null,
+    createIssuedAt: r.create_issued_at ?? null,
     maxRedemptions: r.max_redemptions ?? null,
     expiresAt: r.expires_at ?? null,
     redemptions: r.redemptions ?? 0,
@@ -2837,7 +2839,7 @@ function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceIn
 const SERVICE_INVITE_COLS =
   `invite_id, author_aid, service_ref, encrypted_bundle, secret_hash,
    bound_aid, bound_at, created_at, revoked_at,
-   create_sig, max_redemptions, expires_at, redemptions, approval_mode`;
+   create_sig, create_issued_at, max_redemptions, expires_at, redemptions, approval_mode`;
 
 /**
  * D1 ServiceInviteStorage — bearer-link service-access capability invites
@@ -2876,6 +2878,7 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     secretHash: string;
     createdAt: number;
     createSig?: string;
+    createIssuedAt?: number;
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;
@@ -2888,8 +2891,9 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         `INSERT OR IGNORE INTO service_invites
            (invite_id, author_aid, service_ref, encrypted_bundle,
             secret_hash, bound_aid, bound_at, created_at, revoked_at,
-            create_sig, max_redemptions, expires_at, redemptions, approval_mode)
-         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, 0, ?10)`,
+            create_sig, create_issued_at, max_redemptions, expires_at,
+            redemptions, approval_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, ?10, 0, ?11)`,
       )
       .bind(
         rec.inviteId,
@@ -2899,6 +2903,7 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         rec.secretHash.toLowerCase(),
         rec.createdAt,
         rec.createSig ?? null,
+        rec.createIssuedAt ?? null,
         rec.maxRedemptions ?? null,
         rec.expiresAt ?? null,
         rec.approvalMode ?? "auto",

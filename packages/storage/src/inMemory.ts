@@ -1539,6 +1539,7 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     secretHash: string;
     createdAt: number;
     createSig?: string;
+    createIssuedAt?: number;
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;
@@ -1572,6 +1573,7 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
       createdAt: rec.createdAt,
       revokedAt: null,
       createSig: rec.createSig ?? null,
+      createIssuedAt: rec.createIssuedAt ?? null,
       maxRedemptions: rec.maxRedemptions ?? null,
       expiresAt: rec.expiresAt ?? null,
       redemptions: 0,

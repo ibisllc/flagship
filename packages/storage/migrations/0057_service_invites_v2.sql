@@ -10,6 +10,10 @@
 --   create_sig       — the author's create-envelope signature (IRK or AID), hex.
 --                      Released to the box on redeem so the box verifies the
 --                      owner's create itself (demoting .com to a blind store).
+--   create_issued_at — the create envelope's signed `issuedAt` (epoch-ms), so
+--                      the box reconstructs the EXACT signed CreateServiceInvite
+--                      to verify create_sig (the row's created_at is .com's
+--                      receive time, which differs). NULL on a v1 row.
 --   max_redemptions  — GROUP cap; NULL ⇒ personal/single-use (v1). 0 ⇒ unlimited.
 --   expires_at       — optional invite expiry (epoch-ms); NULL ⇒ never.
 --   redemptions      — count of distinct AIDs bound (group accounting); DEFAULT 0.
@@ -22,6 +26,7 @@
 --   pre-v2 rows ⇒ .com falls back to IRK-verify only.
 
 ALTER TABLE service_invites ADD COLUMN create_sig TEXT;
+ALTER TABLE service_invites ADD COLUMN create_issued_at INTEGER;
 ALTER TABLE service_invites ADD COLUMN max_redemptions INTEGER;
 ALTER TABLE service_invites ADD COLUMN expires_at INTEGER;
 ALTER TABLE service_invites ADD COLUMN redemptions INTEGER NOT NULL DEFAULT 0;

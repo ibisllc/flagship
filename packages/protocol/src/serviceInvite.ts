@@ -40,6 +40,7 @@ const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
 const TAG_VISIT = "flagship/service-visit/v1";
 const TAG_KNOCK = "flagship/service-knock/v1";
 const TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1";
+const TAG_LIST_QUERY = "flagship/service-invite-list/v1";
 
 // ──────────────────────────────────────────────────────────────────────
 // Invite id — `hash(AID_author) · hash(devicePub_author) · counter`.
@@ -525,6 +526,54 @@ export function verifyRemoveServiceAllow(
 ): boolean {
   try {
     return ed.verify(sig, canonicalRemoveServiceAllow(s), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Service-invite LIST query — owner-IRK/AID-signed (v2 §C2). The unsigned v1
+// list was an open graph dump (anyone with a username + a 64-hex authorAID got
+// that author's whole invite graph). The owner now SIGNS this query; `.com`
+// verifies it against the account's registered AID OR IRK (dual-accept during
+// the client transition) before returning the listing. `scope` distinguishes
+// the full list from the revoked-since poll so one signature can't be replayed
+// across the two; `cursor` is the revoked-since lower bound (0 for the full list).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ServiceInviteListQuery {
+  username: string;
+  /** Author AID being listed (lower-hex) — must be the caller's own account. */
+  authorAID: string;
+  /** "list" = the full invite listing; "revoked-since" = the box poller feed. */
+  scope: "list" | "revoked-since";
+  /** revoked-since lower bound (epoch-ms); 0 for the full list. */
+  cursor: number;
+  issuedAt: number;
+}
+
+function canonicalListQuery(q: ServiceInviteListQuery): Bytes {
+  validateNoSepCtrl("username", q.username);
+  validateNoSepCtrl("authorAID", q.authorAID);
+  if (q.scope !== "list" && q.scope !== "revoked-since") {
+    throw new Error("scope must be 'list' or 'revoked-since'");
+  }
+  return new TextEncoder().encode(
+    [TAG_LIST_QUERY, q.username, q.authorAID, q.scope, q.cursor, q.issuedAt].join("|"),
+  );
+}
+
+export function signServiceInviteListQuery(q: ServiceInviteListQuery, signer: Keypair): Bytes {
+  return ed.sign(canonicalListQuery(q), signer.privateKey);
+}
+
+export function verifyServiceInviteListQuery(
+  q: ServiceInviteListQuery,
+  sig: Bytes,
+  signerPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalListQuery(q), signerPub);
   } catch {
     return false;
   }

@@ -331,6 +331,7 @@ export async function handleAdminClaimAndIssue(
   }
 
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, username);
+  const userAid = deriveDemoUserAid(deps.demoIrkKek, username);
   const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, username);
   const rck = deriveDemoRckKey(deps.demoIrkKek, username);
   const userIrkHex = bytesToHex(userIrk.publicKey);
@@ -338,12 +339,15 @@ export async function handleAdminClaimAndIssue(
   // Claim the username under the derived IRK. The username storage's
   // put rejects on conflicting IRK (different hex for the same name);
   // that's an explicit 409 to keep a bad-key-rotation from silently
-  // overwriting a real account's claim.
+  // overwriting a real account's claim. gating v2 — also record the demo
+  // account's stable AID (deterministic-from-KEK) so .com can verify
+  // AID-signed service-invite create/revoke against it.
   const claimResult = await deps.usernames.put({
     username,
     irkPubHex: userIrkHex,
     claimedAt: nowOf(deps),
     isDemo: true,
+    aidPubHex: bytesToHex(userAid.publicKey),
   });
   if (!claimResult.ok) {
     return conflict("username claimed under different IRK; cannot re-issue");

@@ -1106,6 +1106,13 @@ export interface ServiceInviteRecord {
    */
   createSig: string | null;
   /**
+   * The create envelope's signed `issuedAt` (epoch-ms) — distinct from
+   * `createdAt` (`.com`'s receive time). Persisted so the box can reconstruct
+   * the EXACT signed `CreateServiceInvite` to verify `createSig`. NULL on a v1
+   * row (no signature stored).
+   */
+  createIssuedAt: number | null;
+  /**
    * GROUP / multi-use cap: NULL ⇒ personal single-use (v1); 0 ⇒ unlimited;
    * N ⇒ at most N distinct AIDs may bind.
    */
@@ -1168,6 +1175,7 @@ export interface ServiceInviteStorage {
     secretHash: string;
     createdAt: number;
     createSig?: string;
+    createIssuedAt?: number;
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;

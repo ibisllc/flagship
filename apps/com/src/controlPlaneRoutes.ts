@@ -30,6 +30,7 @@ import {
   handleRedeemServiceInvite,
   handleRevokeServiceInvite,
   handleListServiceInvites,
+  handleRevokedSinceServiceInvites,
   handleCleanupApex,
   handleCompleteRePair,
   handleDeviceDisconnect,
@@ -440,6 +441,7 @@ const ROUTE_RE = {
   // create (POST) + list (GET) on the base path; revoke is a distinct sub-path
   // checked first; redeem is account-agnostic (the friend may be a stranger).
   SERVICE_INVITE_REVOKE: /^\/api\/users\/([^/]+)\/service-invites\/revoke$/,
+  SERVICE_INVITE_REVOKED_SINCE: /^\/api\/users\/([^/]+)\/service-invites\/revoked-since$/,
   SERVICE_INVITES: /^\/api\/users\/([^/]+)\/service-invites$/,
   SERVICE_INVITE_REDEEM: /^\/api\/service-invites\/redeem$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -1017,12 +1019,35 @@ export async function tryControlPlane(
       ),
     );
   }
+  // revoked-since (GET) — the box revocation poller; owner-signed. Checked
+  // BEFORE the base list path (it's a longer sub-path of the same prefix).
+  if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKED_SINCE))) {
+    return finish(
+      await handleRevokedSinceServiceInvites(
+        { invites: storage.serviceInvites, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        {
+          authorAID: url.searchParams.get("authorAID"),
+          scope: url.searchParams.get("scope"),
+          cursor: url.searchParams.get("cursor"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
+        },
+      ),
+    );
+  }
   if (method === "GET" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
     return finish(
       await handleListServiceInvites(
         { invites: storage.serviceInvites, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
-        url.searchParams.get("authorAID"),
+        {
+          authorAID: url.searchParams.get("authorAID"),
+          scope: url.searchParams.get("scope"),
+          cursor: url.searchParams.get("cursor"),
+          issuedAt: url.searchParams.get("issuedAt"),
+          sig: url.searchParams.get("sig"),
+        },
       ),
     );
   }
