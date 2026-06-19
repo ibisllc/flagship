@@ -27,6 +27,7 @@ public enum ServiceInvite {
     public static let tagCreate = "flagship/service-invite/create/v1"
     public static let tagRedeem = "flagship/service-invite/redeem/v1"
     public static let tagRevoke = "flagship/service-invite/revoke/v1"
+    public static let tagAccept = "flagship/service-invite/accept/v1"
     public static let tagInviteId = "flagship/service-invite/id/v1"
     public static let tagBundle = "flagship/service-invite/bundle/v1"
     public static let tagAccessMode = "flagship/service-access-mode/v1"
@@ -55,6 +56,35 @@ public enum ServiceInvite {
     /// The stable AID Ed25519 PUBLIC key (32 B) — the allow-list / invite key.
     public static func deriveAccountIdPub(umkSeed: Data) -> Data? {
         deriveAccountId(umkSeed: umkSeed)?.publicKey.rawRepresentation
+    }
+
+    /// Contact Account Id SEED (32 B) — the PER-AUTHOR pseudonymous identity the
+    /// CONSUMER presents when redeeming / visiting / knock-authorizing / accepting
+    /// a given author's services. `HKDF(umkSeed, info =
+    /// "flagship/contact-aid/v1|<authorAidPubHex>")` (mirrors keys.ts
+    /// `deriveContactAccountId`, with the AUTHOR's AID pubkey lower-hex in the
+    /// info). STABLE with that author (idempotent re-redeem across the consumer's
+    /// IRK rotations + new devices); UNLINKABLE across authors (two authors can't
+    /// cross-link the same consumer, and `.com` sees unlinkable pseudonyms).
+    /// Per-AUTHOR (not per-service), so cross-app reuse within one author works.
+    public static func deriveContactAccountIdSeed(umkSeed: Data, authorAidPub: Data) -> Data? {
+        guard umkSeed.count == 32 else { return nil }
+        let info = "flagship/contact-aid/v1|" + HexUtil.encode(authorAidPub)
+        return hkdfSha256(ikm: umkSeed, info: Data(info.utf8))
+    }
+
+    /// The per-author contact AID Ed25519 PRIVATE key — the consumer's redemption
+    /// signer for THIS author's services (v2). Derived from the consumer's UMK +
+    /// the author's AID pubkey.
+    public static func deriveContactAccountId(umkSeed: Data, authorAidPub: Data) -> Curve25519.Signing.PrivateKey? {
+        guard let seed = deriveContactAccountIdSeed(umkSeed: umkSeed, authorAidPub: authorAidPub) else { return nil }
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+    }
+
+    /// The per-author contact AID Ed25519 PUBLIC key (32 B) — the pseudonym the
+    /// box binds in the author's service allow-list (NOT the consumer's global AID).
+    public static func deriveContactAccountIdPub(umkSeed: Data, authorAidPub: Data) -> Data? {
+        deriveContactAccountId(umkSeed: umkSeed, authorAidPub: authorAidPub)?.publicKey.rawRepresentation
     }
 
     /// The household symmetric AEAD key (32 B) — `HKDF(umkSeed, info =
@@ -193,22 +223,77 @@ public enum ServiceInvite {
     // ── Canonical bytes (mirror @flagship/protocol exactly) ──────────────
 
     /// `tagCreate | inviteId | hex(authorAID) | serviceRef | secretHash | encryptedBundle | issuedAt`
+    /// plus, ONLY when present (group / multi-use v2), `maxN=<n>` then `exp=<n>`
+    /// appended in that fixed order — so a v1 create (no caps) signs/verifies
+    /// byte-identically. Mirrors @flagship/protocol `canonicalCreate`.
     public static func canonicalCreate(
         inviteId: String,
         authorAID: Data,
         serviceRef: String,
         secretHash: String,
         encryptedBundle: String,
-        issuedAt: Int64
+        issuedAt: Int64,
+        maxRedemptions: Int? = nil,
+        expiresAt: Int64? = nil
     ) throws -> Data {
         try validateNoSepCtrl("inviteId", inviteId)
         try validateNoSepCtrl("serviceRef", serviceRef)
         try validateNoSepCtrl("secretHash", secretHash)
         try validateNoSepCtrl("encryptedBundle", encryptedBundle)
-        return Data([
+        var parts: [String] = [
             tagCreate, inviteId, HexUtil.encode(authorAID), serviceRef, secretHash,
             encryptedBundle, String(issuedAt),
+        ]
+        if let maxRedemptions {
+            guard maxRedemptions >= 0 else { throw ServiceInviteError.field("maxRedemptions must be non-negative") }
+            parts.append("maxN=\(maxRedemptions)")
+        }
+        if let expiresAt {
+            guard expiresAt >= 0 else { throw ServiceInviteError.field("expiresAt must be non-negative") }
+            parts.append("exp=\(expiresAt)")
+        }
+        return Data(parts.joined(separator: "|").utf8)
+    }
+
+    /// `tagAccept | inviteId | serviceRef | hex(contactAID) | acceptedAt` — the
+    /// MANUAL-approve out-of-band acceptance the CONSUMER's app emits (signed by
+    /// the consumer's PER-AUTHOR contact AID, `deriveContactAccountId`). The
+    /// consumer replies it back through the same private channel; the AUTHOR
+    /// submits it (+ the owner's signed create) to their OWN box, which verifies
+    /// both, then binds the contact AID. Mirrors @flagship/protocol
+    /// `canonicalAccept`.
+    public static func canonicalAccept(
+        inviteId: String,
+        serviceRef: String,
+        contactAID: Data,
+        acceptedAt: Int64
+    ) throws -> Data {
+        try validateNoSepCtrl("inviteId", inviteId)
+        try validateNoSepCtrl("serviceRef", serviceRef)
+        return Data([
+            tagAccept, inviteId, serviceRef, HexUtil.encode(contactAID), String(acceptedAt),
         ].joined(separator: "|").utf8)
+    }
+
+    /// Ed25519-sign an `AcceptServiceInvite` over `canonicalAccept` with the
+    /// consumer's per-author CONTACT AID. Mirrors `signAcceptServiceInvite`.
+    public static func signAcceptServiceInvite(
+        inviteId: String,
+        serviceRef: String,
+        contactAID: Data,
+        acceptedAt: Int64,
+        contactAid: Curve25519.Signing.PrivateKey
+    ) throws -> Data {
+        let bytes = try canonicalAccept(inviteId: inviteId, serviceRef: serviceRef, contactAID: contactAID, acceptedAt: acceptedAt)
+        return try contactAid.signature(for: bytes)
+    }
+
+    /// A random 128-bit invite id (64-char lowercase hex), the v2 replacement for
+    /// the structured `inviteId` (which baked `sha256(devicePub)` into the id — a
+    /// device-fingerprint leak via the listing). Same uniqueness, zero metadata;
+    /// attribution stays in the stored `authorAID`. Mirrors `randomServiceInviteId`.
+    public static func randomServiceInviteId() -> String {
+        HexUtil.encode(randomData(32))
     }
 
     /// `tagRedeem | secretHash | hex(visitorAID) | redeemedAt`
