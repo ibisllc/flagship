@@ -30,6 +30,7 @@ final class ServiceInviteVectorTests: XCTestCase {
         let setAccessMode: [String: Any]
         let visit: [String: Any]
         let knock: [String: Any]
+        let removeAllow: [String: Any]
         let bundle: [String: Any]
     }
 
@@ -64,6 +65,7 @@ final class ServiceInviteVectorTests: XCTestCase {
             setAccessMode: root["setAccessMode"] as! [String: Any],
             visit: root["visit"] as! [String: Any],
             knock: root["knock"] as! [String: Any],
+            removeAllow: root["removeAllow"] as! [String: Any],
             bundle: root["bundle"] as! [String: Any]
         )
     }
@@ -240,6 +242,32 @@ final class ServiceInviteVectorTests: XCTestCase {
             aid: friendAidKey(v)
         )
         XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: friendAid), "our knock sig must verify under friendAID")
+    }
+
+    func testRemoveAllowSignatureVerifies() throws {
+        let v = try load()
+        let bytes = try ServiceInvite.canonicalRemoveServiceAllow(
+            serverId: v.root["serverId"] as! String,
+            serviceRef: v.root["serviceRef"] as! String,
+            aid: v.removeAllow["aid"] as! String,
+            issuedAt: (v.removeAllow["issuedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(v.removeAllow["sigHex"] as! String)!
+        let irkPub = HexUtil.decode(v.derived["authorIrkPubHex"] as! String)!
+        // The recorded (noble RFC-8032) remove-allow sig verifies under OUR
+        // canonical bytes + the recorded authorIRK pub ⇒ our pre-image is
+        // byte-identical to the protocol's (so the box accepts a phone prune).
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: irkPub), "pinned remove-allow sig must verify under authorIRK")
+        // Our own signer produces a valid sig over the SAME bytes (CryptoKit's
+        // Ed25519 is randomized, so verify — don't byte-compare).
+        let mine = try ServiceInvite.signRemoveServiceAllow(
+            serverId: v.root["serverId"] as! String,
+            serviceRef: v.root["serviceRef"] as! String,
+            aid: v.removeAllow["aid"] as! String,
+            issuedAt: (v.removeAllow["issuedAt"] as! NSNumber).int64Value,
+            irk: authorIrkKey(v)
+        )
+        XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: irkPub), "our remove-allow sig must verify under authorIRK")
     }
 
     // MARK: bundle seal/open

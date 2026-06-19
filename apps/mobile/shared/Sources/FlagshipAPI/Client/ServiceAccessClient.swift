@@ -410,6 +410,9 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     )
     public var sessionStatusResult: SecuredSessionStatus = .online
     public var nextError: Error?
+    /// Targets ONLY the box allow-list prune (so a test can fail the prune leg
+    /// while the `.com` revoke succeeds). Thrown once, then cleared.
+    public var removeAllowError: Error?
 
     public init() {}
     private func maybeThrow() throws { if let e = nextError { nextError = nil; throw e } }
@@ -426,8 +429,9 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     }
 
     public func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult {
-        try maybeThrow()
         lock.withLock { _removeAllow.append(RemoveAllowCall(serverDomain: serverDomain, request: flatten(request), signatureHex: signatureHex)) }
+        if let e = removeAllowError { removeAllowError = nil; throw e }
+        try maybeThrow()
         return removeAllowResult
     }
 

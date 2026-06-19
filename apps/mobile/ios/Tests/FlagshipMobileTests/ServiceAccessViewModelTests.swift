@@ -112,14 +112,64 @@ final class ServiceAccessViewModelTests: XCTestCase {
         XCTAssertTrue(vm.people[0].bound)
     }
 
-    func testRemoveSignsRevoke() async {
+    func testRemoveUnredeemedInviteRevokesComOnly() async {
+        // No people loaded ⇒ no bound AID ⇒ `.com` revoke only, NO box prune
+        // (the allow-list never held an unredeemed invite).
         let mock = MockServiceAccessClient()
         let vm = makeVM(mock, now: { 1700 })
         await vm.remove(inviteId: "deadbeef")
         XCTAssertEqual(mock.revokeCalls.count, 1)
         XCTAssertEqual(mock.revokeCalls[0].inviteId, "deadbeef")
-        // (the revoke envelope was signed; the Mock records the call — the
-        // canonical-bytes verification is covered by the vector test.)
+        XCTAssertTrue(mock.removeAllowCalls.isEmpty, "no box prune for an unredeemed invite")
+    }
+
+    func testRemoveBoundFriendPrunesBoxAllowList() async {
+        let mock = MockServiceAccessClient()
+        mock.state = ServiceAccessState(mode: "restricted", allowCount: 1)
+        let id = "aa" + String(repeating: "0", count: 62)
+        let friendAID = "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c"
+        let sealed = try! ServiceInvite.sealBundle(.init(name: "Alex", photo: nil), householdKey: household, inviteId: id)
+        mock.rows = [
+            ServiceInviteRow(inviteId: id, serviceRef: serviceRef, encryptedBundleHex: sealed, boundAidHex: friendAID, boundAt: 1, createdAt: 1, revokedAt: nil),
+        ]
+        let vm = makeVM(mock, now: { 1700 })
+        await vm.load()
+        XCTAssertEqual(vm.people.count, 1)
+
+        await vm.remove(inviteId: id)
+        // BOTH legs fire: the `.com` revoke AND the box allow-list prune.
+        XCTAssertEqual(mock.revokeCalls.count, 1)
+        XCTAssertEqual(mock.revokeCalls[0].inviteId, id)
+        XCTAssertEqual(mock.removeAllowCalls.count, 1, "a redeemed friend must be pruned from the box")
+        let call = mock.removeAllowCalls[0]
+        XCTAssertEqual(call.serverDomain, server)
+        XCTAssertEqual(call.request["serverId"], server)
+        XCTAssertEqual(call.request["serviceRef"], serviceRef)
+        XCTAssertEqual(call.request["aid"], friendAID)
+        // The prune sig verifies under the owner IRK over the exact canonical bytes.
+        let bytes = try! ServiceInvite.canonicalRemoveServiceAllow(
+            serverId: server, serviceRef: serviceRef, aid: friendAID, issuedAt: 1700)
+        let sig = Data(HexUtil.decode(call.signatureHex)!)
+        XCTAssertTrue(irk().publicKey.isValidSignature(sig, for: bytes), "box prune must be owner-IRK signed over the canonical bytes")
+    }
+
+    func testRemoveBoxPruneFailureSurfaces() async {
+        let mock = MockServiceAccessClient()
+        mock.state = ServiceAccessState(mode: "restricted", allowCount: 1)
+        let id = "aa" + String(repeating: "0", count: 62)
+        let sealed = try! ServiceInvite.sealBundle(.init(name: "Alex", photo: nil), householdKey: household, inviteId: id)
+        mock.rows = [
+            ServiceInviteRow(inviteId: id, serviceRef: serviceRef, encryptedBundleHex: sealed, boundAidHex: "a1f3c968acbff6ca2b8267282715e72559cc09bf1e25aecbfd316650a4012b6c", boundAt: 1, createdAt: 1, revokedAt: nil),
+        ]
+        let vm = makeVM(mock)
+        await vm.load()
+        // Fail ONLY the box prune — the `.com` revoke still succeeds, but the
+        // friend would keep box access, so this must surface.
+        mock.removeAllowError = ScreensClientError.http(status: 403, message: "bad sig")
+        await vm.remove(inviteId: id)
+        XCTAssertEqual(mock.revokeCalls.count, 1)
+        XCTAssertEqual(mock.removeAllowCalls.count, 1, "the box prune was attempted")
+        if case .failed = vm.phase {} else { XCTFail("a box-prune failure must surface") }
     }
 
     func testSetModeFailureSurfaces() async {
