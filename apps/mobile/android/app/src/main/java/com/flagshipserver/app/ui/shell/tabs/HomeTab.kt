@@ -247,14 +247,14 @@ fun HomeTab() {
             AddServerChooserScreen(
                 mode = AddServerMode.IN_APP,
                 onProvision = { nav.navigate("create-server") },
-                // The old onPair → "pod-pair" route claimed you could
-                // pair to an existing pod by scanning a QR. That's
-                // semantically wrong: a fresh device can only recover
-                // its own account. Pair as no-op for now; the
-                // "Add another phone" flow lives in Settings →
-                // Trusted devices once Phase E (Wipe & restart) ships
-                // the full multi-device story.
-                onPair = { /* disabled — use Settings → Trusted devices */ },
+                // Pairing an existing box is done by opening it from Home, not
+                // from this chooser — surface the same guidance toast iOS shows
+                // (HomeTab.swift) instead of a silent no-op.
+                onPair = {
+                    toasts.info(
+                        "Servers you already own show up on Home — open one to pair this device. Choose “Provision a new box” to set up brand-new hardware.",
+                    )
+                },
                 onCancel = { nav.popBackStack() },
             )
         }

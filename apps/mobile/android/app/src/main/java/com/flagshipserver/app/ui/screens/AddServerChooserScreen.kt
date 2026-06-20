@@ -82,7 +82,7 @@ fun AddServerChooserScreen(
             icon = Icons.Outlined.QrCode2,
             accent = FS.colors.success,
             title = "Pair an existing box",
-            body = "Already have a Flagship server running somewhere? Scan its pairing QR or paste the 6-character code.",
+            body = "Already have a Flagship server running somewhere? Open it from Home to pair this device.",
             cta = "Pair →",
             onClick = onPair,
             testTag = "chooser-pair",
