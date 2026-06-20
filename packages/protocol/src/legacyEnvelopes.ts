@@ -53,6 +53,8 @@ const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
 const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
+const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
+const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -165,6 +167,34 @@ export interface PublishServerDns {
 export interface ClaimUsername {
   username: string;
   irkPub: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed LAST-DEVICE account-death order. Issued only inside the deletion
+ * ceremony (typed-username + biometric) when the account is removing its final
+ * device. `.com` verifies it against the username's currently-registered IRK,
+ * enforces "no other active device", then HARD-DELETES the username row (so the
+ * name frees immediately) and tears down every server the account owns. The
+ * signature commits to (username, issuedAt) so a captured order can't be
+ * re-aimed at a different name; `issuedAt` bounds the replay window.
+ */
+export interface AccountSelfDelete {
+  username: string;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed opt-in "ask all my servers to delete their content" order. NEVER a
+ * standalone command: `.com` accepts/records it ONLY when it arrives atomically
+ * bundled with a valid last-device {@link AccountSelfDelete} (the bundle-ingest
+ * invariant — docs/account-deletion-and-name-reclaim.md §5). A standalone
+ * servers-self-delete, or one bundled with an absent/invalid account-self-delete,
+ * is rejected and neither order is recorded/forwarded. The signature commits to
+ * (username, issuedAt).
+ */
+export interface ServersSelfDelete {
+  username: string;
   issuedAt: number;
 }
 
@@ -475,6 +505,20 @@ function canonicalClaimUsername(c: ClaimUsername): Bytes {
   );
 }
 
+function canonicalAccountSelfDelete(c: AccountSelfDelete): Bytes {
+  legacyFieldGuard("username", c.username);
+  return new TextEncoder().encode(
+    [TAG_ACCOUNT_SELF_DELETE, c.username.toLowerCase(), c.issuedAt].join("|"),
+  );
+}
+
+function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
+  legacyFieldGuard("username", c.username);
+  return new TextEncoder().encode(
+    [TAG_SERVERS_SELF_DELETE, c.username.toLowerCase(), c.issuedAt].join("|"),
+  );
+}
+
 export function signRebuildRequest(r: ImageRebuildRequest, irk: Keypair): Bytes {
   return ed.sign(canonicalRebuild(r), irk.privateKey);
 }
@@ -746,6 +790,30 @@ export function signClaimUsername(c: ClaimUsername, irk: Keypair): Bytes {
 export function verifyClaimUsername(c: ClaimUsername, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalClaimUsername(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signAccountSelfDelete(c: AccountSelfDelete, irk: Keypair): Bytes {
+  return ed.sign(canonicalAccountSelfDelete(c), irk.privateKey);
+}
+
+export function verifyAccountSelfDelete(c: AccountSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAccountSelfDelete(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServersSelfDelete(c: ServersSelfDelete, irk: Keypair): Bytes {
+  return ed.sign(canonicalServersSelfDelete(c), irk.privateKey);
+}
+
+export function verifyServersSelfDelete(c: ServersSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServersSelfDelete(c), irkPub);
   } catch {
     return false;
   }
