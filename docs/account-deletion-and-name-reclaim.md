@@ -45,6 +45,7 @@ must create that signal. (We chose: **hard-delete the username row** — §1.)
 | Inactive reclaim | dormant-but-undeleted names | **Sysadmin manual tool**, allowed for ≥3 months inactive (expectation: wait longer). NOT an automatic GC. |
 | Servers on delete | orphan vs transfer | **Orphan + lapse**, PLUS an opt-in **"ask all servers to delete their content"** checkbox; build a real **transfer-a-box** flow (§4). |
 | Orphaned online box | reclaiming a live box's name | **Orphan + lapse** — tear down routing/DNS/cert; box keeps sealed data but goes dark and lapses at cert expiry. New claimant can't reach old data (different IRK). |
+| Self-delete bundling | content-wipe is never standalone | **`.com` accepts/records the "servers self-delete" order ONLY when it arrives atomically bundled with the last-device account self-delete order. Absent that, the WHOLE bundle is rejected — neither order is recorded or forwarded.** |
 
 ---
 
@@ -65,10 +66,11 @@ Three escalating steps:
    - **Optional checkbox: "Ask all my servers to delete their content"** (default
      OFF) — issues the self-delete order (§5).
    - Affirmative gate: **type the username** + **biometric**, not a tap.
-3. **Execute:** issue the owner-IRK self-revoke that **hard-deletes the username
-   row** (and tears down routing/DNS/cert — §6), fire the optional content-delete
-   order to online boxes, then `Keystore.wipeAllProfiles()` and drop to Welcome.
-   The name is free immediately.
+3. **Execute:** submit the owner-IRK self-revoke that **hard-deletes the username
+   row** (and tears down routing/DNS/cert — §6). If the content-delete box was
+   checked, it rides as **one atomic bundle** with that self-revoke (§5 invariant)
+   — never on its own. Then `Keystore.wipeAllProfiles()` and drop to Welcome. The
+   name is free immediately.
 
 Mirror on iOS / Android / webapp. Fold the lock-screen sign-out under the same
 gate (today it only warns) so the ceremony is consistent everywhere.
@@ -125,6 +127,18 @@ self-delete** order; boxes that receive it wipe their content. Offline boxes get
 it as a best-effort **pending** order executed on next boot. Default OFF (a plain
 deletion just orphans-and-lapses; sealed data stays on disk, unreachable).
 
+**Bundling invariant (locked):** the content-wipe is **never a standalone
+order**. `.com` accepts/records the "servers self-delete" order ONLY when it
+arrives as one **atomic bundle** with the **last-device account self-delete**
+(the hard-delete-row self-revoke). If that companion order is absent — or the
+issuing device is NOT the account's last device — `.com` rejects the **entire
+bundle** and records/forwards **neither** order. Enforcement lives at `.com`'s
+bundle-ingest: verify (1) both orders present and owner-IRK-signed, (2) the
+issuer is the last remaining device (account goes to zero devices), (3) all-or-
+nothing commit. This guarantees content can only be wiped as an inseparable side
+effect of irreversible account death — there is no "wipe my servers but keep my
+account" path, and a stray/replayed content-delete on its own is inert.
+
 **Threat: attacker with a compromised phone uses this to nuke boxes.** Accepted
 reasoning: the order is only issuable inside the deletion ceremony, which only
 runs on the **last device** behind biometric + typed confirm. An attacker there
@@ -160,7 +174,9 @@ reached live.
 2. **`last_active` + sysadmin reclaim tool** for ≥3-month-inactive names.
 3. **Transfer-a-box**: giver flow + QR + acquirer "Pair an existing box" camera
    scan + box-side re-seal/ownership move.
-4. **Self-delete-content** box-side order handling (online + pending).
+4. **Self-delete-content** — `.com` bundle-ingest enforcing the §5 invariant
+   (content-delete accepted only when atomically bundled with the last-device
+   account self-delete) + box-side order handling (online + pending).
 
 Open build-time questions: exact transfer-token format + who brokers the re-seal
 (`.com` vs direct); whether `last_active` lives on `usernames` or
