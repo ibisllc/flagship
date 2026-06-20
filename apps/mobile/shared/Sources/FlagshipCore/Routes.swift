@@ -6,7 +6,15 @@ import FlagshipAPI
 /// type-safe deep-linking and zero stringly-typed navigation.
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
+    /// "Add a server" — the provision-vs-pair CHOOSER (AddServerChooserScreen),
+    /// at parity with the webapp + Android. Provision pushes `.provisionServer`;
+    /// pairing an existing box is the deferred multi-device path (you pair an
+    /// existing server by opening it from Home), surfaced as guidance.
     case addServer
+    /// The actual "provision a new box" flow (CreateServer), reached from the
+    /// chooser's Provision card. Split out from `.addServer` so the chooser owns
+    /// the fork.
+    case provisionServer
     case installProgress(serial: String, name: String, description: String)
 }
 

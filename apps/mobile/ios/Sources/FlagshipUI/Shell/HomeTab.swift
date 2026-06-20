@@ -61,8 +61,11 @@ public struct HomeTab: View {
             }
             _ = linker.consume()
         case .createServer:
-            if !path.contains(.addServer) {
-                path.append(.addServer)
+            // A `createServer` deep-link is an explicit "provision" intent, so it
+            // skips the chooser and goes straight to the create flow. The Home
+            // "add server" button opens the chooser (.addServer); this does not.
+            if !path.contains(.provisionServer) {
+                path.append(.provisionServer)
             }
             _ = linker.consume()
         default:
@@ -264,8 +267,22 @@ public struct HomeTab: View {
                 ServerDetailContainer(podId: podId)
             }
         case .addServer:
-            // In-app add-server only ever means "provision a new box."
-            // Pairing an existing server is an onboarding-only path.
+            // Provision-vs-pair chooser — parity with the webapp + Android. The
+            // AddServerChooserScreen existed but was never wired (a dead screen);
+            // `.addServer` now shows it and forks: Provision → the create flow;
+            // pairing an existing box is the deferred multi-device path (a device
+            // pairs an existing server by opening it from Home), so onPair gives
+            // that guidance instead of Android's silent no-op.
+            AddServerChooserScreen(
+                mode: .inApp,
+                onProvision: { path.append(.provisionServer) },
+                onPair: {
+                    toasts.info(
+                        "Servers you already own show up on Home — open one to pair this device. Choose “Provision a new box” to set up brand-new hardware."
+                    )
+                }
+            )
+        case .provisionServer:
             CreateServerContainer(
                 onDeliveredVisible: { serverDomain, serial, name, description in
                     // QR-relay delivered and the "boot disk is on the way"

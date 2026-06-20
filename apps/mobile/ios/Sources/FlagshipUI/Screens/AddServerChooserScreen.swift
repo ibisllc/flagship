@@ -45,17 +45,19 @@ public struct AddServerChooserScreen: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("chooser-provision")
 
                 Button(action: onPair) {
                     chooserCard(
                         icon: "qrcode.viewfinder",
                         accent: c.success,
                         title: "Pair an existing box",
-                        body: "Already have a Flagship server running somewhere? Scan its pairing QR or paste the 6-character code.",
+                        body: "Already have a Flagship server running somewhere? Open it from Home to pair this device.",
                         c: c
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("chooser-pair")
 
                 Spacer().frame(height: FS.space.s12)
             }

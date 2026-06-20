@@ -78,12 +78,13 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   ios(
     "ios-create-server-form",
-    "Home → add-server opens the create-server form (name step) → advance to the disk-encryption control.",
+    "Home → add-server → provision-vs-pair chooser → Provision opens the create-server form (name step) → advance to the disk-encryption control.",
     "FlagshipAppUITests/GymEveryMergeTests/test_createServerFormReachable",
     {
       steps: [
         { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home." },
-        { kind: "tap", describe: "Add server (in-app = provision a new box).", handle: "home-add-server" },
+        { kind: "tap", describe: "Add a server.", handle: "home-add-server" },
+        { kind: "tap", describe: "Provision a new box (chooser fork).", handle: "chooser-provision" },
         { kind: "assert", describe: "Name field (step 0).", handle: "cs-name-field" },
         { kind: "type", describe: "Type a name to enable Next.", handle: "cs-name-field" },
         { kind: "tap", describe: "Next → boot-unlock / disk-encryption step.", handle: "cs-next-button" },
@@ -95,6 +96,7 @@ const EVERY_MERGE: readonly Scenario[] = [
       ],
       screenshots: [
         shot("home-ready", "Home."),
+        shot("add-server-chooser", "The provision-vs-pair chooser."),
         shot("create-server-form", "Create-server name step."),
         shot("create-server-encrypt", "The disk-encryption step."),
       ],
