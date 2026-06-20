@@ -149,4 +149,23 @@ if [ "${FLAGSHIP_SKIP_DIST_FRESHNESS:-0}" != "1" ]; then
   fi
 fi
 
+# ──────────────────────────────────────────────────────────────────────
+# Migration-drift gate (OPS-2 enforcement).
+#
+# A deployed Worker can run AHEAD of the prod D1 schema (it bundles the
+# BUILT storage/control-plane dist). A handler touching an unapplied
+# migration's column throws at runtime (Cloudflare 1101 → HTTP 500). This
+# 500'd every account creation once. The node helper compares the repo's
+# migration files against the prod schema_version ledger and refuses the
+# deploy on drift; it degrades to a warning when prod is unreachable.
+#
+# OPT-IN (FLAGSHIP_CHECK_PROD_MIGRATIONS=1, set by the predeploy npm
+# script) so the unit tests that invoke this script directly — and would
+# otherwise query prod from a wrangler-authed dev machine — never trigger
+# it. Skipped under the dist-check fixture root too.
+# ──────────────────────────────────────────────────────────────────────
+if [ "${FLAGSHIP_CHECK_PROD_MIGRATIONS:-0}" = "1" ] && [ -z "${FLAGSHIP_DIST_CHECK_ROOT:-}" ]; then
+  node "$REPO_ROOT/scripts/check-prod-migrations.mjs" || exit 1
+fi
+
 exit 0
