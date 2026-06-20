@@ -24,9 +24,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,17 +53,56 @@ class CompanionRequestsViewModel(
     private val _rowError = MutableStateFlow<Map<String, String>>(emptyMap())
     val rowError: StateFlow<Map<String, String>> = _rowError.asStateFlow()
 
+    private var pollJob: Job? = null
+
+    /** First load — flashes Loading, then a single fetch. */
     fun load(): Job = scope.launch {
         _state.value = LoadingState.Loading
+        refresh()
+    }
+
+    /**
+     * Silent refresh — fetches the pending list WITHOUT flashing Loading (so a
+     * poll re-tick doesn't blank the rendered rows) and swallows transport
+     * blips, keeping the last-good snapshot. Mirrors iOS `refresh()` + the
+     * webapp `pollPending` per-tick behaviour: a tick that fails while we
+     * already have rows leaves them in place; only a failure with no rows yet
+     * surfaces Failed.
+     */
+    private suspend fun refresh() {
         runCatching { client.companionPendingWrites() }
             .fold(
                 onSuccess = { r ->
-                    _state.value = LoadingState.Loaded(
-                        r.pending.sortedBy { it.queuedAt },
-                    )
+                    _state.value = LoadingState.Loaded(r.pending.sortedBy { it.queuedAt })
                 },
-                onFailure = { t -> _state.value = LoadingState.Failed(failureMessage(t)) },
+                onFailure = { t ->
+                    if (_state.value !is LoadingState.Loaded) {
+                        _state.value = LoadingState.Failed(failureMessage(t))
+                    }
+                },
             )
+    }
+
+    /**
+     * Inbox-scoped background poll. Runs a first refresh immediately, then
+     * loops every [intervalMs] silently re-fetching. Idempotent — a second
+     * call cancels the prior loop. The screen drives this while mounted and
+     * cancels it via [stopPolling] on dispose. Mirrors iOS `startPolling()` +
+     * the webapp `pollPending` (default 10s cadence).
+     */
+    fun startPolling(intervalMs: Long = POLL_INTERVAL_MS): Job {
+        stopPolling()
+        return scope.launch {
+            while (isActive) {
+                refresh()
+                delay(intervalMs)
+            }
+        }.also { pollJob = it }
+    }
+
+    fun stopPolling() {
+        pollJob?.cancel()
+        pollJob = null
     }
 
     fun approve(request: CompanionPendingWrite): Job = scope.launch {
@@ -197,6 +238,12 @@ class CompanionRequestsViewModel(
         is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
         is CompanionRequestsError -> t.message ?: "Companion intent is malformed."
         else -> t.message ?: "couldn't complete the request"
+    }
+
+    companion object {
+        /** 10s between polls while the inbox is open — mirrors the webapp's
+         *  `pollPending` default (`companionRequestsClient.js` intervalMs). */
+        const val POLL_INTERVAL_MS = 10_000L
     }
 }
 
