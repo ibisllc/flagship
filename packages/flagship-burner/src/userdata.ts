@@ -107,6 +107,16 @@ export interface UserDataOptions {
    */
   wifiSSID?: string;
   wifiPassword?: string;
+  /**
+   * Create-time pairing: the phone-chosen pairing key's PRIVATE half (32-byte
+   * Ed25519 seed hex). The daemon uses it ONCE at first boot to open the sealed
+   * `add-paired-session` deposit the creating phone left in `.com`, so the box
+   * comes online ALREADY paired (no "Pair this server" tap). An UNSIGNED recipe
+   * sibling — NOT part of the signed InstallBlob — so it never affects the
+   * recipe signature; absent ⇒ the on-disk blob is byte-identical to before.
+   * Carried from the recipe via {@link LoadedBlob.pairingKeyPrivHex}.
+   */
+  pairingKeyPrivHex?: string;
 }
 
 /**
@@ -169,7 +179,9 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
     throw new Error("bootHost must be https://");
   }
   return {
-    blobB64: utf8ToBase64(JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex))),
+    blobB64: utf8ToBase64(
+      JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingKeyPrivHex)),
+    ),
     ref,
     repo,
     bootHost,
@@ -2075,6 +2087,7 @@ echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
 export function installBlobToJson(
   b: InstallBlob,
   blobSignatureHex: string,
+  pairingKeyPrivHex?: string,
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -2098,6 +2111,13 @@ export function installBlobToJson(
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
     blobSignatureHex,
+    // Create-time pairing: the phone-chosen pairing key's private half, used
+    // ONLY by the daemon to open the sealed `add-paired-session` deposit the
+    // creating phone left in .com. An UNSIGNED recipe sibling (never part of
+    // the signed InstallBlob's canonical bytes), so it's appended only when the
+    // recipe carries it — a recipe WITHOUT it serializes byte-identically to
+    // before (existing burns + sha pins unchanged).
+    ...(pairingKeyPrivHex ? { pairingKeyPrivHex } : {}),
   };
 }
 

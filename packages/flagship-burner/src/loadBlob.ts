@@ -26,6 +26,15 @@ import { readFile } from "node:fs/promises";
 export interface LoadedBlob {
   blob: InstallBlob;
   blobSignatureHex: string;
+  /**
+   * Create-time pairing: the recipe's UNSIGNED pairing-key private half (a
+   * 32-byte Ed25519 seed hex), if present. NOT part of the signed InstallBlob —
+   * a top-level recipe sibling the phone adds so the box can open the sealed
+   * `add-paired-session` deposit on first boot. Threaded into the on-disk
+   * install-blob.json via {@link UserDataOptions.pairingKeyPrivHex}; undefined
+   * for recipes that don't carry it (older recipes / non-pairing burns).
+   */
+  pairingKeyPrivHex?: string;
   /** Where the blob came from — useful for the auto-shred step. */
   source: { kind: "file"; path: string } | { kind: "stdin" };
 }
@@ -87,6 +96,16 @@ export function loadBlobFromString(
   if (!parsed || typeof parsed !== "object") {
     throw new BurnerLoadError("top-level value is not an object", "malformed-json");
   }
+  // Create-time pairing: the optional pairing-key private half is a TOP-LEVEL
+  // recipe sibling (alongside `blob`/`blobSignature` in the envelope form, or a
+  // sibling of the flattened fields). Read it off the ORIGINAL parsed object
+  // before the envelope-flatten below drops top-level siblings. UNSIGNED — it's
+  // recipe metadata, never part of the verified InstallBlob.
+  const rawPairingKey = (parsed as Record<string, unknown>).pairingKeyPrivHex;
+  const pairingKeyPrivHex =
+    typeof rawPairingKey === "string" && /^[0-9a-f]{64}$/i.test(rawPairingKey)
+      ? rawPairingKey.toLowerCase()
+      : undefined;
   // Accept both the flattened recipe and the issued envelope that .com / the
   // website hand out: { blob: {...}, blobSignature: "..." }.
   let obj = parsed as Record<string, unknown>;
@@ -128,7 +147,7 @@ export function loadBlobFromString(
       "bad-signature",
     );
   }
-  return { blob, blobSignatureHex: sigHex, source };
+  return { blob, blobSignatureHex: sigHex, pairingKeyPrivHex, source };
 }
 
 export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {

@@ -395,6 +395,92 @@ export async function approveUnlock(req, deps = {}) {
   return { ok: true };
 }
 
+/**
+ * Create-time pairing — the webapp's half of pairing the creating device with a
+ * server BEFORE the box exists. Mirror of iOS `CreateTimePairing.build` + the
+ * daemon's `consumePendingPairing`.
+ *
+ * The box generates its own identity key only at first boot, so we can't seal a
+ * pairing order to it now. We mint a fresh PAIRING keypair, seal an owner-IRK-
+ * signed `add-paired-session` order FOR its public half, DEPOSIT the sealed blob
+ * to `.com` (content-blind), and return:
+ *   - `token` — persist as the session token so the BFF auths once the box
+ *     claims the deposit, and
+ *   - `pairingKeyPrivHex` — embed in the recipe (unsigned sibling) so the
+ *     booting box opens the deposit and comes online ALREADY paired.
+ *
+ * @param {{ serverDomain: string, label?: string }} args
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function,
+ *   now?: () => number, token?: string, pairingKeyPair?: CryptoKeyPair }} [deps]
+ * @returns {Promise<{ token: string, pairingKeyPrivHex: string }>}
+ */
+export async function depositCreateTimePairing(args, deps = {}) {
+  const { serverDomain } = args;
+  const session = getSession();
+  const username = session.username;
+  if (!username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  // 1. Fresh recipe pairing keypair. Export the raw Ed25519 pub (the seal
+  //    recipient) + the 32-byte seed (RFC 8410 pkcs8 = 16-byte prefix || seed).
+  const kp = deps.pairingKeyPair
+    || (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]));
+  const pairingPub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+  const pairingSeed = pkcs8.slice(pkcs8.length - 32);
+  const pairingKeyPrivHex = bytesToHex(pairingSeed);
+
+  // 2. Owner-IRK-signed add-paired-session order (mirror podPair.js canonical).
+  const token = deps.token || bytesToHex(randomBytes(32));
+  const label = String(args.label || "webapp")
+    .replace(/[| -]/g, " ").trim() || "webapp";
+  const order = { type: "add-paired-session", serverId: serverDomain, token, label, issuedAt: now };
+  const orderCanonical = te(
+    ["flagship/order/add-paired-session/v1", serverDomain, token, label, now].join("|"),
+  );
+  const orderSig = await sign(session.umk, orderCanonical);
+  const envelope = te(JSON.stringify({ request: order, signature: bytesToHex(orderSig) }));
+  const sealed = await sealForBoxStk(envelope, pairingPub);
+
+  // 3. IRK mailbox-auth (same shape as fetchVerifiedRequests).
+  const phoneIrkPubHex = await irkPubHex(session.umk);
+  const nonceHex = bytesToHex(randomBytes(32));
+  const authCore = {
+    username, endpointLabel: "device", phoneIrkPub: phoneIrkPubHex,
+    issuedAt: now, expiresAt: now + 120_000, nonce: nonceHex,
+  };
+  const authSig = await sign(
+    session.umk,
+    canonicalDeviceEndpointClaim({ ...authCore, phoneIrkPubHex, nonceHex }),
+  );
+
+  const body = {
+    auth: authCore,
+    authSignature: bytesToHex(authSig),
+    deposit: {
+      serverDomain,
+      requestNonceHex: bytesToHex(randomBytes(32)),
+      stkPub: bytesToHex(pairingPub),
+      sealed: bytesToHex(sealed),
+      issuedAt: now,
+    },
+  };
+  const r = await f(`${comBase}/api/server/${encodeURIComponent(serverDomain)}/pairing-deposit`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`pairing-deposit: HTTP ${r.status} ${txt}`.trim());
+  }
+  return { token, pairingKeyPrivHex };
+}
+
 // Exported for the conversion / seal unit test cross-check.
 export const _internal = {
   buildSealedResponse,

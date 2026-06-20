@@ -56,6 +56,7 @@ import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalSessionStore
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.LocalTrustCenter
@@ -308,6 +309,7 @@ class MainActivity : FragmentActivity() {
                     LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
+                    LocalSessionStore provides sessionStore,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,

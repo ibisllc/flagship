@@ -108,6 +108,12 @@ public final class CreateServerViewModel {
     private let bootUnlock: BootUnlockStore
     private let draftStore: CreateServerDraftStore
     private let diskEncryption: DiskEncryptionStore
+    /// `.com` mailbox client — used at mint time to pre-register the create-time
+    /// pairing deposit (so the creating device comes online ALREADY paired).
+    private let mailbox: any SecretMailboxClient
+    /// Pod session store — the create-time pairing token is persisted here so
+    /// the BFF authenticates the moment the box claims the deposit.
+    private let sessionStore: any SessionStoring
 
     public init(
         username: String,
@@ -115,7 +121,9 @@ public final class CreateServerViewModel {
         relay: any QrRelayClient,
         bootUnlock: BootUnlockStore = BootUnlockStore(),
         draftStore: CreateServerDraftStore = CreateServerDraftStore(),
-        diskEncryption: DiskEncryptionStore = DiskEncryptionStore()
+        diskEncryption: DiskEncryptionStore = DiskEncryptionStore(),
+        mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
+        sessionStore: any SessionStoring = SessionStore()
     ) {
         self.username = username
         self.server = server
@@ -123,6 +131,8 @@ public final class CreateServerViewModel {
         self.bootUnlock = bootUnlock
         self.diskEncryption = diskEncryption
         self.draftStore = draftStore
+        self.mailbox = mailbox
+        self.sessionStore = sessionStore
         // Restore the user's last-typed draft so flipping away from the
         // screen mid-fill doesn't wipe their inputs. Hydrate AFTER the
         // stored properties are assigned so the didSet observers don't
@@ -321,17 +331,66 @@ public final class CreateServerViewModel {
             diskEncryption: encryptDisk ? nil : "none"
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
-        return SignedInstallBlob(blob: blob, signatureHex: HexUtil.encode(blobSig))
+
+        // Create-time pairing: pre-register a sealed `add-paired-session` order
+        // with `.com` and embed the pairing key's private half in the recipe so
+        // the booting box claims it and comes online ALREADY paired — no manual
+        // "Pair this server" tap on the creating device. Reuses the IRK from the
+        // single biometric above (no extra Face ID). Best-effort: a deposit
+        // failure leaves the recipe-embedded key + the manual pairing path as
+        // fallbacks, so it can NEVER block server creation.
+        var pairingKeyPrivHex: String?
+        do {
+            let pairing = try CreateTimePairing.build(
+                username: username,
+                serverDomain: serverDomain,
+                // Matches PodPairViewModel's default; the owner can rename the
+                // session later. (A real UIDevice.current.name is a follow-up.)
+                label: "iPhone",
+                irk: irk
+            )
+            try await mailbox.depositPairing(serverDomain: serverDomain, body: pairing.body)
+            // Only persist the token AFTER `.com` accepted the deposit — a token
+            // the box will never see would auth nothing. The box claims it on
+            // first boot, so by the time the server is online + selected the
+            // session token already matches and the BFF authenticates.
+            await sessionStore.setSessionToken(pairing.token)
+            pairingKeyPrivHex = pairing.pairingKeyPrivHex
+        } catch {
+            // Non-fatal — fall back to the manual pairing flow when the box is up.
+            pairingKeyPrivHex = nil
+        }
+
+        return SignedInstallBlob(
+            blob: blob,
+            signatureHex: HexUtil.encode(blobSig),
+            pairingKeyPrivHex: pairingKeyPrivHex
+        )
     }
 }
 
 public struct SignedInstallBlob: Sendable {
     public let blob: InstallBlob
     public let signatureHex: String
+    /// Create-time pairing: the pairing key's private seed (hex) the booting box
+    /// uses to open the sealed `add-paired-session` deposit. An UNSIGNED recipe
+    /// sibling (never in the signed blob's canonical bytes); nil when create-time
+    /// pairing didn't run (e.g. the `.com` deposit failed → manual-pair fallback).
+    public let pairingKeyPrivHex: String?
+
+    public init(blob: InstallBlob, signatureHex: String, pairingKeyPrivHex: String? = nil) {
+        self.blob = blob
+        self.signatureHex = signatureHex
+        self.pairingKeyPrivHex = pairingKeyPrivHex
+    }
 
     public struct OnWire: Codable, Sendable {
         public let blob: OnWireBlob
         public let blobSignature: String
+        /// Top-level recipe sibling (alongside `blob`/`blobSignature`); the
+        /// burner carries it into the on-disk install-blob.json. Omitted from
+        /// JSON when nil so a non-pairing recipe is byte-identical to before.
+        public let pairingKeyPrivHex: String?
     }
     public struct OnWireBlob: Codable, Sendable {
         public let version: Int
@@ -392,7 +451,10 @@ public struct SignedInstallBlob: Sendable {
                 bootUnlockMode: blob.bootUnlockMode,
                 diskEncryption: blob.diskEncryption
             ),
-            blobSignature: signatureHex
+            blobSignature: signatureHex,
+            // Synthesized Codable uses encodeIfPresent for optionals ⇒ omitted
+            // when nil, so a non-pairing recipe serializes byte-identically.
+            pairingKeyPrivHex: pairingKeyPrivHex
         )
     }
 }

@@ -43,6 +43,38 @@ public protocol SecretMailboxClient: Sendable {
     /// via `bootAuth`). Drops the lease so the box can no longer self-unlock
     /// — it falls back to phone-gated approval (downgrade, not brick).
     func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws
+
+    /// POST /api/server/:domain/pairing-deposit — phone, IRK mailbox-auth.
+    /// Create-time pairing: pre-register a sealed `add-paired-session` order on
+    /// `.com` the moment the recipe is minted, so the booting box claims it on
+    /// first boot and comes online ALREADY paired (no "Pair this server" tap).
+    /// `.com` stores only the OPAQUE sealed blob — it never sees the token (I1).
+    func depositPairing(serverDomain: String, body: PairingDepositBody) async throws
+}
+
+/// The create-time pairing deposit body. `auth`/`authSignature` are the SAME
+/// IRK mailbox-auth shape as the other phone-mailbox calls; `deposit` carries
+/// the sealed `{request,signature}` blob (sealed FOR the recipe pairing key the
+/// phone embedded). Field names match the Worker handler
+/// (`handlePostPairingDeposit`) exactly.
+public struct PairingDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public let stkPub: String            // hex (32 bytes) — the pairing key pub (seal recipient)
+        public let sealed: String            // hex — sealed `{request,signature}` JSON
+        public let issuedAt: Int64
+        public init(serverDomain: String, requestNonceHex: String, stkPub: String, sealed: String, issuedAt: Int64) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+            self.stkPub = stkPub; self.sealed = sealed; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, deposit: Deposit) {
+        self.auth = auth; self.authSignature = authSignature; self.deposit = deposit
+    }
 }
 
 // MARK: - Wire types
@@ -478,6 +510,24 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         try await sendBoot("DELETE", path, body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
 
+    public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        // String-concat the URL (not appendingPathComponent) so the multi-segment
+        // control-plane path lands verbatim — mirrors `sendBoot`. The deposit is
+        // on `.com` (identity plane), not the boot worker.
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/pairing-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad pairing-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     private struct BootResponsePost: Encodable { let response: SecretResponseBody }
     private struct LeaseDepositPost: Encodable { let lease: BoxSealedLeaseWire; let signature: String }
 
@@ -584,5 +634,9 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     }
     public func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
         revoked.append((request, bootAuth))
+    }
+    public private(set) var pairingDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    public func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {
+        pairingDeposits.append((serverDomain, body))
     }
 }

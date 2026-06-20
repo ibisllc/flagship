@@ -46,6 +46,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
             revoked.append((request, bootAuth))
         }
+        func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {}
     }
 
     // Fixtures: a phone IRK, a box STK, and a phone unseal key.

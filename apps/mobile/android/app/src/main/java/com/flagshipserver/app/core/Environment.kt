@@ -16,8 +16,10 @@ import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
+import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
+import com.flagshipserver.app.api.SessionStoring
 
 val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { MockScreensClient() }
 
@@ -41,6 +43,12 @@ val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { MockQrRelayCl
  *  (OkHttp transport) in MainActivity; previews + tests get the in-memory
  *  Mock. The SecretRequestsScreen builds a SecretRequestCoordinator over this. */
 val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { MockSecretMailboxClient() }
+
+/** The pod session store backing the BFF (holds podBaseUrl + session token).
+ *  Production MainActivity installs the EncryptedSessionStore; previews + tests
+ *  get an in-memory one. Create-server reads this to persist the create-time
+ *  pairing token so the BFF authenticates once the box claims the deposit. */
+val LocalSessionStore = staticCompositionLocalOf<SessionStoring> { InMemorySessionStore() }
 
 val LocalAppState = staticCompositionLocalOf<AppState> { AppState() }
 

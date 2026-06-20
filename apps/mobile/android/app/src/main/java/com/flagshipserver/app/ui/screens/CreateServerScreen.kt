@@ -62,6 +62,9 @@ import com.flagshipserver.app.core.InstallBlobBundle
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalQrRelayClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalSessionStore
+import com.flagshipserver.app.core.CreateTimePairing
 import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
@@ -95,6 +98,8 @@ fun CreateServerScreen(
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
     val qrRelay = LocalQrRelayClient.current
+    val mailbox = LocalSecretMailboxClient.current
+    val sessionStore = LocalSessionStore.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -191,6 +196,11 @@ fun CreateServerScreen(
                                 // Only "none" rides the wire; "luks" (default)
                                 // stays absent (legacy bytes + webapp parity).
                                 diskEncryption = if (encryptDisk) null else "none",
+                                // Create-time pairing: deposit a sealed pairing
+                                // order with .com + persist the session token so
+                                // the box comes online ALREADY paired.
+                                mailbox = mailbox,
+                                sessionStore = sessionStore,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -592,6 +602,10 @@ private suspend fun prepareDelivery(
     // default (omitted from the signed canonical bytes + the wire, like
     // bootUnlockMode's "auto").
     diskEncryption: String? = null,
+    // Create-time pairing: optional so the unit tests' direct calls stay simple;
+    // production passes both so the deposit + token-persist run.
+    mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
+    sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -640,6 +654,33 @@ private suspend fun prepareDelivery(
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
+    // Create-time pairing: pre-register a sealed `add-paired-session` order with
+    // `.com` and embed the pairing key's private half in the recipe, so the
+    // booting box claims it and this device comes online ALREADY paired (no
+    // manual "Pair this server" step). Reuses the IRK above (no extra biometric).
+    // Best-effort: a failure leaves the manual pairing path as a fallback and
+    // NEVER blocks creation.
+    var pairingKeyPrivHex: String? = null
+    if (mailbox != null) {
+        try {
+            val pairing = CreateTimePairing.build(
+                username = username,
+                serverDomain = serverDomain,
+                label = "Android",
+                irk = irk,
+                irkPubHex = irkPubHex,
+            )
+            mailbox.depositPairing(serverDomain, pairing.body)
+            // Persist the token only after `.com` accepted the deposit — the box
+            // claims it on first boot, so by the time the server is online the
+            // session token already matches and the BFF authenticates.
+            sessionStore?.setSessionToken(pairing.token)
+            pairingKeyPrivHex = pairing.pairingKeyPrivHex
+        } catch (_: Throwable) {
+            // non-fatal — fall back to manual pairing when the box is up
+        }
+    }
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -662,6 +703,7 @@ private suspend fun prepareDelivery(
             diskEncryption = diskEncryption,
         ),
         blobSignature = blobSigHex,
+        pairingKeyPrivHex = pairingKeyPrivHex,
     )
 
     return PendingDelivery(

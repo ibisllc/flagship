@@ -217,19 +217,28 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
 
 /**
  * Create-time pairing claim. The CREATING phone deposited an owner-IRK-signed
- * `add-paired-session` order — SEALED for this box's identity key — to .com the
- * moment it minted the recipe, BEFORE this box ever booted (so "waiting for the
- * server" survives a phone refresh: the sealed link lives in .com until we claim
- * it). On startup we do ONE public consume-once read, unseal it with our
- * identity key, VERIFY the owner-IRK signature + the canonical bytes, and add
- * the session — so the box comes online ALREADY paired, with no "Pair this
- * server" tap. Best-effort + non-fatal: any failure leaves the manual pairing
- * path as the fallback. Content-blind: .com only ever held the sealed blob (I1).
+ * `add-paired-session` order — SEALED for a phone-chosen PAIRING key whose
+ * private half rides the recipe (`pairingKeyPrivHex`) — to .com the moment it
+ * minted the recipe, BEFORE this box ever booted. The box's own identity key is
+ * generated fresh at first boot (`gen-identity`), so the phone can't seal to it
+ * at create; it seals to the pairing key it embeds in the recipe instead. This
+ * is what makes "waiting for the server" survive a phone refresh: the sealed
+ * link lives in .com until we claim it. On startup we do ONE public
+ * consume-once read, unseal it (trying the recipe pairing key first, then our
+ * identity key as a fallback for a post-registration re-pair), VERIFY the
+ * owner-IRK signature + the canonical bytes, and add the session — so the box
+ * comes online ALREADY paired, with no "Pair this server" tap. Best-effort +
+ * non-fatal: any failure leaves the manual pairing path as the fallback.
+ * Content-blind: .com only ever held the sealed blob (I1).
  */
 async function consumePendingPairing(opts: {
   serverFqdn: string;
   controlPlaneBaseUrl: string;
-  identityPrivKey: Uint8Array;
+  /** Candidate recipient private keys, in priority order: the recipe pairing
+   * key first (the create-time seal target), then the box identity key (a
+   * post-registration re-pair seals to identity). Each is a 32-byte Ed25519
+   * seed; we try them until one opens the blob. */
+  recipientPrivKeys: Uint8Array[];
   ownerIrkPub: Uint8Array;
   pairedSessions: FilePairedSessionStore;
 }): Promise<void> {
@@ -240,7 +249,20 @@ async function consumePendingPairing(opts: {
     if (res.status !== 200) return; // 404 ⇒ nothing pending (the common case)
     const body = (await res.json()) as { sealed?: unknown };
     if (typeof body.sealed !== "string") return;
-    const plain = openSealedFromEd25519Recipient(hexToBytes(body.sealed), opts.identityPrivKey);
+    const sealed = hexToBytes(body.sealed);
+    let plain: Uint8Array | null = null;
+    for (const priv of opts.recipientPrivKeys) {
+      try {
+        plain = openSealedFromEd25519Recipient(sealed, priv);
+        break;
+      } catch {
+        // wrong recipient key — try the next candidate
+      }
+    }
+    if (!plain) {
+      console.error("[daemon] pairing deposit: no recipient key could open the sealed blob — ignored");
+      return;
+    }
     const env = JSON.parse(new TextDecoder().decode(plain)) as {
       request?: PhoneOrder;
       signature?: string;
@@ -256,6 +278,29 @@ async function consumePendingPairing(opts: {
     console.log("[daemon] claimed a create-time pairing deposit — paired on first boot");
   } catch (e) {
     console.error(`[daemon] consumePendingPairing failed (non-fatal): ${(e as Error).message}`);
+  }
+}
+
+/**
+ * Read the recipe's pairing private key (`pairingKeyPrivHex`) from the on-disk
+ * install blob. The phone embeds it as an UNSIGNED recipe sibling (never in the
+ * signed InstallBlob's canonical bytes, so existing recipe signatures are
+ * untouched); the burner writes it into /var/flagship/install-blob.json. Used
+ * ONLY to open the create-time pairing deposit. Returns null when absent/
+ * malformed (older recipes, or a non-pairing burn) — the box then falls back to
+ * its identity key, then to the manual pairing path.
+ */
+async function pairingKeyFromInstallBlob(): Promise<Uint8Array | null> {
+  const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
+  const raw = await tryReadFile(blobPath);
+  if (!raw) return null;
+  try {
+    const b = JSON.parse(raw) as { pairingKeyPrivHex?: unknown };
+    const v = b.pairingKeyPrivHex;
+    if (typeof v !== "string" || !/^[0-9a-f]{64}$/i.test(v)) return null;
+    return hexToBytes(v);
+  } catch {
+    return null;
   }
 }
 
@@ -537,13 +582,18 @@ async function main(): Promise<void> {
     // paired (no manual "Pair this server" tap). Fire-and-forget + best-effort;
     // never blocks bring-up. Needs the owner IRK (cfg) to verify the order.
     if (cfg) {
-      void consumePendingPairing({
-        serverFqdn: env.serverFqdn!,
-        controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-        identityPrivKey,
-        ownerIrkPub: cfg.irkPublicKey,
-        pairedSessions,
-      });
+      void (async () => {
+        const pairingKey = await pairingKeyFromInstallBlob();
+        await consumePendingPairing({
+          serverFqdn: env.serverFqdn!,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+          // Recipe pairing key first (the create-time seal target), box
+          // identity second (a post-registration re-pair seals to identity).
+          recipientPrivKeys: pairingKey ? [pairingKey, identityPrivKey] : [identityPrivKey],
+          ownerIrkPub: cfg.irkPublicKey,
+          pairedSessions,
+        });
+      })();
     }
     console.log(
       `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,

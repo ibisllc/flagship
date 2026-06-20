@@ -34,6 +34,8 @@ import {
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
+import { depositCreateTimePairing } from "../lib/bootApproval.js";
+import { setSessionToken } from "../lib/api.js";
 
 registerView("view-create-server");
 
@@ -431,6 +433,10 @@ function enableRecipeDownload(blobBundle) {
   btn.disabled = false;
   btn.textContent = "Download recipe (.json)";
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
+  // Create-time pairing: carry the unsigned pairing-key sibling into the
+  // downloaded recipe so the burner writes it to the box's install-blob.json
+  // (the daemon opens the deposit with it). Absent ⇒ recipe is byte-identical.
+  if (blobBundle.pairingKeyPrivHex) recipe.pairingKeyPrivHex = blobBundle.pairingKeyPrivHex;
   btn.onclick = () => {
     const json = JSON.stringify(recipe, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -678,7 +684,30 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // downloaded recipe JSON carries exactly what was signed (the burner round-
   // trips it and re-derives the same `de=none` token for box verification).
   if (blob.diskEncryption !== undefined) onWireBlob.diskEncryption = blob.diskEncryption;
-  return { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
+
+  // Create-time pairing: pre-register a sealed `add-paired-session` order with
+  // `.com` and embed the pairing key's private half in the recipe, so the
+  // booting box claims it and the webapp comes online ALREADY paired (no manual
+  // "Pair this server" step). Best-effort: a failure leaves the manual pairing
+  // path as the fallback and NEVER blocks creation.
+  let pairingKeyPrivHex;
+  try {
+    const pairing = await depositCreateTimePairing({ serverDomain: blob.serverDomain });
+    // Persist the token only after `.com` accepted the deposit — the box claims
+    // it on first boot, so by the time the server is online the session token
+    // already matches and the BFF authenticates.
+    setSessionToken(pairing.token);
+    pairingKeyPrivHex = pairing.pairingKeyPrivHex;
+  } catch (e) {
+    console.warn("create-time pairing deposit failed (non-fatal):", e);
+  }
+
+  // The pairing key rides the recipe as a TOP-LEVEL sibling (not inside `blob`,
+  // never in the signed canonical bytes). The relay-deliver path stringifies the
+  // whole bundle, and the download-recipe builder splats it alongside `blob`.
+  const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
+  if (pairingKeyPrivHex) bundle.pairingKeyPrivHex = pairingKeyPrivHex;
+  return bundle;
 }
 
 async function deliverThroughRelay({ sid, pkB }, blobBundle) {

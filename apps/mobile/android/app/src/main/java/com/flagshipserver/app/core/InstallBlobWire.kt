@@ -13,6 +13,12 @@ import kotlinx.serialization.Serializable
 data class InstallBlobBundle(
     val blob: WireBlob,
     val blobSignature: String,    // hex, IRK over canonical bytes
+    // Create-time pairing: the pairing key's private seed (hex) the booting box
+    // uses to open the sealed `add-paired-session` deposit. An UNSIGNED recipe
+    // sibling (top-level, NOT inside `blob` / never in the signed canonical
+    // bytes); null when create-time pairing didn't run. Omitted from JSON when
+    // null (encodeDefaults=false), so a non-pairing recipe is byte-identical.
+    val pairingKeyPrivHex: String? = null,
 )
 
 @Serializable

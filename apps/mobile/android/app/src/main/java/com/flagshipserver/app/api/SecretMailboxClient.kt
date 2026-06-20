@@ -43,6 +43,33 @@ interface SecretMailboxClient {
      *  via `bootAuth`). Drops the lease so the box falls back to phone-gated
      *  approval (downgrade, not brick). */
     suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String)
+
+    /** POST /api/server/:domain/pairing-deposit — phone, IRK mailbox-auth.
+     *  Create-time pairing: pre-register a sealed `add-paired-session` order on
+     *  `.com` the moment the recipe is minted, so the booting box claims it on
+     *  first boot and comes online ALREADY paired (no "Pair this server" tap).
+     *  `.com` stores only the OPAQUE sealed blob — it never sees the token (I1). */
+    suspend fun depositPairing(serverDomain: String, body: PairingDepositBody)
+}
+
+/** The create-time pairing deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` carries the
+ *  sealed `{request,signature}` blob (sealed FOR the recipe pairing key the phone
+ *  embedded). Field names match the Worker handler (`handlePostPairingDeposit`). */
+@Serializable
+data class PairingDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,  // hex (32 bytes)
+        val stkPub: String,           // hex (32 bytes) — pairing key pub (seal recipient)
+        val sealed: String,           // hex — sealed `{request,signature}` JSON
+        val issuedAt: Long,
+    )
 }
 
 // MARK: - Wire types
@@ -343,6 +370,21 @@ class LiveSecretMailboxClient(
             accept = setOf(200, 204),
         )
     }
+
+    override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
+        // The pairing deposit is on `.com` (identity plane), not the boot worker.
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/pairing-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -386,5 +428,10 @@ class MockSecretMailboxClient : SecretMailboxClient {
 
     override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) {
         revoked.add(request to bootAuth)
+    }
+
+    val pairingDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
+        pairingDeposits.add(serverDomain to body)
     }
 }

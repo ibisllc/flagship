@@ -424,6 +424,8 @@ struct CreateServerContainer: View {
     let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.sessionStore) private var sessionStore
     @Environment(AppState.self) private var app
     @State private var vm: CreateServerViewModel?
 
@@ -465,7 +467,9 @@ struct CreateServerContainer: View {
                 vm = CreateServerViewModel(
                     username: app.currentUser ?? "you",
                     server: serverClient,
-                    relay: qrRelay
+                    relay: qrRelay,
+                    mailbox: mailbox,
+                    sessionStore: sessionStore
                 )
             }
         }

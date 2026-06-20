@@ -123,7 +123,64 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-19**.
 
-### 2026-06-19 (latest) — apps default to LIVE + two headline gym callables (`gym:locked` / `gym:total`)
+### 2026-06-19 (latest) — ⭐ CREATE-TIME PAIRING: the creating device comes online ALREADY paired (no manual tap)
+
+**The "Pair this server" tap is gone for the creating device, on all 3 clients.**
+Live hand-testing surfaced it: a freshly-online box showed "isn't paired with this
+device yet" and the manual pair button 404'd. Root insight (owner's): the recipe
+ALREADY carries crypto material to the box, so the phone can **pre-register** the
+pairing with `.com` at create-time and the box claims it on first boot — each side
+does its half with no manual step, and the "waiting" state survives a phone
+refresh (the link lives in `.com`). Chose the **at-create deposit of a RANDOM,
+revocable token** (NOT a deterministic-derived key — confirmed with the owner),
+sealed so `.com` stays content-blind.
+
+**Key constraint that shaped the design:** the box generates its OWN identity key
+only at first boot (`gen-identity`), so the phone can't seal to it at create. So
+the phone mints a fresh **PAIRING keypair**, seals an owner-IRK-signed
+`add-paired-session` order FOR its pub, **deposits** the sealed blob to `.com`
+(content-blind, IRK mailbox-auth), and **embeds the pairing key's PRIVATE half in
+the recipe** as an UNSIGNED sibling `pairingKeyPrivHex`. The booting daemon reads
+it, opens the deposit, verifies the owner-IRK signature, and adds the session.
+
+- **Backend (already on `main`):** `POST/GET /api/server/:d/pairing-deposit`
+  (control-plane `secretMailbox.ts`) — create-time POST is IRK-mailbox-auth +
+  namespace-checked (no box identity exists yet; the seal is the binding); the box
+  does a public, consume-once GET. Reuses `secret_mailbox` with a `purpose:"pairing"`
+  lane (no new table/migration).
+- **Daemon (`index.ts`):** `consumePendingPairing` now opens the deposit by trying
+  the **recipe pairing key first, then the box identity** (`pairingKeyFromInstallBlob`
+  reads `pairingKeyPrivHex` from `/var/flagship/install-blob.json`); best-effort +
+  non-fatal (manual pairing stays the fallback).
+- **Recipe plumbing (zero canonical-bytes risk):** `pairingKeyPrivHex` is an
+  UNSIGNED top-level recipe sibling — `packages/protocol/installBlob.ts` is
+  **untouched**, so existing recipe signatures + the burner sha-pins are
+  byte-identical (absent ⇒ unchanged). TS burner threads it (`loadBlob` →
+  `installBlobToJson` → on-disk JSON); the Mac (Swift) burner needed a **one-line**
+  `normalizeEnvelope` change (it embeds the recipe verbatim).
+- **Clients:** the creating device builds + deposits at mint time (reusing the
+  single create-server biometric — no extra Face ID) and **persists the token** as
+  its session token, so the BFF authenticates the moment the box claims the deposit.
+  iOS `CreateTimePairing` (FlagshipCore) + `SecretMailboxClient.depositPairing`;
+  Android `CreateTimePairing.kt` + the same mailbox method (Android had NO
+  paired-session primitive before — this also gives it its first working BFF
+  session, via a new `LocalSessionStore`); webapp `depositCreateTimePairing`
+  (bootApproval.js) wired into `mintInstallBlobBundle`. All seal-round-trips are
+  pinned by tests (open with the pairing seed → owner-IRK verify, mirroring the
+  daemon).
+
+Gates: `tsc -b` clean · burner/daemon/control-plane vitest **1708** · webapp
+crypto+view **56** · iOS **TEST BUILD SUCCEEDED** + CreateServer/BootUnlock **14**
++ shared `CreateTimePairing` **2** · Android `:app:testDebugUnitTest` BUILD
+SUCCESSFUL (+ CreateTimePairing) · Swift burner **116** + new recipe-sibling test.
+**Known follow-up:** the phone's session token is a single-active slot (pre-existing
+iOS/Android limitation) — a 2nd paired pod still needs a per-pod token store; a real
+`UIDevice.current.name`/Android model name for the session label (defaults
+"iPhone"/"Android"); the `/boot/install-blob.json` copy carries the pairing key in
+plaintext until first-boot consume (minor, time-bounded, USB-in-hand; consume-once
+makes it inert after).
+
+### 2026-06-19 — apps default to LIVE + two headline gym callables (`gym:locked` / `gym:total`)
 
 **Pre-hand-testing ergonomics, owner-directed, on `main`.** Two changes so the
 owner can hand-test against real boxes with one command each:
