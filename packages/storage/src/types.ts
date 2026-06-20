@@ -676,7 +676,35 @@ export interface AutoUnlockLeaseStorage {
 // phone seals only for the user-confirmed box (I2/I3).
 // ──────────────────────────────────────────────────────────────────────
 
-export type SecretMailboxPurpose = "unlock-key" | "entitlement";
+export type SecretMailboxPurpose = "unlock-key" | "entitlement" | "pairing";
+
+/**
+ * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
+ * `add-paired-session` order so the box comes online ALREADY paired (no
+ * separate "Pair this server" tap). Reuses the `secret_mailbox` table as a
+ * dedicated `purpose:"pairing"` lane: the PHONE writes the row directly (no
+ * box request first), the box does ONE public, domain-scoped, consume-once
+ * read at startup. The blob is sealed FOR the box STK, so a public read leaks
+ * nothing (mirrors the box-sealed-lease release posture). The sealed payload is
+ * the `{request,signature}` envelope of an owner-IRK-signed `add-paired-session`
+ * order — `.com` never sees the token (I1); the daemon unseals + verifies it.
+ */
+export interface PairingDepositRecord {
+  /** Box FQDN the deposit is for. */
+  serverDomain: string;
+  /** Account that owns the box (the box's registered username). */
+  username: string;
+  /** 32-byte deposit nonce, hex — the row key the phone picks. */
+  requestNonceHex: string;
+  /** Box STK pubkey, hex — the seal recipient (the directory-bound STK). */
+  stkPubHex: string;
+  /** The sealed `add-paired-session` envelope, hex. NEVER plaintext (I1). */
+  sealedHex: string;
+  /** issuedAt from the phone's deposit (ms). */
+  issuedAt: number;
+  /** Row TTL — `.com` refuses to serve / GCs past this (ms). */
+  expiresAt: number;
+}
 
 export interface SecretMailboxRecord {
   /** Box FQDN the request is for. */
@@ -771,6 +799,22 @@ export interface SecretMailboxStorage {
    * ready yet OR it was already consumed. Expired rows are GC'd when seen.
    */
   consumeResponse(serverDomain: string, requestNonceHex: string, now: number): Promise<SecretMailboxRecord | undefined>;
+  /**
+   * Deposit-on-unlock pairing — the PHONE writes a box-sealed pairing blob
+   * directly (no box request first). Stored as a `purpose:"pairing"` row whose
+   * response is the sealed blob, so it never surfaces in `listPendingForUser`
+   * (that lane is for un-answered unlock requests). Keyed by (serverDomain,
+   * requestNonceHex); a duplicate nonce returns `ok:false`. The caller has
+   * already verified the phone owns the mailbox (IRK mailbox-auth).
+   */
+  putPairingDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box-side: atomically consume the freshest un-expired pairing deposit for
+   * `serverDomain` (consume-once; mirrors the box-sealed-lease release). Public
+   * read at the handler — the blob is sealed for the box STK, so disclosure is
+   * harmless. Returns undefined when none is pending. Expired rows are GC'd.
+   */
+  consumePairingDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

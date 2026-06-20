@@ -24,6 +24,7 @@ import type {
   AutoUnlockLeaseStorage,
   SecretMailboxRecord,
   SecretMailboxStorage,
+  PairingDepositRecord,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -682,6 +683,67 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     if (r.consumedAt !== null) return undefined;
     r.consumedAt = now;
     return { ...r };
+  }
+
+  // ── Deposit-on-unlock pairing lane (purpose:"pairing") ────────────────
+  // Phone-deposited box-sealed blob; the box consumes-once by domain. Stored
+  // as a same-table row whose `responseSealedHex` holds the blob, so it never
+  // appears in `listPendingForUser` (that filters responseSealedHex !== null).
+
+  async putPairingDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "pairing",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumePairingDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "pairing") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
   }
 }
 

@@ -3,7 +3,10 @@ import { dirname, join } from "node:path";
 import {
   ed,
   signServerRevokeBySelf,
+  openSealedFromEd25519Recipient,
+  verifyPhoneOrder,
   type Keypair,
+  type PhoneOrder,
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
@@ -210,6 +213,50 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
     console.log("[daemon] owner config derived from /var/flagship/install-blob.json (no FLAGSHIP_CONFIG)");
   }
   return fromBlob;
+}
+
+/**
+ * Create-time pairing claim. The CREATING phone deposited an owner-IRK-signed
+ * `add-paired-session` order — SEALED for this box's identity key — to .com the
+ * moment it minted the recipe, BEFORE this box ever booted (so "waiting for the
+ * server" survives a phone refresh: the sealed link lives in .com until we claim
+ * it). On startup we do ONE public consume-once read, unseal it with our
+ * identity key, VERIFY the owner-IRK signature + the canonical bytes, and add
+ * the session — so the box comes online ALREADY paired, with no "Pair this
+ * server" tap. Best-effort + non-fatal: any failure leaves the manual pairing
+ * path as the fallback. Content-blind: .com only ever held the sealed blob (I1).
+ */
+async function consumePendingPairing(opts: {
+  serverFqdn: string;
+  controlPlaneBaseUrl: string;
+  identityPrivKey: Uint8Array;
+  ownerIrkPub: Uint8Array;
+  pairedSessions: FilePairedSessionStore;
+}): Promise<void> {
+  try {
+    const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
+    const url = `${base}/api/server/${encodeURIComponent(opts.serverFqdn)}/pairing-deposit`;
+    const res = await fetch(url, { method: "GET" });
+    if (res.status !== 200) return; // 404 ⇒ nothing pending (the common case)
+    const body = (await res.json()) as { sealed?: unknown };
+    if (typeof body.sealed !== "string") return;
+    const plain = openSealedFromEd25519Recipient(hexToBytes(body.sealed), opts.identityPrivKey);
+    const env = JSON.parse(new TextDecoder().decode(plain)) as {
+      request?: PhoneOrder;
+      signature?: string;
+    };
+    const order = env.request;
+    if (!order || typeof env.signature !== "string") return;
+    if (order.type !== "add-paired-session" || order.serverId !== opts.serverFqdn) return;
+    if (!verifyPhoneOrder(order, hexToBytes(env.signature), opts.ownerIrkPub)) {
+      console.error("[daemon] pairing deposit: owner-IRK signature did NOT verify — ignored");
+      return;
+    }
+    await opts.pairedSessions.add(order.token, order.label);
+    console.log("[daemon] claimed a create-time pairing deposit — paired on first boot");
+  } catch (e) {
+    console.error(`[daemon] consumePendingPairing failed (non-fatal): ${(e as Error).message}`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -484,6 +531,20 @@ async function main(): Promise<void> {
         `[daemon] orders-from-user endpoint enabled (verify key: ${pskPubHex ? "psk.pub.hex" : "owner IRK"})`,
       );
     } else console.log(`[daemon] no owner IRK / psk; orders endpoint disabled`);
+
+    // Create-time pairing: claim any sealed add-paired-session the creating
+    // phone left in .com before this box booted, so we come online ALREADY
+    // paired (no manual "Pair this server" tap). Fire-and-forget + best-effort;
+    // never blocks bring-up. Needs the owner IRK (cfg) to verify the order.
+    if (cfg) {
+      void consumePendingPairing({
+        serverFqdn: env.serverFqdn!,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+        identityPrivKey,
+        ownerIrkPub: cfg.irkPublicKey,
+        pairedSessions,
+      });
+    }
     console.log(
       `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,
     );

@@ -7,6 +7,7 @@ import type {
   SecretMailboxRecord,
   SecretMailboxStorage,
   SecretMailboxPurpose,
+  PairingDepositRecord,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -1334,6 +1335,82 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     const meta = (w as { meta?: { changes?: number } }).meta;
     if (meta?.changes !== undefined && meta.changes === 0) return undefined;
     return rowToSecretMailbox({ ...r, consumed_at: now });
+  }
+
+  // ── Deposit-on-unlock pairing lane (purpose:"pairing") ────────────────
+  async putPairingDeposit(rec: PairingDepositRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, 'pairing', ?5, '',
+                   NULL, ?5, ?6, 0, ?7, ?5, ?5, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.sealedHex.toLowerCase(),
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async consumePairingDeposit(serverDomain: string, now: number) {
+    // GC expired pairing rows for this domain first (best-effort).
+    await this.db
+      .prepare(
+        "DELETE FROM secret_mailbox WHERE server_domain = ?1 AND purpose = 'pairing' AND expires_at <= ?2",
+      )
+      .bind(serverDomain, now)
+      .run();
+    // Freshest un-consumed, un-expired pairing deposit.
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'pairing'
+           AND expires_at > ?2 AND consumed_at IS NULL
+           AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    // Single-use release — the conditional WHERE consumed_at IS NULL makes a
+    // concurrent double-consume return at-most-once.
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, r.request_nonce_hex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
   }
 }
 

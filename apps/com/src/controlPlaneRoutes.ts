@@ -48,6 +48,8 @@ import {
   handleReleaseBoxSealedLease,
   handleRevokeBoxSealedLease,
   handleListBoxSealedLeases,
+  handlePostPairingDeposit,
+  handleConsumePairingDeposit,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -482,6 +484,10 @@ const ROUTE_RE = {
   LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
   LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
   LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
+  // Deposit-on-unlock pairing. ONE path discriminated by method:
+  //   POST  phone deposit (IRK mailbox-auth, sealed for the box STK)
+  //   GET   box consume-once read (public — sealed blob only)
+  PAIRING_DEPOSIT: /^\/api\/server\/([^/]+)\/pairing-deposit$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1302,6 +1308,22 @@ export async function tryControlPlane(
           decodeURIComponent(m[2]!),
           await readJson(request),
         ),
+      );
+    }
+    // Deposit-on-unlock pairing — phone deposit (IRK mailbox-auth) +
+    // box consume-once read (public, sealed-for-STK).
+    if (method === "POST" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
+      return finishPlain(
+        await handlePostPairingDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumePairingDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release

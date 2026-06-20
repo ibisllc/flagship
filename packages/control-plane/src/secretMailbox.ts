@@ -630,6 +630,135 @@ export async function handleListBoxSealedLeases(
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// 6a. POST /api/server/:domain/pairing-deposit  (phone, IRK mailbox-auth)
+//
+// Deposit-on-unlock pairing — fold the paired-session pairing INTO the
+// boot-unlock approval ceremony so the box comes online ALREADY paired (no
+// separate "Pair this server" tap). The phone seals an owner-IRK-signed
+// `add-paired-session` order FOR the box STK and deposits it here.
+//
+// Authenticated EXACTLY like the unlock-reply (`handlePostSecretResponse`):
+// the IRK-signed mailbox-auth (`authPhoneMailbox`) proves the phone owns the
+// account's mailbox. `.com` stores the OPAQUE sealed blob — it never sees the
+// token (I1). The box does a public, consume-once read (6b) at startup.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostPairingDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_MAILBOX_TTL;
+
+  const b = body as { deposit?: Record<string, unknown> };
+  const d = b?.deposit ?? {};
+  if (
+    typeof d.serverDomain !== "string" ||
+    typeof d.requestNonceHex !== "string" ||
+    typeof d.stkPub !== "string" ||
+    typeof d.sealed !== "string" ||
+    typeof d.issuedAt !== "number"
+  ) {
+    return malformed("malformed body");
+  }
+  if (d.serverDomain !== host) {
+    return forbidden("serverDomain / host mismatch");
+  }
+  if (!HEX_NONCE.test(d.requestNonceHex.toLowerCase())) {
+    return malformed("requestNonceHex must be 32 bytes hex");
+  }
+  if (!HEX64.test(d.stkPub.toLowerCase())) {
+    return malformed("stkPub must be 32 bytes hex");
+  }
+  const sealedHex = d.sealed.toLowerCase();
+  if (!/^[0-9a-f]*$/.test(sealedHex) || sealedHex.length === 0 || sealedHex.length > 65536) {
+    return malformed("sealed must be non-empty hex within bounds");
+  }
+  if (Math.abs(now() - d.issuedAt) > (deps.maxAgeMs ?? DEFAULT_MAX_AGE)) {
+    return forbidden("stale request");
+  }
+
+  const reg = await deps.servers.get(host);
+  if (reg?.revokedAt) return forbidden("server is revoked");
+  if (reg) {
+    // POST-registration deposit (e.g. a later re-pair): bind to the registered
+    // account AND identity (I2) — the strongest check, used when we have it.
+    if (reg.username.toLowerCase() !== auth.username) {
+      return forbidden("server belongs to a different account");
+    }
+    if (!equalHex(d.stkPub, reg.identityPubKeyHex)) {
+      return forbidden("stkPub does not match the registered server");
+    }
+  } else {
+    // CREATE-TIME deposit (pre-registration): the creating phone deposits the
+    // pairing the moment it mints the recipe, BEFORE the box has ever booted +
+    // registered — so there is no directory identity to bind against yet. The
+    // IRK mailbox-auth proves the owner, and the fqdn must sit under the owner's
+    // namespace (`<server>.<username>.flagship.services`). The SEAL is the real
+    // binding: the box only ever unseals a blob sealed to ITS OWN stk and
+    // verifies the order's owner-IRK signature on consume, so a wrong/forged
+    // stkPub is inert ciphertext. This is what makes "waiting for the server"
+    // survive a phone refresh — the link lives in `.com` until the box claims it.
+    const ownerLabel = host.toLowerCase().split(".")[1];
+    if (ownerLabel !== auth.username) {
+      return forbidden("fqdn is not under the authed account");
+    }
+  }
+
+  const put = await deps.secretMailbox.putPairingDeposit({
+    serverDomain: host,
+    username: reg?.username ?? auth.username,
+    requestNonceHex: d.requestNonceHex.toLowerCase(),
+    stkPubHex: d.stkPub.toLowerCase(),
+    sealedHex,
+    issuedAt: d.issuedAt,
+    expiresAt: now() + ttlMs,
+  });
+  if (!put.ok) {
+    return conflict(put.reason);
+  }
+  return { status: 200, body: { ok: true, expiresAt: now() + ttlMs } };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6b. GET /api/server/:domain/pairing-deposit  (box, public consume-once)
+//
+// PUBLIC + domain-scoped + consume-once — the IDENTICAL security posture as
+// `handleReleaseBoxSealedLease`: the box has no session at boot, and the blob
+// is sealed FOR the box STK, so a public read reveals nothing. Consume-once +
+// the registration check bound abuse. Returns the freshest pending sealed
+// pairing blob (and marks it consumed) or 404.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handleConsumePairingDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const reg = await deps.servers.get(host);
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
+
+  const row = await deps.secretMailbox.consumePairingDeposit(host, now());
+  if (!row) return notFound("no pairing deposit ready");
+  return {
+    status: 200,
+    body: {
+      serverDomain: row.serverDomain,
+      requestNonceHex: row.requestNonceHex,
+      stkPub: row.stkPubHex,
+      // SEALED for the box STK — never plaintext (I1). The box unseals it.
+      sealed: row.sealedHex,
+      issuedAt: row.issuedAt,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Phone mailbox-auth — IRK-signed DeviceEndpointClaim.
 //
 // Repurposed as the mailbox-auth credential (there is no hosted
