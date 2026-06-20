@@ -384,13 +384,13 @@ function renderEmptyServersList(root, { reason, username } = {}) {
   `;
   $("empty-create-server")?.addEventListener("click", async () => {
     // The account is already open, so this is "Add a server" — a
-    // separate, repeatable resource. Jump straight into the reusable
-    // create-server flow (it skips the username claim since the account
-    // is already opened). When the account isn't open yet, fall back to
-    // the wizard's create-server step (which opens the account first).
+    // separate, repeatable resource. Offer the same fork the native apps
+    // do: provision a brand-new box vs. pair an existing one. When the
+    // account isn't open yet, fall back to the wizard's create-server
+    // step (which opens the account first).
     if (accountOpen) {
-      const { enterCreateServer } = await import("./create-server.js");
-      await enterCreateServer();
+      const { enterAddServerChooser } = await import("./add-server-chooser.js");
+      enterAddServerChooser();
       return;
     }
     // No account yet — route through the wizard's OPEN-ACCOUNT step
@@ -666,6 +666,7 @@ function renderServerCards() {
       <h2 class="fs-hero-title" data-home-title>Servers</h2>
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
+      <button class="secondary mt-2" id="home-add-server">+ Add a server</button>
     </div>
     <div data-server-cards>${cardsHtml}</div>
   `;
@@ -679,6 +680,13 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
+  // "+ Add a server" — open the provision-vs-pair chooser (the native
+  // apps' add-server fork). Reachable here once at least one server
+  // exists; the zero-state CTA opens the same chooser.
+  list.querySelector("#home-add-server")?.addEventListener("click", async () => {
+    const { enterAddServerChooser } = await import("./add-server-chooser.js");
+    enterAddServerChooser();
+  });
   // Filter chips — narrow the visible set, no re-fetch.
   list.querySelectorAll("[data-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {

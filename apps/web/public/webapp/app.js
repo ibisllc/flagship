@@ -58,6 +58,7 @@ import { initHomeView, enterHome } from "./views/home.js";
 import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
+import { initAddServerChooserView } from "./views/add-server-chooser.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
 import { initServicesListView, enterServicesList } from "./views/services-list.js";
 import { initServiceDetailView } from "./views/service-detail.js";
@@ -119,6 +120,7 @@ const SUB_VIEW_TABS = {
   "view-home": "home",
   "view-server-detail": "home",
   "view-pod-pair": "home",
+  "view-add-server-chooser": "home",
   "view-pair": "home",
   "view-create-server": "home",
   "view-services-list": "apps",
@@ -464,6 +466,7 @@ async function boot() {
   initPairView();
   initSettingsView();
   initPodPairView();
+  initAddServerChooserView();
   initServerDetailView();
   initServicesListView();
   initServiceDetailView();
