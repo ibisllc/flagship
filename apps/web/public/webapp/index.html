@@ -787,6 +787,19 @@
       </section>
 
       <!-- View 20: Post-recovery reattach progress (J.4) -->
+      <!-- Post-recovery device-disposition choice (L4) — shown right
+           after a cloud-passkey recovery, BEFORE deciding whether to
+           rotate the account identity. Parity with iOS
+           PostRecoveryChoiceScreen. Options are rendered by
+           views/post-recovery-choice.js from the pure copy model. -->
+      <section id="view-post-recovery-choice" class="hidden">
+        <h2>Welcome back</h2>
+        <p class="note">How should this device relate to your other trusted devices?</p>
+        <div id="post-recovery-choice-options"></div>
+        <button class="primary full-width mt-3" id="post-recovery-choice-continue">Continue</button>
+        <button class="secondary full-width mt-2" id="post-recovery-choice-back">← Back</button>
+      </section>
+
       <section id="view-post-recovery" class="hidden">
         <h2>Reattach progress</h2>
         <div class="card warning">

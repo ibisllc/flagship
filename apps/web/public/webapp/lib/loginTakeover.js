@@ -357,6 +357,66 @@ export async function runTakeover(resolution, deps) {
   return { username, seed, rePair, deviceLabel: ADMIN_LABEL };
 }
 
+/** L4 — "Keep my other devices working": bring THIS recovered device into
+ *  the account WITHOUT rotating the identity. Parity with iOS
+ *  PostRecoveryChoiceScreen's default (.keepBothDevices): the device
+ *  derives the SAME account IRK (v1) from the recovered seed, so every
+ *  already-paired device keeps working untouched — no rotation, no grace,
+ *  no /re-pair POST, no network. Strictly does LESS than {@link runTakeover}.
+ *
+ *  @param {object} resolution  a single|multi AccountResolution
+ *  @param {object} deps        the same takeover-deps bundle runTakeover
+ *                              takes (the rotation/re-pair fields go unused)
+ *  @returns {Promise<{username: string, seed: Uint8Array, deviceLabel: string}>}
+ */
+export async function runKeepBoth(resolution, deps) {
+  const username = resolution?.username;
+  if (!username) throw new Error("runKeepBoth: missing username");
+  if (!resolution?.recovery?.present) {
+    throw new Error("runKeepBoth: account has no cloud backup");
+  }
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
+
+  // 1 — credentialed unwrap of the cloud-stored UMK seed.
+  const seed = await deps.recoverFromCloud(username);
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) {
+    throw new Error("runKeepBoth: recovered seed is malformed");
+  }
+
+  // 2 — persist + unlock under the resolved username. Point the keystore
+  // at this profile FIRST so the recovered seed is wrapped under its own
+  // record (multi-profile keying — never clobber another profile).
+  if (typeof deps.setActiveKeystoreProfile === "function") {
+    deps.setActiveKeystoreProfile(username);
+  }
+  await deps.bootstrapFromExistingSeed(makePassphrase(), seed);
+  if (typeof deps.setUsername === "function") deps.setUsername(username);
+  await deps.unlockSession(seed, username);
+
+  // 3 — NO rotation: this device's reach IS the account IRK (v1). Record
+  // it on the local profile under that registered key. We never derive a
+  // rotated key, never sign a re-pair, never touch the network — that is
+  // the whole point of keep-both vs. a takeover.
+  const accountIrk = await deps.deriveIrkFromSeed(seed);
+  if (typeof deps.addProfile === "function") {
+    deps.addProfile({
+      cloudName: username,
+      cloudRootPubHex: toHex(accountIrk.publicKey),
+      deviceLabel: ADMIN_LABEL,
+      deviceCapability: null,
+      demoServer: null,
+    });
+  }
+
+  // 4 — open the account.
+  if (typeof deps.dispatchInitialView === "function") {
+    await deps.dispatchInitialView();
+  }
+
+  return { username, seed, deviceLabel: ADMIN_LABEL };
+}
+
 /** Orchestrate the full single/multi login branch off a resolution.
  *
  *    - no-recovery → render the inline STATE (injected `showState`).
@@ -386,6 +446,24 @@ export async function loginRealAccount(resolution, deps) {
   if (branch === "no-recovery") {
     await deps.showState(noRecoveryState(resolution));
     return { outcome: "no-recovery" };
+  }
+
+  // L4 — post-recovery device disposition (parity with iOS
+  // PostRecoveryChoiceScreen). When the host injects a chooser, let the
+  // user pick how this recovered device relates to their other devices:
+  //   - "keep-both"    → no rotation; {@link runKeepBoth}. Other devices
+  //                      stay connected.
+  //   - "replace-lost" → the takeover below (rotate + re-pair) — unchanged.
+  // Backward-compatible: with no chooser injected, recovery is the
+  // takeover it has always been.
+  if (typeof deps.chooseDisposition === "function") {
+    const choice = await deps.chooseDisposition({ resolution, branch });
+    if (!choice) return { outcome: "cancelled" };
+    if (choice === "keep-both") {
+      const keepBoth = await runKeepBoth(resolution, deps.takeoverDeps);
+      return { outcome: "keep-both", keepBoth };
+    }
+    // Any other choice ("replace-lost") falls through to the takeover.
   }
 
   // Grace explainer — single is 3-day, multi is 24h + a second factor.

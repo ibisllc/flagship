@@ -147,6 +147,14 @@ async function recoverRealAccount(resolution) {
         }),
       confirm: (opts) => inlineConfirm(opts),
       prompt: (opts) => inlinePrompt(opts),
+      // L4 — let the user pick how this recovered device relates to their
+      // other devices (parity with iOS PostRecoveryChoiceScreen). Wipe &
+      // restart stays a v1.1 path (dimmed "Coming soon"), so this resolves
+      // only keep-both or replace-lost.
+      chooseDisposition: async () => {
+        const { enterPostRecoveryChoice } = await import("./post-recovery-choice.js");
+        return enterPostRecoveryChoice({ wipeAndRestartEnabled: false });
+      },
       takeoverDeps: {
         recoverFromCloud,
         // Multi-profile keying: point the keystore at the account being
@@ -165,6 +173,8 @@ async function recoverRealAccount(resolution) {
     });
     if (result.outcome === "takeover") {
       toast(`taking over ${username} — you're now the admin device`, "ok");
+    } else if (result.outcome === "keep-both") {
+      toast(`recovered ${username} — your other devices stay connected`, "ok");
     }
   } catch (e) {
     toast(`couldn't take over ${username}: ${e.message ?? e}`, "err");
