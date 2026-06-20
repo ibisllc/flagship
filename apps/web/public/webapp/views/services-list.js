@@ -7,13 +7,15 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { chipRow, searchField, listRow } from "../lib/uikit.js";
 import { packageIcon } from "../lib/icons.js";
 import { controlApex } from "../lib/apex.js";
+import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
+import { fetchPodInventory } from "./home.js";
 
 const COM_BASE = controlApex();
 
@@ -56,6 +58,53 @@ export function appsSearchMatches(query, app) {
 let appEntries = [];
 let appsFilter = "all";
 let appsQuery = "";
+// The user's online pods (statusByDomain map values), fetched alongside the
+// apps list so the multi-pod switcher can render. Empty until the first load.
+let podSwitcherPods = [];
+
+/** Render the multi-pod switcher (parity with iOS ServicesTab's PodSwitcher).
+ *  Hidden with ≤1 pod. Renders each online pod as a chip-styled option, the
+ *  current one marked, and switches the active pod base URL on select. Pure
+ *  string builder; the select handler is delegated in wireAppsListControls. */
+function podSwitcherHtml() {
+  const model = buildPodSwitcherModel(podSwitcherPods, getPodBaseUrl());
+  if (!model.show) return "";
+  // Reuse the teal `fs-chip` pill style (matches the filter chips below it +
+  // the iOS PodSwitcher capsule). Distinct `data-pod-switch` hook (NOT
+  // `data-chip`) so the filter-chip delegate never picks these up.
+  const buttons = model.options
+    .map(
+      (o) =>
+        `<button type="button" class="fs-chip pod-switcher-chip${o.selected ? " is-selected" : ""}" ` +
+        `data-pod-switch="${escapeHtml(o.baseUrl)}" ` +
+        `aria-pressed="${o.selected ? "true" : "false"}" title="${escapeHtml(o.fqdn)}">` +
+        `${escapeHtml(o.name)}${o.selected ? " ✓" : ""}</button>`,
+    )
+    .join("");
+  return `
+    <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="Switch server">
+      ${buttons}
+    </div>
+  `;
+}
+
+/** Delegate the pod-switch chips: on a tap, point the active pod base URL at
+ *  the chosen pod and re-render the services list for THAT pod. */
+function wirePodSwitcher(root) {
+  root.querySelectorAll("[data-pod-switch]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-pod-switch");
+      if (!next || next === getPodBaseUrl()) return;
+      setPodBaseUrl(next);
+      // The session token is the same paired session across the user's pods;
+      // re-fetch the apps for the newly-selected pod.
+      renderServicesList().catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      });
+    });
+  });
+}
 
 function stripScheme(s) {
   return s.replace(/^https?:\/\//, "");
@@ -138,6 +187,7 @@ function renderAppCards() {
     <div class="fs-hero-compact" data-apps-compact aria-hidden="true">Services</div>
     <div class="fs-hero">
       <h2 class="fs-hero-title" data-apps-title>Services</h2>
+      ${podSwitcherHtml()}
       ${searchField({ value: appsQuery, placeholder: "Search services", id: "apps-search" })}
       ${chipRow({ items: chips, selected: appsFilter, ariaLabel: "Filter services" })}
     </div>
@@ -154,6 +204,7 @@ function renderAppCards() {
 
 /** Delegate chip / search / clear interactions on the freshly painted list. */
 function wireAppsListControls(root) {
+  wirePodSwitcher(root);
   root.querySelectorAll("[data-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {
       appsFilter = btn.getAttribute("data-chip-value") || "all";
@@ -185,6 +236,17 @@ export async function renderServicesList() {
   root.innerHTML = skeletonCards(3);
   appsFilter = "all";
   appsQuery = "";
+  const username = getSession().username;
+  // Refresh the user's online-pod set so the multi-pod switcher reflects the
+  // current fleet (parity with iOS keeping `vm.availablePods` synced from
+  // AppState.pods). Best-effort + non-blocking: a failure leaves the switcher
+  // hidden, never blocks the apps list.
+  try {
+    const { statusByDomain } = await fetchPodInventory(username);
+    podSwitcherPods = [...statusByDomain.values()];
+  } catch {
+    podSwitcherPods = [];
+  }
   try {
     const body = await screensFetch("/api/screens/apps-list");
     if (!body.apps?.length) {
@@ -192,7 +254,6 @@ export async function renderServicesList() {
       renderAppCards();
       return;
     }
-    const username = getSession().username;
     appEntries = body.apps.map((app) => ({ app, bucket: appBucket(app, username) }));
     renderAppCards();
   } catch (e) {
