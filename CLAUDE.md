@@ -123,7 +123,34 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-20 (latest) — prod deploy + wipe for an e2e + a CRITICAL migration-drift fix
+### 2026-06-20 (latest) — iOS sign-out didn't erase the account key (security) + deletion/reclaim design
+
+**⭐ SECURITY (iOS) — sign-out left the account key behind; FIXED (`34ce141f`).**
+Repro: sign out on the lock screen → delete the app → reinstall → still Face-ID-
+unlocks to the (even prod-deleted) account. Root cause: the wrapped UMK / ephemeral
+/ sim-wrap key are written **iCloud-synchronizable** (`.cloudRoot`,
+`kSecAttrSynchronizable=true`) and reads use `SynchronizableAny`, but the DELETE
+paths (`Keystore.keychainDelete` + the `wipeAllProfiles` class-sweep) had **no
+Synchronizable filter** — and `SecItemDelete` without it matches only NON-synced
+items. So the synced UMK was never erased by sign-out, survived app reinstall, and
+restored from iCloud Keychain. Fix: add `kSecAttrSynchronizableAny` to both delete
+queries. iOS `xcodebuild test` **1172/0**. (Client-side — owner must rebuild the
+app; a device/sim with a pre-fix stranded key clears on the next post-fix sign-out
+or a sim "Erase All Content".) Note: Android wipes app data on uninstall, so this
+is iOS-specific; webapp tier-1 is the PIN path.
+
+**Owner-directed follow-ons (DESIGN FIRST — see `docs/account-deletion-and-name-reclaim.md`):**
+a **no-backup deletion ceremony** (Sign out / Remove device with no recovery + no
+other device → popup → full-page irreversible warning [name loss, servers stop —
+transfer first] → confirm = remove-device + kill account) and a **GC** that frees
+usernames with no registered device (name becomes claimable again). Both await
+owner decisions (grace windows, abandoned-reclaim y/n, transfer-away flow, orphaned
+-box handling — §5 of the doc). Backend facts: usernames have only `claimed_at`
+(no `last_active`, no recycling); a deleted account's `/api/users/:u/pods` returns
+`200 {pods:[]}` (no "account gone" signal); user DATA lives on the box, `.com`
+holds only identity/routing/recovery records.
+
+### 2026-06-20 — prod deploy + wipe for an e2e + a CRITICAL migration-drift fix
 
 **Pre-e2e ops:** deployed `.com` (Worker `eab7d68d`, carries the gym-caught webapp
 white-screen fix) + `.services` (Fly, immediate) + wiped prod D1 clean
@@ -1752,7 +1779,7 @@ This file is the in-repo source of truth. For deeper detail, read the relevant l
 
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`
-- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`
+- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `sample-users.md`
 - **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
