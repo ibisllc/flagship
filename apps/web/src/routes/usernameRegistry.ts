@@ -139,6 +139,16 @@ export function adaptRegistryToStorage(
     async casRecoveryCodes() {
       return false;
     },
+    // Account-deletion / name-reclaim (migration 0058) live exclusively on
+    // .com (Worker). The legacy Fastify UsernameRegistry has no last_active
+    // column and no Fastify route drives deletion/reclaim; required only to
+    // satisfy the UsernameStorage interface.
+    async touchLastActive() {
+      return false;
+    },
+    async delete() {
+      return false;
+    },
   };
 }
 

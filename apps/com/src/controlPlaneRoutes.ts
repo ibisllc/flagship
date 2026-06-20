@@ -89,6 +89,8 @@ import {
   handleServerRegister,
   handleRevokeServer,
   handleServerReleaseName,
+  handleAccountDeletionBundle,
+  handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
   handleUsernameClaim,
@@ -535,6 +537,8 @@ const ROUTE_RE = {
   ADMIN_SCHEMA_STATUS: /^\/api\/admin\/schema-status$/,
   ADMIN_SCHEMA_STAMP: /^\/api\/admin\/schema-version\/([^/]+)$/,
   ADMIN_CA_LEASE_STATUS: /^\/api\/admin\/ca-lease-status$/,
+  ADMIN_USERNAME_RECLAIM: /^\/api\/admin\/username\/([^/]+)\/reclaim$/,
+  ACCOUNT_SELF_DELETE: /^\/api\/account\/self-delete$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -943,6 +947,81 @@ export async function tryControlPlane(
           ...(revokeDns ? { dns: revokeDns } : {}),
         },
         await readJson(request),
+      ),
+    );
+  }
+
+  // POST /api/account/self-delete — last-device account-death bundle-ingest.
+  // Verifies the owner-IRK account-self-delete (+ enforces last-device: zero
+  // active device grants), hard-deletes the username row (the name frees
+  // immediately) and tears down every owned server. An optional bundled
+  // servers-self-delete content-wipe order is accepted ONLY atomically with a
+  // valid account-self-delete (§5 invariant) — a bad/absent companion or a
+  // non-last-device caller rejects the WHOLE bundle.
+  if (method === "POST" && ROUTE_RE.ACCOUNT_SELF_DELETE.test(path)) {
+    const delDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
+    return finish(
+      await handleAccountDeletionBundle(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          auditEvents: storage.auditEvents,
+          autoUnlockLeases: storage.autoUnlockLeases,
+          boxSealedLeases: storage.boxSealedLeases,
+          luksKeys: storage.luksKeys,
+          webauthnRecovery: storage.webauthnRecovery,
+          pushTokens: storage.pushTokens,
+          ...(delDns ? { dns: delDns } : {}),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/admin/username/:u/reclaim[?dryRun=1] — admin-gated reclaim of a
+  // ≥90-day-inactive name (same teardown as account-self-delete). Never bulk.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_USERNAME_RECLAIM))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    const reclaimDns =
+      env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : undefined;
+    const dryRun =
+      url.searchParams.get("dryRun") === "1" ||
+      url.searchParams.get("dryRun") === "true";
+    return finish(
+      await handleAdminUsernameReclaim(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          auditEvents: storage.auditEvents,
+          autoUnlockLeases: storage.autoUnlockLeases,
+          boxSealedLeases: storage.boxSealedLeases,
+          luksKeys: storage.luksKeys,
+          webauthnRecovery: storage.webauthnRecovery,
+          pushTokens: storage.pushTokens,
+          ...(reclaimDns ? { dns: reclaimDns } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        { dryRun },
       ),
     );
   }
@@ -1758,6 +1837,8 @@ export async function tryControlPlane(
           daemonStatus: storage.daemonStatus,
           servers: storage.servers,
           routing: storage.routing,
+          // 0058 — coarse "account in use" bump for the username-reclaim tool.
+          usernames: storage.usernames,
         },
         await readJson(request),
       ),
