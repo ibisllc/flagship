@@ -34,6 +34,7 @@ import type {
   AuthCodeStorage,
   ProvisionStatusStorage,
   SecretMailboxStorage,
+  UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import {
@@ -59,8 +60,22 @@ export interface PodInventoryDeps {
    *  unauthenticated `awaitingUnlock` flag (a box with a live boot-unlock
    *  request) so a locked box isn't misclassified "never came online". */
   secretMailbox?: SecretMailboxStorage;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — when wired,
+   * `handlePostDaemonStatus` coarsely bumps `usernames.last_active` for the
+   * owning account after a VERIFIED heartbeat (a live box is the strongest
+   * "account in use" signal for the reclaim tool). Coarse: only when the
+   * stored value is older than ~1 day, so the 5-minutely heartbeat doesn't
+   * hot-write the row. Optional + best-effort: a bump failure never blocks the
+   * heartbeat. NOT consulted on the unauthenticated GET /pods read (that's any
+   * knower-of-a-username and must not keep a name "active").
+   */
+  usernames?: UsernameStorage;
   now?: () => number;
 }
+
+/** Coarse last_active bump cadence: at most once per day. */
+const LAST_ACTIVE_BUMP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Deterministic opaque reference for an install order, safe for the
@@ -353,5 +368,26 @@ export async function handlePostDaemonStatus(
     reportJson: JSON.stringify(report),
     signatureHex: body.signature,
   });
+
+  // Coarse "account in use" bump for the reclaim tool (migration 0058). A
+  // verified heartbeat from a live box is the strongest signal the account is
+  // alive. Best-effort + rate-limited to ≤ once/day so the 5-minutely
+  // heartbeat doesn't hot-write the row; never blocks the heartbeat.
+  if (deps.usernames) {
+    try {
+      const nowMs = (deps.now ?? (() => Date.now()))();
+      const owner = await deps.usernames.get(server.username);
+      if (
+        owner &&
+        (owner.lastActive === undefined ||
+          nowMs - owner.lastActive >= LAST_ACTIVE_BUMP_MIN_INTERVAL_MS)
+      ) {
+        await deps.usernames.touchLastActive(server.username, nowMs);
+      }
+    } catch {
+      // swallow — the heartbeat already landed.
+    }
+  }
+
   return ok({ ok: true });
 }
