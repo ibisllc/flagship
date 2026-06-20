@@ -651,16 +651,36 @@ re-rebased onto refactored `main` and re-validated.
 >   webapp added** (new `lib/podSwitcher.js` + Services-list render), so all three
 >   match iOS's >1-pod switcher.
 >
-> Still open:
-> - **Companion-requests background poll on mobile (L8)** — the webapp polls
->   companion/secret requests in the background; iOS/Android surface them only on
->   a user-initiated read.
-> - **Android `AddControlDevice` order-send wiring** (the screen exists; the
->   signed order-send is not wired).
-> - **Minor:** the add-server chooser's "pair an existing box" is deferred
->   product-wide (a device pairs an existing server by opening it from Home) —
->   iOS gives a guidance toast, Android a silent no-op; align if the in-app
->   multi-device pair flow is ever built.
+> **2026-06-20 (later): the last three closed** (workers, max-effort — parallel
+> read-only mapping → sequential iOS-then-Android implement+build, never two
+> native builds at once; all native-only, 4 focused commits, pushed):
+> - ✅ **Companion-requests background poll (L8)** — added an **inbox-scoped 10s
+>   poll** on iOS (`CompanionRequestsViewModel.startPolling/stopPolling`, wired via
+>   `.task`/`.onDisappear`) and Android (mirror, wired via `DisposableEffect`),
+>   matching the webapp reference faithfully — `pollPending` (10s, first tick
+>   immediate, silent re-ticks, per-tick error-swallow keeping last-good rows).
+>   Deliberately **option A, not an always-on app-scope badge poller**: the
+>   webapp's `startBadgePoll` exists but has **no callers**, so the inbox-scoped
+>   loop IS true parity; the Settings badge stays a one-shot on all three (as the
+>   webapp's is). A heavier always-fresh badge poller is a noted follow-up if ever
+>   wanted. +4 iOS XCTests, +3 Android unit tests.
+> - ✅ **Android `AddControlDevice` order-send wiring** — replaced the no-op with a
+>   real signed send: new shared `core/AddPairedSessionOrder` (canonical bytes
+>   **byte-identical** to the TS/Swift/webapp vector, pinned by test),
+>   `LockPowerClient.pairSession` POSTing the owner-IRK `add-paired-session` order
+>   to `<pod>/api/orders-from-user`, new `AddControlDeviceViewModel` (idempotent —
+>   no-ops if a session token exists; persists the token only after HTTP 200),
+>   mirroring iOS `PodPairViewModel`. Pair-confirm CTA replaces the dead button.
+> - ✅ **Add-server chooser "pair an existing box" alignment** — Android's silent
+>   no-op now shows a **guidance toast using iOS's exact copy**, and the chooser
+>   card body was aligned to iOS ("Open it from Home to pair this device.") so it
+>   no longer promises a scan/code flow the toast then denies.
+>
+> Gates: iOS `xcodebuild test` **1172/0** (xcresult-confirmed, +4) · Android
+> `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (independently re-run for the new
+> canonical-bytes vector) · native-only (no TS/webapp surface touched, so
+> `tsc -b`/webapp vitest unaffected). **The cross-surface parity follow-up list is
+> now empty.**
 
 ### 2026-06-17 — maintainer-trust enforcement landed (apps + boxes verify the blessing)
 
