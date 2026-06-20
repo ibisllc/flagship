@@ -90,7 +90,7 @@ struct LockPowerCard: View {
     }
 }
 
-extension PowerMode: Identifiable {
+extension PowerMode: @retroactive Identifiable {
     public var id: String { rawValue }
 }
 

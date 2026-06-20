@@ -104,7 +104,7 @@ public final class KeyfileImportViewModel {
         do {
             let resp = try await initiateTakeoverRePair(username: username)
             phase = .completed(username: username, completesAt: resp.completesAt)
-        } catch ScreensClientError.http(let status, let message) where status == 401 && (message ?? "").contains("totpProof") {
+        } catch ScreensClientError.http(let status, let message) where status == 401 && message.contains("totpProof") {
             // #52 — the account has a second factor enrolled, which the
             // cloud now requires at initiate even for single-device
             // accounts. The keyfile sheet has no second-factor field
