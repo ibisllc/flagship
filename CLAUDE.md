@@ -123,7 +123,38 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-20 (latest) — 3 parity branches integrated + a gym-caught webapp white-screen fixed
+### 2026-06-20 (latest) — prod deploy + wipe for an e2e + a CRITICAL migration-drift fix
+
+**Pre-e2e ops:** deployed `.com` (Worker `eab7d68d`, carries the gym-caught webapp
+white-screen fix) + `.services` (Fly, immediate) + wiped prod D1 clean
+(`scripts/wipe-all-users.sh`, 45 tables). Rebuilt + re-signed (IBIS LLC Dev ID) +
+reinstalled the Mac burner to `/Applications` (no burner source changes — fresh
+binary of the same logic).
+
+**⭐ CRITICAL — account creation was 500ing in prod (migration drift), fixed.**
+"Open account" on iOS showed *"Service temporarily unavailable"* (the iOS
+`ScreensClient.plainLanguage` 5xx copy). Root cause: the Worker deploy shipped
+current `main`, but **prod D1 was 6 migrations behind** — the deployed
+`handleUsernameClaim` `INSERT` references `usernames.aid_pub_hex` (added by
+**0057**), absent in prod ⇒ every claim threw ⇒ Cloudflare **1101** ⇒ 500.
+Verified live (`POST /api/username/claim` valid-shaped body → 500; `pragma_table_info`
+→ no `aid_pub_hex`; audit → prod had 0051 but was missing **0052–0057**). **Fix:
+applied 0052_vouchers · 0053_stripe_events · 0054_app_purchases · 0055_trust_exceptions
+· 0056_service_invites · 0057_service_invites_v2 to prod in order** (all additive,
+none pre-existed). Re-probed with a REAL signed claim (`deriveIRK(generateUMK())`
++ `signClaimUsername`) → **200 `{ok:true}`**; deleted the probe row (usernames back
+to 0). **Lesson: a Worker deploy bundles built `dist/` that can run AHEAD of the
+prod D1 schema — always audit + apply pending migrations as part of a deploy.**
+
+**Latent bug found, NOT yet fixed (track):** `handleUsernameClaim` calls
+`verifyClaimUsername` UNGUARDED — an invalid Ed25519 pubkey *point* (e.g. all-zero
+hex, structurally valid) makes `ed.verify` THROW rather than return false ⇒ an
+uncaught 500 instead of a clean 403. Real clients never send an invalid point, so
+it didn't block the e2e, but it's a garbage-in → 500 path (mild DoS surface). Fix
+= wrap the verify in try/catch → `forbidden("invalid signature")`. Same pattern
+likely on other `verify*` call sites — worth a sweep.
+
+### 2026-06-20 — 3 parity branches integrated + a gym-caught webapp white-screen fixed
 
 **Integrated three `claude/*` parity branches** (each: verified the gap still
 existed on `main` → cherry-picked the fix onto current `main` → tested → improved
