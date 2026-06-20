@@ -75,6 +75,13 @@ export interface SecretMailboxDeps {
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
 const DEFAULT_MAILBOX_TTL = 5 * 60_000;
+// The create-time pairing deposit is written when the recipe is minted and only
+// CLAIMED at the box's first boot — minutes-to-days later (burn USB → boot →
+// LUKS unlock → daemon). The 5-min mailbox TTL is for live boot-secret
+// round-trips and is far too short here: on real hardware the deposit expired
+// before the box ever booted, so create-time auto-pairing silently no-op'd.
+// Give the pairing deposit a long claim window instead.
+const DEFAULT_PAIRING_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes hex
 
@@ -652,7 +659,8 @@ export async function handlePostPairingDeposit(
   if (!auth.ok) return auth.response;
 
   const now = deps.now ?? (() => Date.now());
-  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_MAILBOX_TTL;
+  // create→first-boot gap, not a live round-trip — use the long deposit TTL.
+  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_PAIRING_DEPOSIT_TTL;
 
   const b = body as { deposit?: Record<string, unknown> };
   const d = b?.deposit ?? {};

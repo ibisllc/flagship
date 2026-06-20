@@ -123,7 +123,34 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-20 (latest) — ⭐ real boxes never came online: burner self-signed entitlement, hub now rejects it; FIXED
+### 2026-06-20 (latest) — onboarding hardening: pairing-TTL + daemon entitlement self-heal + awaiting-entitlement signal
+
+Follow-ons to the burner self-sign fix below, all on `main` (built in an isolated
+worktree to avoid colliding with concurrent agents):
+
+- **Create-time pairing deposit TTL 5 min → 14 days** (`secretMailbox.ts`
+  `DEFAULT_PAIRING_DEPOSIT_TTL`, used only by `handlePostPairingDeposit`). The
+  deposit is written at recipe-mint and only CLAIMED at first boot (minutes-to-
+  days later); the 5-min mailbox TTL (kept for live secret-request round-trips)
+  meant it expired before real hardware ever booted, so create-time auto-pairing
+  silently no-op'd (frank's expired ~10 min before it even registered).
+- **Daemon entitlement self-heal** (`index.ts loadEntitlementsOrExit`): an on-disk
+  bundle is now locally verified against the owner IRK (`verifyRootEntitlement` vs
+  `cfg.irkPublicKey` — the SAME check the hub runs at HELLO). If it fails (a
+  self-signed/stale bundle), the daemon DISCARDS it and falls through to the phone
+  relay instead of crash-looping forever — so a wedged box recovers itself with no
+  shell access (a production box has none). cfg-absent (demo/gym) keeps legacy
+  present-as-is behavior.
+- **`awaitingEntitlement` on `/pods`** (`podInventory.ts`, mirrors `awaitingUnlock`):
+  a box that has posted its entitlement secret-request reads "waiting for approval"
+  (authorize it to serve your account), not "Never came online". Backend signal +
+  webapp can consume immediately; mobile copy needs an app rebuild to show.
+
+Gates: `tsc -b` clean · control-plane vitest 70 (secretMailbox/podInventory/demo) ·
+daemon entitlement/relay 19. The TTL fix needs a `.com` deploy to take effect for
+the NEXT create-server; the daemon + signal ship via the box's first-boot clone.
+
+### 2026-06-20 — ⭐ real boxes never came online: burner self-signed entitlement, hub now rejects it; FIXED
 
 **Root cause: a skipped cutover.** Commit `5b46fb9e` (2026-06-16) turned on
 hub-side IRK-signature enforcement (`irkLookup`, fail-closed on

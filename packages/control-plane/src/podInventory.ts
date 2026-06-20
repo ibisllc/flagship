@@ -116,11 +116,14 @@ export async function handleGetUserPods(
   // no auth: listPendingForUser already returns only un-consumed, un-expired,
   // un-answered rows. Guarded so a failure never drops or fails the list.
   const awaitingUnlock = new Set<string>();
+  const awaitingEntitlement = new Set<string>();
   if (deps.secretMailbox) {
     try {
       const pendingReqs = await deps.secretMailbox.listPendingForUser(username, now);
       for (const r of pendingReqs) {
         if (r.purpose === "unlock-key") awaitingUnlock.add(r.serverDomain.toLowerCase());
+        else if (r.purpose === "entitlement")
+          awaitingEntitlement.add(r.serverDomain.toLowerCase());
       }
     } catch {
       /* enrichment failure must never empty or 500 the authoritative list */
@@ -206,6 +209,10 @@ export async function handleGetUserPods(
         // instead of "never came online" — without needing the biometric
         // mailbox read.
         awaitingUnlock: awaitingUnlock.has(s.serverDomain.toLowerCase()),
+        // Same idea for the entitlement relay: a freshly-booted box that has
+        // posted its entitlement secret-request is "waiting for approval"
+        // (authorize it to serve your account), NOT "never came online".
+        awaitingEntitlement: awaitingEntitlement.has(s.serverDomain.toLowerCase()),
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
         state: "online" as const,

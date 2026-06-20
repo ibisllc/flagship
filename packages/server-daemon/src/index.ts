@@ -5,6 +5,7 @@ import {
   signServerRevokeBySelf,
   openSealedFromEd25519Recipient,
   verifyPhoneOrder,
+  verifyRootEntitlement,
   type Keypair,
   type PhoneOrder,
   type ServerRevokeBySelf,
@@ -948,6 +949,26 @@ async function loadEntitlementsOrExit(deps: {
     process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
   try {
     let loaded = await loadEntitlementBundle(entitlementBundlePath);
+
+    // Self-heal: an on-disk bundle is only usable if its RootEntitlement is
+    // signed by the OWNER IRK — the production hub verifies exactly this at
+    // tunnel HELLO (irkLookup) and rejects anything else. A self-signed/stale
+    // bundle would otherwise crash-loop forever with no recovery on a
+    // shell-less production box. We hold the owner IRK (cfg.irkPublicKey), so
+    // run the hub's check locally: if it fails, DISCARD the bundle and fall
+    // through to the phone relay below to fetch a real IRK-signed one. (When
+    // cfg is absent — demo/gym — we can't verify, so we present as-is, the
+    // legacy behavior.)
+    if (
+      loaded &&
+      cfg &&
+      !verifyRootEntitlement(loaded.rootEntitlement, loaded.rootEntitlementSig, cfg.irkPublicKey)
+    ) {
+      console.warn(
+        "[daemon] on-disk entitlement is not signed by the owner IRK (the hub would reject it at HELLO); discarding and requesting one from the phone",
+      );
+      loaded = null;
+    }
 
     // Entitlement-via-relay (docs/security-phone-as-unlock-endpoint.md §4).
     // If no bundle is on disk, ask the user's phone — through `.com`'s blind
