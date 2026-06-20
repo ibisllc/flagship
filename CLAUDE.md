@@ -121,9 +121,42 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-19**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-19 (latest) — ⭐ CREATE-TIME PAIRING: the creating device comes online ALREADY paired (no manual tap)
+### 2026-06-20 (latest) — 3 parity branches integrated + a gym-caught webapp white-screen fixed
+
+**Integrated three `claude/*` parity branches** (each: verified the gap still
+existed on `main` → cherry-picked the fix onto current `main` → tested → improved
++ brought ALL THREE surfaces to parity → re-tested → merged → deleted the branch).
+Note: the branches forked off `708ad863` (pre-pairing), so a naive merge would
+have reverted create-time pairing — cherry-picked their additive commits instead.
+
+- **Add-server provision-vs-pair chooser** — webapp branch integrated; **iOS
+  brought to parity** (the `AddServerChooserScreen` was a dead screen wired
+  nowhere; `HomeRoute.addServer` now shows it → `.provisionServer` vs. a pair
+  guidance toast; XCUITest + gym scenario tap through the chooser). Android
+  already had it.
+- **Post-recovery keep/replace/wipe choice (L4)** — webapp branch integrated;
+  mirrors iOS/Android (wipe dimmed "Coming soon", same as iOS's
+  `wipeAndRestartEnabled:false`). Mobile already had it.
+- **Multi-pod `PodSwitcher`** — Android branch integrated **and the webapp added**
+  (`lib/podSwitcher.js` + Services-list render, mirroring iOS's >1-pod rule), so
+  all three match iOS.
+
+**⭐ The gym also caught a real pre-existing webapp white-screen on `main`** (fixed
+`45b0694c`, pushed): `app.js` imported `enterVibeCodeChat` TWICE → a parse-time
+SyntaxError halted all app JS → blank webapp. Unit tests load modules
+individually so never hit the full boot graph; a headless boot probe pinned it
+(`Identifier 'enterVibeCodeChat' has already been declared`). The live webapp was
+white-screening until this push.
+
+Gates: `tsc -b` clean · webapp vitest **1454/1455** (the 1 "fail" = a load-induced
+argon2id timeout in the untouched `keyfile.test.ts`; passes 12/12 in isolation) ·
+clean web gym **90/90** · iOS **TEST BUILD SUCCEEDED** + AddServerChooser **2/2** ·
+Android `:app:testDebugUnitTest` (PodSwitcher) BUILD SUCCESSFUL · webapp boot
+probe zero errors. All on `main`. Parity-follow-ups section updated (3 closed).
+
+### 2026-06-19 — ⭐ CREATE-TIME PAIRING: the creating device comes online ALREADY paired (no manual tap)
 
 **The "Pair this server" tap is gone for the creating device, on all 3 clients.**
 Live hand-testing surfaced it: a freshly-online box showed "isn't paired with this
@@ -604,18 +637,30 @@ re-rebased onto refactored `main` and re-validated.
 
 ### Parity follow-ups (deferred, beyond polish)
 
-> Cross-surface gaps that remain after the parity build-out above — deliberately
-> deferred (not blocking), beyond cosmetic polish:
-> - **Webapp post-recovery keep/replace/wipe choice screen (L4)** — mobile has
->   the post-recovery device-disposition choice; the webapp doesn't yet.
+> Cross-surface gaps. **2026-06-20: three closed** by integrating the
+> `claude/*` branches (each verified-gap → integrated → improved → all-surface
+> parity → tested → merged → branch deleted):
+> - ✅ **Webapp "add a server" chooser** (provision vs. pair) — integrated on the
+>   webapp; **iOS brought to parity too** (the `AddServerChooserScreen` existed but
+>   was a dead screen — `HomeRoute.addServer` now shows it, forking to the new
+>   `.provisionServer` route vs. a pair-guidance toast). Android already had it.
+> - ✅ **Webapp post-recovery keep/replace/wipe choice (L4)** — integrated; mirrors
+>   iOS/Android exactly (keep/replace working, wipe-and-restart dimmed "Coming
+>   soon", same as `wipeAndRestartEnabled:false` on iOS).
+> - ✅ **Multi-pod `PodSwitcher`** — Android added (from the branch) **and the
+>   webapp added** (new `lib/podSwitcher.js` + Services-list render), so all three
+>   match iOS's >1-pod switcher.
+>
+> Still open:
 > - **Companion-requests background poll on mobile (L8)** — the webapp polls
 >   companion/secret requests in the background; iOS/Android surface them only on
 >   a user-initiated read.
-> - **Net-new cross-surface items:** **Android `PodSwitcher`** (iOS has the
->   multi-pod switcher), a **webapp "add a server" chooser** (Provision a new box
->   vs. Pair an existing one — mobile distinguishes these), and **Android
->   `AddControlDevice` order-send wiring** (the screen exists; the signed
->   order-send is not wired).
+> - **Android `AddControlDevice` order-send wiring** (the screen exists; the
+>   signed order-send is not wired).
+> - **Minor:** the add-server chooser's "pair an existing box" is deferred
+>   product-wide (a device pairs an existing server by opening it from Home) —
+>   iOS gives a guidance toast, Android a silent no-op; align if the in-app
+>   multi-device pair flow is ever built.
 
 ### 2026-06-17 — maintainer-trust enforcement landed (apps + boxes verify the blessing)
 
