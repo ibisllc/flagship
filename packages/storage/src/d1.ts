@@ -136,6 +136,9 @@ interface UsernameRow {
   // gating v2 — stable AID pubkey (migration 0057). Nullable; absent ⇒
   // .com verifies service-invite create/revoke against the IRK only.
   aid_pub_hex?: string | null;
+  // account-deletion / name-reclaim (migration 0058). Coarse "last seen"
+  // epoch-ms; nullable so a pre-migration SELECT decodes safely.
+  last_active?: number | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -189,6 +192,7 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
       : {}),
     ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
     ...(r.aid_pub_hex != null ? { aidPubHex: r.aid_pub_hex } : {}),
+    ...(r.last_active != null ? { lastActive: r.last_active } : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -239,8 +243,8 @@ export class D1UsernameStorage implements UsernameStorage {
     await this.db
       .prepare(
         "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           // ON CONFLICT updates only claimed_at — like is_demo / the v1.2
           // cascade fields, aid_pub_hex survives a benign re-claim (a fresh
           // value is set via the explicit setAidPub path, not the put path).
@@ -257,6 +261,7 @@ export class D1UsernameStorage implements UsernameStorage {
         rec.totpEnrolledAt ?? null,
         rec.recoveryWipePolicy ?? "graceful",
         rec.aidPubHex ?? null,
+        rec.lastActive ?? null,
       )
       .run();
     return { ok: true as const };
@@ -353,6 +358,22 @@ export class D1UsernameStorage implements UsernameStorage {
         ? stmt.bind(newJson, norm)
         : stmt.bind(newJson, norm, expectedJson);
     const r = await bound.run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async touchLastActive(username: string, atMs: number) {
+    const r = await this.db
+      .prepare("UPDATE usernames SET last_active = ? WHERE username = ?")
+      .bind(atMs, username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async delete(username: string) {
+    const r = await this.db
+      .prepare("DELETE FROM usernames WHERE username = ?")
+      .bind(username.toLowerCase())
+      .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }

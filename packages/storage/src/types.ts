@@ -95,6 +95,16 @@ export interface UsernameRecord {
    * rows ⇒ `.com` falls back to IRK-verify only.
    */
   aidPubHex?: string;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — coarse "account
+   * last seen" epoch-ms, bumped (idempotently, ~once/day) on any
+   * authenticated/owner-IRK-signed read path. Drives the sysadmin
+   * username-reclaim tool (free a name inactive ≥ 90 days;
+   * docs/account-deletion-and-name-reclaim.md §3). Absent on pre-0058
+   * rows; readers treat undefined as "no recorded activity" and fall
+   * back to `claimedAt`.
+   */
+  lastActive?: number;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -231,6 +241,23 @@ export interface UsernameStorage {
     expectedJson: string,
     newJson: string,
   ): Promise<boolean>;
+  /**
+   * Account-deletion / name-reclaim (migration 0058) — coarse, idempotent
+   * "account last seen" bump. Sets `last_active = atMs`. Returns false on
+   * unknown username. Callers should rate-limit (only bump when the stored
+   * value is older than ~1 day) so an authenticated read path doesn't
+   * hot-write the row on every call.
+   */
+  touchLastActive(username: string, atMs: number): Promise<boolean>;
+  /**
+   * Account-deletion (§1) — HARD-DELETE the username row so the name
+   * becomes immediately claimable again (no grace; the deliberate
+   * deletion ceremony already gated it behind typed-username + biometric +
+   * last-device enforcement). Idempotent: deleting an absent row returns
+   * false. The caller (handleAccountSelfDelete) tears down the account's
+   * servers + purges related records around this call.
+   */
+  delete(username: string): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
@@ -397,6 +424,17 @@ export type AuditEventKind =
   // decommissioned}. Cascades through every active boot-unlock lease
   // on the server so the box bricks on the next reboot.
   | "server-revoked"
+  // Account deletion / username reclaim
+  // (docs/account-deletion-and-name-reclaim.md). `account-deleted` logs
+  // the owner-IRK last-device self-delete (the username row is hard-
+  // deleted right after). `servers-self-delete-issued` logs the opt-in
+  // content-wipe order being recorded/forwarded to the account's boxes
+  // (only ever bundled with account-deleted — §5 invariant).
+  // `username-reclaimed` logs the admin-gated reclaim of a ≥90-day-
+  // inactive name.
+  | "account-deleted"
+  | "servers-self-delete-issued"
+  | "username-reclaimed"
   // CT monitoring (server-side, defense-in-depth). Logged for EVERY
   // CT-observed cert under the user's names that isn't accounted for
   // by a daemon-reported baseline cert. When a baseline exists and the

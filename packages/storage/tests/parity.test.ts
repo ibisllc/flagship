@@ -200,6 +200,39 @@ describe("D1 ↔ InMemory parity", () => {
       expectParity(r);
       expect(r.d1).toEqual(["u1", "u2"]);
     });
+
+    it("lastActive absent on a fresh row; touchLastActive sets it + survives a benign re-put", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({ username: "gail", irkPubHex: "aa", claimedAt: 1 });
+        const fresh = (await s.usernames.get("gail"))?.lastActive ?? null;
+        const touched = await s.usernames.touchLastActive("gail", 5_000);
+        const afterTouch = (await s.usernames.get("gail"))?.lastActive ?? null;
+        // a benign re-put (no lastActive) must NOT clear it
+        await s.usernames.put({ username: "gail", irkPubHex: "aa", claimedAt: 9 });
+        const afterReput = (await s.usernames.get("gail"))?.lastActive ?? null;
+        return { fresh, touched, afterTouch, afterReput };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ fresh: null, touched: true, afterTouch: 5_000, afterReput: 5_000 });
+    });
+
+    it("touchLastActive on a missing username is false in both", async () => {
+      const r = await bothAdapters((s) => s.usernames.touchLastActive("ghost", 1));
+      expect(r.mem).toBe(false);
+      expect(r.d1).toBe(false);
+    });
+
+    it("delete hard-removes the row (true), then get is undefined; double-delete is false", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({ username: "hank", irkPubHex: "aa", claimedAt: 1 });
+        const first = await s.usernames.delete("hank");
+        const afterGet = await s.usernames.get("hank");
+        const second = await s.usernames.delete("hank");
+        return { first, afterGet, second };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ first: true, afterGet: undefined, second: false });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────

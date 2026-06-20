@@ -119,6 +119,9 @@ export class InMemoryUsernameStorage implements UsernameStorage {
       // gating v2 — the stable AID survives a benign re-put, mirroring the
       // demo/TOTP fields (a recovery-flow re-claim must not drop it).
       aidPubHex: rec.aidPubHex ?? existing?.aidPubHex,
+      // 0058 — last_active survives a benign re-put (only the explicit
+      // touchLastActive path advances it).
+      lastActive: rec.lastActive ?? existing?.lastActive,
     });
     return { ok: true as const };
   }
@@ -199,6 +202,16 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (current !== expectedJson) return false;
     this.byName.set(norm, { ...r, recoveryCodesHashesJson: newJson });
     return true;
+  }
+  async touchLastActive(username: string, atMs: number) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    this.byName.set(norm, { ...r, lastActive: atMs });
+    return true;
+  }
+  async delete(username: string) {
+    return this.byName.delete(username.toLowerCase());
   }
 }
 
