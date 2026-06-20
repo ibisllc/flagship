@@ -585,8 +585,18 @@ public struct Keystore {
         // class — generic passwords (wrapped UMK / ephemeral / sim-wrap / push /
         // irk-version / watch-delegate / acme) AND keys (the SE wrapping keys) —
         // scoped to this app's Keychain access group. Leaves nothing behind.
+        //
+        // kSecAttrSynchronizableAny is REQUIRED: the UMK / ephemeral / sim-wrap
+        // are written `.cloudRoot` (kSecAttrSynchronizable=true), and a
+        // SecItemDelete WITHOUT this attribute matches ONLY non-synced items —
+        // so without it the wrapped UMK survived sign-out AND an app
+        // delete+reinstall (iCloud Keychain restored it), letting Face ID
+        // re-derive the supposedly-erased identity.
         for cls in [kSecClassGenericPassword, kSecClassKey] {
-            SecItemDelete([kSecClass as String: cls] as CFDictionary)
+            SecItemDelete([
+                kSecClass as String: cls,
+                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+            ] as CFDictionary)
         }
         activeProfileLock.lock()
         _activeProfileId = defaultProfileId
@@ -743,12 +753,16 @@ public struct Keystore {
     }
 
     /// Delete a Generic-Password Keychain item + its in-memory mirror.
-    /// Matches the legacy ad-hoc delete query (no Synchronizable filter)
-    /// so the default-profile on-disk behavior is unchanged.
+    /// kSecAttrSynchronizableAny is REQUIRED: our writes are `.cloudRoot`
+    /// (kSecAttrSynchronizable=true) and a SecItemDelete WITHOUT this
+    /// attribute matches ONLY non-synced items — so omitting it left the
+    /// synced wrapped UMK behind on sign-out (and it came back from iCloud
+    /// Keychain after a reinstall). Reads already use SynchronizableAny.
     fileprivate static func keychainDelete(account: String) {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: account,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         ]
         SecItemDelete(q as CFDictionary)
         InMemoryStore.shared.remove(account: account)
