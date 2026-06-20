@@ -782,35 +782,17 @@ chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
 SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
 
-# Mint the entitlement bundle the daemon hard-requires on every tunnel
-# HELLO. The RootEntitlement binds this box's STK (the identity pubkey
-# just generated) to its canonical FQDN.
-#
-# INTERIM SELF-SIGN — read this before touching it. The demo path signs
-# the RootEntitlement with the deterministic demo *User IRK*. The real
-# (Burner) path has NO user IRK on the box — the phone holds it — so we
-# SELF-SIGN with the box's own identity key (pass the identity priv as
-# the signer; --pod-pub is that same identity pubkey). This is SAFE today
-# ONLY because the production tunnel hub does NOT verify the RootEntitle-
-# ment's IRK signature: apps/web/src/server.ts wires startTunnelHub with
-# authLookup but no irkLookup, and tunnelHub.ts skips the signature check
-# when irkLookup is absent.
-#
-# FOLLOW-UP REQUIRED before irkLookup is enabled in production: replace
-# this self-signed bundle with a phone-signed one. The proper flow is
-# that after first boot the phone signs an EntitlementBundle for THIS
-# box's STK (identity pubkey) with the user's real IRK and delivers it to
-# /var/flagship/entitlements.json (process restart picks it up). Until
-# then a self-signed bundle would be rejected the moment irkLookup goes
-# live, so this MUST be cut over first.
-npx tsx scripts/install-helper.ts mint-entitlements \\
-    --irk-priv "$SERVER_IDENTITY_PRIV_HEX" \\
-    --pod-pub "$SERVER_IDENTITY_PUB_HEX" \\
-    --username "$USERNAME" \\
-    --pod-canonical "$SERVER_DOMAIN" \\
-    --out /var/flagship/entitlements.json \\
-    || echo "[flagship-bootstrap] WARNING: mint-entitlements failed; daemon will not serve"
-chmod 600 /var/flagship/entitlements.json 2>/dev/null || true
+# Entitlement bundle: deliberately NOT minted here. The daemon hard-
+# requires an IRK-signed RootEntitlement on every tunnel HELLO, and the
+# production hub verifies that signature against the owner IRK (irkLookup,
+# live since 2026-06-16), so a box-self-signed bundle is REJECTED at the
+# hub ("rootEntitlement signature failed verification"). The real (Burner)
+# path has no user IRK on the box (the phone holds it), so we write NOTHING
+# here and let the daemon fetch an IRK-signed entitlement from the phone on
+# first boot via .com's blind mailbox (server-daemon entitlementRelay.ts,
+# which fires only when no bundle is on disk). The phone signs an
+# EntitlementBundle for THIS box's STK and the daemon persists it to
+# /var/flagship/entitlements.json.
 
 # Daemon environment. server-daemon reads its two REQUIRED inputs
 # (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process env

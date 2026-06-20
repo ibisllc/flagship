@@ -297,12 +297,12 @@ describe("buildDebianPreseed — first-boot bootstrap (reused verbatim from Ubun
     expect(c).toContain("/target/usr/local/sbin/flagship-bootstrap.sh");
   });
 
-  it("is the SAME daemon setup as Ubuntu (env, self-signed entitlements, units)", () => {
+  it("is the SAME daemon setup as Ubuntu (env, relay-fetched entitlements, units)", () => {
     const b = bootstrap();
     expect(b).toContain("cat > /etc/flagship/daemon.env");
     expect(b).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
-    expect(b).toContain("install-helper.ts mint-entitlements");
-    expect(b).toContain("INTERIM SELF-SIGN");
+    expect(b).not.toContain("install-helper.ts mint-entitlements");
+    expect(b).toContain("fetch an IRK-signed entitlement from the phone");
     expect(b).toContain("ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon");
     expect(b).toContain("systemctl enable flagship-daemon.service flagship-first-boot-register.service");
     // Node 20 from NodeSource — reused verbatim, the whole reason we don't rely

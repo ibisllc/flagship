@@ -91,13 +91,12 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(s.contains("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN"))
         XCTAssertTrue(s.contains("FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX"))
         XCTAssertTrue(s.contains("chmod 600 /etc/flagship/daemon.env"))
-        // Self-signed entitlement bundle (box identity key signs; no user IRK).
-        XCTAssertTrue(s.contains("install-helper.ts mint-entitlements"))
-        XCTAssertTrue(s.contains("--irk-priv \"$SERVER_IDENTITY_PRIV_HEX\""))
-        XCTAssertTrue(s.contains("--pod-pub \"$SERVER_IDENTITY_PUB_HEX\""))
-        XCTAssertTrue(s.contains("--out /var/flagship/entitlements.json"))
-        XCTAssertTrue(s.contains("INTERIM SELF-SIGN"))
-        XCTAssertTrue(s.contains("FOLLOW-UP REQUIRED"))
+        // NO self-signed entitlement bundle — the hub rejects it (irkLookup);
+        // the daemon relay-fetches an IRK-signed one from the phone on first boot.
+        XCTAssertFalse(s.contains("install-helper.ts mint-entitlements"))
+        XCTAssertFalse(s.contains("INTERIM SELF-SIGN"))
+        XCTAssertTrue(s.contains("fetch an IRK-signed entitlement from the phone"))
+        XCTAssertTrue(s.contains("entitlementRelay.ts"))
         // flagship-daemon unit with the FIXED ExecStart (npm run, not npx).
         XCTAssertTrue(s.contains("cat > /etc/systemd/system/flagship-daemon.service"))
         XCTAssertTrue(s.contains("ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon"))
@@ -638,7 +637,7 @@ final class EngineTests: XCTestCase {
         let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "2f8fc01119fbe5f9e738972e563a1244dd98c1ed384b4955f0a4de3475ceec64",
+            hash, "1540d942963bc0878f879089eed177e8ac16f5e31736ef4bf1c47be621f64737",
             "Swift encrypted wired bootstrap drifted from the TS twin.")
     }
 
@@ -656,7 +655,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains(#"cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME""#))
         let hash = SHA256.hash(data: Data(b.utf8)).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(
-            hash, "9bed6e09955da352c0d44915a05c94a26bd80d3304360b8678d195f80db11654",
+            hash, "555dd7b10c5bfbc43ae40dbb5ed6f1e3874b9ebc739c00587e9593809411a62d",
             "Swift encrypted Debian bootstrap drifted from the TS twin.")
     }
 
@@ -814,7 +813,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(cfg.contains("/target/var/flagship/install-blob.json"))
         let b = try preseedBootstrap(cfg)
         XCTAssertTrue(b.contains("cat > /etc/flagship/daemon.env"))
-        XCTAssertTrue(b.contains("install-helper.ts mint-entitlements"))
+        XCTAssertFalse(b.contains("install-helper.ts mint-entitlements"))
         XCTAssertTrue(b.contains("ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon"))
         XCTAssertTrue(b.contains("https://deb.nodesource.com/setup_20.x"))
     }

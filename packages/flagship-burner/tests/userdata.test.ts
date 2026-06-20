@@ -153,18 +153,17 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).toContain("chmod 600 /etc/flagship/daemon.env");
   });
 
-  it("self-signs the entitlement bundle with the box identity key (no user IRK on box)", () => {
+  it("does NOT self-sign the entitlement bundle — the daemon relay-fetches an IRK-signed one from the phone", () => {
     const b = bootstrap();
-    expect(b).toContain("install-helper.ts mint-entitlements");
-    // The signer (--irk-priv) is the box's OWN identity priv, and --pod-pub
-    // is that same identity pubkey — i.e. a self-signed RootEntitlement.
-    expect(b).toMatch(/--irk-priv "\$SERVER_IDENTITY_PRIV_HEX"/);
-    expect(b).toMatch(/--pod-pub "\$SERVER_IDENTITY_PUB_HEX"/);
-    expect(b).toContain("--out /var/flagship/entitlements.json");
-    // The interim/self-signed nature + the phone-signed follow-up must be
-    // documented in the generated script itself.
-    expect(b).toContain("INTERIM SELF-SIGN");
-    expect(b).toContain("FOLLOW-UP REQUIRED");
+    // The hub enforces owner-IRK signatures (irkLookup, live 2026-06-16), so a
+    // box-self-signed RootEntitlement is rejected at tunnel HELLO. The burner
+    // must NOT mint one; the daemon fetches an IRK-signed entitlement from the
+    // phone on first boot (server-daemon entitlementRelay.ts).
+    expect(b).not.toContain("install-helper.ts mint-entitlements");
+    expect(b).not.toContain("INTERIM SELF-SIGN");
+    // The relay rationale is documented in the generated script itself.
+    expect(b).toContain("fetch an IRK-signed entitlement from the phone");
+    expect(b).toContain("entitlementRelay.ts");
   });
 
   it("installs the flagship-daemon unit with the FIXED ExecStart (npm run, not npx)", () => {
@@ -1109,7 +1108,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "2f8fc01119fbe5f9e738972e563a1244dd98c1ed384b4955f0a4de3475ceec64",
+      "1540d942963bc0878f879089eed177e8ac16f5e31736ef4bf1c47be621f64737",
     );
   });
 
@@ -1132,7 +1131,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "9bed6e09955da352c0d44915a05c94a26bd80d3304360b8678d195f80db11654",
+      "555dd7b10c5bfbc43ae40dbb5ed6f1e3874b9ebc739c00587e9593809411a62d",
     );
   });
 

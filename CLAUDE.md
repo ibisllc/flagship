@@ -123,7 +123,46 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-20 (latest) — iOS sign-out didn't erase the account key (security) + deletion/reclaim design
+### 2026-06-20 (latest) — ⭐ real boxes never came online: burner self-signed entitlement, hub now rejects it; FIXED
+
+**Root cause: a skipped cutover.** Commit `5b46fb9e` (2026-06-16) turned on
+hub-side IRK-signature enforcement (`irkLookup`, fail-closed on
+`surface=services`) — the right security fix. But the burner
+(`packages/flagship-burner/src/userdata.ts` + the Swift twin
+`apps/burner-mac/.../UserData.swift`) still minted a **self-signed**
+RootEntitlement (signed by the box's OWN identity key, not the owner IRK). The
+burner's own comment had warned this MUST be cut over *before* irkLookup goes
+live; it wasn't. So every real phone-created box's tunnel HELLO is now rejected
+(`"rootEntitlement signature failed verification"`) → tunnel never registers →
+the canonical `:443` URL resets (ERR_EMPTY_RESPONSE) → no ACME cert, no
+heartbeat → phone shows **"Never came online."** Diagnosed live on
+`frank.harry.flagship.services`: registered + DNS-published, daemon reached
+`provision_status=pairing`, then silent (no `live`/`error`, `daemon_status`
+empty, `:443` SSL reset); `flyctl ips` confirmed DNS → the Fly dedicated
+passthrough IP, so the only missing layer was tunnel registration.
+
+**Fix (burner only, all on `main`): stop self-signing.** The burner now writes
+NO `entitlements.json`; the daemon's existing first-boot relay
+(`server-daemon/src/entitlementRelay.ts`, fires `if (!loaded && cfg)`) requests
+an **IRK-signed** RootEntitlement from the owner's phone via `.com`'s blind
+mailbox (purpose `entitlement`; responders already exist on iOS/Android +
+control-plane), and the phone signs one for THIS box's STK. `cfg` (owner IRK) is
+derived from `/var/flagship/install-blob.json` even without `FLAGSHIP_CONFIG`, so
+the relay always has what it needs. Demo (`demoUsersAdminCloudInit.ts`) + gym
+(`gymProvision.ts`) paths are UNTOUCHED — they legitimately self-mint with a
+real/demo IRK that the hub accepts. TS↔Swift bootstrap kept byte-identical
+(re-pinned sha: wired `1540d942…`, Debian `555dd7b1…`).
+
+Gates: TS burner vitest **186** · `tsc -b` clean · Swift `EngineTests` all pass
+(incl. both byte-identical bootstrap pins) · demo/gym self-mint tests **27**
+still green. **Existing self-signed boxes (e.g. frank) self-heal by removing
+`/var/flagship/entitlements.json` + restarting the daemon (`Restart=on-failure`
+re-fires the relay) → approve the entitlement on the phone.** Follow-up found
+(not yet fixed): the create-time **pairing** deposit TTL is ~5 min, far shorter
+than a real box's boot-to-daemon time (frank's expired ~10 min before it
+registered) — auto-pairing silently no-ops on real hardware.
+
+### 2026-06-20 — iOS sign-out didn't erase the account key (security) + deletion/reclaim design
 
 **⭐ SECURITY (iOS) — sign-out left the account key behind; FIXED (`34ce141f`).**
 Repro: sign out on the lock screen → delete the app → reinstall → still Face-ID-
