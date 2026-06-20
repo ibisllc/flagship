@@ -673,8 +673,13 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// assert which request was resolved + with what outcome.
     public private(set) var companionResolveCalls: [CompanionResolvePendingRequest] = []
 
+    /// Counts `companionPendingWrites()` invocations so tests can assert the
+    /// background poll ticks (and stops on teardown).
+    public private(set) var companionPendingWritesCallCount: Int = 0
+
     public func companionPendingWrites() async throws -> CompanionPendingWritesResponse {
         try await tick()
+        companionPendingWritesCallCount += 1
         if let fixture = companionPendingWritesFixture { return fixture }
         return CompanionPendingWritesResponse(pending: [])
     }

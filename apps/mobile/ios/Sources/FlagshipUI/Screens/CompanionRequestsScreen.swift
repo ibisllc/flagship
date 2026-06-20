@@ -30,10 +30,14 @@ public struct CompanionRequestsScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Companion requests")
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await vm.load() }
+        .refreshable { await vm.refresh() }
         .task {
             if case .idle = vm.state { await vm.load() }
+            // Background poll while the inbox is on screen — matches the
+            // webapp's 10s pollPending; torn down on disappear.
+            vm.startPolling()
         }
+        .onDisappear { vm.stopPolling() }
         .task {
             while !Task.isCancelled {
                 nowMs = Int64(Date().timeIntervalSince1970 * 1000)
