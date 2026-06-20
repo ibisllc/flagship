@@ -22,7 +22,6 @@ import {
   startAiChatAlertPoll,
   makeAiChatNotifier,
 } from "./lib/aiChatAlerts.js";
-import { enterVibeCodeChat } from "./views/vibecode-chat.js";
 import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
