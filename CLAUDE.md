@@ -146,13 +146,33 @@ none pre-existed). Re-probed with a REAL signed claim (`deriveIRK(generateUMK())
 to 0). **Lesson: a Worker deploy bundles built `dist/` that can run AHEAD of the
 prod D1 schema — always audit + apply pending migrations as part of a deploy.**
 
-**Latent bug found, NOT yet fixed (track):** `handleUsernameClaim` calls
-`verifyClaimUsername` UNGUARDED — an invalid Ed25519 pubkey *point* (e.g. all-zero
-hex, structurally valid) makes `ed.verify` THROW rather than return false ⇒ an
-uncaught 500 instead of a clean 403. Real clients never send an invalid point, so
-it didn't block the e2e, but it's a garbage-in → 500 path (mild DoS surface). Fix
-= wrap the verify in try/catch → `forbidden("invalid signature")`. Same pattern
-likely on other `verify*` call sites — worth a sweep.
+**⭐⭐ SECURITY — low-order public-key acceptance (Ed25519), FIXED + deployed
+(`f3f9778f`).** While hardening the above, the zero-key probe revealed something
+worse than the suspected throw: the **all-zero public key + zero signature
+VERIFIED as valid** (it created a username) — the classic Ed25519 low-order-key
+forgery. Any envelope whose verifier pubkey comes from untrusted input (a username
+claim IRK, a redeem AID, …) could be satisfied by the zero key ⇒ **anyone could
+squat any username / forge a "valid" signature for a key nobody controls.** Fix at
+the single `ed` chokepoint (`packages/protocol/src/edSync.ts`): a Proxy swaps
+`ed.verify` for a hardened version that rejects the **libsodium small-order +
+non-canonical blocklist** (incl. 0x00…00) and never throws on malformed input —
+**covering all ~104 `ed.verify` call sites at once** (subsumes the try/catch the
+earlier note called for). Pinned by `edLowOrderReject.test.ts` (zero key → false;
+malformed → false-not-throw; legit key → true). Verified live post-deploy: zero-key
+claim → **403**, valid signed claim → **200**. Full `vitest` green (the chokepoint
+is used everywhere). No call-site or canonical-bytes change ⇒ no signature break.
+
+**OPS-2 ENFORCEMENT — deploy-time migration-drift gate added (so the drift above
+can't recur).** The `schema_version` ledger + `/api/admin/schema-status` existed
+but the ledger was **empty** and nothing gated the deploy. Now: (1) reconciled the
+prod ledger (stamped 0001–0057, all applied to live prod); (2) `scripts/check-prod-migrations.mjs`
+diffs the repo's migration files vs the prod ledger and **refuses the deploy** on
+drift (degrades to a warning when prod is unreachable); (3) wired into
+`scripts/predeploy-com.sh`, **opt-in via `FLAGSHIP_CHECK_PROD_MIGRATIONS=1`** which
+the `apps/com` `predeploy` npm script sets (so the predeploy unit tests — which run
+on a wrangler-authed dev box — never query prod). Bypass: `FLAGSHIP_SKIP_MIGRATION_CHECK=1`.
+Proven: gate exit-1'd on the empty ledger, exit-0'd after reconcile, and ran live
+in the `f3f9778f` deploy (`✓ prod ledger in sync (57 migrations)`).
 
 ### 2026-06-20 — 3 parity branches integrated + a gym-caught webapp white-screen fixed
 
