@@ -45,6 +45,8 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSearchField
+import com.flagshipserver.app.ui.components.PodSwitcher
+import com.flagshipserver.app.ui.components.PodSwitcherModel
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.ServicesListViewModel
@@ -85,8 +87,17 @@ fun ServicesListScreen(nav: NavController) {
     // Presentation-only narrowing — never mutates the loaded apps.
     var query by remember { mutableStateOf("") }
     var ownerFilter by remember { mutableStateOf(OwnerFilter.ALL) }
+    // V8 — server filter (the PodSwitcher). null == "All servers".
+    var serverFilter by remember { mutableStateOf<String?>(null) }
 
     val me = (appState.currentUser.collectAsState().value ?: "").lowercase()
+    val pods by appState.pods.collectAsState()
+    val leaderPodId by appState.leaderPodId.collectAsState()
+    // A pod the user no longer owns can't stay selected (it would hide every
+    // app); treat a stale selection as "All servers". Derived (not a state
+    // write) so it's safe to compute during composition.
+    val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
+    val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
     // Merge the daemon apps-list with the per-service /links fan-out
     // exactly as iOS AppsTab.AppRow does: slug.capitalized name,
@@ -113,6 +124,11 @@ fun ServicesListScreen(nav: NavController) {
                 OwnerFilter.YOURS -> me.isEmpty() || app.creator.lowercase() == me
                 OwnerFilter.SHARED -> me.isNotEmpty() && app.creator.lowercase() != me
             }
+        }
+        // V8 — server filter: when a pod is selected, keep only the apps whose
+        // canonical URL carries that pod's name as a subdomain (mirrors iOS).
+        .filter { app ->
+            filterPodName == null || PodSwitcherModel.matchesPod(app.canonicalUrl, filterPodName)
         }
 
     val subtitle = when (val st = state) {
@@ -169,6 +185,20 @@ fun ServicesListScreen(nav: NavController) {
             }
         } else {
             Spacer(Modifier.height(FS.space.s4))
+            // V8 — the server filter sits above search when the user owns more
+            // than one pod, doubling as a context switcher ("All servers" =
+            // every app regardless of which pod runs it).
+            if (pods.size > 1) {
+                PodSwitcher(
+                    pods = pods,
+                    currentPodId = effectiveServerFilter,
+                    leaderPodId = leaderPodId,
+                    onPick = { serverFilter = it.podId },
+                    allLabel = "All servers",
+                    onPickAll = { serverFilter = null },
+                )
+                Spacer(Modifier.height(FS.space.s3))
+            }
             FSSearchField(
                 value = query,
                 onValueChange = { query = it },
