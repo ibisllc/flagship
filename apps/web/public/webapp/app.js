@@ -87,6 +87,7 @@ import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initPostRecoveryChoiceView } from "./views/post-recovery-choice.js";
+import { initAccountDeleteView } from "./views/account-delete.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
@@ -496,6 +497,7 @@ async function boot() {
   initVibeCodeChatView();
   initRecoveryView();
   initPostRecoveryChoiceView();
+  initAccountDeleteView();
   // post-recovery is owned by another worker; init it best-effort so
   // the shell loads cleanly whether or not it's on disk yet.
   try {

@@ -24,6 +24,9 @@ import {
   signOut as signOutTier,
   signOutConfirmCopy,
 } from "../lib/sessionTiers.js";
+import { resolveAccount } from "../lib/accountResolve.js";
+import { accountDeletePolicy } from "../lib/accountDeletion.js";
+import { enterAccountDelete } from "./account-delete.js";
 
 registerView("view-settings");
 
@@ -414,6 +417,39 @@ async function handleSignOut() {
   toast("signed out");
 }
 
+/** A recovery-gated session button (Tier-2 sign-out / Tier-3 remove) was
+ *  tapped while greyed (no cloud recovery enrolled). Decide between the two
+ *  no-recovery outcomes:
+ *    - LAST device  → this removal is account DEATH; route into the full
+ *                     deletion ceremony (typed-username + confirm) instead of
+ *                     silently blocking.
+ *    - other device → the key survives elsewhere; nudge the user to set up
+ *                     recovery (the existing guidance), no ceremony.
+ *  Best-effort + fail-closed: any resolve failure (network / unknown count)
+ *  treats it as the last device, so a no-recovery wipe never bypasses the
+ *  ceremony. */
+async function handleNoRecoveryGatedTap() {
+  const username = getSession().username;
+  let resolution = null;
+  try {
+    resolution = await resolveAccount(username);
+  } catch {
+    resolution = null;
+  }
+  const policy = accountDeletePolicy({
+    hasCloudRecovery: false,
+    trustedDeviceCount: resolution?.trustedDeviceCount,
+    isDemoAccount: resolution?.kind === "demo",
+  });
+  if (policy === "ceremony") {
+    enterAccountDelete();
+    return;
+  }
+  // "normal" (another device exists) or "exempt" (demo) — the destructive
+  // wipe still needs recovery to be safe here, so keep the guidance nudge.
+  toast("Set up account recovery to use this.", "warn");
+}
+
 export function initSettingsView() {
   $("settings-back")?.addEventListener("click", async () => {
     show("view-home");
@@ -439,7 +475,11 @@ export function initSettingsView() {
   // of running the key wipe.
   $("settings-signout")?.addEventListener("click", () => {
     if (!sessionRecoveryEnrolled) {
-      toast("Set up account recovery to use this.", "warn");
+      // No recovery: a last-device sign-out is account death → ceremony.
+      handleNoRecoveryGatedTap().catch((e) => {
+        console.error("no-recovery sign-out gate failed", e);
+        toast(humanError(e), "err");
+      });
       return;
     }
     handleSignOut().catch((e) => {
@@ -452,7 +492,11 @@ export function initSettingsView() {
   // toasts until recovery is enrolled.
   $("settings-reset")?.addEventListener("click", () => {
     if (!sessionRecoveryEnrolled) {
-      toast("Set up account recovery to use this.", "warn");
+      // No recovery: removing the last device is account death → ceremony.
+      handleNoRecoveryGatedTap().catch((e) => {
+        console.error("no-recovery remove gate failed", e);
+        toast(humanError(e), "err");
+      });
       return;
     }
     handleReset();

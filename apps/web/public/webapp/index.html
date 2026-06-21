@@ -1002,6 +1002,34 @@
         <button class="secondary full-width mt-2" id="settings-back">← Back</button>
       </section>
 
+      <!-- Account-deletion ceremony — last-device, no-recovery account DEATH.
+           Reached from the recovery-gated Session/Danger-zone buttons when there
+           is no other device + no cloud recovery. -->
+      <section id="view-account-delete" class="hidden">
+        <h2>Delete your account</h2>
+        <div class="card danger-zone">
+          <p class="weight-600">This permanently deletes <span id="account-delete-username"></span>.</p>
+          <p class="note mt-2">This is the last device on this account and there is no cloud recovery, so removing it ends the account. There is no undo — no passkey, no other device, no reset.</p>
+          <ul class="note mt-2">
+            <li>Your username is <strong>permanently lost</strong> and may be claimed by someone else.</li>
+            <li>Your servers stop being reachable and manageable. If you want to keep one, <strong>transfer it first</strong> from its server page, then come back.</li>
+            <li>The account key on this device is erased.</li>
+          </ul>
+        </div>
+        <div class="card mt-2">
+          <label class="row">
+            <input type="checkbox" id="account-delete-wipe-content" />
+            <span class="note">Ask all my servers to delete their content. Offline servers act on next boot. Leave off to just orphan them — their sealed data stays on disk but goes dark.</span>
+          </label>
+        </div>
+        <div class="card mt-2">
+          <p class="note">To confirm, type your username <strong id="account-delete-confirm-prompt"></strong>:</p>
+          <input id="account-delete-confirm-input" type="text" placeholder="username" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <button id="account-delete-go" class="full-width mt-3" disabled>Delete my account</button>
+        </div>
+        <button class="secondary full-width mt-2" id="account-delete-back">← Cancel</button>
+      </section>
+
       <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->
       <section id="view-pair" class="hidden">
         <h2>Pair to a server</h2>
