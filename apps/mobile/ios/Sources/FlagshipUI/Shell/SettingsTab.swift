@@ -235,11 +235,13 @@ public struct SettingsTab: View {
                     hasCloudRecovery: app.hasCloudRecovery,
                     signOutPolicy: SignOutPolicy.evaluate(
                         hasCloudRecovery: app.hasCloudRecovery,
-                        isDemoAccount: !dev.useLiveClient
+                        isDemoAccount: !dev.useLiveClient,
+                        isLastDevice: isLastDevice
                     ),
                     onRecoveryRequired: {
                         toasts.warning("Set up account recovery to use this.")
-                    }
+                    },
+                    onDeleteAccount: { path.append(.deleteAccount) }
                 )
                 .alert(
                     "Replace device",
@@ -295,9 +297,33 @@ public struct SettingsTab: View {
         }
     }
 
+    /// True when this is the account's last device (the founding device is not
+    /// in the roster — docs §0), so a no-recovery wipe is account DEATH. Unknown
+    /// (devices not yet loaded) ⇒ false: conservatively shows "set up recovery"
+    /// rather than the delete ceremony; the server independently re-enforces
+    /// last-device on the self-delete bundle anyway.
+    private var isLastDevice: Bool {
+        if case .loaded(let devs)? = vm?.trustedDevices { return devs.count <= 1 }
+        return false
+    }
+
     @ViewBuilder
     private func settingsDestination(for route: SettingsRoute) -> some View {
         switch route {
+        case .deleteAccount:
+            // Step 2 of the last-device deletion ceremony: the full-page
+            // irreversible warning. Reached only when SignOutPolicy.evaluate
+            // == .deletionCeremony (no recovery + last device). On confirm the
+            // VM signs the owner-IRK self-delete bundle, POSTs it, wipes every
+            // Keychain profile, then drops to Welcome via signOut.
+            AccountDeletionScreen(
+                vm: AccountDeletionViewModel(
+                    server: server,
+                    username: { [app] in app.currentUser },
+                    onWiped: { app.signOut() }
+                ),
+                username: app.currentUser ?? ""
+            )
         case .providers:
             ProvidersStub()
         case .aiKeys:

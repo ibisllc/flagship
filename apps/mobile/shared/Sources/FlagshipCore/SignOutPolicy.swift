@@ -17,6 +17,15 @@ import Foundation
 public enum SignOutPolicy: Equatable, Sendable {
     case allowed
     case blockedNoRecovery
+    /// Account DEATH. No cloud recovery AND this is the LAST device, so wiping
+    /// the local key destroys the only copy of the identity for good. A plain
+    /// Tier-2/3 wipe here would silently orphan the account; instead the UI
+    /// must run the deletion ceremony (docs/account-deletion-and-name-reclaim.md
+    /// §2): a full-page irreversible warning → typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome. The name frees
+    /// immediately. (With recovery OR another device the key survives elsewhere,
+    /// so it's a normal Tier-2/3 action — `.allowed` / `.blockedNoRecovery`.)
+    case deletionCeremony
 
     /// GYM-ONLY override. The UI gym needs to exercise the recovery-gating UX
     /// (greyed tier-2/3 buttons → recovery-required toast, D3-C1 / §7-A seed
@@ -29,12 +38,23 @@ public enum SignOutPolicy: Equatable, Sendable {
     /// unchanged for real users.
     public nonisolated(unsafe) static var gymForceBlockNoRecovery = false
 
+    /// `isLastDevice` distinguishes the two no-recovery shapes (docs §2):
+    /// when there is NO cloud recovery, a wipe on the LAST device is account
+    /// DEATH (`.deletionCeremony`) — the local key is the only copy — whereas
+    /// another device on the account means the key survives elsewhere, so the
+    /// wipe is merely "set up recovery first" (`.blockedNoRecovery`). The
+    /// FOUNDING device never appears in the device roster (docs §0), so callers
+    /// derive last-device from `trustedDevices.count <= 1`. The default is
+    /// `false` so the legacy two-argument call site keeps its exact behaviour
+    /// (`.blockedNoRecovery`).
     public static func evaluate(
         hasCloudRecovery: Bool,
-        isDemoAccount: Bool = false
+        isDemoAccount: Bool = false,
+        isLastDevice: Bool = false
     ) -> SignOutPolicy {
         if gymForceBlockNoRecovery { return .blockedNoRecovery }
         if isDemoAccount { return .allowed }
-        return hasCloudRecovery ? .allowed : .blockedNoRecovery
+        if hasCloudRecovery { return .allowed }
+        return isLastDevice ? .deletionCeremony : .blockedNoRecovery
     }
 }

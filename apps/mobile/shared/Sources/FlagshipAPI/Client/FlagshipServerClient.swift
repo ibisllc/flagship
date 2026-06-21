@@ -242,6 +242,77 @@ public protocol FlagshipServerClient: Sendable {
     /// inventory is a ghost (drop it). Mirrors handleListOutstandingOrders
     /// in packages/control-plane/src/outstandingOrders.ts.
     func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse
+
+    /// Last-device account deletion ceremony (docs/account-deletion-and-name-
+    /// reclaim.md §2/§5). POSTs the atomic `{ accountSelfDelete, serversSelfDelete? }`
+    /// bundle to `POST /api/account/self-delete`. The account-self-delete order
+    /// is ALWAYS present (owner-IRK-signed, last-device); the servers-self-delete
+    /// content-wipe is included ONLY when the user opted in — and `.com` accepts
+    /// it solely as an inseparable side effect of the account death (a standalone
+    /// servers order, or a non-last-device caller, rejects the WHOLE bundle).
+    /// On 200 `.com` has hard-deleted the username row (the name frees at once);
+    /// the caller then wipes its local key material + drops to Welcome. A 403
+    /// "not the last device" / "stale request" / "invalid … signature" is the
+    /// failure the UI surfaces via the humanized-error path.
+    func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse
+}
+
+/// The atomic deletion bundle body for `POST /api/account/self-delete`. Mirrors
+/// the Worker's `BundleBody` (packages/control-plane/src/accountDeletion.ts):
+/// `accountSelfDelete` is required; `serversSelfDelete` is omitted entirely
+/// unless the user opted into the content-wipe. Each order is a
+/// `{ request: { username, issuedAt }, signature }` envelope signed by the
+/// owner IRK over the canonical bytes (FlagshipCore.AccountSelfDeleteOrder /
+/// ServersSelfDeleteOrder).
+public struct AccountSelfDeleteBundleRequest: Encodable, Sendable {
+    public struct Order: Encodable, Sendable {
+        public struct Inner: Encodable, Sendable {
+            public let username: String
+            public let issuedAt: Int64
+            public init(username: String, issuedAt: Int64) {
+                self.username = username; self.issuedAt = issuedAt
+            }
+        }
+        public let request: Inner
+        public let signature: String   // hex; Ed25519 by the owner IRK
+        public init(request: Inner, signature: String) {
+            self.request = request; self.signature = signature
+        }
+    }
+    public let accountSelfDelete: Order
+    /// Present ONLY when the user opted into "ask all my servers to delete
+    /// their content". Encoded as an absent key when nil (the §5 bundling
+    /// invariant: a standalone servers order is never sent).
+    public let serversSelfDelete: Order?
+    public init(accountSelfDelete: Order, serversSelfDelete: Order? = nil) {
+        self.accountSelfDelete = accountSelfDelete
+        self.serversSelfDelete = serversSelfDelete
+    }
+}
+
+/// `POST /api/account/self-delete` success body. Mirrors the Worker's `ok({…})`.
+public struct AccountSelfDeleteResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let username: String
+    public let deletedAt: Int64
+    public let serversTornDown: Int
+    public let serversSelfDeleteForwarded: Int
+    public let contentWipeRequested: Bool
+    public init(
+        ok: Bool,
+        username: String,
+        deletedAt: Int64,
+        serversTornDown: Int,
+        serversSelfDeleteForwarded: Int,
+        contentWipeRequested: Bool
+    ) {
+        self.ok = ok
+        self.username = username
+        self.deletedAt = deletedAt
+        self.serversTornDown = serversTornDown
+        self.serversSelfDeleteForwarded = serversSelfDeleteForwarded
+        self.contentWipeRequested = contentWipeRequested
+    }
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -1830,6 +1901,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
+    public private(set) var selfDeleteBundles: [AccountSelfDeleteBundleRequest] = [] // recorded deletion-ceremony bundles
+    /// When set, `selfDeleteAccount` throws this instead of recording — lets a
+    /// test exercise the 403 "not the last device" failure branch.
+    public var selfDeleteError: Error? = nil
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
@@ -2746,6 +2821,24 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let u = req.request.username.lowercased()
         return OutstandingOrdersResponse(username: u, orders: outstandingOrdersByUser[u] ?? [])
     }
+
+    public func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse {
+        try await tick()
+        if let err = selfDeleteError { throw err }
+        selfDeleteBundles.append(req)
+        let u = req.accountSelfDelete.request.username.lowercased()
+        // Mirror the Worker's hard-delete side effects for the in-memory mock so
+        // a follow-on resolveAccount/usernameAvailable reflects the freed name.
+        claimedUsernames[u] = nil
+        return AccountSelfDeleteResponse(
+            ok: true,
+            username: u,
+            deletedAt: Int64(Date().timeIntervalSince1970 * 1000),
+            serversTornDown: 0,
+            serversSelfDeleteForwarded: req.serversSelfDelete != nil ? 1 : 0,
+            contentWipeRequested: req.serversSelfDelete != nil
+        )
+    }
 }
 
 // MARK: - Live
@@ -3282,5 +3375,12 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = req.request.username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.username
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/users/\(encoded)/outstanding-orders", body: body)
+    }
+
+    public func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse {
+        // `serversSelfDelete` is omitted from the JSON entirely when nil — the
+        // §5 bundling invariant means a standalone servers order is never sent.
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/account/self-delete", body: body)
     }
 }

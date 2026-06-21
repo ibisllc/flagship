@@ -141,6 +141,13 @@ public struct SettingsScreen: View {
     /// "Set up account recovery to use this." — rather than running the
     /// destructive path.
     var onRecoveryRequired: () -> Void = {}
+    /// Fired when the action is account DEATH (`signOutPolicy ==
+    /// .deletionCeremony` — no cloud recovery AND this is the last device).
+    /// Both the tier-2 "Lock with passkey" and the danger-zone "Remove this
+    /// device" confirm into the SAME ceremony: this routes the container to
+    /// push the full-page irreversible warning (typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome).
+    var onDeleteAccount: () -> Void = {}
 
     public init(
         username: String,
@@ -177,7 +184,8 @@ public struct SettingsScreen: View {
         onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true,
         signOutPolicy: SignOutPolicy = .allowed,
-        onRecoveryRequired: @escaping () -> Void = {}
+        onRecoveryRequired: @escaping () -> Void = {},
+        onDeleteAccount: @escaping () -> Void = {}
     ) {
         self.username = username
         self.controlDevices = controlDevices
@@ -214,6 +222,7 @@ public struct SettingsScreen: View {
         self.hasCloudRecovery = hasCloudRecovery
         self.signOutPolicy = signOutPolicy
         self.onRecoveryRequired = onRecoveryRequired
+        self.onDeleteAccount = onDeleteAccount
     }
 
     /// Optional promo announcement at the top of Settings. Wired but empty by
@@ -719,7 +728,9 @@ public struct SettingsScreen: View {
                 Text("Erases account key and deletes data. Sign back in with your recovery passkey.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Lock with passkey", muted: gated, block: true, large: true) {
-                    if gated { onRecoveryRequired() } else { signOutConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { signOutConfirm = true }
                 }
                 .accessibilityIdentifier("settings-sign-out-btn")
             }
@@ -741,7 +752,9 @@ public struct SettingsScreen: View {
                 Text("Remove this device from your account. You may need account recovery to resume.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
                 FSDangerButton("Remove this device from account", muted: gated, block: true) {
-                    if gated { onRecoveryRequired() } else { showRemoveConfirm = true }
+                    if gated { onRecoveryRequired() }
+                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                    else { showRemoveConfirm = true }
                 }
                 .accessibilityIdentifier("remove-from-account-btn")
             }

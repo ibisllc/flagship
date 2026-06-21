@@ -157,6 +157,12 @@ public enum SettingsRoute: Hashable, Sendable {
     /// `flagship://access?…` deeplink (or the raw "Get link" string) from a
     /// box's knock page and routes it into the same KnockAuthorize flow.
     case processUrl
+    /// Last-device account-DEATH ceremony (docs/account-deletion-and-name-reclaim.md
+    /// §2). Reached only when `SignOutPolicy.evaluate(...) == .deletionCeremony`
+    /// (no cloud recovery AND this is the last device) after the confirm popup.
+    /// Hosts the full-page irreversible warning → typed-username + biometric →
+    /// owner-IRK self-delete bundle → local wipe → Welcome.
+    case deleteAccount
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad
