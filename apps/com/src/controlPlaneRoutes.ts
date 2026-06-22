@@ -56,6 +56,7 @@ import {
   handlePostTransferOffer,
   handlePostTransferClaim,
   handleGetTransferClaim,
+  handleGetTransferRehome,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -512,6 +513,11 @@ const ROUTE_RE = {
   TRANSFER_OFFER: /^\/api\/server\/([^/]+)\/transfer\/offer$/,
   TRANSFER_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/claim$/,
   TRANSFER_CLAIM_POLL: /^\/api\/server\/([^/]+)\/transfer\/claim-poll$/,
+  // Box-side re-home read (Layer A): the BOX polls its OLD canonical to learn
+  // "did my owner change?". PUBLIC (the payload is already-public identity); the
+  // box re-verifies the fresh acquirer-IRK entitlement + the giver-signed
+  // re-sealed lease before serving. 404 when never transferred.
+  TRANSFER_REHOME: /^\/api\/server\/([^/]+)\/transfer\/rehome$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1452,6 +1458,23 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.SELF_DELETE_DEPOSIT))) {
       return finishPlain(
         await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Box-side re-home read (Layer A) — the box polls its OLD canonical to
+    // learn its new owner/namespace after a completed transfer. PUBLIC read; no
+    // DNS deps needed (it only reads the transfer row + re-derives the FQDN).
+    if (method === "GET" && (m = path.match(ROUTE_RE.TRANSFER_REHOME))) {
+      return finishPlain(
+        await handleGetTransferRehome(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+        ),
       );
     }
     // Transfer-a-box broker — the cross-account ownership handoff. The claim

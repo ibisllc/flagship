@@ -14,6 +14,7 @@ import {
   handlePostTransferOffer,
   handlePostTransferClaim,
   handleGetTransferClaim,
+  handleGetTransferRehome,
   type ServerTransferDeps,
 } from "../src/serverTransfer.js";
 
@@ -343,5 +344,34 @@ describe("transfer-a-box broker", () => {
     const res = await handlePostTransferClaim(deps(s), HOST, claimBody(aliceIrk, "alice", nonce));
     expect(res.status).toBe(403);
     expect((res.body as { error: string }).error).toMatch(/current owner/);
+  });
+
+  // ── Layer A: box-side re-home read ───────────────────────────────────────
+  it("rehome 404s for a box that was never transferred", async () => {
+    const s = await setup();
+    // Offer deposited but never claimed → no completed transfer.
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce: hex(rand(32)) }));
+    const res = await handleGetTransferRehome(deps(s), HOST);
+    expect(res.status).toBe(404);
+  });
+
+  it("rehome returns the new canonical + acquirer IRK after a completed transfer", async () => {
+    const s = await setup();
+    const nonce = hex(rand(32));
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
+    await handlePostTransferClaim(deps(s), HOST, claimBody(bobIrk, "bob", nonce));
+
+    const res = await handleGetTransferRehome(deps(s), HOST);
+    expect(res.status).toBe(200);
+    const body = res.body as {
+      rehomed: boolean;
+      newServerDomain: string;
+      acquirerUsername: string;
+      acquirerIrkPub: string;
+    };
+    expect(body.rehomed).toBe(true);
+    expect(body.newServerDomain).toBe("home.bob.flagship.services");
+    expect(body.acquirerUsername).toBe("bob");
+    expect(body.acquirerIrkPub).toBe(hex(bobIrk.publicKey));
   });
 });

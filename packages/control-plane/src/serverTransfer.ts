@@ -535,3 +535,40 @@ export async function handleGetTransferClaim(
     acquirerIrkPub: row.acquirerIrkPubHex,
   });
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// 4. GET /api/server/:domain/rehome  (box, PUBLIC consume-once-style read)
+//
+// The BOX (which knows its OLD canonical FQDN = its FLAGSHIP_SUBDOMAIN) polls
+// this to learn "did my owner change?". After a successful claim the transfer
+// row — keyed by the OLD domain — holds the acquirer's username + IRK pub. The
+// box reads those, re-derives its new canonical (`<server>.<acquirer>.<apex>`),
+// and re-homes (cert SANs + entitlement). Public because the payload is already
+// public identity (the acquirer's username + their registered IRK pub are CT-/
+// directory-visible); the box does NOT trust this as a key authority — it
+// re-verifies a fresh acquirer-IRK-signed entitlement and the giver-signed
+// re-sealed disk-key lease before serving, exactly like first-boot. 404 when the
+// box was never transferred (the common case) so the poller stays cheap.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handleGetTransferRehome(
+  deps: ServerTransferDeps,
+  host: string,
+): Promise<HandlerResponseWithHeaders> {
+  const now = deps.now ?? (() => Date.now());
+  const row = await deps.serverTransfers.getOffer(host, now());
+  if (!row || row.claimedAt === null || !row.acquirerUsername || !row.acquirerIrkPubHex) {
+    return notFound("no completed transfer for this server");
+  }
+  const apex = deps.apex ?? "flagship.services";
+  const parts = splitPodCanonical(host, apex);
+  const newServerDomain = parts ? `${parts.server}.${row.acquirerUsername}.${apex}` : null;
+  return ok({
+    rehomed: true,
+    serverDomain: host,
+    newServerDomain,
+    acquirerUsername: row.acquirerUsername,
+    acquirerIrkPub: row.acquirerIrkPubHex,
+    claimedAt: row.claimedAt,
+  });
+}
