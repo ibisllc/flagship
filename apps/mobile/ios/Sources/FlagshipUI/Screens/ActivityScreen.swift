@@ -61,15 +61,6 @@ public struct ActivityScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                // The switcher lives INLINE (not in `.toolbar`): its custom
-                // dropdown is an in-hierarchy overlay, and a nav-bar ToolbarItem
-                // clips that overlay to the bar bounds → the panel was invisible
-                // on tap. `.zIndex(1)` lets the open panel paint above the rows
-                // below it (the panel's own zIndex only orders within its host).
-                if pods.count > 1 {
-                    HStack { Spacer(); podSwitcherIfMulti }
-                        .zIndex(1)
-                }
                 // ALWAYS reachable, OUTSIDE the state switch: a box waiting for
                 // an unlock/entitlement approval is exactly the case where the
                 // daemon BFF (and thus this feed) can't load, so gating the
@@ -135,6 +126,15 @@ public struct ActivityScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
+        // Top-right, above the large title. The PodSwitcher now presents its
+        // panel as a popover, so it is no longer clipped by the nav bar here.
+        .toolbar {
+            if pods.count > 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    podSwitcherIfMulti
+                }
+            }
+        }
         .refreshable { await onRefresh() }
     }
 

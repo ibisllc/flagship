@@ -56,17 +56,20 @@ public struct PodSwitcher: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         trigger(c)
-            .overlay(alignment: .topTrailing) {
-                if open {
-                    panel(c)
-                        .offset(y: 40)
-                        .zIndex(100)
-                        .transition(.opacity)
-                }
+            // Presented as a POPOVER — NOT a nav-bar-clipped in-hierarchy overlay
+            // (which rendered into nothing when the trigger sits in a ToolbarItem)
+            // and NOT a system `Menu` (which floats in its own window over the
+            // biometric-lock cover). A popover anchors to the trigger even inside
+            // a navigation-bar ToolbarItem, so the switcher keeps its place
+            // top-right ABOVE the large title while the panel actually appears.
+            // `.presentationCompactAdaptation(.popover)` keeps it a downward
+            // popover on iPhone instead of a half-sheet. We still force it closed
+            // on background (scenePhase) so an open list of server names can't
+            // linger over the lock cover.
+            .popover(isPresented: $open, arrowEdge: .top) {
+                panel(c)
+                    .presentationCompactAdaptation(.popover)
             }
-            // Never leave the panel open across a background → re-lock. The lock
-            // overlay already covers it, but closing here keeps it from
-            // reappearing open on return.
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { open = false }
             }
