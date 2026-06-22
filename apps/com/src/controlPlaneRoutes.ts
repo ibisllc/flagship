@@ -53,6 +53,9 @@ import {
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
   handleConsumeSelfDeleteDeposit,
+  handlePostTransferOffer,
+  handlePostTransferClaim,
+  handleGetTransferClaim,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -497,6 +500,13 @@ const ROUTE_RE = {
   // PUBLIC IRK-signed entitlement) / GET box consume-once read.
   ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
+  // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
+  // path discriminated by method:
+  //   POST  giver deposit (IRK mailbox-auth, signed ServerTransferOffer)
+  //         OR acquirer claim (signed ServerTransferClaim) — disambiguated by body
+  //   GET   giver claim-poll (IRK mailbox-auth → acquirer IRK for the re-seal)
+  TRANSFER_OFFER: /^\/api\/server\/([^/]+)\/transfer\/offer$/,
+  TRANSFER_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/claim$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1438,6 +1448,61 @@ export async function tryControlPlane(
       return finishPlain(
         await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
+    }
+    // Transfer-a-box broker — the cross-account ownership handoff. The claim
+    // handler does the .com-side NAMESPACE MIGRATION (servers + routing + DNS).
+    // DNS uses the same per-box upsert posture as registration (direct
+    // CloudflareDnsClient when no broker is configured).
+    if (
+      method &&
+      (path.match(ROUTE_RE.TRANSFER_OFFER) || path.match(ROUTE_RE.TRANSFER_CLAIM))
+    ) {
+      const xferM =
+        path.match(ROUTE_RE.TRANSFER_OFFER) ?? path.match(ROUTE_RE.TRANSFER_CLAIM);
+      const isOffer = ROUTE_RE.TRANSFER_OFFER.test(path);
+      const xferCfDns =
+        !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({
+              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+            })
+          : null;
+      const xferDnsClient = env.DNS_BROKER_URL
+        ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+        : xferCfDns;
+      const buildTransferDeps = () => ({
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        auditEvents: storage.auditEvents,
+        ...(xferDnsClient && env.SERVICES_PASSTHROUGH_IPV4
+          ? {
+              dns: {
+                client: xferDnsClient,
+                servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+                servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+              },
+            }
+          : {}),
+        apex: env.SERVICES_APEX,
+      });
+      const domain = decodeURIComponent(xferM![1]!);
+      if (method === "POST" && isOffer) {
+        return finishPlain(
+          await handlePostTransferOffer(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST" && !isOffer) {
+        return finishPlain(
+          await handlePostTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "GET" && !isOffer) {
+        return finishPlain(
+          await handleGetTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release
     // / revoke). Same deposit-and-release shape as the box-sealed lease above;

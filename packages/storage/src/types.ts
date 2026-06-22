@@ -435,6 +435,13 @@ export type AuditEventKind =
   | "account-deleted"
   | "servers-self-delete-issued"
   | "username-reclaimed"
+  // Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a
+  // cross-account ownership handoff. `server-transfer-offered` logs the
+  // giver depositing the one-time offer; `server-transfer-claimed` logs
+  // the acquirer claiming it + the namespace migration (logged on BOTH the
+  // giver's and the acquirer's account feed).
+  | "server-transfer-offered"
+  | "server-transfer-claimed"
   // CT monitoring (server-side, defense-in-depth). Logged for EVERY
   // CT-observed cert under the user's names that isn't accounted for
   // by a daemon-reported baseline cert. When a baseline exists and the
