@@ -127,6 +127,20 @@ self-delete** order; boxes that receive it wipe their content. Offline boxes get
 it as a best-effort **pending** order executed on next boot. Default OFF (a plain
 deletion just orphans-and-lapses; sealed data stays on disk, unreachable).
 
+**Delivery (locked, with code evidence).** The order reaches the box via the
+existing **mailbox deposit rail** (the `pairing`/`entitlement` deposit pattern):
+`.com` writes the signed `servers-self-delete` order into the `secret_mailbox`
+under a new **`self-delete`** purpose lane, keyed by server domain, **during the
+bundle commit BEFORE teardown** (one per owned server). The daemon consumes it
+on its heartbeat poll (≤5-min window), **owner-IRK-verifies** it, then runs the
+data-services wipe — best-effort + idempotent. **Critical:** unlike the
+entitlement consume (which 403s on `reg.revokedAt`), the `self-delete` consume
+endpoint must be **revoke-tolerant** — the ceremony revokes the server during
+teardown, so a revoked-guard would make the order undeliverable. It is safe to
+serve post-revoke because the order is owner-IRK-signed and self-verifying (a
+relay can't forge it). **Offline boxes** never poll ⇒ orphan-and-lapse (data
+stays sealed, unreachable) — the accepted model.
+
 **Bundling invariant (locked):** the content-wipe is **never a standalone
 order**. `.com` accepts/records the "servers self-delete" order ONLY when it
 arrives as one **atomic bundle** with the **last-device account self-delete**
