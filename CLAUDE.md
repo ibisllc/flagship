@@ -91,6 +91,16 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   retail / NFC boxes). **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
   in `main`.
+  - **`feat/transfer-a-box` is a *develop-then-MERGE* branch, not a perpetual
+    gate.** Unlike marketplace/retail (held off `main` until a product launch),
+    transfer-a-box is a core follow-on to the already-shipped account-deletion
+    work — its protocol contract is ALREADY on `main` (inert: no handlers/UI),
+    and the branch completes the rest (the `.com` namespace-migration broker, the
+    giver-phone re-seal, box-side cert/entitlement re-home, the giver-QR +
+    acquirer-camera clients). **TODO: merge `feat/transfer-a-box` into `main`
+    once it is complete + reviewed + (box-side) reburn-validated.** Design +
+    build-order: `docs/account-deletion-and-name-reclaim.md` §4. (Started on a
+    background worker 2026-06-21.)
   - **`alpine` is a *parked* branch, not a feature-to-launch.** It holds the
     full Alpine bare-metal installer path (ISO builder + apkovl + installer-tiny
     + the burner Quick/trailer flow + `/api/personalize-iso`) that `main` shed
@@ -159,6 +169,10 @@ commits on `main`, each gated:
   GIVER-PHONE step (only it holds the giver IRK; the box can't re-seal itself).
   REMAINING: `.com` namespace-migration broker, giver-phone re-seal-on-claim,
   box-side cert/entitlement re-home, client giver-QR + acquirer-camera.
+  **IN PROGRESS on branch `feat/transfer-a-box`** (background worker started
+  2026-06-21, scoped to the backend broker + storage + webapp; native clients +
+  box-side cert re-home documented as a handoff). **⭐ PROJECT-WIDE TODO: merge
+  `feat/transfer-a-box` → `main` once complete + reviewed + reburn-validated.**
 
 Gates: `tsc -b` clean · storage parity +2 · control-plane accountDeletion **23** +
 secretMailbox · server-daemon selfDeleteConsumer **10** (full daemon+storage+
