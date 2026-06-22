@@ -718,7 +718,8 @@ export type SecretMailboxPurpose =
   | "unlock-key"
   | "entitlement"
   | "pairing"
-  | "entitlement-deposit";
+  | "entitlement-deposit"
+  | "self-delete";
 
 /**
  * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
@@ -870,6 +871,26 @@ export interface SecretMailboxStorage {
   /** Box first-boot: atomically consume the freshest un-expired entitlement
    *  deposit for `serverDomain` (consume-once), or undefined. Expired GC'd. */
   consumeEntitlementDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Account-death content-wipe deposit — `.com` writes the owner-IRK-signed
+   * `servers-self-delete` order into a `purpose:"self-delete"` lane DURING the
+   * last-device account-deletion bundle commit (before teardown), one row per
+   * owned server, keyed by server domain. The box polls + consumes it on its
+   * heartbeat cadence, owner-IRK-verifies it, then wipes its content. Like the
+   * entitlement deposit the `sealedHex` carries a PUBLIC, IRK-signed order (not a
+   * secret) — the box re-verifies under the owner IRK, so a public consume-once
+   * read is harmless. Caller is `handleAccountDeletionBundle` (server-side write,
+   * post the §5 bundle validation — there is no phone POST endpoint for it).
+   */
+  putSelfDeleteDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box-side: atomically consume the freshest un-expired self-delete deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. The consume
+   * endpoint that wraps this is deliberately REVOKE-TOLERANT — the deletion
+   * ceremony revokes the server during teardown, so a revoked-guard would make
+   * the order undeliverable; it is safe because the order is owner-IRK-signed.
+   */
+  consumeSelfDeleteDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

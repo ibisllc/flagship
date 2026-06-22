@@ -771,6 +771,60 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // secretMailbox self-delete lane — `.com` writes the owner-IRK-signed
+  // servers-self-delete order at account death; the box consumes it once.
+  // Consume returns the freshest pending row, marks it consumed (so a
+  // re-poll after a crashed wipe returns undefined), and GCs expired rows.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (self-delete lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("deposit → consume-once → second consume returns undefined", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSelfDeleteDeposit(mk("aa".repeat(16), "deadbeef"));
+        const first = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          10,
+        );
+        const second = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          11,
+        );
+        return { putOk: put.ok, firstSealed: first?.sealedHex, secondDefined: second !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ putOk: true, firstSealed: "deadbeef", secondDefined: false });
+    });
+
+    it("duplicate nonce rejected; expired rows never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSelfDeleteDeposit(mk("bb".repeat(16), "one", 1000));
+        const dup = await s.secretMailbox.putSelfDeleteDeposit(mk("bb".repeat(16), "two", 1000));
+        // A separate, already-expired deposit on another domain.
+        await s.secretMailbox.putSelfDeleteDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "old.alice.flagship.services",
+          100,
+        );
+        return { dupOk: dup.ok, expiredDefined: expired !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ dupOk: false, expiredDefined: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // acmeAccountKeyDelivery — one-slot-per-box upsert (put replaces),
   // deleteByAccountKeyId count.
   // ────────────────────────────────────────────────────────────────────
