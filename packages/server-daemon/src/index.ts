@@ -110,6 +110,11 @@ import {
   loadEntitlementBundle,
 } from "./entitlementBundleStore.js";
 import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlementRelay.js";
+import {
+  buildSelfDeletePoller,
+  fileMarkerStore,
+  realWipeContent,
+} from "./selfDeleteConsumer.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -1731,6 +1736,28 @@ async function wireOwnerHandlers(deps: {
     poller.start();
     process.once("SIGTERM", () => poller.stop());
     process.once("SIGINT", () => poller.stop());
+  }
+  // Account-death content-wipe (docs/account-deletion-and-name-reclaim.md §5):
+  // poll the self-delete lane on the heartbeat cadence. If the owner deleted
+  // their LAST-device account with "ask all servers to delete their content",
+  // `.com` deposited an owner-IRK-signed servers-self-delete order; we verify it
+  // under the config-pinned owner IRK and wipe the data-services content. The
+  // marker makes it idempotent across reboots. Best-effort throughout.
+  {
+    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+    const selfDeletePoller = buildSelfDeletePoller({
+      serverDomain: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
+      username: cfg.userId,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      markerStore: fileMarkerStore(`${dataDir}/self-delete-done.json`),
+      wipeContent: realWipeContent,
+      onLog: (m) => console.log(m),
+    });
+    selfDeletePoller.start();
+    process.once("SIGTERM", () => selfDeletePoller.stop());
+    process.once("SIGINT", () => selfDeletePoller.stop());
+    console.log("[daemon] self-delete content-wipe poller armed");
   }
   // Web-experience gating (docs "Web-experience gating"): QR-login for a
   // restricted service's WEBSITE (a browser can't AID-sign). Shares the access +
