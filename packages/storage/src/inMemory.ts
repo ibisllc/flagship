@@ -745,6 +745,63 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
       expiresAt: best.expiresAt,
     };
   }
+
+  async putEntitlementDeposit(rec: PairingDepositRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose: "entitlement-deposit",
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      // PUBLIC IRK-signed entitlement carrier (not sealed) — see types.ts.
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  async consumeEntitlementDeposit(serverDomain: string, now: number) {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== "entitlement-deposit") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
 }
 
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {

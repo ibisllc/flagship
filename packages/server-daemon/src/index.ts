@@ -109,7 +109,7 @@ import {
   defaultEntitlementBundlePath,
   loadEntitlementBundle,
 } from "./entitlementBundleStore.js";
-import { fetchEntitlementViaRelay } from "./entitlementRelay.js";
+import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlementRelay.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -979,25 +979,41 @@ async function loadEntitlementsOrExit(deps: {
     // ANY relay failure (timeout, no reply, forged/mismatched carrier) falls
     // through to whatever already exists on disk — never a brick.
     if (!loaded && cfg) {
-      console.log(
-        `[daemon] no entitlement bundle on disk; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
-      );
-      // The awaiting-entitlement handoff is covered by the `pairing` status
-      // report fired once the bundle loads below — no separate UI phase.
-      const relayed = await fetchEntitlementViaRelay({
+      // FIRST, claim a phone-DEPOSITED entitlement. The phone pre-deposits an
+      // IRK-signed entitlement for this box's STK at the moment it approves the
+      // first-boot unlock, so an encrypted box comes online with a SINGLE owner
+      // approval. Only if there is no deposit do we issue a relay request.
+      const deposited = await claimEntitlementDeposit({
         serverDomain: env.serverFqdn,
-        identity: identityKeypair,
         ownerIrkPub: cfg.irkPublicKey,
+        stkPub: identityKeypair.publicKey,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         entitlementBundlePath,
         onLog: (m) => console.log(m),
       });
-      if (relayed) {
-        loaded = relayed;
+      if (deposited) {
+        loaded = deposited;
       } else {
-        // Re-read in case a concurrent provisioner (the burner's self-signed
-        // bundle, a phone PhoneOrders delivery) wrote one while we waited.
-        loaded = await loadEntitlementBundle(entitlementBundlePath);
+        console.log(
+          `[daemon] no deposited entitlement; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
+        );
+        // The awaiting-entitlement handoff is covered by the `pairing` status
+        // report fired once the bundle loads below — no separate UI phase.
+        const relayed = await fetchEntitlementViaRelay({
+          serverDomain: env.serverFqdn,
+          identity: identityKeypair,
+          ownerIrkPub: cfg.irkPublicKey,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+          entitlementBundlePath,
+          onLog: (m) => console.log(m),
+        });
+        if (relayed) {
+          loaded = relayed;
+        } else {
+          // Re-read in case a concurrent provisioner (a phone PhoneOrders
+          // delivery) wrote one while we waited.
+          loaded = await loadEntitlementBundle(entitlementBundlePath);
+        }
       }
     }
 

@@ -50,6 +50,8 @@ import {
   handleListBoxSealedLeases,
   handlePostPairingDeposit,
   handleConsumePairingDeposit,
+  handlePostEntitlementDeposit,
+  handleConsumeEntitlementDeposit,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -488,6 +490,9 @@ const ROUTE_RE = {
   //   POST  phone deposit (IRK mailbox-auth, sealed for the box STK)
   //   GET   box consume-once read (public — sealed blob only)
   PAIRING_DEPOSIT: /^\/api\/server\/([^/]+)\/pairing-deposit$/,
+  // Entitlement deposit-on-unlock: POST phone deposit (IRK mailbox-auth, the
+  // PUBLIC IRK-signed entitlement) / GET box consume-once read.
+  ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1324,6 +1329,22 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.PAIRING_DEPOSIT))) {
       return finishPlain(
         await handleConsumePairingDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Entitlement deposit-on-unlock — phone deposit (IRK mailbox-auth, the
+    // PUBLIC IRK-signed entitlement) + box consume-once read.
+    if (method === "POST" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
+      return finishPlain(
+        await handlePostEntitlementDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release

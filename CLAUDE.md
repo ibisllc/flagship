@@ -123,7 +123,47 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-20 (latest) — onboarding hardening: pairing-TTL + daemon entitlement self-heal + awaiting-entitlement signal
+### 2026-06-21 (latest) — fold "authorize to serve" INTO the first-boot unlock (entitlement deposit) — BACKEND + DAEMON
+
+**Why:** real boxes (frank, hali) stranded because authorizing a box to *serve*
+is a SECOND phone approval, separate from the boot/unlock approval — and it
+surfaces ~10s after unlock with no push, so owners never saw it. Owner decision:
+*"if I give permission to boot, consent to serve is implied"* (for boxes that
+require a boot-unlock). Design rationale in `docs/security-phone-as-unlock-endpoint.md`
+(§4/§8 already unify unlock + entitlement as one mechanism).
+
+**Mechanism (no protocol/canonical-bytes change — the entitlement carrier is
+PUBLIC, IRK-signed, not a secret):** the phone, when it approves the first-boot
+unlock, ALSO mints an owner-IRK-signed RootEntitlement for the box's STK (which
+it holds from the unlock request) and DEPOSITS it on `.com`; the box claims it on
+boot with no second tap. New blind store-and-forward lane mirroring the pairing
+deposit.
+
+**Landed this pass (backend + daemon, on `main`, isolated worktree):**
+- **`.com` entitlement-deposit lane** — `POST/GET /api/server/:d/entitlement-deposit`
+  (`secretMailbox.ts` `handlePost/ConsumeEntitlementDeposit`; POST is IRK-mailbox-
+  auth + I2 registered-STK bind; GET is public consume-once). Storage:
+  `put/consumeEntitlementDeposit` (D1 + InMemory, `purpose:"entitlement-deposit"`
+  rows; no migration — reuses `secret_mailbox`). 1h TTL. Wired in
+  `controlPlaneRoutes.ts`.
+- **Daemon claims the deposit BEFORE relaying** (owner's explicit requirement):
+  `entitlementRelay.ts` `claimEntitlementDeposit` (GET → `decodeAndVerifyEntitlementCarrier`
+  under owner IRK → persist; short retry for a slightly-late deposit). Order in
+  `loadEntitlementsOrExit`: disk → [self-heal discard if not IRK-signed] → **claim
+  deposit** → relay. Null on no-deposit/mismatch → falls back to relay (never a brick).
+
+Gates: `tsc -b` clean · storage+control-plane+server-daemon vitest **2871** (+3 new
+`claimEntitlementDeposit` tests: claim+persist, 404→null→relay, wrong-STK→null).
+
+**STILL TODO — clients (need an app rebuild to show):** on the unlock-approval, the
+phone also mints+deposits the entitlement (reuse the existing relay responder's
+RootEntitlement mint, POST to the deposit endpoint); three-way copy — *"Unlock
+device and authorize it to join my cloud."* (encrypted first boot, picked off the
+`lastReported:null` directory signal) / *"Authorize device to join my cloud."*
+(no-LUKS / re-pair / rotation) / *"Unlock device."* (established reboot). iOS +
+Android + webapp.
+
+### 2026-06-20 — onboarding hardening: pairing-TTL + daemon entitlement self-heal + awaiting-entitlement signal
 
 Follow-ons to the burner self-sign fix below, all on `main` (built in an isolated
 worktree to avoid colliding with concurrent agents):

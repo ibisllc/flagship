@@ -32,6 +32,7 @@ import {
 } from "../src/entitlementBundleStore.js";
 import {
   buildEntitlementSecretRequest,
+  claimEntitlementDeposit,
   decodeAndVerifyEntitlementCarrier,
   fetchEntitlementViaRelay,
 } from "../src/entitlementRelay.js";
@@ -361,6 +362,81 @@ describe("entitlementRelay — full handshake", () => {
     });
     expect(result).toBeNull();
     // Nothing persisted — a forged reply never lands on disk.
+    expect(await loadEntitlementBundle(path)).toBeNull();
+  });
+});
+
+describe("entitlementRelay — claimEntitlementDeposit (phone-deposited, claimed before relay)", () => {
+  let dir: string;
+  let irk: Keypair;
+  let stk: Keypair;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "flagship-edep-"));
+    irk = makeKeypair(0x11);
+    stk = makeKeypair(0x22);
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("claims + verifies a deposited entitlement and persists it (single approval path)", async () => {
+    const bundle = mintDevEntitlements({
+      irk,
+      podPubKey: stk.publicKey,
+      username: USERNAME,
+      podCanonical: DOMAIN,
+    });
+    const { fetchImpl } = scriptedFetch([{ status: 200, json: { sealed: carrierHexFor(bundle) } }]);
+    const path = defaultEntitlementBundlePath(dir);
+    const got = await claimEntitlementDeposit({
+      serverDomain: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      stkPub: stk.publicKey,
+      controlPlaneBaseUrl: CONTROL,
+      entitlementBundlePath: path,
+      fetchImpl,
+      sleep: async () => {},
+    });
+    expect(got).not.toBeNull();
+    expect(got!.rootEntitlement.podCanonical).toBe(DOMAIN);
+    expect(await loadEntitlementBundle(path)).not.toBeNull();
+  });
+
+  it("returns null when no deposit is present, so the caller falls back to the relay", async () => {
+    const { fetchImpl } = scriptedFetch([]); // every GET → 404
+    const got = await claimEntitlementDeposit({
+      serverDomain: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      stkPub: stk.publicKey,
+      controlPlaneBaseUrl: CONTROL,
+      entitlementBundlePath: defaultEntitlementBundlePath(dir),
+      attempts: 2,
+      fetchImpl,
+      sleep: async () => {},
+    });
+    expect(got).toBeNull();
+  });
+
+  it("rejects a carrier bound to a DIFFERENT STK (→ null, never a brick)", async () => {
+    const wrongStk = makeKeypair(0x33);
+    const bundle = mintDevEntitlements({
+      irk,
+      podPubKey: wrongStk.publicKey,
+      username: USERNAME,
+      podCanonical: DOMAIN,
+    });
+    const { fetchImpl } = scriptedFetch([{ status: 200, json: { sealed: carrierHexFor(bundle) } }]);
+    const path = defaultEntitlementBundlePath(dir);
+    const got = await claimEntitlementDeposit({
+      serverDomain: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      stkPub: stk.publicKey,
+      controlPlaneBaseUrl: CONTROL,
+      entitlementBundlePath: path,
+      fetchImpl,
+      sleep: async () => {},
+    });
+    expect(got).toBeNull();
     expect(await loadEntitlementBundle(path)).toBeNull();
   });
 });

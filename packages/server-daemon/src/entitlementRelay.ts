@@ -329,3 +329,99 @@ async function safeText(res: { text(): Promise<string> }): Promise<string> {
     return "";
   }
 }
+
+export interface ClaimEntitlementDepositOptions {
+  /** This box's canonical FQDN. */
+  serverDomain: string;
+  /** The user's IRK pubkey (baked into the config) — the carrier is verified
+   *  against THIS, never against anything `.com` asserts. */
+  ownerIrkPub: Uint8Array;
+  /** This box's STK pubkey — the entitlement must bind to it. */
+  stkPub: Uint8Array;
+  /** `.com` base URL. */
+  controlPlaneBaseUrl: string;
+  /** Where to persist the claimed bundle. */
+  entitlementBundlePath: string;
+  /** GET attempts before giving up. The phone deposits at unlock-approval —
+   *  the same gesture that hands the box its disk key — so the deposit is
+   *  almost always already waiting by the time the daemon checks; a few
+   *  retries only cover a slightly-late deposit. Default 4. */
+  attempts?: number;
+  /** Sleep between attempts (ms). Default 5000. */
+  retryMs?: number;
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  onLog?: (m: string) => void;
+}
+
+/**
+ * Claim a phone-DEPOSITED entitlement before falling back to a relay request.
+ *
+ * The phone pre-deposits an IRK-signed RootEntitlement for this box's STK at
+ * the moment it approves the first-boot unlock (it already holds the STK from
+ * the unlock request), so an encrypted box comes online with a SINGLE owner
+ * approval — no separate "authorize it to serve" tap. The daemon checks for
+ * that deposit FIRST; only if there is none does it issue a relay request.
+ *
+ * `.com` is a blind store-and-forward: the deposited carrier is the same
+ * public, IRK-signed entitlement the box presents at the hub HELLO (NOT a
+ * secret), so a public consume-once GET reveals nothing usable without the STK
+ * private key. We verify the carrier under the OWNER IRK + bind it to our STK
+ * and podCanonical before trusting it. Returns null on no-deposit / any
+ * mismatch so the caller falls back to the relay — never a brick.
+ */
+export async function claimEntitlementDeposit(
+  opts: ClaimEntitlementDepositOptions,
+): Promise<EntitlementBundle | null> {
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const log = opts.onLog ?? (() => {});
+  const attempts = opts.attempts ?? 4;
+  const retryMs = opts.retryMs ?? 5000;
+  const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/entitlement-deposit`;
+
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) await sleep(retryMs);
+    let sealedHex: string | undefined;
+    try {
+      const res = await fetchImpl(url, { method: "GET" });
+      if (res.status === 404) continue; // not deposited (yet) — keep trying
+      if (!res.ok) {
+        log(`[entitlement-deposit] GET ${res.status}; falling back to relay`);
+        return null;
+      }
+      const body = (await res.json()) as { sealed?: string };
+      sealedHex = body?.sealed;
+    } catch (e) {
+      log(`[entitlement-deposit] GET failed: ${(e as Error).message}; retrying`);
+      continue; // transient — keep trying within the bounded window
+    }
+    if (typeof sealedHex !== "string" || sealedHex.length === 0) {
+      log("[entitlement-deposit] reply missing carrier; falling back to relay");
+      return null;
+    }
+    let bundle: EntitlementBundle;
+    try {
+      bundle = decodeAndVerifyEntitlementCarrier({
+        sealedHex,
+        ownerIrkPub: opts.ownerIrkPub,
+        serverDomain: opts.serverDomain,
+        stkPub: opts.stkPub,
+      });
+    } catch (e) {
+      log(`[entitlement-deposit] carrier rejected: ${(e as Error).message}; falling back to relay`);
+      return null;
+    }
+    try {
+      await writeEntitlementBundle(opts.entitlementBundlePath, bundle);
+    } catch (e) {
+      // Serve now even if the on-disk persist failed; it re-claims next boot.
+      log(`[entitlement-deposit] persist failed (continuing): ${(e as Error).message}`);
+    }
+    log("[entitlement-deposit] claimed a phone-deposited entitlement");
+    return bundle;
+  }
+  return null; // no deposit within the window → caller issues a relay request
+}

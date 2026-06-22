@@ -82,6 +82,12 @@ const DEFAULT_MAILBOX_TTL = 5 * 60_000;
 // before the box ever booted, so create-time auto-pairing silently no-op'd.
 // Give the pairing deposit a long claim window instead.
 const DEFAULT_PAIRING_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
+// The entitlement deposit is written when the phone approves the first-boot
+// unlock and CLAIMED by the box seconds-to-minutes later (it boots from the
+// same approval). Short window — it's first-boot delivery, then the box holds
+// the entitlement on disk; an unclaimed one (e.g. a routine reboot where the
+// box already has its entitlement) just GCs.
+const DEFAULT_ENTITLEMENT_DEPOSIT_TTL = 60 * 60_000; // 1 hour
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes hex
 
@@ -760,6 +766,111 @@ export async function handleConsumePairingDeposit(
       requestNonceHex: row.requestNonceHex,
       stkPub: row.stkPubHex,
       // SEALED for the box STK — never plaintext (I1). The box unseals it.
+      sealed: row.sealedHex,
+      issuedAt: row.issuedAt,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6c. POST /api/server/:domain/entitlement-deposit  (phone, IRK mailbox-auth)
+//     GET  /api/server/:domain/entitlement-deposit  (box, public consume-once)
+//
+// Fold "authorize it to serve" INTO the first-boot unlock approval: when the
+// phone unseals the LUKS key it ALSO mints an owner-IRK-signed RootEntitlement
+// for the box's STK (which it holds from the unlock request) and deposits it
+// here, so the box claims it on boot with NO second tap. Same store-and-forward
+// posture as the pairing deposit — EXCEPT the blob is the PUBLIC IRK-signed
+// entitlement (what the box presents at HELLO), not an encrypted secret, so the
+// public consume-once GET is harmless. The box verifies under the owner IRK.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostEntitlementDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_ENTITLEMENT_DEPOSIT_TTL;
+
+  const b = body as { deposit?: Record<string, unknown> };
+  const d = b?.deposit ?? {};
+  if (
+    typeof d.serverDomain !== "string" ||
+    typeof d.requestNonceHex !== "string" ||
+    typeof d.stkPub !== "string" ||
+    typeof d.sealed !== "string" ||
+    typeof d.issuedAt !== "number"
+  ) {
+    return malformed("malformed body");
+  }
+  if (d.serverDomain !== host) {
+    return forbidden("serverDomain / host mismatch");
+  }
+  if (!HEX_NONCE.test(d.requestNonceHex.toLowerCase())) {
+    return malformed("requestNonceHex must be 32 bytes hex");
+  }
+  if (!HEX64.test(d.stkPub.toLowerCase())) {
+    return malformed("stkPub must be 32 bytes hex");
+  }
+  const carrierHex = d.sealed.toLowerCase();
+  if (!/^[0-9a-f]*$/.test(carrierHex) || carrierHex.length === 0 || carrierHex.length > 65536) {
+    return malformed("carrier must be non-empty hex within bounds");
+  }
+  if (Math.abs(now() - d.issuedAt) > (deps.maxAgeMs ?? DEFAULT_MAX_AGE)) {
+    return forbidden("stale request");
+  }
+
+  // The entitlement binds a REGISTERED box's STK (I2). The box always registers
+  // at install — before its first steady-state boot/unlock — so a deposit always
+  // has a directory identity to bind against.
+  const reg = await deps.servers.get(host);
+  if (!reg) return forbidden("server not registered");
+  if (reg.revokedAt) return forbidden("server is revoked");
+  if (reg.username.toLowerCase() !== auth.username) {
+    return forbidden("server belongs to a different account");
+  }
+  if (!equalHex(d.stkPub, reg.identityPubKeyHex)) {
+    return forbidden("stkPub does not match the registered server");
+  }
+
+  const put = await deps.secretMailbox.putEntitlementDeposit({
+    serverDomain: host,
+    username: reg.username,
+    requestNonceHex: d.requestNonceHex.toLowerCase(),
+    stkPubHex: d.stkPub.toLowerCase(),
+    sealedHex: carrierHex,
+    issuedAt: d.issuedAt,
+    expiresAt: now() + ttlMs,
+  });
+  if (!put.ok) {
+    return conflict(put.reason);
+  }
+  return { status: 200, body: { ok: true, expiresAt: now() + ttlMs } };
+}
+
+export async function handleConsumeEntitlementDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const reg = await deps.servers.get(host);
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
+
+  const row = await deps.secretMailbox.consumeEntitlementDeposit(host, now());
+  if (!row) return notFound("no entitlement deposit ready");
+  return {
+    status: 200,
+    body: {
+      serverDomain: row.serverDomain,
+      requestNonceHex: row.requestNonceHex,
+      stkPub: row.stkPubHex,
+      // PUBLIC IRK-signed entitlement carrier (not sealed) — the box verifies
+      // it under the owner IRK + binds it to its STK/podCanonical.
       sealed: row.sealedHex,
       issuedAt: row.issuedAt,
     },

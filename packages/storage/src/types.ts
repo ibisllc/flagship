@@ -676,7 +676,11 @@ export interface AutoUnlockLeaseStorage {
 // phone seals only for the user-confirmed box (I2/I3).
 // ──────────────────────────────────────────────────────────────────────
 
-export type SecretMailboxPurpose = "unlock-key" | "entitlement" | "pairing";
+export type SecretMailboxPurpose =
+  | "unlock-key"
+  | "entitlement"
+  | "pairing"
+  | "entitlement-deposit";
 
 /**
  * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
@@ -815,6 +819,19 @@ export interface SecretMailboxStorage {
    * harmless. Returns undefined when none is pending. Expired rows are GC'd.
    */
   consumePairingDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Entitlement deposit-on-unlock — the PHONE pre-deposits an IRK-signed
+   * RootEntitlement carrier for the box's STK when it approves the first-boot
+   * unlock, so the box claims it WITHOUT a separate "authorize to serve" tap.
+   * Stored like a pairing deposit (a `purpose:"entitlement-deposit"` row whose
+   * `sealedHex` holds the carrier), EXCEPT the blob is the PUBLIC, IRK-signed
+   * entitlement — not an encrypted secret (it's what the box presents at HELLO),
+   * so a public consume-once read is harmless. Caller has IRK-mailbox-auth'd.
+   */
+  putEntitlementDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Box first-boot: atomically consume the freshest un-expired entitlement
+   *  deposit for `serverDomain` (consume-once), or undefined. Expired GC'd. */
+  consumeEntitlementDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
