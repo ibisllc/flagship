@@ -55,6 +55,8 @@ const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
 const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
 const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
+const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
+const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -195,6 +197,46 @@ export interface AccountSelfDelete {
  */
 export interface ServersSelfDelete {
   username: string;
+  issuedAt: number;
+}
+
+/**
+ * Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a cross-account
+ * ownership handoff. Two envelopes, two parties:
+ *
+ * - {@link ServerTransferOffer} is minted by the CURRENT owner's phone (signed
+ *   with the giver's owner IRK) and encoded into the QR shown on the box's
+ *   detail page. It commits to (serverDomain, transferNonce, issuedAt,
+ *   expiresAt) — a one-time, short-TTL authorization. It does NOT name the
+ *   acquirer (unknown until they scan).
+ * - {@link ServerTransferClaim} is minted by the ACQUIRER's phone (signed with
+ *   the acquirer's owner IRK) after scanning the QR. It binds the acquirer's
+ *   identity (username + IRK pub) to the offer's nonce, so `.com` can move
+ *   ownership to a SPECIFIC new account, one-time.
+ *
+ * `.com` verifies the offer against the server's CURRENT registered owner IRK
+ * and the claim against the acquirer's registered IRK, then moves the
+ * server-ownership + routing records to the acquirer. The disk-key re-seal is a
+ * separate giver-phone step (only the giver's phone can unseal the LUKS key to
+ * re-seal it for the acquirer IRK) deposited via the box-sealed-lease lane.
+ */
+export interface ServerTransferOffer {
+  serverDomain: string;
+  /** 32-byte random nonce, hex — the one-time handle binding offer↔claim. */
+  transferNonce: string;
+  issuedAt: number;
+  /** Absolute expiry (ms) — a short TTL bounds a captured QR. */
+  expiresAt: number;
+}
+
+export interface ServerTransferClaim {
+  serverDomain: string;
+  /** The offer's nonce — ties this claim to a specific offer. */
+  transferNonce: string;
+  /** The acquirer's account name (the new owner). */
+  acquirerUsername: string;
+  /** The acquirer's owner IRK pubkey — ownership re-binds to this. */
+  acquirerIrkPub: Bytes;
   issuedAt: number;
 }
 
@@ -519,6 +561,36 @@ function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
   );
 }
 
+function canonicalServerTransferOffer(c: ServerTransferOffer): Bytes {
+  legacyFieldGuard("serverDomain", c.serverDomain);
+  legacyFieldGuard("transferNonce", c.transferNonce);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_TRANSFER_OFFER,
+      c.serverDomain.toLowerCase(),
+      c.transferNonce.toLowerCase(),
+      c.issuedAt,
+      c.expiresAt,
+    ].join("|"),
+  );
+}
+
+function canonicalServerTransferClaim(c: ServerTransferClaim): Bytes {
+  legacyFieldGuard("serverDomain", c.serverDomain);
+  legacyFieldGuard("transferNonce", c.transferNonce);
+  legacyFieldGuard("acquirerUsername", c.acquirerUsername);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_TRANSFER_CLAIM,
+      c.serverDomain.toLowerCase(),
+      c.transferNonce.toLowerCase(),
+      c.acquirerUsername.toLowerCase(),
+      hex(c.acquirerIrkPub),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
 export function signRebuildRequest(r: ImageRebuildRequest, irk: Keypair): Bytes {
   return ed.sign(canonicalRebuild(r), irk.privateKey);
 }
@@ -814,6 +886,30 @@ export function signServersSelfDelete(c: ServersSelfDelete, irk: Keypair): Bytes
 export function verifyServersSelfDelete(c: ServersSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalServersSelfDelete(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerTransferOffer(c: ServerTransferOffer, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerTransferOffer(c), irk.privateKey);
+}
+
+export function verifyServerTransferOffer(c: ServerTransferOffer, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerTransferOffer(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerTransferClaim(c: ServerTransferClaim, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerTransferClaim(c), irk.privateKey);
+}
+
+export function verifyServerTransferClaim(c: ServerTransferClaim, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerTransferClaim(c), irkPub);
   } catch {
     return false;
   }
