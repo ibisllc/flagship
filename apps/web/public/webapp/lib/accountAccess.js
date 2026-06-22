@@ -19,45 +19,25 @@
  *  @property {string|null} disabledReason   why it's greyed out (null when enabled)
  */
 
-/** Grace-path label/sublabel by the server-derived graceModel. */
-function graceCopy(graceModel) {
-  switch (graceModel) {
-    case "24h-totp":
-      return {
-        label: "Use your authenticator, then wait 24h",
-        sublabel: "No passkey or other device? Claim with a TOTP/recovery code + a 24-hour hold.",
-      };
-    case "3d":
-      return {
-        label: "Claim after a 3-day wait",
-        sublabel: "No passkey or other device? Start a claim; your other devices get 3 days to object.",
-      };
-    case "instant":
-      return {
-        label: "Claim this account",
-        sublabel: "Attach this device to the account.",
-      };
-    default: // "none"
-      return {
-        label: "Claim after a wait",
-        sublabel: "Not available for this account — use one of the options above.",
-      };
-  }
-}
-
 /**
- * Build the access-options list for a resolved (existing) account. ALL options
- * are always returned; `enabled`/`disabledReason` say which apply, so an account
- * with no cloud recovery still SHOWS "Recover with your passkey" (disabled, with
- * a reason) instead of silently dropping it.
+ * Build the access-options list for a resolved (existing) account. These are all
+ * SELF-CUSTODY paths — you get back in by proving you hold a credential (a
+ * recovery passkey, another signed-in device, or a key file). There is NO
+ * no-credential "claim after a wait": a flagship.services name is yours for as
+ * long as you hold a key for it, and is never taken from you or handed to anyone
+ * else (docs/login-and-account-redesign.md — naming is self-custody). Lose every
+ * credential with no backup and the name stays reserved to you, unusable — which
+ * is why we push enrolling a recovery factor at sign-up.
+ *
+ * ALL options are always returned; `enabled`/`disabledReason` say which apply,
+ * so an account with no cloud recovery still SHOWS "Recover with your passkey"
+ * (disabled, with a reason) instead of silently dropping it.
  *
  * @param {AccountResolution} resolution
  * @returns {AccessOption[]}
  */
 export function accessOptions(resolution) {
   const recoveryEnrolled = !!(resolution && resolution.recovery && resolution.recovery.present);
-  const graceModel = (resolution && resolution.graceModel) || "none";
-  const grace = graceCopy(graceModel);
   return [
     {
       id: "recover",
@@ -79,16 +59,6 @@ export function accessOptions(resolution) {
       sublabel: "Restore from a key file you exported and saved.",
       enabled: true,
       disabledReason: null,
-    },
-    {
-      id: "grace",
-      label: grace.label,
-      sublabel: grace.sublabel,
-      enabled: graceModel !== "none",
-      disabledReason:
-        graceModel === "none"
-          ? "This account can only be accessed with one of the options above."
-          : null,
     },
   ];
 }

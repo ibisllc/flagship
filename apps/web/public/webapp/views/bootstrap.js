@@ -141,9 +141,8 @@ function hideAccess() {
 async function dispatchAccess(id, resolution) {
   switch (id) {
     case "recover":
-    case "grace":
-      // Both ride the credentialed login state machine; it does cloud recovery
-      // when a passkey is enrolled, else the grace takeover.
+      // The credentialed login state machine (cloud-recovery unwrap). There is
+      // no no-credential fallback — naming is self-custody.
       return recoverRealAccount(resolution);
     case "keyfile": {
       const { enterRecovery } = await import("./recovery.js");

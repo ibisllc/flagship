@@ -20,10 +20,12 @@ function res(over: Partial<Record<string, unknown>> = {}): Resolution {
   } as unknown as Resolution;
 }
 
-describe("accessOptions — the four pathways are ALWAYS shown", () => {
-  it("always returns recover / scan / keyfile / grace, in that order", () => {
+describe("accessOptions — the self-custody pathways are ALWAYS shown", () => {
+  it("returns recover / scan / keyfile (NO no-credential 'claim after a wait')", () => {
     const ids = accessOptions(res()).map((o) => o.id);
-    expect(ids).toEqual(["recover", "scan", "keyfile", "grace"]);
+    expect(ids).toEqual(["recover", "scan", "keyfile"]);
+    // Naming is self-custody — there is no grace/forced-takeover path.
+    expect(ids).not.toContain("grace");
   });
 
   it("recover is ENABLED only when cloud recovery is enrolled", () => {
@@ -40,16 +42,6 @@ describe("accessOptions — the four pathways are ALWAYS shown", () => {
     const opts = accessOptions(res({ recovery: { present: false }, graceModel: "none" }));
     expect(opts.find((o) => o.id === "scan")!.enabled).toBe(true);
     expect(opts.find((o) => o.id === "keyfile")!.enabled).toBe(true);
-  });
-
-  it("grace is disabled (with a reason) when the account has no grace path", () => {
-    const none = accessOptions(res({ graceModel: "none" })).find((o) => o.id === "grace")!;
-    expect(none.enabled).toBe(false);
-    expect(none.disabledReason).toBeTruthy();
-
-    const totp = accessOptions(res({ graceModel: "24h-totp" })).find((o) => o.id === "grace")!;
-    expect(totp.enabled).toBe(true);
-    expect(totp.label.toLowerCase()).toContain("authenticator");
   });
 
   it("hasAnyAccess: even a recovery-less account is reachable (scan/keyfile)", () => {
