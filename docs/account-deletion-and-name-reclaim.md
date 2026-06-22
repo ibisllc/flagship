@@ -162,6 +162,94 @@ the RootEntitlement `podCanonical`, and routing. So moving ownership
    The native camera/QR + the box cert/namespace migration need a reburn to
    validate e2e (cannot be hardware-validated in CI).
 
+### Implementation status (2026-06-21, on `feat/transfer-a-box`)
+
+**BUILT + TESTED (the `.com` broker + storage + webapp):**
+
+- **Storage (`packages/storage`)** — a dedicated `server_transfers` store
+  (`ServerTransferStorage`, InMemory + D1, migration **0059**): one offer per
+  box (`putOffer`, INSERT-OR-REPLACE so a re-issue overwrites), `getOffer`
+  (GCs an unclaimed expired row but KEEPS a claimed one so the giver's phone can
+  still complete the re-seal after expiry), and `claim` (atomic one-time CAS on
+  `claimed_at IS NULL`). D1↔InMemory parity tests (+5).
+- **`.com` broker (`packages/control-plane/src/serverTransfer.ts`)** — wired in
+  `apps/com/src/controlPlaneRoutes.ts`:
+  - `POST /api/server/:domain/transfer/offer` — giver IRK mailbox-auth (reuses
+    the `DeviceEndpointClaim` credential); verifies the `ServerTransferOffer`
+    under the box's CURRENT registered owner IRK (servers.get → usernames.get);
+    one-time short-TTL (15 min) offer, re-issue replaces.
+  - `POST /api/server/:domain/transfer/claim` — verifies the
+    `ServerTransferClaim` under the acquirer's REGISTERED IRK (and that the
+    claim's bound IRK equals it); one-time CAS; then the **`.com`-half NAMESPACE
+    MIGRATION**: re-homes the `servers` + `routing` records from
+    `<server>.<giver>` to `<server>.<acquirer>` (SAME box identity key),
+    publishes the acquirer's per-box DNS (apex + wildcard, registration posture),
+    revokes the old domain, audits BOTH account feeds (`server-transfer-offered`
+    / `server-transfer-claimed`).
+  - `POST /api/server/:domain/transfer/claim-poll` — giver IRK mailbox-auth; the
+    giver's phone learns the acquirer IRK for the disk-key re-seal. (POST not GET
+    because the IRK mailbox-auth rides the body; mirrors the secret-requests
+    POST-alias idiom.)
+  - 12 broker tests (happy path moves servers+routing+DNS; forged / wrong-key /
+    non-owner / stale / absent / nonce-mismatch / expired offers rejected;
+    one-time; giver-only claim poll; re-issue replaces; can't transfer to self).
+- **Webapp (`apps/web/public/webapp/lib/serverTransfer.js` + views)** — the
+  giver "Transfer to another account" card on server-detail (irreversible
+  warning + type-to-confirm the FQDN → sign + deposit → render a paste-able
+  claim code) and the acquirer "Take over a transferred box" entry on the
+  add-server chooser (paste → sign + POST the claim). 5 tests incl. a FULL
+  giver-offer → acquirer-claim → giver-poll round-trip against the real broker
+  handlers, plus canonical-byte pins against `@flagship/protocol`.
+
+**REMAINING (each needs a box-side pass + a reburn — cannot be CI-validated):**
+
+1. **Box-side cert + entitlement re-home on a podCanonical change (Layer 3 —
+   DOCUMENTED HANDOFF, deliberately not half-built).** When ownership moves the
+   box's FQDN changes (`<server>.<giver>` → `<server>.<acquirer>`), so on its
+   next boot/heartbeat the daemon must, mirroring how `selfDeleteConsumer` was
+   scoped (a small, self-contained, owner-IRK-verified consumer): (a) detect the
+   namespace change — the canonical name the daemon derives from
+   `/var/flagship/install-blob.json` (or a `.com` directory read of its own
+   registration) no longer matches the cert it holds; (b) re-derive `boxCertSans`
+   = `[<server>.<acquirer>, *.<server>.<acquirer>]` and let the EXISTING per-box
+   ACME path re-issue (the SANs-changed → discard-and-re-mint logic from the A′
+   cert work already does this when SANs change at startup — the transfer just
+   needs the box to pick up the new canonical); (c) re-register / re-publish
+   routing under the new namespace (or rely on `.com`'s migration having done the
+   directory + DNS, and the box simply tunnels its new podCanonical); (d) drop
+   its stale RootEntitlement (signed `podCanonical` = old) and pick up a fresh
+   ACQUIRER-minted one via the existing entitlement-relay/deposit lane (the
+   acquirer's phone mints it, exactly like first-boot). None of this is a new
+   protocol — it reuses the A′ cert re-mint + the entitlement relay; the work is
+   threading "my owner/namespace changed" into the daemon boot path and is best
+   done WITH a reburn so the kernel/ACME/tunnel path is actually exercised.
+2. **Giver-phone re-seal-on-claim deposit.** Only the giver's phone can unseal
+   the LUKS disk key (it holds the giver IRK; the box holds only the sealed
+   blob). After the broker records the claim, the giver's phone polls
+   `transfer/claim-poll`, learns the acquirer IRK, unseals the current disk key,
+   and deposits a NEW box-sealed lease sealed to the ACQUIRER IRK via the
+   EXISTING `handlePostBoxSealedLease` lane. Until that lands the acquirer cannot
+   unlock an encrypted box (the accepted handshake — both phones, giver first).
+   The webapp `pollTransferClaim` already returns the acquirer IRK; the actual
+   unseal-and-redeposit reuses `lib/leases.js` (box-sealed-lease deposit) and is
+   a giver-phone step — natural to add alongside the box-side reburn validation.
+3. **Native iOS/Android giver-QR render + acquirer camera.** The OFFER/CLAIM
+   envelopes already exist in Swift (`FlagshipCore.ServerTransferOfferOrder` /
+   `…ClaimOrder`) and Kotlin (`core.ServerTransferOfferOrder` / `…ClaimOrder`),
+   pinned by cross-platform vectors. The native surfaces need: (giver) a
+   "Transfer to another account" action on server-detail → biometric +
+   type-to-confirm → sign the offer with the owner IRK → deposit it
+   (`POST /api/server/:d/transfer/offer` with the same IRK mailbox-auth the
+   webapp builds — see `lib/serverTransfer.js buildMailboxAuth` for the exact
+   `DeviceEndpointClaim` wire shape) → render the QR carrying
+   `{serverDomain, transferNonce, giverIrkPub, expiresAt, offerSignature}`
+   (the webapp's `createTransferOffer` `qr` object is the canonical payload).
+   (Acquirer) Home → Add a server → "Pair an existing box" → camera viewfinder →
+   scan the QR → sign a `ServerTransferClaim` with the acquirer owner IRK →
+   `POST /api/server/:d/transfer/claim`. Both need a build + device test (NOT
+   doable in CI per this branch's no-native-build rule). The webapp lib is the
+   reference for the exact request bodies + canonical bytes.
+
 ---
 
 ## 5. Self-delete-content order (opt-in) + attacker analysis
