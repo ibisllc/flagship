@@ -12,6 +12,8 @@ public struct ActivityScreen: View {
     let currentPodId: String?
     let leaderPodId: String?
     var onPickPod: (PodInfo) -> Void = { _ in }
+    /// "All servers" filter selection — clears the per-server scoping.
+    var onPickAll: () -> Void = {}
     var onOpenApprovals: () -> Void = {}
     var onOpenPostRecovery: () -> Void = {}
     /// P5 — push the dedicated full-page audit-log viewer.
@@ -24,6 +26,7 @@ public struct ActivityScreen: View {
         currentPodId: String? = nil,
         leaderPodId: String? = nil,
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
+        onPickAll: @escaping () -> Void = {},
         onOpenApprovals: @escaping () -> Void = {},
         onOpenPostRecovery: @escaping () -> Void = {},
         onOpenAuditLog: @escaping () -> Void = {},
@@ -34,6 +37,7 @@ public struct ActivityScreen: View {
         self.currentPodId = currentPodId
         self.leaderPodId = leaderPodId
         self.onPickPod = onPickPod
+        self.onPickAll = onPickAll
         self.onOpenApprovals = onOpenApprovals
         self.onOpenPostRecovery = onOpenPostRecovery
         self.onOpenAuditLog = onOpenAuditLog
@@ -42,7 +46,14 @@ public struct ActivityScreen: View {
 
     @ViewBuilder private var podSwitcherIfMulti: some View {
         if pods.count > 1 {
-            PodSwitcher(pods: pods, currentPodId: currentPodId, leaderPodId: leaderPodId, onPick: onPickPod)
+            PodSwitcher(
+                pods: pods,
+                currentPodId: currentPodId,
+                leaderPodId: leaderPodId,
+                onPick: onPickPod,
+                allLabel: "All servers",
+                onPickAll: onPickAll
+            )
         }
     }
 

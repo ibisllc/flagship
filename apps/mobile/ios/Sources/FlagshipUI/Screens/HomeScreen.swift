@@ -449,7 +449,10 @@ public struct HomeScreen: View {
                 Button {
                     onSetLeader(pod)
                 } label: {
-                    Label("Make leader", systemImage: "crown.fill")
+                    // System contextMenu only renders SF Symbols for icons, so
+                    // the custom LeaderFlag can't be used here — use the closest
+                    // stock flag symbol instead of the retired crown.
+                    Label("Make leader", systemImage: "flag.fill")
                 }
             }
             Button {
@@ -762,7 +765,7 @@ public struct LeaderBadge: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         HStack(spacing: 6) {
-            Image(systemName: "crown.fill").font(.system(size: 9))
+            LeaderFlag(size: 11, tint: c.primary)
             Text("Leader").font(.system(size: 11, weight: .semibold))
         }
         .foregroundColor(c.primary)

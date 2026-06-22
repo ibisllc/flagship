@@ -1543,6 +1543,22 @@ button[data-device-restricted] {
 .fs-chip.is-selected .fs-chip-count { color: color-mix(in srgb, var(--accent-on) 88%, transparent); }
 .fs-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* Pod-switcher leader marker: a small teal flag next to the main server's
+   chip. Tinted with the accent so it reads as "leader" distinctly from the
+   teal `is-selected` background (which is the current-selection cue). On a
+   selected chip the accent-on ink keeps it visible against the teal fill. */
+.pod-switcher-leader {
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  color: var(--accent);
+  vertical-align: middle;
+}
+.pod-switcher-leader svg { width: 14px; height: 14px; }
+.fs-chip.is-selected .pod-switcher-leader { color: var(--accent-on); }
+
 /* ── Search field ──────────────────────────────────────────────────── */
 .fs-search {
   display: flex;

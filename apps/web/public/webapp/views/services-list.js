@@ -7,12 +7,12 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
-import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
+import { screensFetch, screensFetchFrom, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { chipRow, searchField, listRow } from "../lib/uikit.js";
-import { packageIcon } from "../lib/icons.js";
+import { packageIcon, flagIcon } from "../lib/icons.js";
 import { controlApex } from "../lib/apex.js";
 import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
 import { fetchPodInventory } from "./home.js";
@@ -63,23 +63,33 @@ let appsQuery = "";
 let podSwitcherPods = [];
 
 /** Render the multi-pod switcher (parity with iOS ServicesTab's PodSwitcher).
- *  Hidden with ≤1 pod. Renders each online pod as a chip-styled option, the
- *  current one marked, and switches the active pod base URL on select. Pure
- *  string builder; the select handler is delegated in wireAppsListControls. */
+ *  Hidden with ≤1 pod. First option is "All servers" (clears single-pod
+ *  scope → services from all pods); the rest are each online pod. The leader
+ *  pod carries a small teal flag marker; the current selection is shown by the
+ *  teal `is-selected` background ONLY (no tick). Pure string builder; the
+ *  select handler is delegated in wireAppsListControls. */
 function podSwitcherHtml() {
   const model = buildPodSwitcherModel(podSwitcherPods, getPodBaseUrl());
   if (!model.show) return "";
   // Reuse the teal `fs-chip` pill style (matches the filter chips below it +
   // the iOS PodSwitcher capsule). Distinct `data-pod-switch` hook (NOT
   // `data-chip`) so the filter-chip delegate never picks these up.
+  // `data-pod-switch` carries the target base URL; "" = the "All servers"
+  // pseudo-option (clears the active-pod scope). Selection = teal background
+  // only (the `is-selected` class), with no tick glyph. The leader pod renders
+  // a small teal flag marker so leadership reads distinct from selection.
   const buttons = model.options
-    .map(
-      (o) =>
+    .map((o) => {
+      const flag = o.isLeader
+        ? `<span class="icon pod-switcher-leader" aria-label="Main server" title="Main server">${flagIcon}</span>`
+        : "";
+      return (
         `<button type="button" class="fs-chip pod-switcher-chip${o.selected ? " is-selected" : ""}" ` +
         `data-pod-switch="${escapeHtml(o.baseUrl)}" ` +
-        `aria-pressed="${o.selected ? "true" : "false"}" title="${escapeHtml(o.fqdn)}">` +
-        `${escapeHtml(o.name)}${o.selected ? " ✓" : ""}</button>`,
-    )
+        `aria-pressed="${o.selected ? "true" : "false"}" title="${escapeHtml(o.isAll ? o.name : o.fqdn)}">` +
+        `${escapeHtml(o.name)}${flag}</button>`
+      );
+    })
     .join("");
   return `
     <div class="fs-chip-row pod-switcher mt-1" role="group" aria-label="Switch server">
@@ -89,15 +99,22 @@ function podSwitcherHtml() {
 }
 
 /** Delegate the pod-switch chips: on a tap, point the active pod base URL at
- *  the chosen pod and re-render the services list for THAT pod. */
+ *  the chosen pod (or clear it for "All servers") and re-render the services
+ *  list. The empty string is a valid target ("All servers" / no single-pod
+ *  scope), so we compare to the current value rather than treating "" as
+ *  "no-op". */
 function wirePodSwitcher(root) {
   root.querySelectorAll("[data-pod-switch]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const next = btn.getAttribute("data-pod-switch");
-      if (!next || next === getPodBaseUrl()) return;
+      // The attribute is always present; "" is the "All servers" target.
+      const next = btn.getAttribute("data-pod-switch") ?? "";
+      if (next === getPodBaseUrl()) return;
       setPodBaseUrl(next);
       // The session token is the same paired session across the user's pods;
-      // re-fetch the apps for the newly-selected pod.
+      // re-fetch the apps for the newly-selected scope. With "All servers"
+      // the active-pod slot is cleared, so the per-pod apps-list call falls
+      // back to the default (same-origin / first) pod — see the note in
+      // renderServicesList.
       renderServicesList().catch((e) => {
         console.error(e);
         toast(humanError(e), "err");
@@ -248,13 +265,23 @@ export async function renderServicesList() {
     podSwitcherPods = [];
   }
   try {
-    const body = await screensFetch("/api/screens/apps-list");
-    if (!body.apps?.length) {
+    // "All servers" (no active-pod scope, getPodBaseUrl() === "") aggregates
+    // each online pod's apps list; a specific pod scopes to it. We dedupe the
+    // aggregate on serviceId so a service listed by more than one pod (a
+    // leader-routed tier-2 service) doesn't appear twice.
+    let apps;
+    if (!getPodBaseUrl() && podSwitcherPods.length) {
+      apps = await fetchAppsAcrossPods(podSwitcherPods);
+    } else {
+      const body = await screensFetch("/api/screens/apps-list");
+      apps = body.apps ?? [];
+    }
+    if (!apps.length) {
       appEntries = [];
       renderAppCards();
       return;
     }
-    appEntries = body.apps.map((app) => ({ app, bucket: appBucket(app, username) }));
+    appEntries = apps.map((app) => ({ app, bucket: appBucket(app, username) }));
     renderAppCards();
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -263,6 +290,34 @@ export async function renderServicesList() {
       throw e;
     }
   }
+}
+
+/** Fan out the apps-list across every online pod and merge, deduped on
+ *  serviceId. Per-pod failures are tolerated (a single offline/erroring pod
+ *  shouldn't blank the whole list). */
+async function fetchAppsAcrossPods(pods) {
+  const bases = [...new Set(
+    pods
+      .map((p) => String(p?.serverDomain ?? "").trim())
+      .filter(Boolean)
+      .map((d) => `https://${d}`),
+  )];
+  const lists = await Promise.all(
+    bases.map((base) =>
+      screensFetchFrom(base, "/api/screens/apps-list")
+        .then((b) => b?.apps ?? [])
+        .catch(() => []),
+    ),
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const app of lists.flat()) {
+    const id = String(app?.serviceId ?? "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    merged.push(app);
+  }
+  return merged;
 }
 
 function bindServicesListHandlers() {

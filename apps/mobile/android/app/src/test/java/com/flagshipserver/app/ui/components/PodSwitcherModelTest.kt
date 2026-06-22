@@ -34,12 +34,12 @@ class PodSwitcherModelTest {
     }
 
     @Test
-    fun leaderCrown_onlyForConcreteSelectedLeader() {
-        assertTrue(PodSwitcherModel.showsLeaderCrown("home", "home"))
-        assertFalse(PodSwitcherModel.showsLeaderCrown("office", "home"))
-        // The "All" state (null selection) never shows the crown, even if the
+    fun leaderFlag_onlyForConcreteSelectedLeader() {
+        assertTrue(PodSwitcherModel.showsLeaderFlag("home", "home"))
+        assertFalse(PodSwitcherModel.showsLeaderFlag("office", "home"))
+        // The "All" state (null selection) never shows the flag, even if the
         // leader is set.
-        assertFalse(PodSwitcherModel.showsLeaderCrown(null, "home"))
+        assertFalse(PodSwitcherModel.showsLeaderFlag(null, "home"))
     }
 
     @Test

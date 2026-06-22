@@ -46,7 +46,16 @@ export class ScreensError extends Error {
  * `x-flagship-session` header.
  */
 export async function screensFetch(path, init = {}) {
-  const base = getPodBaseUrl();
+  return screensFetchFrom(getPodBaseUrl(), path, init);
+}
+
+/**
+ * Like `screensFetch` but against an EXPLICIT pod base URL rather than the
+ * active-pod slot — used to fan out across the user's pods (e.g. the
+ * "All servers" view aggregating each pod's apps list). The session token is
+ * the same paired session across the user's pods, so it authenticates on each.
+ */
+export async function screensFetchFrom(base, path, init = {}) {
   if (!base) {
     throw new ScreensError("not paired to a server yet", 0);
   }

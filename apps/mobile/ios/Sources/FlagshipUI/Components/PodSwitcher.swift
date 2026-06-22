@@ -1,19 +1,35 @@
 import SwiftUI
 import FlagshipCore
 
-/// Compact menu/picker for switching the active pod context. Shown in
-/// per-pod-scoped surfaces (Apps, Activity, ServerDetail-driven views)
-/// when the user owns more than one pod. Tap → menu of pods with the
-/// leader marked.
+/// Compact dropdown for switching / filtering the active pod context. Shown in
+/// per-pod-scoped surfaces (Apps, Activity, ServerDetail-driven views) when the
+/// user owns more than one pod. Tap → a panel of pods with the leader marked by
+/// a small flag; the currently-selected row carries a teal background.
 ///
-/// V8 — Apps-tab variant. When `allLabel` is set, the menu prepends an
-/// "All <thing>" entry that maps to `currentPodId == nil`, and tapping
-/// it fires `onPickAll`. Used on the Apps page where the switcher
-/// doubles as a filter: "All servers" = show every app the user owns
-/// regardless of which pod it runs on. Other call sites pass nil and
-/// keep the original single-select behavior.
+/// V8 — Apps-tab variant. When `allLabel` is set, the panel prepends an
+/// "All <thing>" entry that maps to `currentPodId == nil`, and tapping it fires
+/// `onPickAll`. Used where the switcher doubles as a filter: "All servers" =
+/// every app the user owns regardless of which pod it runs on.
+///
+/// This is a CUSTOM in-hierarchy dropdown rather than a system `Menu` on
+/// purpose: a system menu presents in its own UIKit window that floats ABOVE
+/// the app's view tree — including the biometric lock overlay — so an open menu
+/// leaked server names over the Face-ID cover. Rendering the panel as an
+/// overlay inside the normal view hierarchy means `RootShell`'s lock screen
+/// (zIndex 10) covers it, and `scenePhase` closes it on background for good
+/// measure. It also lets us paint the teal selection background + the flag,
+/// which a system menu can't.
+///
+/// NOTE (maintainer): the panel is an overlay anchored to the trigger. The
+/// trigger currently lives in a navigation-bar `ToolbarItem` at both call
+/// sites; if the panel is visually clipped by the nav bar on device, move the
+/// `PodSwitcher` out of `.toolbar` into the inline content area (one-line move
+/// at the call site) — the component itself needs no change.
 public struct PodSwitcher: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var open = false
+
     let pods: [PodInfo]
     let currentPodId: String?
     let leaderPodId: String?
@@ -39,37 +55,26 @@ public struct PodSwitcher: View {
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
-        Menu {
-            if let allLabel, let onPickAll {
-                Button {
-                    onPickAll()
-                } label: {
-                    HStack {
-                        Text(allLabel)
-                        Spacer()
-                        if currentPodId == nil {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                Divider()
-            }
-            ForEach(pods) { pod in
-                Button {
-                    onPick(pod)
-                } label: {
-                    HStack {
-                        Text(pod.name)
-                        if pod.podId == leaderPodId {
-                            Image(systemName: "crown.fill")
-                        }
-                        Spacer()
-                        if pod.podId == currentPodId {
-                            Image(systemName: "checkmark")
-                        }
-                    }
+        trigger(c)
+            .overlay(alignment: .topTrailing) {
+                if open {
+                    panel(c)
+                        .offset(y: 40)
+                        .zIndex(100)
+                        .transition(.opacity)
                 }
             }
+            // Never leave the panel open across a background → re-lock. The lock
+            // overlay already covers it, but closing here keeps it from
+            // reappearing open on return.
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { open = false }
+            }
+    }
+
+    private func trigger(_ c: FSColors) -> some View {
+        Button {
+            open.toggle()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "server.rack")
@@ -79,11 +84,9 @@ public struct PodSwitcher: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(c.text)
                 if currentPodId == leaderPodId && currentPodId != nil {
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(c.primary)
+                    LeaderFlag(size: 12, tint: c.primary)
                 }
-                Image(systemName: "chevron.down")
+                Image(systemName: open ? "chevron.up" : "chevron.down")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(c.textMuted)
             }
@@ -96,6 +99,71 @@ public struct PodSwitcher: View {
             )
             .clipShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("pod-switcher")
+    }
+
+    private func panel(_ c: FSColors) -> some View {
+        VStack(spacing: 0) {
+            if let allLabel, let onPickAll {
+                row(label: allLabel, isLeader: false, isSelected: currentPodId == nil, c: c) {
+                    onPickAll()
+                    open = false
+                }
+                Divider().background(c.border)
+            }
+            ForEach(Array(pods.enumerated()), id: \.element.id) { idx, pod in
+                row(
+                    label: pod.name,
+                    isLeader: pod.podId == leaderPodId,
+                    isSelected: pod.podId == currentPodId,
+                    c: c
+                ) {
+                    onPick(pod)
+                    open = false
+                }
+                if idx < pods.count - 1 {
+                    Divider().background(c.border.opacity(0.5))
+                }
+            }
+        }
+        .frame(width: 230, alignment: .leading)
+        .background(c.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(c.border, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 6)
+        .accessibilityIdentifier("pod-switcher-menu")
+    }
+
+    private func row(
+        label: String,
+        isLeader: Bool,
+        isSelected: Bool,
+        c: FSColors,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(c.text)
+                if isLeader {
+                    LeaderFlag(size: 13, tint: c.primary)
+                }
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Selection is shown ONLY by the teal background (no checkmark) so
+            // it never reads as the leader marker.
+            .background(isSelected ? c.primary.opacity(0.16) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var currentName: String {

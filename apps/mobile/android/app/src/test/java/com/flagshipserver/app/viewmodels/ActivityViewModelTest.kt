@@ -203,4 +203,47 @@ class ActivityViewModelTest {
         assertEquals(0L, snap.at)
         assertNull(snap.subtitle)
     }
+
+    // ---- ActivityFeedFilter (pure server-filter logic) ------------------
+
+    private fun installItem(serviceId: String, detail: String? = null) =
+        ActivityItem.InstallEvent(
+            RecentInstallEvent(at = 1, kind = "installed", serviceId = serviceId, detail = detail),
+        )
+
+    private fun auditItem() =
+        ActivityItem.AuditEntry(
+            com.flagshipserver.app.api.AuditEvent(
+                seq = 1, eventKind = "device-added", detail = "Added iPad",
+                devicePrefix = "ab", postedAt = 1,
+            ),
+        )
+
+    @Test fun feedFilter_allServers_passesEverything() {
+        val items = listOf(
+            installItem("blog.home.harry.flagship.services"),
+            auditItem(),
+        )
+        assertEquals(items, ActivityFeedFilter.apply(items, null))
+        assertEquals(items, ActivityFeedFilter.apply(items, ""))
+    }
+
+    @Test fun feedFilter_specificServer_keepsAccountWideAndMatchingInstall() {
+        val matching = installItem("blog.home.harry.flagship.services")
+        val other = installItem("wiki.office.harry.flagship.services")
+        val matchByDetail = installItem("svc", detail = "deployed to home.harry.flagship.services")
+        val audit = auditItem()
+        val out = ActivityFeedFilter.apply(listOf(matching, other, matchByDetail, audit), "home")
+        // Account-wide audit always stays; only home-attributable installs remain.
+        assertTrue(out.contains(audit))
+        assertTrue(out.contains(matching))
+        assertTrue(out.contains(matchByDetail))
+        assertTrue(!out.contains(other))
+    }
+
+    @Test fun feedFilter_installMatch_isDelimitedSegmentNotBareSubstring() {
+        // "home" must appear as a `.home.` segment, not inside "homestead".
+        val item = installItem("blog.homestead.harry.flagship.services")
+        assertTrue(!ActivityFeedFilter.matches(item, "home"))
+    }
 }

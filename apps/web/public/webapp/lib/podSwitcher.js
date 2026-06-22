@@ -48,6 +48,34 @@ export function podShortName(serverDomain) {
 }
 
 /**
+ * The synthetic "All servers" pseudo-option's stable base URL sentinel. It is
+ * NOT a real pod URL — it's the empty string, which is also exactly what
+ * `getPodBaseUrl()` returns when no single pod is scoped (api.js falls back to
+ * same-origin). So selecting "All servers" is `setPodBaseUrl("")` — clearing
+ * the active-pod scope — and the model marks it selected when the active base
+ * URL doesn't match any specific pod.
+ */
+export const ALL_PODS_BASE_URL = "";
+
+/**
+ * Determine the LEADER pod's fqdn from a pod list, using the SAME convention
+ * the control plane uses for tier-2 canonical routing (serviceRename.ts:
+ * `liveServers[0]` — the earliest-registered non-revoked server). Pure +
+ * DOM-free so the view layer can pass it into `buildPodSwitcherModel`.
+ *
+ * Returns the leader's fqdn (lower-cased) or "" if none.
+ *
+ * @param {Map<string,object>|Array<object>} pods
+ */
+export function leaderFqdnOf(pods) {
+  const list = pods instanceof Map ? [...pods.values()] : Array.isArray(pods) ? pods : [];
+  const live = list
+    .filter((p) => String(p?.serverDomain ?? "").trim() && p?.revokedAt == null)
+    .sort((a, b) => (a?.registeredAt ?? 0) - (b?.registeredAt ?? 0));
+  return live.length ? String(live[0].serverDomain).trim().toLowerCase() : "";
+}
+
+/**
  * Build the pod-switcher model from the user's online pods + the active pod
  * base URL.
  *
@@ -57,53 +85,83 @@ export function podShortName(serverDomain) {
  * either that map or a plain array. Only entries WITH a serverDomain count —
  * a malformed/pending entry can't be a switch target.
  *
- * Returns `{ show, options, selectedBaseUrl }`:
+ * The FIRST option is always the synthetic **"All servers"** pseudo-option
+ * (`isAll: true`, `baseUrl: ""`). "All servers" semantics: no single-pod
+ * scoping — `setPodBaseUrl("")` clears the active-pod slot so per-pod-scoped
+ * views show their default (unscoped) data. It is `selected` when the active
+ * base URL matches NO specific pod (e.g. empty active URL). Selecting a
+ * specific pod scopes to it (the existing setPodBaseUrl behavior).
+ *
+ * Returns `{ show, options, all, selectedBaseUrl }`:
  *   - `show`: true iff there is MORE THAN ONE selectable pod (exact iOS rule
  *     `app.pods.count > 1`). With 0 or 1 pod the switcher is hidden.
- *   - `options`: `[{ podId, name, fqdn, baseUrl, selected }]`, de-duped on
- *     fqdn and sorted by display name for a stable order. Exactly one option
- *     is `selected` when the active base URL matches a pod; if it matches
- *     none (e.g. paired to a box not in the directory yet), the first option
- *     is selected so the control always shows a current value (iOS likewise
- *     defaults the current pod).
- *   - `selectedBaseUrl`: the base URL of the selected option ("" when none).
+ *   - `options`: `[{ podId, name, fqdn, baseUrl, selected, isLeader, isAll }]`.
+ *     Index 0 is the "All servers" pseudo-option; the rest are the de-duped
+ *     pods sorted by display name. The leader pod (earliest-registered
+ *     non-revoked) is marked `isLeader: true`. Exactly one option is
+ *     `selected`: the matching pod when the active base URL names one, else
+ *     "All servers".
+ *   - `all`: the "All servers" option (same object as `options[0]`).
+ *   - `selectedBaseUrl`: the base URL of the selected option ("" for "All").
  *
- * @param {Map<string,{serverDomain?:string}>|Array<{serverDomain?:string}>} pods
+ * @param {Map<string,object>|Array<object>} pods
  * @param {string} activeBaseUrl  the current pod base URL (api.getPodBaseUrl())
+ * @param {string} [leaderFqdn]  the leader pod's fqdn; defaults to
+ *   `leaderFqdnOf(pods)` so the caller need not compute it.
  */
-export function buildPodSwitcherModel(pods, activeBaseUrl) {
+export function buildPodSwitcherModel(pods, activeBaseUrl, leaderFqdn) {
   const list = pods instanceof Map ? [...pods.values()] : Array.isArray(pods) ? pods : [];
+  const leader = String(leaderFqdn ?? leaderFqdnOf(pods)).trim().toLowerCase();
   // De-dupe on the normalized fqdn, keep only entries that name a pod.
   const seen = new Set();
-  const opts = [];
+  const podOpts = [];
   for (const p of list) {
     const fqdn = String(p?.serverDomain ?? "").trim();
     if (!fqdn) continue;
     const key = fqdn.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    opts.push({
+    podOpts.push({
       podId: `pod-${key}`,
       name: podShortName(fqdn),
       fqdn,
       baseUrl: podBaseUrlFor(fqdn),
       selected: false,
+      isLeader: key === leader,
+      isAll: false,
     });
   }
   // Stable order: by display name, then fqdn (a tie-breaker so two pods that
   // share a first label don't reorder between renders).
-  opts.sort((a, b) => a.name.localeCompare(b.name) || a.fqdn.localeCompare(b.fqdn));
+  podOpts.sort((a, b) => a.name.localeCompare(b.name) || a.fqdn.localeCompare(b.fqdn));
+
+  // The "All servers" pseudo-option is always first.
+  const allOption = {
+    podId: "pod-all",
+    name: "All servers",
+    fqdn: "",
+    baseUrl: ALL_PODS_BASE_URL,
+    selected: false,
+    isLeader: false,
+    isAll: true,
+  };
+  const opts = [allOption, ...podOpts];
 
   const activeHost = hostOfBaseUrl(activeBaseUrl);
-  let selectedIdx = opts.findIndex((o) => o.fqdn.toLowerCase() === activeHost);
-  // No match (paired to a box not in the directory, or empty active URL):
-  // default to the first pod so there's always a current value to display.
-  if (selectedIdx < 0 && opts.length > 0) selectedIdx = 0;
-  if (selectedIdx >= 0) opts[selectedIdx].selected = true;
+  // A specific pod is selected when the active base URL names one; otherwise
+  // "All servers" (no single-pod scope) is the current selection.
+  const podIdx = podOpts.findIndex((o) => o.fqdn.toLowerCase() === activeHost);
+  if (podIdx >= 0) {
+    podOpts[podIdx].selected = true;
+  } else {
+    allOption.selected = true;
+  }
+  const selected = opts.find((o) => o.selected);
 
   return {
-    show: opts.length > 1,
+    show: podOpts.length > 1,
     options: opts,
-    selectedBaseUrl: selectedIdx >= 0 ? opts[selectedIdx].baseUrl : "",
+    all: allOption,
+    selectedBaseUrl: selected ? selected.baseUrl : "",
   };
 }
