@@ -52,6 +52,7 @@ import {
   handleConsumePairingDeposit,
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
+  handleConsumeSelfDeleteDeposit,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -495,6 +496,7 @@ const ROUTE_RE = {
   // Entitlement deposit-on-unlock: POST phone deposit (IRK mailbox-auth, the
   // PUBLIC IRK-signed entitlement) / GET box consume-once read.
   ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
+  SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -980,6 +982,9 @@ export async function tryControlPlane(
           luksKeys: storage.luksKeys,
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
+          // §5 box-side delivery: deposit the content-wipe order for each owned
+          // server so an online box consumes it on its heartbeat and wipes.
+          secretMailbox: storage.secretMailbox,
           ...(delDns ? { dns: delDns } : {}),
         },
         await readJson(request),
@@ -1424,6 +1429,14 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
       return finishPlain(
         await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Account-death content-wipe — box consume-once read of the owner-IRK-signed
+    // servers-self-delete order .com deposited at the last-device deletion (the
+    // consume is revoke-tolerant; the box re-verifies the order under the owner IRK).
+    if (method === "GET" && (m = path.match(ROUTE_RE.SELF_DELETE_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release

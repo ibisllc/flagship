@@ -35,6 +35,7 @@ import type {
   LuksKeyStorage,
   PushTokenStorage,
   RoutingStorage,
+  SecretMailboxStorage,
   ServerRecord,
   ServerStorage,
   UsernameStorage,
@@ -69,9 +70,28 @@ export interface AccountDeletionDeps {
   luksKeys?: LuksKeyStorage;
   webauthnRecovery?: WebauthnRecoveryStorage;
   pushTokens?: PushTokenStorage;
+  /** Mailbox the §5 content-wipe order is DEPOSITED into (one row per owned
+   *  server), so an online box consumes it on its heartbeat and wipes. Absent
+   *  ⇒ the content-wipe is recorded as an audit row only (no box-side delivery).
+   */
+  secretMailbox?: SecretMailboxStorage;
   dns?: DnsDeleteClient;
   freshnessMs?: number;
+  /** TTL for a deposited self-delete order (ms). Default 14 days — long enough
+   *  that an online-but-slow box still catches it; an offline box never polls
+   *  (orphan-and-lapse, the accepted model). */
+  selfDeleteTtlMs?: number;
   now?: () => number;
+}
+
+/** Default self-delete deposit TTL: 14 days (mirrors the pairing-deposit window). */
+const DEFAULT_SELF_DELETE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+function utf8ToHex(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return out;
 }
 
 interface BundleBody {
@@ -314,6 +334,7 @@ export async function handleAccountDeletionBundle(
   //    any commit, so a bad companion rejects the WHOLE bundle (neither order
   //    is recorded/forwarded). ──────────────────────────────────────────────
   let serversOrder: ServersSelfDelete | null = null;
+  let serversSigHex: string | null = null;
   const sd = body?.serversSelfDelete;
   if (sd !== undefined) {
     if (
@@ -346,6 +367,7 @@ export async function handleAccountDeletionBundle(
       return forbidden("invalid serversSelfDelete signature");
     }
     serversOrder = candidate;
+    serversSigHex = sd.signature.toLowerCase();
   }
 
   // ── Commit. Record/forward the servers-self-delete order FIRST (while the
@@ -353,17 +375,46 @@ export async function handleAccountDeletionBundle(
   //    account. The whole thing only reaches here when every check passed, so
   //    the bundle is committed atomically (all-or-nothing). ──────────────────
   let serversSelfDeleteForwarded = 0;
-  if (serversOrder) {
+  if (serversOrder && serversSigHex) {
+    // The deposited carrier is the PUBLIC owner-IRK-signed order envelope, hex
+    // of UTF-8 JSON — the same shape the daemon decodes + re-verifies. `.com`
+    // can't forge it (a relay holds no IRK), so a public consume-once read is
+    // harmless. The deposit nonce is the order signature truncated to 32 bytes;
+    // the same nonce on different domains is fine (the row key is per-domain).
+    const carrierHex = utf8ToHex(
+      JSON.stringify({
+        request: { username, issuedAt: serversOrder.issuedAt },
+        signature: serversSigHex,
+      }),
+    );
+    const nonceHex = serversSigHex.slice(0, 64);
+    const ttlMs = deps.selfDeleteTtlMs ?? DEFAULT_SELF_DELETE_TTL_MS;
     const ownedServers = await deps.servers.listForUser(username);
     for (const s of ownedServers) {
       if (s.revokedAt) continue;
+      // Deposit the wipe order for an online box to consume on its heartbeat.
+      if (deps.secretMailbox) {
+        try {
+          await deps.secretMailbox.putSelfDeleteDeposit({
+            serverDomain: s.serverDomain,
+            username,
+            requestNonceHex: nonceHex,
+            stkPubHex: s.identityPubKeyHex,
+            sealedHex: carrierHex,
+            issuedAt: serversOrder.issuedAt,
+            expiresAt: now + ttlMs,
+          });
+        } catch {
+          /* swallow — delivery is best-effort; the account death still lands */
+        }
+      }
       try {
         await recordAuditEvent(
           { auditEvents: deps.auditEvents },
           {
             username,
             eventKind: "servers-self-delete-issued",
-            detail: `Content-wipe order recorded for ${s.serverDomain}`,
+            detail: `Content-wipe order deposited for ${s.serverDomain}`,
             devicePrefix: s.serverDomain.slice(0, 8),
             postedAt: now,
           },

@@ -4,6 +4,7 @@ import {
   signAccountSelfDelete,
   signServersSelfDelete,
   signDaemonStatusReport,
+  verifyServersSelfDelete,
   type AccountSelfDelete,
   type DaemonStatusReport,
   type Keypair,
@@ -15,6 +16,7 @@ import {
   handleAdminUsernameReclaim,
   type AccountDeletionDeps,
 } from "../src/accountDeletion.js";
+import { handleConsumeSelfDeleteDeposit } from "../src/secretMailbox.js";
 import { handlePostDaemonStatus } from "../src/podInventory.js";
 import { handleUsernameClaim } from "../src/usernameClaim.js";
 
@@ -57,6 +59,7 @@ function deps(storage: InMemoryStorage, now = NOW): AccountDeletionDeps {
     luksKeys: storage.luksKeys,
     webauthnRecovery: storage.webauthnRecovery,
     pushTokens: storage.pushTokens,
+    secretMailbox: storage.secretMailbox,
     now: () => now,
   };
 }
@@ -353,6 +356,86 @@ describe("handleAccountDeletionBundle — §5 bundle atomicity", () => {
     });
     expect(res.status).toBe(403);
     expect(await storage.usernames.get("kyle")).toBeDefined();
+  });
+});
+
+describe("box-side content-wipe delivery (self-delete deposit)", () => {
+  function mailboxDeps(storage: InMemoryStorage, now = NOW) {
+    return {
+      servers: storage.servers,
+      usernames: storage.usernames,
+      secretMailbox: storage.secretMailbox,
+      boxSealedLeases: storage.boxSealedLeases,
+      now: () => now,
+    };
+  }
+
+  it("deposits a verifiable wipe order per owned server; the box consumes it once", async () => {
+    const storage = new InMemoryStorage();
+    const irk = makeKey(50);
+    await seedAccount(storage, "uma", irk);
+    const stk = makeKey(51);
+    const domain = "home.uma.flagship.services";
+    await storage.servers.put({
+      serverDomain: domain,
+      username: "uma",
+      identityPubKeyHex: hex(stk.publicKey),
+      registeredAt: NOW,
+    });
+
+    const res = await handleAccountDeletionBundle(deps(storage), {
+      accountSelfDelete: acctEnvelope("uma", irk),
+      serversSelfDelete: serversEnvelope("uma", irk),
+    });
+    expect(res.status).toBe(200);
+
+    // The box consumes the deposited order. NB: the server was revoked during
+    // teardown, yet the consume still succeeds (revoke-tolerant).
+    const got = await handleConsumeSelfDeleteDeposit(mailboxDeps(storage), domain);
+    expect(got.status).toBe(200);
+    const carrierHex = (got.body as { sealed: string }).sealed;
+
+    // The carrier decodes to the owner-IRK-signed order and re-verifies.
+    const json = new TextDecoder().decode(
+      Uint8Array.from(carrierHex.match(/../g)!.map((h) => parseInt(h, 16))),
+    );
+    const carrier = JSON.parse(json) as {
+      request: { username: string; issuedAt: number };
+      signature: string;
+    };
+    expect(carrier.request.username).toBe("uma");
+    const sigBytes = Uint8Array.from(carrier.signature.match(/../g)!.map((h) => parseInt(h, 16)));
+    expect(
+      verifyServersSelfDelete(
+        { username: carrier.request.username, issuedAt: carrier.request.issuedAt },
+        sigBytes,
+        irk.publicKey,
+      ),
+    ).toBe(true);
+
+    // Consume-once: the second poll finds nothing.
+    const again = await handleConsumeSelfDeleteDeposit(mailboxDeps(storage), domain);
+    expect(again.status).toBe(404);
+  });
+
+  it("a bare account-self-delete (no content-wipe) deposits nothing", async () => {
+    const storage = new InMemoryStorage();
+    const irk = makeKey(52);
+    await seedAccount(storage, "vic", irk);
+    const domain = "home.vic.flagship.services";
+    await storage.servers.put({
+      serverDomain: domain,
+      username: "vic",
+      identityPubKeyHex: "ab".repeat(32),
+      registeredAt: NOW,
+    });
+
+    const res = await handleAccountDeletionBundle(deps(storage), {
+      accountSelfDelete: acctEnvelope("vic", irk),
+    });
+    expect(res.status).toBe(200);
+    const got = await handleConsumeSelfDeleteDeposit(mailboxDeps(storage), domain);
+    expect(got.status).toBe(404);
   });
 });
 

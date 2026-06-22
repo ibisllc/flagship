@@ -878,6 +878,48 @@ export async function handleConsumeEntitlementDeposit(
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// 6d. GET /api/server/:domain/self-delete  (box, public consume-once)
+//
+// Account-death content-wipe delivery. `.com` deposited the owner-IRK-signed
+// `servers-self-delete` order into the `self-delete` lane during the
+// last-device account-deletion bundle commit (handleAccountDeletionBundle).
+// The box polls this on its heartbeat cadence, consumes the order once, and —
+// after re-verifying it under the owner IRK — wipes its content.
+//
+// CRITICAL: this consume is deliberately REVOKE-TOLERANT — unlike the
+// entitlement/pairing consume (which 403 on `reg.revokedAt`). The deletion
+// ceremony revokes the server during teardown, so a revoked-guard would make
+// the order undeliverable. It is safe to serve post-revoke because the carrier
+// is the PUBLIC, owner-IRK-signed order (a relay can't forge it) and the box
+// re-verifies it under the config-pinned owner IRK before acting.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handleConsumeSelfDeleteDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const reg = await deps.servers.get(host);
+  if (!reg) return notFound("unknown server");
+  // NB: NO `reg.revokedAt` guard — see the revoke-tolerance note above.
+
+  const row = await deps.secretMailbox.consumeSelfDeleteDeposit(host, now());
+  if (!row) return notFound("no self-delete order ready");
+  return {
+    status: 200,
+    body: {
+      serverDomain: row.serverDomain,
+      requestNonceHex: row.requestNonceHex,
+      stkPub: row.stkPubHex,
+      // PUBLIC owner-IRK-signed servers-self-delete order carrier — the box
+      // re-verifies it under the config-pinned owner IRK before wiping.
+      sealed: row.sealedHex,
+      issuedAt: row.issuedAt,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Phone mailbox-auth — IRK-signed DeviceEndpointClaim.
 //
 // Repurposed as the mailbox-auth credential (there is no hosted
