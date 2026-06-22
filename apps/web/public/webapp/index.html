@@ -26,21 +26,17 @@
     <main>
       <!-- View 1: First run — passphrase to wrap a fresh UMK -->
       <section id="view-bootstrap" class="hidden">
-        <h2>Set up this device</h2>
+        <h2>Get started</h2>
         <div class="card warning">
           <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
           <a class="pill" href="https://flagshipserver.com/security.html">Read the trade-offs →</a>
         </div>
         <div class="card">
-          <p class="note">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
-          <input id="bootstrap-passphrase" type="password" placeholder="Passphrase" autocomplete="new-password" />
-          <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" class="mt-2" />
-          <button id="bootstrap-go" class="full-width mt-3">Generate device key</button>
+          <p class="note">Enter a username. If it's free you'll create it; if it already exists, we'll show you how to get back into it.</p>
+          <input id="bootstrap-username" type="text" placeholder="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
+          <button id="bootstrap-continue" class="full-width mt-3">Continue</button>
         </div>
-        <div class="card mt-2">
-          <p class="note">Already have an account on another browser? Recover with your passkey.</p>
-          <button class="secondary full-width" id="bootstrap-recover">Recover from passkey</button>
-        </div>
+        <div id="bootstrap-access" class="card mt-2 hidden"></div>
       </section>
 
       <!-- View 2: Locked — passphrase to unwrap UMK -->

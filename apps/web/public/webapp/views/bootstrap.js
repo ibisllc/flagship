@@ -16,35 +16,84 @@ import {
   classifyResolution,
   resolveAccount,
 } from "../lib/accountResolve.js";
+import { accessOptions } from "../lib/accountAccess.js";
 import { loginRealAccount } from "../lib/loginTakeover.js";
 import { addProfile } from "../lib/profiles.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { escapeHtml } from "../lib/util.js";
 import { set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-bootstrap");
 
 const USERNAME_RE = /^[a-z0-9]{3,30}$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
 
-async function handleBootstrap() {
-  const a = $("bootstrap-passphrase").value;
-  const b = $("bootstrap-passphrase-2").value;
-  if (a !== b) return toast("passphrases don't match", "err");
-  if (a.length < 8) return toast("passphrase must be 8+ chars", "err");
+/**
+ * The unified cover (docs/login-and-account-redesign.md): ONE username field.
+ * Resolve it, then branch on what the account IS — never a dead 404/"taken":
+ *   - free      → sign up (claim this name)
+ *   - demo      → join the sandbox
+ *   - taken     → show EVERY way to get back in (recover / scan / keyfile /
+ *                 claim-with-a-wait), unsupported ones disabled + explained.
+ */
+async function handleContinue() {
+  const raw = ($("bootstrap-username")?.value || "").trim().toLowerCase();
+  if (!USERNAME_RE.test(raw)) {
+    return toast("username: 3–30 lowercase letters and digits, no hyphens", "err");
+  }
+  hideAccess();
+  let resolution;
   try {
-    const seed = await bootstrapNewIdentity(a);
+    resolution = await resolveAccount(raw);
+  } catch (e) {
+    // A throw here is a genuine transport/server failure (rate-limit, 5xx) —
+    // NOT a missing account (a miss is `kind:"unknown"` in a 200 body).
+    return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
+  }
+  switch (classifyResolution(resolution)) {
+    case "demo":
+      return joinDemo(resolution);
+    case "unknown":
+      return signUp(raw); // the name is FREE → create it
+    default:
+      return showAccessOptions(resolution); // the name is TAKEN → how to get in
+  }
+}
+
+/** FREE name → create the account. Username-first: the name is already chosen,
+ *  so collect the passphrase now (it used to live on the cover), generate the
+ *  device key, then hand the wizard the chosen name to claim + finish setup. */
+async function signUp(username) {
+  const pass = await inlinePrompt({
+    title: `Create "${username}"`,
+    message:
+      "Choose a passphrase (8+ chars). It encrypts your key in this browser — flagshipserver.com never sees it.",
+    placeholder: "passphrase",
+    type: "password",
+    validate: (v) => (!v || v.length < 8 ? "8+ characters" : null),
+  });
+  if (!pass) return;
+  const confirm = await inlinePrompt({
+    title: "Confirm passphrase",
+    message: "Type it again.",
+    placeholder: "passphrase",
+    type: "password",
+    validate: (v) => (v !== pass ? "passphrases don't match" : null),
+  });
+  if (confirm == null) return;
+  try {
+    const seed = await bootstrapNewIdentity(pass);
     await unlockSession(seed);
     toast("device key generated");
-    // Phase 2 (docs/login-and-account-redesign.md): generating a device
-    // key is NOT opening an account. The account is an identity — the
-    // user must still claim a username (bound to this device key) before
-    // they have an account. Route through the first-run wizard, which
-    // advances from the (now-complete) device-key step straight to the
-    // OPEN-ACCOUNT step. Server provisioning is separate + later. If the
-    // wizard isn't on disk, fall back to the normal app shell.
+    // Hand the wizard the already-chosen name so the user doesn't retype it.
     try {
       const { enterWizard } = await import("./wizard.js");
       await enterWizard({ step: "username" });
+      const field = document.getElementById("wizard-username-input");
+      if (field) {
+        field.value = username;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     } catch {
       await dispatchInitialView();
     }
@@ -54,42 +103,63 @@ async function handleBootstrap() {
   }
 }
 
-async function handleRecover() {
-  // Account-name-first JOIN (docs/login-and-account-redesign.md). The
-  // login field holds ONLY a bare username — a person/company handle,
-  // letters/digits, no dots. We then run a single preflight
-  // (GET /api/account/resolve) and branch on what the account IS, not on
-  // an HTTP status. Login NEVER surfaces a 404: every "absent" is a node
-  // in the decision tree.
-  const username = await inlinePrompt({
-    title: "Join an account",
-    message: "The username on the account you're joining.",
-    placeholder: "alice",
-    validate: (v) => {
-      if (!v) return "username required";
-      if (!USERNAME_RE.test(v)) return "3–30 lowercase letters and digits, no hyphens";
-      return null;
-    },
-  });
-  if (!username) return;
-
-  let resolution;
-  try {
-    resolution = await resolveAccount(username);
-  } catch (e) {
-    // A throw here is a genuine transport/server failure (rate-limit,
-    // 5xx) — NOT a missing account. A miss is `kind:"unknown"` in a 200
-    // body, handled below.
-    return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
+/** TAKEN name → render all four access pathways (enabled/disabled+explained)
+ *  inline, and route the pick to its existing flow. This is the fix for the
+ *  old dead-end: entering your own name now offers recovery, not "try another". */
+function showAccessOptions(resolution) {
+  const host = $("bootstrap-access");
+  if (!host) return;
+  const opts = accessOptions(resolution);
+  host.innerHTML =
+    `<p class="note">"<strong>${escapeHtml(resolution.username)}</strong>" already exists — that's an account. How do you want to get back in?</p>` +
+    opts
+      .map(
+        (o) => `
+      <button class="full-width mt-2${o.enabled ? "" : " secondary"}" data-access="${o.id}"${o.enabled ? "" : " disabled"}>
+        ${escapeHtml(o.label)}
+      </button>
+      <p class="note muted-sm">${escapeHtml(o.enabled ? o.sublabel : o.disabledReason || o.sublabel)}</p>`,
+      )
+      .join("");
+  host.classList.remove("hidden");
+  for (const btn of host.querySelectorAll("[data-access]:not([disabled])")) {
+    btn.addEventListener("click", () =>
+      dispatchAccess(btn.getAttribute("data-access"), resolution),
+    );
   }
+}
 
-  switch (classifyResolution(resolution)) {
-    case "demo":
-      return joinDemo(resolution);
-    case "unknown":
-      return showNoSuchAccount(username);
-    default:
+function hideAccess() {
+  const host = $("bootstrap-access");
+  if (host) {
+    host.classList.add("hidden");
+    host.innerHTML = "";
+  }
+}
+
+/** Route a chosen access pathway to its existing flow. */
+async function dispatchAccess(id, resolution) {
+  switch (id) {
+    case "recover":
+    case "grace":
+      // Both ride the credentialed login state machine; it does cloud recovery
+      // when a passkey is enrolled, else the grace takeover.
       return recoverRealAccount(resolution);
+    case "keyfile": {
+      const { enterRecovery } = await import("./recovery.js");
+      return enterRecovery();
+    }
+    case "scan": {
+      const link = await inlinePrompt({
+        title: "Scan a pairing code",
+        message:
+          "On a device that's already signed in, open Settings → Add device, then paste the pairing link it shows here.",
+        placeholder: "https://flagshipserver.com/join?…",
+      });
+      if (!link) return;
+      const { enterJoin } = await import("./join.js");
+      return enterJoin(link);
+    }
   }
 }
 
@@ -111,16 +181,6 @@ async function joinDemo(resolution) {
   } catch (e) {
     toast(`couldn't open the demo: ${e.message ?? e}`, "err");
   }
-}
-
-/** A miss is a STATE, not a 404 — render clear guidance, not an error. */
-async function showNoSuchAccount(username) {
-  await inlineConfirm({
-    title: "No Flagship account by that name",
-    message: `We couldn't find an account called "${username}". Check the spelling, or generate a new account instead.`,
-    okLabel: "OK",
-    cancelLabel: "Back",
-  });
 }
 
 /** Phase 3 — the real-account (single/multi) login state machine. Drives
@@ -182,6 +242,11 @@ async function recoverRealAccount(resolution) {
 }
 
 export function initBootstrapView() {
-  $("bootstrap-go")?.addEventListener("click", handleBootstrap);
-  $("bootstrap-recover")?.addEventListener("click", handleRecover);
+  $("bootstrap-continue")?.addEventListener("click", handleContinue);
+  $("bootstrap-username")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleContinue();
+    }
+  });
 }
