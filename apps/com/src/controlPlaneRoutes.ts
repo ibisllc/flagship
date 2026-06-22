@@ -100,6 +100,7 @@ import {
   handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
+  handleRandomUsername,
   handleUsernameClaim,
   handleUsersCheck,
   parseTestAccountsEnv,
@@ -427,6 +428,7 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
+  USERNAME_RANDOM: /^\/api\/username\/random$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_RENAME: /^\/api\/username\/rename$/,
@@ -781,6 +783,11 @@ export async function tryControlPlane(
 
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
+  }
+  // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "random" would otherwise
+  // be read as a username lookup. Suggests available random handles for sign-up.
+  if (method === "GET" && ROUTE_RE.USERNAME_RANDOM.test(path)) {
+    return finish(await handleRandomUsername(storage.usernames));
   }
   if (method === "POST" && ROUTE_RE.USERS_CHECK.test(path)) {
     return finish(

@@ -46,15 +46,19 @@ no-credential "grace takeover" recovery path and the 90-day GC reclaim.
 
 ## 3. Username grammar & reserved names
 
-**Grammar (change required).** Today the handle is `^[a-z0-9]{3,30}$` (no
-hyphens — `packages/control-plane/src/labels.ts`). Random `adjective-noun-NNNN`
-needs hyphens, which are DNS-label-legal. Extend to a **DNS-safe label**:
-`^[a-z0-9]([a-z0-9-]{1,28}[a-z0-9])?$`, length 3–30, **no leading/trailing
-hyphen, no `--`** (the `--` ban is mandatory: the retired cert-flattening
-delimiter used `--`, and re-introducing user-controlled `--` risks colliding with
-any tier-2 label parsing — audit `bootkey-builder` + the cert SAN derivation
-before enabling). Mirror the grammar in TS/Swift/Kotlin + the webapp regex
-(`bootstrap.js`, `accountResolve.js`, `state.js`).
+**Grammar — KEEP DASHLESS (decided 2026-06-22; the audit found an active
+collision).** The handle stays `^[a-z0-9]{3,30}$` (no hyphens). Reason:
+`packages/services-zone/src/validation.ts` parses app URLs as
+`<slug>-<creator>.<host>.flagship.services` by splitting on the **last dash** and
+**requires the creator (username) to be dashless** for that split to be
+unambiguous (it says so explicitly: *"the dash is reserved as the slug-creator
+separator in app URLs"*). Allowing dashes in usernames would break every app URL
++ the daemon's label parsing — not worth it for a separator. So **random names
+are CONCATENATED**: `<adjective><noun><NNNN>` (e.g. `happyotter4821`), built from
+short curated words so they stay readable and ≤30 chars, and they satisfy the
+EXISTING grammar with **zero validator/parser changes**. (If we ever truly want
+dashes, that's a separate, larger change to the `<slug>-<creator>` scheme across
+`services-zone` + the daemon — out of scope here.)
 
 **Reserved / blocklist (new).** A claim (random OR custom) must reject:
 - **Infra/impersonation labels:** `admin, root, www, api, boot, recovery,
@@ -72,9 +76,10 @@ before enabling). Mirror the grammar in TS/Swift/Kotlin + the webapp regex
 Replace "pick a username" at sign-up with **server-assisted random assignment**:
 
 1. Client requests a candidate: `GET /api/username/random` → returns an
-   available, non-reserved `adjective-noun-NNNN` (server picks from a wordlist;
-   numeric suffix gives a ~10^10 space so collisions are rare; server re-rolls on
-   a taken candidate). Returns a few candidates so the user can "shuffle".
+   available, non-reserved **`<adjective><noun><NNNN>`** (CONCATENATED, dashless —
+   see §3; server picks short curated words; numeric suffix gives a wide space so
+   collisions are rare; server re-rolls on a taken candidate). Returns a few
+   candidates so the user can "shuffle".
 2. Client claims it exactly as today — the standalone IRK-signed
    `flagship/claim-username/v1` (`openAccount.claimUsername`), idempotent (409 =
    already this IRK). The claim is **free** (no payment).
