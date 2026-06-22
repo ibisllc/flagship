@@ -87,6 +87,7 @@ fun HomeTab() {
         )
     }
     val awaitingApproval by app.serversAwaitingApproval.collectAsState()
+    val awaitingEntitlement by app.serversAwaitingEntitlement.collectAsState()
     val ctx = LocalContext.current
     // Persistent dismiss for the post-creation backup-reminder banner
     // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
@@ -202,6 +203,7 @@ fun HomeTab() {
                 onSignInAgain = { app.signOut() },
                 deviceCapability = capability,
                 awaitingApproval = awaitingApproval,
+                awaitingEntitlement = awaitingEntitlement,
             )
         }
         composable("server-detail/{podId}") { entry ->

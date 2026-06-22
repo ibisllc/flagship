@@ -112,6 +112,10 @@ fun HomeScreen(
      *  liveness classification — a waiting box reads "Waiting for approval",
      *  never "Never came online". Source: AppState.serversAwaitingApproval. */
     awaitingApproval: Set<String> = emptySet(),
+    /** The entitlement (serve-auth) waiting set — same role for the other inbox
+     *  lane, so a box waiting on entitlement reads "Waiting for approval", not
+     *  "Never came online". Source: AppState.serversAwaitingEntitlement. */
+    awaitingEntitlement: Set<String> = emptySet(),
 ) {
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
@@ -124,7 +128,11 @@ fun HomeScreen(
     // Derived liveness per pod (folds in the cheap directory awaitingUnlock
     // flag OR the account-level biometric-watcher waiting signal).
     fun livenessOf(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercase()))
+        pod.livenessState(
+            hasLiveUnlockRequest = pod.awaitingUnlock ||
+                awaitingApproval.contains(pod.fqdn.lowercase()) ||
+                awaitingEntitlement.contains(pod.fqdn.lowercase()),
+        )
 
     // Per-filter counts off the full pod set (search-independent) so the chip
     // badges read the account-wide totals.

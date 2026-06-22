@@ -254,6 +254,18 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
     expect(html).toContain("Approve unlock");
   });
 
+  it("waiting-for-approval: a box awaiting ENTITLEMENT is NOT dead either (Box Request Inbox)", () => {
+    // ezra's case: registered long ago, never checked in, but the directory's
+    // cheap `awaitingEntitlement` flag means it's actively asking to be
+    // authorized to serve — must read "waiting for approval", not "never seen".
+    const pod = { lastReported: null, registeredAt: now - 60 * 60 * 1000, awaitingEntitlement: true };
+    const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(c.kind).toBe("waiting-for-approval");
+    const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });
+    expect(html).not.toContain("js-delete-dead-server"); // decommission suppressed
+    expect(html).toContain("js-approve-unlock"); // actionable entry → boot-approval (handles entitlement)
+  });
+
   it("coming-online: registered within the grace window, no live request", () => {
     const pod = { lastReported: null, registeredAt: now - 5 * 60 * 1000 };
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });

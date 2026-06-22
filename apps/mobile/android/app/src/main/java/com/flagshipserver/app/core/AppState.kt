@@ -265,7 +265,11 @@ class AppState(
      *  the account-level (biometric-watcher) waiting set — either means the box
      *  is actively waiting, so it must not read "never came online". */
     fun liveness(pod: PodInfo): PodInfo.LivenessState =
-        pod.livenessState(hasLiveUnlockRequest = pod.awaitingUnlock || hasLiveUnlockRequest(pod.fqdn))
+        pod.livenessState(
+            hasLiveUnlockRequest = pod.awaitingUnlock ||
+                hasLiveUnlockRequest(pod.fqdn) ||
+                hasLiveEntitlementRequest(pod.fqdn),
+        )
 
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod

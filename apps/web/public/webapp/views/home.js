@@ -168,11 +168,13 @@ export function classifyServer(server, pod, opts = {}) {
   if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
   if (!pod || pod.lastReported == null) {
-    // Registered but never checked in. A live unlock request means it's
-    // actively waiting for the owner — not dead. `awaitingUnlock` is the cheap,
-    // unauthenticated directory signal (a live parked unlock request); the
-    // explicit opt is the biometric-read fallback. Either one ⇒ waiting.
-    if (opts.hasLiveUnlockRequest || pod?.awaitingUnlock) {
+    // Registered but never checked in. A live unlock OR entitlement request
+    // means it's actively waiting for the owner — not dead. `awaitingUnlock` /
+    // `awaitingEntitlement` are the cheap, unauthenticated directory signals (a
+    // live parked request); the explicit opt is the biometric-read fallback.
+    // Any one ⇒ waiting (folding entitlement in is what stops a box stuck on
+    // serve-authorization from reading "never came online").
+    if (opts.hasLiveUnlockRequest || pod?.awaitingUnlock || pod?.awaitingEntitlement) {
       return { kind: "waiting-for-approval", label: "waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.

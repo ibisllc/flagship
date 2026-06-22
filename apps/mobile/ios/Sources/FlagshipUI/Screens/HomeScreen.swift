@@ -44,6 +44,10 @@ public struct HomeScreen: View {
     /// liveness classification — a waiting box reads "Waiting for approval",
     /// never "Never came online". Source: AppState.serversAwaitingApproval.
     let awaitingApproval: Set<String>
+    /// The entitlement (serve-auth) waiting set — same role as `awaitingApproval`
+    /// for the other inbox lane, so a box waiting on entitlement reads "Waiting
+    /// for approval" on Home, not "Never came online".
+    let awaitingEntitlement: Set<String>
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -77,6 +81,7 @@ public struct HomeScreen: View {
         accountWasReset: Bool = false,
         deviceCapability: DeviceCapabilityBlock? = nil,
         awaitingApproval: Set<String> = [],
+        awaitingEntitlement: Set<String> = [],
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteDeadServer: @escaping (PodInfo) -> Void = { _ in },
@@ -98,6 +103,7 @@ public struct HomeScreen: View {
         self.accountWasReset = accountWasReset
         self.deviceCapability = deviceCapability
         self.awaitingApproval = awaitingApproval
+        self.awaitingEntitlement = awaitingEntitlement
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -201,7 +207,7 @@ public struct HomeScreen: View {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
         return pods.filter { pod in
             let liveness = pod.livenessState(
-                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
             )
             let matchesFilter = statusFilter.matches(pod: pod, liveness: liveness)
             let matchesSearch = q.isEmpty
@@ -217,7 +223,7 @@ public struct HomeScreen: View {
     private func filterCount(_ f: HomeStatusFilter) -> Int {
         pods.filter { pod in
             let liveness = pod.livenessState(
-                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+                hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
             )
             return f.matches(pod: pod, liveness: liveness)
         }.count
@@ -415,7 +421,7 @@ public struct HomeScreen: View {
     /// badge, and the full long-press context menu preserved verbatim.
     private func serverRow(pod: PodInfo, c: FSColors) -> some View {
         let liveness = pod.livenessState(
-            hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased())
+            hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
         )
         let isLeader = pod.podId == leaderPodId
         return Button(action: { onOpenPod(pod) }) {

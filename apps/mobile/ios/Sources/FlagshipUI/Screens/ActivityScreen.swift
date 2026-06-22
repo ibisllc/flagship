@@ -70,15 +70,19 @@ public struct ActivityScreen: View {
                     HStack { Spacer(); podSwitcherIfMulti }
                         .zIndex(1)
                 }
+                // ALWAYS reachable, OUTSIDE the state switch: a box waiting for
+                // an unlock/entitlement approval is exactly the case where the
+                // daemon BFF (and thus this feed) can't load, so gating the
+                // approvals entry behind `.loaded` hid it precisely when needed.
+                section("BOX APPROVALS", c: c) {
+                    approvalsEntryCard(c: c)
+                }
                 switch state {
                 case .idle, .loading:
                     skeletons
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let feed):
-                    section("BOX APPROVALS", c: c) {
-                        approvalsEntryCard(c: c)
-                    }
                     if let snap = feed.postRecovery {
                         section("POST-RECOVERY", c: c) {
                             postRecoveryCard(snap, c: c)

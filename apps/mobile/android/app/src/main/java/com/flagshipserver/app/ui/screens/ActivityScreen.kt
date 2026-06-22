@@ -116,6 +116,11 @@ fun ActivityScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s4))
 
+        // ALWAYS visible, OUTSIDE the loaded-state branch: a box waiting for an
+        // unlock/entitlement approval is exactly when the daemon BFF (this feed)
+        // can't load, so gating it behind Loaded hid it precisely when needed.
+        ApprovalsEntryCard(nav)
+
         when (val s = state) {
             is LoadingState.Loaded -> FeedBody(
                 ActivityFeed(items = ActivityFeedFilter.apply(s.value.items, filterPodName)),
@@ -129,10 +134,9 @@ fun ActivityScreen(nav: NavController) {
 }
 
 @Composable
-private fun FeedBody(feed: ActivityFeed, nav: NavController) {
-    // Always-available entry into the relay approval list. A box set to
-    // "authorize each boot" posts a sealed-key request and pushes the phone;
-    // this is the in-app way to reach the same screen.
+private fun ApprovalsEntryCard(nav: NavController) {
+    // The in-app way to reach the relay approval list — ALWAYS available, since a
+    // box waiting on an unlock/entitlement approval can't load its BFF feed.
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
@@ -149,7 +153,10 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
         }
     }
     Spacer(Modifier.height(FS.space.s3))
+}
 
+@Composable
+private fun FeedBody(feed: ActivityFeed, nav: NavController) {
     if (feed.items.any { it is ActivityItem.RecoverySnapshot }) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {

@@ -91,6 +91,7 @@ public struct HomeTab: View {
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
                     awaitingApproval: app.serversAwaitingApproval,
+                    awaitingEntitlement: app.serversAwaitingEntitlement,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }

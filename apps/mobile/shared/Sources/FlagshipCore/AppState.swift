@@ -179,10 +179,19 @@ public final class AppState {
     /// `PodInfo.livenessState(hasLiveUnlockRequest:)` so callsites don't repeat
     /// the set lookup.
     public func liveness(for pod: PodInfo) -> PodInfo.LivenessState {
-        // The cheap directory `awaitingUnlock` flag OR the biometric-watcher set
-        // — either one means the box is actively waiting, so it must not read as
-        // "never came online" (and the decommission/delete must stay hidden).
-        return pod.livenessState(hasLiveUnlockRequest: isAwaitingUnlock(pod))
+        // The cheap directory `awaitingUnlock`/`awaitingEntitlement` flags OR the
+        // watcher sets — any one means the box is actively waiting for an owner
+        // approval, so it must not read as "never came online" (and the
+        // decommission/delete must stay hidden). Folding entitlement in here is
+        // what makes a box stuck on serve-authorization show "waiting for
+        // approval" on Home instead of looking dead.
+        return pod.livenessState(hasLiveUnlockRequest: isAwaitingApproval(pod))
+    }
+
+    /// True when [pod] is waiting for ANY owner approval — unlock OR entitlement.
+    /// The single "don't classify this dead, surface the approval" signal.
+    public func isAwaitingApproval(_ pod: PodInfo) -> Bool {
+        isAwaitingUnlock(pod) || isAwaitingEntitlement(pod)
     }
 
     /// W3 — durable list of clouds this phone is a member of. The
