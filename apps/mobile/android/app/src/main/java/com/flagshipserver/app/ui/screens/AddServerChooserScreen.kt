@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +44,7 @@ fun AddServerChooserScreen(
     mode: AddServerMode = AddServerMode.IN_APP,
     onProvision: () -> Unit,
     onPair: () -> Unit,
+    onTakeOver: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
@@ -87,6 +89,18 @@ fun AddServerChooserScreen(
             onClick = onPair,
             testTag = "chooser-pair",
         )
+        if (onTakeOver != null) {
+            Spacer(Modifier.height(FS.space.s3))
+            ChooserCard(
+                icon = Icons.Outlined.SwapHoriz,
+                accent = FS.colors.primary,
+                title = "Take over a transferred box",
+                body = "Someone is handing you a running box. Scan the transfer code on their phone to take ownership.",
+                cta = "Scan code →",
+                onClick = onTakeOver,
+                testTag = "chooser-takeover",
+            )
+        }
         if (onCancel != null) {
             Spacer(Modifier.height(FS.space.s4))
             FSGhostButton(label = "Cancel", onClick = onCancel, block = true)

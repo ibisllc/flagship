@@ -201,54 +201,59 @@ the RootEntitlement `podCanonical`, and routing. So moving ownership
   giver-offer → acquirer-claim → giver-poll round-trip against the real broker
   handlers, plus canonical-byte pins against `@flagship/protocol`.
 
-**REMAINING (each needs a box-side pass + a reburn — cannot be CI-validated):**
+**LANDED (2026-06-21 follow-on — Layers A, B, C):**
 
-1. **Box-side cert + entitlement re-home on a podCanonical change (Layer 3 —
-   DOCUMENTED HANDOFF, deliberately not half-built).** When ownership moves the
-   box's FQDN changes (`<server>.<giver>` → `<server>.<acquirer>`), so on its
-   next boot/heartbeat the daemon must, mirroring how `selfDeleteConsumer` was
-   scoped (a small, self-contained, owner-IRK-verified consumer): (a) detect the
-   namespace change — the canonical name the daemon derives from
-   `/var/flagship/install-blob.json` (or a `.com` directory read of its own
-   registration) no longer matches the cert it holds; (b) re-derive `boxCertSans`
-   = `[<server>.<acquirer>, *.<server>.<acquirer>]` and let the EXISTING per-box
-   ACME path re-issue (the SANs-changed → discard-and-re-mint logic from the A′
-   cert work already does this when SANs change at startup — the transfer just
-   needs the box to pick up the new canonical); (c) re-register / re-publish
-   routing under the new namespace (or rely on `.com`'s migration having done the
-   directory + DNS, and the box simply tunnels its new podCanonical); (d) drop
-   its stale RootEntitlement (signed `podCanonical` = old) and pick up a fresh
-   ACQUIRER-minted one via the existing entitlement-relay/deposit lane (the
-   acquirer's phone mints it, exactly like first-boot). None of this is a new
-   protocol — it reuses the A′ cert re-mint + the entitlement relay; the work is
-   threading "my owner/namespace changed" into the daemon boot path and is best
-   done WITH a reburn so the kernel/ACME/tunnel path is actually exercised.
-2. **Giver-phone re-seal-on-claim deposit.** Only the giver's phone can unseal
-   the LUKS disk key (it holds the giver IRK; the box holds only the sealed
-   blob). After the broker records the claim, the giver's phone polls
-   `transfer/claim-poll`, learns the acquirer IRK, unseals the current disk key,
-   and deposits a NEW box-sealed lease sealed to the ACQUIRER IRK via the
-   EXISTING `handlePostBoxSealedLease` lane. Until that lands the acquirer cannot
-   unlock an encrypted box (the accepted handshake — both phones, giver first).
-   The webapp `pollTransferClaim` already returns the acquirer IRK; the actual
-   unseal-and-redeposit reuses `lib/leases.js` (box-sealed-lease deposit) and is
-   a giver-phone step — natural to add alongside the box-side reburn validation.
-3. **Native iOS/Android giver-QR render + acquirer camera.** The OFFER/CLAIM
-   envelopes already exist in Swift (`FlagshipCore.ServerTransferOfferOrder` /
-   `…ClaimOrder`) and Kotlin (`core.ServerTransferOfferOrder` / `…ClaimOrder`),
-   pinned by cross-platform vectors. The native surfaces need: (giver) a
-   "Transfer to another account" action on server-detail → biometric +
-   type-to-confirm → sign the offer with the owner IRK → deposit it
-   (`POST /api/server/:d/transfer/offer` with the same IRK mailbox-auth the
-   webapp builds — see `lib/serverTransfer.js buildMailboxAuth` for the exact
-   `DeviceEndpointClaim` wire shape) → render the QR carrying
-   `{serverDomain, transferNonce, giverIrkPub, expiresAt, offerSignature}`
-   (the webapp's `createTransferOffer` `qr` object is the canonical payload).
-   (Acquirer) Home → Add a server → "Pair an existing box" → camera viewfinder →
-   scan the QR → sign a `ServerTransferClaim` with the acquirer owner IRK →
-   `POST /api/server/:d/transfer/claim`. Both need a build + device test (NOT
-   doable in CI per this branch's no-native-build rule). The webapp lib is the
-   reference for the exact request bodies + canonical bytes.
+1. **Box-side cert + entitlement re-home on a podCanonical change (Layer A —
+   DONE, unit-tested).** `packages/server-daemon/src/transferRehomeConsumer.ts`
+   (modelled on `selfDeleteConsumer`): polls a new PUBLIC `.com` read
+   `GET /api/server/:old/transfer/rehome` (`handleGetTransferRehome` — the
+   transfer row, keyed by the OLD canonical, holds the acquirer username + IRK
+   pub after a claim). On a completed transfer it persists a re-home MARKER
+   (`/var/flagship/transfer-rehome.json`) with the new canonical + acquirer IRK.
+   The daemon `main()` applies the marker at the TOP of boot (before runtime /
+   entitlement load): it overrides `env.serverFqdn` + `cfg.irkPublicKey` to the
+   acquirer's, so the EXISTING A′ cert path re-derives `boxCertSans` for the new
+   SANs and re-issues, and the EXISTING entitlement self-heal discards the stale
+   giver-signed bundle and picks up a fresh acquirer-minted one — no new cert/ACME
+   code. The box never trusts `.com` as a key authority: the acquirer IRK only
+   becomes load-bearing once a fresh acquirer-IRK-signed entitlement verifies
+   under it at HELLO (same check the hub runs). Tests: `transferRehomeConsumer`
+   (7) + broker rehome read (+2). **Live e2e still needs a reburn** (the
+   kernel/ACME/tunnel path isn't CI-exercised).
+2. **Giver-phone re-seal-on-claim deposit (Layer B — DONE, unit-tested).** A
+   disk-key handoff column on the claimed transfer row (migration **0060** +
+   `putDiskKeyHandoff`, D1↔InMemory parity). Broker:
+   `POST .../transfer/disk-key` (giver IRK mailbox-auth — deposits the disk key
+   RE-SEALED to the ACQUIRER IRK; claimed-row + giver-account guarded) and
+   `POST .../transfer/disk-key-claim` (acquirer IRK mailbox-auth — consume).
+   `.com` stays content-blind (only the acquirer IRK opens the blob). Webapp
+   `lib/serverTransfer.js`: `resealDiskKeyForAcquirer` (open the giver-sealed
+   disk key with the giver IRK → re-seal to the acquirer IRK via
+   `ed25519PubToX25519` + `sealForBrowserKey` → deposit) + `claimResealedDiskKey`
+   (fetch + open with the acquirer IRK). NOTE: this re-seals to the ACQUIRER IRK
+   (a two-phone handshake — the acquirer then completes the standard
+   box-sealed-lease deposit), NOT a giver-signed `handlePostBoxSealedLease`
+   directly: after the namespace migration the lease-v2 handler verifies under the
+   acquirer's registered IRK, which the giver's phone doesn't hold. Tests: a wire
+   round-trip through the real broker + a crypto round-trip pinned against
+   `@flagship/protocol` `openSealedFromEd25519Recipient`.
+3. **Native iOS/Android giver-QR render + acquirer camera (Layer C — code-complete,
+   awaits an xcodebuild/gradle compile).** Clients: `ServerTransferClient`
+   (protocol + Live + Mock) on iOS (`FlagshipAPI`) and Android (`api`), reusing
+   `MailboxAuthEnvelope`; pure flow builders `ServerTransferFlow` (offer/claim/QR
+   codec/disk-key re-seal) in `FlagshipCore` (Swift, `swift test`-green) +
+   `core` (Kotlin, JVM unit tests). VMs: `TransferGiverViewModel` (sign offer →
+   deposit → QR → poll → re-seal on claim) + `TransferAcquirerViewModel` (parse
+   QR → sign claim → POST) on both. Screens: `TransferServerScreens` (giver
+   type-confirm + biometric + QR render via the existing `PairingQRView` /
+   `qrImageBitmap`; acquirer camera via the existing `QRScannerView` / `QRScanner`).
+   Entry: a "Take over a transferred box" card on `AddServerChooserScreen` (both).
+   Tests: Swift `ServerTransferFlowTests` (5, swift-test-green) + iOS
+   `TransferViewModelTests` (XCTest, **NOT compiled here** — needs xcodebuild);
+   Android `ServerTransferFlowTest` + `TransferViewModelTest` (**NOT compiled
+   here** — needs gradle). The server-detail "Transfer to another account" entry
+   wiring + nav route into `TransferGiverScreen` is the small remaining UI hookup
+   to do during the native compile pass.
 
 ---
 
@@ -322,10 +327,14 @@ reached live.
    mailbox lane, deposit-on-commit, the revoke-tolerant box consume, and the
    daemon `selfDeleteConsumer` (heartbeat poll → owner-IRK re-verify →
    data-services wipe, idempotent). Needs a reburn for live e2e.
-3. ⏳ **Transfer-a-box**: ✅ protocol contract (offer + claim, 3 platforms, pinned
-   — 2026-06-21). REMAINING: the `.com` namespace-migration broker, the
-   giver-phone re-seal-on-claim, box-side cert/entitlement re-home, and the
-   client giver-QR + acquirer-camera flow (see the §4 build-order note).
+3. ⏳ **Transfer-a-box**: ✅ protocol contract (offer + claim, 3 platforms, pinned),
+   ✅ `.com` namespace-migration broker + storage, ✅ webapp client, ✅ box-side
+   cert/entitlement re-home consumer (Layer A), ✅ giver-phone disk-key re-seal
+   (Layer B), ✅ native iOS/Android clients + VMs + screens (Layer C,
+   code-complete). REMAINING: the native xcodebuild/gradle compile + on-device
+   test, the server-detail "Transfer to another account" entry hookup, and a
+   reburn for the box-side cert/entitlement re-home + disk-key handshake live e2e
+   (none CI-validatable).
 
 Open build-time questions: exact transfer-token format + who brokers the re-seal
 (`.com` vs direct); whether `last_active` lives on `usernames` or
