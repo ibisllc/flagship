@@ -13,7 +13,7 @@ private struct TransferCallout: View {
         let c = FSColors.scheme(scheme)
         let color: Color = kind == .success ? c.success : (kind == .danger ? c.danger : c.primary)
         Text(text)
-            .font(FS.font.bodySmall())
+            .font(FS.font.bodySm())
             .foregroundColor(c.text)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(FS.space.s3)
@@ -41,7 +41,7 @@ public struct TransferGiverScreen: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s5) {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
                 switch vm.phase {
                 case .idle, .signing, .posting:
                     warning(c)
@@ -74,7 +74,7 @@ public struct TransferGiverScreen: View {
             Text("This hands \(serverDomain) and ALL its contents to another account. You will lose control of it. This cannot be undone.")
                 .font(FS.font.body()).foregroundColor(c.textMuted)
             Text("Type the server's address to confirm:")
-                .font(FS.font.bodySmall()).foregroundColor(c.textMuted)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             TextField(serverDomain, text: $typed)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -95,7 +95,7 @@ public struct TransferGiverScreen: View {
             Text("Have the new owner scan this")
                 .font(FS.font.h3()).foregroundColor(c.text)
             Text("On their phone: Add a server → Take over a transferred box. Keep this screen open until it completes — your phone hands off the disk key after they claim it.")
-                .font(FS.font.bodySmall()).foregroundColor(c.textMuted)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             if let text = vm.qrText {
                 HStack { Spacer(); PairingQRView(text: text, size: 240); Spacer() }
             }
@@ -136,7 +136,7 @@ public struct TransferAcquirerScreen: View {
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s5) {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
                 switch vm.phase {
                 case .idle:
                     scanner(c)
@@ -163,7 +163,7 @@ public struct TransferAcquirerScreen: View {
             Text("Point your camera at the transfer code")
                 .font(FS.font.h3()).foregroundColor(c.text)
             Text("The current owner shows it from their box's page (Transfer to another account).")
-                .font(FS.font.bodySmall()).foregroundColor(c.textMuted)
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
             QRScannerView(
                 onScan: { text in if scanning { scanning = false; _ = vm.ingest(text) } },
                 validate: { ServerTransferFlow.looksLikeTransferQR($0) }
