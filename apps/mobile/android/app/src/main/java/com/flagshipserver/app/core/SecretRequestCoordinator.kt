@@ -28,6 +28,7 @@ package com.flagshipserver.app.core
 import com.flagshipserver.app.api.BoxSealedLeaseWire
 import com.flagshipserver.app.api.LeaseRevokeWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
+import com.flagshipserver.app.api.PairingDepositBody
 import com.flagshipserver.app.api.PendingSecretRequest
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SecretResponseBody
@@ -184,6 +185,33 @@ class SecretRequestCoordinator(
             nonce = nonceGen(),
         )
         mailbox.postResponse(body, respAuth)
+
+        // Fold "authorize it to serve" INTO this unlock approval: pre-deposit an
+        // owner-IRK-signed entitlement for the box's STK so it comes online with
+        // no second tap (consent to boot ⇒ consent to serve). Best-effort — a
+        // failure never fails the unlock; the box can still fetch one via relay.
+        if (purpose == SecretPurpose.UNLOCK_KEY) {
+            try {
+                val carrierHex = buildEntitlementReply(verified, stkPub, material)
+                val auth = buildMailboxAuth(material)
+                mailbox.depositEntitlement(
+                    verified.serverDomain,
+                    PairingDepositBody(
+                        auth = auth.auth,
+                        authSignature = auth.authSignature,
+                        deposit = PairingDepositBody.Deposit(
+                            serverDomain = verified.serverDomain,
+                            requestNonceHex = HexUtil.encode(nonceGen()),
+                            stkPub = HexUtil.encode(stkPub),
+                            sealed = carrierHex,
+                            issuedAt = now(),
+                        ),
+                    ),
+                )
+            } catch (_: Throwable) {
+                // best-effort — the box can still fetch one via the relay
+            }
+        }
 
         // "auto" mode: deposit a box-sealed lease (the user's IRK authorizes
         // it here — I2) using the key we just recovered (never .com-visible).

@@ -392,7 +392,106 @@ export async function approveUnlock(req, deps = {}) {
     const txt = await r.text().catch(() => "");
     throw new Error(`post boot response failed: ${r.status} ${txt}`.trim());
   }
+
+  // Fold "authorize it to serve" INTO this unlock approval: pre-deposit an
+  // owner-IRK-signed entitlement for the box's STK so it comes online with no
+  // second tap (consent to boot ⇒ consent to serve). Best-effort — a failure
+  // never fails the unlock; the box can still fetch one via the relay.
+  try {
+    await depositEntitlement(
+      { serverDomain: req.serverDomain, stkPubHex: req.directoryStkPubHex },
+      { fetch: f, comBase, signWithIrk: sign, now: () => now },
+    );
+  } catch (e) {
+    console.warn(
+      "[boot-approval] entitlement deposit failed (the box will relay instead):",
+      e?.message || e,
+    );
+  }
   return { ok: true };
+}
+
+/**
+ * Mint an owner-IRK-signed RootEntitlement for THIS box's STK and DEPOSIT it on
+ * `.com`, so the box claims it on first boot with no separate "authorize to
+ * serve" approval. The carrier is the PUBLIC EntitlementBundle JSON (what the
+ * box presents at the hub HELLO), not a secret — so the deposit is content-blind
+ * to `.com` and a public consume-once read by the box is harmless.
+ *
+ * @param {{ serverDomain: string, stkPubHex: string }} args
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+export async function depositEntitlement(args, deps = {}) {
+  const session = getSession();
+  const username = session.username;
+  if (!username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const stkPubHex = String(args.stkPubHex).toLowerCase();
+  const carrierHex = await buildEntitlementCarrier({
+    username,
+    podPubKeyHex: stkPubHex,
+    podCanonical: args.serverDomain,
+    issuedAt: now,
+    signWithIrk: sign,
+    umk: session.umk,
+  });
+
+  // IRK mailbox-auth — same shape as the pairing deposit.
+  const phoneIrkPubHex = await irkPubHex(session.umk);
+  const nonceHex = bytesToHex(randomBytes(32));
+  const authCore = {
+    username, endpointLabel: "device", phoneIrkPub: phoneIrkPubHex,
+    issuedAt: now, expiresAt: now + 120_000, nonce: nonceHex,
+  };
+  const authSig = await sign(
+    session.umk,
+    canonicalDeviceEndpointClaim({ ...authCore, phoneIrkPubHex, nonceHex }),
+  );
+  const body = {
+    auth: authCore,
+    authSignature: bytesToHex(authSig),
+    deposit: {
+      serverDomain: args.serverDomain,
+      requestNonceHex: bytesToHex(randomBytes(32)),
+      stkPub: stkPubHex,
+      sealed: carrierHex,
+      issuedAt: now,
+    },
+  };
+  const r = await f(
+    `${comBase}/api/server/${encodeURIComponent(args.serverDomain)}/entitlement-deposit`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+  );
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`entitlement-deposit: HTTP ${r.status} ${txt}`.trim());
+  }
+  return { ok: true };
+}
+
+/**
+ * The PUBLIC entitlement carrier hex: an owner-IRK-signed RootEntitlement
+ * serialized as the daemon's on-disk EntitlementBundle JSON (UTF-8 → hex).
+ * Canonical bytes + JSON field shape MUST match packages/protocol
+ * `canonicalRootEntitlement` + server-daemon `serializeEntitlementBundle`.
+ */
+async function buildEntitlementCarrier({ username, podPubKeyHex, podCanonical, issuedAt, signWithIrk, umk }) {
+  const canonical = te(
+    ["flagship/root-entitlement/v1", username, podPubKeyHex, podCanonical, issuedAt].join("|"),
+  );
+  const sig = await signWithIrk(umk, canonical);
+  const json = JSON.stringify({
+    rootEntitlement: { username, podPubKey: podPubKeyHex, podCanonical, issuedAt },
+    rootEntitlementSig: bytesToHex(sig),
+    serviceEntitlement: null,
+    serviceEntitlementSig: null,
+  });
+  return bytesToHex(te(json));
 }
 
 /**
@@ -489,4 +588,5 @@ export const _internal = {
   canonicalSecretRequest,
   canonicalBootAuth,
   deriveIrkSeed,
+  buildEntitlementCarrier,
 };

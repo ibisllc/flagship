@@ -142,9 +142,13 @@ private struct SecretRequestCard: View {
     let onApprove: () async -> Void
 
     private var purposeLabel: String {
+        // Approving the unlock now ALSO deposits the box's entitlement (consent
+        // to boot ⇒ consent to serve), so the box comes online with this one
+        // approval. (A first-boot-only "Unlock device" / established-reboot split
+        // is a future refinement once per-pod liveness is threaded in here.)
         switch request.purpose {
-        case .unlockKey:    return "Unlock its encrypted disk"
-        case .entitlement:  return "Authorize it to serve your account"
+        case .unlockKey:    return "Unlock device and authorize it to join your cloud"
+        case .entitlement:  return "Authorize device to join your cloud"
         case .none:         return "Boot secret"
         }
     }

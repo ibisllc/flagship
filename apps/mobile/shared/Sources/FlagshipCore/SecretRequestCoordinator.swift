@@ -239,6 +239,16 @@ public final class SecretRequestCoordinator {
         }
         try await mailbox.postResponse(response: body, bootAuth: respAuth)
 
+        // Fold "authorize it to serve" INTO this unlock approval: when the owner
+        // IRK is in hand (i.e. NOT the watch-delegate quick path, which has no
+        // IRK and can't authorize serving), pre-deposit an owner-IRK-signed
+        // entitlement for the box's STK so it comes online with no second tap
+        // (consent to boot ⇒ consent to serve). Best-effort — a failure never
+        // fails the unlock; the box can still fetch one via the relay.
+        if purpose == .unlockKey, let irk {
+            try? await depositEntitlement(request: request, irk: irk)
+        }
+
         // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
         // future reboots (the user's IRK authorizes it here — I2). Only for
         // unlock-key; the key is the one we just recovered, never `.com`-visible.
@@ -246,6 +256,30 @@ public final class SecretRequestCoordinator {
             return try await depositAutoUnlockLease(request: request, luksKey: key, irk: try requireIrk())
         }
         return nil
+    }
+
+    /// Mint an owner-IRK-signed RootEntitlement for this box's STK and DEPOSIT it
+    /// on `.com` so the box claims it on first boot without a separate "authorize
+    /// to serve" tap. The carrier is the PUBLIC entitlement (what the box presents
+    /// at the hub HELLO), not a secret. Reuses the relay responder's mint.
+    private func depositEntitlement(
+        request: SecretRequest,
+        irk: Curve25519.Signing.PrivateKey
+    ) async throws {
+        let carrierHex = try buildEntitlementReply(request: request, irk: irk)
+        let auth = try buildMailboxAuth(irk: irk)
+        let body = PairingDepositBody(
+            auth: auth.auth,
+            authSignature: auth.authSignature,
+            deposit: PairingDepositBody.Deposit(
+                serverDomain: request.serverDomain,
+                requestNonceHex: HexUtil.encode(nonceGen()),
+                stkPub: HexUtil.encode(request.stkPub),
+                sealed: carrierHex,
+                issuedAt: now()
+            )
+        )
+        try await mailbox.depositEntitlement(serverDomain: request.serverDomain, body: body)
     }
 
     /// One-tap approval for the directory-driven server card. The pod's cheap

@@ -50,6 +50,14 @@ interface SecretMailboxClient {
      *  first boot and comes online ALREADY paired (no "Pair this server" tap).
      *  `.com` stores only the OPAQUE sealed blob — it never sees the token (I1). */
     suspend fun depositPairing(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/entitlement-deposit — phone, IRK mailbox-auth.
+     *  Fold "authorize to serve" into the first-boot unlock: the phone deposits
+     *  an owner-IRK-signed entitlement for the box's STK so it claims it on boot
+     *  with no separate tap. `deposit.sealed` is the PUBLIC entitlement carrier
+     *  (what the box presents at HELLO), not a secret. Reuses [PairingDepositBody]
+     *  — identical wire shape. */
+    suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody)
 }
 
 /** The create-time pairing deposit body. `auth`/`authSignature` are the SAME IRK
@@ -385,6 +393,20 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/entitlement-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -433,5 +455,10 @@ class MockSecretMailboxClient : SecretMailboxClient {
     val pairingDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
     override suspend fun depositPairing(serverDomain: String, body: PairingDepositBody) {
         pairingDeposits.add(serverDomain to body)
+    }
+
+    val entitlementDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
+        entitlementDeposits.add(serverDomain to body)
     }
 }

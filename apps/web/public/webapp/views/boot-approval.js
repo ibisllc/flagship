@@ -23,7 +23,11 @@ let inFlightId = null;
 function purposeLabel(purpose) {
   switch (purpose) {
     case "unlock-key":
-      return "Unlock its encrypted disk";
+      // Approving the unlock now ALSO deposits the box's entitlement (consent
+      // to boot ⇒ consent to serve), so it comes online with this one approval.
+      // (The first-boot-only "Unlock device" / established-reboot split is a
+      // native refinement — this view lacks the per-pod liveness signal.)
+      return "Unlock device and authorize it to join your cloud";
     case "entitlement":
       return "Authorize it to serve your account";
     default:

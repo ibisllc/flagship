@@ -47,6 +47,10 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             revoked.append((request, bootAuth))
         }
         func depositPairing(serverDomain: String, body: PairingDepositBody) async throws {}
+        var entitlementDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+        func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
+            entitlementDeposits.append((serverDomain, body))
+        }
     }
 
     // Fixtures: a phone IRK, a box STK, and a phone unseal key.
@@ -180,6 +184,50 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         XCTAssertEqual(ctx, SealedSecretResponse.context(nonce: request.nonce, purpose: .unlockKey))
         let recovered = payload.subdata(in: (4 + ctxLen)..<payload.count)
         XCTAssertEqual(recovered, luksKey)
+    }
+
+    // MARK: - unlock approval also deposits the entitlement (one-approval onboarding)
+
+    @MainActor
+    func testUnlockApproval_alsoDepositsEntitlementForBoxStk() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x33, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let luksKey = Data("real-luks-disk-key-0123456789abc".utf8)
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        let sealedForPhone = try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: unsealPub)
+        mailbox.sealedLuksKeyHex = HexUtil.encode(sealedForPhone)
+
+        let coord = makeCoordinator(mailbox)
+        let verified = try await coord.fetchVerifiedRequests()
+        _ = try await coord.confirmAndRespond(verified[0])
+
+        // The single unlock approval ALSO deposited an entitlement for the box.
+        XCTAssertEqual(mailbox.entitlementDeposits.count, 1)
+        let dep = try XCTUnwrap(mailbox.entitlementDeposits.first)
+        XCTAssertEqual(dep.serverDomain, "home.alice.flagship.services")
+        XCTAssertEqual(dep.body.deposit.stkPub, HexUtil.encode(boxStk().publicKey.rawRepresentation))
+
+        // The carrier is an owner-IRK-signed RootEntitlement bound to THIS box,
+        // and its signature verifies under the phone IRK (what the hub checks).
+        let carrier = try XCTUnwrap(HexUtil.decode(dep.body.deposit.sealed))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: carrier) as? [String: Any])
+        let re = try XCTUnwrap(json["rootEntitlement"] as? [String: Any])
+        XCTAssertEqual(re["podCanonical"] as? String, "home.alice.flagship.services")
+        XCTAssertEqual(re["podPubKey"] as? String, HexUtil.encode(boxStk().publicKey.rawRepresentation))
+        let sig = try XCTUnwrap(HexUtil.decode(try XCTUnwrap(json["rootEntitlementSig"] as? String)))
+        let rootEnt = RootEntitlement(
+            username: try XCTUnwrap(re["username"] as? String),
+            podPubKey: try XCTUnwrap(HexUtil.decode(try XCTUnwrap(re["podPubKey"] as? String))),
+            podCanonical: try XCTUnwrap(re["podCanonical"] as? String),
+            issuedAt: Int64(try XCTUnwrap(re["issuedAt"] as? Int))
+        )
+        XCTAssertTrue(phoneIrk().publicKey.isValidSignature(sig, for: rootEnt.canonicalBytes()))
     }
 
     @MainActor

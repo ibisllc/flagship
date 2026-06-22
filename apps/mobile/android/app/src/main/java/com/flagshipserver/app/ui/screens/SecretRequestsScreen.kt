@@ -169,9 +169,13 @@ private fun SecretRequestCard(
     inFlight: Boolean,
     onApprove: () -> Unit,
 ) {
+    // Approving the unlock now ALSO deposits the box's entitlement (consent to
+    // boot ⇒ consent to serve), so the box comes online with this one approval.
+    // (A first-boot-only "Unlock device" / established-reboot split is a future
+    // refinement once the per-pod liveness signal is threaded into this screen.)
     val purposeLabel = when (req.purpose) {
-        SecretPurpose.UNLOCK_KEY -> "Unlock its encrypted disk"
-        SecretPurpose.ENTITLEMENT -> "Authorize it to serve your account"
+        SecretPurpose.UNLOCK_KEY -> "Unlock device and authorize it to join your cloud"
+        SecretPurpose.ENTITLEMENT -> "Authorize device to join your cloud"
         null -> "Boot secret"
     }
     FSCard(padding = PaddingValues(FS.space.s4)) {

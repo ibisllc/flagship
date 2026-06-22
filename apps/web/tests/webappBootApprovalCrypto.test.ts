@@ -3,6 +3,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import {
   openSealedFromEd25519Recipient,
   openSealedSecretResponse,
+  verifyRootEntitlement,
 } from "@flagship/protocol";
 // The boot router's own request signer — the source of truth for the
 // Flagship-Boot-v1 canonical bytes the webapp must reproduce. Lives in
@@ -133,5 +134,61 @@ describe("webapp boot-approval crypto matches @flagship/protocol byte-for-byte",
 
     // The seed's noble-derived pub must equal the WebCrypto raw pub (sanity).
     expect(toHex(ed25519.getPublicKey(pairingSeed))).toBe(toHex(pairingPub));
+  });
+});
+
+describe("webapp entitlement carrier verifies under the protocol's own RootEntitlement check", () => {
+  function hexToBytes(h: string): Uint8Array {
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+  const buildEntitlementCarrier = (_internal as unknown as {
+    buildEntitlementCarrier: (a: {
+      username: string;
+      podPubKeyHex: string;
+      podCanonical: string;
+      issuedAt: number;
+      signWithIrk: (umk: Uint8Array, bytes: Uint8Array) => Promise<Uint8Array>;
+      umk: Uint8Array;
+    }) => Promise<string>;
+  }).buildEntitlementCarrier;
+
+  it("the deposited carrier is accepted by @flagship/protocol verifyRootEntitlement (byte-identical canonical)", async () => {
+    const irkSeed = new Uint8Array(32).fill(0x11);
+    const irkPub = ed25519.getPublicKey(irkSeed);
+    const stkPub = ed25519.getPublicKey(new Uint8Array(32).fill(0x22));
+    const username = "harry";
+    const podCanonical = "hali.harry.flagship.services";
+    const issuedAt = 1_782_000_000_000;
+
+    // The webapp signs the entitlement with the owner IRK (injected here).
+    const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) =>
+      ed25519.sign(bytes, irkSeed);
+    const carrierHex = await buildEntitlementCarrier({
+      username,
+      podPubKeyHex: toHex(stkPub),
+      podCanonical,
+      issuedAt,
+      signWithIrk,
+      umk: new Uint8Array(0),
+    });
+
+    // Decode the carrier exactly as the daemon does (hex → UTF-8 JSON).
+    const json = JSON.parse(new TextDecoder().decode(hexToBytes(carrierHex)));
+    expect(json.serviceEntitlement).toBeNull();
+    expect(json.rootEntitlement.podCanonical).toBe(podCanonical);
+    const rootEntitlement = {
+      username: json.rootEntitlement.username,
+      podPubKey: hexToBytes(json.rootEntitlement.podPubKey),
+      podCanonical: json.rootEntitlement.podCanonical,
+      issuedAt: json.rootEntitlement.issuedAt,
+    };
+    const sig = hexToBytes(json.rootEntitlementSig);
+    // The protocol's own verifier (the source of truth the hub + daemon use).
+    expect(verifyRootEntitlement(rootEntitlement, sig, irkPub)).toBe(true);
+    // Negative control: a different IRK must NOT verify.
+    const otherPub = ed25519.getPublicKey(new Uint8Array(32).fill(0x33));
+    expect(verifyRootEntitlement(rootEntitlement, sig, otherPub)).toBe(false);
   });
 });

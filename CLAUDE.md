@@ -202,13 +202,27 @@ deposit.
 Gates: `tsc -b` clean · storage+control-plane+server-daemon vitest **2871** (+3 new
 `claimEntitlementDeposit` tests: claim+persist, 404→null→relay, wrong-STK→null).
 
-**STILL TODO — clients (need an app rebuild to show):** on the unlock-approval, the
-phone also mints+deposits the entitlement (reuse the existing relay responder's
-RootEntitlement mint, POST to the deposit endpoint); three-way copy — *"Unlock
-device and authorize it to join my cloud."* (encrypted first boot, picked off the
-`lastReported:null` directory signal) / *"Authorize device to join my cloud."*
-(no-LUKS / re-pair / rotation) / *"Unlock device."* (established reboot). iOS +
-Android + webapp.
+**CLIENTS — DONE (all three surfaces).** On the unlock approval the phone now also
+mints + deposits the entitlement for the box's STK (reusing the relay responder's
+RootEntitlement mint), so an encrypted box comes online with ONE approval:
+- **iOS** — `SecretRequestCoordinator.confirmAndRespond` deposits after the unlock
+  reply when the owner IRK is in hand (the watch-delegate quick path has no IRK →
+  box relays); `SecretMailboxClient.depositEntitlement`. Test
+  `testUnlockApproval_alsoDepositsEntitlementForBoxStk` (carrier verifies under the
+  phone IRK). `xcodebuild` **TEST SUCCEEDED**.
+- **Android** — same wiring in `core/SecretRequestCoordinator.kt` +
+  `api/SecretMailboxClient.depositEntitlement`. `:app:testDebugUnitTest` **BUILD
+  SUCCESSFUL**.
+- **webapp** — `bootApproval.js` `depositEntitlement` + `buildEntitlementCarrier`
+  (ported from the daemon/protocol), wired into `approveUnlock` (best-effort).
+  Test: the carrier verifies under `@flagship/protocol` `verifyRootEntitlement`
+  (byte-identical canonical). webapp vitest green.
+
+Copy: unlock label is now *"Unlock device and authorize it to join your cloud"* on
+all three (deposit happens on every unlock approval; harmless on reboots). The
+first-boot-only *"Unlock device"* / established-reboot split is a deferred
+refinement (needs the per-pod liveness signal threaded into the approval screen).
+Mobile shows it after an Xcode/Gradle rebuild; webapp + backend are live.
 
 ### 2026-06-20 — onboarding hardening: pairing-TTL + daemon entitlement self-heal + awaiting-entitlement signal
 
