@@ -100,6 +100,17 @@ fun SettingsScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val hasRecovery by app.hasCloudRecovery.collectAsState()
     val username = app.currentUser.collectAsState().value ?: ""
+    // Last-device signal for the deletion ceremony (docs §0: the founding
+    // device isn't in the roster, so derive it from the trusted-device list,
+    // count <= 1). Defaults false until loaded — conservative: shows "set up
+    // recovery" rather than the delete ceremony; .com re-enforces last-device.
+    var isLastDevice by remember { mutableStateOf(false) }
+    LaunchedEffect(username) {
+        if (username.isNotEmpty()) {
+            isLastDevice = runCatching { server.listDevices(username).devices.size <= 1 }
+                .getOrDefault(false)
+        }
+    }
 
     // Real account type (single vs multi-device + 2FA), read off the Worker
     // `usernames` row via the same VM the Account-security screen uses, so the
@@ -124,6 +135,7 @@ fun SettingsScreen(nav: NavController) {
     val signOutPolicy = SignOutPolicy.evaluate(
         hasCloudRecovery = hasRecovery,
         isDemoAccount = isDemoAccount,
+        isLastDevice = isLastDevice,
     )
     // The recovery-gated buttons ("Lock with passkey" + "Remove this
     // device") stay greyed-but-tappable until recovery is enrolled; a
@@ -432,7 +444,11 @@ fun SettingsScreen(nav: NavController) {
             label = "Lock with passkey",
             muted = sessionGated,
             onClick = {
-                if (sessionGated) showRecoveryRequiredToast() else showSignOutConfirm = true
+                when {
+                    sessionGated -> showRecoveryRequiredToast()
+                    signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
+                    else -> showSignOutConfirm = true
+                }
             },
             block = true,
             modifier = Modifier.testTag("settings-sign-out-btn"),
@@ -460,7 +476,11 @@ fun SettingsScreen(nav: NavController) {
             label = "Remove this device from account",
             muted = sessionGated,
             onClick = {
-                if (sessionGated) showRecoveryRequiredToast() else showRemoveConfirm = true
+                when {
+                    sessionGated -> showRecoveryRequiredToast()
+                    signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
+                    else -> showRemoveConfirm = true
+                }
             },
             block = true,
             modifier = Modifier.testTag("settings-remove-device-btn"),
@@ -550,6 +570,7 @@ fun SettingsScreen(nav: NavController) {
                         if (SignOutPolicy.evaluate(
                                 hasCloudRecovery = hasRecovery,
                                 isDemoAccount = isDemoAccount,
+                                isLastDevice = isLastDevice,
                             ) == SignOutPolicy.ALLOWED
                         ) {
                             Keystore.wipe()

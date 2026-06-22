@@ -19,6 +19,12 @@ import kotlinx.serialization.Serializable
 
 interface FlagshipServerClient {
     suspend fun claimUsername(req: UsernameClaimRequest)
+    /** POST /api/account/self-delete — the last-device account-death bundle.
+     *  accountSelfDelete is always sent; serversSelfDelete rides only for the
+     *  opt-in content-wipe (atomic §5 bundle, never standalone). A 200 means
+     *  the username row is hard-deleted on .com and the name is free; a 403
+     *  ("not the last device …") / 404 throws so the caller never wipes. */
+    suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest)
     suspend fun issueAuthCode(req: AuthCodeIssueRequest)
     suspend fun registerRck(req: RckRegisterRequest)
     /** Revoke an outstanding auth-code so a never-booted server can't
@@ -673,6 +679,29 @@ data class UsernameClaimRequest(
     )
 }
 
+/** Body for POST /api/account/self-delete. `accountSelfDelete` is always
+ *  present; `serversSelfDelete` is included ONLY for the opt-in content-wipe
+ *  (the atomic §5 bundle — `.com` rejects the whole request if a serversSelfDelete
+ *  arrives without a valid last-device accountSelfDelete). Both orders carry the
+ *  same lowercased username + issuedAt; signatures are IRK over the
+ *  account-self-delete / servers-self-delete canonical bytes. */
+@Serializable
+data class AccountSelfDeleteBundleRequest(
+    val accountSelfDelete: Order,
+    val serversSelfDelete: Order? = null,
+) {
+    @Serializable
+    data class Order(
+        val request: Inner,
+        val signature: String,       // hex, IRK over canonical bytes
+    )
+    @Serializable
+    data class Inner(
+        val username: String,
+        val issuedAt: Long,
+    )
+}
+
 @Serializable
 data class AuthCodeIssueRequest(
     val code: AuthCodeWire,
@@ -1123,6 +1152,12 @@ class MockFlagshipServerClient(
         val prior = _claimedUsernames[u]
         if (prior != null && prior != req.request.irkPub) throw HttpException(409, "username taken")
         _claimedUsernames[u] = req.request.irkPub
+    }
+
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        tick()
+        // Mock: hard-delete frees the name (mirrors .com dropping the row).
+        _claimedUsernames.remove(req.accountSelfDelete.request.username.lowercase())
     }
 
     override suspend fun issueAuthCode(req: AuthCodeIssueRequest) {
@@ -1877,6 +1912,16 @@ class LiveFlagshipServerClient(
             "$base/api/username/claim", req,
             serializer = UsernameClaimRequest.serializer(),
             accept = setOf(200, 201, 204, 409),
+        )
+    }
+
+    override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) {
+        // Only 200 is success; 403 (not last device / bad sig) + 404 throw
+        // HttpException so the caller surfaces it and never wipes locally.
+        transport.postJson(
+            "$base/api/account/self-delete", req,
+            serializer = AccountSelfDeleteBundleRequest.serializer(),
+            accept = setOf(200),
         )
     }
 

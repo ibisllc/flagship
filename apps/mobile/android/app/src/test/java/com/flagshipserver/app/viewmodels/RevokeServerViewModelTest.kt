@@ -5,6 +5,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.AccountSelfDeleteBundleRequest
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
 import com.flagshipserver.app.api.AppRenameResponse
@@ -174,6 +175,7 @@ class RevokeServerViewModelTest {
     /// without an HTTP transport. Mirrors the iOS `ThrowingServer` shape.
     private class ThrowingServer(private val error: Throwable) : FlagshipServerClient {
         override suspend fun claimUsername(req: UsernameClaimRequest) { throw error }
+        override suspend fun selfDeleteAccount(req: AccountSelfDeleteBundleRequest) { throw error }
         override suspend fun issueAuthCode(req: AuthCodeIssueRequest) { throw error }
         override suspend fun registerRck(req: RckRegisterRequest) { throw error }
         override suspend fun revokeAuthCode(req: AuthCodeRevokeRequest) { throw error }
