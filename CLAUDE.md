@@ -133,6 +133,24 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 — naming/recovery model DECIDED + spec; "claim after a wait" removed
+
+**Owner-directed naming + recovery model (spec: `docs/naming-recovery-and-name-change.md`).**
+After a long design discussion: **names are self-custody + forever** — no admin
+stripping, no GC, no no-credential "grace takeover" (that path is being removed).
+Recovery is credential-only (passkey / key-file / device-pair). Account creation
+will assign a **random name** (free, unsquattable); **changing your name costs
+money** (~$5, via the unlinkable-Pro rails) and is a same-owner **namespace
+migration** (re-homes every box — FQDN/cert/DNS/entitlement — reusing the
+transfer-a-box machinery; IRK unchanged ⇒ no disk re-seal). A **12-month launch
+dibs** lets domain holders claim matching names via DNS/`.well-known` proof;
+brands beyond that use **their own domain** (the sovereignty tier). Full build
+checklist + 10 open decisions in the spec. **Shipped this turn:** removed the
+no-credential "Claim after a wait" option from the webapp cover (accessOptions is
+now the 3 credential paths; live, deployed). **NOT yet built:** everything else in
+the spec (random-assign, paid name-change/re-home, dibs, the cover flip to
+sign-in-only, the removals).
+
 ### 2026-06-22 — unified username-first cover (webapp) + Box Request Inbox visibility gaps
 
 **Box Request Inbox visibility gaps (all surfaces, shipped):** a box waiting on
@@ -2117,7 +2135,7 @@ This file is the in-repo source of truth. For deeper detail, read the relevant l
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`
 - **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`
-- **Login / accounts / demo** — `login-and-account-redesign.md`, `sample-users.md`
+- **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `sample-users.md`
 - **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
