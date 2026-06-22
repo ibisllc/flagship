@@ -115,6 +115,7 @@ import {
   fileMarkerStore,
   realWipeContent,
 } from "./selfDeleteConsumer.js";
+import { buildRehomePoller, readRehomeMarker } from "./transferRehomeConsumer.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -311,7 +312,7 @@ async function pairingKeyFromInstallBlob(): Promise<Uint8Array | null> {
 }
 
 async function main(): Promise<void> {
-  const cfg = await tryLoadConfig();
+  let cfg = await tryLoadConfig();
   const env = envFromProcess();
 
   if (!env.serverFqdn || !env.identityPrivKeyHex) {
@@ -320,6 +321,33 @@ async function main(): Promise<void> {
         "or supply FLAGSHIP_CONFIG with the same fields.",
     );
     process.exit(2);
+  }
+
+  // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
+  // A). If a prior boot's poller observed an ownership transfer it persisted a
+  // marker; apply it BEFORE anything reads the canonical / owner IRK so cert SANs
+  // + entitlement load against the NEW namespace. Same identity key carries
+  // forward; only the FQDN + owner IRK move. The acquirer IRK only becomes
+  // load-bearing once a fresh acquirer-IRK-signed entitlement verifies under it.
+  {
+    const rehomeMarkerPath =
+      process.env.FLAGSHIP_REHOME_MARKER ??
+      `${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/transfer-rehome.json`;
+    const marker = await readRehomeMarker(rehomeMarkerPath);
+    if (marker && marker.newServerDomain !== env.serverFqdn.toLowerCase()) {
+      console.log(
+        `[daemon] re-home marker present: serving as ${marker.newServerDomain} ` +
+          `(was ${env.serverFqdn}); owner → ${marker.acquirerUsername}`,
+      );
+      env.serverFqdn = marker.newServerDomain;
+      if (cfg) {
+        cfg = {
+          ...cfg,
+          userId: marker.acquirerUsername,
+          irkPublicKey: hexToBytes(marker.acquirerIrkPubHex),
+        };
+      }
+    }
   }
 
   const identityPrivKey = hexToBytes(env.identityPrivKeyHex);
@@ -1758,6 +1786,25 @@ async function wireOwnerHandlers(deps: {
     process.once("SIGTERM", () => selfDeletePoller.stop());
     process.once("SIGINT", () => selfDeletePoller.stop());
     console.log("[daemon] self-delete content-wipe poller armed");
+  }
+  // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
+  // A): poll `.com` for "did my owner change?". On a completed transfer the
+  // poller persists a marker; the box re-homes (new FQDN + owner IRK ⇒ cert
+  // re-issue + fresh acquirer entitlement) on its NEXT restart. Best-effort; a
+  // box that was never transferred just 404s cheaply on every poll.
+  {
+    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+    const rehomePoller = buildRehomePoller({
+      serverDomain: env.serverFqdn,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      markerPath:
+        process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`,
+      onLog: (m) => console.log(m),
+    });
+    rehomePoller.start();
+    process.once("SIGTERM", () => rehomePoller.stop());
+    process.once("SIGINT", () => rehomePoller.stop());
+    console.log("[daemon] transfer re-home poller armed");
   }
   // Web-experience gating (docs "Web-experience gating"): QR-login for a
   // restricted service's WEBSITE (a browser can't AID-sign). Shares the access +

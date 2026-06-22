@@ -825,6 +825,162 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // serverTransfers — the transfer-a-box broker lane. One offer per box
+  // (re-issue replaces); claim is a one-time CAS; getOffer GCs an unclaimed
+  // expired offer but keeps a claimed one.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverTransfers", () => {
+    const dom = "home.alice.flagship.services";
+    const mkOffer = (nonce: string, expiresAt = 1000) => ({
+      serverDomain: dom,
+      giverUsername: "alice",
+      transferNonce: nonce,
+      giverIrkPubHex: "aa".repeat(32),
+      issuedAt: 1,
+      expiresAt,
+      offerSignatureHex: "ff".repeat(64),
+      claimedAt: null,
+      acquirerUsername: null,
+      acquirerIrkPubHex: null,
+      claimIssuedAt: null,
+      claimSignatureHex: null,
+      diskKeyHandoffHex: null,
+      diskKeyHandoffAt: null,
+    });
+
+    it("offer → claim → record carries acquirer binding; second claim rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("11".repeat(16)));
+        const first = await s.serverTransfers.claim(
+          dom, "11".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const second = await s.serverTransfers.claim(
+          dom, "11".repeat(16), "carol", "dd".repeat(32), 6, "ee".repeat(64), 11,
+        );
+        const after = await s.serverTransfers.getOffer(dom, 12);
+        return {
+          firstOk: first.ok,
+          firstAcq: first.ok ? first.record.acquirerUsername : null,
+          secondOk: second.ok,
+          secondReason: second.ok ? null : second.reason,
+          afterClaimed: after?.claimedAt !== null && after?.claimedAt !== undefined,
+          afterAcqIrk: after?.acquirerIrkPubHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        firstOk: true,
+        firstAcq: "bob",
+        secondOk: false,
+        secondReason: "already claimed",
+        afterClaimed: true,
+        afterAcqIrk: "bb".repeat(32),
+      });
+    });
+
+    it("putDiskKeyHandoff sets the re-sealed key on a claimed row; refuses unclaimed", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("55".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 9);
+        await s.serverTransfers.claim(
+          dom, "55".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 12);
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          handoff: row?.diskKeyHandoffHex,
+          handoffAt: row?.diskKeyHandoffAt,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        handoff: "ab".repeat(60),
+        handoffAt: 12,
+      });
+    });
+
+    it("re-issued offer replaces the prior unclaimed row", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("22".repeat(16)));
+        await s.serverTransfers.putOffer(mkOffer("33".repeat(16)));
+        // The old nonce can no longer be claimed; only the freshest stands.
+        const oldClaim = await s.serverTransfers.claim(
+          dom, "22".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const newClaim = await s.serverTransfers.claim(
+          dom, "33".repeat(16), "bob", "bb".repeat(32), 6, "cc".repeat(64), 11,
+        );
+        return {
+          oldOk: oldClaim.ok,
+          oldReason: oldClaim.ok ? null : oldClaim.reason,
+          newOk: newClaim.ok,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ oldOk: false, oldReason: "nonce mismatch", newOk: true });
+    });
+
+    it("claim of an expired offer is rejected; getOffer GCs the expired unclaimed row", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("44".repeat(16), 50));
+        const expiredClaim = await s.serverTransfers.claim(
+          dom, "44".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 100,
+        );
+        const gone = await s.serverTransfers.getOffer(dom, 100);
+        return {
+          claimOk: expiredClaim.ok,
+          claimReason: expiredClaim.ok ? null : expiredClaim.reason,
+          goneDefined: gone !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ claimOk: false, claimReason: "expired", goneDefined: false });
+    });
+
+    it("claim of an absent / nonce-mismatched offer is rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        const absent = await s.serverTransfers.claim(
+          dom, "55".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        await s.serverTransfers.putOffer(mkOffer("66".repeat(16)));
+        const wrongNonce = await s.serverTransfers.claim(
+          dom, "77".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        return {
+          absentReason: absent.ok ? null : absent.reason,
+          wrongNonceReason: wrongNonce.ok ? null : wrongNonce.reason,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ absentReason: "no offer", wrongNonceReason: "nonce mismatch" });
+    });
+
+    it("getOffer keeps a claimed offer even after expiry (re-seal window); remove deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("88".repeat(16), 50));
+        await s.serverTransfers.claim(
+          dom, "88".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 40,
+        );
+        const afterExpiry = await s.serverTransfers.getOffer(dom, 100);
+        await s.serverTransfers.remove(dom);
+        const removed = await s.serverTransfers.getOffer(dom, 100);
+        return {
+          keptAfterExpiry: afterExpiry !== undefined,
+          keptAcq: afterExpiry?.acquirerUsername,
+          removedDefined: removed !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ keptAfterExpiry: true, keptAcq: "bob", removedDefined: false });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // acmeAccountKeyDelivery — one-slot-per-box upsert (put replaces),
   // deleteByAccountKeyId count.
   // ────────────────────────────────────────────────────────────────────

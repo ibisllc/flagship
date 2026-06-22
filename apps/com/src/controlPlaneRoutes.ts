@@ -53,6 +53,12 @@ import {
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
   handleConsumeSelfDeleteDeposit,
+  handlePostTransferOffer,
+  handlePostTransferClaim,
+  handleGetTransferClaim,
+  handleGetTransferRehome,
+  handlePostTransferDiskKey,
+  handleGetTransferDiskKey,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -497,6 +503,28 @@ const ROUTE_RE = {
   // PUBLIC IRK-signed entitlement) / GET box consume-once read.
   ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
+  // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
+  // path discriminated by method:
+  //   POST .../transfer/offer       giver deposit (IRK mailbox-auth, signed offer)
+  //   POST .../transfer/claim       acquirer claim (signed ServerTransferClaim)
+  //   POST .../transfer/claim-poll  giver claim-poll (IRK mailbox-auth → acquirer
+  //                                 IRK for the disk-key re-seal). POST (not GET)
+  //                                 because the IRK mailbox-auth rides the body
+  //                                 (a GET-with-body is non-portable) — mirrors
+  //                                 the secret-requests listing's POST alias.
+  TRANSFER_OFFER: /^\/api\/server\/([^/]+)\/transfer\/offer$/,
+  TRANSFER_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/claim$/,
+  TRANSFER_CLAIM_POLL: /^\/api\/server\/([^/]+)\/transfer\/claim-poll$/,
+  // Box-side re-home read (Layer A): the BOX polls its OLD canonical to learn
+  // "did my owner change?". PUBLIC (the payload is already-public identity); the
+  // box re-verifies the fresh acquirer-IRK entitlement + the giver-signed
+  // re-sealed lease before serving. 404 when never transferred.
+  TRANSFER_REHOME: /^\/api\/server\/([^/]+)\/transfer\/rehome$/,
+  // Layer B disk-key handoff: giver deposits the re-sealed-to-acquirer-IRK disk
+  // key (POST, giver IRK mailbox-auth); acquirer reads it (POST, acquirer IRK
+  // mailbox-auth — the auth rides the body, mirroring claim-poll).
+  TRANSFER_DISK_KEY: /^\/api\/server\/([^/]+)\/transfer\/disk-key$/,
+  TRANSFER_DISK_KEY_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/disk-key-claim$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1438,6 +1466,107 @@ export async function tryControlPlane(
       return finishPlain(
         await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
+    }
+    // Box-side re-home read (Layer A) — the box polls its OLD canonical to
+    // learn its new owner/namespace after a completed transfer. PUBLIC read; no
+    // DNS deps needed (it only reads the transfer row + re-derives the FQDN).
+    if (method === "GET" && (m = path.match(ROUTE_RE.TRANSFER_REHOME))) {
+      return finishPlain(
+        await handleGetTransferRehome(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+        ),
+      );
+    }
+    // Layer B disk-key handoff — the giver deposits the disk key re-sealed to
+    // the acquirer IRK; the acquirer reads it. Both IRK mailbox-auth in the body;
+    // no DNS deps needed (content-blind blob store on the transfer row).
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.TRANSFER_DISK_KEY) || path.match(ROUTE_RE.TRANSFER_DISK_KEY_CLAIM))
+    ) {
+      const isClaim = ROUTE_RE.TRANSFER_DISK_KEY_CLAIM.test(path);
+      const xferDeps = {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        apex: env.SERVICES_APEX,
+      };
+      const domain = decodeURIComponent(m[1]!);
+      return finishPlain(
+        isClaim
+          ? await handleGetTransferDiskKey(xferDeps, domain, await readJson(request))
+          : await handlePostTransferDiskKey(xferDeps, domain, await readJson(request)),
+      );
+    }
+    // Transfer-a-box broker — the cross-account ownership handoff. The claim
+    // handler does the .com-side NAMESPACE MIGRATION (servers + routing + DNS).
+    // DNS uses the same per-box upsert posture as registration (direct
+    // CloudflareDnsClient when no broker is configured).
+    if (
+      method &&
+      (path.match(ROUTE_RE.TRANSFER_OFFER) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL))
+    ) {
+      const xferM =
+        path.match(ROUTE_RE.TRANSFER_OFFER) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL);
+      const isOffer = ROUTE_RE.TRANSFER_OFFER.test(path);
+      const isPoll = ROUTE_RE.TRANSFER_CLAIM_POLL.test(path);
+      const xferCfDns =
+        !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({
+              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+            })
+          : null;
+      const xferDnsClient = env.DNS_BROKER_URL
+        ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+        : xferCfDns;
+      const buildTransferDeps = () => ({
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        auditEvents: storage.auditEvents,
+        ...(xferDnsClient && env.SERVICES_PASSTHROUGH_IPV4
+          ? {
+              dns: {
+                client: xferDnsClient,
+                servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+                servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+              },
+            }
+          : {}),
+        apex: env.SERVICES_APEX,
+      });
+      const domain = decodeURIComponent(xferM![1]!);
+      if (method === "POST" && isOffer) {
+        return finishPlain(
+          await handlePostTransferOffer(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST" && isPoll) {
+        // Giver re-seal discovery — IRK mailbox-auth in the body.
+        return finishPlain(
+          await handleGetTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST") {
+        // The acquirer claim (TRANSFER_CLAIM).
+        return finishPlain(
+          await handlePostTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
     }
     // #28 Option B — seal-to-box ACME account-key delivery (deposit / release
     // / revoke). Same deposit-and-release shape as the box-sealed lease above;

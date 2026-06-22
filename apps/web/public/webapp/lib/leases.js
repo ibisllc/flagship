@@ -230,7 +230,7 @@ function randomHex(byteLen) {
  *   [32..44)  AES-GCM nonce (12 bytes)
  *   [44..)    ciphertext + 16-byte tag
  */
-async function openSealedWithIrk(umkSeed, blob) {
+export async function openSealedWithIrk(umkSeed, blob) {
   if (blob.length < 44) throw new Error("sealed blob too short");
   const ephPub = blob.slice(0, 32);
   const nonce = blob.slice(32, 44);

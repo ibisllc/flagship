@@ -14,15 +14,18 @@ public struct AddServerChooserScreen: View {
     let mode: Mode
     var onProvision: () -> Void
     var onPair: () -> Void
+    var onTakeOver: () -> Void
 
     public init(
         mode: Mode = .inApp,
         onProvision: @escaping () -> Void = {},
-        onPair: @escaping () -> Void = {}
+        onPair: @escaping () -> Void = {},
+        onTakeOver: @escaping () -> Void = {}
     ) {
         self.mode = mode
         self.onProvision = onProvision
         self.onPair = onPair
+        self.onTakeOver = onTakeOver
     }
 
     public var body: some View {
@@ -58,6 +61,18 @@ public struct AddServerChooserScreen: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("chooser-pair")
+
+                Button(action: onTakeOver) {
+                    chooserCard(
+                        icon: "arrow.left.arrow.right",
+                        accent: c.primary,
+                        title: "Take over a transferred box",
+                        body: "Someone is handing you a running box. Scan the transfer code on their phone to take ownership.",
+                        c: c
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("chooser-takeover")
 
                 Spacer().frame(height: FS.space.s12)
             }

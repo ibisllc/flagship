@@ -435,6 +435,13 @@ export type AuditEventKind =
   | "account-deleted"
   | "servers-self-delete-issued"
   | "username-reclaimed"
+  // Transfer-a-box (docs/account-deletion-and-name-reclaim.md §4) — a
+  // cross-account ownership handoff. `server-transfer-offered` logs the
+  // giver depositing the one-time offer; `server-transfer-claimed` logs
+  // the acquirer claiming it + the namespace migration (logged on BOTH the
+  // giver's and the acquirer's account feed).
+  | "server-transfer-offered"
+  | "server-transfer-claimed"
   // CT monitoring (server-side, defense-in-depth). Logged for EVERY
   // CT-observed cert under the user's names that isn't accounted for
   // by a daemon-reported baseline cert. When a baseline exists and the
@@ -944,6 +951,107 @@ export interface BoxSealedLeaseStorage {
   list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Server transfer-a-box (docs/account-deletion-and-name-reclaim.md §4)
+//
+// A cross-account ownership handoff brokered by `.com`. The GIVER's phone
+// deposits a `ServerTransferOffer` (giver-IRK-signed, names the box + a
+// one-time short-TTL nonce, NOT the acquirer) keyed by server domain — one
+// live offer per box, a new offer replaces. The ACQUIRER's phone POSTs a
+// `ServerTransferClaim` (acquirer-IRK-signed, binds their username + IRK
+// pub to the offer's nonce). On a valid claim `.com` re-homes the box's
+// namespace (servers + routing + DNS) to the acquirer, marks the offer
+// claimed (one-time), and records the acquirer IRK so the GIVER's phone can
+// discover it on its next poll and re-seal the LUKS disk key for the new
+// owner (the box never holds the giver IRK, so the re-seal is a giver-phone
+// step deposited via the existing box-sealed-lease lane).
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A pending transfer offer + (once claimed) the acquirer's binding. One row
+ * per `serverDomain`; a new offer REPLACES any prior unclaimed row for the
+ * same box (the giver can re-issue). Once `claimedAt` is set the row is
+ * one-time spent — a second claim is rejected.
+ */
+export interface ServerTransferRecord {
+  /** Box FQDN the offer is for (the current canonical domain). */
+  serverDomain: string;
+  /** The giver-account username at offer time (the CURRENT owner). */
+  giverUsername: string;
+  /** 32-byte one-time nonce, hex — binds offer↔claim. */
+  transferNonce: string;
+  /** The giver's owner-IRK pubkey, hex — the offer was verified against this. */
+  giverIrkPubHex: string;
+  /** issuedAt from the signed offer (ms). */
+  issuedAt: number;
+  /** Absolute offer expiry (ms) — a captured QR is inert past this. */
+  expiresAt: number;
+  /** The giver's offer signature over the canonical bytes, hex. Stored so a
+   *  re-verify is possible against the giver IRK independent of `.com`. */
+  offerSignatureHex: string;
+  /** Set when a valid claim lands — the offer is one-time spent after this. */
+  claimedAt: number | null;
+  /** Acquirer account name from the claim (null until claimed). */
+  acquirerUsername: string | null;
+  /** Acquirer owner-IRK pubkey, hex — ownership re-binds to this (null until
+   *  claimed). The giver's phone reads this to re-seal the disk key. */
+  acquirerIrkPubHex: string | null;
+  /** issuedAt from the acquirer's claim (ms), or null. */
+  claimIssuedAt: number | null;
+  /** The acquirer's claim signature, hex, or null. */
+  claimSignatureHex: string | null;
+  /** Layer B — the box's LUKS disk key, RE-SEALED to the ACQUIRER IRK by the
+   *  giver's phone after the claim (the giver holds the giver IRK to unseal the
+   *  current blob; the box never does). Hex of a `sealForEd25519Recipient` blob;
+   *  `.com` is content-blind (only the acquirer's IRK can open it). Null until
+   *  the giver completes the re-seal. Consume-once on the acquirer read. */
+  diskKeyHandoffHex: string | null;
+  /** When the giver deposited the re-sealed disk key (ms), or null. */
+  diskKeyHandoffAt: number | null;
+}
+
+export interface ServerTransferStorage {
+  /**
+   * Giver deposits (or re-issues) an offer for a box. Keyed by serverDomain —
+   * INSERT-OR-REPLACE: a new offer overwrites any prior unclaimed row for the
+   * same box. The caller has already verified the offer signature under the
+   * box's CURRENT owner IRK (offer-deposit is IRK mailbox-auth).
+   */
+  putOffer(rec: ServerTransferRecord): Promise<void>;
+  /** Read the offer row for a box (claimed or not), or undefined when none
+   *  or expired-and-unclaimed (an expired-but-claimed row is still returned
+   *  so the giver's phone can complete the re-seal). */
+  getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined>;
+  /**
+   * Acquirer claim: atomically bind the acquirer to a LIVE (unexpired,
+   * unclaimed) offer whose nonce matches. Returns the updated record on
+   * success. Returns `ok:false` with a reason when the offer is absent
+   * (`no offer`), expired (`expired`), already claimed (`already claimed`),
+   * or the nonce doesn't match (`nonce mismatch`). One-time: a second claim
+   * after success returns `already claimed`. The caller has already verified
+   * the claim signature under the acquirer's REGISTERED IRK.
+   */
+  claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }>;
+  /** Layer B — the giver's phone deposits the disk key re-sealed to the
+   *  acquirer IRK on the CLAIMED transfer row. No-op (false) if there is no
+   *  claimed row for the box. */
+  putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean>;
+  /** Delete the offer row for a box (cleanup after a completed transfer). */
+  remove(serverDomain: string): Promise<void>;
+}
+
 export interface DaemonStatusRecord {
   serverDomain: string;
   certSha256: string | null;
@@ -1074,6 +1182,7 @@ export interface Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
+  serverTransfers: ServerTransferStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
