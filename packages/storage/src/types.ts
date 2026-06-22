@@ -1000,6 +1000,14 @@ export interface ServerTransferRecord {
   claimIssuedAt: number | null;
   /** The acquirer's claim signature, hex, or null. */
   claimSignatureHex: string | null;
+  /** Layer B — the box's LUKS disk key, RE-SEALED to the ACQUIRER IRK by the
+   *  giver's phone after the claim (the giver holds the giver IRK to unseal the
+   *  current blob; the box never does). Hex of a `sealForEd25519Recipient` blob;
+   *  `.com` is content-blind (only the acquirer's IRK can open it). Null until
+   *  the giver completes the re-seal. Consume-once on the acquirer read. */
+  diskKeyHandoffHex: string | null;
+  /** When the giver deposited the re-sealed disk key (ms), or null. */
+  diskKeyHandoffAt: number | null;
 }
 
 export interface ServerTransferStorage {
@@ -1032,6 +1040,14 @@ export interface ServerTransferStorage {
     claimSignatureHex: string,
     now: number,
   ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }>;
+  /** Layer B — the giver's phone deposits the disk key re-sealed to the
+   *  acquirer IRK on the CLAIMED transfer row. No-op (false) if there is no
+   *  claimed row for the box. */
+  putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean>;
   /** Delete the offer row for a box (cleanup after a completed transfer). */
   remove(serverDomain: string): Promise<void>;
 }

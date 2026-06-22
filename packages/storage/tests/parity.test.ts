@@ -844,6 +844,8 @@ describe("D1 ↔ InMemory parity", () => {
       acquirerIrkPubHex: null,
       claimIssuedAt: null,
       claimSignatureHex: null,
+      diskKeyHandoffHex: null,
+      diskKeyHandoffAt: null,
     });
 
     it("offer → claim → record carries acquirer binding; second claim rejected", async () => {
@@ -873,6 +875,32 @@ describe("D1 ↔ InMemory parity", () => {
         secondReason: "already claimed",
         afterClaimed: true,
         afterAcqIrk: "bb".repeat(32),
+      });
+    });
+
+    it("putDiskKeyHandoff sets the re-sealed key on a claimed row; refuses unclaimed", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("55".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 9);
+        await s.serverTransfers.claim(
+          dom, "55".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 12);
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          handoff: row?.diskKeyHandoffHex,
+          handoffAt: row?.diskKeyHandoffAt,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        handoff: "ab".repeat(60),
+        handoffAt: 12,
       });
     });
 

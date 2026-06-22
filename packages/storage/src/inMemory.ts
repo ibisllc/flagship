@@ -918,6 +918,18 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
     return { ok: true as const, record: { ...r } };
   }
 
+  async putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.diskKeyHandoffHex = diskKeyHandoffHex;
+    r.diskKeyHandoffAt = now;
+    return true;
+  }
+
   async remove(serverDomain: string): Promise<void> {
     this.rows.delete(serverDomain);
   }

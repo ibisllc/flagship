@@ -265,6 +265,8 @@ export async function handlePostTransferOffer(
     acquirerIrkPubHex: null,
     claimIssuedAt: null,
     claimSignatureHex: null,
+    diskKeyHandoffHex: null,
+    diskKeyHandoffAt: null,
   });
 
   if (deps.auditEvents) {
@@ -571,4 +573,74 @@ export async function handleGetTransferRehome(
     acquirerIrkPub: row.acquirerIrkPubHex,
     claimedAt: row.claimedAt,
   });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 5. POST /api/server/:domain/transfer/disk-key  (giver, IRK mailbox-auth)
+//
+// Layer B — the giver-phone disk-key re-seal deposit. Only the GIVER's phone
+// can unseal the box's LUKS disk key (it holds the giver IRK; the box holds
+// only the sealed blob). After the acquirer claims, the giver's phone unseals
+// the current disk key, RE-SEALS it to the ACQUIRER IRK (learned from
+// claim-poll), and deposits the sealed blob here. `.com` stays content-blind —
+// only the acquirer's IRK can open it. We accept it ONLY on a CLAIMED row whose
+// giver-account is the authed phone (the re-seal is the giver's step).
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostTransferDiskKey(
+  deps: ServerTransferDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const b = body as { sealedDiskKey?: unknown };
+  if (typeof b?.sealedDiskKey !== "string") {
+    return malformed("sealedDiskKey required");
+  }
+  const sealedHex = b.sealedDiskKey.toLowerCase();
+  if (!/^[0-9a-f]+$/.test(sealedHex) || sealedHex.length < 88 || sealedHex.length > 65536) {
+    // ≥44 bytes (eph_pub + nonce) → ≥88 hex; bounded.
+    return malformed("sealedDiskKey must be a sealed blob within bounds");
+  }
+
+  const row = await deps.serverTransfers.getOffer(host, now());
+  if (!row || row.claimedAt === null) return notFound("no claimed transfer for this server");
+  if (row.giverUsername !== auth.username) {
+    return forbidden("only the offering account may deposit the re-sealed key");
+  }
+
+  const stored = await deps.serverTransfers.putDiskKeyHandoff(host, sealedHex, now());
+  if (!stored) return notFound("no claimed transfer for this server");
+  return ok({ ok: true });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6. POST /api/server/:domain/transfer/disk-key-claim  (acquirer, IRK mailbox-auth)
+//
+// Layer B — the acquirer's phone picks up the giver's re-sealed disk key,
+// opens it with the acquirer IRK, and (client-side) completes the standard
+// box-sealed-lease deposit. Served ONLY to the acquirer bound on the claimed
+// row. Returns the sealed-to-acquirer-IRK blob; 404 until the giver deposits.
+// POST (not GET) — the IRK mailbox-auth rides the body, mirroring claim-poll.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handleGetTransferDiskKey(
+  deps: ServerTransferDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const row = await deps.serverTransfers.getOffer(host, now());
+  if (!row || row.claimedAt === null) return notFound("no claimed transfer for this server");
+  if (row.acquirerUsername !== auth.username) {
+    return forbidden("only the acquiring account may read the re-sealed key");
+  }
+  if (!row.diskKeyHandoffHex) return notFound("re-sealed disk key not yet deposited");
+  return ok({ sealedDiskKey: row.diskKeyHandoffHex });
 }

@@ -21,6 +21,9 @@
 // device-endpoint mailbox-auth (the same bytes the broker re-derives + verifies).
 
 import { controlApex } from "./apex.js";
+import { ed25519PubToX25519 } from "./edToMont.js";
+import { sealForBrowserKey } from "./buildDraft.js";
+import { openSealedWithIrk } from "./leases.js";
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
@@ -340,4 +343,129 @@ export async function pollTransferClaim(args, deps = {}) {
     acquirerUsername: body.acquirerUsername,
     newServerDomain: body.newServerDomain,
   };
+}
+
+// ── Layer B — giver-phone disk-key re-seal ─────────────────────────────────
+//
+// Only the GIVER's phone can unseal the box's LUKS disk key (it holds the giver
+// IRK; the box holds only the sealed blob). After the acquirer claims, the
+// giver's phone:
+//   1. fetches the box-sealed disk key (sealed to the GIVER IRK at install) and
+//      opens it with the giver IRK;
+//   2. RE-SEALS it to the ACQUIRER IRK (learned from `pollTransferClaim`);
+//   3. deposits the sealed blob via .../transfer/disk-key (giver IRK
+//      mailbox-auth). `.com` stays content-blind — only the acquirer IRK opens
+//      it. The acquirer then picks it up + completes the box-sealed-lease
+//      deposit (the accepted two-phone handshake, giver first).
+
+/**
+ * GIVER: unseal the box's disk key with the giver IRK, re-seal it to the
+ * acquirer IRK, and deposit it. `args.acquirerIrkPubHex` comes from
+ * `pollTransferClaim`. Resolves `{ ok: true }` on a 200.
+ */
+export async function resealDiskKeyForAcquirer(args, deps = {}) {
+  const { serverDomain, username, umk, irkPubHex, signWithIrk, acquirerIrkPubHex } = args;
+  if (!serverDomain) throw err("serverDomain required", 400);
+  if (!(umk instanceof Uint8Array) || typeof signWithIrk !== "function") {
+    throw err("unlock the webapp first", 400);
+  }
+  if (!acquirerIrkPubHex) throw err("acquirerIrkPubHex required", 400);
+  const f = deps.fetch || fetch;
+  const origin = deps.origin || controlApex();
+
+  // 1. Fetch + open the giver-sealed disk key. Injectable for tests.
+  const diskKey =
+    typeof deps.openDiskKey === "function"
+      ? await deps.openDiskKey()
+      : await defaultOpenGiverDiskKey({ serverDomain, umk, origin, fetch: f });
+
+  // 2. Re-seal to the acquirer IRK (Ed25519 pub → X25519 → seal).
+  const acquirerX = ed25519PubToX25519(hexFromHexString(acquirerIrkPubHex));
+  const sealed = await (deps.sealForRecipient || sealForBrowserKey)(diskKey, bytesToHexStr(acquirerX));
+  const sealedHex = bytesToHexStr(sealed);
+
+  // 3. Deposit (giver IRK mailbox-auth).
+  const mailboxAuth = await buildMailboxAuth({ username, umk, signWithIrk, irkPubHex }, deps);
+  let resp;
+  try {
+    resp = await f(`${origin}/api/server/${encodeURIComponent(serverDomain)}/transfer/disk-key`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...mailboxAuth, sealedDiskKey: sealedHex }),
+    });
+  } catch (e) {
+    throw err(`network error: ${(e && e.message) || e}`);
+  }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw err((body && body.error) || `HTTP ${resp.status}`, resp.status);
+  return { ok: true };
+}
+
+/**
+ * ACQUIRER: pick up the giver's re-sealed disk key (acquirer IRK mailbox-auth),
+ * open it with the acquirer IRK. Returns the raw disk key bytes; the caller then
+ * completes the standard box-sealed-lease deposit. Resolves `{ ready: false }`
+ * (404) while the giver hasn't re-sealed yet.
+ */
+export async function claimResealedDiskKey(args, deps = {}) {
+  const { serverDomain, username, umk, irkPubHex, signWithIrk } = args;
+  if (!serverDomain) throw err("serverDomain required", 400);
+  if (!(umk instanceof Uint8Array) || typeof signWithIrk !== "function") {
+    throw err("unlock the webapp first", 400);
+  }
+  const f = deps.fetch || fetch;
+  const origin = deps.origin || controlApex();
+  const mailboxAuth = await buildMailboxAuth({ username, umk, signWithIrk, irkPubHex }, deps);
+  let resp;
+  try {
+    resp = await f(
+      `${origin}/api/server/${encodeURIComponent(serverDomain)}/transfer/disk-key-claim`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(mailboxAuth),
+      },
+    );
+  } catch (e) {
+    throw err(`network error: ${(e && e.message) || e}`);
+  }
+  if (resp.status === 404) return { ready: false };
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw err((body && body.error) || `HTTP ${resp.status}`, resp.status);
+  if (typeof body.sealedDiskKey !== "string") throw err("malformed handoff", 502);
+  const diskKey = await openSealedWithIrk(umk, hexFromHexString(body.sealedDiskKey));
+  return { ready: true, diskKey };
+}
+
+async function defaultOpenGiverDiskKey({ serverDomain, umk, origin, fetch: f }) {
+  const sealedRes = await f(
+    `${origin}/api/server/${encodeURIComponent(serverDomain)}/sealed-luks-key`,
+  );
+  if (!sealedRes.ok) {
+    throw err(`no sealed key on file for ${serverDomain}: ${sealedRes.status}`, sealedRes.status);
+  }
+  const sealedJson = await sealedRes.json();
+  return openSealedWithIrk(umk, hexFromHexString(sealedJson.sealedKey));
+}
+
+function hexFromHexString(hex) {
+  const clean = String(hex).toLowerCase();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function bytesToHexStr(b) {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+
+/** Test seam: seal `plaintext` to an Ed25519 recipient pubkey (hex), exactly as
+ *  resealDiskKeyForAcquirer does (Ed25519 pub → X25519 → sealForBrowserKey).
+ *  Exported for the cross-platform crypto round-trip test against
+ *  @flagship/protocol's openSealedFromEd25519Recipient. */
+export async function __sealToEd25519ForTest(plaintext, recipientEdPubHex) {
+  const x = ed25519PubToX25519(hexFromHexString(recipientEdPubHex));
+  return sealForBrowserKey(plaintext, bytesToHexStr(x));
 }

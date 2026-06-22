@@ -1597,6 +1597,8 @@ interface ServerTransferRow {
   acquirer_irk_pub_hex: string | null;
   claim_issued_at: number | null;
   claim_signature_hex: string | null;
+  disk_key_handoff_hex: string | null;
+  disk_key_handoff_at: number | null;
 }
 
 function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
@@ -1613,6 +1615,8 @@ function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
     acquirerIrkPubHex: r.acquirer_irk_pub_hex,
     claimIssuedAt: r.claim_issued_at,
     claimSignatureHex: r.claim_signature_hex,
+    diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
+    diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
   };
 }
 
@@ -1722,8 +1726,29 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         acquirerIrkPubHex: acquirerIrkPubHex.toLowerCase(),
         claimIssuedAt,
         claimSignatureHex: claimSignatureHex.toLowerCase(),
+        diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
+        diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
       },
     };
+  }
+
+  async putDiskKeyHandoff(
+    serverDomain: string,
+    diskKeyHandoffHex: string,
+    now: number,
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the disk-key handoff (the giver re-seals to
+    // the acquirer IRK learned from the claim).
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET disk_key_handoff_hex = ?1, disk_key_handoff_at = ?2
+         WHERE server_domain = ?3 AND claimed_at IS NOT NULL`,
+      )
+      .bind(diskKeyHandoffHex.toLowerCase(), now, serverDomain)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
   }
 
   async remove(serverDomain: string): Promise<void> {

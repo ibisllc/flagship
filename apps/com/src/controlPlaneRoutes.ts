@@ -57,6 +57,8 @@ import {
   handlePostTransferClaim,
   handleGetTransferClaim,
   handleGetTransferRehome,
+  handlePostTransferDiskKey,
+  handleGetTransferDiskKey,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -518,6 +520,11 @@ const ROUTE_RE = {
   // box re-verifies the fresh acquirer-IRK entitlement + the giver-signed
   // re-sealed lease before serving. 404 when never transferred.
   TRANSFER_REHOME: /^\/api\/server\/([^/]+)\/transfer\/rehome$/,
+  // Layer B disk-key handoff: giver deposits the re-sealed-to-acquirer-IRK disk
+  // key (POST, giver IRK mailbox-auth); acquirer reads it (POST, acquirer IRK
+  // mailbox-auth — the auth rides the body, mirroring claim-poll).
+  TRANSFER_DISK_KEY: /^\/api\/server\/([^/]+)\/transfer\/disk-key$/,
+  TRANSFER_DISK_KEY_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/disk-key-claim$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1475,6 +1482,28 @@ export async function tryControlPlane(
           },
           decodeURIComponent(m[1]!),
         ),
+      );
+    }
+    // Layer B disk-key handoff — the giver deposits the disk key re-sealed to
+    // the acquirer IRK; the acquirer reads it. Both IRK mailbox-auth in the body;
+    // no DNS deps needed (content-blind blob store on the transfer row).
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.TRANSFER_DISK_KEY) || path.match(ROUTE_RE.TRANSFER_DISK_KEY_CLAIM))
+    ) {
+      const isClaim = ROUTE_RE.TRANSFER_DISK_KEY_CLAIM.test(path);
+      const xferDeps = {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        routing: storage.routing,
+        serverTransfers: storage.serverTransfers,
+        apex: env.SERVICES_APEX,
+      };
+      const domain = decodeURIComponent(m[1]!);
+      return finishPlain(
+        isClaim
+          ? await handleGetTransferDiskKey(xferDeps, domain, await readJson(request))
+          : await handlePostTransferDiskKey(xferDeps, domain, await readJson(request)),
       );
     }
     // Transfer-a-box broker — the cross-account ownership handoff. The claim
