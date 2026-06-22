@@ -90,11 +90,18 @@ object ActivityFeedFilter {
             // Account-wide — never hidden by a server filter.
             is ActivityItem.AuditEntry -> true
             is ActivityItem.RecoverySnapshot -> true
-            // Pod-attributable: keep only when the event text names the pod.
+            // Pod-attributable: keep only when the event text names the pod as
+            // a complete dot-delimited LABEL — a segment boundary before it
+            // (start-of-text OR any non-[a-z0-9-] char, e.g. '.'/space) and a
+            // '.' immediately after. So a serviceId like "blog.home.harry…" AND
+            // a detail string naming "…to home.harry…" both match the pod
+            // "home", but "homestead.harry…" does NOT (home is not a full
+            // label). A bare ".pod." needle missed the boundary case (a pod
+            // that is the leftmost FQDN label, e.g. "home.harry…").
             is ActivityItem.InstallEvent -> {
-                val needle = ".${podName.lowercase()}."
+                val pod = podName.lowercase()
                 val hay = ("${item.event.serviceId} ${item.event.detail ?: ""}").lowercase()
-                hay.contains(needle)
+                Regex("(^|[^a-z0-9-])" + Regex.escape(pod) + "\\.").containsMatchIn(hay)
             }
         }
     }
