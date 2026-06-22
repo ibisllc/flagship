@@ -123,7 +123,54 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
 
-### 2026-06-21 (latest) — fold "authorize to serve" INTO the first-boot unlock (entitlement deposit) — BACKEND + DAEMON
+### 2026-06-21 (latest) — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
+
+**The no-backup deletion ceremony + reclaim is built, tested, and on `main`**
+(design: `docs/account-deletion-and-name-reclaim.md`). Scope delivered: the
+deletion ceremony + the §5 self-delete bundle invariant + the admin reclaim tool.
+**Transfer-a-box and box-side execution of the content-wipe order are DEFERRED**
+(box-side disk-key re-seal needs a daemon pass + reburn; `.com` currently
+records/forwards the servers-self-delete as audit rows only).
+
+- **Protocol:** `account-self-delete` + `servers-self-delete` owner-IRK envelopes
+  (`flagship/{account,servers}-self-delete/v1|<username>|<issuedAt>`), wrapped
+  never-throwing verify, pinned cross-platform vectors (TS + Swift + Kotlin).
+- **Control-plane:** `handleAccountDeletionBundle` — verifies the owner IRK,
+  enforces LAST-DEVICE (zero active `device_capability_grants`; the founding
+  device is the `usernames.irk_pub_hex` holder, not in the roster), HARD-DELETES
+  the username row (name frees immediately) + ordered per-server teardown. **§5
+  atomic bundle:** the content-wipe `servers-self-delete` is validated fully
+  BEFORE any commit and accepted ONLY bundled with a valid last-device
+  account-self-delete — a bad/absent companion or non-last-device rejects the
+  WHOLE bundle (neither recorded). Admin reclaim `POST /api/admin/username/:u/reclaim`
+  (≥90d inactive, dry-run) + `last_active` (migration **0058**) bumped coarsely.
+- **Clients (webapp/iOS/Android):** full-page IRREVERSIBLE warning (username lost
+  / servers stop — transfer first / no recovery) + type-username + biometric +
+  opt-in "ask all servers to delete content" checkbox; signs the bundle, POSTs,
+  and wipes local key material ONLY after a 200; 403 "last device" surfaced w/o
+  wiping. `SignOutPolicy` gained the `deletionCeremony`/`DELETION_CEREMONY`
+  outcome (no recovery + last device); both tier-2 sign-out and danger-zone
+  remove-device route into the ceremony.
+
+Gates: `tsc -b` clean · control-plane/storage/protocol **2053** · webapp account-
+deletion **12/12** · iOS `xcodebuild test` **1172/0** · Android
+`:app:testDebugUnitTest` **BUILD SUCCESSFUL** · Swift cross-platform vector
+**5/5**. 7 commits, rebased cleanly onto the entitlement work + re-verified, pushed.
+**Built via 2 multi-agent passes** (foundation agent + a client fan-out that
+STALLED on the native builds — the workflow/agent stall-watchdog repeatedly killed
+long silent `xcodebuild`/`gradle` runs, so iOS + Android were finished + built by
+the main loop directly; webapp completed in-agent).
+
+**Open follow-ups:** (1) **transfer-a-box** (giver QR + acquirer "Pair an existing
+box" camera + box-side re-seal) — its own workflow next; (2) **box-side
+self-delete execution** (daemon consumes the deposited order + a reburn); (3) iOS
+has no dedicated ceremony XCTest yet (build-green + canonical vectors cover it;
+webapp + Android have policy/ceremony tests). **Deploy prereqs (NOT done — owner
+go):** apply + stamp migration **0058** before the next Worker deploy (the
+predeploy migration gate blocks otherwise); this feature is **not deployed**; the
+iOS/Android apps need fresh builds to test on device.
+
+### 2026-06-21 — fold "authorize to serve" INTO the first-boot unlock (entitlement deposit) — BACKEND + DAEMON
 
 **Why:** real boxes (frank, hali) stranded because authorizing a box to *serve*
 is a SECOND phone approval, separate from the boot/unlock approval — and it
