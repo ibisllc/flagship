@@ -15,17 +15,28 @@
 
 package com.flagshipserver.app.core
 
+/** The two account-level "boxes waiting for an approval" sets the watcher
+ *  publishes from ONE poll — the Box Request Inbox detection tier
+ *  (docs/box-request-inbox.md). `unlock` feeds the boot-unlock card; `entitlement`
+ *  feeds the serve-authorization card. Both are lowercased-fqdn sets off the
+ *  cheap unauthenticated `/pods` digest (no biometric). Mirror of iOS. */
+data class PendingApprovalSets(
+    val unlock: Set<String> = emptySet(),
+    val entitlement: Set<String> = emptySet(),
+)
+
 class BootApprovalWatcher(
     private val app: AppState,
     /** Refresh the `/pods` directory (unauthenticated, NO biometric) and return
-     *  the set of server fqdns the directory marks `awaitingUnlock`. */
-    private val pollAwaiting: suspend () -> Set<String>,
+     *  the fqdn sets it marks `awaitingUnlock` / `awaitingEntitlement`. */
+    private val pollAwaiting: suspend () -> PendingApprovalSets,
 ) {
-    /** One directory refresh → publish the set of fqdns with a pending unlock
-     *  request onto AppState. Returns the resolved set. */
-    suspend fun pollOnce(): Set<String> {
-        val waiting = pollAwaiting()
-        app.setServersAwaitingApproval(waiting)
-        return waiting
+    /** One directory refresh → publish both pending-approval sets onto AppState
+     *  (unlock + entitlement). Returns the resolved sets. */
+    suspend fun pollOnce(): PendingApprovalSets {
+        val sets = pollAwaiting()
+        app.setServersAwaitingApproval(sets.unlock)
+        app.setServersAwaitingEntitlement(sets.entitlement)
+        return sets
     }
 }

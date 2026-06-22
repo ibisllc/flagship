@@ -131,9 +131,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-21**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
-### 2026-06-21 (latest) — box-side self-delete execution + iOS ceremony XCTest SHIPPED; transfer-a-box protocol landed
+### 2026-06-21 — box-side self-delete execution + iOS ceremony XCTest SHIPPED; transfer-a-box protocol landed
 
 **Closed two of the three account-deletion follow-ups + landed the cryptographic
 core of the third** (design: `docs/account-deletion-and-name-reclaim.md`). 5
@@ -194,6 +194,70 @@ control-plane **2909**) · protocol vectors **14** · iOS `AccountDeletionViewMo
 **6/6** · Swift `ServerTransferCanonicalTests` **4/4** · Android
 `ServerTransferVectorTest` BUILD SUCCESSFUL. **NOT deployed** (box-side needs a
 reburn; the `.com` self-delete consume route ships on the next Worker deploy).
+### 2026-06-22 (latest) — Box Request Inbox: one always-on channel for "a box is asking its owner" (SPEC + backend + webapp + iOS + Android)
+
+**Why:** a box that needs an approval (unlock a disk, authorize itself to serve)
+was surfaced through a sprawl of one-offs — two hand-computed `/pods` booleans
+(`awaitingUnlock` + `awaitingEntitlement`), a unlock-only `BootApprovalWatcher`
+with **no entitlement equivalent** (0 mobile refs to `awaitingEntitlement` vs
+83 to `awaitingUnlock`), and pull-to-refresh detection. So an entitlement-stuck
+box (e.g. ezra) re-asks forever (daemon `process.exit(1)` → systemd restart →
+re-post) but nothing in the app turns the ask into a tappable card — loud on the
+wire, silent to the human. Owner-directed unification. Spec:
+`docs/box-request-inbox.md`.
+
+**The insight:** the wire primitive is ALREADY generic over type — the box signs
+`flagship/secret-request/v1|serverDomain|stkPub|purpose|nonce|issuedAt`; `purpose`
+IS the type. So this is mostly *delete + unify* in the clients, not new protocol.
+One inbox, one channel, one **type registry** (`type → {title, detail, respond}`);
+`unlock-key` and `entitlement` become two registry entries. New types later =
+one entry + one `purpose` string. (Also locked in the spec: there is **no
+create-time entitlement deposit** — it binds the box's first-boot STK, unknown at
+create. Deposit-on-unlock is the optimization; the inbox is the universal
+fallback.)
+
+**Landed this pass (backend + webapp reference, on `main` worktree, verified):**
+- **Backend** (`podInventory.ts`): `/pods` now returns a typed
+  `pendingRequests: [{id,type,issuedAt,expiresAt}]` digest per pod (the cheap,
+  unauthenticated, pollable detection tier), computed from the same
+  `listPendingForUser` scan (which already returns ONLY request lanes — deposit
+  lanes never surface). The two booleans are kept for one release but **derived**
+  from `pendingRequests` (compat for deployed webapp + un-rebuilt apps). +2 tests.
+- **Webapp** (reference client): `bootApproval.js` refactored to a `satisfy(req)`
+  dispatcher over `BOX_REQUEST_TYPES` (registry); added the `entitlement`
+  responder so the webapp now answers BOTH types (was unlock-only, entitlement
+  read-only). New `lib/boxInbox.js` — the channel/store (foreground-poll
+  abstraction, future push/socket behind the same interface). `views/boot-approval.js`
+  generalised to the inbox: every type actionable, registry titles, foreground
+  auto-poll (no drag-to-refresh). +5 webapp tests; existing view/crypto tests
+  updated.
+
+**Mobile (iOS + Android) — DONE.** Key insight: the approvals LIST already
+answered BOTH types (`confirmAndRespond` has the `.entitlement` branch); the gap
+was purely PROACTIVE surfacing — the watcher + server-card only reacted to
+`awaitingUnlock` (mobile had **0** refs to `awaitingEntitlement` vs 83 to
+`awaitingUnlock`). So per platform: decode `awaitingEntitlement`/`pendingRequests`
+off `/pods`; the watcher (`BootApprovalWatcher`) now publishes a typed
+`PendingApprovalSets {unlock, entitlement}` from one poll into
+`serversAwaitingApproval` + new `serversAwaitingEntitlement`; the coordinator
+gained `approvePendingEntitlement` (mirrors `approvePendingUnlock`, no lease); the
+server-card (`BootUnlockApprovalViewModel` + card) is parameterized by
+`SecretPurpose` so ONE card serves both lanes (purpose-aware copy + dispatch);
+ServerDetail renders the serve-auth card when `awaitingEntitlement`. This closes
+the "silent box" hole — a box stuck on entitlement is now a one-tap card, not an
+invisible crash-loop.
+
+Gates: `tsc -b` clean (whole tree) · control-plane podInventory **27** (full
+control-plane **1068**) · webapp boxInbox **5** + bootApproval crypto **6** + view
+**7** + uxCopy **18** · iOS `xcodebuild test` **TEST SUCCEEDED** (BootApprovalWatcher
+4 + BootUnlockApprovalViewModel 11 + SecretRequestCoordinator 13, +2 new) · Android
+`:app:testDebugUnitTest` **BUILD SUCCESSFUL** (+2 new). Mobile shows it after an
+Xcode/Gradle rebuild; backend + webapp deploy with `.com`.
+
+**Remaining (deferred):** the two `/pods` booleans stay (derived from
+`pendingRequests`) for one release, dropped once nothing reads them; a unified
+`pendingRequests`-typed inbox object on mobile (vs the two parallel sets) and an
+SSE/WebSocket + push transport are the spec's later refinements.
 
 ### 2026-06-21 — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
 
@@ -2018,7 +2082,7 @@ This file is the in-repo source of truth. For deeper detail, read the relevant l
 
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`
-- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`
+- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `sample-users.md`
 - **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`

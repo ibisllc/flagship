@@ -1,10 +1,24 @@
 import Foundation
 import FlagshipCore
 
-/// Account-level "which of my boxes are waiting for a boot-unlock approval
-/// right now?" — ONE poll that fans the answer out to every server card,
-/// detail page, and the post-creation checklist via
-/// `AppState.serversAwaitingApproval`.
+/// The two account-level "boxes waiting for an approval" sets the watcher
+/// publishes from ONE poll — the Box Request Inbox detection tier
+/// (docs/box-request-inbox.md). `unlock` feeds the boot-unlock card; `entitlement`
+/// feeds the new serve-authorization card. Both are lowercased-fqdn sets read
+/// off the cheap unauthenticated `/pods` digest (no biometric).
+public struct PendingApprovalSets: Sendable, Equatable {
+    public var unlock: Set<String>
+    public var entitlement: Set<String>
+    public init(unlock: Set<String> = [], entitlement: Set<String> = []) {
+        self.unlock = unlock
+        self.entitlement = entitlement
+    }
+}
+
+/// Account-level "which of my boxes are waiting for an approval right now?" —
+/// ONE poll that fans the answer out to every server card, detail page, and the
+/// post-creation checklist via `AppState.serversAwaitingApproval` (unlock) and
+/// `AppState.serversAwaitingEntitlement` (serve-auth).
 ///
 /// DIRECTORY-DRIVEN, NO BIOMETRIC. Detection reads the unauthenticated `/pods`
 /// directory's cheap `awaitingUnlock` flag — NOT the IRK-signed mailbox. The
@@ -23,14 +37,14 @@ public final class BootApprovalWatcher {
 
     private let app: AppState
     /// Refresh the `/pods` directory (unauthenticated, NO biometric) and return
-    /// the set of server fqdns the directory marks `awaitingUnlock`.
-    private let pollAwaiting: () async -> Set<String>
+    /// the fqdn sets the directory marks `awaitingUnlock` / `awaitingEntitlement`.
+    private let pollAwaiting: () async -> PendingApprovalSets
     private let pollIntervalNanos: UInt64
     private var task: Task<Void, Never>?
 
     public init(
         app: AppState,
-        pollAwaiting: @escaping () async -> Set<String>,
+        pollAwaiting: @escaping () async -> PendingApprovalSets,
         pollIntervalNanos: UInt64 = BootApprovalWatcher.pollInterval
     ) {
         self.app = app
@@ -58,9 +72,10 @@ public final class BootApprovalWatcher {
     /// request. Best-effort: the closure swallows failures and returns the
     /// prior set, so a blip never thrashes the UI. Exposed for pull-to-refresh.
     @discardableResult
-    public func pollOnce() async -> Set<String> {
-        let waiting = await pollAwaiting()
-        app.serversAwaitingApproval = waiting
-        return waiting
+    public func pollOnce() async -> PendingApprovalSets {
+        let sets = await pollAwaiting()
+        app.serversAwaitingApproval = sets.unlock
+        app.serversAwaitingEntitlement = sets.entitlement
+        return sets
     }
 }

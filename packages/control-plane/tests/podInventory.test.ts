@@ -64,6 +64,13 @@ interface PodsResponse {
     lastReported: number | null;
     currentCert: { sha256: string | null } | null;
     awaitingUnlock: boolean;
+    awaitingEntitlement: boolean;
+    pendingRequests: Array<{
+      id: string;
+      type: string;
+      issuedAt: number;
+      expiresAt: number;
+    }>;
   }>;
   pending: Array<{
     orderRef: string;
@@ -130,6 +137,61 @@ describe("awaitingUnlock (cheap, non-biometric boot-unlock-waiting signal)", () 
     const r = await handleGetUserPods(deps(storage, { secretMailbox: undefined }), "harry");
     expect(r.status).toBe(200);
     expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(false);
+  });
+});
+
+describe("pendingRequests digest (Box Request Inbox detection tier)", () => {
+  function req(
+    serverDomain: string,
+    purpose: "unlock-key" | "entitlement",
+    nonceHex: string,
+    expiresAt: number,
+  ) {
+    return {
+      serverDomain,
+      username: "harry",
+      requestNonceHex: nonceHex,
+      stkPubHex: "22".repeat(32),
+      purpose,
+      requestIssuedAt: NOW - 1_000,
+      requestSignatureHex: "cd".repeat(64),
+      deviceInfoJson: null,
+      postedAt: NOW - 1_000,
+      expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: null,
+      responseIssuedAt: null,
+      respondedAt: null,
+      consumedAt: null,
+    };
+  }
+
+  it("surfaces every live request typed, and DERIVES both booleans from it", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const dom = "home1.harry.flagship.services";
+    expect((await storage.secretMailbox.putRequest(req(dom, "unlock-key", "aa".repeat(32), NOW + 60_000))).ok).toBe(true);
+    expect((await storage.secretMailbox.putRequest(req(dom, "entitlement", "bb".repeat(32), NOW + 60_000))).ok).toBe(true);
+
+    const pod = (await handleGetUserPods(deps(storage), "harry") as { body: PodsResponse }).body.pods[0]!;
+
+    expect(pod.pendingRequests).toHaveLength(2);
+    const byType = Object.fromEntries(pod.pendingRequests.map((r) => [r.type, r]));
+    expect(byType["unlock-key"]?.id).toBe("aa".repeat(32));
+    expect(byType["entitlement"]?.id).toBe("bb".repeat(32));
+    expect(byType["unlock-key"]?.expiresAt).toBe(NOW + 60_000);
+    // The compat booleans are now purely a projection of pendingRequests.
+    expect(pod.awaitingUnlock).toBe(true);
+    expect(pod.awaitingEntitlement).toBe(true);
+  });
+
+  it("is empty (and both booleans false) for a box with nothing pending", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const pod = (await handleGetUserPods(deps(storage), "harry") as { body: PodsResponse }).body.pods[0]!;
+    expect(pod.pendingRequests).toEqual([]);
+    expect(pod.awaitingUnlock).toBe(false);
+    expect(pod.awaitingEntitlement).toBe(false);
   });
 });
 

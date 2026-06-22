@@ -315,56 +315,19 @@ export async function fetchVerifiedRequests(deps = {}) {
 }
 
 /**
- * Approve a verified `unlock-key` request: fetch the phone-sealed LUKS
- * key, unseal it with the IRK, re-seal it FOR the box STK bound to
- * (nonce, purpose), and POST the sealed reply to the boot worker authed
- * by an owner-IRK Flagship-Boot-v1 header. Mirror of
- * SecretRequestCoordinator.confirmAndRespond (unlock-key branch).
- *
- * @param {VerifiedBootRequest} req
- * @param {{ fetch?: typeof fetch, comBase?: string, bootBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ * POST a sealed reply (whatever the request type produced) to the boot
+ * worker, authed by an owner-IRK Flagship-Boot-v1 header. The transport is
+ * identical for every request type — only the `sealed` bytes differ — so the
+ * Box Request Inbox (docs/box-request-inbox.md) shares ONE post path and the
+ * per-type responders just hand it their `sealedHex`. Mirror of
+ * SecretRequestCoordinator.confirmAndRespond's single postResponse.
  */
-export async function approveUnlock(req, deps = {}) {
-  if (req.purpose !== "unlock-key") {
-    throw new Error("approve this request type from your phone");
-  }
+async function postBootResponse(req, sealedHex, deps) {
   const session = getSession();
-  if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
-  const comBase = deps.comBase || COM_BASE;
   const bootBase = deps.bootBase || BOOT_BASE;
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
-
-  const stkEdPub = hexToBytes(req.directoryStkPubHex);
-
-  // 1. GET the phone-sealed LUKS key (sealed FOR the IRK at install).
-  const sealedRes = await f(
-    `${comBase}/api/server/${encodeURIComponent(req.serverDomain)}/sealed-luks-key`,
-  );
-  if (sealedRes.status === 404) throw new Error("no sealed disk key is on file for this box yet");
-  if (!sealedRes.ok) throw new Error(`sealed-luks-key: HTTP ${sealedRes.status}`);
-  const sealedJson = await sealedRes.json();
-  const sealedBlob = hexToBytes(sealedJson.sealedKey);
-
-  // 2. Unseal with the IRK seed (whichever phone key the installer sealed
-  //    against — the webapp's primary key is the IRK).
-  const irkSeed = await deriveIrkSeed(session.umk);
-  let luksKey;
-  try {
-    luksKey = await openSealedWithEd25519Seed(sealedBlob, irkSeed);
-  } catch {
-    throw new Error("couldn't unseal the disk key with this browser's account key");
-  }
-
-  // 3. Re-seal FOR the box STK, bound to (nonce, purpose).
-  const sealed = await buildSealedResponse(luksKey, {
-    stkEdPub,
-    nonceHex: req.requestNonceHex,
-    purpose: req.purpose,
-  });
-
-  // 4. POST the reply to the boot worker, owner-IRK Flagship-Boot-v1 auth.
   const path = "/api/boot/response";
   const authHeader = await ownerBootHeader({
     serverDomain: req.serverDomain,
@@ -379,7 +342,7 @@ export async function approveUnlock(req, deps = {}) {
       serverDomain: req.serverDomain,
       requestNonceHex: req.requestNonceHex,
       purpose: req.purpose,
-      sealed: bytesToHex(sealed),
+      sealed: sealedHex,
       issuedAt: now,
     },
   };
@@ -392,11 +355,57 @@ export async function approveUnlock(req, deps = {}) {
     const txt = await r.text().catch(() => "");
     throw new Error(`post boot response failed: ${r.status} ${txt}`.trim());
   }
+}
 
-  // Fold "authorize it to serve" INTO this unlock approval: pre-deposit an
-  // owner-IRK-signed entitlement for the box's STK so it comes online with no
-  // second tap (consent to boot ⇒ consent to serve). Best-effort — a failure
-  // never fails the unlock; the box can still fetch one via the relay.
+/**
+ * The `unlock-key` responder: fetch the phone-sealed LUKS key, unseal it with
+ * the IRK, re-seal it FOR the box STK bound to (nonce, purpose), POST it, and
+ * THEN deposit the entitlement (consent to boot ⇒ consent to serve, so the box
+ * also comes online with this one approval). Mirror of confirmAndRespond's
+ * unlock branch + the line-248 deposit.
+ *
+ * @param {VerifiedBootRequest} req
+ * @param {{ fetch?: typeof fetch, comBase?: string, bootBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+async function respondUnlock(req, deps = {}) {
+  const session = getSession();
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const stkEdPub = hexToBytes(req.directoryStkPubHex);
+
+  // 1. GET the phone-sealed LUKS key (sealed FOR the IRK at install).
+  const sealedRes = await f(
+    `${comBase}/api/server/${encodeURIComponent(req.serverDomain)}/sealed-luks-key`,
+  );
+  if (sealedRes.status === 404) throw new Error("no sealed disk key is on file for this box yet");
+  if (!sealedRes.ok) throw new Error(`sealed-luks-key: HTTP ${sealedRes.status}`);
+  const sealedJson = await sealedRes.json();
+  const sealedBlob = hexToBytes(sealedJson.sealedKey);
+
+  // 2. Unseal with the IRK seed (the webapp's primary key is the IRK).
+  const irkSeed = await deriveIrkSeed(session.umk);
+  let luksKey;
+  try {
+    luksKey = await openSealedWithEd25519Seed(sealedBlob, irkSeed);
+  } catch {
+    throw new Error("couldn't unseal the disk key with this browser's account key");
+  }
+
+  // 3. Re-seal FOR the box STK, bound to (nonce, purpose); POST it.
+  const sealed = await buildSealedResponse(luksKey, {
+    stkEdPub,
+    nonceHex: req.requestNonceHex,
+    purpose: req.purpose,
+  });
+  await postBootResponse(req, bytesToHex(sealed), deps);
+
+  // 4. Fold "authorize it to serve" INTO this unlock approval (the primary
+  // layer). Best-effort — a failure never fails the unlock; the box can still
+  // request the entitlement via the inbox fallback.
   try {
     await depositEntitlement(
       { serverDomain: req.serverDomain, stkPubHex: req.directoryStkPubHex },
@@ -404,11 +413,82 @@ export async function approveUnlock(req, deps = {}) {
     );
   } catch (e) {
     console.warn(
-      "[boot-approval] entitlement deposit failed (the box will relay instead):",
+      "[box-inbox] entitlement deposit failed (the box will request it via the inbox):",
       e?.message || e,
     );
   }
   return { ok: true };
+}
+
+/**
+ * The `entitlement` responder: mint an owner-IRK RootEntitlement carrier for
+ * the box's STK and POST it as the reply to the box's entitlement request.
+ * Same transport as unlock — only the sealed bytes differ (the PUBLIC carrier,
+ * not a secret). Mirror of confirmAndRespond's `.entitlement` branch. This is
+ * the inbox FALLBACK for boxes that never got a deposit (unencrypted boxes, or
+ * a deposit that failed).
+ *
+ * @param {VerifiedBootRequest} req
+ * @param {{ fetch?: typeof fetch, bootBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+async function respondEntitlement(req, deps = {}) {
+  const session = getSession();
+  const username = session.username;
+  if (!username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const carrierHex = await buildEntitlementCarrier({
+    username,
+    podPubKeyHex: String(req.directoryStkPubHex).toLowerCase(),
+    podCanonical: req.serverDomain,
+    issuedAt: now,
+    signWithIrk: sign,
+    umk: session.umk,
+  });
+  await postBootResponse(req, carrierHex, deps);
+  return { ok: true };
+}
+
+/**
+ * The Box Request type registry (docs/box-request-inbox.md): type → how to
+ * present it and how to satisfy it. Adding a future type is one entry here +
+ * a `purpose` string — no new plumbing, no new watcher. The webapp is now at
+ * parity with mobile: it answers BOTH `unlock-key` and `entitlement`.
+ */
+export const BOX_REQUEST_TYPES = {
+  "unlock-key": {
+    title: () => "Unlock device and authorize it to join your cloud",
+    detail: () => "Unlocks the encrypted disk and authorizes this box to serve your account.",
+    respond: respondUnlock,
+  },
+  entitlement: {
+    title: () => "Authorize this box to serve your account",
+    detail: () => "Lets this box come online and serve your services.",
+    respond: respondEntitlement,
+  },
+};
+
+/**
+ * Satisfy a verified box request by dispatching to its type's responder.
+ * The ONE entry point the inbox calls for any type.
+ * @param {VerifiedBootRequest} req
+ */
+export async function satisfy(req, deps = {}) {
+  const spec = BOX_REQUEST_TYPES[req.purpose];
+  if (!spec) throw new Error(`unsupported request type: ${req.purpose}`);
+  return spec.respond(req, deps);
+}
+
+/**
+ * Back-compat alias — the existing boot-approval view calls approveUnlock.
+ * Now a thin wrapper over the registry's unlock responder.
+ * @param {VerifiedBootRequest} req
+ */
+export async function approveUnlock(req, deps = {}) {
+  if (req.purpose !== "unlock-key") throw new Error(`approveUnlock: not an unlock-key request (${req.purpose})`);
+  return respondUnlock(req, deps);
 }
 
 /**

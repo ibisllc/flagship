@@ -28,6 +28,7 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.BootApprovalWatcher
+import com.flagshipserver.app.core.PendingApprovalSets
 import com.flagshipserver.app.core.PendingServerReconciler
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
@@ -71,14 +72,17 @@ fun HomeTab() {
             // path derived the IRK to read the mailbox, firing Face ID on a
             // timer.) Best-effort: a blip returns the prior set.
             pollAwaiting = pollAwaiting@{
+                val prior = PendingApprovalSets(
+                    app.serversAwaitingApproval.value,
+                    app.serversAwaitingEntitlement.value,
+                )
                 val user = app.currentUser.value
-                if (user.isNullOrEmpty()) return@pollAwaiting app.serversAwaitingApproval.value
-                val dir = runCatching { mailbox.fetchPods(user) }
-                    .getOrElse { return@pollAwaiting app.serversAwaitingApproval.value }
-                dir.pods
-                    .filter { it.awaitingUnlock }
-                    .map { it.serverDomain.lowercase() }
-                    .toSet()
+                if (user.isNullOrEmpty()) return@pollAwaiting prior
+                val dir = runCatching { mailbox.fetchPods(user) }.getOrElse { return@pollAwaiting prior }
+                PendingApprovalSets(
+                    unlock = dir.pods.filter { it.awaitingUnlock }.map { it.serverDomain.lowercase() }.toSet(),
+                    entitlement = dir.pods.filter { it.awaitingEntitlement }.map { it.serverDomain.lowercase() }.toSet(),
+                )
             },
         )
     }
@@ -230,6 +234,10 @@ fun HomeTab() {
                     )
                 }
             } else {
+                // The Box Request Inbox's entitlement lane (account-level set,
+                // refreshed by the watcher) — collected so the serve-auth card
+                // arms/clears on its own.
+                val awaitingEnt by app.serversAwaitingEntitlement.collectAsState()
                 ServerDetailScreen(
                     podId = podId,
                     // The directory's cheap `awaitingUnlock` flag (no biometric)
@@ -238,6 +246,7 @@ fun HomeTab() {
                     // page even when its BFF can't load (a locked box can't
                     // answer its daemon).
                     awaitingUnlock = pod.awaitingUnlock,
+                    awaitingEntitlement = awaitingEnt.contains(pod.fqdn.lowercase()),
                     serverFqdn = pod.fqdn,
                     onBack = { nav.popBackStack() },
                 )

@@ -64,6 +64,7 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
 import com.flagshipserver.app.core.PowerMode
+import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.keystore.Keystore
@@ -108,6 +109,10 @@ fun ServerDetailScreen(
     // approval card must be offered REGARDLESS of whether the daemon BFF loaded
     // (a locked box never answers its BFF — that's the whole point).
     awaitingUnlock: Boolean = false,
+    // The directory's `awaitingEntitlement` flag — the box posted a serve-auth
+    // request and is waiting to be authorized to serve. Surfaces a second
+    // approval card, same pattern as `awaitingUnlock` (Box Request Inbox).
+    awaitingEntitlement: Boolean = false,
     // The pod's FQDN, available even when the daemon BFF load fails — drives the
     // approval card. The loaded detail path prefers its own serverFqdn.
     serverFqdn: String? = null,
@@ -153,6 +158,14 @@ fun ServerDetailScreen(
             ?: serverFqdn?.takeIf { it.isNotEmpty() }
         approvalFqdn?.let { fqdn ->
             BootUnlockApprovalCard(serverDomain = fqdn, awaitingUnlock = awaitingUnlock)
+            // The Box Request Inbox's serve-authorization lane: a box that posted
+            // an entitlement request (no deposit, or an unencrypted box) is now
+            // actionable here too, not silently stuck.
+            BootUnlockApprovalCard(
+                serverDomain = fqdn,
+                awaitingUnlock = awaitingEntitlement,
+                purpose = SecretPurpose.ENTITLEMENT,
+            )
             Spacer(Modifier.height(FS.space.s6))
         }
 
@@ -292,15 +305,29 @@ private fun BootUnlockCard(serverDomain: String) {
 // whole ceremony — mailbox fetch, unseal, response, lease — runs behind it).
 // Mirror of iOS ServerDetailScreen.BootUnlockApprovalCard.
 @Composable
-private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean) {
+private fun BootUnlockApprovalCard(
+    serverDomain: String,
+    awaitingUnlock: Boolean,
+    purpose: SecretPurpose = SecretPurpose.UNLOCK_KEY,
+) {
     val mailbox = LocalSecretMailboxClient.current
     val app = LocalAppState.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val username by app.currentUser.collectAsState()
     val store = remember { ServerSettingsStore.from(context) }
+    val isEntitlement = purpose == SecretPurpose.ENTITLEMENT
+    val headline = if (isEntitlement) "Your box is waiting for authorization to serve"
+                   else "Your box is waiting for your approval to unlock"
+    val bodyCopy = if (isEntitlement)
+        "Authorize this box to serve your account so it can come online. Your phone will ask for your fingerprint once to approve."
+    else
+        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve."
+    val ctaLabel = if (isEntitlement) "Authorize" else "Approve unlock"
+    val approvedCopy = if (isEntitlement) "Authorized — your box should come online shortly."
+                       else "Unlock approved — your box should come online shortly."
 
-    val vm = remember(serverDomain) {
+    val vm = remember(serverDomain, purpose) {
         BootUnlockApprovalViewModel(
             serverDomain = serverDomain,
             makeSource = {
@@ -319,6 +346,7 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             depositAutoLease = {
                 store.effectiveMode(serverDomain) == ServerSettingsStore.Mode.AUTO
             },
+            purpose = purpose,
         )
     }
     val state by vm.state.collectAsState()
@@ -334,17 +362,17 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                     Text(
-                        "Your box is waiting for your approval to unlock",
+                        headline,
                         color = FS.colors.text,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
                     Text(
-                        "If you just powered it on, release its disk key to bring it online. Your phone will ask for your fingerprint once to approve.",
+                        bodyCopy,
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                     )
                     FSPrimaryButton(
-                        label = "Approve unlock",
+                        label = ctaLabel,
                         onClick = { scope.launch { vm.approve() } },
                         block = true,
                         large = true,
@@ -375,7 +403,7 @@ private fun BootUnlockApprovalCard(serverDomain: String, awaitingUnlock: Boolean
             SectionLabel("Boot unlock")
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Text(
-                    "Unlock approved — your box should come online shortly.",
+                    approvedCopy,
                     color = FS.colors.text,
                     style = TextStyle(fontSize = 14.sp),
                 )

@@ -306,6 +306,25 @@ public final class SecretRequestCoordinator {
         return try await confirmAndRespond(live, depositAutoLease: depositAutoLease)
     }
 
+    /// One-tap approval for the directory-driven ENTITLEMENT card — the Box
+    /// Request Inbox's serve-authorization lane (docs/box-request-inbox.md). The
+    /// box's pending `entitlement` request is detected by the pod's cheap
+    /// `awaitingEntitlement` flag (no biometric); this fetches + re-verifies the
+    /// live request and responds (mint the owner-IRK RootEntitlement carrier),
+    /// all under ONE biometric. No lease (entitlement carries no secret). Throws
+    /// `.noPendingRequest` if the box gave up between the refresh and the tap.
+    @discardableResult
+    public func approvePendingEntitlement(serverDomain: String) async throws -> String? {
+        let verified = try await fetchVerifiedRequests()
+        let mine = verified
+            .filter { $0.serverDomain.lowercased() == serverDomain.lowercased() && $0.purpose == .entitlement }
+            .sorted { $0.pending.postedAt > $1.pending.postedAt }
+        guard let live = mine.first(where: { now() <= $0.pending.expiresAt }) else {
+            throw CoordinatorError.noPendingRequest(serverDomain)
+        }
+        return try await confirmAndRespond(live, depositAutoLease: false)
+    }
+
     /// Kill switch — revoke a server's auto-unlock lease. The box can no
     /// longer self-unlock and falls back to phone-gated approval (a downgrade,
     /// not a brick). `leaseId` is the one returned by confirmAndRespond at

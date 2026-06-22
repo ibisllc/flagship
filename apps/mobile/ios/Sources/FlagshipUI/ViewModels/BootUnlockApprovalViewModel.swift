@@ -24,6 +24,11 @@ public protocol ApprovalSource {
     /// gave up between the directory refresh and the tap.
     @discardableResult
     func approvePendingUnlock(serverDomain: String, depositAutoLease: Bool) async throws -> String?
+    /// One-tap approval for the directory-driven ENTITLEMENT card (serve-auth) —
+    /// fetch+verify the live `entitlement` request for `serverDomain` and respond
+    /// under a single biometric. Satisfied directly by the coordinator's method.
+    @discardableResult
+    func approvePendingEntitlement(serverDomain: String) async throws -> String?
 }
 
 /// `SecretRequestCoordinator` already IS the production approval source —
@@ -67,6 +72,11 @@ public final class BootUnlockApprovalViewModel {
     public private(set) var state: State = .idle
 
     private let serverDomain: String
+    /// Which inbox request this card approves: `.unlockKey` (release the disk
+    /// key) or `.entitlement` (authorize the box to serve). The detection flag
+    /// and the approve dispatch both key off this, so ONE card type serves both
+    /// lanes of the Box Request Inbox.
+    private let purpose: SecretPurpose
     private let makeCoordinator: () -> ApprovalSource?
     /// "auto" servers deposit a self-unlock lease on approve. Read from the
     /// per-server `BootUnlockStore` so the approval matches the create-time
@@ -78,11 +88,13 @@ public final class BootUnlockApprovalViewModel {
 
     public init(
         serverDomain: String,
+        purpose: SecretPurpose = .unlockKey,
         makeCoordinator: @escaping () -> ApprovalSource?,
         store: BootUnlockStore = BootUnlockStore(),
         initialAwaiting: Bool = false
     ) {
         self.serverDomain = serverDomain
+        self.purpose = purpose
         self.makeCoordinator = makeCoordinator
         self.store = store
         // Seed the state from the directory flag so the FIRST body render is
@@ -128,8 +140,14 @@ public final class BootUnlockApprovalViewModel {
         }
         state = .approving
         do {
-            let depositLease = store.effectiveMode(for: serverDomain) == .auto
-            _ = try await coord.approvePendingUnlock(serverDomain: serverDomain, depositAutoLease: depositLease)
+            switch purpose {
+            case .unlockKey:
+                // "auto" servers also get a box-sealed self-unlock lease.
+                let depositLease = store.effectiveMode(for: serverDomain) == .auto
+                _ = try await coord.approvePendingUnlock(serverDomain: serverDomain, depositAutoLease: depositLease)
+            case .entitlement:
+                _ = try await coord.approvePendingEntitlement(serverDomain: serverDomain)
+            }
             state = .approved
         } catch {
             state = .failed(HumanError.humanize(error))

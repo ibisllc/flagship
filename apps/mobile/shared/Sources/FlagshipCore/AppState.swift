@@ -143,6 +143,25 @@ public final class AppState {
         serversAwaitingApproval.contains(fqdn.lowercased())
     }
 
+    /// Lowercased fqdns of boxes that have posted a LIVE entitlement
+    /// secret-request — the Box Request Inbox's entitlement lane
+    /// (docs/box-request-inbox.md). Same one-poll fan-out as
+    /// `serversAwaitingApproval`, populated by `BootApprovalWatcher`. This is the
+    /// proactive surfacing the entitlement relay previously lacked (a box stuck
+    /// on entitlement re-asked forever but nothing in the app showed it).
+    public var serversAwaitingEntitlement: Set<String> = []
+
+    /// True iff [fqdn] is waiting for the owner to authorize it to serve.
+    public func hasLiveEntitlementRequest(forFqdn fqdn: String) -> Bool {
+        serversAwaitingEntitlement.contains(fqdn.lowercased())
+    }
+
+    /// True when [pod] is actively waiting for an entitlement (serve-auth)
+    /// approval. Mirrors `isAwaitingUnlock`; reads the account-level set.
+    public func isAwaitingEntitlement(_ pod: PodInfo) -> Bool {
+        hasLiveEntitlementRequest(forFqdn: pod.fqdn)
+    }
+
     /// True when [pod] is actively waiting for a boot-unlock approval. The
     /// SINGLE source the UI must use — the status badge AND the per-server
     /// Approve card — so the two never disagree. It ORs two signals of

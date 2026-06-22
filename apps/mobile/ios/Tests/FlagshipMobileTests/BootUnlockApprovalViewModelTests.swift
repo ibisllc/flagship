@@ -21,6 +21,7 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
         var approveError: Error?
         var leaseId: String? = "lease-1"
         private(set) var approveCalls: [(serverDomain: String, depositAutoLease: Bool)] = []
+        private(set) var entitlementCalls: [String] = []
 
         func verifiedRequests() async throws -> [SecretRequestCoordinator.VerifiedRequest] { [] }
         @discardableResult
@@ -30,6 +31,12 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
             if let approveError { throw approveError }
             approveCalls.append((serverDomain, depositAutoLease))
             return leaseId
+        }
+        @discardableResult
+        func approvePendingEntitlement(serverDomain: String) async throws -> String? {
+            if let approveError { throw approveError }
+            entitlementCalls.append(serverDomain)
+            return nil
         }
     }
 
@@ -61,6 +68,21 @@ final class BootUnlockApprovalViewModelTests: XCTestCase {
             serverDomain: domain, makeCoordinator: { nil }, initialAwaiting: false
         )
         XCTAssertEqual(vm.state, .idle)
+    }
+
+    /// The Box Request Inbox parity fix: an `.entitlement` card dispatches to
+    /// approvePendingEntitlement (NOT the unlock path), so a box stuck on
+    /// serve-authorization is approvable from the same card. Regression guard on
+    /// the silent-box hole (mobile had no entitlement surfacing at all).
+    func test_entitlementPurpose_dispatchesToEntitlementApproval() async {
+        let source = FakeSource()
+        let vm = BootUnlockApprovalViewModel(
+            serverDomain: domain, purpose: .entitlement, makeCoordinator: { source }
+        )
+        await vm.approve()
+        XCTAssertEqual(vm.state, .approved)
+        XCTAssertEqual(source.entitlementCalls, [domain])
+        XCTAssertTrue(source.approveCalls.isEmpty, "entitlement must NOT take the unlock path")
     }
 
     // MARK: - Directory-driven surfacing (NO biometric)

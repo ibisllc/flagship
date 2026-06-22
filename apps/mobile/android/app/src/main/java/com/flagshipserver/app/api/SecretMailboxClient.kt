@@ -236,6 +236,12 @@ data class PodDirectoryEntry(
      *  (instead of "never came online") without the biometric mailbox read.
      *  Defaulted ⇒ absent on a pre-field Worker is false. Mirror of iOS. */
     val awaitingUnlock: Boolean = false,
+    /** Same idea for the entitlement relay: the box posted its entitlement
+     *  secret-request and is "waiting for approval" (authorize it to serve), NOT
+     *  "never came online". Part of the Box Request Inbox digest
+     *  (docs/box-request-inbox.md). Defaulted ⇒ absent on a pre-field Worker is
+     *  false. Mirror of iOS. */
+    val awaitingEntitlement: Boolean = false,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

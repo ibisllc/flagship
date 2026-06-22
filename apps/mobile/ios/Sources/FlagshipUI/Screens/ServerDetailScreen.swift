@@ -27,6 +27,10 @@ public struct ServerDetailScreen: View {
     /// box is definitely waiting for a boot-unlock approval, so the approval
     /// card must be offered REGARDLESS of whether the daemon BFF detail loaded.
     let awaitingUnlock: Bool
+    /// The directory's cheap `awaitingEntitlement` flag — the box has posted an
+    /// entitlement (serve-auth) request and is waiting for the owner to authorize
+    /// it to serve. Surfaces a second approval card, same as `awaitingUnlock`.
+    let awaitingEntitlement: Bool
     /// True when the BFF load failed specifically because this device has no
     /// paired-session token. Distinct from the transient "Connecting…" failure:
     /// retrying never helps until the owner pairs, so the failed state shows the
@@ -49,6 +53,7 @@ public struct ServerDetailScreen: View {
         serverName: String? = nil,
         deadServerFqdn: String? = nil,
         awaitingUnlock: Bool = false,
+        awaitingEntitlement: Bool = false,
         notPaired: Bool = false,
         pairing: Bool = false,
         onOpenSessions: @escaping () -> Void = {},
@@ -62,6 +67,7 @@ public struct ServerDetailScreen: View {
         self.serverName = serverName
         self.deadServerFqdn = deadServerFqdn
         self.awaitingUnlock = awaitingUnlock
+        self.awaitingEntitlement = awaitingEntitlement
         self.notPaired = notPaired
         self.pairing = pairing
         self.onOpenSessions = onOpenSessions
@@ -102,6 +108,14 @@ public struct ServerDetailScreen: View {
                     BootUnlockApprovalCard(
                         serverDomain: fqdn,
                         awaitingUnlock: awaitingUnlock
+                    )
+                    // The Box Request Inbox's serve-authorization lane: a box that
+                    // posted an entitlement request (no deposit, or an unencrypted
+                    // box) is now actionable here too, not silently stuck.
+                    BootUnlockApprovalCard(
+                        serverDomain: fqdn,
+                        awaitingUnlock: awaitingEntitlement,
+                        purpose: .entitlement
                     )
                 }
                 switch state {
@@ -512,8 +526,28 @@ struct BootUnlockApprovalCard: View {
     /// The directory poll refreshes it on a timer + on foreground, so the
     /// prompt appears on its own the moment a box starts waiting.
     var awaitingUnlock: Bool = false
+    /// Which Box Request Inbox lane this card approves: `.unlockKey` (release the
+    /// disk key) or `.entitlement` (authorize the box to serve). The detection
+    /// flag passed in as `awaitingUnlock` is just "is this lane waiting?".
+    var purpose: SecretPurpose = .unlockKey
 
     @State private var vm: BootUnlockApprovalViewModel?
+
+    private var isEntitlement: Bool { purpose == .entitlement }
+    private var headline: String {
+        isEntitlement ? "Your box is waiting for authorization to serve"
+                      : "Your box is waiting for your approval to unlock"
+    }
+    private var bodyCopy: String {
+        isEntitlement
+            ? "Authorize this box to serve your account so it can come online. Your phone will ask for Face ID once to approve."
+            : "If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve."
+    }
+    private var ctaLabel: String { isEntitlement ? "Authorize" : "Approve unlock" }
+    private var approvedCopy: String {
+        isEntitlement ? "Authorized — your box should come online shortly."
+                      : "Unlock approved — your box should come online shortly."
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -523,6 +557,7 @@ struct BootUnlockApprovalCard: View {
         // Face ID fires only when the owner taps Approve.
         let model = vm ?? BootUnlockApprovalViewModel(
             serverDomain: serverDomain,
+            purpose: purpose,
             makeCoordinator: makeCoordinator,
             initialAwaiting: awaitingUnlock
         )
@@ -553,7 +588,7 @@ struct BootUnlockApprovalCard: View {
             }
         case .approved:
             statusCard(c: c) {
-                Label("Unlock approved — your box should come online shortly.", systemImage: "checkmark.seal.fill")
+                Label(approvedCopy, systemImage: "checkmark.seal.fill")
                     .font(FS.font.body())
                     .foregroundColor(c.text)
             }
@@ -575,15 +610,15 @@ struct BootUnlockApprovalCard: View {
         sectionWrap("BOX WAITING", c: c) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Your box is waiting for your approval to unlock")
+                    Text(headline)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(c.text)
-                    Text("If you just powered it on, release its disk key to bring it online. Your phone will ask for Face ID once to approve.")
+                    Text(bodyCopy)
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, FS.space.s1)
-                    FSPrimaryButton("Approve unlock", block: true, large: true) {
+                    FSPrimaryButton(ctaLabel, block: true, large: true) {
                         Task { await vm.approve() }
                     }
                     .accessibilityIdentifier("sd-approve-unlock")

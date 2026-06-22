@@ -172,7 +172,7 @@ public struct HomeTab: View {
             // unlock surfaces an Approve affordance on the list/checklist
             // without waiting for a push or a per-card poller.
             if approvalWatcher == nil {
-                let w = BootApprovalWatcher(app: app, pollAwaiting: pollAwaitingUnlock)
+                let w = BootApprovalWatcher(app: app, pollAwaiting: pollPendingApprovals)
                 approvalWatcher = w
                 w.start()
             }
@@ -371,14 +371,18 @@ public struct HomeTab: View {
     /// `/pods` directory — NO biometric. (The old path derived the IRK to read
     /// the mailbox, which fired Face ID every 5s on device.) Best-effort: a blip
     /// returns the prior set so the UI never thrashes.
-    private func pollAwaitingUnlock() async -> Set<String> {
+    private func pollPendingApprovals() async -> PendingApprovalSets {
         guard let user = app.currentUser, !user.isEmpty,
               let dir = try? await mailbox.fetchPods(username: user)
-        else { return app.serversAwaitingApproval }
-        return Set(
-            dir.pods
-                .filter { $0.awaitingUnlock }
-                .map { $0.serverDomain.lowercased() }
+        else {
+            return PendingApprovalSets(
+                unlock: app.serversAwaitingApproval,
+                entitlement: app.serversAwaitingEntitlement
+            )
+        }
+        return PendingApprovalSets(
+            unlock: Set(dir.pods.filter { $0.awaitingUnlock }.map { $0.serverDomain.lowercased() }),
+            entitlement: Set(dir.pods.filter { $0.awaitingEntitlement }.map { $0.serverDomain.lowercased() })
         )
     }
 
@@ -686,6 +690,7 @@ struct ServerDetailContainer: View {
                     // box that starts waiting AFTER the last /pods reconcile shows
                     // "waiting for approval" on Home but no Approve card here.
                     awaitingUnlock: pod.map { app.isAwaitingUnlock($0) } ?? false,
+                    awaitingEntitlement: pod.map { app.isAwaitingEntitlement($0) } ?? false,
                     // The BFF said "no session token" → this device isn't paired.
                     // Surface the one-tap pairing affordance (but only for a box
                     // that's actually reachable — a dead box never paired and

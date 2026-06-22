@@ -34,6 +34,7 @@ import type {
   AuthCodeStorage,
   ProvisionStatusStorage,
   SecretMailboxStorage,
+  SecretMailboxPurpose,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
@@ -92,6 +93,24 @@ export function orderRefForSerial(serial: string): string {
   );
 }
 
+/**
+ * One un-answered box→owner approval request, for the cheap UNAUTHENTICATED
+ * `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+ * This is the detection tier only: `type` is the secret-request purpose; the
+ * full signed request + deviceInfo is fetched over the authenticated
+ * `/api/secret-requests` path when the owner taps to satisfy it.
+ */
+export interface PendingRequestSummary {
+  /** requestNonceHex — the box's reply is keyed by (serverDomain, this). */
+  id: string;
+  /** Secret-request purpose: "unlock-key" | "entitlement" | …future types. */
+  type: SecretMailboxPurpose;
+  /** issuedAt from the signed SecretRequest (ms). */
+  issuedAt: number;
+  /** Row TTL (ms). */
+  expiresAt: number;
+}
+
 /** A still-in-flight install order, shaped for the merged `/pods` list. */
 export interface PendingPodEntry {
   /** `hex(sha256("flagship/order-ref/v1|" + serial))` — opaque order ref.
@@ -122,23 +141,30 @@ export async function handleGetUserPods(
 
   const now = (deps.now ?? (() => Date.now()))();
 
-  // Cheap, non-biometric "is this box waiting for a boot-unlock approval?"
-  // signal. A locked box can't reach its daemon BFF (the disk is sealed) and
-  // won't POST a daemon-status heartbeat, so without this it falls through to
-  // "never came online" past the grace window — and the phone's only other
-  // signal (the IRK-signed mailbox read) is biometric and can't run unattended,
-  // so it can't repopulate after an app restart. Reading the mailbox here needs
-  // no auth: listPendingForUser already returns only un-consumed, un-expired,
-  // un-answered rows. Guarded so a failure never drops or fails the list.
-  const awaitingUnlock = new Set<string>();
-  const awaitingEntitlement = new Set<string>();
+  // Cheap, non-biometric digest of "what is each box asking its owner to
+  // approve right now?" — the detection tier of the Box Request Inbox
+  // (docs/box-request-inbox.md). A locked/awaiting box can't reach its daemon
+  // BFF (disk sealed) and won't POST a daemon-status heartbeat, so without this
+  // it falls through to "never came online" past the grace window — and the
+  // phone's only other signal (the IRK-signed mailbox read) is biometric and
+  // can't poll. Reading the mailbox here needs no auth: listPendingForUser
+  // returns ONLY un-consumed, un-expired, un-answered REQUEST lanes (deposit
+  // lanes are answered-by-construction and never surface), so this set is
+  // exactly the inbox. Guarded so a failure never drops or fails the list.
+  const pendingByDomain = new Map<string, PendingRequestSummary[]>();
   if (deps.secretMailbox) {
     try {
       const pendingReqs = await deps.secretMailbox.listPendingForUser(username, now);
       for (const r of pendingReqs) {
-        if (r.purpose === "unlock-key") awaitingUnlock.add(r.serverDomain.toLowerCase());
-        else if (r.purpose === "entitlement")
-          awaitingEntitlement.add(r.serverDomain.toLowerCase());
+        const key = r.serverDomain.toLowerCase();
+        const list = pendingByDomain.get(key) ?? [];
+        list.push({
+          id: r.requestNonceHex,
+          type: r.purpose,
+          issuedAt: r.requestIssuedAt,
+          expiresAt: r.expiresAt,
+        });
+        pendingByDomain.set(key, list);
       }
     } catch {
       /* enrichment failure must never empty or 500 the authoritative list */
@@ -149,6 +175,7 @@ export async function handleGetUserPods(
     servers.map(async (s) => {
       const routing = await deps.routing.get(s.serverDomain);
       const status = statusByDomain.get(s.serverDomain.toLowerCase());
+      const pendingRequests = pendingByDomain.get(s.serverDomain.toLowerCase()) ?? [];
       let appsServed: string[] = [];
       if (status?.servicesServedJson) {
         try {
@@ -218,16 +245,17 @@ export async function handleGetUserPods(
           : null,
         signedStatus,
         appsServed,
-        // Cheap directory-level "this box is waiting for a boot-unlock
-        // approval right now" flag, so the client shows "waiting for approval"
-        // (and suppresses the dangerous decommission/delete) for a locked box
-        // instead of "never came online" — without needing the biometric
-        // mailbox read.
-        awaitingUnlock: awaitingUnlock.has(s.serverDomain.toLowerCase()),
-        // Same idea for the entitlement relay: a freshly-booted box that has
-        // posted its entitlement secret-request is "waiting for approval"
-        // (authorize it to serve your account), NOT "never came online".
-        awaitingEntitlement: awaitingEntitlement.has(s.serverDomain.toLowerCase()),
+        // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
+        // the typed list of approvals this box is currently asking its owner
+        // for. The generic client inbox is the flatMap of this across pods.
+        pendingRequests,
+        // COMPAT (one release): the two booleans are now DERIVED from
+        // pendingRequests so the deployed webapp + not-yet-rebuilt apps keep
+        // working. They tell the client to show "waiting for approval" (and
+        // suppress the dangerous decommission/delete) instead of "never came
+        // online". Removed once all surfaces read pendingRequests.
+        awaitingUnlock: pendingRequests.some((r) => r.type === "unlock-key"),
+        awaitingEntitlement: pendingRequests.some((r) => r.type === "entitlement"),
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
         state: "online" as const,

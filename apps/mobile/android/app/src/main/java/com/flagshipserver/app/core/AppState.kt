@@ -245,6 +245,22 @@ class AppState(
     fun hasLiveUnlockRequest(fqdn: String): Boolean =
         _serversAwaitingApproval.value.contains(fqdn.lowercase())
 
+    /**
+     * Lowercased fqdns of boxes with a LIVE entitlement (serve-auth) request —
+     * the Box Request Inbox's entitlement lane (docs/box-request-inbox.md). The
+     * proactive surfacing the entitlement relay previously lacked (a stuck box
+     * re-asked forever but nothing in the app showed it). Mirror of iOS.
+     */
+    private val _serversAwaitingEntitlement = MutableStateFlow<Set<String>>(emptySet())
+    val serversAwaitingEntitlement: StateFlow<Set<String>> = _serversAwaitingEntitlement.asStateFlow()
+    fun setServersAwaitingEntitlement(fqdns: Set<String>) {
+        _serversAwaitingEntitlement.value = fqdns.map { it.lowercase() }.toSet()
+    }
+
+    /** True iff [fqdn] is waiting for the owner to authorize it to serve. */
+    fun hasLiveEntitlementRequest(fqdn: String): Boolean =
+        _serversAwaitingEntitlement.value.contains(fqdn.lowercase())
+
     /** Liveness for [pod] using the cheap directory `awaitingUnlock` flag OR
      *  the account-level (biometric-watcher) waiting set — either means the box
      *  is actively waiting, so it must not read "never came online". */

@@ -12,32 +12,44 @@ import XCTest
 final class BootApprovalWatcherTests: XCTestCase {
     private let domain = "home.demo1234.flagship.services"
 
-    func test_publishesAwaitingSetFromDirectory() async {
+    func test_publishesAwaitingSetsFromDirectory() async {
         let app = AppState(currentUser: "demo1234")
-        let w = BootApprovalWatcher(app: app, pollAwaiting: { [self] in [domain] }, pollIntervalNanos: 1)
-        let set = await w.pollOnce()
-        XCTAssertEqual(set, [domain])
+        let w = BootApprovalWatcher(
+            app: app,
+            pollAwaiting: { [self] in PendingApprovalSets(unlock: [domain], entitlement: [domain]) },
+            pollIntervalNanos: 1
+        )
+        let sets = await w.pollOnce()
+        XCTAssertEqual(sets.unlock, [domain])
+        XCTAssertEqual(sets.entitlement, [domain])
         XCTAssertEqual(app.serversAwaitingApproval, [domain])
+        // The entitlement lane is the new Box Request Inbox surfacing.
+        XCTAssertEqual(app.serversAwaitingEntitlement, [domain])
     }
 
-    func test_emptyDirectory_clearsSet() async {
+    func test_emptyDirectory_clearsSets() async {
         let app = AppState(currentUser: "demo1234")
         app.serversAwaitingApproval = [domain]
-        let w = BootApprovalWatcher(app: app, pollAwaiting: { [] }, pollIntervalNanos: 1)
-        let set = await w.pollOnce()
-        XCTAssertTrue(set.isEmpty)
+        app.serversAwaitingEntitlement = [domain]
+        let w = BootApprovalWatcher(app: app, pollAwaiting: { PendingApprovalSets() }, pollIntervalNanos: 1)
+        let sets = await w.pollOnce()
+        XCTAssertTrue(sets.unlock.isEmpty)
         XCTAssertTrue(app.serversAwaitingApproval.isEmpty)
+        XCTAssertTrue(app.serversAwaitingEntitlement.isEmpty)
     }
 
-    func test_blip_closureReturnsPriorSet_untouched() async {
+    func test_blip_closureReturnsPriorSets_untouched() async {
         // The directory closure is best-effort: on a fetch blip it returns the
-        // prior set, so the published set is unchanged — no thrash.
+        // prior sets, so the published sets are unchanged — no thrash.
         let app = AppState(currentUser: "demo1234")
         app.serversAwaitingApproval = [domain]
-        let prior = app.serversAwaitingApproval
+        let prior = PendingApprovalSets(
+            unlock: app.serversAwaitingApproval,
+            entitlement: app.serversAwaitingEntitlement
+        )
         let w = BootApprovalWatcher(app: app, pollAwaiting: { prior }, pollIntervalNanos: 1)
-        let set = await w.pollOnce()
-        XCTAssertEqual(set, [domain])
+        let sets = await w.pollOnce()
+        XCTAssertEqual(sets.unlock, [domain])
     }
 
     /// Regression: a box that STARTS waiting after the last /pods reconcile has

@@ -286,6 +286,12 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// (instead of "never came online") without the biometric mailbox read.
     /// Decoded leniently — absent on a pre-field Worker ⇒ false.
     public let awaitingUnlock: Bool
+    /// Same idea as `awaitingUnlock`, for the entitlement relay: the box has
+    /// posted its entitlement secret-request and is "waiting for approval"
+    /// (authorize it to serve your account), NOT "never came online". Part of
+    /// the Box Request Inbox digest (docs/box-request-inbox.md). Lenient — absent
+    /// on a pre-field Worker ⇒ false.
+    public let awaitingEntitlement: Bool
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -294,13 +300,15 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         registeredAt: Int64? = nil,
         hasCert: Bool = false,
         signedStatus: SignedDaemonStatus? = nil,
-        awaitingUnlock: Bool = false
+        awaitingUnlock: Bool = false,
+        awaitingEntitlement: Bool = false
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
         self.registeredAt = registeredAt; self.hasCert = hasCert
         self.signedStatus = signedStatus
         self.awaitingUnlock = awaitingUnlock
+        self.awaitingEntitlement = awaitingEntitlement
     }
 
     public init(from decoder: Decoder) throws {
@@ -311,6 +319,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
         self.awaitingUnlock = (try? c.decodeIfPresent(Bool.self, forKey: .awaitingUnlock)) ?? false
+        self.awaitingEntitlement = (try? c.decodeIfPresent(Bool.self, forKey: .awaitingEntitlement)) ?? false
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
@@ -331,6 +340,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
         if awaitingUnlock { try c.encode(true, forKey: .awaitingUnlock) }
+        if awaitingEntitlement { try c.encode(true, forKey: .awaitingEntitlement) }
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -339,7 +349,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, awaitingUnlock
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, awaitingUnlock, awaitingEntitlement
     }
 }
 
