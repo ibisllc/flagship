@@ -76,6 +76,26 @@ public struct ServicesTab: View {
             if let vm {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
+                        // Server filter lives INLINE (not in `.toolbar`): the
+                        // PodSwitcher's custom dropdown is an in-hierarchy
+                        // overlay, and a nav-bar ToolbarItem clips that overlay
+                        // to the bar bounds → the panel was invisible on tap.
+                        // `.zIndex(1)` lets the open panel paint above the rows
+                        // below (its own zIndex only orders within its host).
+                        if app.pods.count > 1 {
+                            HStack {
+                                Spacer()
+                                PodSwitcher(
+                                    pods: app.pods,
+                                    currentPodId: vm.serverFilter,
+                                    leaderPodId: app.leaderPodId,
+                                    onPick: { pod in vm.serverFilter = pod.podId },
+                                    allLabel: "All servers",
+                                    onPickAll: { vm.serverFilter = nil }
+                                )
+                            }
+                            .zIndex(1)
+                        }
                         subheader(c: c, vm: vm)
                         emptyOrList(vm: vm, c: c)
                         Spacer().frame(height: FS.space.s12)
@@ -87,21 +107,6 @@ public struct ServicesTab: View {
                 .navigationTitle("Services")
                 .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
                 .searchable(text: searchBinding(vm: vm), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search services")
-                .toolbar {
-                    // V8 — server filter stays as the top-right PodSwitcher.
-                    if app.pods.count > 1 {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            PodSwitcher(
-                                pods: app.pods,
-                                currentPodId: vm.serverFilter,
-                                leaderPodId: app.leaderPodId,
-                                onPick: { pod in vm.serverFilter = pod.podId },
-                                allLabel: "All servers",
-                                onPickAll: { vm.serverFilter = nil }
-                            )
-                        }
-                    }
-                }
                 .refreshable { await vm.load() }
             } else {
                 ProgressView()
