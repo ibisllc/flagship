@@ -8,6 +8,8 @@ import type {
   SecretMailboxStorage,
   SecretMailboxPurpose,
   PairingDepositRecord,
+  ServerTransferRecord,
+  ServerTransferStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -1582,6 +1584,156 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
   }
 }
 
+interface ServerTransferRow {
+  server_domain: string;
+  giver_username: string;
+  transfer_nonce: string;
+  giver_irk_pub_hex: string;
+  issued_at: number;
+  expires_at: number;
+  offer_signature_hex: string;
+  claimed_at: number | null;
+  acquirer_username: string | null;
+  acquirer_irk_pub_hex: string | null;
+  claim_issued_at: number | null;
+  claim_signature_hex: string | null;
+}
+
+function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
+  return {
+    serverDomain: r.server_domain,
+    giverUsername: r.giver_username,
+    transferNonce: r.transfer_nonce,
+    giverIrkPubHex: r.giver_irk_pub_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    offerSignatureHex: r.offer_signature_hex,
+    claimedAt: r.claimed_at,
+    acquirerUsername: r.acquirer_username,
+    acquirerIrkPubHex: r.acquirer_irk_pub_hex,
+    claimIssuedAt: r.claim_issued_at,
+    claimSignatureHex: r.claim_signature_hex,
+  };
+}
+
+export class D1ServerTransferStorage implements ServerTransferStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putOffer(rec: ServerTransferRecord): Promise<void> {
+    // One offer per box — INSERT OR REPLACE on the server_domain PK so a
+    // re-issued offer overwrites any prior unclaimed row.
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_transfers
+           (server_domain, giver_username, transfer_nonce, giver_irk_pub_hex,
+            issued_at, expires_at, offer_signature_hex,
+            claimed_at, acquirer_username, acquirer_irk_pub_hex,
+            claim_issued_at, claim_signature_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+      )
+      .bind(
+        rec.serverDomain,
+        rec.giverUsername.toLowerCase(),
+        rec.transferNonce.toLowerCase(),
+        rec.giverIrkPubHex.toLowerCase(),
+        rec.issuedAt,
+        rec.expiresAt,
+        rec.offerSignatureHex.toLowerCase(),
+        rec.claimedAt,
+        rec.acquirerUsername === null ? null : rec.acquirerUsername.toLowerCase(),
+        rec.acquirerIrkPubHex === null ? null : rec.acquirerIrkPubHex.toLowerCase(),
+        rec.claimIssuedAt,
+        rec.claimSignatureHex === null ? null : rec.claimSignatureHex.toLowerCase(),
+      )
+      .run();
+  }
+
+  async getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<ServerTransferRow>();
+    if (!r) return undefined;
+    // GC an unclaimed offer past its TTL; keep a claimed row so the giver's
+    // phone can still complete the re-seal after expiry.
+    if (r.claimed_at === null && r.expires_at <= now) {
+      await this.db
+        .prepare("DELETE FROM server_transfers WHERE server_domain = ?1 AND claimed_at IS NULL")
+        .bind(serverDomain)
+        .run();
+      return undefined;
+    }
+    return rowToServerTransfer(r);
+  }
+
+  async claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .first<ServerTransferRow>();
+    if (!r) return { ok: false as const, reason: "no offer" };
+    if (r.claimed_at !== null) return { ok: false as const, reason: "already claimed" };
+    if (r.expires_at <= now) return { ok: false as const, reason: "expired" };
+    if (r.transfer_nonce !== transferNonce.toLowerCase()) {
+      return { ok: false as const, reason: "nonce mismatch" };
+    }
+    // Conditional UPDATE (CAS on claimed_at IS NULL) so two racing claims
+    // can't both win.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET claimed_at = ?1, acquirer_username = ?2, acquirer_irk_pub_hex = ?3,
+               claim_issued_at = ?4, claim_signature_hex = ?5
+         WHERE server_domain = ?6 AND claimed_at IS NULL`,
+      )
+      .bind(
+        now,
+        acquirerUsername.toLowerCase(),
+        acquirerIrkPubHex.toLowerCase(),
+        claimIssuedAt,
+        claimSignatureHex.toLowerCase(),
+        serverDomain,
+      )
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) {
+      return { ok: false as const, reason: "already claimed" };
+    }
+    return {
+      ok: true as const,
+      record: {
+        serverDomain: r.server_domain,
+        giverUsername: r.giver_username,
+        transferNonce: r.transfer_nonce,
+        giverIrkPubHex: r.giver_irk_pub_hex,
+        issuedAt: r.issued_at,
+        expiresAt: r.expires_at,
+        offerSignatureHex: r.offer_signature_hex,
+        claimedAt: now,
+        acquirerUsername: acquirerUsername.toLowerCase(),
+        acquirerIrkPubHex: acquirerIrkPubHex.toLowerCase(),
+        claimIssuedAt,
+        claimSignatureHex: claimSignatureHex.toLowerCase(),
+      },
+    };
+  }
+
+  async remove(serverDomain: string): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM server_transfers WHERE server_domain = ?1")
+      .bind(serverDomain)
+      .run();
+  }
+}
+
 interface BoxSealedLeaseRow {
   server_domain: string;
   lease_id: string;
@@ -2885,6 +3037,7 @@ export class D1Storage implements Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
+  serverTransfers: ServerTransferStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
@@ -2922,6 +3075,7 @@ export class D1Storage implements Storage {
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.secretMailbox = new D1SecretMailboxStorage(db);
+    this.serverTransfers = new D1ServerTransferStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);

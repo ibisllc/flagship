@@ -25,6 +25,8 @@ import type {
   SecretMailboxRecord,
   SecretMailboxStorage,
   PairingDepositRecord,
+  ServerTransferRecord,
+  ServerTransferStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -874,6 +876,53 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
   }
 }
 
+export class InMemoryServerTransferStorage implements ServerTransferStorage {
+  // Keyed by serverDomain — one offer per box (a new offer replaces).
+  private rows = new Map<string, ServerTransferRecord>();
+
+  async putOffer(rec: ServerTransferRecord): Promise<void> {
+    this.rows.set(rec.serverDomain, { ...rec });
+  }
+
+  async getOffer(serverDomain: string, now: number): Promise<ServerTransferRecord | undefined> {
+    const r = this.rows.get(serverDomain);
+    if (!r) return undefined;
+    // GC an unclaimed offer past its TTL; keep a claimed row so the giver's
+    // phone can still complete the re-seal after expiry.
+    if (r.claimedAt === null && r.expiresAt <= now) {
+      this.rows.delete(serverDomain);
+      return undefined;
+    }
+    return { ...r };
+  }
+
+  async claim(
+    serverDomain: string,
+    transferNonce: string,
+    acquirerUsername: string,
+    acquirerIrkPubHex: string,
+    claimIssuedAt: number,
+    claimSignatureHex: string,
+    now: number,
+  ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }> {
+    const r = this.rows.get(serverDomain);
+    if (!r) return { ok: false as const, reason: "no offer" };
+    if (r.claimedAt !== null) return { ok: false as const, reason: "already claimed" };
+    if (r.expiresAt <= now) return { ok: false as const, reason: "expired" };
+    if (r.transferNonce !== transferNonce) return { ok: false as const, reason: "nonce mismatch" };
+    r.claimedAt = now;
+    r.acquirerUsername = acquirerUsername;
+    r.acquirerIrkPubHex = acquirerIrkPubHex;
+    r.claimIssuedAt = claimIssuedAt;
+    r.claimSignatureHex = claimSignatureHex;
+    return { ok: true as const, record: { ...r } };
+  }
+
+  async remove(serverDomain: string): Promise<void> {
+    this.rows.delete(serverDomain);
+  }
+}
+
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   // Composite key: `${serverDomain} ${leaseId}`.
   private rows = new Map<string, BoxSealedLeaseRecord>();
@@ -1319,6 +1368,7 @@ export class InMemoryStorage implements Storage {
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   secretMailbox = new InMemorySecretMailboxStorage();
+  serverTransfers = new InMemoryServerTransferStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
