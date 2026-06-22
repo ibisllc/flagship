@@ -257,13 +257,19 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("recovery-cloud-setup");
   });
 
-  it("/webapp/views/bootstrap.js offers the recover-from-passkey path", async () => {
+  it("/webapp/views/bootstrap.js is username-first and offers the access pathways", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/bootstrap.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("recoverFromCloud");
+    // The unified cover: one username field → resolve → branch.
+    expect(r.body).toContain("bootstrap-continue");
+    expect(r.body).toContain("resolveAccount");
+    expect(r.body).toContain("accessOptions");
+    // Taken-name access pathways still route to the real flows.
+    expect(r.body).toContain("recoverFromCloud"); // recover
     expect(r.body).toContain("bootstrapFromExistingSeed");
-    expect(r.body).toContain("bootstrap-recover");
+    expect(r.body).toContain("enterRecovery"); // keyfile import
+    expect(r.body).toContain("enterJoin"); // scan a pairing code
   });
 
   it("/webapp/keystore.js exposes bootstrapFromExistingSeed for the recovery flow", async () => {

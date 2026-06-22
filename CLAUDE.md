@@ -133,6 +133,34 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 — unified username-first cover (webapp) + Box Request Inbox visibility gaps
+
+**Box Request Inbox visibility gaps (all surfaces, shipped):** a box waiting on
+*entitlement* read "Never came online" on Home, and the Activity "Open approvals"
+entry was gated behind the feed LOADING (which fails for the offline/awaiting
+boxes that need it). Fixed: liveness now folds in `awaitingEntitlement`
+(iOS `AppState.isAwaitingApproval`; Android `AppState.liveness`; webapp
+`classifyServer`) so it reads "Waiting for approval" (decommission suppressed);
+the approvals entry is hoisted OUT of the loaded-state branch on iOS + Android.
+Webapp live; iOS/Android after a rebuild.
+
+**Unified cover — WEBAPP done, mobile PENDING.** Root cause of "the name harry is
+already taken": the cover's *create* path (`openAccount.claimUsername`) claims
+with the webapp's fresh device key; a name bound to a *different* IRK (your
+phone's) is rejected, and the create UI dead-ended at a trademark-claim / "try
+another" — it never called `/api/account/resolve` or offered recovery. Rebuilt
+the cover **username-first** (`views/bootstrap.js` + `index.html`): enter a name →
+`resolveAccount` → **free** ⇒ sign up (claim), **demo** ⇒ join sandbox, **taken**
+⇒ render ALL FOUR access pathways (`lib/accountAccess.js` `accessOptions`):
+recover-with-passkey (enabled iff cloud recovery enrolled), scan-a-pairing-code
+(→ `enterJoin`), import-a-key-file (→ `enterRecovery`), claim-with-a-wait (grace,
+per `graceModel`) — unsupported ones shown DISABLED + explained, not hidden. The
+passphrase moved off the cover into the sign-up step. Gates: webapp accountAccess
+**5** + static **31** + login-never-404 **25** + home/inbox/profiles/sessions/
+post-recovery/account-deletion green; `tsc -b` clean. **NEXT: mirror the
+username-first cover + access-options on iOS + Android lock screens** (where #1
+scan-pairing wasn't even offered).
+
 ### 2026-06-21 — box-side self-delete execution + iOS ceremony XCTest SHIPPED; transfer-a-box protocol landed
 
 **Closed two of the three account-deletion follow-ups + landed the cryptographic
