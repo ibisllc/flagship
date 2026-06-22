@@ -126,18 +126,55 @@ unchanged, so the LUKS disk key stays sealed to the same key — NO disk re-seal
      `/pods`/registration), claims the new entitlement, **re-derives its cert
      SANs** (A′ already auto-discards+re-mints on FQDN change — the same path that
      handles model-C→A′), re-runs ACME for the new SANs, and re-registers routing.
-4. **Cutover:** dual-route old+new for a grace period (both FQDNs resolve while
-   the box re-issues), then retire the old FQDN (DNS removed, routing dropped).
-   **Old URLs go dark** — surface this prominently in the confirm UI.
+4. **Cutover: NONE (decided).** The moment the transaction finalizes, the new
+   identity is live and **the old name is relinquished immediately** — no
+   dual-route grace. Old FQDNs go dark at once (DNS removed, routing dropped);
+   `oldname` becomes claimable by anyone. Surface this hard in the confirm UI
+   ("your old URLs stop working immediately and the old name is released").
 5. **Offline boxes:** the deposit + registry change persist; a box re-homes when
-   it next checks in. The name change completes at `.com` immediately; per-box
-   cutover is eventually-consistent.
+   it next checks in. The name change completes at `.com` immediately; a box
+   that's offline at finalize re-homes on its next check-in (its old URL is
+   already dark).
 
 **Reuse map:** transfer-a-box (`serverTransfer.ts`, migration `0059`,
 namespace-migration re-home + DNS + routing) · A′ cert SAN re-derivation
 (daemon) · entitlement relay/deposit (`entitlementRelay.ts`, `entitlement-deposit`
 lane) · per-box DNS publisher (`services-zone`). **New:** the name-change order +
 the orchestration that drives all boxes through re-home under one request.
+
+## 5b. Restricted-service access continuity across a rename
+
+**Authorization survives a rename with NO work** — grounded in
+`serviceInvites.ts`: a service grant binds the grantee's **stable AID**
+(`deriveAccountId(UMK)`), is **enforced by the box itself** (it holds the owner
+AID pubkey and verifies the signed create), and **`.com` is a blind carrier**.
+None of that references the username/URL, and a rename leaves the AID, box STK,
+service, and grants untouched. **The capability does not break.** What breaks is
+only the URL the grantee navigates to.
+
+- **App-mediated grantees → re-resolve, leak-free.** The stored invite holds the
+  stable reference (`serviceRef` + owner identity), **not** a URL. The client
+  re-queries `.com` for the service's *current* URL by **stable identity, never by
+  the old name**, so no public `oldname→newname` record is created — only an
+  already-authorized grantee learns the new name. **Build requirement: invites/
+  clients must resolve the live URL from the stable handle and must NOT cache the
+  URL.**
+- **Plain-browser-bookmark grantees → cannot re-resolve.** With no cutover, the
+  old URL is dead and any redirect would itself be the leak (or be served by
+  whoever next claims `oldname`). **So: after a rename, flag every grantee
+  "URL changed — resend" in service > users, with per-grantee + "resend to all"
+  actions.** The owner re-sends out of band — which is also the *privacy-correct
+  default* (the owner controls who learns the new name, and silently skips anyone
+  they renamed away from).
+
+**Honest ceiling — rename ≠ unlinkability.** The box STK is public (`/pods` is
+unauthenticated) and FQDNs are in CT logs, so an observer who recorded the old
+STK can correlate it under the new name. The stable identity that makes access
+survive is the same thing that links the names — you can't have both. A rename is
+a **rebrand**, not anonymity. True disassociation is a *different* operation:
+**revoke the grants** (already built) + a **fresh box identity** (re-key/re-burn,
+which intentionally breaks all carry-over). The UI must say plainly that renaming
+does not hide that this is the same box.
 
 ## 6. Payment — the name-change entitlement (unlinkable)
 
@@ -147,8 +184,12 @@ the orchestration that drives all boxes through re-home under one request.
   cannot link payment → account → identity).
 - **Product:** one-time, single-use, bound to the *name-change action* (not
   transferable to other entitlements). Redemption is **IRK-signed** so only the
-  account holder consumes it. Price **floor $5** (config; may price premium/short
-  names higher later — §16 decision).
+  account holder consumes it.
+- **Pricing (decided): ONE flat price** (~$5), **no premium/short-name tiers** —
+  the genuinely premium names are all already held as `.com` domains and so are
+  reachable only through dibs, not an open market, so there's nothing to tier.
+  **A dibs claim is priced a bit HIGHER** than a normal change (a "we kept the
+  name warm for you" premium), not lower.
 - **Methods:** card via processor + a privacy method (Monero) for the
   no-link-at-all path (mirrors `pro.html`).
 - **No refunds** (a name change does real work — a box re-home). State at point
@@ -212,12 +253,12 @@ key-file import (`keyfileImportTakeover.js`), device-pair / scan-a-code
 persists, claimed, forever; the account is unusable; no one else can ever take
 it. No new code — the absence of GC *is* the behavior.
 
-**Enrollment posture (§16 decision):** strongly-encourage vs **require** at least
-one recovery factor at sign-up (key-file download is zero-infra). Given
-names-forever + no fallback, I recommend **require** a key-file download (or a
-passkey) before the account is "complete", with a clear "this is the only way
-back in" screen. The app already blocks tier-2 sign-out without recovery — move
-that gate earlier.
+**Enrollment posture (DECIDED): REQUIRE a backup at sign-up.** At least one
+recovery factor (key-file download is the zero-infra option, or a passkey) must
+be set before the account is "complete", with a clear "this is the only way back
+in — we cannot recover it for you" screen. (Names-forever + credential-only
+recovery means there is genuinely no fallback.) Move the existing tier-2-sign-out
+recovery gate earlier, to sign-up.
 
 ## 9. Cover / UX changes (all surfaces)
 
@@ -233,9 +274,16 @@ name" (not a create entry).
 
 **Name change (new):** Settings → "Change your name" → type desired name → live
 availability + reserved/dibs check → (domain-proof if in window) → pay (unlinkable)
-→ **confirm sheet warning: re-homes your boxes, old URLs stop working, brief
-cutover** → migration progress (per-box re-home status, reuse the
-ActiveOperations sliver).
+→ **confirm sheet warning: re-homes your boxes, old URLs stop working
+IMMEDIATELY, the old name is released, and this does NOT hide that it's the same
+box** → migration progress (per-box re-home status, reuse the ActiveOperations
+sliver).
+
+**Post-rename — re-issue access links (new).** After a rename, the **service >
+users** list flags every grantee **"URL changed — resend"**, with per-grantee
+**Resend** + a **Resend to all**. App-mediated grantees re-resolve automatically
+(§5b) and need nothing; the flag + resend covers browser-bookmark grantees and is
+the owner-controlled (privacy-correct) way to disclose the new name.
 
 **Framing copy:** "`<name>.flagship.services` is your handle — yours forever, and
 free. For a permanent branded link, connect your own domain." Position
@@ -302,17 +350,21 @@ path.
 
 ## 16. Open decisions
 
+DECIDED (2026-06-22): **require a backup at sign-up** · **one flat price, no
+premium tiers**, **dibs priced a bit higher** (kept-warm) · **no cutover —
+instant relinquish on finalize** · name-change is a **rebrand, not
+unlinkability** (true disassociation = revoke + fresh box identity).
+
+Still open:
 1. **Username grammar:** confirm hyphens allowed + the `--` ban + audit no tier-2
-   parser collides.
+   parser collides (mostly an engineering audit — I can do it).
 2. **Random format:** `adjective-noun-NNNN`? suffix length? wordlist source.
-3. **Dibs claim price:** free (launch incentive) or the standard fee?
-4. **Post-window free matching-name claim by a domain holder:** free or fee?
-5. **Recovery enrollment:** require (recommended) vs strongly-encourage at sign-up.
-6. **Dibs scope:** `.com` only, or any domain whose eTLD+1 label matches?
-7. **Premium pricing:** flat $5, or short/dictionary names priced higher?
-8. **Name-change cutover:** dual-route window length; hard-cut vs grace.
-9. **Profanity policy** source + appeal (none, by design?).
-10. **Payment methods** at launch (card + Monero?) and the no-refund copy.
+3. **Dibs claim price:** the exact "kept-warm" premium over the base change fee.
+4. **Post-window free matching-name claim by a domain holder:** free or base fee?
+5. **Dibs scope:** `.com` only, or any domain whose eTLD+1 label matches?
+6. **Profanity policy** source + appeal (none, by design?).
+7. **Payment methods** at launch (card + Monero?) and the no-refund copy.
+8. **Dibs window length:** 12 months assumed — confirm.
 
 ## 17. Build checklist (everything to realize the vision)
 
@@ -328,9 +380,15 @@ limits · `name_changes`/`name_dibs_claims` storage · audit · window config.
 DNS + re-register + old-canonical retire).
 
 **Clients (webapp · iOS · Android):** sign-up random-assign + shuffle · recovery
-enrollment gate · cover flip (username field = sign-in only) · name-change
-Settings flow (availability + dibs proof + unlinkable pay + re-home warning +
-progress) · BYO-domain positioning copy.
+enrollment gate (required) · cover flip (username field = sign-in only) ·
+name-change Settings flow (availability + dibs proof + unlinkable pay + re-home
+warning + progress) · **service-invite clients resolve the live URL from the
+stable handle, never cache the URL (§5b)** · **service > users "URL changed —
+resend" flag + per-grantee/all resend** · BYO-domain positioning copy.
+
+**Service-access (§5b):** ensure invites/grants carry only the STABLE reference
+(`serviceRef` + owner identity), and add a stable-handle → current-URL resolve so
+app grantees reconnect after a rename with no public old→new record.
 
 **Removals:** grace takeover · GC reclaim · trademark mailto · grace branch in
 resolve/login · create-takes-a-name path.
