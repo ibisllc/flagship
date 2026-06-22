@@ -5,6 +5,9 @@ import {
   deriveIrkVersioned,
   signWithIrkVersioned,
   setActiveKeystoreProfile,
+  signWithIrk,
+  bytesToHex,
+  persistSeedForProfile,
 } from "../keystore.js";
 import { humanError } from "../lib/humanError.js";
 import { $, registerView } from "../lib/router.js";
@@ -18,8 +21,10 @@ import {
 } from "../lib/accountResolve.js";
 import { accessOptions } from "../lib/accountAccess.js";
 import { loginRealAccount } from "../lib/loginTakeover.js";
+import { openAccount } from "../lib/openAccount.js";
 import { addProfile } from "../lib/profiles.js";
-import { unlockSession } from "../lib/state.js";
+import { unlockSession, getSession } from "../lib/state.js";
+import { controlApex } from "../lib/apex.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { set as profileSet } from "../lib/profilesStore.js";
@@ -28,14 +33,14 @@ registerView("view-bootstrap");
 
 const USERNAME_RE = /^[a-z0-9]{3,30}$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
 
-/**
- * The unified cover (docs/login-and-account-redesign.md): ONE username field.
- * Resolve it, then branch on what the account IS — never a dead 404/"taken":
- *   - free      → sign up (claim this name)
- *   - demo      → join the sandbox
- *   - taken     → show EVERY way to get back in (recover / scan / keyfile /
- *                 claim-with-a-wait), unsupported ones disabled + explained.
- */
+// Sign-up no longer takes a chosen name — naming is random-by-default
+// (docs/naming-recovery-and-name-change.md §4): a custom name is a paid change,
+// later. So the cover has TWO actions: "Create account" (→ random handle) and a
+// username field that is SIGN-IN only.
+
+/** SIGN IN: resolve the typed username and branch on what the account IS —
+ *  never a dead 404/"taken". Unknown → "no account by that name" (NOT sign-up;
+ *  sign-up is the separate random path). Taken → the credential access options. */
 async function handleContinue() {
   const raw = ($("bootstrap-username")?.value || "").trim().toLowerCase();
   if (!USERNAME_RE.test(raw)) {
@@ -46,26 +51,44 @@ async function handleContinue() {
   try {
     resolution = await resolveAccount(raw);
   } catch (e) {
-    // A throw here is a genuine transport/server failure (rate-limit, 5xx) —
-    // NOT a missing account (a miss is `kind:"unknown"` in a 200 body).
     return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
   }
   switch (classifyResolution(resolution)) {
     case "demo":
       return joinDemo(resolution);
     case "unknown":
-      return signUp(raw); // the name is FREE → create it
+      return showNoSuchAccount(raw);
     default:
-      return showAccessOptions(resolution); // the name is TAKEN → how to get in
+      return showAccessOptions(resolution); // taken → credential access options
   }
 }
 
-/** FREE name → create the account. Username-first: the name is already chosen,
- *  so collect the passphrase now (it used to live on the cover), generate the
- *  device key, then hand the wizard the chosen name to claim + finish setup. */
-async function signUp(username) {
+/** A miss is a STATE, not a 404 — clear guidance, and a nudge to create. */
+async function showNoSuchAccount(username) {
+  await inlineConfirm({
+    title: "No account by that name",
+    message: `We couldn't find an account called "${username}". Check the spelling, or create a new account (you'll get a free random handle).`,
+    okLabel: "OK",
+    cancelLabel: "Back",
+  });
+}
+
+/** Fetch a few available random handles for the sign-up "shuffle". */
+async function fetchRandomCandidates() {
+  const r = await fetch(`${controlApex()}/api/username/random`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`couldn't get a handle (HTTP ${r.status})`);
+  const body = await r.json().catch(() => ({}));
+  const list = Array.isArray(body.candidates) ? body.candidates.filter((s) => typeof s === "string") : [];
+  if (!list.length) throw new Error("no handle available — try again");
+  return list;
+}
+
+/** CREATE ACCOUNT: a free, random, dashless handle. Passphrase → device key →
+ *  fetch candidates → shuffle/accept → claim that EXACT name (no free-text edit,
+ *  so a custom name stays a paid change) → on to the recovery step. */
+async function createAccount() {
   const pass = await inlinePrompt({
-    title: `Create "${username}"`,
+    title: "Create your account",
     message:
       "Choose a passphrase (8+ chars). It encrypts your key in this browser — flagshipserver.com never sees it.",
     placeholder: "passphrase",
@@ -81,19 +104,69 @@ async function signUp(username) {
     validate: (v) => (v !== pass ? "passphrases don't match" : null),
   });
   if (confirm == null) return;
+
+  let seed;
   try {
-    const seed = await bootstrapNewIdentity(pass);
+    seed = await bootstrapNewIdentity(pass);
     await unlockSession(seed);
-    toast("device key generated");
-    // Hand the wizard the already-chosen name so the user doesn't retype it.
+  } catch (e) {
+    console.error(e);
+    return toast(humanError(e), "err");
+  }
+
+  // Pick a random handle — shuffle until they accept.
+  let candidates;
+  try {
+    candidates = await fetchRandomCandidates();
+  } catch (e) {
+    return toast(e.message ?? String(e), "err");
+  }
+  let chosen = null;
+  let i = 0;
+  while (chosen == null) {
+    const name = candidates[i];
+    const accept = await inlineConfirm({
+      title: "Your handle",
+      message: `Your account name will be "${name}". It's random and free — you can change it later for a fee. Use it, or shuffle for another?`,
+      okLabel: "Use this name",
+      cancelLabel: "Shuffle",
+    });
+    if (accept) {
+      chosen = name;
+      break;
+    }
+    i += 1;
+    if (i >= candidates.length) {
+      try {
+        candidates = await fetchRandomCandidates();
+      } catch (e) {
+        return toast(e.message ?? String(e), "err");
+      }
+      i = 0;
+    }
+  }
+
+  // Claim that EXACT name (idempotent, IRK-signed). No editable field, so a
+  // free custom name is impossible — that's the paid name-change.
+  try {
+    const session = getSession();
+    await openAccount(chosen, {
+      session,
+      signWithIrk,
+      bytesToHex,
+      setUsername: (u) => {
+        try { profileSet("username", u); } catch { /* swallow */ }
+        session.username = u;
+      },
+      persistSeedForProfile,
+      addProfile,
+      // No dispatchInitialView — route into the recovery step (a backup is
+      // required; the wizard owns that flow, then the app shell).
+    });
+    toast(`account created — ${chosen}`, "ok");
     try {
       const { enterWizard } = await import("./wizard.js");
-      await enterWizard({ step: "username" });
-      const field = document.getElementById("wizard-username-input");
-      if (field) {
-        field.value = username;
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      await enterWizard({ step: "secure-account" });
     } catch {
       await dispatchInitialView();
     }
@@ -241,6 +314,7 @@ async function recoverRealAccount(resolution) {
 }
 
 export function initBootstrapView() {
+  $("bootstrap-create")?.addEventListener("click", createAccount);
   $("bootstrap-continue")?.addEventListener("click", handleContinue);
   $("bootstrap-username")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {

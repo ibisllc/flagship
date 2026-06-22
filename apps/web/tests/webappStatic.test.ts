@@ -261,7 +261,10 @@ describe("/webapp PWA static surface", () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/bootstrap.js" });
     expect(r.statusCode).toBe(200);
-    // The unified cover: one username field → resolve → branch.
+    // Random-by-default cover: a "Create account" action (random handle) +
+    // a SIGN-IN-only username field that resolves to the access options.
+    expect(r.body).toContain("createAccount");
+    expect(r.body).toContain("/api/username/random");
     expect(r.body).toContain("bootstrap-continue");
     expect(r.body).toContain("resolveAccount");
     expect(r.body).toContain("accessOptions");
