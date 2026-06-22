@@ -169,10 +169,24 @@ commits on `main`, each gated:
   GIVER-PHONE step (only it holds the giver IRK; the box can't re-seal itself).
   REMAINING: `.com` namespace-migration broker, giver-phone re-seal-on-claim,
   box-side cert/entitlement re-home, client giver-QR + acquirer-camera.
-  **IN PROGRESS on branch `feat/transfer-a-box`** (background worker started
-  2026-06-21, scoped to the backend broker + storage + webapp; native clients +
-  box-side cert re-home documented as a handoff). **⭐ PROJECT-WIDE TODO: merge
-  `feat/transfer-a-box` → `main` once complete + reviewed + reburn-validated.**
+  **IN PROGRESS on branch `feat/transfer-a-box`** (background worker, 2026-06-21).
+  **Landed on the branch (4 commits, full-repo vitest green, +22 tests, conflict-
+  free rebase onto current `main` — no file overlap with the PodSwitcher merge):**
+  storage `server_transfers` broker lane (migration **0059**, D1+InMemory+parity);
+  the `.com` broker (`serverTransfer.ts` — offer deposit [giver-IRK mailbox-auth,
+  verified under the box's CURRENT owner IRK] + claim [acquirer's REGISTERED IRK,
+  one-time CAS] → the `.com`-half **namespace migration** re-homing servers +
+  routing `<server>.<giver>`→`<server>.<acquirer>` + per-box DNS + audit, plus a
+  claim-poll so the giver learns the acquirer IRK for the re-seal); webapp giver
+  QR + acquirer claim flow. **STILL on the branch (NOT merged): the feature is not
+  end-to-end — merging now would expose a webapp transfer flow that strands an
+  encrypted box (acquirer can't unlock).** REMAINING before merge: (a) box-side
+  cert + entitlement re-home on a podCanonical change; (b) giver-phone disk-key
+  re-seal (reuse `handlePostBoxSealedLease`; claim-poll already returns the
+  acquirer IRK); (c) native iOS/Android giver-QR + acquirer-camera. **⭐ PROJECT-
+  WIDE TODO: finish (a)–(c) → rebase onto `main` → reburn-validate → merge
+  `feat/transfer-a-box` → `main`.** Deploy note: migration **0059** must be
+  applied + stamped before the Worker deploy that carries the broker.
 
 Gates: `tsc -b` clean · storage parity +2 · control-plane accountDeletion **23** +
 secretMailbox · server-daemon selfDeleteConsumer **10** (full daemon+storage+
