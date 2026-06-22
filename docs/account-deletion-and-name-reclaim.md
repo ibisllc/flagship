@@ -104,19 +104,63 @@ Home → Add a server → **"Pair an existing box"** (today a dead toast/no-op).
 **Acquirer:** Home → Add a server → **"Pair an existing box"** → **camera
 viewfinder** → scan the QR → take ownership.
 
-**Crypto / build considerations (to spec at build time):**
-- The box's LUKS key is sealed to the giver's owner IRK; transfer means the box
-  **re-seals its disk key to the acquirer's IRK** and `.com`'s server-ownership +
+**Crypto / build considerations:**
+- The box's LUKS key is sealed to the giver's owner IRK; transfer means the disk
+  key is **re-sealed to the acquirer's IRK** and `.com`'s server-ownership +
   routing records move to the acquirer. The box must be **online** to complete.
 - The QR carries an **ephemeral transfer token** (giver-IRK-signed), not the
   acquirer's identity (unknown in advance). On scan, the acquirer presents their
-  IRK; the box (or `.com` brokering) binds ownership to it, one-time.
+  IRK; `.com` (brokering) binds ownership to it, one-time.
 - This reuses/extends `usernameHandover` / `serverRevocation` plumbing + the
   pairing-deposit pattern; it is NOT the same as adding a device to the *same*
   account.
 - Sequencing: ship the **deletion ceremony first** (warn "transfer first"), then
   build transfer-a-box as the immediate follow-on (owner: important, not
   deferred).
+
+**Protocol contract — LANDED (2026-06-21).** Two owner-IRK-signed envelopes,
+byte-identical across TS / Swift (`FlagshipCore.ServerTransferOfferOrder` /
+`…ClaimOrder`) / Kotlin (`core.ServerTransferOfferOrder` / `…ClaimOrder`),
+pinned by cross-platform vectors:
+```
+flagship/server-transfer-offer/v1|<serverDomain>|<transferNonce>|<issuedAt>|<expiresAt>
+flagship/server-transfer-claim/v1|<serverDomain>|<transferNonce>|<acquirerUsername>|<acquirerIrkPubHex>|<issuedAt>
+```
+The OFFER (giver IRK) is the QR; it names the box + a one-time short-TTL nonce,
+NOT the acquirer. The CLAIM (acquirer IRK) binds the acquirer's username + IRK
+pub to the offer's nonce. `.com` verifies the offer under the box's CURRENT
+owner IRK and the claim under the acquirer's registered IRK.
+
+**⚠️ Broker is a NAMESPACE MIGRATION, not a username swap — design finding (the
+remaining build).** The box's identity is bound to the OWNER's namespace at
+every layer: the canonical FQDN (`<server>.<oldowner>.flagship.services`), the
+LE cert SANs (`[<server>.<owner>, *.<server>.<owner>]`), the per-box DNS records,
+the RootEntitlement `podCanonical`, and routing. So moving ownership
+`alice`→`bob` is NOT `UPDATE servers SET username='bob'` — it re-homes the box to
+`<server>.bob.…`, which requires, atomically at the `.com` broker + then box-side:
+1. **`.com`**: verify offer (under current-owner IRK) + claim (under acquirer's
+   registered IRK) + offer liveness (stored, unexpired, unclaimed); then move the
+   `servers` row + `routing` record to the acquirer's namespace, publish new
+   per-box DNS, mark the offer claimed (one-time), audit.
+2. **Box**: re-issue its LE cert for the NEW SANs (its existing per-box ACME, on
+   the new podCanonical), pick up a fresh acquirer-minted RootEntitlement via the
+   existing entitlement-relay/deposit lane, and reseat routing.
+3. **Disk key**: only the GIVER's phone can unseal the LUKS key (it holds the
+   giver IRK; the box holds only the sealed blob). So the re-seal is a
+   GIVER-PHONE step — on seeing the acquirer's claim, the giver's phone unseals
+   the current disk key and deposits a NEW box-sealed lease sealed to the
+   ACQUIRER IRK (reusing `handlePostBoxSealedLease`). The "box re-seals itself"
+   phrasing above is therefore inaccurate; the box never holds the giver IRK.
+   Until that deposit lands the acquirer cannot unlock an encrypted box (the
+   accepted handshake — both phones participate, giver first).
+
+   Build order for the remainder: (a) `.com` broker — offer-deposit lane (IRK
+   mailbox-auth) + claim handler doing the namespace move; (b) the giver-phone
+   re-seal-on-claim deposit; (c) box-side cert re-issue + entitlement re-pickup
+   on a podCanonical change; (d) clients — giver "Transfer to another account"
+   warning + QR render, acquirer "Pair an existing box" camera scan + claim POST.
+   The native camera/QR + the box cert/namespace migration need a reburn to
+   validate e2e (cannot be hardware-validated in CI).
 
 ---
 
@@ -181,16 +225,19 @@ reached live.
 
 ## 7. Build plan (proposed order)
 
-1. **Deletion ceremony** (3 surfaces): full-page warning + type/biometric gate +
+1. ✅ **Deletion ceremony** (3 surfaces): full-page warning + type/biometric gate +
    hard-delete-row self-revoke + immediate name free + lock-screen gate
-   consolidation. (Warn "transfer first"; checkbox wired to a stubbed self-delete
-   until §5 box-side lands.)
-2. **`last_active` + sysadmin reclaim tool** for ≥3-month-inactive names.
-3. **Transfer-a-box**: giver flow + QR + acquirer "Pair an existing box" camera
-   scan + box-side re-seal/ownership move.
-4. **Self-delete-content** — `.com` bundle-ingest enforcing the §5 invariant
-   (content-delete accepted only when atomically bundled with the last-device
-   account self-delete) + box-side order handling (online + pending).
+   consolidation. SHIPPED (+ iOS dedicated XCTest, 2026-06-21).
+2. ✅ **`last_active` + sysadmin reclaim tool** for ≥3-month-inactive names. SHIPPED.
+4. ✅ **Self-delete-content** — `.com` bundle-ingest enforcing the §5 invariant +
+   **box-side delivery + execution SHIPPED (2026-06-21)**: a `self-delete`
+   mailbox lane, deposit-on-commit, the revoke-tolerant box consume, and the
+   daemon `selfDeleteConsumer` (heartbeat poll → owner-IRK re-verify →
+   data-services wipe, idempotent). Needs a reburn for live e2e.
+3. ⏳ **Transfer-a-box**: ✅ protocol contract (offer + claim, 3 platforms, pinned
+   — 2026-06-21). REMAINING: the `.com` namespace-migration broker, the
+   giver-phone re-seal-on-claim, box-side cert/entitlement re-home, and the
+   client giver-QR + acquirer-camera flow (see the §4 build-order note).
 
 Open build-time questions: exact transfer-token format + who brokers the re-seal
 (`.com` vs direct); whether `last_active` lives on `usernames` or

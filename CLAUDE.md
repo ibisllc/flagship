@@ -121,9 +121,53 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-20**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-21**.
 
-### 2026-06-21 (latest) — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
+### 2026-06-21 (latest) — box-side self-delete execution + iOS ceremony XCTest SHIPPED; transfer-a-box protocol landed
+
+**Closed two of the three account-deletion follow-ups + landed the cryptographic
+core of the third** (design: `docs/account-deletion-and-name-reclaim.md`). 5
+commits on `main`, each gated:
+
+- **Box-side self-delete EXECUTION (the §5 content-wipe, end-to-end).** A
+  `purpose:"self-delete"` `secret_mailbox` lane (storage: types + InMemory + D1 +
+  D1↔InMemory parity); `handleAccountDeletionBundle` now DEPOSITS the owner-IRK-
+  signed `servers-self-delete` order (one row per owned server) during the bundle
+  commit — replacing the audit-only forward; a **revoke-tolerant**
+  `handleConsumeSelfDeleteDeposit` (`GET /api/server/:d/self-delete`) — the
+  ceremony revokes the server during teardown, so unlike the entitlement/pairing
+  consume it must NOT 403 on `revokedAt` (safe: the order is owner-IRK-signed +
+  re-verified box-side); and the daemon `selfDeleteConsumer` (heartbeat poll →
+  decode/verify the carrier under the config-pinned owner IRK → `realWipeContent`
+  = stop `flagship-data-services` + `docker compose down -v` + prune + drop the
+  app data tree). Idempotent via a local marker. Box-side ⇒ needs a reburn for
+  live e2e (unit-tested here: storage parity, control-plane deposit→consume-once
+  +revoke-tolerant, daemon 10 cases incl. forged/wrong-account/junk rejected
+  without wiping).
+- **iOS dedicated ceremony XCTest** — `AccountDeletionViewModelTests` (6/6 TEST
+  SUCCEEDED): opt-out bundles no servers order; opt-in bundles it + both orders
+  re-verify under the owner IRK over the exact canonical bytes + share one
+  issuedAt; wipe + drop-to-Welcome ONLY after 200; 403 "last device" surfaces the
+  backstop and NEVER wipes; 403-generic/404 fail without wiping. Closes the
+  "iOS has no dedicated ceremony XCTest" follow-up.
+- **Transfer-a-box — protocol contract LANDED** (the rest is the remaining build).
+  `server-transfer-offer` (giver IRK, the QR) + `server-transfer-claim` (acquirer
+  IRK), byte-identical TS/Swift/Kotlin, pinned vectors (TS 8 · Swift 4 · Kotlin
+  BUILD SUCCESSFUL). **Key finding (in §4): the broker is a NAMESPACE MIGRATION,
+  not a username swap** — the box FQDN/cert-SANs/DNS/`podCanonical`/routing all
+  encode the owner, so `alice`→`bob` re-homes the box; and the LUKS re-seal is a
+  GIVER-PHONE step (only it holds the giver IRK; the box can't re-seal itself).
+  REMAINING: `.com` namespace-migration broker, giver-phone re-seal-on-claim,
+  box-side cert/entitlement re-home, client giver-QR + acquirer-camera.
+
+Gates: `tsc -b` clean · storage parity +2 · control-plane accountDeletion **23** +
+secretMailbox · server-daemon selfDeleteConsumer **10** (full daemon+storage+
+control-plane **2909**) · protocol vectors **14** · iOS `AccountDeletionViewModelTests`
+**6/6** · Swift `ServerTransferCanonicalTests` **4/4** · Android
+`ServerTransferVectorTest` BUILD SUCCESSFUL. **NOT deployed** (box-side needs a
+reburn; the `.com` self-delete consume route ships on the next Worker deploy).
+
+### 2026-06-21 — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
 
 **The no-backup deletion ceremony + reclaim is built, tested, and on `main`**
 (design: `docs/account-deletion-and-name-reclaim.md`). Scope delivered: the
