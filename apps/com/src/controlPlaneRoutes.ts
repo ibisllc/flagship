@@ -502,11 +502,16 @@ const ROUTE_RE = {
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
   // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
   // path discriminated by method:
-  //   POST  giver deposit (IRK mailbox-auth, signed ServerTransferOffer)
-  //         OR acquirer claim (signed ServerTransferClaim) — disambiguated by body
-  //   GET   giver claim-poll (IRK mailbox-auth → acquirer IRK for the re-seal)
+  //   POST .../transfer/offer       giver deposit (IRK mailbox-auth, signed offer)
+  //   POST .../transfer/claim       acquirer claim (signed ServerTransferClaim)
+  //   POST .../transfer/claim-poll  giver claim-poll (IRK mailbox-auth → acquirer
+  //                                 IRK for the disk-key re-seal). POST (not GET)
+  //                                 because the IRK mailbox-auth rides the body
+  //                                 (a GET-with-body is non-portable) — mirrors
+  //                                 the secret-requests listing's POST alias.
   TRANSFER_OFFER: /^\/api\/server\/([^/]+)\/transfer\/offer$/,
   TRANSFER_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/claim$/,
+  TRANSFER_CLAIM_POLL: /^\/api\/server\/([^/]+)\/transfer\/claim-poll$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1455,11 +1460,16 @@ export async function tryControlPlane(
     // CloudflareDnsClient when no broker is configured).
     if (
       method &&
-      (path.match(ROUTE_RE.TRANSFER_OFFER) || path.match(ROUTE_RE.TRANSFER_CLAIM))
+      (path.match(ROUTE_RE.TRANSFER_OFFER) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ||
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL))
     ) {
       const xferM =
-        path.match(ROUTE_RE.TRANSFER_OFFER) ?? path.match(ROUTE_RE.TRANSFER_CLAIM);
+        path.match(ROUTE_RE.TRANSFER_OFFER) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM) ??
+        path.match(ROUTE_RE.TRANSFER_CLAIM_POLL);
       const isOffer = ROUTE_RE.TRANSFER_OFFER.test(path);
+      const isPoll = ROUTE_RE.TRANSFER_CLAIM_POLL.test(path);
       const xferCfDns =
         !env.DNS_BROKER_URL && env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
           ? new CloudflareDnsClient({
@@ -1493,14 +1503,16 @@ export async function tryControlPlane(
           await handlePostTransferOffer(buildTransferDeps(), domain, await readJson(request)),
         );
       }
-      if (method === "POST" && !isOffer) {
-        return finishPlain(
-          await handlePostTransferClaim(buildTransferDeps(), domain, await readJson(request)),
-        );
-      }
-      if (method === "GET" && !isOffer) {
+      if (method === "POST" && isPoll) {
+        // Giver re-seal discovery — IRK mailbox-auth in the body.
         return finishPlain(
           await handleGetTransferClaim(buildTransferDeps(), domain, await readJson(request)),
+        );
+      }
+      if (method === "POST") {
+        // The acquirer claim (TRANSFER_CLAIM).
+        return finishPlain(
+          await handlePostTransferClaim(buildTransferDeps(), domain, await readJson(request)),
         );
       }
     }

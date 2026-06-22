@@ -35,7 +35,8 @@ import {
   JOURNAL_DEFAULT_UNIT,
   JOURNAL_DEFAULT_LINES,
 } from "../lib/journal.js";
-import { signWithIrk } from "../keystore.js";
+import { signWithIrk, bytesToHex } from "../keystore.js";
+import { createTransferOffer } from "../lib/serverTransfer.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -203,6 +204,17 @@ export async function renderServerDetail() {
         <p class="note small hidden" id="journal-status"></p>
         <pre id="journal-output" class="journal-output hidden" aria-label="journal output"></pre>
       </div>
+      <h2 class="mt-4">Transfer</h2>
+      <div class="card" id="transfer-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">
+          Hand <strong>${escapeHtml(body.serverFqdn)}</strong> and
+          <strong>all its contents</strong> to another account. You will lose
+          control of it. The other person scans the code from
+          <em>Add a server → Pair an existing box</em>.
+        </p>
+        <button id="transfer-start-btn" class="full-width mt-2">Transfer to another account</button>
+      </div>
+
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -218,6 +230,7 @@ export async function renderServerDetail() {
     wireLockPower(body);
     wireDeadMan(body);
     wireJournal(body);
+    wireTransfer(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -759,6 +772,100 @@ function wireDeadMan(body) {
       affirmBtn.disabled = false;
       affirmBtn.textContent = `Keep ${body.serverFqdn.split(".")[0] || "server"} unlocked`;
     }
+  });
+}
+
+function wireTransfer(body) {
+  $("transfer-start-btn")?.addEventListener("click", () => {
+    openTransferDialog(body).catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("server transfer failed", e);
+        toast(humanError(e), "err");
+      }
+    });
+  });
+}
+
+// Giver "Transfer to another account": full irreversible warning + type-to-
+// confirm the FQDN, then sign + deposit the offer and render the claim code the
+// acquirer pastes into "Pair an existing box". The disk-key re-seal is a later
+// giver-phone step (the box never holds the giver IRK) — surfaced as a note.
+async function openTransferDialog(body) {
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const serverFqdn = body.serverFqdn;
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Transfer this server");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Transfer ${escapeHtml(serverFqdn)}?</h3>
+    <p class="modal-message">
+      This hands the box <strong>and all its contents</strong> to another
+      account. <strong>You will lose control of it</strong> — this cannot be
+      undone. Type the server's full name to confirm.
+    </p>
+    <input class="full-width mt-2" data-transfer-confirm placeholder="${escapeHtml(serverFqdn)}" autocomplete="off" />
+    <p class="modal-error err-text hidden" data-transfer-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-transfer-cancel>Cancel</button>
+      <button class="danger" data-transfer-go disabled>Create transfer code</button>
+    </div>
+    <div class="mt-3 hidden" data-transfer-result>
+      <p class="note">Share this code with the other person — it expires soon.
+      They paste it into <em>Add a server → Pair an existing box</em>. After they
+      claim it you'll be asked to finish handing over the disk key.</p>
+      <textarea class="full-width" rows="4" readonly data-transfer-qr></textarea>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const cleanup = () => { if (dlg.open) dlg.close(); dlg.remove(); };
+  const confirmEl = dlg.querySelector("[data-transfer-confirm]");
+  const goBtn = dlg.querySelector("[data-transfer-go]");
+  const cancelBtn = dlg.querySelector("[data-transfer-cancel]");
+  const errEl = dlg.querySelector("[data-transfer-error]");
+  const resultEl = dlg.querySelector("[data-transfer-result]");
+  const qrEl = dlg.querySelector("[data-transfer-qr]");
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+
+    confirmEl.addEventListener("input", () => {
+      goBtn.disabled = confirmEl.value.trim().toLowerCase() !== serverFqdn.toLowerCase();
+    });
+
+    goBtn.addEventListener("click", async () => {
+      errEl.classList.add("hidden");
+      goBtn.disabled = true;
+      goBtn.textContent = "Signing…";
+      try {
+        const out = await createTransferOffer({
+          serverDomain: serverFqdn,
+          username: session.username,
+          umk: session.umk,
+          irkPubHex: bytesToHex(session.irk.publicKey),
+          signWithIrk,
+        });
+        qrEl.value = out.qrText;
+        resultEl.classList.remove("hidden");
+        goBtn.classList.add("hidden");
+        confirmEl.disabled = true;
+        cancelBtn.textContent = "Done";
+        toast("Transfer code created", "ok");
+        resolve(out);
+      } catch (e) {
+        errEl.textContent = humanError(e);
+        errEl.classList.remove("hidden");
+        goBtn.disabled = false;
+        goBtn.textContent = "Create transfer code";
+      }
+    });
   });
 }
 
