@@ -122,7 +122,17 @@ import {
   buildSwkDepositPoller,
   fileSwkMarkerStore,
 } from "./swkDepositConsumer.js";
-import { readAuthCodeBirthDate, wireGossip } from "./gossip/index.js";
+import {
+  buildCgkDepositPoller,
+  fileCgkMarkerStore,
+} from "./cgkDepositConsumer.js";
+import {
+  buildSetLeaderConsumer,
+  buildReadSelfVote,
+  fileSetLeaderVoteStore,
+  type SetLeaderConsumer,
+} from "./setLeaderConsumer.js";
+import { readAuthCodeBirthDate, wireGossip, resolveCgk } from "./gossip/index.js";
 import type { GossipLoop } from "./gossip/gossipLoop.js";
 import {
   addEmbeddedPairing,
@@ -310,6 +320,22 @@ export async function persistSwkHex(path: string, swkHex: string): Promise<void>
   }
 }
 
+/** Best-effort persist of the CGK hex to /var/flagship/cgk.hex (mode 0600), so a
+ *  reboot resolves it via the existing on-disk path (resolveCgk) and gossip wires
+ *  on the next boot. Non-fatal: a write failure just means the next boot re-polls. */
+export async function persistCgkHex(path: string, cgkHex: string): Promise<void> {
+  try {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, cgkHex.trim() + "\n", { mode: 0o600 });
+    await rename(tmp, path);
+  } catch (e) {
+    console.warn(
+      `[daemon] could not persist cgk.hex (${(e as Error).message}); will re-poll the cgk lane next boot`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
@@ -464,6 +490,39 @@ async function main(): Promise<void> {
     process.once("SIGTERM", () => swkPoller.stop());
     process.once("SIGINT", () => swkPoller.stop());
     console.log("[daemon] no SWK yet — swk-deposit consumer armed (secret-free recipe)");
+  }
+
+  // ---- Post-boot CGK delivery consumer (Phase 6) ----
+  // (docs/multi-pod-liveness-session-leadership.md). When NO CGK is provisioned
+  // (env / cgk.hex / install-blob cgkHex all absent — the default secret-free
+  // recipe), per-service leadership gossip stays DISABLED. Poll the `.com` cgk
+  // lane: the owner's phone seals the per-cloud CGK to THIS box's identity and
+  // IRK-signs the wrapper; we verify under the config-pinned owner IRK, unseal
+  // with the identity key, persist cgk.hex, and RESTART so the next boot resolves
+  // the CGK from disk and `wireGossip` enables. Runs ONLY in the no-CGK +
+  // production (cfg present) state — mirrors the SWK consumer EXACTLY (forged/
+  // wrong-box → keep polling, never persist/brick; idempotent). demo/gym
+  // (cfg-absent) is a no-op.
+  const cgkHexFilePath = "/var/flagship/cgk.hex";
+  const hasCgk = (await resolveCgk({ cgkHexFilePath })) !== null;
+  if (!hasCgk && cfg && env.controlPlaneBaseUrl) {
+    const cgkPoller = buildCgkDepositPoller({
+      serverDomain: env.serverFqdn!,
+      ownerIrkPub: cfg.irkPublicKey,
+      boxIdentityPriv: identityPrivKey,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
+      restart: () => {
+        console.log("[daemon] CGK provisioned via deposit — restarting to enable gossip");
+        process.exit(0);
+      },
+      markerStore: fileCgkMarkerStore(`${dataDir}/cgk-claimed.json`),
+      onLog: (m) => console.log(m),
+    });
+    cgkPoller.start();
+    process.once("SIGTERM", () => cgkPoller.stop());
+    process.once("SIGINT", () => cgkPoller.stop());
+    console.log("[daemon] no CGK yet — cgk-deposit consumer armed (secret-free recipe)");
   }
 
   // ---- Paired-session store (phone-paired browser bearer tokens) ----
@@ -786,17 +845,51 @@ async function main(): Promise<void> {
   // mounts on the live runtime; the announce+elect loop starts here. The route
   // claim/release is LIVE-wired to runtime.urlController (claim/release push a
   // tunnel HELLO update). Never throws / never bricks the daemon.
+  // Owner preferred-server vote consumer (Phase 6) — polls the `.com` set-leader
+  // lane for THIS box, verifies under the owner IRK, stores the standing vote, and
+  // feeds the gossip loop's `readSelfVote` getter (so a vote for THIS box rides its
+  // own announcement; a vote for a sibling → no self-vote, the sibling carries it
+  // via gossip; "none" clears). Best-effort + never bricks. Armed only with a cfg
+  // (owner IRK) + control plane. It runs independently of CGK presence: a box may
+  // hold a stored vote even before gossip is enabled, ready the moment it is.
+  let setLeaderConsumer: SetLeaderConsumer | null = null;
+  if (cfg && env.controlPlaneBaseUrl) {
+    setLeaderConsumer = buildSetLeaderConsumer({
+      serverDomain: env.serverFqdn!,
+      user: cfg.userId,
+      ownerIrkPub: cfg.irkPublicKey,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      store: fileSetLeaderVoteStore(`${dataDir}/set-leader.json`),
+      onLog: (m) => console.log(m),
+    });
+    setLeaderConsumer.start();
+    process.once("SIGTERM", () => setLeaderConsumer?.stop());
+    process.once("SIGINT", () => setLeaderConsumer?.stop());
+  }
+
   const gossipLoop = await (async () => {
     if (!cfg) return null;
     try {
+      const selfStkHex = bytesToHexLocal(identityKeypair.publicKey);
       const result = await wireGossip({
         user: cfg.userId,
         serverFqdn: env.serverFqdn!,
-        identityPubHex: bytesToHexLocal(identityKeypair.publicKey),
+        identityPubHex: selfStkHex,
         birthDate: (await readAuthCodeBirthDate()) ?? Date.now(),
         urlController: runtime.urlController,
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
+        // The owner's set-leader vote rides THIS box's gossip frame only when it
+        // names this box's STK (Phase 5 left this returning null). When the consumer
+        // is absent (no cfg/control plane) the getter is omitted ⇒ no self-vote.
+        ...(setLeaderConsumer
+          ? {
+              readSelfVote: buildReadSelfVote({
+                currentVote: () => setLeaderConsumer!.currentVote(),
+                selfStkHex,
+              }),
+            }
+          : {}),
         onLog: (m) => console.log(m),
       });
       if (result.enabled && result.handler && result.loop) {
