@@ -381,6 +381,15 @@ export async function scheduled(
         console.error("[username-suggest] cron pass failed", e);
       }),
     );
+    // Graceful-decommission eviction-chain GC. Drops rows the successor has
+    // acked (newAckedAt set) and that are well past the TTL — a generous 30-day
+    // window is the safe v1 (encryption-conditional GC is a documented
+    // refinement). Independently guarded.
+    ctx.waitUntil(
+      runEvictionGcCron(env, now).catch((e) => {
+        console.error("[decommission] eviction GC pass failed", e);
+      }),
+    );
     return;
   }
   // Unknown cron string — be defensive: do nothing rather than mis-
@@ -404,6 +413,15 @@ async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<voi
   await storage.suggestThrottle.prune(nowMs - 2 * THROTTLE_WINDOW_RESET_MS);
   // Drop offers well past their claimable window (the gate uses OFFER_TTL_MS).
   await storage.usernameOffers.prune(nowMs - 2 * OFFER_TTL_MS);
+}
+
+/** GC the graceful-decommission eviction chain: drop successor-acked rows that
+ *  are past a generous TTL. No-ops without a DB. Best-effort; guarded by caller. */
+const EVICTION_GC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+async function runEvictionGcCron(env: ScheduledEnv, now: Date): Promise<void> {
+  if (!env.DB) return;
+  const storage = new D1Storage(env.DB);
+  await storage.serverEvictions.gcEvictions(now.getTime(), EVICTION_GC_TTL_MS);
 }
 
 /**

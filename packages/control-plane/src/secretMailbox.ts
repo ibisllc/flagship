@@ -930,11 +930,11 @@ export async function handleConsumeSelfDeleteDeposit(
 // one unique.
 // ──────────────────────────────────────────────────────────────────────
 
-type AuthResult =
+export type AuthResult =
   | { ok: true; username: string }
   | { ok: false; response: HandlerResponse };
 
-async function authPhoneMailbox(deps: SecretMailboxDeps, body: unknown): Promise<AuthResult> {
+export async function authPhoneMailbox(deps: SecretMailboxDeps, body: unknown): Promise<AuthResult> {
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
 

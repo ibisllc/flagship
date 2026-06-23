@@ -53,6 +53,12 @@ import {
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
   handleConsumeSelfDeleteDeposit,
+  handlePostDecommission,
+  handleGetDecommission,
+  handleGetEvictionChain,
+  handlePostEpochComplete,
+  handlePostAckOld,
+  handlePostAckNew,
   handlePostTransferOffer,
   handlePostTransferClaim,
   handleGetTransferClaim,
@@ -505,6 +511,18 @@ const ROUTE_RE = {
   // PUBLIC IRK-signed entitlement) / GET box consume-once read.
   ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
+  // Graceful server-replacement decommission (docs/server-replacement-graceful-
+  // decommission.md). The bare `decommission` path is method-discriminated:
+  //   POST  owner deposits the IRK-signed ServerDecommission order (mailbox-auth)
+  //   GET   the retiring box fetches its own order by ?stk= (PUBLIC, revoke-tolerant)
+  // The sub-path literals (epoch-complete / ack-old / ack-new) are anchored with
+  // `$` so they can't collide with the bare matcher; the eviction-chain is the
+  // successor's full-chain read.
+  DECOMMISSION_EPOCH_COMPLETE: /^\/api\/server\/([^/]+)\/decommission\/epoch-complete$/,
+  DECOMMISSION_ACK_OLD: /^\/api\/server\/([^/]+)\/decommission\/ack-old$/,
+  DECOMMISSION_ACK_NEW: /^\/api\/server\/([^/]+)\/decommission\/ack-new$/,
+  DECOMMISSION: /^\/api\/server\/([^/]+)\/decommission$/,
+  EVICTION_CHAIN: /^\/api\/server\/([^/]+)\/eviction-chain$/,
   // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
   // path discriminated by method:
   //   POST .../transfer/offer       giver deposit (IRK mailbox-auth, signed offer)
@@ -1488,6 +1506,63 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.SELF_DELETE_DEPOSIT))) {
       return finishPlain(
         await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Graceful server-replacement decommission (docs/server-replacement-graceful-
+    // decommission.md). The deposit is owner mailbox-authed; the box-fetch +
+    // chain-fetch + epoch/ack reports are public (the order is owner-IRK-signed
+    // and re-verified box-side). The sub-path matchers run BEFORE the bare
+    // `decommission` matcher so a method-discriminated bare path can't swallow them.
+    const buildDecommissionDeps = () => ({
+      servers: storage.servers,
+      usernames: storage.usernames,
+      serverEvictions: storage.serverEvictions,
+      mailbox: buildSecretMailboxDeps(),
+    });
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_EPOCH_COMPLETE))) {
+      return finishPlain(
+        await handlePostEpochComplete(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_ACK_OLD))) {
+      return finishPlain(
+        await handlePostAckOld(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_ACK_NEW))) {
+      return finishPlain(
+        await handlePostAckNew(buildDecommissionDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION))) {
+      return finishPlain(
+        await handlePostDecommission(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.DECOMMISSION))) {
+      return finishPlain(
+        await handleGetDecommission(
+          buildDecommissionDeps(),
+          decodeURIComponent(m[1]!),
+          url.searchParams.get("stk"),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.EVICTION_CHAIN))) {
+      return finishPlain(
+        await handleGetEvictionChain(buildDecommissionDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // Box-side re-home read (Layer A) — the box polls its OLD canonical to
