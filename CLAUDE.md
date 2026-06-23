@@ -133,6 +133,65 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 — multi-pod liveness + per-pod sessions + per-service leadership by gossip (Phases 1-5)
+
+**Why:** three live bugs on `harry` (a fresh `frank` over the box that ran
+`leticia`): (A) a turned-off box read "online" forever, (B) only one server's
+in-app page loaded ("Connecting" for the rest), (C) the new box auto-seized
+"leader" with no consent. Root causes: `/pods` hardcoded `state:"online"`
+(registration, not liveness); iOS used ONE global `podBaseUrl` + a single-active
+session token; and the client INVENTED a leader (`leaderPodId` dangled →
+`pods.first` = the newest box). The Bug-C fix grew into a real, `.com`-independent,
+per-service leadership system. Spec: `docs/multi-pod-liveness-session-leadership.md`.
+
+**The model (per the design discussion):** there is NO global "leader of all
+servers" — only **per-service leads** (the highest-**clout** live server *running*
+a service is its `<service>.<user>` route target) plus a frontend-only "preferred
+server" default. **Clout** = most-recent owner vote > oldest **signed birth
+certificate** (the immutable create-time authCode) > alphabetical — a pure function
+every box agrees on. Boxes **gossip** over a reserved `broadcast--<user>.flagship.services`
+fan-out (the hub terminates TLS, fans an opaque **CGK**-encrypted blob to the
+account's boxes, content-blind, returns nothing; `CGK = HKDF(umk.seed,
+"flagship.cloud-gossip.v1")`). Each round a box **claims** its `<service>.<user>`
+route iff it's the highest-clout live runner and **yields** (releases) when
+outranked — against a DUMB grant-on-capability hub (last-write-wins untouched). The
+**release half** is what kills the original flap (frank/leticia fought forever only
+because nothing yielded).
+
+**Built — Phases 1-5, all CI-green, on `feat/multipod-liveness-leadership`** (built
+via parallel worktree workers, integrated + merged with current `main`):
+- **Phase 1 (`.com`):** `liveness:"live"|"unreachable"|"never"` + `lastSeenMsAgo` +
+  oldest-first order on `/pods`; `FRESHNESS_WINDOW = 15min` (3× the ~5min
+  heartbeat); a *bridged* `lastReported` classifies `never` (not `unreachable`).
+- **Phase 2 (clients):** webapp + iOS (1229 XCTests) + Android (1124) — honest
+  liveness states, **per-pod base URL + per-pod token store** (keyed `pod-<fqdn>`,
+  legacy-token migration), and the `pods.first`/dangling-leader guess DELETED.
+- **Phase 3 (protocol):** `deriveCGK`, gossip canonical+HMAC+`seal/open`,
+  `set-leader` vote, `electLeadForService`/`compareClout`, `birthDateFromAuthCode`
+  — TS (708) + Swift (16) + Kotlin, pinned cross-platform vectors.
+- **Phase 4 (hub):** the `broadcast--<user>` content-blind per-account fan-out —
+  reuses the SNI router's existing hub→box stream origination; reserved
+  `broadcast`/`servers`/`all`.
+- **Phase 5 (daemon):** CGK read (mirror of SWK; absent ⇒ gossip disabled, no
+  brick) + `/internal/gossip` ingest + SiblingView (45s announce, ~112s liveness
+  window) + per-service election + claim/yield **live-wired to `urlController`**.
+
+Gates: `tsc -b` clean · full `vitest` **6523** · iOS **TEST BUILD SUCCEEDED**
+(1229) · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (1124) · protocol
+Swift 16 / Kotlin green. **Phases 1-2 alone fix all three reported bugs;** 3-5 build
+the broadcast machinery.
+
+**REMAINING — Phase 6 (the live-enablement layer, NOT yet built):** (a) **CGK
+post-boot provisioning** via a sealed `.com` deposit lane (MUST mirror the
+secret-free SWK delivery — do NOT embed CGK in the recipe; the repo is
+secret-free-recipe by default) — until this ships, gossip stays disabled on real
+boxes; (b) the **"Set preferred server"** action signing `set-leader` + its
+deposit/consume so the daemon's self-vote getter lights up; (c) the `.com` **relay**
+of computed per-service leads for client display. Plus two documented daemon seams:
+`urlController.release` is a *soft* release today (no dedicated release frame), and
+a **reburn** is needed to validate the box-side gossip loop live (CI proves the
+units + byte-compat, not the physical fan-out).
+
 ### 2026-06-23 (latest) — recipe is now FULLY secret-free: `pairingKeyPrivHex` removed (the last secret)
 
 **Completes the secret-free-recipe spec** (`docs/recipe-delivery-and-remote-install.md`).
@@ -2515,7 +2574,7 @@ This file is the in-repo source of truth. For deeper detail, read the relevant l
 
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
-- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`
+- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
 - **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
