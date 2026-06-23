@@ -58,6 +58,15 @@ describe("validateUserLabel", () => {
       expect(_internal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
     }
   });
+
+  it("bans the gossip fan-out reserved names broadcast/servers/all (Phase 4)", () => {
+    for (const reserved of ["broadcast", "servers", "all"]) {
+      const r = validateUserLabel(reserved);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/reserved/);
+      expect(_internal.RESERVED_USER_LABELS.has(reserved)).toBe(true);
+    }
+  });
 });
 
 describe("validateAppLabel", () => {

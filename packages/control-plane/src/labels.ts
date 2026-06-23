@@ -32,6 +32,11 @@ const RESERVED_USER_LABELS = new Set([
   "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
   "static", "cdn", "assets", "files", "git", "tunnel", "control",
   "control-plane", "console", "dashboard", "blog", "docs",
+  // Per-account gossip fan-out reserved names (Phase 4). `broadcast` is the
+  // reserved fan-out label `broadcast--<user>.flagship.services` the hub mirrors
+  // gossip through; `servers`/`all` are reserved collective addresses for the
+  // same fleet-wide regime. A user must never own any of these as a username.
+  "broadcast", "servers", "all",
   // Test-environment apex labels (docs/ui-test-gym.md §6.5). Banning
   // these as usernames is what makes the `gym.` test env safe to share
   // the prod zones: no prod user can ever own the `gym` label, so a test
@@ -56,6 +61,10 @@ const RESERVED_USER_LABELS = new Set([
 const RESERVED_SERVER_LABELS = new Set([
   "www", "api", "admin", "flagship", "flagshipserver", "services",
   "ns1", "ns2", "mail", "tunnel", "control", "status",
+  // Gossip fan-out reserved names (Phase 4) — a server (the leftmost
+  // `<server>` label) must not collide with the fleet-wide gossip addresses
+  // either, so a box can never shadow `broadcast--<user>` routing.
+  "broadcast", "servers", "all",
 ]);
 
 // Test-account usernames live in a Worker secret (env.TEST_ACCOUNTS),
