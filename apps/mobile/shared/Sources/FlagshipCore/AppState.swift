@@ -128,32 +128,49 @@ public final class AppState {
     /// (the watcher keeps its legacy keep-waiting behaviour).
     public var lastKnownOutstandingOrderRefs: Set<String>?
 
-    /// Lowercased fqdns of servers that currently have a LIVE pending boot-
-    /// unlock request in the identity-plane mailbox (a box waiting for the
-    /// owner's approval). Populated by ONE account-level poll
-    /// (`BootApprovalWatcher`) so the list / card / detail can read a per-server
-    /// "is it waiting for me?" without N pollers. Empty ⇒ none waiting (or not
-    /// polled yet this session).
-    public var serversAwaitingApproval: Set<String> = []
+    /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
+    /// keyed by lowercased fqdn → the list of approvals that box is currently
+    /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`
+    /// digest (`[{id,type,issuedAt,expiresAt}]`) — `unlock-key` and `entitlement`
+    /// are two `type` values in ONE inbox, not two parallel sets. Populated by
+    /// ONE account-level poll (`BootApprovalWatcher`) so the list / card / detail
+    /// read a per-server "what is it asking me?" without N pollers. Empty ⇒
+    /// nothing waiting (or not polled yet this session). The legacy
+    /// `hasLiveUnlockRequest` / `hasLiveEntitlementRequest` accessors are now
+    /// DERIVED from this by filtering on `type`.
+    public var boxRequestInbox: [String: [BoxRequest]] = [:]
 
-    /// True iff [fqdn] has a live pending unlock request right now. Case-folds
-    /// the lookup. The single bridge from the account-level set into the
-    /// per-server liveness classifier.
-    public func hasLiveUnlockRequest(forFqdn fqdn: String) -> Bool {
-        serversAwaitingApproval.contains(fqdn.lowercased())
+    /// Every pending request across all of the owner's boxes, newest first —
+    /// the flat inbox the inbox view renders from.
+    public var boxRequests: [BoxRequest] {
+        boxRequestInbox.values.flatMap { $0 }.sorted { $0.issuedAt > $1.issuedAt }
     }
 
-    /// Lowercased fqdns of boxes that have posted a LIVE entitlement
-    /// secret-request — the Box Request Inbox's entitlement lane
-    /// (docs/box-request-inbox.md). Same one-poll fan-out as
-    /// `serversAwaitingApproval`, populated by `BootApprovalWatcher`. This is the
-    /// proactive surfacing the entitlement relay previously lacked (a box stuck
-    /// on entitlement re-asked forever but nothing in the app showed it).
-    public var serversAwaitingEntitlement: Set<String> = []
+    /// The pending requests for [fqdn] of a given type (case-folds the lookup).
+    public func boxRequests(forFqdn fqdn: String, type: SecretPurpose) -> [BoxRequest] {
+        (boxRequestInbox[fqdn.lowercased()] ?? []).filter { $0.type == type }
+    }
+
+    /// True iff [fqdn] has a live pending unlock request right now. Derived from
+    /// the unified inbox (`type == .unlockKey`). The single bridge from the
+    /// account-level inbox into the per-server liveness classifier.
+    public func hasLiveUnlockRequest(forFqdn fqdn: String) -> Bool {
+        !boxRequests(forFqdn: fqdn, type: .unlockKey).isEmpty
+    }
 
     /// True iff [fqdn] is waiting for the owner to authorize it to serve.
+    /// Derived from the unified inbox (`type == .entitlement`).
     public func hasLiveEntitlementRequest(forFqdn fqdn: String) -> Bool {
-        serversAwaitingEntitlement.contains(fqdn.lowercased())
+        !boxRequests(forFqdn: fqdn, type: .entitlement).isEmpty
+    }
+
+    /// Lowercased fqdns with a live request of [type] — the display set a view
+    /// projects from the unified inbox (mirrors the old `serversAwaiting*`
+    /// shape, now derived).
+    public func serversAwaiting(_ type: SecretPurpose) -> Set<String> {
+        Set(boxRequestInbox.compactMap { key, reqs in
+            reqs.contains { $0.type == type } ? key : nil
+        })
     }
 
     /// True when [pod] is actively waiting for an entitlement (serve-auth)
@@ -166,8 +183,8 @@ public final class AppState {
     /// SINGLE source the UI must use — the status badge AND the per-server
     /// Approve card — so the two never disagree. It ORs two signals of
     /// different freshness: the per-pod `awaitingUnlock` flag (refreshed only
-    /// by a full `/pods` reconcile) and the account-level `serversAwaitingApproval`
-    /// set (refreshed every 5s by `BootApprovalWatcher`). A box that STARTS
+    /// by a full `/pods` reconcile) and the account-level Box Request Inbox
+    /// (refreshed every 5s by `BootApprovalWatcher`). A box that STARTS
     /// waiting after the last full reconcile has a stale-false per-pod flag but
     /// a fresh set membership — reading the per-pod flag alone hid the Approve
     /// card on server-detail while Home still showed "waiting for approval".

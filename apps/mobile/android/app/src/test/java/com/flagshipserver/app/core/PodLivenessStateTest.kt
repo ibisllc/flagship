@@ -76,7 +76,10 @@ class PodLivenessStateTest {
             s.pods.value[0].livenessState(hasLiveUnlockRequest = false, now = now),
         )
         // Mark it waiting ⇒ waitingForApproval regardless of time.
-        s.setServersAwaitingApproval(setOf("box.harry.flagship.services"))
+        s.setBoxRequestInbox(mapOf("box.harry.flagship.services" to listOf(BoxRequest(
+            nonceHex = "n", serverDomain = "box.harry.flagship.services",
+            type = SecretPurpose.UNLOCK_KEY, issuedAt = 1, expiresAt = now + 60_000,
+        ))))
         assertEquals(PodInfo.LivenessState.WAITING_FOR_APPROVAL, s.liveness(s.pods.value[0]))
         assertTrue(s.hasLiveUnlockRequest("BOX.harry.flagship.services"))
     }

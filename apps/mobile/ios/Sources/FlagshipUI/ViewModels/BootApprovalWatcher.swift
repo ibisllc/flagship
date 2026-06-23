@@ -1,27 +1,17 @@
 import Foundation
 import FlagshipCore
 
-/// The two account-level "boxes waiting for an approval" sets the watcher
-/// publishes from ONE poll — the Box Request Inbox detection tier
-/// (docs/box-request-inbox.md). `unlock` feeds the boot-unlock card; `entitlement`
-/// feeds the new serve-authorization card. Both are lowercased-fqdn sets read
-/// off the cheap unauthenticated `/pods` digest (no biometric).
-public struct PendingApprovalSets: Sendable, Equatable {
-    public var unlock: Set<String>
-    public var entitlement: Set<String>
-    public init(unlock: Set<String> = [], entitlement: Set<String> = []) {
-        self.unlock = unlock
-        self.entitlement = entitlement
-    }
-}
-
-/// Account-level "which of my boxes are waiting for an approval right now?" —
-/// ONE poll that fans the answer out to every server card, detail page, and the
-/// post-creation checklist via `AppState.serversAwaitingApproval` (unlock) and
-/// `AppState.serversAwaitingEntitlement` (serve-auth).
+/// Account-level "which of my boxes are waiting for an approval right now, and
+/// for WHAT?" — ONE poll that publishes the unified Box Request Inbox
+/// (docs/box-request-inbox.md) into `AppState.boxRequestInbox` (keyed by
+/// lowercased fqdn → the typed `[BoxRequest]`). Every server card, detail page,
+/// and the post-creation checklist read their per-server state off that one
+/// object — `unlock-key` and `entitlement` are two `type` values in one inbox,
+/// not two parallel sets, so a new request type later is one registry entry, no
+/// new watcher/boolean.
 ///
 /// DIRECTORY-DRIVEN, NO BIOMETRIC. Detection reads the unauthenticated `/pods`
-/// directory's cheap `awaitingUnlock` flag — NOT the IRK-signed mailbox. The
+/// directory's cheap `pendingRequests` digest — NOT the IRK-signed mailbox. The
 /// previous implementation polled `verifiedRequests()` every 5s, which derives
 /// the IRK from the Secure Enclave: on a real device that fired Face ID every
 /// five seconds on the Home tab (it was silent only on the simulator, where the
@@ -37,14 +27,14 @@ public final class BootApprovalWatcher {
 
     private let app: AppState
     /// Refresh the `/pods` directory (unauthenticated, NO biometric) and return
-    /// the fqdn sets the directory marks `awaitingUnlock` / `awaitingEntitlement`.
-    private let pollAwaiting: () async -> PendingApprovalSets
+    /// the unified inbox the directory reports (lowercased fqdn → `[BoxRequest]`).
+    private let pollAwaiting: () async -> [String: [BoxRequest]]
     private let pollIntervalNanos: UInt64
     private var task: Task<Void, Never>?
 
     public init(
         app: AppState,
-        pollAwaiting: @escaping () async -> PendingApprovalSets,
+        pollAwaiting: @escaping () async -> [String: [BoxRequest]],
         pollIntervalNanos: UInt64 = BootApprovalWatcher.pollInterval
     ) {
         self.app = app
@@ -68,14 +58,13 @@ public final class BootApprovalWatcher {
         task = nil
     }
 
-    /// One directory refresh → publish the set of fqdns with a live unlock
-    /// request. Best-effort: the closure swallows failures and returns the
-    /// prior set, so a blip never thrashes the UI. Exposed for pull-to-refresh.
+    /// One directory refresh → publish the unified inbox. Best-effort: the
+    /// closure swallows failures and returns the prior inbox, so a blip never
+    /// thrashes the UI. Exposed for pull-to-refresh.
     @discardableResult
-    public func pollOnce() async -> PendingApprovalSets {
-        let sets = await pollAwaiting()
-        app.serversAwaitingApproval = sets.unlock
-        app.serversAwaitingEntitlement = sets.entitlement
-        return sets
+    public func pollOnce() async -> [String: [BoxRequest]] {
+        let inbox = await pollAwaiting()
+        app.boxRequestInbox = inbox
+        return inbox
     }
 }

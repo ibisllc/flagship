@@ -21,7 +21,7 @@ public struct HomeTab: View {
     /// to-refresh always re-runs it.
     @State private var didReconcileServerTruth = false
     /// Account-level "which boxes are waiting for my unlock approval?" poller.
-    /// Populates `app.serversAwaitingApproval` so the list / detail / checklist
+    /// Populates `app.boxRequestInbox` so the list / detail / checklist
     /// can read a per-server waiting state from ONE fetch (no N pollers).
     @State private var approvalWatcher: BootApprovalWatcher?
     /// Persistent dismiss for the post-creation backup-reminder banner
@@ -90,8 +90,8 @@ public struct HomeTab: View {
                     ),
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
-                    awaitingApproval: app.serversAwaitingApproval,
-                    awaitingEntitlement: app.serversAwaitingEntitlement,
+                    awaitingApproval: app.serversAwaiting(.unlockKey),
+                    awaitingEntitlement: app.serversAwaiting(.entitlement),
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -367,24 +367,36 @@ public struct HomeTab: View {
         if navigateHome { path.removeAll() }
     }
 
-    /// Account-level "which boxes are waiting to unlock?" poll for the watcher.
-    /// Reads the cheap `awaitingUnlock` flag straight from the unauthenticated
+    /// Account-level "what is each box asking me to approve?" poll for the
+    /// watcher — builds the unified Box Request Inbox (docs/box-request-inbox.md)
+    /// from the cheap `pendingRequests` digest straight off the unauthenticated
     /// `/pods` directory — NO biometric. (The old path derived the IRK to read
     /// the mailbox, which fired Face ID every 5s on device.) Best-effort: a blip
-    /// returns the prior set so the UI never thrashes.
-    private func pollPendingApprovals() async -> PendingApprovalSets {
+    /// returns the prior inbox so the UI never thrashes. Unknown/future purposes
+    /// a not-yet-updated client can't satisfy are dropped here (they need no
+    /// affordance), so the inbox only ever holds requests this app can act on.
+    private func pollPendingApprovals() async -> [String: [BoxRequest]] {
         guard let user = app.currentUser, !user.isEmpty,
               let dir = try? await mailbox.fetchPods(username: user)
         else {
-            return PendingApprovalSets(
-                unlock: app.serversAwaitingApproval,
-                entitlement: app.serversAwaitingEntitlement
-            )
+            return app.boxRequestInbox
         }
-        return PendingApprovalSets(
-            unlock: Set(dir.pods.filter { $0.awaitingUnlock }.map { $0.serverDomain.lowercased() }),
-            entitlement: Set(dir.pods.filter { $0.awaitingEntitlement }.map { $0.serverDomain.lowercased() })
-        )
+        var inbox: [String: [BoxRequest]] = [:]
+        for pod in dir.pods {
+            let key = pod.serverDomain.lowercased()
+            let reqs: [BoxRequest] = pod.pendingRequests.compactMap { r in
+                guard let purpose = SecretPurpose(rawValue: r.type) else { return nil }
+                return BoxRequest(
+                    nonceHex: r.id,
+                    serverDomain: pod.serverDomain,
+                    type: purpose,
+                    issuedAt: r.issuedAt,
+                    expiresAt: r.expiresAt
+                )
+            }
+            if !reqs.isEmpty { inbox[key] = reqs }
+        }
+        return inbox
     }
 
     /// #43 + #56 — reconcile the pod list against server truth from ONE

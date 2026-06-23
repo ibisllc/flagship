@@ -251,6 +251,26 @@ public struct SignedDaemonStatus: Codable, Equatable, Sendable {
     }
 }
 
+/// One un-answered box→owner approval request, from the cheap UNAUTHENTICATED
+/// `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+/// This is the detection tier only: `type` is the secret-request purpose; the
+/// full signed request is fetched over the authenticated mailbox path when the
+/// owner taps to satisfy it. Mirrors control-plane `PendingRequestSummary`.
+public struct PendingRequestSummaryWire: Codable, Equatable, Sendable {
+    /// requestNonceHex — the box's reply is keyed by (serverDomain, this).
+    public let id: String
+    /// Secret-request purpose: "unlock-key" | "entitlement" | …future types.
+    public let type: String
+    /// issuedAt from the signed SecretRequest (ms).
+    public let issuedAt: Int64
+    /// Row TTL (ms).
+    public let expiresAt: Int64
+    public init(id: String, type: String, issuedAt: Int64, expiresAt: Int64) {
+        self.id = id; self.type = type
+        self.issuedAt = issuedAt; self.expiresAt = expiresAt
+    }
+}
+
 /// A directory entry from GET /api/users/:u/pods. `identityPubKey` is the
 /// box's registered STK — the trust anchor the phone re-verifies against.
 public struct PodDirectoryEntry: Codable, Equatable, Sendable {
@@ -292,6 +312,12 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// the Box Request Inbox digest (docs/box-request-inbox.md). Lenient — absent
     /// on a pre-field Worker ⇒ false.
     public let awaitingEntitlement: Bool
+    /// The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
+    /// — the list of approvals this box is currently asking its owner for. The
+    /// unified client inbox is the flatMap of this across pods; the two booleans
+    /// above are the (compat) projection `some(r.type == …)`. Lenient: absent on
+    /// a pre-field Worker ⇒ empty.
+    public let pendingRequests: [PendingRequestSummaryWire]
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -301,7 +327,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         hasCert: Bool = false,
         signedStatus: SignedDaemonStatus? = nil,
         awaitingUnlock: Bool = false,
-        awaitingEntitlement: Bool = false
+        awaitingEntitlement: Bool = false,
+        pendingRequests: [PendingRequestSummaryWire] = []
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -309,6 +336,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.signedStatus = signedStatus
         self.awaitingUnlock = awaitingUnlock
         self.awaitingEntitlement = awaitingEntitlement
+        self.pendingRequests = pendingRequests
     }
 
     public init(from decoder: Decoder) throws {
@@ -320,6 +348,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
         self.awaitingUnlock = (try? c.decodeIfPresent(Bool.self, forKey: .awaitingUnlock)) ?? false
         self.awaitingEntitlement = (try? c.decodeIfPresent(Bool.self, forKey: .awaitingEntitlement)) ?? false
+        self.pendingRequests = (try? c.decodeIfPresent([PendingRequestSummaryWire].self, forKey: .pendingRequests)) ?? []
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
@@ -341,6 +370,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
         if awaitingUnlock { try c.encode(true, forKey: .awaitingUnlock) }
         if awaitingEntitlement { try c.encode(true, forKey: .awaitingEntitlement) }
+        if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -349,7 +379,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, awaitingUnlock, awaitingEntitlement
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, awaitingUnlock, awaitingEntitlement, pendingRequests
     }
 }
 

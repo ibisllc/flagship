@@ -110,11 +110,11 @@ fun HomeScreen(
     /** Lowercased fqdns of servers with a LIVE pending boot-unlock request
      *  (the box is waiting for the owner's approval). Drives the per-card
      *  liveness classification — a waiting box reads "Waiting for approval",
-     *  never "Never came online". Source: AppState.serversAwaitingApproval. */
+     *  never "Never came online". Source: AppState.serversAwaiting(UNLOCK_KEY). */
     awaitingApproval: Set<String> = emptySet(),
     /** The entitlement (serve-auth) waiting set — same role for the other inbox
      *  lane, so a box waiting on entitlement reads "Waiting for approval", not
-     *  "Never came online". Source: AppState.serversAwaitingEntitlement. */
+     *  "Never came online". Source: AppState.serversAwaiting(ENTITLEMENT). */
     awaitingEntitlement: Set<String> = emptySet(),
 ) {
     val scroll = rememberScrollState()
