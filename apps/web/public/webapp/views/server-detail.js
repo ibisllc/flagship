@@ -37,6 +37,13 @@ import {
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { createTransferOffer } from "../lib/serverTransfer.js";
+import {
+  resolveReplacementContext,
+  preflightGate,
+  runReplacement,
+  DISK_DISPOSITIONS,
+  DEFAULT_DISPOSITION,
+} from "../lib/serverReplacement.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -215,6 +222,17 @@ export async function renderServerDetail() {
         <button id="transfer-start-btn" class="full-width mt-2">Transfer to another account</button>
       </div>
 
+      <h2 class="mt-4">Replace</h2>
+      <div class="card" id="replace-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">
+          Retire this box and burn a fresh one for
+          <strong>${escapeHtml(body.serverFqdn)}</strong>. The old box flushes a
+          final backup, releases the name, and powers off <em>before</em> the
+          replacement can claim it — so the two never fight over the route.
+        </p>
+        <button id="replace-start-btn" class="full-width mt-2">Replace this server</button>
+      </div>
+
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -231,6 +249,7 @@ export async function renderServerDetail() {
     wireDeadMan(body);
     wireJournal(body);
     wireTransfer(body);
+    wireReplace(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -864,6 +883,164 @@ async function openTransferDialog(body) {
         errEl.classList.remove("hidden");
         goBtn.disabled = false;
         goBtn.textContent = "Create transfer code";
+      }
+    });
+  });
+}
+
+// ---- Replace this server (graceful decommission) ----------------------
+
+function wireReplace(body) {
+  $("replace-start-btn")?.addEventListener("click", () => {
+    openReplaceDialog(body).catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("server replace failed", e);
+        toast(humanError(e), "err");
+      }
+    });
+  });
+}
+
+const DISPOSITION_LABELS = {
+  keep: "Keep the disk (power off, data intact)",
+  "wipe-after-handoff": "Wipe after the replacement is proven (recommended)",
+  "wipe-now": "Wipe now (irreversible — accepts the backup as the only copy)",
+};
+
+// "Replace this server": resolve the box's current STK + backup-enrollment, let
+// the owner pick a disposition (with a HARD pre-flight gate when a wipe would
+// lose un-backed-up data), then mint+sign+deposit the decommission order and
+// retire the instance locally (L3) so the phone never re-approves this box.
+async function openReplaceDialog(body) {
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const serverFqdn = body.serverFqdn;
+  const username = session.username || body.username;
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Replace this server");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Replace ${escapeHtml(serverFqdn)}?</h3>
+    <p class="modal-message" data-replace-loading>Checking this server's backup…</p>
+    <div class="hidden" data-replace-body>
+      <p class="note" data-replace-backup></p>
+      <label class="caption mt-2">What happens to the old disk?</label>
+      <select class="full-width" data-replace-disposition>
+        ${DISK_DISPOSITIONS.map(
+          (d) => `<option value="${escapeHtml(d)}"${d === DEFAULT_DISPOSITION ? " selected" : ""}>${escapeHtml(DISPOSITION_LABELS[d])}</option>`,
+        ).join("")}
+      </select>
+      <p class="note small err-text hidden" data-replace-gate></p>
+      <p class="note small hidden" data-replace-warn></p>
+    </div>
+    <p class="modal-error err-text hidden" data-replace-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-replace-cancel>Cancel</button>
+      <button class="danger" data-replace-go disabled>Retire and replace</button>
+    </div>
+    <div class="mt-3 hidden" data-replace-result>
+      <p class="note">Server retiring — the old box will flush a final backup,
+      release the name and power off. Burn a replacement when ready from
+      <em>Add a server</em>; it claims the name once the old box has stepped down.</p>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const cleanup = () => { if (dlg.open) dlg.close(); dlg.remove(); };
+  const loadingEl = dlg.querySelector("[data-replace-loading]");
+  const bodyEl = dlg.querySelector("[data-replace-body]");
+  const backupEl = dlg.querySelector("[data-replace-backup]");
+  const dispoEl = dlg.querySelector("[data-replace-disposition]");
+  const gateEl = dlg.querySelector("[data-replace-gate]");
+  const warnEl = dlg.querySelector("[data-replace-warn]");
+  const errEl = dlg.querySelector("[data-replace-error]");
+  const goBtn = dlg.querySelector("[data-replace-go]");
+  const cancelBtn = dlg.querySelector("[data-replace-cancel]");
+  const resultEl = dlg.querySelector("[data-replace-result]");
+
+  let ctx = { retiredStkPubHex: null, backupEnrolled: false };
+
+  const refreshGate = () => {
+    const disposition = dispoEl.value;
+    const wipeNow = disposition === "wipe-now";
+    const { blocked, reason } = preflightGate({
+      disposition,
+      backupEnrolled: ctx.backupEnrolled,
+    });
+    if (blocked) {
+      gateEl.textContent = reason;
+      gateEl.classList.remove("hidden");
+      // wipe-now is the explicit "I accept data loss" escape hatch (§11.4): it
+      // stays enabled (with the warning), every other wipe is hard-blocked.
+      goBtn.disabled = !wipeNow || !ctx.retiredStkPubHex;
+    } else {
+      gateEl.classList.add("hidden");
+      goBtn.disabled = !ctx.retiredStkPubHex;
+    }
+    if (wipeNow) {
+      warnEl.textContent = "Wipe-now is irreversible — there is no fallback if the backup is incomplete.";
+      warnEl.classList.remove("hidden");
+    } else {
+      warnEl.classList.add("hidden");
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+
+    void (async () => {
+      ctx = await resolveReplacementContext({ serverDomain: serverFqdn, username });
+      loadingEl.classList.add("hidden");
+      bodyEl.classList.remove("hidden");
+      backupEl.textContent = ctx.backupEnrolled
+        ? "Peer-backup is enrolled — the old box flushes a final backup before it steps down."
+        : "No backup is enrolled for this server. Wiping will lose its data — set up backup first, or accept the loss with 'wipe-now'.";
+      if (!ctx.retiredStkPubHex) {
+        errEl.textContent = "Couldn't read this box's current key from the directory — is it online? It must be reachable to be replaced.";
+        errEl.classList.remove("hidden");
+      }
+      dispoEl.addEventListener("change", refreshGate);
+      refreshGate();
+    })().catch((e) => {
+      loadingEl.classList.add("hidden");
+      errEl.textContent = humanError(e);
+      errEl.classList.remove("hidden");
+    });
+
+    goBtn.addEventListener("click", async () => {
+      errEl.classList.add("hidden");
+      goBtn.disabled = true;
+      const orig = goBtn.textContent;
+      goBtn.textContent = "Signing…";
+      try {
+        await runReplacement({
+          serverDomain: serverFqdn,
+          username,
+          retiredStkPubHex: ctx.retiredStkPubHex,
+          disposition: dispoEl.value,
+          backupEnrolled: ctx.backupEnrolled,
+          umk: session.umk,
+          irkPubHex: bytesToHex(session.irk.publicKey),
+          signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+        });
+        bodyEl.classList.add("hidden");
+        resultEl.classList.remove("hidden");
+        goBtn.classList.add("hidden");
+        cancelBtn.textContent = "Done";
+        toast("Server retiring — burn a replacement when ready", "ok");
+        resolve({ ok: true });
+      } catch (e) {
+        errEl.textContent = humanError(e);
+        errEl.classList.remove("hidden");
+        goBtn.textContent = orig;
+        refreshGate();
       }
     });
   });

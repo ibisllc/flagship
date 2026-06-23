@@ -26,6 +26,7 @@ import {
   remove as profileRemove,
 } from "../lib/profilesStore.js";
 import { controlApex } from "../lib/apex.js";
+import { isServerDecommissioned } from "../lib/serverReplacement.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -833,9 +834,18 @@ export async function renderHome() {
     const { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
       session.username,
     );
+    // L3 (docs §8b) — a box retired by "Replace this server" is suppressed from
+    // the list so the phone never re-surfaces or re-approves the zombie instance
+    // (the replacement re-registers under the same FQDN with a fresh STK; until
+    // it does the old FQDN simply doesn't appear).
+    body.servers = (body.servers ?? []).filter(
+      (s) => !isServerDecommissioned(s.serverId),
+    );
     // Registered server always supersedes a pending order with the same
     // fqdn (identity unified on the normalized fqdn).
-    const pendingOrders = pendingWithoutRegisteredTwin(body.servers, pending);
+    const pendingOrders = pendingWithoutRegisteredTwin(body.servers, pending).filter(
+      (o) => !isServerDecommissioned(o.fqdn),
+    );
 
     // Zero registered AND zero pending → the honest empty zero-state.
     if (!body.servers.length && !pendingOrders.length) {

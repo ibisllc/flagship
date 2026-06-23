@@ -95,6 +95,10 @@ export const SLOT_FIELDS = Object.freeze([
   // device-key generation, step 2 is open-account). Keep the legacy flat
   // key live so the wizard's pre-profile state never drops.
   { slot: "wizardState",             legacy: "flagship.wizard.state.v1",               deviceWideOrPreProfile: true },
+  // Graceful-decommission L3 — the JSON set of FQDNs this device retired when
+  // it "Replace this server"'d a box. Home filters these out and the boot
+  // surfaces decline a retired box's unlock.
+  { slot: "decommissionedServers",   legacy: "flagship.decommissioned.servers.v1" },
 ]);
 
 const SLOT_TO_LEGACY = new Map(SLOT_FIELDS.map((f) => [f.slot, f.legacy]));
