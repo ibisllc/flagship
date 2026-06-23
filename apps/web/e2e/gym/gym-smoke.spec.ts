@@ -63,9 +63,22 @@ async function coldLaunch(page: Page): Promise<void> {
  * only does the client-side identity mint and leaves the app on the wizard.
  */
 async function generateIdentity(page: Page): Promise<void> {
-  await page.fill("#bootstrap-passphrase", PASSPHRASE);
-  await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
-  await page.click("#bootstrap-go");
+  // The cover is username-first now; "Create a new account" opens an inline
+  // passphrase prompt + confirm, then mints the device identity client-side
+  // (bootstrapNewIdentity + unlockSession persist the wrapped UMK to IndexedDB)
+  // BEFORE the random-handle suggestion fetch. In the backendless gym that
+  // /api/username/suggest 404s → an error toast — but the identity is already
+  // persisted, so a reload→unlock (reachShell) still works.
+  await page.click("#bootstrap-create");
+  await expect(page.locator(".modal-title")).toHaveText("Create your account");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+  // The suggestion fetch fails (no backend) → toast; waiting for it guarantees
+  // the async mint has already landed before any reload.
+  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
 }
 
 /**
@@ -81,8 +94,8 @@ async function generateIdentity(page: Page): Promise<void> {
 async function reachShell(page: Page, viewAlias: string): Promise<void> {
   await coldLaunch(page);
   await generateIdentity(page);
-  // Confirm the client-side identity mint landed on the wizard before reload.
-  await expect(page.locator("#view-wizard")).toBeVisible({ timeout: 10_000 });
+  // generateIdentity already waited for the post-mint toast, so the wrapped UMK
+  // is persisted; reload with the deep-link → boot sees it → unlock screen.
   await page.goto(`/index.html?view=${viewAlias}`);
   // The wrapped UMK persists → boot routes to the unlock screen.
   await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
@@ -100,9 +113,11 @@ test.describe("gym webapp", () => {
     await shot(page, testInfo, "cold-launch");
     // The editorial brand title renders.
     await expect(page.locator("header h1#title")).toContainText("Flagship");
-    // The primary "create account" action is present + enabled (the
-    // every-button-reachable spirit of D7-usable for this screen).
-    const go = page.locator("#bootstrap-go");
+    // The username-first cover: the typed-name field + the primary "create a
+    // new account" action are present + enabled (the every-button-reachable
+    // spirit of D7-usable for this screen).
+    await expect(page.locator("#bootstrap-username")).toBeVisible();
+    const go = page.locator("#bootstrap-create");
     await expect(go).toBeVisible();
     await expect(go).toBeEnabled();
     await shot(page, testInfo, "bootstrap-ready");
@@ -140,56 +155,58 @@ test.describe("gym webapp", () => {
 
   test("gym webapp bootstrap rejects a passphrase mismatch", async ({ page }, testInfo) => {
     await coldLaunch(page);
-    await page.fill("#bootstrap-passphrase", PASSPHRASE);
-    await page.fill("#bootstrap-passphrase-2", PASSPHRASE + "-different");
-    await page.click("#bootstrap-go");
-    // Stays on bootstrap (no identity minted) + an error toast surfaces.
-    await expect(page.locator("#view-bootstrap")).toBeVisible();
-    await expect(page.locator("#toast")).toContainText(/don'?t match/i, { timeout: 3_000 });
+    // The passphrase moved off the cover into the create-account modals: the
+    // confirm step's inline validator rejects a mismatch (no identity minted).
+    await page.click("#bootstrap-create");
+    await expect(page.locator(".modal-title")).toHaveText("Create your account");
+    await page.fill(".modal-input", PASSPHRASE);
+    await page.click("[data-modal-ok]");
+    await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
+    await page.fill(".modal-input", PASSPHRASE + "-different");
+    await page.click("[data-modal-ok]");
+    // Stays in the confirm modal with the mismatch error — nothing minted.
+    await expect(page.locator("[data-modal-error]")).toContainText(/don'?t match/i);
+    await expect(page.locator(".modal-title")).toHaveText("Confirm passphrase");
     await shot(page, testInfo, "mismatch-toast");
   });
 
   test("gym webapp bootstrap rejects a too-short passphrase", async ({ page }, testInfo) => {
     await coldLaunch(page);
-    await page.fill("#bootstrap-passphrase", "short");
-    await page.fill("#bootstrap-passphrase-2", "short");
-    await page.click("#bootstrap-go");
-    await expect(page.locator("#view-bootstrap")).toBeVisible();
-    await expect(page.locator("#toast")).toContainText(/8\+? chars/i, { timeout: 3_000 });
+    // The first create-account modal's inline validator rejects a < 8-char
+    // passphrase and stays open (no identity minted).
+    await page.click("#bootstrap-create");
+    await expect(page.locator(".modal-title")).toHaveText("Create your account");
+    await page.fill(".modal-input", "short");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("[data-modal-error]")).toContainText(/8\+? char/i);
+    await expect(page.locator(".modal-title")).toHaveText("Create your account");
     await shot(page, testInfo, "short-toast");
   });
 
-  // ─── The first-run wizard (client-side: device-key mint → username step) ──
+  // ─── Create-account mint + the username-first cover validation ───────────
 
   test("gym webapp bootstrap mints an identity and reaches the home shell", async ({
     page,
   }, testInfo) => {
-    await coldLaunch(page);
-    await generateIdentity(page);
-    // bootstrapNewIdentity is pure client-side crypto; with the account not
-    // yet open it routes through the wizard's username step. We assert the
-    // wizard chrome rendered (a backendless transition off bootstrap).
-    await expect(page.locator("#view-wizard")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#wizard-username-input")).toBeVisible();
-    await shot(page, testInfo, "wizard-username");
+    // The create flow mints the device identity client-side (the random-handle
+    // suggestion 404s with no backend, but the wrapped UMK is persisted), so a
+    // reload→unlock reaches the real Home shell — a backendless full round-trip.
+    await reachShell(page, "home");
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+    await shot(page, testInfo, "home-reached");
   });
 
   test("gym webapp wizard rejects an invalid username client-side", async ({
     page,
   }, testInfo) => {
+    // Username typing now lives on the username-first cover (the typed
+    // create-screen + wizard username step were removed). The cover's sign-in
+    // path validates client-side BEFORE any directory call, so an invalid
+    // handle is rejected with no backend: stays on the cover + an error toast.
     await coldLaunch(page);
-    await generateIdentity(page);
-    await expect(page.locator("#wizard-username-input")).toBeVisible({ timeout: 10_000 });
-    // Uppercase + too short → the client-side isValidUsername reject fires
-    // BEFORE any availability call, so it is fully deterministic with no
-    // backend. The PRIMARY deterministic signal is that the view does NOT
-    // advance (stays on the username step). An error toast also surfaces, but
-    // it queues behind the still-showing "device key generated" toast from the
-    // mint, so we give it a generous timeout for the queue to drain.
-    await page.fill("#wizard-username-input", "AB");
-    await page.click("#wizard-go-username");
-    await expect(page.locator("#view-wizard")).toBeVisible();
-    await expect(page.locator("#wizard-username-input")).toBeVisible();
+    await page.fill("#bootstrap-username", "AB"); // uppercase + too short
+    await page.click("#bootstrap-continue");
+    await expect(page.locator("#view-bootstrap")).toBeVisible();
     await expect(page.locator("#toast")).toContainText(/lowercase/i, { timeout: 6_000 });
     await shot(page, testInfo, "username-invalid");
   });
