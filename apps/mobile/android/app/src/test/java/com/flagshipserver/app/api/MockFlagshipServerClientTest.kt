@@ -7,6 +7,7 @@ package com.flagshipserver.app.api
 import com.flagshipserver.app.core.HttpException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -96,6 +97,16 @@ class MockFlagshipServerClientTest {
         assertTrue(c.usernameAvailable("admin").available.not())
         assertTrue(c.usernameAvailable("a").available.not())
         assertTrue(c.usernameAvailable("kamdemharry").available)
+    }
+
+    @Test fun suggestUsername_returnsAValidRandomHandle() = runTest {
+        // The Mock suggests a fresh <adjective>-<noun> with a positive cooldown
+        // and never throttles (offline/dev convenience).
+        val s = make().suggestUsername("abcd")
+        assertNotNull(s.name)
+        assertFalse(s.throttled)
+        assertTrue(s.retryAfterMs > 0)
+        assertTrue(Regex("^[a-z]+-[a-z]+$").matches(s.name!!))
     }
 
     @Test fun usernameAvailable_enforces3to30Length() = runTest {

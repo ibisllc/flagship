@@ -45,6 +45,7 @@ import com.flagshipserver.app.api.TotpEnrollConfirmRequest
 import com.flagshipserver.app.api.TotpEnrollConfirmResponse
 import com.flagshipserver.app.api.TrustedDevicesListResponse
 import com.flagshipserver.app.api.UsernameAvailabilityResponse
+import com.flagshipserver.app.api.UsernameSuggestion
 import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.api.UsernameLookupResponse
 import com.flagshipserver.app.api.WipeRestartRequest
@@ -182,6 +183,7 @@ class RevokeServerViewModelTest {
         override suspend fun releaseServerName(req: ReleaseServerNameRequest) { throw error }
         override suspend fun revokeServer(req: ServerRevocationRequest) { throw error }
         override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse = throw error
+        override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion = throw error
         override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? = throw error
         override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse = throw error
         override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope = throw error

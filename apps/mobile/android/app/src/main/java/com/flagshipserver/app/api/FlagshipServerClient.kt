@@ -43,6 +43,11 @@ interface FlagshipServerClient {
      *  `revokeServer` + the iOS `revokeServer` shape. */
     suspend fun revokeServer(req: ServerRevocationRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
+    /** Sign-up handle suggestion. POST /api/username/suggest with a throwaway
+     *  `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
+     *  200 carries a name + retryAfterMs cooldown; a 429 carries throttled + the
+     *  cooldown remaining. See docs/username-suggestion-queue.md. */
+    suspend fun suggestUsername(deviceKey: String): UsernameSuggestion
 
     /** Canonical provisioning-progress poll — GET /api/order/<serial>/status
      *  on flagshipserver.com (the control plane; NOT session-gated — the
@@ -787,6 +792,16 @@ data class RckRegisterRequest(
     )
 }
 
+/** One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
+ *  on a 429 `name` is null + `throttled` is true. `retryAfterMs` is the cooldown
+ *  until the next regenerate is allowed either way. */
+@Serializable
+data class UsernameSuggestion(
+    val name: String? = null,
+    val retryAfterMs: Int = 0,
+    val throttled: Boolean = false,
+)
+
 @Serializable
 data class UsernameAvailabilityResponse(
     val username: String,
@@ -1183,6 +1198,15 @@ class MockFlagshipServerClient(
     override suspend fun revokeServer(req: ServerRevocationRequest) {
         tick()
         _revokedServers += req
+    }
+
+    /** Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
+     *  2 s cooldown, never throttled (offline/dev convenience; no DNS). */
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        tick()
+        val adj = listOf("happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly").random()
+        val noun = listOf("otter", "panda", "fox", "heron", "robin", "finch", "badger", "beaver", "gecko", "comet").random()
+        return UsernameSuggestion(name = "$adj-$noun", retryAfterMs = 2000, throttled = false)
     }
 
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
@@ -1976,6 +2000,28 @@ class LiveFlagshipServerClient(
             responseSerializer = UsernameAvailabilityResponse.serializer(),
         )
 
+    override suspend fun suggestUsername(deviceKey: String): UsernameSuggestion {
+        val bodyBytes = transport.json
+            .encodeToString(SuggestUsernameBody.serializer(), SuggestUsernameBody(deviceKey))
+            .encodeToByteArray()
+        // accept 429 so the throttle is a normal outcome, not an exception.
+        val resp = transport.execute(
+            method = "POST",
+            url = "$base/api/username/suggest",
+            body = bodyBytes,
+            contentType = "application/json",
+            accept = setOf(200, 429),
+        )
+        val wire = transport.json.decodeFromString(
+            SuggestUsernameWire.serializer(), resp.body.decodeToString(),
+        )
+        return if (resp.status == 429) {
+            UsernameSuggestion(name = null, retryAfterMs = wire.retryAfterMs ?: 3000, throttled = true)
+        } else {
+            UsernameSuggestion(name = wire.name, retryAfterMs = wire.retryAfterMs ?: 2000, throttled = false)
+        }
+    }
+
     override suspend fun fetchProvisionStatus(serial: String): ProvisionStatusRecord? {
         // GET /api/order/<serial>/status — 200 carries the record; 404
         // means "no report yet" → surface as null (the poller renders the
@@ -2297,3 +2343,12 @@ class LiveFlagshipServerClient(
 
 @Serializable
 private data class UsernameAvailabilityCheckBody(@SerialName("username") val username: String)
+
+@Serializable
+private data class SuggestUsernameBody(@SerialName("deviceKey") val deviceKey: String)
+
+@Serializable
+private data class SuggestUsernameWire(
+    val name: String? = null,
+    val retryAfterMs: Int? = null,
+)
