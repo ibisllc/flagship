@@ -110,30 +110,20 @@ describe("webapp boot-approval crypto matches @flagship/protocol byte-for-byte",
     expect(ok).toBe(true);
   });
 
-  // Create-time pairing: the webapp mints a fresh WebCrypto Ed25519 pairing key,
-  // seals the order to its raw pub, and embeds the pkcs8-extracted 32-byte seed
-  // in the recipe as `pairingKeyPrivHex`. The daemon opens the deposit with that
-  // seed via openSealedFromEd25519Recipient — so the seed extraction MUST be the
-  // inverse of the raw pub. This pins exactly that (the one genuinely-new crypto
-  // step in depositCreateTimePairing).
-  it("pkcs8-extracted pairing seed opens what was sealed to its raw pub (daemon's move)", async () => {
-    const kp = (await crypto.subtle.generateKey(
-      { name: "Ed25519" },
-      true,
-      ["sign", "verify"],
-    )) as CryptoKeyPair;
-    const pairingPub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
-    const pairingSeed = pkcs8.slice(pkcs8.length - 32); // RFC 8410: prefix(16) || seed(32)
-
-    // The webapp seals to the raw pub; the daemon opens with the seed.
-    const order = new TextEncoder().encode(JSON.stringify({ request: { type: "add-paired-session" } }));
-    const sealed = await sealForBoxStk(order, pairingPub);
-    const opened = openSealedFromEd25519Recipient(sealed, pairingSeed);
-    expect(toHex(opened)).toBe(toHex(order));
-
-    // The seed's noble-derived pub must equal the WebCrypto raw pub (sanity).
-    expect(toHex(ed25519.getPublicKey(pairingSeed))).toBe(toHex(pairingPub));
+  // Secret-free pairing (default online): the webapp seals the plaintext
+  // `pairingOrder` JSON DIRECTLY to the box's REGISTERED identity pub; the daemon
+  // unseals it with its identity seed and decodes the `{request, signature}` JSON
+  // verbatim. Pin the box's exact move so the deposit carrier is openable.
+  it("default pairing deposit: order JSON sealed to the box identity opens verbatim (daemon's move)", async () => {
+    const boxSeed = ed25519.utils.randomSecretKey();
+    const boxPub = ed25519.getPublicKey(boxSeed);
+    const orderJson = JSON.stringify({
+      request: { type: "add-paired-session", serverId: "kitchen.alice.flagship.services" },
+      signature: "ab".repeat(64),
+    });
+    const sealed = await sealForBoxStk(new TextEncoder().encode(orderJson), boxPub);
+    const opened = openSealedFromEd25519Recipient(sealed, boxSeed);
+    expect(new TextDecoder().decode(opened)).toBe(orderJson);
   });
 });
 

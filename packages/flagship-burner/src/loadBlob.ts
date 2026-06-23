@@ -27,19 +27,20 @@ export interface LoadedBlob {
   blob: InstallBlob;
   blobSignatureHex: string;
   /**
-   * Create-time pairing: the recipe's UNSIGNED pairing-key private half (a
-   * 32-byte Ed25519 seed hex), if present. NOT part of the signed InstallBlob —
-   * a top-level recipe sibling the phone adds so the box can open the sealed
-   * `add-paired-session` deposit on first boot. Threaded into the on-disk
-   * install-blob.json via {@link UserDataOptions.pairingKeyPrivHex}; undefined
-   * for recipes that don't carry it (older recipes / non-pairing burns).
+   * OFFLINE secret-free pairing (advanced/embed): the recipe's UNSIGNED embedded
+   * `add-paired-session` order (the plaintext `{request, signature}` JSON), if
+   * present. NOT part of the signed InstallBlob — a top-level recipe sibling the
+   * phone adds so the box can verify + add the paired session LOCALLY on first
+   * boot (no `.com`). Threaded into the on-disk install-blob.json via
+   * {@link UserDataOptions.pairingOrder}; undefined for the default online recipe
+   * (no secret) and older recipes.
    */
-  pairingKeyPrivHex?: string;
+  pairingOrder?: string;
   /**
    * SWK provisioning: the recipe's UNSIGNED Service Workload Key (a 32-byte hex,
    * = `deriveSWK(umk, serverId)`), if present. NOT part of the signed InstallBlob
    * — a top-level recipe sibling the phone adds (exactly like
-   * {@link pairingKeyPrivHex}) so the daemon can turn on the service/build
+   * {@link pairingOrder}) so the daemon can turn on the service/build
    * platform at first boot. Threaded into the on-disk install-blob.json via
    * {@link UserDataOptions.swkHex}; undefined for recipes that don't carry it.
    */
@@ -105,16 +106,20 @@ export function loadBlobFromString(
   if (!parsed || typeof parsed !== "object") {
     throw new BurnerLoadError("top-level value is not an object", "malformed-json");
   }
-  // Create-time pairing: the optional pairing-key private half is a TOP-LEVEL
-  // recipe sibling (alongside `blob`/`blobSignature` in the envelope form, or a
-  // sibling of the flattened fields). Read it off the ORIGINAL parsed object
-  // before the envelope-flatten below drops top-level siblings. UNSIGNED — it's
-  // recipe metadata, never part of the verified InstallBlob.
-  const rawPairingKey = (parsed as Record<string, unknown>).pairingKeyPrivHex;
-  const pairingKeyPrivHex =
-    typeof rawPairingKey === "string" && /^[0-9a-f]{64}$/i.test(rawPairingKey)
-      ? rawPairingKey.toLowerCase()
-      : undefined;
+  // OFFLINE secret-free pairing (advanced/embed): the optional embedded
+  // `add-paired-session` order (plaintext `{request, signature}` JSON) is a
+  // TOP-LEVEL recipe sibling (alongside `blob`/`blobSignature` in the envelope
+  // form, or a sibling of the flattened fields). Read it off the ORIGINAL parsed
+  // object before the envelope-flatten below drops top-level siblings. UNSIGNED —
+  // recipe metadata, never part of the verified InstallBlob. Tolerate either a
+  // JSON STRING or an inlined object; serialize an object to the canonical string.
+  const rawPairingOrder = (parsed as Record<string, unknown>).pairingOrder;
+  const pairingOrder =
+    typeof rawPairingOrder === "string" && rawPairingOrder.length > 0
+      ? rawPairingOrder
+      : rawPairingOrder && typeof rawPairingOrder === "object"
+        ? JSON.stringify(rawPairingOrder)
+        : undefined;
   // SWK provisioning: the optional Service Workload Key is likewise a TOP-LEVEL
   // recipe sibling (read off the ORIGINAL parsed object, before the envelope
   // flatten drops top-level siblings). UNSIGNED — recipe metadata, never part of
@@ -165,7 +170,7 @@ export function loadBlobFromString(
       "bad-signature",
     );
   }
-  return { blob, blobSignatureHex: sigHex, pairingKeyPrivHex, swkHex, source };
+  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, source };
 }
 
 export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {

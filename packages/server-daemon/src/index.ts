@@ -3,11 +3,8 @@ import { dirname, join } from "node:path";
 import {
   ed,
   signServerRevokeBySelf,
-  openSealedFromEd25519Recipient,
-  verifyPhoneOrder,
   verifyRootEntitlement,
   type Keypair,
-  type PhoneOrder,
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
@@ -127,6 +124,11 @@ import {
 } from "./swkDepositConsumer.js";
 import { readAuthCodeBirthDate, wireGossip } from "./gossip/index.js";
 import type { GossipLoop } from "./gossip/gossipLoop.js";
+import {
+  addEmbeddedPairing,
+  buildPairingDepositPoller,
+  filePairingMarkerStore,
+} from "./pairingDepositConsumer.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -234,89 +236,35 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
 }
 
 /**
- * Create-time pairing claim. The CREATING phone deposited an owner-IRK-signed
- * `add-paired-session` order — SEALED for a phone-chosen PAIRING key whose
- * private half rides the recipe (`pairingKeyPrivHex`) — to .com the moment it
- * minted the recipe, BEFORE this box ever booted. The box's own identity key is
- * generated fresh at first boot (`gen-identity`), so the phone can't seal to it
- * at create; it seals to the pairing key it embeds in the recipe instead. This
- * is what makes "waiting for the server" survive a phone refresh: the sealed
- * link lives in .com until we claim it. On startup we do ONE public
- * consume-once read, unseal it (trying the recipe pairing key first, then our
- * identity key as a fallback for a post-registration re-pair), VERIFY the
- * owner-IRK signature + the canonical bytes, and add the session — so the box
- * comes online ALREADY paired, with no "Pair this server" tap. Best-effort +
- * non-fatal: any failure leaves the manual pairing path as the fallback.
- * Content-blind: .com only ever held the sealed blob (I1).
+ * Read the recipe's OPTIONAL embedded pairing order (`pairingOrder`) from the
+ * on-disk install blob — the OFFLINE/advanced secret-free mode. The phone embeds
+ * the owner-IRK-signed `add-paired-session` order in PLAINTEXT (`{request,
+ * signature}` JSON) as an UNSIGNED recipe sibling (never in the signed
+ * InstallBlob's canonical bytes, so existing recipe signatures are untouched),
+ * exactly like `swkHex`; the burner writes it into /var/flagship/install-blob.json.
+ * The daemon verifies the owner-IRK signature at boot and adds the session
+ * LOCALLY with no `.com` call. Returns the raw JSON string (un-verified here —
+ * `addEmbeddedPairing` verifies) or null when absent/malformed (the default
+ * online recipe carries NO pairing material → the box falls through to the
+ * `.com` pairing-deposit poller).
+ *
+ * The default secret-free recipe carries `pairingKeyPrivHex` NO MORE: it is
+ * cleanly removed. Older recipes that still carry it pair through the EXISTING
+ * `.com` pairing-deposit lane (the phone now seals the order to the box identity,
+ * which the poller opens) — the dead `pairingKeyPrivHex` sibling is simply ignored.
  */
-async function consumePendingPairing(opts: {
-  serverFqdn: string;
-  controlPlaneBaseUrl: string;
-  /** Candidate recipient private keys, in priority order: the recipe pairing
-   * key first (the create-time seal target), then the box identity key (a
-   * post-registration re-pair seals to identity). Each is a 32-byte Ed25519
-   * seed; we try them until one opens the blob. */
-  recipientPrivKeys: Uint8Array[];
-  ownerIrkPub: Uint8Array;
-  pairedSessions: FilePairedSessionStore;
-}): Promise<void> {
-  try {
-    const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
-    const url = `${base}/api/server/${encodeURIComponent(opts.serverFqdn)}/pairing-deposit`;
-    const res = await fetch(url, { method: "GET" });
-    if (res.status !== 200) return; // 404 ⇒ nothing pending (the common case)
-    const body = (await res.json()) as { sealed?: unknown };
-    if (typeof body.sealed !== "string") return;
-    const sealed = hexToBytes(body.sealed);
-    let plain: Uint8Array | null = null;
-    for (const priv of opts.recipientPrivKeys) {
-      try {
-        plain = openSealedFromEd25519Recipient(sealed, priv);
-        break;
-      } catch {
-        // wrong recipient key — try the next candidate
-      }
-    }
-    if (!plain) {
-      console.error("[daemon] pairing deposit: no recipient key could open the sealed blob — ignored");
-      return;
-    }
-    const env = JSON.parse(new TextDecoder().decode(plain)) as {
-      request?: PhoneOrder;
-      signature?: string;
-    };
-    const order = env.request;
-    if (!order || typeof env.signature !== "string") return;
-    if (order.type !== "add-paired-session" || order.serverId !== opts.serverFqdn) return;
-    if (!verifyPhoneOrder(order, hexToBytes(env.signature), opts.ownerIrkPub)) {
-      console.error("[daemon] pairing deposit: owner-IRK signature did NOT verify — ignored");
-      return;
-    }
-    await opts.pairedSessions.add(order.token, order.label);
-    console.log("[daemon] claimed a create-time pairing deposit — paired on first boot");
-  } catch (e) {
-    console.error(`[daemon] consumePendingPairing failed (non-fatal): ${(e as Error).message}`);
-  }
-}
-
-/**
- * Read the recipe's pairing private key (`pairingKeyPrivHex`) from the on-disk
- * install blob. The phone embeds it as an UNSIGNED recipe sibling (never in the
- * signed InstallBlob's canonical bytes, so existing recipe signatures are
- * untouched); the burner writes it into /var/flagship/install-blob.json. Used
- * ONLY to open the create-time pairing deposit. Returns null when absent/
- * malformed (older recipes, or a non-pairing burn) — the box then falls back to
- * its identity key, then to the manual pairing path.
- */
-async function pairingKeyFromInstallBlob(): Promise<Uint8Array | null> {
+async function pairingOrderFromInstallBlob(): Promise<string | null> {
   const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
   const raw = await tryReadFile(blobPath);
   if (!raw) return null;
   try {
-    const b = JSON.parse(raw) as { pairingKeyPrivHex?: unknown };
-    const v = b.pairingKeyPrivHex;
-    if (typeof v !== "string" || !/^[0-9a-f]{64}$/i.test(v)) return null;
-    return hexToBytes(v);
+    const b = JSON.parse(raw) as { pairingOrder?: unknown };
+    const v = b.pairingOrder;
+    // Accept either the embedded JSON STRING or an already-parsed object (the
+    // burner writes the string; be tolerant of either shape).
+    if (typeof v === "string" && v.length > 0) return v;
+    if (v && typeof v === "object") return JSON.stringify(v);
+    return null;
   } catch {
     return null;
   }
@@ -725,22 +673,48 @@ async function main(): Promise<void> {
       );
     } else console.log(`[daemon] no owner IRK / psk; orders endpoint disabled`);
 
-    // Create-time pairing: claim any sealed add-paired-session the creating
-    // phone left in .com before this box booted, so we come online ALREADY
-    // paired (no manual "Pair this server" tap). Fire-and-forget + best-effort;
-    // never blocks bring-up. Needs the owner IRK (cfg) to verify the order.
+    // Secret-free pairing: come online ALREADY paired (no manual "Pair this
+    // server" tap), with NO secret in the recipe. Two modes (both need the owner
+    // IRK, cfg, to verify the order):
+    //   OFFLINE (advanced/embed): the recipe carries the owner-IRK-signed
+    //     `add-paired-session` order in plaintext (`pairingOrder` sibling) — add
+    //     it LOCALLY, no `.com` call.
+    //   DEFAULT (online): the recipe carries NO pairing material; the phone
+    //     deposits the order SEALED to THIS box's identity into the `.com`
+    //     pairing-deposit lane AFTER we register, so we POLL that lane on the
+    //     heartbeat cadence until we claim it (mirrors the SWK consumer).
+    // Fire-and-forget + best-effort; never blocks bring-up.
     if (cfg) {
+      const pairingMarker = filePairingMarkerStore(`${dataDir}/pairing-claimed.json`);
       void (async () => {
-        const pairingKey = await pairingKeyFromInstallBlob();
-        await consumePendingPairing({
+        const embedded = await pairingOrderFromInstallBlob();
+        if (embedded) {
+          const out = await addEmbeddedPairing({
+            embeddedJson: embedded,
+            serverFqdn: env.serverFqdn!,
+            ownerIrkPub: cfg.irkPublicKey,
+            pairedSessions,
+            markerStore: pairingMarker,
+            onLog: (m) => console.log(m),
+          });
+          // An embedded order that doesn't verify falls through to the poller
+          // (a box might also carry a fresh `.com` deposit).
+          if (out.added) return;
+        }
+        if (!env.controlPlaneBaseUrl) return;
+        const pairingPoller = buildPairingDepositPoller({
           serverFqdn: env.serverFqdn!,
-          controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-          // Recipe pairing key first (the create-time seal target), box
-          // identity second (a post-registration re-pair seals to identity).
-          recipientPrivKeys: pairingKey ? [pairingKey, identityPrivKey] : [identityPrivKey],
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           ownerIrkPub: cfg.irkPublicKey,
+          boxIdentityPriv: identityPrivKey,
           pairedSessions,
+          markerStore: pairingMarker,
+          onLog: (m) => console.log(m),
         });
+        pairingPoller.start();
+        process.once("SIGTERM", () => pairingPoller.stop());
+        process.once("SIGINT", () => pairingPoller.stop());
+        console.log("[daemon] no embedded pairing — pairing-deposit consumer armed (secret-free recipe)");
       })();
     }
     console.log(

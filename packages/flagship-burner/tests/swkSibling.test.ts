@@ -10,7 +10,7 @@ import { installBlobToJson } from "../src/userdata.js";
 import { loadBlobFromString } from "../src/loadBlob.js";
 
 // SWK provisioning: the phone embeds `swkHex` (= deriveSWK(umk, serverId)) as an
-// UNSIGNED top-level recipe sibling, exactly like `pairingKeyPrivHex`. The burner
+// UNSIGNED top-level recipe sibling, exactly like `pairingOrder`. The burner
 // threads it into the on-disk install-blob.json. It must NEVER enter the signed
 // InstallBlob's canonical bytes — a recipe with vs. without it signs identically.
 
@@ -69,11 +69,11 @@ describe("installBlobToJson — swkHex sibling", () => {
     expect("swkHex" in json).toBe(false);
   });
 
-  it("coexists with pairingKeyPrivHex (both unsigned siblings)", () => {
+  it("coexists with pairingOrder (both unsigned siblings)", () => {
     const { blob, blobSignatureHex } = signedBlob();
-    const pairing = "a".repeat(64);
-    const json = installBlobToJson(blob, blobSignatureHex, pairing, SWK);
-    expect(json.pairingKeyPrivHex).toBe(pairing);
+    const pairingOrder = JSON.stringify({ request: { type: "add-paired-session" }, signature: "ab" });
+    const json = installBlobToJson(blob, blobSignatureHex, pairingOrder, SWK);
+    expect(json.pairingOrder).toBe(pairingOrder);
     expect(json.swkHex).toBe(SWK);
   });
 

@@ -201,6 +201,28 @@ describe("pairing deposit — phone deposit (IRK mailbox-auth)", () => {
     expect(verifyPhoneOrder(opened.request, hexToBytes(opened.signature), irk.publicKey)).toBe(true);
   });
 
+  it("SECRET-FREE: a POST-registration deposit sealed to the REGISTERED box identity round-trips", async () => {
+    // The default secret-free recipe carries NO pairing key. The box boots,
+    // registers (its identity = stk), and the phone reads that identity from
+    // /pods and seals the add-paired-session order to it — binding stkPub ==
+    // reg.identityPubKeyHex (the strong I2 check). The box opens it with its OWN
+    // identity key (no recipe-embedded pairing key).
+    const irk = makeKey();
+    const stk = makeKey();
+    const storage = await setup({ irk, stk }); // registers HOST with identity = stk
+    const { token, sealedHex } = sealedPairing({ irk, stk });
+    const dep = await handlePostPairingDeposit(deps(storage), HOST, depositBody({ irk, stk, sealedHex }));
+    expect(dep.status).toBe(200);
+    const read = await handleConsumePairingDeposit(deps(storage), HOST);
+    expect(read.status).toBe(200);
+    // The box opens with its identity key — exactly what the daemon poller does.
+    const opened = JSON.parse(
+      new TextDecoder().decode(openSealedFromEd25519Recipient(hexToBytes((read.body as { sealed: string }).sealed), stk.privateKey)),
+    ) as { request: PhoneOrder; signature: string };
+    expect((opened.request as { token: string }).token).toBe(token);
+    expect(verifyPhoneOrder(opened.request, hexToBytes(opened.signature), irk.publicKey)).toBe(true);
+  });
+
   it("rejects a CREATE-TIME deposit for a fqdn NOT under the authed account (403)", async () => {
     const irk = makeKey();
     const stk = makeKey();

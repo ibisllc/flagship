@@ -169,13 +169,14 @@ public enum RecipeLoader {
         else { return data }
         if var blob = obj["blob"] as? [String: Any], let sig = obj["blobSignature"] as? String {
             blob["blobSignatureHex"] = sig
-            // Create-time pairing: carry the UNSIGNED top-level pairing-key
-            // sibling INTO the flattened blob so it lands in the on-disk
-            // install-blob.json the daemon reads. NOT part of the signed blob —
-            // the envelope flatten would otherwise drop it (it lives beside
-            // `blob`/`blobSignature`, not inside `blob`).
-            if let pairing = obj["pairingKeyPrivHex"] as? String {
-                blob["pairingKeyPrivHex"] = pairing
+            // Secret-free pairing (offline/embed): carry the UNSIGNED top-level
+            // plaintext `pairingOrder` sibling (the owner-IRK-signed
+            // `add-paired-session` order) INTO the flattened blob so it lands in
+            // the on-disk install-blob.json; the daemon verifies + adds the
+            // session locally. NOT part of the signed blob — the envelope flatten
+            // would otherwise drop it (it lives beside `blob`/`blobSignature`).
+            if let pairingOrder = obj["pairingOrder"] as? String {
+                blob["pairingOrder"] = pairingOrder
             }
             // SWK provisioning: same mechanism — carry the UNSIGNED top-level
             // `swkHex` sibling INTO the flattened blob so it lands in the on-disk

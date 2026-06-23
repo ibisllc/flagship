@@ -133,6 +133,46 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 (latest) — recipe is now FULLY secret-free: `pairingKeyPrivHex` removed (the last secret)
+
+**Completes the secret-free-recipe spec** (`docs/recipe-delivery-and-remote-install.md`).
+The entry below removed the SWK from the default recipe; this removes the LAST secret —
+the create-time pairing key — so the FIRST recipe carries ZERO secrets and is safe to
+hand off (a partner/colo can build the box without ever holding its session/keys).
+
+**The pairing keypair is eliminated entirely.** Two modes (mirroring the SWK):
+- **DEFAULT (online):** the IRK-signed `add-paired-session` order is **sealed to the
+  box identity and deposited post-registration**, riding the SAME `SwkDepositCoordinator`
+  (one biometric → both SWK + pairing deposits). The daemon **polls** the `.com`
+  pairing-deposit lane (the deposit now lands AFTER boot, not before) and opens it with
+  its identity key (the identity path already existed). Token stays sealed, `.com`-blind;
+  the post-registration `stkPub == registered identityPubKey` binding is STRONGER than
+  the old create-time namespace check.
+- **OFFLINE (advanced/embed):** the IRK-signed order is **embedded plaintext** in the
+  recipe (a sibling like `swkHex`); the daemon verifies it under the owner IRK and adds
+  the session LOCALLY with **no `.com`**. Plaintext-in-USB is the accepted offline
+  tradeoff (physical possession; never hand off — that's the default path's job).
+
+Built via 2 worker agents — PA (TS rail: protocol `pairingOrder` envelope + daemon
+`pairingDepositConsumer` poller + `addEmbeddedPairing` + burner drops `pairingKeyPrivHex`)
++ PB (native clients + Swift burner: order build, default deposit via the coordinator,
+offline embed). Pinned cross-platform vector for the order JSON on TS/Swift/Kotlin/JS.
+No bootstrap sha-pin change; `pairingKeyPrivHex` gone from all shipping code (only
+explanatory comments remain).
+
+Gates (merged tree): `tsc -b` clean · full vitest **6429 / 0 fail** · iOS `xcodebuild`
+**TEST SUCCEEDED** (1212) · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (forced
+rerun) · burner-mac `swift test` **118/0**. Merged cleanly with the concurrent
+graceful-decommission work (rerere applied the prior `SecretMailboxClient`/`home.js`
+resolutions).
+
+**REMAINING (owner): a REBURN** to validate the live pairing-deposit→claim handshake +
+the offline-embed path on hardware (CI proves the envelope/poller/embed + byte-compat,
+not the physical boot). With this, the spec's **near-term bucket is COMPLETE** —
+secret-free default for BOTH the SWK and the pairing key. The "later" bucket (phone↔burner
+session + QR secret-injection, Android USB-OTG, export/delegated-build UX, `.com`
+transparency receipt, image-measurement attestation) remains deferred.
+
 ### 2026-06-23 (later) — SECRET-FREE recipe by default: post-boot sealed SWK delivery + single Advanced-mode toggle
 
 Implements the near-term bucket of `docs/recipe-delivery-and-remote-install.md`.
