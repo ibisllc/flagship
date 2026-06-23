@@ -66,6 +66,9 @@ import type {
   DeviceCapabilityGrantStorage,
   SchemaVersionRecord,
   SchemaVersionStorage,
+  SuggestionQueueStorage,
+  SuggestThrottleStorage,
+  SuggestThrottleRecord,
   CtAlertStorage,
   TrustExceptionRecord,
   TrustExceptionStorage,
@@ -3051,6 +3054,8 @@ export class D1DeviceCapabilityGrantStorage
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
+  suggestionQueue: SuggestionQueueStorage;
+  suggestThrottle: SuggestThrottleStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -3089,6 +3094,8 @@ export class D1Storage implements Storage {
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
+    this.suggestionQueue = new D1SuggestionQueueStorage(db);
+    this.suggestThrottle = new D1SuggestThrottleStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -3164,6 +3171,104 @@ export class D1SchemaVersionStorage implements SchemaVersionStorage {
       .bind(version)
       .first();
     return !!r;
+  }
+}
+
+/** D1 username suggestion queue (migration 0061). Pop order matches the
+ *  (enqueued_at, name) index, so D1 ↔ InMemory agree exactly. */
+export class D1SuggestionQueueStorage implements SuggestionQueueStorage {
+  constructor(private readonly db: D1Database) {}
+  async enqueue(names: string[], at: number): Promise<number> {
+    let added = 0;
+    for (const raw of names) {
+      const name = raw.toLowerCase();
+      const r = await this.db
+        .prepare(
+          `INSERT OR IGNORE INTO username_suggestion_queue (name, enqueued_at) VALUES (?1, ?2)`,
+        )
+        .bind(name, at)
+        .run();
+      // D1 surfaces affected-row count via meta.changes (1 = inserted, 0 = dup).
+      if ((r.meta?.changes ?? 0) > 0) added += 1;
+    }
+    return added;
+  }
+  async popOldest(): Promise<string | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT name FROM username_suggestion_queue ORDER BY enqueued_at ASC, name ASC LIMIT 1`,
+      )
+      .first<{ name: string }>();
+    if (!row) return null;
+    await this.db
+      .prepare(`DELETE FROM username_suggestion_queue WHERE name = ?1`)
+      .bind(row.name)
+      .run();
+    return row.name;
+  }
+  async count(): Promise<number> {
+    const r = await this.db
+      .prepare(`SELECT COUNT(*) AS n FROM username_suggestion_queue`)
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+  async list(): Promise<string[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT name FROM username_suggestion_queue ORDER BY enqueued_at ASC, name ASC`,
+      )
+      .all<{ name: string }>();
+    return (r.results ?? []).map((row) => row.name);
+  }
+}
+
+/** D1 per-device regenerate throttle (migration 0061). */
+export class D1SuggestThrottleStorage implements SuggestThrottleStorage {
+  constructor(private readonly db: D1Database) {}
+  async get(deviceKey: string): Promise<SuggestThrottleRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT device_key, count, window_start, last_at, next_allowed_at
+           FROM username_suggest_throttle WHERE device_key = ?1`,
+      )
+      .bind(deviceKey)
+      .first<{
+        device_key: string;
+        count: number;
+        window_start: number;
+        last_at: number;
+        next_allowed_at: number;
+      }>();
+    if (!r) return undefined;
+    return {
+      deviceKey: r.device_key,
+      count: r.count,
+      windowStart: r.window_start,
+      lastAt: r.last_at,
+      nextAllowedAt: r.next_allowed_at,
+    };
+  }
+  async upsert(rec: SuggestThrottleRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO username_suggest_throttle
+           (device_key, count, window_start, last_at, next_allowed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(device_key) DO UPDATE SET
+           count = excluded.count,
+           window_start = excluded.window_start,
+           last_at = excluded.last_at,
+           next_allowed_at = excluded.next_allowed_at`,
+      )
+      .bind(rec.deviceKey, rec.count, rec.windowStart, rec.lastAt, rec.nextAllowedAt)
+      .run();
+  }
+  async prune(olderThan: number): Promise<number> {
+    const r = await this.db
+      .prepare(`DELETE FROM username_suggest_throttle WHERE last_at < ?1`)
+      .bind(olderThan)
+      .run();
+    return r.meta?.changes ?? 0;
   }
 }
 

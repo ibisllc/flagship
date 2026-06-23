@@ -1,6 +1,9 @@
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
+  SuggestionQueueStorage,
+  SuggestThrottleStorage,
+  SuggestThrottleRecord,
   CtAlertRecord,
   CtAlertStorage,
   TrustExceptionRecord,
@@ -1369,6 +1372,8 @@ export class InMemoryDeviceCapabilityGrantStorage
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   schemaVersion = new InMemorySchemaVersionStorage();
+  suggestionQueue = new InMemorySuggestionQueueStorage();
+  suggestThrottle = new InMemorySuggestThrottleStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -1538,6 +1543,63 @@ export class InMemorySchemaVersionStorage implements SchemaVersionStorage {
   }
   async has(version: string): Promise<boolean> {
     return this.byVersion.has(version);
+  }
+}
+
+/**
+ * In-memory username suggestion queue. Pop order = (enqueuedAt ASC, name ASC)
+ * so it matches the D1 index ordering exactly (parity).
+ */
+export class InMemorySuggestionQueueStorage implements SuggestionQueueStorage {
+  private byName = new Map<string, number>();
+  async enqueue(names: string[], at: number): Promise<number> {
+    let added = 0;
+    for (const raw of names) {
+      const name = raw.toLowerCase();
+      if (this.byName.has(name)) continue;
+      this.byName.set(name, at);
+      added += 1;
+    }
+    return added;
+  }
+  private ordered(): string[] {
+    return [...this.byName.entries()]
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  }
+  async popOldest(): Promise<string | null> {
+    const first = this.ordered()[0];
+    if (first === undefined) return null;
+    this.byName.delete(first);
+    return first;
+  }
+  async count(): Promise<number> {
+    return this.byName.size;
+  }
+  async list(): Promise<string[]> {
+    return this.ordered();
+  }
+}
+
+/** In-memory per-device regenerate throttle (dumb CRUD). */
+export class InMemorySuggestThrottleStorage implements SuggestThrottleStorage {
+  private byKey = new Map<string, SuggestThrottleRecord>();
+  async get(deviceKey: string): Promise<SuggestThrottleRecord | undefined> {
+    const r = this.byKey.get(deviceKey);
+    return r ? { ...r } : undefined;
+  }
+  async upsert(rec: SuggestThrottleRecord): Promise<void> {
+    this.byKey.set(rec.deviceKey, { ...rec });
+  }
+  async prune(olderThan: number): Promise<number> {
+    let removed = 0;
+    for (const [k, v] of [...this.byKey.entries()]) {
+      if (v.lastAt < olderThan) {
+        this.byKey.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 }
 

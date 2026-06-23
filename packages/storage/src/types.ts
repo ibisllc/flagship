@@ -1168,9 +1168,57 @@ export interface SchemaVersionStorage {
   has(version: string): Promise<boolean>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Random username suggestion — queue + escalating per-device throttle
+// (docs/username-suggestion-queue.md)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A pool of pre-validated, available random usernames (grammar + not-claimed +
+ * not a `.com` property), kept warm by the replenish cron. A suggestion POPS the
+ * oldest — so a name handed out (and then refused) is gone, defeating the
+ * reject-then-predict attack. Advisory only; the authoritative reservation is
+ * still `handleUsernameClaim`.
+ */
+export interface SuggestionQueueStorage {
+  /** Insert candidates, idempotent on `name`. Returns how many NEW rows added. */
+  enqueue(names: string[], at: number): Promise<number>;
+  /** Remove + return the oldest queued name (FIFO, name-tiebroken), or null. */
+  popOldest(): Promise<string | null>;
+  /** Current queue size. */
+  count(): Promise<number>;
+  /** Queued names in pop order (oldest first). For diagnostics/tests. */
+  list(): Promise<string[]>;
+}
+
+export interface SuggestThrottleRecord {
+  deviceKey: string;
+  /** Suggests in the current window (drives the escalating cooldown). */
+  count: number;
+  windowStart: number;
+  lastAt: number;
+  /** ms-epoch before which the next suggest is refused. */
+  nextAllowedAt: number;
+}
+
+/**
+ * Per-device regenerate throttle. Dumb CRUD — the escalating-cooldown POLICY
+ * lives in control-plane (`checkSuggestThrottle`). `device_key` is a
+ * client-generated ephemeral id (NOT the account IRK; that doesn't exist yet at
+ * the suggestion screen).
+ */
+export interface SuggestThrottleStorage {
+  get(deviceKey: string): Promise<SuggestThrottleRecord | undefined>;
+  upsert(rec: SuggestThrottleRecord): Promise<void>;
+  /** Delete rows with `lastAt < olderThan`. Returns rows removed. */
+  prune(olderThan: number): Promise<number>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
+  suggestionQueue: SuggestionQueueStorage;
+  suggestThrottle: SuggestThrottleStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;

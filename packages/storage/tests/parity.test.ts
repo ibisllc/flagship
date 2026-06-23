@@ -236,6 +236,73 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // suggestionQueue (0061) — FIFO pop (enqueued_at, name), idempotent
+  // enqueue, INSERT-OR-IGNORE dedupe counting.
+  // ────────────────────────────────────────────────────────────────────
+  describe("suggestionQueue", () => {
+    it("enqueue counts only NEW rows; dupes are ignored", async () => {
+      const r = await bothAdapters(async (s) => {
+        const a = await s.suggestionQueue.enqueue(["brave-fox", "calm-owl"], 10);
+        const b = await s.suggestionQueue.enqueue(["calm-owl", "wild-hare"], 20);
+        return { a, b, count: await s.suggestionQueue.count() };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ a: 2, b: 1, count: 3 });
+    });
+
+    it("popOldest is FIFO by (enqueued_at, name) and deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestionQueue.enqueue(["wild-hare", "brave-fox"], 5); // same ts → name tiebreak
+        await s.suggestionQueue.enqueue(["calm-owl"], 9);
+        const first = await s.suggestionQueue.popOldest();
+        const second = await s.suggestionQueue.popOldest();
+        return { first, second, remaining: await s.suggestionQueue.list() };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ first: "brave-fox", second: "wild-hare", remaining: ["calm-owl"] });
+    });
+
+    it("popOldest on an empty queue returns null", async () => {
+      const r = await bothAdapters(async (s) => s.suggestionQueue.popOldest());
+      expectParity(r);
+      expect(r.d1).toBeNull();
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // suggestThrottle (0061) — upsert overwrite + prune-by-lastAt.
+  // ────────────────────────────────────────────────────────────────────
+  describe("suggestThrottle", () => {
+    it("upsert inserts then overwrites; get round-trips the record", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestThrottle.upsert({ deviceKey: "dev1", count: 1, windowStart: 100, lastAt: 100, nextAllowedAt: 2100 });
+        await s.suggestThrottle.upsert({ deviceKey: "dev1", count: 2, windowStart: 100, lastAt: 200, nextAllowedAt: 5200 });
+        return s.suggestThrottle.get("dev1");
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ deviceKey: "dev1", count: 2, windowStart: 100, lastAt: 200, nextAllowedAt: 5200 });
+    });
+
+    it("get on an unknown key is undefined; prune drops stale rows by lastAt", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.suggestThrottle.upsert({ deviceKey: "old", count: 1, windowStart: 0, lastAt: 50, nextAllowedAt: 100 });
+        await s.suggestThrottle.upsert({ deviceKey: "fresh", count: 1, windowStart: 0, lastAt: 500, nextAllowedAt: 600 });
+        const removed = await s.suggestThrottle.prune(200);
+        return {
+          missing: await s.suggestThrottle.get("nope"),
+          removed,
+          old: await s.suggestThrottle.get("old"),
+          fresh: await s.suggestThrottle.get("fresh"),
+        };
+      });
+      expectParity(r);
+      expect(r.d1.removed).toBe(1);
+      expect(r.d1.old).toBeUndefined();
+      expect(r.d1.fresh).toMatchObject({ deviceKey: "fresh" });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // usernameAliases — the ?1-reuse path (isConsumed binds 1 value into 2
   // predicates) + alias-chain resolution + conflicting-alias rejection.
   // ────────────────────────────────────────────────────────────────────
