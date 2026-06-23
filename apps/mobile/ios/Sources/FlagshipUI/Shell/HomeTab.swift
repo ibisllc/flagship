@@ -265,7 +265,7 @@ public struct HomeTab: View {
                     }
                 }
             } else {
-                ServerDetailContainer(podId: podId)
+                ServerDetailContainer(podId: podId, onDeleted: { path.removeAll() })
             }
         case .addServer:
             // Provision-vs-pair chooser — parity with the webapp + Android. The
@@ -552,16 +552,17 @@ struct PendingPodContainer: View {
 /// (PendingPodContainer) and the Home list's "Cancel server" context action.
 /// Mirrors webapp `cancelServer`. On a release failure the pod is KEPT (the
 /// name is still reserved) with a warning toast.
+@discardableResult
 @MainActor
 func cancelPendingServer(
     pod: PodInfo,
     server: any FlagshipServerClient,
     app: AppState,
     toasts: ToastCenter
-) async {
+) async -> Bool {
     guard let username = app.currentUser else {
         app.removePod(pod.podId)
-        return
+        return true
     }
     do {
         let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
@@ -588,10 +589,12 @@ func cancelPendingServer(
         toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
         app.removePod(pod.podId)
         PendingServerStore().remove(username: username, podId: pod.podId)
+        return true
     } catch {
         // Keep the pod: the name is still reserved, so dropping it locally
         // would just hide a name the user can't re-use.
         toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+        return false
     }
 }
 
@@ -656,6 +659,9 @@ struct DemoInstallProgressContainer: View {
 /// (the latter polls every 15s while the screen is on stage).
 struct ServerDetailContainer: View {
     let podId: String
+    /// Pop the nav stack back to Home — fired after the decommission/free-the-name
+    /// action succeeds (the pod is gone, so this page now points at nothing).
+    var onDeleted: () -> Void = {}
     @Environment(\.screensClient) private var client
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.sessionStore) private var sessionStore
@@ -715,7 +721,8 @@ struct ServerDetailContainer: View {
                         async let b: Void = metricsVm.load()
                         _ = await (a, b)
                     },
-                    onPair: { Task { await pairThenReload(detailVm: detailVm) } }
+                    onPair: { Task { await pairThenReload(detailVm: detailVm) } },
+                    onDeleted: onDeleted
                 )
             } else {
                 ProgressView()
