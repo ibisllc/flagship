@@ -170,6 +170,7 @@ public struct ServerDetailScreen: View {
                         // (the release path) ALONGSIDE the lost/stolen Revoke.
                         DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
                     }
+                    ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
                     TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
@@ -817,6 +818,76 @@ struct TransferCard: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// "Replace this server" entry on server-detail (docs/server-replacement-
+/// graceful-decommission.md). Owner-only — the decommission order is IRK-signed
+/// behind the biometric inside `ReplaceServerViewModel`. Opens the
+/// `ReplaceServerScreen` (backup pre-flight gate → disposition picker → mint +
+/// deposit) in a sheet. Lives just above transfer/danger as a graceful retire
+/// (distinct from Revoke, which bricks; this hands the FQDN to a replacement).
+struct ReplaceServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.screensClient) private var screens
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+    /// Pops the nav stack after the replacement is ordered (this page now points
+    /// at a retired box that's been removed from the fleet).
+    var onReplaced: () -> Void = {}
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("REPLACE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Replace this server", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-replace-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                ReplaceServerScreen(
+                    vm: ReplaceServerViewModel(
+                        mailbox: mailbox,
+                        screens: screens,
+                        serverFqdn: serverDomain,
+                        username: app.currentUser ?? "",
+                        // L3 — retire the box instance locally so a rebooting
+                        // encrypted zombie is never re-surfaced for unlock approval.
+                        onRetired: {
+                            app.removePod(PodInfo.podId(forFqdn: serverDomain))
+                        }
+                    ),
+                    serverFqdn: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            showSheet = false
+                            // If the pod was retired, pop back to Home.
+                            if !app.pods.contains(where: { $0.podId == PodInfo.podId(forFqdn: serverDomain) }) {
+                                onReplaced()
+                            }
+                        }
                     }
                 }
             }

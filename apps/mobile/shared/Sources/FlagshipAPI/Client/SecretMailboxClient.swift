@@ -57,6 +57,48 @@ public protocol SecretMailboxClient: Sendable {
     /// no separate tap. `deposit.sealed` is the PUBLIC entitlement carrier (what
     /// the box presents at HELLO), not a secret. Reuses `PairingDepositBody`.
     func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/decommission — phone, IRK mailbox-auth (the SAME
+    /// `DeviceEndpointClaim` shape the self-delete / pairing / entitlement deposits
+    /// use). Deposits an owner-IRK-signed `ServerDecommission` eviction order for
+    /// the retiring box instance (docs/server-replacement-graceful-decommission.md
+    /// §6). `.com` mailbox-auths the depositor as the domain's registered owner,
+    /// re-verifies the order under that owner's IRK, and records the eviction so
+    /// the box self-retires on its next outbound poll. Throws on non-2xx.
+    func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws
+}
+
+/// The decommission deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `order` is the
+/// `ServerDecommission` field set and `signature` is the owner-IRK signature
+/// over its canonical bytes. Field names match the Worker handler
+/// (`handlePostDecommission`) exactly: `{ auth, authSignature, order, signature }`.
+public struct DecommissionDepositBody: Encodable, Equatable, Sendable {
+    public struct Order: Encodable, Equatable, Sendable {
+        public let podCanonical: String
+        public let retiredStkPubHex: String
+        public let finalBackup: Bool
+        public let diskDisposition: String
+        public let backupEpoch: Int64
+        public let nonce: String
+        public let issuedAt: Int64
+        public init(
+            podCanonical: String, retiredStkPubHex: String, finalBackup: Bool,
+            diskDisposition: String, backupEpoch: Int64, nonce: String, issuedAt: Int64
+        ) {
+            self.podCanonical = podCanonical; self.retiredStkPubHex = retiredStkPubHex
+            self.finalBackup = finalBackup; self.diskDisposition = diskDisposition
+            self.backupEpoch = backupEpoch; self.nonce = nonce; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let order: Order
+    public let signature: String
+    public init(auth: MailboxAuthEnvelope.Auth, authSignature: String, order: Order, signature: String) {
+        self.auth = auth; self.authSignature = authSignature
+        self.order = order; self.signature = signature
+    }
 }
 
 /// The create-time pairing deposit body. `auth`/`authSignature` are the SAME
@@ -572,6 +614,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
+            throw ScreensClientError.http(status: 0, message: "bad decommission URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     private struct BootResponsePost: Encodable { let response: SecretResponseBody }
     private struct LeaseDepositPost: Encodable { let lease: BoxSealedLeaseWire; let signature: String }
 
@@ -686,5 +743,12 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public private(set) var entitlementDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
     public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
         entitlementDeposits.append((serverDomain, body))
+    }
+    /// Optional error to throw on the next `depositDecommission`, then cleared.
+    public var nextDecommissionError: Error?
+    public private(set) var decommissionDeposits: [(serverDomain: String, body: DecommissionDepositBody)] = []
+    public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
+        if let e = nextDecommissionError { nextDecommissionError = nil; throw e }
+        decommissionDeposits.append((serverDomain, body))
     }
 }
