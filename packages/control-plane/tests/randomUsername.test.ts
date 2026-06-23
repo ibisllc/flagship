@@ -18,25 +18,26 @@ function seededRng(seed: number): () => number {
 }
 
 describe("randomCandidate", () => {
-  it("is always a valid, dashless, ≤30-char username (grammar holds for every word pair)", () => {
+  it("is always a valid, ≤30-char dashed username (grammar holds for every word pair)", () => {
     // Exhaustively check the building blocks: the longest possible handle must
-    // still pass validateUserLabel (the §3 dashless invariant).
+    // pass validateUserLabel — interior single dashes, no `--`, no leading/
+    // trailing dash, ≤30 chars.
     for (const adj of ADJECTIVES) {
       for (const noun of NOUNS) {
-        const handle = `${adj}${noun}9999`;
+        const handle = `${adj}-${noun}-9999`;
         const v = validateUserLabel(handle);
         expect(v.ok, `${handle} should be valid`).toBe(true);
-        expect(handle).not.toContain("-");
+        expect(handle).not.toContain("--");
         expect(handle.length).toBeLessThanOrEqual(30);
       }
     }
   });
 
-  it("produces <adjective><noun><4-digit> shapes", () => {
+  it("produces <adjective>-<noun>-<4-digit> shapes", () => {
     const rng = seededRng(42);
     for (let i = 0; i < 50; i++) {
       const c = randomCandidate(rng);
-      expect(c).toMatch(/^[a-z]+\d{4}$/);
+      expect(c).toMatch(/^[a-z]+-[a-z]+-\d{4}$/);
       expect(validateUserLabel(c).ok).toBe(true);
     }
   });

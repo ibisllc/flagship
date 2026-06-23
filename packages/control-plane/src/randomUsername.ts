@@ -1,12 +1,12 @@
 /**
  * Random username generation (docs/naming-recovery-and-name-change.md §4).
  *
- * Account creation assigns a RANDOM, free, unsquattable handle. Names are
- * DASHLESS (§3 — the `<slug>-<creator>` app-URL parser in @flagship/services-zone
- * requires dashless usernames), so we CONCATENATE short curated words + a 4-digit
- * suffix: `<adjective><noun><NNNN>` (e.g. `happyotter4821`). Every candidate is
- * passed through `validateUserLabel` (grammar + reserved) and checked for
- * availability, so a returned name is always claimable.
+ * Account creation assigns a RANDOM, free, unsquattable handle. Usernames may
+ * contain interior single dashes (docs/service-addressing-double-dash.md — the
+ * slug↔creator composite uses `--`), so we join short curated words + a 4-digit
+ * suffix with dashes: `<adjective>-<noun>-<NNNN>` (e.g. `happy-otter-4821`). Every
+ * candidate is passed through `validateUserLabel` (grammar + reserved) and checked
+ * for availability, so a returned name is always claimable.
  */
 
 import type { UsernameStorage } from "@flagship/storage";
@@ -53,14 +53,14 @@ function pick<T>(arr: readonly T[], rng: () => number): T {
 }
 
 /**
- * One `<adjective><noun><NNNN>` candidate (CONCATENATED, dashless). Not
+ * One `<adjective>-<noun>-<NNNN>` candidate (dash-joined). Not
  * availability-checked — use {@link generateAvailable} for that.
  */
 export function randomCandidate(rng: () => number = cryptoUnit): string {
   const adj = pick(ADJECTIVES, rng);
   const noun = pick(NOUNS, rng);
   const num = String(Math.floor(rng() * 10_000)).padStart(4, "0");
-  return `${adj}${noun}${num}`;
+  return `${adj}-${noun}-${num}`;
 }
 
 export interface GenerateAvailableOpts {

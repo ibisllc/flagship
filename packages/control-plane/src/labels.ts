@@ -4,13 +4,21 @@
  * the control-plane package has zero runtime deps on Node-specific code.
  */
 
-// Usernames: lowercase alphanumerics only, 3–30 chars. NO hyphens —
-// this is deliberate. Banning '-' from usernames means the composite
-// app id `<creator>-<slug>` parses unambiguously by splitting at the
-// FIRST hyphen (the creator can't contain one), and the URL label
-// `<slug>-<creator>` parses by splitting at the LAST hyphen (slugs
-// may contain hyphens, creators can't). See docs/multi-device.md.
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+// Usernames: lowercase alphanumerics + INTERIOR single dashes, 3–30 chars, no
+// leading/trailing dash and NO `--` (docs/service-addressing-double-dash.md).
+// Dashes are now safe because the slug↔creator composite uses a DOUBLE dash
+// (`<creator>--<slug>` / `<slug>--<creator>`) as its delimiter, so single dashes
+// in either half are unambiguous. The `--` ban (enforced separately, since the
+// regex alone would permit it) keeps the composite delimiter unique.
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+
+/** Username SHAPE check only (grammar + the `--` ban) — no reserved-word check.
+ *  The single source of truth other modules import instead of re-declaring the
+ *  regex (kills drift). */
+export function isValidUsernameShape(input: string): boolean {
+  const norm = String(input).toLowerCase();
+  return USERNAME_RE.test(norm) && !norm.includes("--");
+}
 
 // App slugs / pod names / arbitrary DNS labels follow RFC 1123
 // (hyphens allowed in the interior, not at the ends, 1–63). Both
@@ -62,8 +70,12 @@ export type LabelValidation =
 
 export function validateUserLabel(input: string): LabelValidation {
   const norm = String(input).toLowerCase();
-  if (!USERNAME_RE.test(norm)) {
-    return { ok: false, reason: "username must be 3–30 lowercase letters or digits (no hyphens)" };
+  if (!isValidUsernameShape(norm)) {
+    return {
+      ok: false,
+      reason:
+        "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
+    };
   }
   if (RESERVED_USER_LABELS.has(norm)) {
     return { ok: false, reason: `username "${norm}" is reserved` };

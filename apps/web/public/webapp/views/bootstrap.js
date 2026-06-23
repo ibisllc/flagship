@@ -31,7 +31,7 @@ import { set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-bootstrap");
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
 
 // Sign-up no longer takes a chosen name — naming is random-by-default
 // (docs/naming-recovery-and-name-change.md §4): a custom name is a paid change,

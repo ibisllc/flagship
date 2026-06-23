@@ -52,7 +52,7 @@ export interface CustomDomainDeps {
   ) => Promise<void>;
 }
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 /** Decided: 300s minimum between custom-domain changes (dual: the
  *  client mirrors a UX cooldown; this is the server backstop). */

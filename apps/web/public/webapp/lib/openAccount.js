@@ -26,7 +26,7 @@ import { controlApex } from "./apex.js";
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
  *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
  *  labels.ts. */
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */

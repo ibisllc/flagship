@@ -40,7 +40,7 @@ export function lockSession() {
   _session.username = null;
 }
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
 
 /**
  * Lazy-init the user's chosen username. Used by pairing + promo flows

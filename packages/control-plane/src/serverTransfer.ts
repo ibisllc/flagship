@@ -176,7 +176,7 @@ function splitPodCanonical(
   const server = parts[0]!;
   const user = parts[1]!;
   if (!/^[a-z0-9-]{1,63}$/.test(server)) return null;
-  if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
+  if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(user)) return null;
   return { server, user };
 }
 

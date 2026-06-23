@@ -55,7 +55,7 @@ export interface AuditListResponse {
   events: AuditEventSummary[];
 }
 
-const USERNAME_RE = /^[a-z0-9]{3,30}$/; // no hyphens — see labels.ts
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // no hyphens — see labels.ts
 const MAX_LIMIT = 50;
 const MAX_DETAIL_LEN = 256;
 

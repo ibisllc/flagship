@@ -49,7 +49,7 @@ import { controlApex } from "./apex.js";
 
 /** Login field is a bare handle: 3–30 lowercase letters/digits, no dots,
  *  no hyphens. Mirror of bootstrap.js / state.js / control-plane labels.ts. */
-const USERNAME_RE = /^[a-z0-9]{3,30}$/;
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** A locally-synthesized `unknown` resolution. We never have to call the
  *  network for an obviously-invalid handle, and we still render a STATE

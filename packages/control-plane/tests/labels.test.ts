@@ -39,11 +39,13 @@ describe("validateUserLabel — strict, 3–30, dashless", () => {
     expect(validateUserLabel("a".repeat(63)).ok).toBe(false);
   });
 
-  it("rejects hyphens (any position) — usernames are dashless", () => {
-    expect(validateUserLabel("my-name").ok).toBe(false);
-    expect(validateUserLabel("-name").ok).toBe(false);
-    expect(validateUserLabel("name-").ok).toBe(false);
-    expect(validateUserLabel("a-b-c").ok).toBe(false);
+  it("accepts interior single dashes; rejects leading/trailing and `--`", () => {
+    expect(validateUserLabel("my-name").ok).toBe(true);
+    expect(validateUserLabel("a-b-c").ok).toBe(true);
+    expect(validateUserLabel("happy-otter-4821").ok).toBe(true);
+    expect(validateUserLabel("-name").ok).toBe(false); // leading dash
+    expect(validateUserLabel("name-").ok).toBe(false); // trailing dash
+    expect(validateUserLabel("a--b").ok).toBe(false); // `--` is the slug-creator delimiter
   });
 
   it("rejects uppercase that doesn't normalize, dots, underscores, spaces", () => {
@@ -134,9 +136,12 @@ describe("validateServerLabel — loose RFC-1123 DNS label", () => {
 });
 
 describe("the two rules diverge on purpose", () => {
-  it("a hyphenated name is OK as a server but NOT as a username", () => {
+  it("interior dashes are now OK for BOTH (the rules converged on dashes)", () => {
+    // The username rule used to forbid dashes; with the `--` composite delimiter
+    // it allows interior single dashes, like the server rule. They still diverge
+    // on length (server min 1 / username min 3) and the reserved set, below.
     expect(validateServerLabel("media-server").ok).toBe(true);
-    expect(validateUserLabel("media-server").ok).toBe(false);
+    expect(validateUserLabel("media-server").ok).toBe(true);
   });
 
   it("a single-char name is OK as a server but NOT as a username (min 3)", () => {
