@@ -83,6 +83,41 @@ public final class NfcPairViewModel {
     private var ephemeralPriv: Curve25519.KeyAgreement.PrivateKey?
     /// Wall-clock ms of the verified tap — anchors the session-lock window.
     private var tapAtMs: Int64?
+    /// The SAS bytes for the active pairing — held so the LED-SAS capture
+    /// can verify observed glances against the locally derived sequence.
+    private var sasBytes: Data?
+
+    // MARK: N-PHONE-6 — LED-SAS capture (the active "optional SAS glance")
+
+    /// Drives the glance-by-glance LED-SAS verify shown alongside the
+    /// Wi-Fi form. The expected sequence is derived locally; the user (or,
+    /// in a later build, the camera decoder) records what the box's LED
+    /// actually blinked, one glance at a time, and the 3-of-3 verdict is
+    /// computed by `@flagship/protocol`'s `verifyLedSas` mirror. Strict:
+    /// a single mismatched glance fails the whole check — the LED-SAS is
+    /// the authenticator on the degraded path, so it can't be best-of-3.
+    public struct LedSasCapture: Equatable, Sendable {
+        public enum Verdict: Equatable, Sendable {
+            case pending
+            case confirmed
+            case mismatch
+        }
+        /// Per-glance expected sub-sequences ("RGB", "YYB", "GRB").
+        public let expectedGlances: [String]
+        /// What the user recorded per glance so far (index-aligned with
+        /// `expectedGlances`; trailing entries absent until recorded).
+        public var observed: [String]
+        public var verdict: Verdict
+
+        /// The glance index the capture is waiting on, or nil when every
+        /// glance has been recorded.
+        public var currentGlance: Int? {
+            observed.count < expectedGlances.count ? observed.count : nil
+        }
+        public var isComplete: Bool { observed.count == expectedGlances.count }
+    }
+
+    public private(set) var ledCapture: LedSasCapture?
 
     public init(
         reader: any NfcPairReaderProtocol,
@@ -129,6 +164,8 @@ public final class NfcPairViewModel {
             paired = result
             ephemeralPriv = priv
             tapAtMs = tapped
+            sasBytes = sas
+            ledCapture = nil
             phase = .askingForWifi(PairConfirmation(
                 boxLabel: result.payload.hint.mdnsName,
                 suffix6: result.payload.hint.suffix6,
@@ -261,6 +298,42 @@ public final class NfcPairViewModel {
         phase = .ledSasFallback
     }
 
+    // MARK: N-PHONE-6 — LED-SAS capture API (active "optional SAS glance")
+
+    /// Begin the glance-by-glance LED-SAS verify. Requires an active
+    /// pairing (the SAS bytes are derived at the verified tap). No-ops if
+    /// the SAS can't be expanded (too few bytes — should never happen for
+    /// the 4-byte SAS, but stay fail-safe).
+    public func beginLedSasCapture() {
+        guard let sasBytes else { return }
+        guard let seq = try? encodeLedSas(sasBytes),
+              let glances = try? ledSasGlances(seq) else { return }
+        ledCapture = LedSasCapture(expectedGlances: glances, observed: [], verdict: .pending)
+    }
+
+    /// Record one observed glance (e.g. the user tapped the colors they
+    /// saw, or the camera decoder emitted them). When the final glance
+    /// lands, run the strict 3-of-3 verify and publish the verdict. A
+    /// malformed glance is ignored (a garbled read shouldn't advance the
+    /// capture); the screen re-prompts the same glance.
+    public func recordLedGlance(_ glance: String) {
+        guard var capture = ledCapture, !capture.isComplete else { return }
+        guard isWellFormedGlance(glance) else { return }
+        capture.observed.append(glance)
+        if capture.isComplete {
+            capture.verdict = verifyLedSas(sas: sasBytes ?? Data(), observedGlances: capture.observed)
+                ? .confirmed
+                : .mismatch
+        }
+        ledCapture = capture
+    }
+
+    /// Discard the capture so the user can re-run it from the first glance
+    /// (used after a mismatch, or to start over before completing).
+    public func resetLedSasCapture() {
+        ledCapture = nil
+    }
+
     /// Reset to idle. Clears the form fields + transient crypto material.
     public func reset() {
         clearPairing()
@@ -275,6 +348,8 @@ public final class NfcPairViewModel {
         paired = nil
         ephemeralPriv = nil
         tapAtMs = nil
+        sasBytes = nil
+        ledCapture = nil
     }
 
     private static func userMessage(for err: NfcPairReaderError) -> String {
