@@ -133,6 +133,47 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 (latest) — unified live-update channel: ONE foreground long-poll replaces the pollers
+
+**Usability: the UI updates with NO manual refresh** while the app is focused (a
+complement to push for notifications-off users; effective only when open + in focus).
+ONE channel carries everything — install-event phases (the setup checklist), pod
+liveness/status, and box-requests ("authorize boot") — so the
+checklist→authorize-boot→server-updates flow is live, servers appear on Home + status
+auto-refreshes, all without the old polling ping-pong.
+
+**Backend (L1):** `GET /api/users/:u/stream?cursor=<hex>` — a hanging GET that reuses
+the `/pods` `buildPodInventory` builder + a **content-hash cursor** (per-pod
+`lastReported`/cert/`appsServed`/`pendingRequests` + per-order `phase`; excludes fetch
+timestamps). Matching cursor ⇒ HOLD (re-check ~2s, ≤25s) and return the instant
+anything changes; no/stale cursor ⇒ immediate; always 200, never errors on timeout.
+Unauthenticated like `/pods`; fully testable via injected clock/sleep/state.
+
+**Clients (L2):** ONE app-scope `LiveSync` per platform (webapp `lib/liveSync.js`
+extending the `boxInbox` abstraction; iOS/Android `LiveSyncCoordinator`, mirroring
+`AiChatAlertPoller`) that long-polls **only when focused** (`document.hidden` /
+`scenePhase==.active` / paired+unlocked), feeds the SHARED pod/pending/box-request
+state the views already read, with ±500ms reconnect jitter and **graceful fallback to
+`/pods` polling** on any stream error (never worse than today). REPLACES the Home
+approval polls + the `boxInbox` interval; deliberately KEEPS the per-pending
+`PendingPodWatcher` timers (they drive the install Live-Activity off the canonical
+`order/:serial/status` channel — removing them would risk the checklist; the redundant
+poll is harmless).
+
+Built via 2 worker agents (L1 backend, L2 native clients), one worktree. Merged with the
+concurrent multi-pod work — resolved `MainActivity.kt` to keep BOTH `PodSessionSync` +
+the app-scope `LiveSync`, and restored `liveness`/`lastSeenMsAgo` on `OnlinePodEntry`
+that an auto-merge had dropped (caught by `tsc`). Gates (merged tree): `tsc -b` clean ·
+full vitest **6543 / 0 fail** · iOS `xcodebuild` **TEST SUCCEEDED** (1219) · Android
+`:app:testDebugUnitTest` **BUILD SUCCESSFUL** (forced rerun).
+
+**Follow-ups (deferred):** the webapp loop re-checks every ~5s when hidden rather than a
+hard suspend (battery-cheap, correct); a true-push transport (the `BuildRelay` DO
+pattern) could replace the internal re-check; the per-pending install watchers could
+fold into the channel once the Live-Activity wiring rides `/stream`'s `pending[].phase`.
+NOT deployed (the `/stream` route ships with the next `.com` deploy; mobile needs
+rebuilds).
+
 ### 2026-06-23 — multi-pod liveness + per-pod sessions + per-service leadership by gossip (Phases 1-5)
 
 **Why:** three live bugs on `harry` (a fresh `frank` over the box that ran
