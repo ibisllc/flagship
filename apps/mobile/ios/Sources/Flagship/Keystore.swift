@@ -220,6 +220,47 @@ public struct Keystore {
         return (irk, stkPub)
     }
 
+    /// The box's Service Workload Key (SWK) as lowercase hex — the deterministic
+    /// `HKDF-SHA256(UMK seed, info="flagship.swk.v1|<serverId>")` the daemon
+    /// re-derives nowhere (the box can't: it has no UMK), so the phone provisions
+    /// it at create-time as an UNSIGNED `swkHex` recipe sibling. This is the BOX
+    /// SWK via `ServerKeys.deriveSwk` (DOTS) — the protocol/daemon derivation —
+    /// NOT the app-backup `Keystore.deriveSWK` (SLASHES, `flagship/swk/v1|…`),
+    /// which is a deliberately different key. The unambiguous name guards against
+    /// confusing the two.
+    public static func deriveBoxServiceWorkloadKey(serverId: String, reason: String) async throws -> String {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box SWK for \(serverId)")
+        }
+        return HexUtil.encode(swk)
+    }
+
+    /// A′ cert pinning + SWK provisioning in ONE biometric: the IRK, the new
+    /// box's STK PUBLIC key, AND the box's deterministic SWK (hex), all derived
+    /// from a single UMK unwrap (a separate SWK call would re-prompt Face ID
+    /// during server creation). The SWK is the box-side `ServerKeys.deriveSwk`
+    /// (DOTS) key — NOT the app-backup `deriveSWK` (slashes).
+    public static func deriveIRKBoxStkAndSwk(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, boxStkPub: Data, boxSwkHex: String) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let stkPub = ServerKeys.deriveStkPub(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box STK pubkey for \(serverId)")
+        }
+        guard let swk = ServerKeys.deriveSwk(umkSeed: umkData, serverId: serverId) else {
+            throw KeystoreError.derivationFailed("box SWK for \(serverId)")
+        }
+        return (irk, stkPub, HexUtil.encode(swk))
+    }
+
     /// Stable Account Identity Key (AID) — the NON-rotating account identity
     /// (`HKDF(umk, "flagship/account-id/v1")`, via `ServiceInvite`), used for
     /// service-access gating: the friend signs the redeem/visit with it, and an

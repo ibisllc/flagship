@@ -256,11 +256,18 @@ public final class CreateServerViewModel {
         // (biometric-free) /pods refreshes can verify the box's STK-signed
         // daemon-status report and pin its real cert fingerprint (A′
         // phase 4) — the directory's identityPubKey echo is never trusted.
-        let mint = try await Keystore.deriveIRKAndBoxStkPub(
+        // ONE biometric also yields the box's SWK (hex). The box can't derive
+        // it (no UMK), so the phone provisions it as an UNSIGNED `swkHex` recipe
+        // sibling the daemon persists at first boot to turn on the service/build
+        // platform. This is the box-side `ServerKeys.deriveSwk` (DOTS) key — the
+        // protocol/daemon derivation, same UMK seed + serverId as the STK above —
+        // NOT the app-backup `Keystore.deriveSWK` (slashes).
+        let mint = try await Keystore.deriveIRKBoxStkAndSwk(
             serverId: serverDomain,
             reason: "Mint installer for \(name)"
         )
         let irk = mint.irk
+        let boxSwkHex = mint.boxSwkHex
         CertPinRegistry.shared.registerBoxStk(domain: serverDomain, stkPub: mint.boxStkPub)
 
         let delegated = Curve25519.Signing.PrivateKey()
@@ -364,7 +371,8 @@ public final class CreateServerViewModel {
         return SignedInstallBlob(
             blob: blob,
             signatureHex: HexUtil.encode(blobSig),
-            pairingKeyPrivHex: pairingKeyPrivHex
+            pairingKeyPrivHex: pairingKeyPrivHex,
+            swkHex: boxSwkHex
         )
     }
 }
@@ -377,11 +385,17 @@ public struct SignedInstallBlob: Sendable {
     /// sibling (never in the signed blob's canonical bytes); nil when create-time
     /// pairing didn't run (e.g. the `.com` deposit failed → manual-pair fallback).
     public let pairingKeyPrivHex: String?
+    /// The box's deterministic SWK (lowercase hex), an UNSIGNED recipe sibling
+    /// the burner carries to `/var/flagship/install-blob.json`; the daemon
+    /// persists it at first boot to turn on the service/build platform. nil only
+    /// for legacy/mock paths that don't provision it.
+    public let swkHex: String?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingKeyPrivHex: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingKeyPrivHex: String? = nil, swkHex: String? = nil) {
         self.blob = blob
         self.signatureHex = signatureHex
         self.pairingKeyPrivHex = pairingKeyPrivHex
+        self.swkHex = swkHex
     }
 
     public struct OnWire: Codable, Sendable {
@@ -391,6 +405,10 @@ public struct SignedInstallBlob: Sendable {
         /// burner carries it into the on-disk install-blob.json. Omitted from
         /// JSON when nil so a non-pairing recipe is byte-identical to before.
         public let pairingKeyPrivHex: String?
+        /// Top-level recipe sibling carrying the box's SWK (hex); the burner
+        /// preserves it into the on-disk install-blob.json. Omitted from JSON
+        /// when nil so a recipe without it is byte-identical to before.
+        public let swkHex: String?
     }
     public struct OnWireBlob: Codable, Sendable {
         public let version: Int
@@ -454,7 +472,8 @@ public struct SignedInstallBlob: Sendable {
             blobSignature: signatureHex,
             // Synthesized Codable uses encodeIfPresent for optionals ⇒ omitted
             // when nil, so a non-pairing recipe serializes byte-identically.
-            pairingKeyPrivHex: pairingKeyPrivHex
+            pairingKeyPrivHex: pairingKeyPrivHex,
+            swkHex: swkHex
         )
     }
 }
