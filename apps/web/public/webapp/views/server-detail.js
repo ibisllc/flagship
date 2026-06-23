@@ -36,6 +36,7 @@ import {
   JOURNAL_DEFAULT_LINES,
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
+import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
 import { createTransferOffer } from "../lib/serverTransfer.js";
 import {
   resolveReplacementContext,
@@ -211,6 +212,20 @@ export async function renderServerDetail() {
         <p class="note small hidden" id="journal-status"></p>
         <pre id="journal-output" class="journal-output hidden" aria-label="journal output"></pre>
       </div>
+      <h2 class="mt-4">Preferred server</h2>
+      <div class="card" id="preferred-server-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">
+          When several of your boxes run the same service, the highest-clout
+          live one leads it. Setting <strong>${escapeHtml(body.serverFqdn)}</strong>
+          as your preferred server makes it lead by default whenever it's online.
+        </p>
+        <div class="row" id="preferred-server-status">
+          <span class="label">Status</span>
+          <span class="pill" id="preferred-server-pill">${isPreferredServer(body.serverFqdn) ? "preferred" : "not preferred"}</span>
+        </div>
+        <button id="set-preferred-btn" class="full-width mt-2"${isPreferredServer(body.serverFqdn) ? " disabled" : ""}>Set as preferred server</button>
+      </div>
+
       <h2 class="mt-4">Transfer</h2>
       <div class="card" id="transfer-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
@@ -248,6 +263,7 @@ export async function renderServerDetail() {
     wireLockPower(body);
     wireDeadMan(body);
     wireJournal(body);
+    wirePreferredServer(body);
     wireTransfer(body);
     wireReplace(body);
     wireDangerZone(body.serverFqdn, body.username);
@@ -259,6 +275,26 @@ export async function renderServerDetail() {
       throw e;
     }
   }
+}
+
+function wirePreferredServer(body) {
+  const btn = $("set-preferred-btn");
+  const pill = $("preferred-server-pill");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Signing…";
+    try {
+      await setPreferredServer({ serverDomain: body.serverFqdn });
+      if (pill) pill.textContent = "preferred";
+      btn.textContent = "Set as preferred server";
+      toast(`${body.serverFqdn} is now your preferred server`, "ok");
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Set as preferred server";
+      toast(humanError(e), "err");
+    }
+  });
 }
 
 function wireAutoUnlock(serverFqdn) {
