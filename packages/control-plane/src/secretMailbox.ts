@@ -88,6 +88,13 @@ const DEFAULT_PAIRING_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 // the entitlement on disk; an unclaimed one (e.g. a routine reboot where the
 // box already has its entitlement) just GCs.
 const DEFAULT_ENTITLEMENT_DEPOSIT_TTL = 60 * 60_000; // 1 hour
+// The SWK delivery (secret-free recipe) is deposited by the phone after the box
+// registers but is CLAIMED at the box's first steady-state boot — which on real
+// hardware can be many minutes (burn USB → boot → LUKS unlock → daemon) to days
+// later (a box built by someone else, powered on whenever they get to it). Give
+// it the same generous claim window as the pairing deposit, NOT the short live-
+// mailbox TTL, so it survives a slow boot.
+const DEFAULT_SWK_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes hex
 
@@ -871,6 +878,112 @@ export async function handleConsumeEntitlementDeposit(
       stkPub: row.stkPubHex,
       // PUBLIC IRK-signed entitlement carrier (not sealed) — the box verifies
       // it under the owner IRK + binds it to its STK/podCanonical.
+      sealed: row.sealedHex,
+      issuedAt: row.issuedAt,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6c-bis. POST /api/server/:domain/swk-deposit  (phone, IRK mailbox-auth)
+//         GET  /api/server/:domain/swk-deposit  (box, public consume-once)
+//
+// Secret-free-recipe SWK delivery (docs/recipe-delivery-and-remote-install.md).
+// The recipe carries NO SWK; the box boots platform-less, registers, and the
+// phone seals the SWK to the box's OWN identity (generated at first boot) and
+// IRK-signs the wrapper, then deposits it here. The box claims it on boot and
+// turns on its service platform. Same store-and-forward posture as the pairing
+// deposit — and like pairing the carrier is SEALED, so the public consume-once
+// GET reveals only ciphertext (`.com` stays content-blind; the box unseals it
+// with its identity key). The deposit binds the box's REGISTERED STK (I2).
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostSwkDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_SWK_DEPOSIT_TTL;
+
+  const b = body as { deposit?: Record<string, unknown> };
+  const d = b?.deposit ?? {};
+  if (
+    typeof d.serverDomain !== "string" ||
+    typeof d.requestNonceHex !== "string" ||
+    typeof d.stkPub !== "string" ||
+    typeof d.sealed !== "string" ||
+    typeof d.issuedAt !== "number"
+  ) {
+    return malformed("malformed body");
+  }
+  if (d.serverDomain !== host) {
+    return forbidden("serverDomain / host mismatch");
+  }
+  if (!HEX_NONCE.test(d.requestNonceHex.toLowerCase())) {
+    return malformed("requestNonceHex must be 32 bytes hex");
+  }
+  if (!HEX64.test(d.stkPub.toLowerCase())) {
+    return malformed("stkPub must be 32 bytes hex");
+  }
+  const carrierHex = d.sealed.toLowerCase();
+  if (!/^[0-9a-f]*$/.test(carrierHex) || carrierHex.length === 0 || carrierHex.length > 65536) {
+    return malformed("carrier must be non-empty hex within bounds");
+  }
+  if (Math.abs(now() - d.issuedAt) > (deps.maxAgeMs ?? DEFAULT_MAX_AGE)) {
+    return forbidden("stale request");
+  }
+
+  // Bind a REGISTERED box's STK (I2). The box registers at install — before its
+  // first steady-state boot — so a deposit always has a directory identity to
+  // bind against. The owner must own the box.
+  const reg = await deps.servers.get(host);
+  if (!reg) return forbidden("server not registered");
+  if (reg.revokedAt) return forbidden("server is revoked");
+  if (reg.username.toLowerCase() !== auth.username) {
+    return forbidden("server belongs to a different account");
+  }
+  if (!equalHex(d.stkPub, reg.identityPubKeyHex)) {
+    return forbidden("stkPub does not match the registered server");
+  }
+
+  const put = await deps.secretMailbox.putSwkDeposit({
+    serverDomain: host,
+    username: reg.username,
+    requestNonceHex: d.requestNonceHex.toLowerCase(),
+    stkPubHex: d.stkPub.toLowerCase(),
+    sealedHex: carrierHex,
+    issuedAt: d.issuedAt,
+    expiresAt: now() + ttlMs,
+  });
+  if (!put.ok) {
+    return conflict(put.reason);
+  }
+  return { status: 200, body: { ok: true, expiresAt: now() + ttlMs } };
+}
+
+export async function handleConsumeSwkDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const reg = await deps.servers.get(host);
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
+
+  const row = await deps.secretMailbox.consumeSwkDeposit(host, now());
+  if (!row) return notFound("no swk deposit ready");
+  return {
+    status: 200,
+    body: {
+      serverDomain: row.serverDomain,
+      requestNonceHex: row.requestNonceHex,
+      stkPub: row.stkPubHex,
+      // SEALED SWK-delivery carrier — the box verifies the owner-IRK signature +
+      // unseals the SWK with its identity key. `.com` holds ciphertext only.
       sealed: row.sealedHex,
       issuedAt: row.issuedAt,
     },
