@@ -29,6 +29,43 @@ export type ClaimAction =
   | { kind: "release"; service: string };
 
 /**
+ * The subset of the services THIS box runs where it is the elected lead among
+ * {self-as-live} ∪ {live siblings}. Pure — the source of the "services I lead"
+ * set the daemon-status heartbeat reports (Phase 6 Part 3). Sorted.
+ */
+export function selfLeadsForRound(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+}): string[] {
+  const { self, liveSiblings } = deps;
+  const selfClout: CloutMember = {
+    id: self.id,
+    domain: self.domain,
+    birthDate: self.birthDate,
+    voteIssuedAt: self.voteIssuedAt,
+    liveness: "live",
+    services: self.services,
+  };
+  const members: CloutMember[] = [
+    selfClout,
+    ...liveSiblings.map((s) => ({
+      id: s.id,
+      domain: s.domain,
+      birthDate: s.birthDate,
+      voteIssuedAt: s.voteIssuedAt,
+      liveness: s.liveness,
+      services: s.services,
+    })),
+  ];
+  const leads: string[] = [];
+  for (const service of self.services) {
+    const lead = electLeadForService(members, service);
+    if (lead !== null && lead.id === self.id) leads.push(service);
+  }
+  return leads.sort();
+}
+
+/**
  * Compute the claim/yield actions for one round WITHOUT applying them. Pure.
  *
  * For each service this box runs:

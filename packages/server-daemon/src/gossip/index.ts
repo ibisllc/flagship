@@ -166,6 +166,7 @@ export { buildGossipLoop, ANNOUNCE_INTERVAL_MS, LIVENESS_WINDOW_MS } from "./gos
 export {
   decideClaimActions,
   runElectionRound,
+  selfLeadsForRound,
   type ClaimAction,
   type SelfMember,
 } from "./election.js";

@@ -642,10 +642,15 @@ async function main(): Promise<void> {
   // fix for the "never came online" regression; the /pods provision-status
   // bridge is the fallback when this hasn't run yet). Fired from onCertIssued
   // (first report the instant the cert lands) + periodically thereafter.
+  // Late-binding cell for the gossip loop so the heartbeat (started here, before
+  // the gossip loop wires) can report the live "services I lead" set (Phase 6
+  // Part 3). Back-patched once the loop exists; null/absent ⇒ no leadsServices.
+  const gossipLoopRef: { current: GossipLoop | null } = { current: null };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     identity: identityKeypair,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+    readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
   });
 
   let runtime: DaemonRuntime;
@@ -895,6 +900,8 @@ async function main(): Promise<void> {
       if (result.enabled && result.handler && result.loop) {
         runtime.addHandler(result.handler);
         result.loop.start();
+        // Back-patch the heartbeat's lead source so /pods can relay leadsServices.
+        gossipLoopRef.current = result.loop;
         return result.loop;
       }
     } catch (e) {
