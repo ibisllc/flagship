@@ -249,22 +249,12 @@ data class PodDirectoryEntry(
      *  null when the daemon never reported (or `.com` dropped it). Consumed by
      *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
     val signedStatus: SignedDaemonStatus? = null,
-    /** Cheap directory signal: the box has a LIVE boot-unlock request parked
-     *  right now. Lets the phone show "waiting for approval" for a locked box
-     *  (instead of "never came online") without the biometric mailbox read.
-     *  Defaulted ⇒ absent on a pre-field Worker is false. Mirror of iOS. */
-    val awaitingUnlock: Boolean = false,
-    /** Same idea for the entitlement relay: the box posted its entitlement
-     *  secret-request and is "waiting for approval" (authorize it to serve), NOT
-     *  "never came online". Part of the Box Request Inbox digest
-     *  (docs/box-request-inbox.md). Defaulted ⇒ absent on a pre-field Worker is
-     *  false. Mirror of iOS. */
-    val awaitingEntitlement: Boolean = false,
     /** The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
-     *  — the list of approvals this box is currently asking its owner for. The
-     *  unified client inbox is the flatMap of this across pods; the two booleans
-     *  above are the (compat) projection `any { it.type == … }`. Defaulted ⇒
-     *  absent on a pre-field Worker is empty. Mirror of iOS. */
+     *  — the list of approvals this box is currently asking its owner for
+     *  (`unlock-key`, `entitlement`, …future types). The unified client inbox is
+     *  the flatMap of this across pods; it replaced the old compat
+     *  `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods once
+     *  every surface read this). Defaulted ⇒ absent is empty. Mirror of iOS. */
     val pendingRequests: List<PendingRequestSummaryWire> = emptyList(),
 ) {
     /** A box that has reported daemon status OR holds a cert has come online

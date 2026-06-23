@@ -58,8 +58,9 @@ export interface PodInventoryDeps {
    *  500 the authoritative list. */
   provisionStatus?: ProvisionStatusStorage;
   /** The phone-as-unlock-endpoint mailbox. Used ONLY to derive the cheap,
-   *  unauthenticated `awaitingUnlock` flag (a box with a live boot-unlock
-   *  request) so a locked box isn't misclassified "never came online". */
+   *  unauthenticated `pendingRequests` digest (the typed list of approvals a
+   *  box has live) so a locked/awaiting box isn't misclassified "never came
+   *  online" — the Box Request Inbox detection tier. */
   secretMailbox?: SecretMailboxStorage;
   /**
    * Account-deletion / name-reclaim (migration 0058) — when wired,
@@ -248,14 +249,12 @@ export async function handleGetUserPods(
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
         // the typed list of approvals this box is currently asking its owner
         // for. The generic client inbox is the flatMap of this across pods.
+        // Every surface (webapp + iOS + Android) reads `pendingRequests`; the
+        // old compat booleans (`awaitingUnlock` / `awaitingEntitlement`, a
+        // `some(r.type === …)` projection of this) were dropped once all
+        // surfaces cut over — a new request type is now one more entry here,
+        // no boolean to add.
         pendingRequests,
-        // COMPAT (one release): the two booleans are now DERIVED from
-        // pendingRequests so the deployed webapp + not-yet-rebuilt apps keep
-        // working. They tell the client to show "waiting for approval" (and
-        // suppress the dangerous decommission/delete) instead of "never came
-        // online". Removed once all surfaces read pendingRequests.
-        awaitingUnlock: pendingRequests.some((r) => r.type === "unlock-key"),
-        awaitingEntitlement: pendingRequests.some((r) => r.type === "entitlement"),
         // #56 — registered servers are always online; lets the unified client
         // reconciler key on `state` without a second authenticated fetch.
         state: "online" as const,

@@ -7,6 +7,7 @@ package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.PendingPodEntry
+import com.flagshipserver.app.api.PendingRequestSummaryWire
 import com.flagshipserver.app.api.PodDirectoryEntry
 import com.flagshipserver.app.api.PodsDirectoryResponse
 import com.flagshipserver.app.api.ProvisionStatusEntry
@@ -118,7 +119,10 @@ class ProvisionTimelineViewModelTest {
                 PodDirectoryEntry(
                     serverDomain = "abc.harry.flagship.services",
                     identityPubKey = "00".repeat(32),
-                    awaitingUnlock = true,
+                    // registered + locked, no cert/heartbeat (a live unlock request)
+                    pendingRequests = listOf(PendingRequestSummaryWire(
+                        id = "ab".repeat(32), type = "unlock-key", issuedAt = 1, expiresAt = 9_999_999_999_999L,
+                    )),
                 ),
             ),
         )

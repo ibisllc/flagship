@@ -63,8 +63,6 @@ interface PodsResponse {
     state: string;
     lastReported: number | null;
     currentCert: { sha256: string | null } | null;
-    awaitingUnlock: boolean;
-    awaitingEntitlement: boolean;
     pendingRequests: Array<{
       id: string;
       type: string;
@@ -91,7 +89,9 @@ async function withServer(storage: InMemoryStorage) {
   });
 }
 
-describe("awaitingUnlock (cheap, non-biometric boot-unlock-waiting signal)", () => {
+describe("pendingRequests unlock lane (cheap, non-biometric boot-unlock-waiting signal)", () => {
+  const hasUnlock = (pod: PodsResponse["pods"][number]) =>
+    pod.pendingRequests.some((r) => r.type === "unlock-key");
   function unlockRequest(serverDomain: string, expiresAt: number) {
     return {
       serverDomain,
@@ -121,22 +121,22 @@ describe("awaitingUnlock (cheap, non-biometric boot-unlock-waiting signal)", () 
     expect(put.ok).toBe(true);
 
     const r = await handleGetUserPods(deps(storage), "harry");
-    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(true);
+    expect(hasUnlock((r.body as PodsResponse).pods[0]!)).toBe(true);
   });
 
   it("does NOT flag a box with no pending unlock request", async () => {
     const storage = new InMemoryStorage();
     await withServer(storage);
     const r = await handleGetUserPods(deps(storage), "harry");
-    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(false);
+    expect(hasUnlock((r.body as PodsResponse).pods[0]!)).toBe(false);
   });
 
-  it("does NOT flag when secretMailbox is unwired (degrades to false, never throws)", async () => {
+  it("does NOT flag when secretMailbox is unwired (degrades to empty, never throws)", async () => {
     const storage = new InMemoryStorage();
     await withServer(storage);
     const r = await handleGetUserPods(deps(storage, { secretMailbox: undefined }), "harry");
     expect(r.status).toBe(200);
-    expect((r.body as PodsResponse).pods[0]?.awaitingUnlock).toBe(false);
+    expect((r.body as PodsResponse).pods[0]?.pendingRequests).toEqual([]);
   });
 });
 
@@ -166,7 +166,7 @@ describe("pendingRequests digest (Box Request Inbox detection tier)", () => {
     };
   }
 
-  it("surfaces every live request typed, and DERIVES both booleans from it", async () => {
+  it("surfaces every live request typed — both lanes in one digest, no booleans", async () => {
     const storage = new InMemoryStorage();
     await withServer(storage);
     const dom = "home1.harry.flagship.services";
@@ -180,18 +180,18 @@ describe("pendingRequests digest (Box Request Inbox detection tier)", () => {
     expect(byType["unlock-key"]?.id).toBe("aa".repeat(32));
     expect(byType["entitlement"]?.id).toBe("bb".repeat(32));
     expect(byType["unlock-key"]?.expiresAt).toBe(NOW + 60_000);
-    // The compat booleans are now purely a projection of pendingRequests.
-    expect(pod.awaitingUnlock).toBe(true);
-    expect(pod.awaitingEntitlement).toBe(true);
+    // The two lanes are types in the ONE digest — no separate booleans.
+    expect(byType["unlock-key"]).toBeDefined();
+    expect(byType["entitlement"]).toBeDefined();
+    expect(pod).not.toHaveProperty("awaitingUnlock");
+    expect(pod).not.toHaveProperty("awaitingEntitlement");
   });
 
-  it("is empty (and both booleans false) for a box with nothing pending", async () => {
+  it("is empty for a box with nothing pending", async () => {
     const storage = new InMemoryStorage();
     await withServer(storage);
     const pod = (await handleGetUserPods(deps(storage), "harry") as { body: PodsResponse }).body.pods[0]!;
     expect(pod.pendingRequests).toEqual([]);
-    expect(pod.awaitingUnlock).toBe(false);
-    expect(pod.awaitingEntitlement).toBe(false);
   });
 });
 

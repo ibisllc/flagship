@@ -101,7 +101,11 @@ public struct PendingServerReconciler {
                 name: pendingName ?? Self.serverNameFromFqdn(fqdn),
                 cameOnline: entry.cameOnline,
                 registeredAt: entry.registeredAt ?? 0,
-                awaitingUnlock: entry.awaitingUnlock
+                // Derived from the Box Request Inbox digest (the `awaitingUnlock`
+                // boolean was dropped from /pods): this per-pod flag is the
+                // "from the last full reconcile" unlock signal, OR'd at read-time
+                // with the live watcher inbox in `AppState.isAwaitingUnlock`.
+                awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue }
             )
         }
 

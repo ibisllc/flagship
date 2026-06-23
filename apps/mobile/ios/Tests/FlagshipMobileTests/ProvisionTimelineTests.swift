@@ -268,7 +268,10 @@ final class ProvisionTimelineTests: XCTestCase {
             pods: [PodDirectoryEntry(
                 serverDomain: "abc.harry.flagship.services",
                 identityPubKey: String(repeating: "00", count: 32),
-                awaitingUnlock: true   // registered + locked, no cert/heartbeat
+                // registered + locked, no cert/heartbeat (a live unlock request)
+                pendingRequests: [PendingRequestSummaryWire(
+                    id: String(repeating: "ab", count: 32), type: "unlock-key", issuedAt: 1, expiresAt: 9_999_999_999_999
+                )]
             )],
             pending: []
         )
