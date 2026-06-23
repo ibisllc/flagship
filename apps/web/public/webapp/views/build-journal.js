@@ -4,7 +4,7 @@
 //   enterBuildJournal(buildId) → that build's timeline directly
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
@@ -46,7 +46,9 @@ async function renderList() {
       el.addEventListener("click", () => renderDetail(el.getAttribute("data-build")));
     }
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    // The sessions list is a build-platform ENTRY call — a 404 means the box
+    // can't build services (unlike renderDetail's session-scoped 404).
+    toast(buildEntryError(e), "err");
   }
 }
 

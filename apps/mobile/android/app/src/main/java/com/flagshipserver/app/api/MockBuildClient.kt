@@ -19,9 +19,16 @@ class MockBuildClient(
     /** When true, `adapt` throws a 503 so previews/tests can exercise the
      *  "AI adapt not configured → fall back to scratch" branch. */
     var adaptNotConfigured: Boolean = false,
+    /** When set, the build ENTRY calls (gitImport / mcpCreate / sessions) throw
+     *  an `ScreensError.Http` with this status — used to exercise the 404
+     *  build-platform-absent mapping. */
+    var entryFailStatus: Int? = null,
 ) : BuildClient {
 
     private suspend fun tick() { if (simulatedLatencyMs > 0) delay(simulatedLatencyMs) }
+    private fun failEntryIfRequested() {
+        entryFailStatus?.let { throw ScreensError.Http(it, """{"error":"not found"}""") }
+    }
     private fun now(): Long = System.currentTimeMillis()
     private fun mintBuildId(): String = "bld-${UUID.randomUUID().toString().take(8).lowercase()}"
     private fun mintKey(): String = (1..32).joinToString("") {
@@ -36,6 +43,7 @@ class MockBuildClient(
 
     override suspend fun gitImport(req: BuildGitRequest): BuildGitResponse {
         tick()
+        failEntryIfRequested()
         gitImportCalls.add(req)
         val fit = gitFitFixture ?: true
         return if (fit) {
@@ -89,6 +97,7 @@ class MockBuildClient(
 
     override suspend fun mcpCreate(req: BuildMcpRequest): BuildMcpResponse {
         tick()
+        failEntryIfRequested()
         mcpCreateCalls.add(req)
         val id = mintBuildId()
         return BuildMcpResponse(buildId = id, connection = connectionFor(id))
@@ -129,6 +138,7 @@ class MockBuildClient(
 
     override suspend fun sessions(): BuildSessionsResponse {
         tick()
+        failEntryIfRequested()
         return sessionsFixture ?: BuildSessionsResponse(
             builds = listOf(
                 BuildSummary(

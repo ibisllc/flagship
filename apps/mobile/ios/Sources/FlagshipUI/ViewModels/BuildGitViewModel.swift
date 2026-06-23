@@ -62,7 +62,10 @@ public final class BuildGitViewModel {
             phase = .verdict(r)
         } catch {
             phase = .idle
-            errorMessage = ScreensClientError.userFacing(error)
+            // A 404 here means the box has no service/build platform wired —
+            // the whole `/api/build/*` surface is absent, not this one repo.
+            errorMessage = ScreensClientError.buildPlatformAbsent(error)
+                ?? ScreensClientError.userFacing(error)
         }
     }
 

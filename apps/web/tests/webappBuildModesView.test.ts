@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
+// @ts-expect-error — plain-JS webapp module, no types
+import { ScreensError, buildEntryError } from "../public/webapp/lib/api.js";
 
 async function asset(path: string): Promise<string> {
   const app = buildServer();
@@ -103,6 +105,22 @@ describe("webapp build-modes views", () => {
     // The create-a-service entry now opens the chooser.
     expect(body).toContain('id="build-src-scratch"');
     expect(body).toContain('id="build-src-mcp"');
+  });
+
+  it("a 404 on a build ENTRY call reads as platform-absent, not generic", () => {
+    const msg = buildEntryError(new ScreensError("not found", 404));
+    expect(msg).toMatch(/isn't set up to build services yet/i);
+    expect(msg).not.toMatch(/moved or been removed/i);
+    expect(msg).not.toMatch(/\b404\b/);
+    // Non-404 errors fall through to the normal message.
+    expect(buildEntryError(new ScreensError("boom", 500))).toBe("boom");
+  });
+
+  it("git/mcp/journal entry views use the platform-absent mapper", async () => {
+    for (const view of ["build-git.js", "build-mcp.js", "build-journal.js"]) {
+      const body = await asset(`/webapp/views/${view}`);
+      expect(body).toContain("buildEntryError");
+    }
   });
 
   it("app.js wires the chooser as the create-service entry", async () => {

@@ -5,7 +5,7 @@
 // Every step is recorded in the build journal.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { enterVibeCode } from "./vibe-code.js";
@@ -47,7 +47,8 @@ async function checkRepo() {
     buildId = r.buildId;
     renderVerdict(r);
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    // A 404 here means the box has no service/build platform wired.
+    toast(buildEntryError(e), "err");
   } finally {
     btn.disabled = false;
     btn.textContent = "Check repo";
