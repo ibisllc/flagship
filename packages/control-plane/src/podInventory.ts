@@ -80,6 +80,38 @@ export interface PodInventoryDeps {
 const LAST_ACTIVE_BUMP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * How long a real daemon heartbeat remains fresh. The daemon posts at ~5 min
+ * cadence; 3× that tolerates 2 missed beats before declaring unreachable.
+ * A box bridged from provision-status (static timestamp, never refreshed) is
+ * NOT subject to this window — see `bridgedLastReported` below.
+ */
+export const FRESHNESS_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Classify a pod's liveness based on its daemon-status heartbeat.
+ *
+ *   "live"        — real heartbeat received within FRESHNESS_WINDOW_MS.
+ *   "unreachable" — had a real heartbeat but it's now stale.
+ *   "never"       — registered but never sent a real heartbeat (including
+ *                   boxes whose only `lastReported` came from the provision-
+ *                   status bridge — a one-time static timestamp that would
+ *                   wrongly flip to "unreachable" after 15 min otherwise).
+ */
+function computeLiveness(
+  realLastReported: number | null,
+  now: number,
+): { liveness: "live" | "unreachable" | "never"; lastSeenMsAgo: number | null } {
+  if (realLastReported === null) {
+    return { liveness: "never", lastSeenMsAgo: null };
+  }
+  const age = now - realLastReported;
+  if (age < FRESHNESS_WINDOW_MS) {
+    return { liveness: "live", lastSeenMsAgo: age };
+  }
+  return { liveness: "unreachable", lastSeenMsAgo: age };
+}
+
+/**
  * Deterministic opaque reference for an install order, safe for the
  * UNAUTHENTICATED `/pods` list. The auth-code `serial` is a capability
  * (anyone who knows username+serial can POST fake provision phases to
@@ -200,7 +232,14 @@ export async function handleGetUserPods(
       // NEVER drops a server or fails the list. Only runs when daemon_status is
       // absent — adds up to 2 extra queries per daemon_status-less server
       // (fine for small N; remove once daemons POST real heartbeats).
+      // `realLastReported` is the heartbeat timestamp from an actual STK-signed
+      // daemon-status POST — the only value that should be subject to the
+      // FRESHNESS_WINDOW liveness check. The provision-status bridge below sets
+      // `lastReported` for wire compat but is flagged separately so the liveness
+      // classifier can treat bridged boxes as "never" (awaiting first heartbeat)
+      // rather than wrongly flipping them to "unreachable" after 15 min.
       let lastReported = status?.lastReported ?? null;
+      let realLastReported: number | null = status?.lastReported ?? null;
       if (!status && deps.authCodes && deps.provisionStatus) {
         try {
           const code = await deps.authCodes.latestByServerDomain(s.serverDomain);
@@ -208,6 +247,8 @@ export async function handleGetUserPods(
             const ps = await deps.provisionStatus.getProvisionStatus(code.serial);
             if (ps?.phase === "live") {
               lastReported = ps.updatedAt ?? now;
+              // Keep realLastReported null — this is a bridge value, not a real
+              // heartbeat. The liveness classifier must not apply the window to it.
             }
           }
         } catch {
@@ -230,6 +271,7 @@ export async function handleGetUserPods(
           signedStatus = null;
         }
       }
+      const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
       return {
         serverDomain: s.serverDomain,
         identityPubKey: s.identityPubKeyHex,
@@ -237,6 +279,11 @@ export async function handleGetUserPods(
         revokedAt: s.revokedAt ?? null,
         routingTarget: routing?.currentTargetHex ?? null,
         lastReported,
+        // Computed server-side from daemon-status heartbeat cadence (~5 min).
+        // Distinguishes a real heartbeat (subject to FRESHNESS_WINDOW_MS) from a
+        // provision-bridge timestamp (classified "never" regardless of age).
+        liveness,
+        lastSeenMsAgo,
         currentCert: status
           ? {
               sha256: status.certSha256,
@@ -261,6 +308,11 @@ export async function handleGetUserPods(
       };
     }),
   );
+
+  // Deterministic oldest-first order so /pods is stable across fetches.
+  // The storage listForUser has no guaranteed order (D1 query lacks ORDER BY);
+  // sort here rather than changing the storage layer so this stays within scope.
+  pods.sort((a, b) => a.registeredAt - b.registeredAt);
 
   // #56 — outstanding install orders, merged into the same unauthenticated
   // list. The per-order phase enrichment is individually try/catch-guarded:
