@@ -622,6 +622,12 @@ public struct PodCard: View {
                         // came online (the leader is the daemon the screens
                         // point at) — never badge a dead box as Leader.
                         if isLeader && pod.cameOnline { LeaderBadge() }
+                        // Per-service leadership (Phase 6): the services this box
+                        // currently leads (from /pods `leadsServices`). Tolerant
+                        // of absence — renders nothing when empty.
+                        if pod.cameOnline && !pod.leadsServices.isEmpty {
+                            LeadServicesBadge(services: pod.leadsServices)
+                        }
                         Spacer(minLength: 0)
                     }
                     // "Your server is being installed" — a thin
@@ -783,5 +789,33 @@ public struct LeaderBadge: View {
         .frame(minHeight: 22)
         .background(c.primary.opacity(0.12))
         .clipShape(Capsule())
+    }
+}
+
+/// Per-service leadership (Phase 6) — a small "leads N" indicator for a box that
+/// is the current lead for one or more services (`PodInfo.leadsServices` from
+/// `/pods`). Tolerant of absence: renders nothing when the list is empty.
+public struct LeadServicesBadge: View {
+    @Environment(\.colorScheme) private var scheme
+    public let services: [String]
+    public init(services: [String]) { self.services = services }
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        if !services.isEmpty {
+            let label = services.count == 1
+                ? "Leads \(services[0])"
+                : "Leads \(services.count) services"
+            HStack(spacing: 6) {
+                Image(systemName: "crown.fill").font(.system(size: 10, weight: .semibold))
+                Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+            }
+            .foregroundColor(c.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+            .frame(minHeight: 22)
+            .background(c.primary.opacity(0.12))
+            .clipShape(Capsule())
+            .accessibilityIdentifier("pod-leads-badge")
+        }
     }
 }

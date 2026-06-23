@@ -30,25 +30,40 @@ public struct SwkDepositCoordinator {
     /// Stash of the create-time pairing order owed per server (secret-free
     /// pairing). Deposited on the SAME pass as the SWK (one biometric → both).
     private let pairingStore: PendingPairingDepositStore
+    /// Stash of the CGK deposit owed per server (per-service leadership). The CGK
+    /// is the per-CLOUD gossip key, delivered post-boot exactly like the SWK and
+    /// on the SAME biometric pass.
+    private let cgkStore: PendingCgkDepositStore
     /// Derives (IRK, box SWK hex) under one biometric for the given serverId.
     /// Injectable so tests don't hit the Keychain/biometric.
     private let deriveIrkAndSwk: (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String)
+    /// Derives the per-cloud CGK hex (no serverId). Injectable so tests don't hit
+    /// the Keychain/biometric. The IRK from `deriveIrkAndSwk` is reused for the
+    /// CGK deposit's owner signature, so this returns only the CGK material.
+    private let deriveCgkHex: (_ reason: String) async throws -> String
 
     public init(
         username: String,
         mailbox: any SecretMailboxClient,
         store: PendingSwkDepositStore = PendingSwkDepositStore(),
         pairingStore: PendingPairingDepositStore = PendingPairingDepositStore(),
+        cgkStore: PendingCgkDepositStore = PendingCgkDepositStore(),
         deriveIrkAndSwk: @escaping (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String) = { serverId, reason in
             let m = try await Keystore.deriveIRKBoxStkAndSwk(serverId: serverId, reason: reason)
             return (m.irk, m.boxSwkHex)
+        },
+        deriveCgkHex: @escaping (_ reason: String) async throws -> String = { reason in
+            let m = try await Keystore.deriveIRKAndCgk(reason: reason)
+            return m.cgkHex
         }
     ) {
         self.username = username
         self.mailbox = mailbox
         self.store = store
         self.pairingStore = pairingStore
+        self.cgkStore = cgkStore
         self.deriveIrkAndSwk = deriveIrkAndSwk
+        self.deriveCgkHex = deriveCgkHex
     }
 
     /// Deposit what's OWED for a box that has registered (carrying
@@ -59,7 +74,8 @@ public struct SwkDepositCoordinator {
     public func depositIfNeeded(serverDomain: String, identityPubKeyHex: String) async {
         let swkOwed = store.isPending(for: serverDomain)
         let pairingOrderJson = pairingStore.pendingOrder(for: serverDomain)
-        guard swkOwed || pairingOrderJson != nil else { return }
+        let cgkOwed = cgkStore.isPending(for: serverDomain)
+        guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
         do {
             let (irk, swkHex) = try await deriveIrkAndSwk(serverDomain, "Authorize \(serverDomain) to run apps")
@@ -87,6 +103,25 @@ public struct SwkDepositCoordinator {
                 )
                 try await mailbox.depositPairing(serverDomain: serverDomain, body: body)
                 pairingStore.markDeposited(for: serverDomain)
+            }
+
+            // CGK delivery — the EXACT twin of the SWK deposit, on the same
+            // biometric (the IRK is already in hand). The CGK is per-CLOUD (no
+            // serverId), sealed to THIS box's registered identity. Best-effort:
+            // a box without a CGK just doesn't gossip yet (never bricked).
+            if cgkOwed {
+                let cgkHex = try await deriveCgkHex("Authorize \(serverDomain) to join your cloud")
+                if let cgk = HexUtil.decode(cgkHex), cgk.count == 32 {
+                    let body = try CgkDelivery.buildDeposit(
+                        username: username,
+                        serverDomain: serverDomain,
+                        cgk: cgk,
+                        boxIdentityPub: boxIdentityPub,
+                        irk: irk
+                    )
+                    try await mailbox.depositCgk(serverDomain: serverDomain, body: body)
+                    cgkStore.markDeposited(for: serverDomain)
+                }
             }
         } catch {
             // Leave the `pending` marker(s) so the next reconcile retries.

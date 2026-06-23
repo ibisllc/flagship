@@ -61,17 +61,29 @@ class SwkDepositTest {
         return PendingPairingDepositStore(prefs)
     }
 
+    private fun freshCgkStore(): PendingCgkDepositStore {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = ctx.getSharedPreferences("cgk.${System.nanoTime()}", Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        return PendingCgkDepositStore(prefs)
+    }
+
+    private val cgk = ByteArray(32) { 0x55 }
+
     private fun coordinator(
         store: PendingSwkDepositStore,
         mailbox: MockSecretMailboxClient,
         pairingStore: PendingPairingDepositStore = freshPairingStore(),
+        cgkStore: PendingCgkDepositStore = freshCgkStore(),
     ) =
         SwkDepositCoordinator(
             username = "alice",
             mailbox = mailbox,
             store = store,
             pairingStore = pairingStore,
+            cgkStore = cgkStore,
             deriveIrkAndSwk = { Triple(Ed25519Sign(irkKp.privateKey), HexUtil.encode(irkKp.publicKey), HexUtil.encode(swk)) },
+            deriveCgkHex = { HexUtil.encode(cgk) },
         )
 
     @Test

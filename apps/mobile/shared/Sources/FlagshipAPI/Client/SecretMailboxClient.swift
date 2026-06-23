@@ -82,6 +82,61 @@ public protocol SecretMailboxClient: Sendable {
     /// the SWK to the box's REGISTERED identity and IRK-signs the wrapper, depositing
     /// the sealed carrier here for the box to claim on boot. Reuses `PairingDepositBody`.
     func depositSwk(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/cgk-deposit — phone, IRK mailbox-auth. The EXACT
+    /// twin of `depositSwk` for the Cloud Gossip Key (per-service leadership Phase
+    /// 6): the recipe carries NO CGK; after the box registers, the phone seals the
+    /// per-cloud CGK to the box's REGISTERED identity + IRK-signs the wrapper and
+    /// deposits the sealed carrier here for the box to claim post-boot. `.com`
+    /// holds ciphertext only. Reuses `PairingDepositBody`.
+    func depositCgk(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
+    /// owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
+    /// a box domain. `.com` verifies the owner-IRK signature before storing; the
+    /// box fetches the vote meant for it and rides it on its gossip frame (clout).
+    /// Uses its own `SetLeaderDepositBody` (the `{auth, deposit, vote, signature}`
+    /// shape from the TS rail).
+    func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws
+}
+
+/// The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+/// vote to a box domain; `vote` is the `SetLeaderVote` field set and `signature`
+/// is the owner-IRK signature over its canonical bytes. Field names match the
+/// Worker handler (`handlePostSetLeaderDeposit`) exactly:
+/// `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
+/// preferredStkPubHex,issuedAt,nonce}, signature }`.
+public struct SetLeaderDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public init(serverDomain: String, requestNonceHex: String) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+        }
+    }
+    public struct Vote: Encodable, Equatable, Sendable {
+        public let user: String
+        public let preferredStkPubHex: String   // hex (32 bytes) or "none"
+        public let issuedAt: Int64
+        public let nonce: String
+        public init(user: String, preferredStkPubHex: String, issuedAt: Int64, nonce: String) {
+            self.user = user; self.preferredStkPubHex = preferredStkPubHex
+            self.issuedAt = issuedAt; self.nonce = nonce
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public let vote: Vote
+    public let signature: String   // hex (64 bytes) — owner IRK over the vote canonical bytes
+    public init(
+        auth: MailboxAuthEnvelope.Auth, authSignature: String,
+        deposit: Deposit, vote: Vote, signature: String
+    ) {
+        self.auth = auth; self.authSignature = authSignature
+        self.deposit = deposit; self.vote = vote; self.signature = signature
+    }
 }
 
 /// The decommission deposit body. `auth`/`authSignature` are the SAME IRK
@@ -376,6 +431,11 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// Wall-clock ms since the box's last heartbeat (`lastSeenMsAgo`), or nil
     /// when it never checked in / a pre-field Worker.
     public let lastSeenMsAgo: Int64?
+    /// Per-service leadership (Phase 6) — the service slugs this box currently
+    /// LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive; absent ⇒
+    /// empty (a pre-field Worker, or the box leads nothing). Decoded LENIENTLY so
+    /// a garbled value yields [] rather than failing the whole pods-list decode.
+    public let leadsServices: [String]
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -386,7 +446,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         signedStatus: SignedDaemonStatus? = nil,
         pendingRequests: [PendingRequestSummaryWire] = [],
         liveness: String? = nil,
-        lastSeenMsAgo: Int64? = nil
+        lastSeenMsAgo: Int64? = nil,
+        leadsServices: [String] = []
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -395,6 +456,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.pendingRequests = pendingRequests
         self.liveness = liveness
         self.lastSeenMsAgo = lastSeenMsAgo
+        self.leadsServices = leadsServices
     }
 
     public init(from decoder: Decoder) throws {
@@ -406,6 +468,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
         self.liveness = try c.decodeIfPresent(String.self, forKey: .liveness)
         self.lastSeenMsAgo = try c.decodeIfPresent(Int64.self, forKey: .lastSeenMsAgo)
+        self.leadsServices = (try? c.decodeIfPresent([String].self, forKey: .leadsServices)) ?? []
         self.pendingRequests = (try? c.decodeIfPresent([PendingRequestSummaryWire].self, forKey: .pendingRequests)) ?? []
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
@@ -428,6 +491,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
         try c.encodeIfPresent(liveness, forKey: .liveness)
         try c.encodeIfPresent(lastSeenMsAgo, forKey: .lastSeenMsAgo)
+        if !leadsServices.isEmpty { try c.encode(leadsServices, forKey: .leadsServices) }
         if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
     }
 
@@ -437,7 +501,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, pendingRequests, liveness, lastSeenMsAgo
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices
     }
 }
 
@@ -728,6 +792,36 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/cgk-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad cgk-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
+    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/set-leader") else {
+            throw ScreensClientError.http(status: 0, message: "bad set-leader URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
@@ -896,6 +990,26 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             throw e
         }
         swkDeposits.append((serverDomain, body))
+    }
+    public private(set) var cgkDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    /// When set, `depositCgk` throws it once (to exercise best-effort/retry paths).
+    public var cgkDepositError: Error?
+    public func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
+        if let e = cgkDepositError {
+            cgkDepositError = nil
+            throw e
+        }
+        cgkDeposits.append((serverDomain, body))
+    }
+    public private(set) var setLeaderDeposits: [(serverDomain: String, body: SetLeaderDepositBody)] = []
+    /// When set, `depositSetLeader` throws it once.
+    public var setLeaderDepositError: Error?
+    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
+        if let e = setLeaderDepositError {
+            setLeaderDepositError = nil
+            throw e
+        }
+        setLeaderDeposits.append((serverDomain, body))
     }
     /// Optional error to throw on the next `depositDecommission`, then cleared.
     public var nextDecommissionError: Error?

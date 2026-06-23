@@ -261,6 +261,26 @@ public struct Keystore {
         return (irk, stkPub, HexUtil.encode(swk))
     }
 
+    /// CGK provisioning twin of `deriveIRKBoxStkAndSwk` for per-service
+    /// leadership (Phase 6): the IRK plus the per-CLOUD Cloud Gossip Key (hex) in
+    /// ONE biometric. The CGK is `CloudGossip.deriveCGK(umk.seed)` — per cloud,
+    /// NOT per server (no serverId), so it is the same key for every box of the
+    /// account. The phone seals it to a box's REGISTERED identity at deposit time.
+    public static func deriveIRKAndCgk(
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, cgkHex: String) {
+        let umk = try await unwrappedUMK(reason: reason)
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let irk = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: irkSeed.withUnsafeBytes { Data($0) }
+        )
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let cgk = CloudGossip.deriveCGK(umkSeed: umkData) else {
+            throw KeystoreError.derivationFailed("cloud gossip key (CGK)")
+        }
+        return (irk, HexUtil.encode(cgk))
+    }
+
     /// Stable Account Identity Key (AID) — the NON-rotating account identity
     /// (`HKDF(umk, "flagship/account-id/v1")`, via `ServiceInvite`), used for
     /// service-access gating: the friend signs the redeem/visit with it, and an

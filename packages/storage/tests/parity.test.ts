@@ -998,6 +998,75 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // secretMailbox cgk + set-leader lanes (Phase 6) — same consume-once + dedup
+  // + GC + lane-isolation semantics as the swk lane.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (cgk + set-leader lanes)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("cgk deposit → consume-once → second consume undefined; dedup; lane isolation", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putCgkDeposit(mk("aa".repeat(16), "cgkblob"));
+        const dup = await s.secretMailbox.putCgkDeposit(mk("aa".repeat(16), "again"));
+        const first = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 11);
+        // A swk consume must NOT see the cgk row.
+        await s.secretMailbox.putCgkDeposit(mk("bb".repeat(16), "cgk2"));
+        const cross = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 12);
+        return {
+          putOk: put.ok,
+          dupOk: dup.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          crossDefined: cross !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        dupOk: false,
+        firstSealed: "cgkblob",
+        secondDefined: false,
+        crossDefined: false,
+      });
+    });
+
+    it("set-leader deposit → consume-once → second consume undefined; expired never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSetLeaderDeposit(mk("cc".repeat(16), "voteblob"));
+        const first = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 11);
+        await s.secretMailbox.putSetLeaderDeposit({
+          ...mk("dd".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSetLeaderDeposit("old.alice.flagship.services", 100);
+        return {
+          putOk: put.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          expiredDefined: expired !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        firstSealed: "voteblob",
+        secondDefined: false,
+        expiredDefined: false,
+      });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // serverTransfers — the transfer-a-box broker lane. One offer per box
   // (re-issue replaces); claim is a one-time CAS; getOffer GCs an unclaimed
   // expired offer but keeps a claimed one.

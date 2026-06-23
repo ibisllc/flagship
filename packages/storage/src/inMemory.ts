@@ -27,6 +27,7 @@ import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
   SecretMailboxRecord,
+  SecretMailboxPurpose,
   SecretMailboxStorage,
   PairingDepositRecord,
   ServerTransferRecord,
@@ -914,6 +915,86 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     const expired: string[] = [];
     for (const [k, r] of this.rows) {
       if (r.purpose !== "swk") continue;
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.consumedAt !== null) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.postedAt > best.postedAt) {
+        best = r;
+        bestKey = k;
+      }
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best || !bestKey || best.responseSealedHex === null) return undefined;
+    best.consumedAt = now;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
+  // ── CGK delivery lane (purpose:"cgk") — Phase 6 ───────────────────────
+  async putCgkDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "cgk");
+  }
+
+  async consumeCgkDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "cgk");
+  }
+
+  // ── Owner preferred-server vote lane (purpose:"set-leader") — Phase 6 ──
+  async putSetLeaderDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "set-leader");
+  }
+
+  async consumeSetLeaderDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "set-leader");
+  }
+
+  // Shared deposit-lane helpers (the SWK/cgk/set-leader lanes are identical
+  // store-and-forward shapes; factored so a new lane is one purpose string).
+  private putGenericDeposit(rec: PairingDepositRecord, purpose: SecretMailboxPurpose) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, {
+      serverDomain: rec.serverDomain,
+      username: rec.username,
+      requestNonceHex: rec.requestNonceHex,
+      stkPubHex: rec.stkPubHex,
+      purpose,
+      requestIssuedAt: rec.issuedAt,
+      requestSignatureHex: "",
+      deviceInfoJson: null,
+      postedAt: rec.issuedAt,
+      expiresAt: rec.expiresAt,
+      lastPushAt: 0,
+      responseSealedHex: rec.sealedHex,
+      responseIssuedAt: rec.issuedAt,
+      respondedAt: rec.issuedAt,
+      consumedAt: null,
+    });
+    return { ok: true as const };
+  }
+
+  private consumeGenericDeposit(
+    serverDomain: string,
+    now: number,
+    purpose: SecretMailboxPurpose,
+  ): PairingDepositRecord | undefined {
+    let bestKey: string | undefined;
+    let best: SecretMailboxRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.purpose !== purpose) continue;
       if (r.serverDomain !== serverDomain) continue;
       if (r.consumedAt !== null) continue;
       if (r.expiresAt <= now) {

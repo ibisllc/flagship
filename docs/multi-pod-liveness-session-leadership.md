@@ -1,8 +1,9 @@
 # Multi-pod liveness, per-pod sessions, and per-service leadership — fixes + gossip
 
-**Status:** Phases 1-5 BUILT + CI-green (bug fixes + the full gossip broadcast
-path); Phase 6 (owner-vote UI + `.com` relay + CGK post-boot provisioning) is the
-remaining live-enablement layer (reburn-gated). Surfaced live from
+**Status:** Phases 1-6 BUILT + CI-green (bug fixes + the full gossip broadcast path
++ CGK post-boot provisioning + owner-vote UI + `.com` lead relay). A box-side
+**reburn** is the remaining live validation (CI proves the units + cross-platform
+byte-compat, not the physical fan-out). Surfaced live from
 `frank`/`leticia` on `harry` (a fresh `frank` install on the box that used to run
 `leticia`; `leticia` is now just turned off). Three independent client/directory
 bugs, none of them secret-persistence (a fresh install regenerates every on-disk
@@ -319,12 +320,15 @@ gossip path built and unit-tested):
 yielded slot relies on socket-death / FCFS takeover); and the daemon's self-vote
 getter is wired but returns `null` until Phase 6 feeds it a received `set-leader`.
 
-**Phase 6 (remaining, reburn-gated):** the owner's control surface + turning gossip
-on for real boxes — (a) **CGK post-boot provisioning** via a sealed `.com` deposit
-lane (mirror the secret-free SWK delivery — do NOT embed CGK in the recipe; the repo
-is secret-free-recipe by default), (b) the "Set preferred server" action signing
-`set-leader` + its deposit/consume so the self-vote getter lights up, (c) the `.com`
-relay of computed per-service leads for client display.
+**Phase 6 (BUILT, reburn-gated for live):** the owner's control surface + turning
+gossip on for real boxes — (a) **CGK post-boot provisioning** via the
+`flagship/cgk-delivery/v1` sealed `.com` deposit lane (twin of the secret-free SWK
+delivery — CGK is NEVER in the recipe; daemon `cgkDepositConsumer` persists +
+restarts → gossip wires), (b) the "Set preferred server" action signs `set-leader`
++ deposits; the daemon `setLeaderConsumer` feeds the gossip `readSelfVote`, (c) the
+daemon reports `leadsServices` in its (signature-safe) heartbeat → `/pods` relays it
+→ clients show "lead"/"preferred". Pinned cross-platform CGK-delivery vector on
+TS/Swift/Kotlin/webapp. A **reburn** validates the box-side deposit→claim→loop live.
 
 ## Open questions
 

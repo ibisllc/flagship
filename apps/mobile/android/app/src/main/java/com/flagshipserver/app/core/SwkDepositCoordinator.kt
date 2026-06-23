@@ -31,9 +31,17 @@ class SwkDepositCoordinator(
     /** Stash of the create-time pairing order owed per server (secret-free
      *  pairing). Deposited on the SAME pass as the SWK (one biometric → both). */
     private val pairingStore: PendingPairingDepositStore,
+    /** Stash of the CGK deposit owed per server (per-service leadership). The CGK
+     *  is the per-CLOUD gossip key, delivered post-boot exactly like the SWK and
+     *  on the SAME biometric pass. */
+    private val cgkStore: PendingCgkDepositStore,
     /** Derives (IRK signer, IRK pub hex, box SWK hex) for the given serverId
      *  under one biometric. Injectable so tests don't hit the Keystore. */
     private val deriveIrkAndSwk: suspend (serverId: String) -> Triple<Ed25519Sign, String, String>,
+    /** Derives the per-cloud CGK hex (no serverId). Injectable so tests don't hit
+     *  the Keystore. The IRK from [deriveIrkAndSwk] is reused for the CGK deposit's
+     *  owner signature, so this returns only the CGK material. */
+    private val deriveCgkHex: suspend () -> String,
 ) {
     /** Deposit what's OWED for a box that has registered (carrying
      *  `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
@@ -43,7 +51,8 @@ class SwkDepositCoordinator(
     suspend fun depositIfNeeded(serverDomain: String, identityPubKeyHex: String) {
         val swkOwed = store.isPending(serverDomain)
         val pairingOrderJson = pairingStore.pendingOrder(serverDomain)
-        if (!swkOwed && pairingOrderJson == null) return
+        val cgkOwed = cgkStore.isPending(serverDomain)
+        if (!swkOwed && pairingOrderJson == null && !cgkOwed) return
         val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
         if (boxIdentityPub.size != 32) return
         try {
@@ -78,6 +87,27 @@ class SwkDepositCoordinator(
                 mailbox.depositPairing(serverDomain, body)
                 pairingStore.markDeposited(serverDomain)
             }
+
+            // CGK delivery — the EXACT twin of the SWK deposit, on the same
+            // biometric (the IRK is already in hand). The CGK is per-CLOUD (no
+            // serverId), sealed to THIS box's registered identity. Best-effort:
+            // a box without a CGK just doesn't gossip yet (never bricked).
+            if (cgkOwed) {
+                val cgkHex = deriveCgkHex()
+                val cgk = HexUtil.decode(cgkHex)
+                if (cgk != null && cgk.size == 32) {
+                    val body = CgkDelivery.buildDeposit(
+                        username = username,
+                        serverDomain = serverDomain,
+                        cgk = cgk,
+                        boxIdentityPub = boxIdentityPub,
+                        irk = irk,
+                        irkPubHex = irkPubHex,
+                    )
+                    mailbox.depositCgk(serverDomain, body)
+                    cgkStore.markDeposited(serverDomain)
+                }
+            }
         } catch (_: Throwable) {
             // Leave the `pending` marker(s) so the next reconcile retries.
         }
@@ -91,16 +121,23 @@ class SwkDepositCoordinator(
             mailbox: SecretMailboxClient,
             store: PendingSwkDepositStore,
             pairingStore: PendingPairingDepositStore,
+            cgkStore: PendingCgkDepositStore,
         ): SwkDepositCoordinator = SwkDepositCoordinator(
             username = username,
             mailbox = mailbox,
             store = store,
             pairingStore = pairingStore,
+            cgkStore = cgkStore,
             deriveIrkAndSwk = { serverId ->
                 val irk = Keystore.deriveIRK("Authorize $serverId to run apps")
                 val irkPubHex = Keystore.irkPubHex()
                 val swkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverId))
                 Triple(irk, irkPubHex, swkHex)
+            },
+            // The CGK is per CLOUD (no serverId) — CloudGossip.deriveCGK(umk.seed).
+            // The in-hand UMK seed is reused (no extra biometric).
+            deriveCgkHex = {
+                HexUtil.encode(CloudGossip.deriveCGK(Keystore.currentUmkSeed()))
             },
         )
     }

@@ -72,13 +72,17 @@ fun HomeTab() {
         // every reconcile.
         val swkStore = PendingSwkDepositStore.from(reconcilerContext)
         val pairingStore = PendingPairingDepositStore.from(reconcilerContext)
+        // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in
+        // the recipe, so it is always deposited post-registration (on the same
+        // biometric pass as the SWK). Idempotent via the store.
+        val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(reconcilerContext)
         PendingServerReconciler(
             app = app,
             mailbox = mailbox,
             onRegistered = { fqdn, identityPubKeyHex ->
                 val user = app.currentUser.value
                 if (!user.isNullOrEmpty()) {
-                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore)
+                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore, cgkStore)
                         .depositIfNeeded(fqdn, identityPubKeyHex)
                 }
             },

@@ -174,7 +174,7 @@ fold into the channel once the Live-Activity wiring rides `/stream`'s `pending[]
 NOT deployed (the `/stream` route ships with the next `.com` deploy; mobile needs
 rebuilds).
 
-### 2026-06-23 — multi-pod liveness + per-pod sessions + per-service leadership by gossip (Phases 1-5)
+### 2026-06-23 — multi-pod liveness + per-pod sessions + per-service leadership by gossip (Phases 1-6)
 
 **Why:** three live bugs on `harry` (a fresh `frank` over the box that ran
 `leticia`): (A) a turned-off box read "online" forever, (B) only one server's
@@ -222,16 +222,32 @@ Gates: `tsc -b` clean · full `vitest` **6523** · iOS **TEST BUILD SUCCEEDED**
 Swift 16 / Kotlin green. **Phases 1-2 alone fix all three reported bugs;** 3-5 build
 the broadcast machinery.
 
-**REMAINING — Phase 6 (the live-enablement layer, NOT yet built):** (a) **CGK
-post-boot provisioning** via a sealed `.com` deposit lane (MUST mirror the
-secret-free SWK delivery — do NOT embed CGK in the recipe; the repo is
-secret-free-recipe by default) — until this ships, gossip stays disabled on real
-boxes; (b) the **"Set preferred server"** action signing `set-leader` + its
-deposit/consume so the daemon's self-vote getter lights up; (c) the `.com` **relay**
-of computed per-service leads for client display. Plus two documented daemon seams:
-`urlController.release` is a *soft* release today (no dedicated release frame), and
-a **reburn** is needed to validate the box-side gossip loop live (CI proves the
-units + byte-compat, not the physical fan-out).
+**Phase 6 — BUILT (turns the gossip on + the owner control surface), CI-green:**
+(a) **CGK post-boot provisioning** — `flagship/cgk-delivery/v1` (twin of the
+secret-free SWK delivery: phone derives `deriveCGK(umk.seed)`, seals to the box
+identity, IRK-signs; `cgk-deposit` lane; daemon `cgkDepositConsumer` persists
+`/var/flagship/cgk.hex` + restarts → gossip wires). CGK is NEVER in the recipe.
+(b) **"Set preferred server"** — clients sign `set-leader` + deposit; daemon
+`setLeaderConsumer` stores it and feeds the gossip `readSelfVote` (Phase 5's null
+getter now lit). (c) **`.com` relay** — the daemon reports `leadsServices` in its
+(unsigned, signature-safe) heartbeat; `/pods` relays it; clients show a "lead"
+indicator + a "preferred" pill. Pinned cross-platform CGK-delivery vector
+(`147205c6…44417a0f`) on TS + Swift + Kotlin + webapp.
+
+Phase-6 gates: `tsc -b` clean · full `vitest` **6598** (cgkDelivery, cgk/set-leader
+deposit lanes, daemon consumers, leads relay, storage parity) · iOS `xcodebuild
+test` **1240/0** · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL** · webapp
+**1572** · Swift CgkDelivery/SetLeader 9 · Kotlin vectors green.
+
+**REMAINING (owner, NOT CI-validatable):** a **reburn** to validate the box-side
+CGK deposit→claim→gossip-loop + the route claim/yield live (CI proves the units +
+byte-compat, not the physical fan-out). Two documented daemon seams persist:
+`urlController.release` is a *soft* release today (no dedicated release frame — a
+yielded slot relies on socket-death / FCFS takeover), and the hub fan-out's live
+cross-process round trip against a real daemon is untested by CI. **Deploy posture:**
+Fix A + the cgk/set-leader lanes + the `/pods` leads field ride the next `.com`
+Worker deploy; the `broadcast--user` fan-out rides the `.services` Fly deploy; no
+migration added (cgk/set-leader reuse `secret_mailbox`).
 
 ### 2026-06-23 (latest) — recipe is now FULLY secret-free: `pairingKeyPrivHex` removed (the last secret)
 

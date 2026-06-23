@@ -648,6 +648,49 @@ describe("POST /api/daemon-status — verbatim signed tuple persisted + relayed"
   });
 });
 
+// ── Per-service leads relay (Phase 6 Part 3) ─────────────────────────────────
+
+describe("POST /api/daemon-status — leadsServices relay on /pods", () => {
+  it("relays the UNSIGNED leadsServices the daemon reports; signed report still re-verifies", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const rep = report();
+    const body = signedBody(rep);
+
+    const post = await handlePostDaemonStatus(deps(storage), {
+      ...body,
+      leadsServices: ["blog", "wiki"],
+    });
+    expect(post.status).toBe(200);
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & {
+      pods: Array<{
+        leadsServices: string[];
+        signedStatus: { report: DaemonStatusReport; signatureHex: string } | null;
+      }>;
+    };
+    expect(out.pods[0]?.leadsServices).toEqual(["blog", "wiki"]);
+    // The signature still covers only the canonical fields — leadsServices is not
+    // part of the canonical bytes, so the relayed report re-verifies under the STK.
+    const signed = out.pods[0]!.signedStatus!;
+    const sigBytes = Uint8Array.from(
+      signed.signatureHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+    );
+    expect(verifyDaemonStatusReport(signed.report, sigBytes, ed.getPublicKey(STK_PRIV))).toBe(true);
+  });
+
+  it("absent leadsServices ⇒ a tolerant empty array on /pods (additive)", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const post = await handlePostDaemonStatus(deps(storage), signedBody(report()));
+    expect(post.status).toBe(200);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & { pods: Array<{ leadsServices: string[] }> };
+    expect(out.pods[0]?.leadsServices).toEqual([]);
+  });
+});
+
 // ── Per-pod liveness fields: liveness + lastSeenMsAgo ────────────────────────
 
 describe("GET /api/users/:u/pods — liveness fields (liveness + lastSeenMsAgo)", () => {

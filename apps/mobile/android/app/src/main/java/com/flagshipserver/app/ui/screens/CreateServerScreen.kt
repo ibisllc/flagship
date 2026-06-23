@@ -141,6 +141,9 @@ fun CreateServerScreen(
     var embedSecrets by remember { mutableStateOf(false) }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
+    // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
+    // recipe, so it is owed on EVERY created server and deposited post-registration.
+    val cgkDepositStore = remember { com.flagshipserver.app.core.PendingCgkDepositStore.from(context) }
     // Backup policy — draft-only metadata (phone-only default). Hydrated from
     // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
     // the wire (applied later via an owner-signed set-backup-policy order).
@@ -227,6 +230,7 @@ fun CreateServerScreen(
                                 embedSecrets = embedSecrets,
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
+                                cgkDepositStore = cgkDepositStore,
                                 // Secret-free pairing: build the order + persist the
                                 // session token now; the order is sealed + deposited
                                 // post-registration so the box comes online paired.
@@ -707,6 +711,10 @@ private suspend fun prepareDelivery(
     // secret-free of the SWK and a deposit is recorded as owed.
     embedSecrets: Boolean = false,
     swkDepositStore: PendingSwkDepositStore? = null,
+    // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
+    // recipe; it is owed on EVERY created server (independent of embed-secrets) and
+    // sealed + deposited post-registration on the SWK biometric pass.
+    cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     // Secret-free pairing: stashes the create-time order owed when embed-secrets
     // is OFF, so the Home reconcile seals + deposits it post-registration.
     pairingDepositStore: PendingPairingDepositStore? = null,
@@ -813,6 +821,10 @@ private suspend fun prepareDelivery(
         embeddedPairingOrder = null
         pairingOrderJson?.let { pairingDepositStore?.markPending(serverDomain, it) }
     }
+    // The CGK is NEVER embedded in the recipe (the per-cloud gossip secret is
+    // always post-boot delivered), so it is owed on EVERY created server,
+    // independent of the embed-secrets choice.
+    cgkDepositStore?.markPending(serverDomain)
 
     val bundle = InstallBlobBundle(
         blob = WireBlob(

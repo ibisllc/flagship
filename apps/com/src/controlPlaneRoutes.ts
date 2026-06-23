@@ -54,6 +54,10 @@ import {
   handleConsumeEntitlementDeposit,
   handlePostSwkDeposit,
   handleConsumeSwkDeposit,
+  handlePostCgkDeposit,
+  handleConsumeCgkDeposit,
+  handlePostSetLeaderDeposit,
+  handleConsumeSetLeaderDeposit,
   handleConsumeSelfDeleteDeposit,
   handlePostDecommission,
   handleGetDecommission,
@@ -516,6 +520,12 @@ const ROUTE_RE = {
   // Secret-free-recipe SWK delivery: POST phone deposit (IRK mailbox-auth, the
   // SEALED SWK-delivery carrier) / GET box consume-once read (sealed only).
   SWK_DEPOSIT: /^\/api\/server\/([^/]+)\/swk-deposit$/,
+  // Post-boot CGK delivery (Phase 6): POST phone deposit (IRK mailbox-auth, the
+  // SEALED CGK-delivery carrier) / GET box consume-once read (sealed only).
+  CGK_DEPOSIT: /^\/api\/server\/([^/]+)\/cgk-deposit$/,
+  // Owner preferred-server vote (Phase 6): POST phone deposit (IRK mailbox-auth,
+  // owner-IRK set-leader vote, verified before storing) / GET box consume-once read.
+  SET_LEADER_DEPOSIT: /^\/api\/server\/([^/]+)\/set-leader$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
   // Graceful server-replacement decommission (docs/server-replacement-graceful-
   // decommission.md). The bare `decommission` path is method-discriminated:
@@ -1524,6 +1534,39 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
       return finishPlain(
         await handleConsumeSwkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Post-boot CGK delivery (Phase 6) — phone deposit (IRK mailbox-auth, the
+    // SEALED CGK-delivery carrier) + box consume-once read (sealed-only, public).
+    if (method === "POST" && (m = path.match(ROUTE_RE.CGK_DEPOSIT))) {
+      return finishPlain(
+        await handlePostCgkDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.CGK_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeCgkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Owner preferred-server vote (Phase 6) — phone deposit (IRK mailbox-auth, the
+    // owner-IRK set-leader vote, signature-verified before storing) + box
+    // consume-once read (the box re-verifies under the owner IRK).
+    if (method === "POST" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
+      return finishPlain(
+        await handlePostSetLeaderDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSetLeaderDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // Account-death content-wipe — box consume-once read of the owner-IRK-signed

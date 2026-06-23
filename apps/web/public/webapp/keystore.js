@@ -508,6 +508,18 @@ export async function deriveSwkFromSeed(umkSeed, serverId) {
   return bytesToHex(await hkdf32(umkSeed, `flagship.swk.v1|${serverId}`));
 }
 
+/** The account's Cloud Gossip Key (CGK) — byte-identical to @flagship/protocol
+ *  `deriveCGK`: HKDF-SHA256(umkSeed, salt=empty, info="flagship.cloud-gossip.v1",
+ *  32). DOT info (PROTOCOL family), and — unlike the SWK — there is NO `|serverId`
+ *  suffix: the CGK is ONE key for the WHOLE cloud (every pod of the account
+ *  derives the same one), so siblings can authenticate gossip with no per-pod
+ *  exchange. The box can't derive it (no UMK), so once it registers the webapp
+ *  seals this to the box identity + IRK-signs a cgk-delivery wrapper + deposits
+ *  it (the exact twin of the SWK delivery). Returns lowercase hex. */
+export async function deriveCgkFromSeed(umkSeed) {
+  return bytesToHex(await hkdf32(umkSeed, "flagship.cloud-gossip.v1"));
+}
+
 export async function deriveBakFromSeed(umkSeed, serverId) {
   const seed = await hkdf32(umkSeed, `flagship.bak.v1|${serverId}`);
   const pkcs8 = pkcs8FromSeed(seed);

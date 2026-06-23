@@ -176,6 +176,13 @@ export interface OnlinePodEntry {
   currentCert: { sha256: string | null; validUntil: number | null; issuer: string | null } | null;
   signedStatus: { report: unknown; signatureHex: string } | null;
   appsServed: string[];
+  /**
+   * The service slugs this box currently LEADS (Phase 6 Part 3) — sourced from the
+   * UNSIGNED `leadsServices` the daemon-status heartbeat carries inside the relayed
+   * report. Additive + tolerant of absence: an empty array when the box doesn't
+   * report leads (old daemon / no gossip / no CGK). Clients badge "lead" from this.
+   */
+  leadsServices: string[];
   pendingRequests: PendingRequestSummary[];
   state: "online";
 }
@@ -294,12 +301,21 @@ export async function buildPodInventory(
       // drop it but not forge it). Parse is guarded: a corrupt row degrades
       // to null, never fails the list.
       let signedStatus: { report: unknown; signatureHex: string } | null = null;
+      // Phase 6 Part 3 — the per-pod "services I lead" set, relayed from the UNSIGNED
+      // `leadsServices` the daemon stashed inside the report JSON. Parsed alongside
+      // signedStatus; absent/corrupt → empty (additive, never fails the list).
+      let leadsServices: string[] = [];
       if (status?.reportJson && status.signatureHex) {
         try {
+          const parsedReport = JSON.parse(status.reportJson) as unknown;
           signedStatus = {
-            report: JSON.parse(status.reportJson) as unknown,
+            report: parsedReport,
             signatureHex: status.signatureHex,
           };
+          const ls = (parsedReport as { leadsServices?: unknown })?.leadsServices;
+          if (Array.isArray(ls)) {
+            leadsServices = ls.filter((x): x is string => typeof x === "string");
+          }
         } catch {
           signedStatus = null;
         }
@@ -326,6 +342,7 @@ export async function buildPodInventory(
           : null,
         signedStatus,
         appsServed,
+        leadsServices,
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
         // the typed list of approvals this box is currently asking its owner
         // for. The generic client inbox is the flatMap of this across pods.
@@ -407,6 +424,14 @@ interface DaemonStatusBody {
     issuedAt?: number;
   };
   signature?: string;
+  /**
+   * UNSIGNED advisory field (Phase 6 Part 3) — the service slugs this box currently
+   * LEADS. NOT part of the canonical daemon-status bytes (the pinned vector + native
+   * mirrors stay byte-identical), so it can't be verified; `.com` stores it inside
+   * the relayed reportJson and surfaces it on /pods as `leadsServices` for display.
+   * Tolerant of absence: an old daemon omits it ⇒ no leads relayed.
+   */
+  leadsServices?: string[];
 }
 
 /**
@@ -451,6 +476,13 @@ export async function handlePostDaemonStatus(
         r.appsServed.some((x) => typeof x !== "string"))) {
     return malformed("appsServed must be a string array");
   }
+  // Phase 6 Part 3 — the UNSIGNED advisory "services I lead" set. Tolerant: an
+  // absent/malformed value is dropped (treated as no leads), never rejecting the
+  // heartbeat (an old daemon never sends it; the field is not signed).
+  const leadsServices: string[] =
+    Array.isArray(body.leadsServices)
+      ? body.leadsServices.filter((x): x is string => typeof x === "string")
+      : [];
   const server = await deps.servers.get(r.serverDomain);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
@@ -477,6 +509,13 @@ export async function handlePostDaemonStatus(
     return forbidden("invalid signature");
   }
 
+  // Store the verbatim signed report PLUS the unsigned `leadsServices` sibling. The
+  // `report` object's canonical-bytes (what clients re-verify) IGNORE extra keys, so
+  // appending `leadsServices` to the relayed JSON is signature-safe and needs no
+  // migration (it rides the existing reportJson column). Only attach when present so
+  // the verbatim tuple is unchanged for boxes that don't report leads.
+  const reportForStore =
+    leadsServices.length > 0 ? { ...report, leadsServices } : report;
   await deps.daemonStatus.put({
     serverDomain: r.serverDomain.toLowerCase(),
     certSha256: report.certSha256,
@@ -484,7 +523,7 @@ export async function handlePostDaemonStatus(
     certIssuer: report.certIssuer,
     servicesServedJson: JSON.stringify(report.appsServed),
     lastReported: (deps.now ?? (() => Date.now()))(),
-    reportJson: JSON.stringify(report),
+    reportJson: JSON.stringify(reportForStore),
     signatureHex: body.signature,
   });
 

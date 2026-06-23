@@ -727,7 +727,9 @@ export type SecretMailboxPurpose =
   | "pairing"
   | "entitlement-deposit"
   | "self-delete"
-  | "swk";
+  | "swk"
+  | "cgk"
+  | "set-leader";
 
 /**
  * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
@@ -917,6 +919,40 @@ export interface SecretMailboxStorage {
    * harmless (mirrors the pairing-deposit release posture).
    */
   consumeSwkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Cloud Gossip Key (CGK) delivery (Phase 6) — the PHONE seals the per-cloud CGK
+   * to the box's identity (generated at first boot) and IRK-signs the wrapper, then
+   * deposits it here so the box claims it post-boot and turns on per-service
+   * leadership gossip with NO secret in the recipe. Stored like the SWK deposit (a
+   * `purpose:"cgk"` row whose `sealedHex` holds the CGK-delivery carrier). The
+   * carrier wraps a SEALED secret — `.com` holds ciphertext only (I1/I3); the box
+   * unseals it with its identity key. Caller has IRK-mailbox-auth'd.
+   */
+  putCgkDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired CGK deposit for `serverDomain`
+   * (consume-once), or undefined. Expired rows GC'd. Public read at the handler —
+   * the carrier is SEALED for the box identity, so disclosure is harmless.
+   */
+  consumeCgkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Owner preferred-server vote delivery (Phase 6) — the PHONE deposits an owner-
+   * IRK-signed `set-leader` vote (the PUBLIC envelope, not an encrypted secret —
+   * it carries only `{user, preferredStkPubHex, issuedAt, nonce}` + signature) so
+   * a box can fetch the vote addressed to it and ride it on its gossip frame.
+   * Stored like a deposit in a `purpose:"set-leader"` row whose `sealedHex` holds
+   * the vote carrier; the box re-verifies under the owner IRK, so a public
+   * consume-once read is harmless. Caller has IRK-mailbox-auth'd + has verified the
+   * set-leader signature before storing.
+   */
+  putSetLeaderDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired set-leader vote deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read at
+   * the handler — the vote is owner-IRK-signed, so a public consume-once read is
+   * harmless; the box re-verifies under the owner IRK.
+   */
+  consumeSetLeaderDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

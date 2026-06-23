@@ -101,6 +101,7 @@ import com.flagshipserver.app.viewmodels.RevokeServerReason
 import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
+import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -196,6 +197,8 @@ fun ServerDetailScreen(
         (detail as? LoadingState.Loaded)?.let { d ->
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            PreferredServerCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             FrontPageCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
@@ -681,6 +684,94 @@ private fun FrontPageCard(serverDomain: String) {
                         modifier = Modifier.semantics { contentDescription = "sd-front-page-save" },
                     )
                 }
+            }
+        }
+    }
+}
+
+// "Set as preferred server" — the owner's per-service-leadership default vote
+// (Phase 6, docs/multi-pod-liveness-session-leadership.md). Mirror of the iOS
+// PreferredServerCard. Reads the mailbox + AppState from the composition;
+// behind the standard biometric (via SetPreferredServerViewModel) it signs the
+// existing set-leader vote for THIS box's STK and deposits it, then marks the
+// pod preferred IMMEDIATELY (app.setLeader) independent of gossip catch-up.
+//
+// Only meaningful with more than one server (a preferred default among peers),
+// and only once the box has a registered identity to vote for.
+@Composable
+private fun PreferredServerCard(serverDomain: String) {
+    val mailbox = LocalSecretMailboxClient.current
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val scope = rememberCoroutineScope()
+
+    val pods by app.pods.collectAsState()
+    val leaderPodId by app.leaderPodId.collectAsState()
+    val username by app.currentUser.collectAsState()
+
+    val pod = pods.firstOrNull { it.fqdn.lowercase() == serverDomain.lowercase() }
+    val isPreferred = pod != null && leaderPodId == pod.podId
+    val hasStk = (com.flagshipserver.app.core.HexUtil.decode(pod?.identityPubKeyHex ?: "")?.size ?: 0) == 32
+    val multiPod = pods.count { it.status != com.flagshipserver.app.core.PodInfo.Status.PENDING } > 1
+
+    // Gate: >1 non-pending server AND this box has a registered STK to vote for.
+    if (!multiPod || !hasStk || pod == null) return
+
+    var working by remember(serverDomain) { mutableStateOf(false) }
+
+    Text(
+        "Preferred server",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (isPreferred) {
+                Text(
+                    "This is your preferred server",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                )
+                Text(
+                    "New service routes default here when it's the highest-clout live server. You can pick a different one from another server's page.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+            } else {
+                Text(
+                    "Make this the default target for your cloud — votes for it across your boxes so the highest-clout live server leading a service prefers it.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                )
+                FSPrimaryButton(
+                    label = if (working) "Setting…" else "Set as preferred server",
+                    onClick = {
+                        if (working) return@FSPrimaryButton
+                        working = true
+                        scope.launch {
+                            val vm = SetPreferredServerViewModel(
+                                username = username ?: "",
+                                serverDomain = serverDomain,
+                                preferredStkPubHex = pod.identityPubKeyHex,
+                                mailbox = mailbox,
+                            )
+                            val ok = vm.setPreferred()
+                            if (ok) {
+                                // Reflect the choice immediately, independent of
+                                // gossip catch-up.
+                                app.setLeader(pod.podId)
+                                toasts.success("Preferred server set.")
+                            } else {
+                                toasts.warning("Couldn't set the preferred server — try again.")
+                            }
+                            working = false
+                        }
+                    },
+                    enabled = !working,
+                    block = true,
+                    modifier = Modifier.semantics { contentDescription = "sd-set-preferred" },
+                )
             }
         }
     }

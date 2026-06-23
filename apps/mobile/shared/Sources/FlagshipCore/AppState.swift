@@ -496,7 +496,9 @@ public final class AppState {
         awaitingUnlock: Bool = false,
         liveness: PodInfo.Liveness? = nil,
         lastSeenMsAgo: Int64? = nil,
-        lastReported: Int64? = nil
+        lastReported: Int64? = nil,
+        identityPubKeyHex: String = "",
+        leadsServices: [String] = []
     ) -> String {
         // HONEST LIVENESS (Fix A) — derive the pod's status from the
         // server-authoritative `liveness` field instead of trusting that a
@@ -521,7 +523,8 @@ public final class AppState {
             // (don't clobber a richer name). A box whose reachability changed,
             // came online, or is now waiting for an approval is re-flowed below.
             if old.status == derivedStatus && old.cameOnline && !awaitingUnlock
-                && old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo {
+                && old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo
+                && old.leadsServices == leadsServices {
                 return old.podId
             }
             pods[idx] = PodInfo(
@@ -537,7 +540,10 @@ public final class AppState {
                 awaitingUnlock: awaitingUnlock,
                 liveness: liveness,
                 lastSeenMsAgo: lastSeenMsAgo,
-                lastReported: lastReported ?? old.lastReported
+                lastReported: lastReported ?? old.lastReported,
+                // Keep a known STK; never downgrade to empty on a sparse update.
+                identityPubKeyHex: identityPubKeyHex.isEmpty ? old.identityPubKeyHex : identityPubKeyHex,
+                leadsServices: leadsServices
             )
             return old.podId
         }
@@ -553,7 +559,9 @@ public final class AppState {
             awaitingUnlock: awaitingUnlock,
             liveness: liveness,
             lastSeenMsAgo: lastSeenMsAgo,
-            lastReported: lastReported
+            lastReported: lastReported,
+            identityPubKeyHex: identityPubKeyHex,
+            leadsServices: leadsServices
         ))
         return id
     }
@@ -724,6 +732,18 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// from `/pods`), threaded for completeness. nil ⇒ never reported.
     public let lastReported: Int64?
 
+    /// The box's registered STK (its identity pubkey, hex) from `/pods`
+    /// (`identityPubKey`). Threaded onto the model so the "Set as preferred
+    /// server" owner vote can name THIS box's STK (`preferredStkPubHex`) without
+    /// a second directory fetch. Empty for pending/demo pods (no registration).
+    public let identityPubKeyHex: String
+
+    /// Per-service leadership (Phase 6) — the service slugs this box currently
+    /// LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive + tolerant
+    /// of absence: empty when `.com` didn't carry it (pre-field Worker) or the box
+    /// leads nothing. Surfaced as a small "lead" indicator on the server card.
+    public let leadsServices: [String]
+
     /// Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`.
     public enum Liveness: String, Sendable, Hashable {
         case live, unreachable, never
@@ -742,7 +762,9 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         awaitingUnlock: Bool = false,
         liveness: Liveness? = nil,
         lastSeenMsAgo: Int64? = nil,
-        lastReported: Int64? = nil
+        lastReported: Int64? = nil,
+        identityPubKeyHex: String = "",
+        leadsServices: [String] = []
     ) {
         self.podId = podId
         self.name = name
@@ -757,6 +779,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.liveness = liveness
         self.lastSeenMsAgo = lastSeenMsAgo
         self.lastReported = lastReported
+        self.identityPubKeyHex = identityPubKeyHex
+        self.leadsServices = leadsServices
     }
 
     /// Derived per-server liveness — the single classifier the list, the

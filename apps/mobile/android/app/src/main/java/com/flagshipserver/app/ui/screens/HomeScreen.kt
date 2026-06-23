@@ -447,6 +447,9 @@ fun ServerRow(
                     // Leader = the daemon the screens point at; only badge a
                     // server that actually came online.
                     if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    // Per-service leadership (Phase 6): the services this box leads
+                    // (from /pods `leadsServices`). Tolerant of absence.
+                    LeadServicesPill(pod)
                     FSPill(
                         label = PodStatusStyle.label(pod, liveness),
                         kind = PodStatusStyle.pillKind(liveness, pod.status),
@@ -548,6 +551,9 @@ fun PodCard(
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
                     if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
+                    // Per-service leadership (Phase 6): "Leads N" badge, tolerant
+                    // of absence (renders nothing when the box leads nothing).
+                    LeadServicesPill(pod)
                 }
                 if (!pod.description.isNullOrEmpty()) {
                     Text(
@@ -649,4 +655,17 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
             if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
         }
     }
+}
+
+/// Per-service leadership (Phase 6) — a small "Leads N" indicator for a box that
+/// is the current lead for one or more services (`PodInfo.leadsServices` from
+/// `/pods`). Tolerant of absence: renders nothing when the list is empty or the
+/// box never came online (a dead box is never badged as leading). Mirror of iOS
+/// LeadServicesBadge.
+@Composable
+fun LeadServicesPill(pod: PodInfo) {
+    val services = pod.leadsServices
+    if (!pod.cameOnline || services.isEmpty()) return
+    val label = if (services.size == 1) "Leads ${services[0]}" else "Leads ${services.size} services"
+    FSPill(label, kind = FSPillKind.Online, modifier = Modifier.testTag("pod-leads-badge"))
 }

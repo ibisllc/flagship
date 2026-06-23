@@ -99,6 +99,12 @@ class PendingServerReconciler(
                 liveness = PodInfo.Liveness.fromWire(entry.liveness),
                 lastSeenMsAgo = entry.lastSeenMsAgo,
                 lastReported = entry.lastReported,
+                // Thread the registered STK so the "Set as preferred server" vote
+                // can name THIS box without a second directory fetch.
+                identityPubKeyHex = entry.identityPubKey,
+                // Per-service leadership (Phase 6) — the services this box leads
+                // (additive; empty when absent).
+                leadsServices = entry.leadsServices,
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed for

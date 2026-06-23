@@ -672,6 +672,183 @@ export async function depositSwk(args, deps = {}) {
 }
 
 /**
+ * CGK delivery (per-cloud gossip key, docs/multi-pod-liveness-session-leadership.md
+ * Phase 6). The EXACT twin of `buildSwkDeliveryCarrier` — only the tag + payload
+ * differ. Mirror of @flagship/protocol `buildCgkDelivery` + `cgkDeliveryToCarrierHex`.
+ *
+ * Seal the 32-byte CGK FOR the box's Ed25519 identity pub (via `sealForBoxStk`, the
+ * same ed→x25519 seal the SWK/pairing flows use) and IRK-sign the wrapper binding
+ * `(serverDomain, sealed, issuedAt)`:
+ *
+ *   flagship/cgk-delivery/v1|<serverDomain>|<hex(sealed)>|<issuedAt>
+ *
+ * Returns the carrier hex (UTF-8 JSON {serverDomain, sealed, issuedAt, signature}
+ * → hex), byte-identical to the TS so the box parses + verifies + unseals it.
+ *
+ * @param {{ serverDomain: string, cgk: Uint8Array, boxIdentityPub: Uint8Array,
+ *   issuedAt: number, signWithIrk: Function, umk: Uint8Array }} args
+ */
+export async function buildCgkDeliveryCarrier({ serverDomain, cgk, boxIdentityPub, issuedAt, signWithIrk, umk }) {
+  if (cgk.length !== 32) throw new Error("CGK must be 32 bytes");
+  if (boxIdentityPub.length !== 32) throw new Error("box identity pubkey must be 32 bytes");
+  const sealed = await sealForBoxStk(cgk, boxIdentityPub);
+  // Field guard: serverDomain must never contain '|' or control chars (mirrors
+  // legacyFieldGuard) — true for every real FQDN; assert it defensively.
+  if (/[| -]/.test(serverDomain)) {
+    throw new Error("serverDomain contains a reserved canonical-bytes char");
+  }
+  const sealedHex = bytesToHex(sealed);
+  const canonical = te(
+    ["flagship/cgk-delivery/v1", serverDomain, sealedHex, issuedAt].join("|"),
+  );
+  const sig = await signWithIrk(umk, canonical);
+  const json = JSON.stringify({
+    serverDomain,
+    sealed: sealedHex,
+    issuedAt,
+    signature: bytesToHex(sig),
+  });
+  return bytesToHex(te(json));
+}
+
+/**
+ * Deposit the CGK for a box that has registered, on `.com`'s blind cgk-deposit
+ * lane. Per-cloud (NO serverId in the derivation) — but the DELIVERY is addressed
+ * to one box (sealed to its identity). Once the box is in the directory (with its
+ * identity pub), the webapp seals the CGK to it + IRK-signs the wrapper + deposits
+ * the sealed carrier here. The box claims it on boot and enables per-service
+ * leadership gossip. `.com` holds ciphertext only (I1). The exact twin of
+ * `depositSwk` (same `{auth,…,deposit}` mailbox wrapper); `deposit.stkPub` binds
+ * the REGISTERED STK (I2).
+ *
+ * @param {{ serverDomain: string, stkPubHex: string, cgkHex: string }} args
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+export async function depositCgk(args, deps = {}) {
+  const session = getSession();
+  const username = session.username;
+  if (!username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const stkPubHex = String(args.stkPubHex).toLowerCase();
+  const carrierHex = await buildCgkDeliveryCarrier({
+    serverDomain: args.serverDomain,
+    cgk: hexToBytes(args.cgkHex),
+    boxIdentityPub: hexToBytes(stkPubHex),
+    issuedAt: now,
+    signWithIrk: sign,
+    umk: session.umk,
+  });
+
+  // IRK mailbox-auth — same shape as the swk / pairing / entitlement deposit.
+  const phoneIrkPubHex = await irkPubHex(session.umk);
+  const nonceHex = bytesToHex(randomBytes(32));
+  const authCore = {
+    username, endpointLabel: "device", phoneIrkPub: phoneIrkPubHex,
+    issuedAt: now, expiresAt: now + 120_000, nonce: nonceHex,
+  };
+  const authSig = await sign(
+    session.umk,
+    canonicalDeviceEndpointClaim({ ...authCore, phoneIrkPubHex, nonceHex }),
+  );
+  const body = {
+    auth: authCore,
+    authSignature: bytesToHex(authSig),
+    deposit: {
+      serverDomain: args.serverDomain,
+      requestNonceHex: bytesToHex(randomBytes(32)),
+      stkPub: stkPubHex,
+      sealed: carrierHex,
+      issuedAt: now,
+    },
+  };
+  const r = await f(
+    `${comBase}/api/server/${encodeURIComponent(args.serverDomain)}/cgk-deposit`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+  );
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`cgk-deposit: HTTP ${r.status} ${txt}`.trim());
+  }
+  return { ok: true };
+}
+
+/**
+ * Build + sign the owner-IRK `flagship/set-leader/v1` vote and DEPOSIT it on
+ * `.com`'s set-leader lane, ADDRESSED to `serverDomain` (the box that should
+ * lead). The vote names a `preferredStkPubHex` (the selected pod's STK) and the
+ * box rides it on its gossip frame; `"none"` clears the vote. PUBLIC envelope
+ * (re-verified by the box) — no secret. Same `{auth,…}` mailbox wrapper as the
+ * SWK/CGK deposits, but the body carries `{deposit, vote, signature}` per the
+ * set-leader lane contract.
+ *
+ * @param {{ serverDomain: string, preferredStkPubHex: string }} args
+ *   `serverDomain` = the box the vote is addressed to (typically the preferred
+ *   pod's own domain); `preferredStkPubHex` = that pod's STK (or "none").
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+export async function depositSetLeader(args, deps = {}) {
+  const session = getSession();
+  const username = session.username;
+  if (!username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const preferredStkPubHex = String(args.preferredStkPubHex).toLowerCase();
+  const voteNonceHex = bytesToHex(randomBytes(32));
+  const vote = {
+    user: String(username).toLowerCase(),
+    preferredStkPubHex,
+    issuedAt: now,
+    nonce: voteNonceHex,
+  };
+  // Canonical bytes, byte-identical to @flagship/protocol `canonicalSetLeader`:
+  //   flagship/set-leader/v1|<user>|<preferredStkPubHex>|<issuedAt>|<nonce>
+  const voteCanonical = te(
+    ["flagship/set-leader/v1", vote.user, vote.preferredStkPubHex, vote.issuedAt, vote.nonce].join("|"),
+  );
+  const voteSig = await sign(session.umk, voteCanonical);
+
+  // IRK mailbox-auth — same shape as the swk / cgk deposit.
+  const phoneIrkPubHex = await irkPubHex(session.umk);
+  const authNonceHex = bytesToHex(randomBytes(32));
+  const authCore = {
+    username, endpointLabel: "device", phoneIrkPub: phoneIrkPubHex,
+    issuedAt: now, expiresAt: now + 120_000, nonce: authNonceHex,
+  };
+  const authSig = await sign(
+    session.umk,
+    canonicalDeviceEndpointClaim({ ...authCore, phoneIrkPubHex, nonceHex: authNonceHex }),
+  );
+  const body = {
+    auth: authCore,
+    authSignature: bytesToHex(authSig),
+    deposit: {
+      serverDomain: args.serverDomain,
+      requestNonceHex: bytesToHex(randomBytes(32)),
+    },
+    vote,
+    signature: bytesToHex(voteSig),
+  };
+  const r = await f(
+    `${comBase}/api/server/${encodeURIComponent(args.serverDomain)}/set-leader`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+  );
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`set-leader: HTTP ${r.status} ${txt}`.trim());
+  }
+  return { ok: true };
+}
+
+/**
  * The PUBLIC entitlement carrier hex: an owner-IRK-signed RootEntitlement
  * serialized as the daemon's on-disk EntitlementBundle JSON (UTF-8 → hex).
  * Canonical bytes + JSON field shape MUST match packages/protocol
@@ -811,4 +988,5 @@ export const _internal = {
   deriveIrkSeed,
   buildEntitlementCarrier,
   buildSwkDeliveryCarrier,
+  buildCgkDeliveryCarrier,
 };

@@ -81,7 +81,53 @@ interface SecretMailboxClient {
      * to claim on boot. Reuses PairingDepositBody. */
     suspend fun depositSwk(serverDomain: String, body: PairingDepositBody)
 
+    /** POST /api/server/:domain/cgk-deposit — phone, IRK mailbox-auth. The EXACT
+     *  twin of [depositSwk] for the Cloud Gossip Key (per-service leadership Phase
+     *  6): the recipe carries NO CGK; after the box registers, the phone seals the
+     *  per-cloud CGK to the box's REGISTERED identity + IRK-signs the wrapper and
+     *  deposits the sealed carrier here for the box to claim post-boot. `.com`
+     *  holds ciphertext only. Reuses [PairingDepositBody]. */
+    suspend fun depositCgk(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
+     *  owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
+     *  a box domain. `.com` verifies the owner-IRK signature before storing; the
+     *  box fetches the vote meant for it and rides it on its gossip frame (clout).
+     *  Uses its own [SetLeaderDepositBody] (the `{auth, deposit, vote, signature}`
+     *  shape from the TS rail). */
+    suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody)
+
     suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
+}
+
+/** The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+ *  vote to a box domain; `vote` is the set-leader vote field set and `signature`
+ *  is the owner-IRK signature over its canonical bytes. Field names match the
+ *  Worker handler (`handlePostSetLeaderDeposit`) exactly:
+ *  `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
+ *  preferredStkPubHex,issuedAt,nonce}, signature }`. */
+@Serializable
+data class SetLeaderDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+    val vote: Vote,
+    val signature: String,   // hex (64 bytes) — owner IRK over the vote canonical bytes
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,   // hex (32 bytes)
+    )
+
+    @Serializable
+    data class Vote(
+        val user: String,
+        val preferredStkPubHex: String,   // hex (32 bytes) or "none"
+        val issuedAt: Long,
+        val nonce: String,
+    )
 }
 
 /** The decommission deposit body. `auth`/`authSignature` are the SAME IRK
@@ -314,6 +360,12 @@ data class PodDirectoryEntry(
      *  if it never checked in / a pre-field Worker. Humanized into "offline —
      *  last seen <…>" for an `unreachable` box. Mirror of iOS. */
     val lastSeenMsAgo: Long? = null,
+    /** Per-service leadership (Phase 6) — the service slugs this box currently
+     *  LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive; absent ⇒
+     *  empty (a pre-field Worker, or the box leads nothing). Defaulted so a
+     *  garbled/absent value yields [] rather than failing the whole pods-list
+     *  decode. Mirror of iOS PodDirectoryEntry.leadsServices. */
+    val leadsServices: List<String> = emptyList(),
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */
@@ -538,6 +590,34 @@ class LiveSecretMailboxClient(
         )
     }
 
+    override suspend fun depositCgk(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/cgk-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(SetLeaderDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/set-leader",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
     override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
         val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
         val bytes = transport.json
@@ -633,6 +713,23 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
         swkDepositError?.let { swkDepositError = null; throw it }
         swkDeposits.add(serverDomain to body)
+    }
+
+    val cgkDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    /** When set, the next [depositCgk] throws this, then clears it (best-effort
+     *  retry path). */
+    var cgkDepositError: Throwable? = null
+    override suspend fun depositCgk(serverDomain: String, body: PairingDepositBody) {
+        cgkDepositError?.let { cgkDepositError = null; throw it }
+        cgkDeposits.add(serverDomain to body)
+    }
+
+    val setLeaderDeposits: MutableList<Pair<String, SetLeaderDepositBody>> = mutableListOf()
+    /** When set, the next [depositSetLeader] throws this, then clears it. */
+    var setLeaderError: Throwable? = null
+    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
+        setLeaderError?.let { setLeaderError = null; throw it }
+        setLeaderDeposits.add(serverDomain to body)
     }
 
     /** When set, the next [depositDecommission] throws this, then clears it. */

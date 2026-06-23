@@ -21,7 +21,7 @@ import {
   macGossip,
   sealGossip,
 } from "@flagship/protocol";
-import { runElectionRound, type SelfMember } from "./election.js";
+import { runElectionRound, selfLeadsForRound, type SelfMember } from "./election.js";
 import type { RouteClaimer } from "./routeClaimer.js";
 import type { SiblingView } from "./siblingView.js";
 
@@ -69,6 +69,13 @@ export interface GossipLoop {
   stop(): void;
   /** Run a single announce+elect tick (also the unit-test entry point). */
   tick(): Promise<void>;
+  /**
+   * The service slugs THIS box currently leads — the subset of the services it
+   * runs where it was the elected lead on the most recent election round. Sorted.
+   * Empty until the first tick. Reported on the daemon-status heartbeat so `.com`
+   * can relay per-pod "lead" badges (Phase 6 Part 3).
+   */
+  currentLeads(): string[];
 }
 
 export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
@@ -77,6 +84,8 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
   const now = deps.now ?? (() => Date.now());
   const log = deps.onLog ?? (() => {});
   let timer: ReturnType<typeof setInterval> | null = null;
+  // The services this box led on the most recent election round (Phase 6 Part 3).
+  let leads: string[] = [];
 
   function buildAnnouncement(s: SelfAnnounceState): GossipAnnouncement {
     return {
@@ -119,9 +128,14 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       voteIssuedAt: s.vote && s.vote.date > 0 ? s.vote.date : null,
       services: s.services,
     };
+    const liveSiblings = deps.view.liveMembers(t);
+    // Record the leads BEFORE applying claim/release so the heartbeat reports the
+    // election outcome even if a claim apply throws (the route is soft, the
+    // election is the source of truth for "lead").
+    leads = selfLeadsForRound({ self, liveSiblings });
     await runElectionRound({
       self,
-      liveSiblings: deps.view.liveMembers(t),
+      liveSiblings,
       claimer: deps.claimer,
       onLog: deps.onLog,
     });
@@ -153,5 +167,6 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       }
     },
     tick,
+    currentLeads: () => [...leads],
   };
 }
