@@ -131,7 +131,74 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
+
+### 2026-06-23 — build-a-service ENABLED on real boxes: phone-provisioned SWK at first boot (+ honest "not set up" copy)
+
+**Why:** "Import from Git repo" (and ALL of build-a-service / `/api/services`) returned
+**404 → "Couldn't load"** on real phone-provisioned boxes. Root cause (diagnosed
+from the user-confirmed 404): the daemon constructs `servicePlatform` ONLY when it
+has a **Service Workload Key (SWK)** (index.ts ~575), and the phone→box SWK handoff
+was never wired — only the demo/gym cloud-init minted one. So every real box ran
+platform-less and the entire `/api/build/*` + `/api/services` surface 404'd. NOT a
+client bug, NOT the repo (a real clone/access failure returns 200 + a verdict card,
+never "Couldn't load").
+
+**The fix — provision the SWK from the phone; recovery is FREE.** The SWK is ALREADY
+a deterministic key: `deriveSWK(umk, serverId)` = HKDF(umk.seed,
+"flagship.swk.v1|serverId", 32). So the phone derives it at create-time (SAME UMK
+seed + serverId as BAK, behind the EXISTING create biometric — no extra Face ID) and
+embeds `swkHex` as an **UNSIGNED recipe sibling** (mirrors `pairingKeyPrivHex` — does
+NOT enter canonical bytes, **NO burner sha-pin change**, never transits `.com` in
+plaintext). The daemon reads it at first boot (env → `/var/flagship/swk.hex` →
+install-blob sibling), persists it, then `servicePlatform` constructs → `/api/build/*`
++ `/api/services` mount. **Recovery is automatic:** the SWK is deterministic, so a
+replaced box re-burned with a recipe re-derived from the recovered UMK gets the
+byte-identical SWK → peer-backup shares decrypt. No escrow, no recovery wiring.
+
+**⚠️ Correctness note (the trap):** there are TWO "SWK" derivations — the BOX one
+(`ServerKeys.deriveSwk`, info `flagship.swk.v1`, **DOTS**) and the app-backup one
+(iOS `Keystore.deriveSWK`, `flagship/swk/v1`, **SLASHES**, deliberately distinct).
+Box provisioning uses the DOTS one on all surfaces, pinned to a cross-platform vector
+(`seed=32×0x07, serverId="srv-vector-1"` → `55c865a1…b421377`).
+
+**Peer-backup side-effect — NONE.** Providing the SWK constructs `BackupLoop` but it
+starts DISABLED (owner toggles via a phone IRK order) and `RepairScheduler` is a
+no-op without a daemon wired — no peers/registry needed, no crash/loop/log-spam. SWK
+presence enables build-modes ONLY; activating peer-backup stays a separate explicit
+step.
+
+**Also (honest stopgap for un-reburned boxes):** the build screens now map the
+platform-absent **404 → "This server isn't set up to build services yet"**
+(iOS/Android/webapp, scoped to the build ENTRY calls — git "Check repo", MCP create,
+sessions list; session-scoped 404s untouched) instead of the misleading "Couldn't
+load."
+
+Layers (TS plumbing + native clients + Swift burner + the copy fix), each gated:
+daemon first-boot consume+persist (`server-daemon`); TS burner `installBlobToJson`
+swkHex sibling + `loadBlob`/`cli` (`flagship-burner`); `deriveSWK` vector
+(`protocol`); iOS/Android/webapp derive+embed at create (`ServerKeys.deriveSwk`
+[+ webapp new `deriveSwkFromSeed`]); Swift burner sibling-preserve (`burner-mac`);
+build-404 copy (all 3 clients).
+
+Gates: `tsc -b` clean · daemon swkConsume + burner swkSibling + protocol vector **29**
+(broader TS sweep 901/901) · iOS `xcodebuild` **TEST SUCCEEDED** (+ BoxSwkProvisioning
+6) · Android `:app:testDebugUnitTest` BUILD SUCCESSFUL · webapp keystore+create-view
+**57** + build-modes view **12** · burner-mac `swift test` **118**. 8 commits on
+`main` (`d86aa25b` copy · `cbe798c5` TS-plumbing merge · `2a790598`/`dbbadd85`/
+`b35225df`/`56511f06` clients+burner).
+
+**REMAINING (owner, NOT CI-validatable): a REBURN to validate the first-boot SWK
+handoff live.** CI proves the byte-compatibility + the consume path; it cannot prove
+the physical first boot. **Already-burned boxes have NO SWK until reburned** (they
+show the new "not set up to build services yet" copy meanwhile). Owner steps: rebuild
+iOS/Android apps + rebuild the burner + reburn → create a server → it comes online →
+"Build a service / Import from Git repo" should work (`/api/services` 200, `/api/build`
+mounted). NOTE: the live LLM provider is still NOT wired in the daemon, so the
+git-import FIT path + scratch session creation work, but AI "adapt" / scratch
+streaming still needs that separate (pre-existing) wiring. The webapp half of this
+(`keystore.js` + `create-server.js` + the build-404 copy) rides the next `.com`
+Worker deploy.
 
 ### 2026-06-22 (do-now sweep) — transfer entry + Box Request Inbox finalize + NFC LED-SAS verify + migration-ledger fix
 
