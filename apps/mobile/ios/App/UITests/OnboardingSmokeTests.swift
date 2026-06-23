@@ -31,11 +31,11 @@ final class OnboardingSmokeTests: XCTestCase {
 
         // 2. SuggestUsername — accept the auto-suggested random handle (the
         //    mock client suggests one instantly; there's no typed field now).
-        let cont = app.buttons["Continue"]
-        XCTAssertTrue(cont.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: cont)
+        let acctContinue = app.buttons["Continue"]
+        XCTAssertTrue(acctContinue.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: acctContinue)
         waitForExpectations(timeout: 5)
-        cont.tap()
+        acctContinue.tap()
 
         // 3. CreateServer — fill name, Continue to the QR step.
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch
