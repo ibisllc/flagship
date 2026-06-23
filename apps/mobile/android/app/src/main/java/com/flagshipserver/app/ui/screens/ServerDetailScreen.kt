@@ -56,10 +56,14 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.ServerMetricsResponse
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.viewmodels.TransferGiverViewModel
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
@@ -199,6 +203,8 @@ fun ServerDetailScreen(
             DeadManCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            TransferCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
@@ -1051,6 +1057,65 @@ private fun DeadManCard(serverDomain: String) {
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
                 )
+            }
+        }
+    }
+}
+
+// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+// Owner-only — the offer is IRK-signed behind the biometric inside
+// TransferGiverViewModel, so only the box's owner can complete it. Opens the
+// existing TransferGiverScreen (type-to-confirm → QR → disk-key hand-off) in a
+// full-screen dialog. Lives just above the danger zone as an irreversible
+// management action. Mirror of iOS TransferCard.
+@Composable
+private fun TransferCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val transfer = LocalServerTransferClient.current
+    val mailbox = LocalSecretMailboxClient.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Transfer",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSDangerButton(
+                label = "Transfer to another account",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-transfer-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            TransferGiverViewModel(
+                serverDomain = serverDomain,
+                username = username ?: "",
+                client = transfer,
+                mailbox = mailbox,
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                TransferGiverScreen(vm = vm, serverDomain = serverDomain)
             }
         }
     }

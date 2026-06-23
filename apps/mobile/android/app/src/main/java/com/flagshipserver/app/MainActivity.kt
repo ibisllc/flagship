@@ -29,6 +29,10 @@ import com.flagshipserver.app.api.LiveBuildClient
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
+import com.flagshipserver.app.api.LiveServerTransferClient
+import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.ServerTransferClient
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.api.LiveFlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
@@ -196,6 +200,8 @@ class MainActivity : FragmentActivity() {
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
+        val mockTransfer = MockServerTransferClient()
+        val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
@@ -245,6 +251,8 @@ class MainActivity : FragmentActivity() {
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
                 if (useLive) liveMailbox else mockMailbox
+            val effectiveTransfer: ServerTransferClient =
+                if (useLive) liveTransfer else mockTransfer
             // Identity calls are IRK-signed (not session-token gated), so this
             // pivots on the toggle alone — like relay/mailbox above.
             val effectiveFlagshipServer: FlagshipServerClient =
@@ -309,6 +317,7 @@ class MainActivity : FragmentActivity() {
                     LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
+                    LocalServerTransferClient provides effectiveTransfer,
                     LocalSessionStore provides sessionStore,
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,

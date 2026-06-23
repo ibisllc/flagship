@@ -164,6 +164,7 @@ public struct ServerDetailScreen: View {
                         // (the release path) ALONGSIDE the lost/stolen Revoke.
                         DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName)
                     }
+                    TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -752,6 +753,61 @@ struct DecommissionDeadServerCard: View {
             cameOnline: false
         )
         await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
+    }
+}
+
+/// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+/// Owner-only — the offer is IRK-signed behind the biometric inside
+/// `TransferGiverViewModel`, so only the box's owner can complete it. Opens the
+/// existing `TransferGiverScreen` (type-to-confirm → QR → disk-key hand-off) in
+/// a sheet. Lives just above the danger zone as an irreversible management action.
+struct TransferCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.serverTransferClient) private var transfer
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("TRANSFER")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Transfer to another account", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-transfer-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                TransferGiverScreen(
+                    vm: TransferGiverViewModel(
+                        client: transfer,
+                        mailbox: mailbox,
+                        serverDomain: serverDomain,
+                        username: app.currentUser ?? ""
+                    ),
+                    serverDomain: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
     }
 }
 

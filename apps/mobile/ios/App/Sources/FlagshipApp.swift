@@ -315,6 +315,11 @@ struct FlagshipApp: App {
     // split as lock/power + front-page.
     private let mockServiceUninstall = MockServiceUninstallClient()
     private let liveServiceUninstall: any ServiceUninstallClient
+    // Transfer-a-box broker client — hits `.com` (the namespace-migration
+    // broker), not a box-pinned pipe, so it's a plain live client; live/mock
+    // split as the others.
+    private let mockServerTransfer = MockServerTransferClient()
+    private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
     // Per-service access gating (#92): box calls ride the SAME box-pinned
     // session (set-mode + redeem are signature-authed daemon endpoints); the
     // invite create/list/revoke calls hit `.com` over the default public-CA
@@ -352,6 +357,9 @@ struct FlagshipApp: App {
     private var activeServiceAccess: any ServiceAccessClient {
         dev.useLiveClient ? liveServiceAccess : mockServiceAccess
     }
+    private var activeServerTransfer: any ServerTransferClient {
+        dev.useLiveClient ? liveServerTransfer : mockServerTransfer
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -373,6 +381,7 @@ struct FlagshipApp: App {
                 .environment(\.frontPageClient, activeFrontPage)
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.serviceAccessClient, activeServiceAccess)
+                .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
