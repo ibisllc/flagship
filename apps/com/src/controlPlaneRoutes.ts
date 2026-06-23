@@ -782,7 +782,12 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
-    return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
+    return finish(
+      await handleUsernameClaim(
+        { storage: storage.usernames, offers: storage.usernameOffers },
+        await readJson(request),
+      ),
+    );
   }
   // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "suggest" would otherwise
   // be read as a username lookup. Hands ONE random handle for sign-up, popped from
@@ -794,6 +799,7 @@ export async function tryControlPlane(
           queue: storage.suggestionQueue,
           usernames: storage.usernames,
           throttle: storage.suggestThrottle,
+          offers: storage.usernameOffers,
         },
         await readJson(request),
       ),

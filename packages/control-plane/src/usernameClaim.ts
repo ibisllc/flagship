@@ -1,12 +1,26 @@
 import { verifyClaimUsername, type ClaimUsername } from "@flagship/protocol";
-import type { UsernameStorage } from "@flagship/storage";
+import type { UsernameStorage, UsernameOfferStorage } from "@flagship/storage";
 import { HEX128, HEX64, hexToBytes, bytesToHex } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
 import { conflict, forbidden, malformed, notFound, ok } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 
+/** How long a suggested name stays claimable (docs/username-suggestion-queue.md).
+ *  Generous vs. an actual sign-up (seconds–minutes) so a slow one isn't blocked. */
+export const OFFER_TTL_MS = 60 * 60_000;
+
 export interface UsernameClaimDeps {
   storage: UsernameStorage;
+  /**
+   * The recently-offered roster. When present, a claim is ALLOWED only for a name
+   * the server recently SUGGESTED (or one already owned by the claimant — the
+   * idempotent re-claim). Prod wires this; legacy test-setups omit it (no gate).
+   * docs/username-suggestion-queue.md §3.
+   */
+  offers?: UsernameOfferStorage;
+  offerTtlMs?: number;
+  /** Trusted ops/test path (admin-authorized at the edge) bypasses the roster. */
+  bypassOfferGate?: boolean;
   freshnessMs?: number;
   now?: () => number;
 }
@@ -60,6 +74,24 @@ export async function handleUsernameClaim(
   const v = validateUserLabel(r.username);
   if (!v.ok) return malformed(v.reason);
 
+  // Roster gate — a username is claimable ONLY if the server recently SUGGESTED
+  // it (so the generator's not-claimed + not-.com vetting is what gates claims).
+  // Exceptions: a name already owned by THIS claimant (idempotent re-claim), and
+  // a trusted ops/test path. docs/username-suggestion-queue.md §3.
+  if (deps.offers && !deps.bypassOfferGate) {
+    const notBefore = now - (deps.offerTtlMs ?? OFFER_TTL_MS);
+    const offered = await deps.offers.isOffered(v.label, notBefore);
+    if (!offered) {
+      const existing = await deps.storage.get(v.label);
+      const sameOwner =
+        existing !== undefined &&
+        existing.irkPubHex.toLowerCase() === bytesToHex(irkPub).toLowerCase();
+      if (!sameOwner) {
+        return forbidden("that name isn't available — pick one of the suggested handles");
+      }
+    }
+  }
+
   // gating v2 — record the stable AID alongside the IRK when the client
   // supplies a well-formed one. Ignored if absent/malformed (never blocks).
   const aidPubHex =
@@ -74,6 +106,9 @@ export async function handleUsernameClaim(
     ...(aidPubHex ? { aidPubHex } : {}),
   });
   if (!out.ok) return conflict(out.reason);
+  // Claimed — retire the offer so the roster stays small + a name can't be
+  // "re-claimed off-roster" by a different key later.
+  if (deps.offers) await deps.offers.consume(v.label);
   return ok({ ok: true, username: v.label });
 }
 

@@ -54,6 +54,7 @@ import {
   replenishSuggestionQueue,
   comDomainExists,
   THROTTLE_WINDOW_RESET_MS,
+  OFFER_TTL_MS,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
@@ -401,6 +402,8 @@ async function runSuggestionQueueCron(env: ScheduledEnv, now: Date): Promise<voi
     now: nowMs,
   });
   await storage.suggestThrottle.prune(nowMs - 2 * THROTTLE_WINDOW_RESET_MS);
+  // Drop offers well past their claimable window (the gate uses OFFER_TTL_MS).
+  await storage.usernameOffers.prune(nowMs - 2 * OFFER_TTL_MS);
 }
 
 /**

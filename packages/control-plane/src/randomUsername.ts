@@ -13,6 +13,7 @@ import type {
   UsernameStorage,
   SuggestionQueueStorage,
   SuggestThrottleStorage,
+  UsernameOfferStorage,
 } from "@flagship/storage";
 import { validateUserLabel } from "./labels.js";
 import { ok, malformed, type HandlerResponseWithHeaders } from "./types.js";
@@ -262,6 +263,9 @@ export interface SuggestUsernameDeps {
   queue: SuggestionQueueStorage;
   usernames: UsernameStorage;
   throttle: SuggestThrottleStorage;
+  /** The recently-offered roster — a suggested name is recorded here so it (and
+   *  only it) becomes claimable. Omit only in tests that don't assert the gate. */
+  offers?: UsernameOfferStorage;
   now?: number;
   rng?: () => number;
 }
@@ -299,5 +303,8 @@ export async function handleSuggestUsername(
   if (name == null) {
     return { status: 503, body: { error: "no name available" } };
   }
+  // Record the offer so this (vetted) name becomes claimable — and ONLY names
+  // we've handed out are claimable (docs/username-suggestion-queue.md §3).
+  if (deps.offers) await deps.offers.record(name, deviceKey, now);
   return ok({ name, retryAfterMs: decision.retryAfterMs });
 }

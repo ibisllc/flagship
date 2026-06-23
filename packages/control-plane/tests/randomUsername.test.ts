@@ -241,6 +241,20 @@ describe("handleSuggestUsername", () => {
     expect(r2.status).toBe(429);
   });
 
+  it("records the returned name on the offer roster (so it becomes claimable)", async () => {
+    const s = new InMemoryStorage();
+    const deps = {
+      queue: s.suggestionQueue,
+      usernames: s.usernames,
+      throttle: s.suggestThrottle,
+      offers: s.usernameOffers,
+      now: 5000,
+    };
+    const r = await handleSuggestUsername(deps, { deviceKey: "devO" });
+    const name = (r.body as { name: string }).name;
+    expect(await s.usernameOffers.isOffered(name, 0)).toBe(true);
+  });
+
   it("falls back to inline generation (no DNS) when the queue is empty", async () => {
     const s = new InMemoryStorage();
     const deps = { queue: s.suggestionQueue, usernames: s.usernames, throttle: s.suggestThrottle, now: 1, rng: seededRng(9) };
