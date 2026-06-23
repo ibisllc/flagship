@@ -307,19 +307,30 @@ public final class AppState {
         return pods.first(where: { $0.podId == id })
     }
 
+    /// DETERMINISTIC FALLBACK (Fix C) — the OLDEST pod. `.com` returns `/pods`
+    /// oldest-first, so `pods.first` IS the oldest. The UI default pod / leader
+    /// must NEVER silently float to a brand-new box (= whatever appeared first in
+    /// some other ordering); when an explicit anchor is missing or dangling, it
+    /// re-anchors HERE — the stable, oldest pod — so adding a server can't seize
+    /// the default. nil only when there are no pods.
+    private var oldestPod: PodInfo? { pods.first }
+
     public var currentPod: PodInfo? {
         if let id = currentPodId, let p = pods.first(where: { $0.podId == id }) { return p }
-        return leaderPod ?? pods.first
+        // The leader is the UI default. If it resolves, use it; otherwise fall
+        // back to the OLDEST pod (deterministic) — NOT `pods.first` "by accident"
+        // and never the newest box.
+        return leaderPod ?? oldestPod
     }
 
-    /// The pod the BOX session (the screens-client `podBaseUrl`) should target.
-    /// Unlike `currentPod` — which resolves to the LEADER and thus, by default,
-    /// the OLDEST pod (`pods.first`) regardless of liveness — this prefers a LIVE
-    /// pod. A registered-but-dead pod (e.g. an old zombie that defaults to leader)
-    /// must NOT anchor the session: `PodSessionSync` clears the base URL on a
-    /// non-`.online` anchor, which would brick the box surface for EVERY pod,
-    /// including healthy ones. So: the selected pod if it's online, else the first
-    /// online pod; nil only when no pod is online (nothing to connect to anyway).
+    /// The GLOBAL anchor pod for Home/Services (the default box session). Unlike
+    /// `currentPod` — which resolves to the LEADER and thus, by default, the
+    /// OLDEST pod regardless of liveness — this prefers a genuinely-LIVE pod
+    /// (HONEST LIVENESS, Fix A: `.status == .online` now means a real heartbeat,
+    /// not mere registration). A registered-but-dead/unreachable pod that happens
+    /// to be the leader must NOT anchor the global session: the selected pod if
+    /// it's online, else the first online pod; nil when no pod is online (the
+    /// per-pod detail still targets its own box deterministically via the fqdn).
     public var sessionPod: PodInfo? {
         if let p = currentPod, p.status == .online { return p }
         return pods.first(where: { $0.status == .online })
@@ -328,6 +339,10 @@ public final class AppState {
     public func completeOnboarding(username: String, pods: [PodInfo]) {
         self.currentUser = username
         self.pods = pods
+        // The genuine first anchor: the OLDEST pod (`pods.first` — `.com` returns
+        // `/pods` oldest-first). This is the only place leadership is seeded from
+        // the list; thereafter it's STICKY (Fix C) — `addPod` never re-seeds it,
+        // so a later box can't seize the default.
         self.leaderPodId = pods.first?.podId
         self.currentPodId = pods.first?.podId
         self.isPaired = true
@@ -405,6 +420,12 @@ public final class AppState {
 
     public func addPod(_ pod: PodInfo) {
         pods.append(pod)
+        // STICKY LEADERSHIP (Fix C) — a newly-added box must NEVER change the
+        // leader / default pod. A new server auto-seizing leadership was the
+        // reported bug ("frank seized leadership"). We seed leader/current ONLY
+        // when none is set yet (the genuine first-pod / cold-restore case); an
+        // existing leader is left exactly as it is, so the new box is just
+        // another selectable pod — not the new default.
         if leaderPodId == nil { leaderPodId = pod.podId }
         if currentPodId == nil { currentPodId = pod.podId }
     }
@@ -472,27 +493,51 @@ public final class AppState {
         description: String? = nil,
         cameOnline: Bool = true,
         registeredAt: Int64 = 0,
-        awaitingUnlock: Bool = false
+        awaitingUnlock: Bool = false,
+        liveness: PodInfo.Liveness? = nil,
+        lastSeenMsAgo: Int64? = nil,
+        lastReported: Int64? = nil
     ) -> String {
+        // HONEST LIVENESS (Fix A) — derive the pod's status from the
+        // server-authoritative `liveness` field instead of trusting that a
+        // registered box is `.online`. `.live` → online; `.unreachable` →
+        // offline (a previously-live box now stale); `.never` → unknown
+        // (registered, awaiting its first heartbeat — NOT session-eligible, so
+        // it can't anchor a box session or be picked as a live leader). When
+        // `.com` didn't send the field (pre-field Worker), fall back to the
+        // legacy registration-is-online behavior.
+        let derivedStatus: PodInfo.Status
+        switch liveness {
+        case .live:        derivedStatus = .online
+        case .unreachable: derivedStatus = .offline
+        case .never:       derivedStatus = .unknown
+        case nil:          derivedStatus = .online
+        }
         let target = fqdn.lowercased()
         if let idx = pods.firstIndex(where: { $0.fqdn.lowercased() == target }) {
             let old = pods[idx]
-            // Already online with a confirmed check-in AND not waiting — nothing
-            // to do (don't clobber a richer name). A previously-dead pod that has
-            // since come online, OR one that's now waiting for an unlock approval,
-            // must still be re-flowed below so its pill updates.
-            if old.status == .online && old.cameOnline && !awaitingUnlock { return old.podId }
+            // Already at the derived liveness with a confirmed check-in AND not
+            // waiting AND the liveness signal hasn't changed — nothing to do
+            // (don't clobber a richer name). A box whose reachability changed,
+            // came online, or is now waiting for an approval is re-flowed below.
+            if old.status == derivedStatus && old.cameOnline && !awaitingUnlock
+                && old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo {
+                return old.podId
+            }
             pods[idx] = PodInfo(
                 podId: old.podId,
                 name: old.name.isEmpty ? name : old.name,
                 description: old.description ?? description,
                 fqdn: old.fqdn,
-                status: .online,
+                status: derivedStatus,
                 pendingAuthCodeSerial: nil,
                 cameOnline: cameOnline,
                 // Keep a known registration time; never downgrade to 0.
                 registeredAt: registeredAt > 0 ? registeredAt : old.registeredAt,
-                awaitingUnlock: awaitingUnlock
+                awaitingUnlock: awaitingUnlock,
+                liveness: liveness,
+                lastSeenMsAgo: lastSeenMsAgo,
+                lastReported: lastReported ?? old.lastReported
             )
             return old.podId
         }
@@ -502,10 +547,13 @@ public final class AppState {
             name: name,
             description: description,
             fqdn: fqdn,
-            status: .online,
+            status: derivedStatus,
             cameOnline: cameOnline,
             registeredAt: registeredAt,
-            awaitingUnlock: awaitingUnlock
+            awaitingUnlock: awaitingUnlock,
+            liveness: liveness,
+            lastSeenMsAgo: lastSeenMsAgo,
+            lastReported: lastReported
         ))
         return id
     }
@@ -522,8 +570,13 @@ public final class AppState {
 
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
-        if leaderPodId == podId { leaderPodId = pods.first?.podId }
-        if currentPodId == podId { currentPodId = leaderPodId ?? pods.first?.podId }
+        // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
+        // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
+        // (`oldestPod`, = `pods.first` since `.com` returns oldest-first) rather
+        // than letting `currentPod` silently float to whatever happens to be
+        // first. A non-leader removal leaves the leader untouched (sticky).
+        if leaderPodId == podId { leaderPodId = oldestPod?.podId }
+        if currentPodId == podId { currentPodId = leaderPodId ?? oldestPod?.podId }
     }
 
     public func signOut() {
@@ -650,6 +703,32 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// hidden). Defaults false (pending/demo/pre-field-Worker pods).
     public let awaitingUnlock: Bool
 
+    /// HONEST LIVENESS — the server-authoritative reachability classification
+    /// from the `/pods` directory (`liveness: "live" | "unreachable" | "never"`).
+    /// `.com` computes this from the box's daemon-status heartbeat against a
+    /// freshness window — so the phone STOPS trusting mere registration as
+    /// "online". nil ⇒ a pre-field Worker response that didn't carry the field
+    /// (the reconciler falls back to registration-derived `cameOnline`).
+    ///   - `.live`        → the box is reachable (heartbeat within the window).
+    ///   - `.unreachable` → it checked in before but has now gone stale/offline.
+    ///   - `.never`       → registered but never sent a real heartbeat — still
+    ///                      coming up / awaiting first heartbeat, NOT dead.
+    public let liveness: Liveness?
+
+    /// Wall-clock ms since the box's last daemon-status check-in, from `/pods`
+    /// (`lastSeenMsAgo`). Humanized into "offline — last seen <…>" when the box
+    /// is `.unreachable`. nil ⇒ never checked in (or a pre-field Worker).
+    public let lastSeenMsAgo: Int64?
+
+    /// Wall-clock ms of the box's last daemon-status check-in (`lastReported`
+    /// from `/pods`), threaded for completeness. nil ⇒ never reported.
+    public let lastReported: Int64?
+
+    /// Server-authoritative reachability, mirroring `.com`'s `/pods` `liveness`.
+    public enum Liveness: String, Sendable, Hashable {
+        case live, unreachable, never
+    }
+
     public init(
         podId: String,
         name: String,
@@ -660,7 +739,10 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         demoServer: DemoServerBlock? = nil,
         cameOnline: Bool = true,
         registeredAt: Int64 = 0,
-        awaitingUnlock: Bool = false
+        awaitingUnlock: Bool = false,
+        liveness: Liveness? = nil,
+        lastSeenMsAgo: Int64? = nil,
+        lastReported: Int64? = nil
     ) {
         self.podId = podId
         self.name = name
@@ -672,6 +754,9 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.cameOnline = cameOnline
         self.registeredAt = registeredAt
         self.awaitingUnlock = awaitingUnlock
+        self.liveness = liveness
+        self.lastSeenMsAgo = lastSeenMsAgo
+        self.lastReported = lastReported
     }
 
     /// Derived per-server liveness — the single classifier the list, the
@@ -691,22 +776,68 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         /// Registered, no live request, no check-in, and past the grace window
         /// — the box genuinely never came online. Offer the free-the-name delete.
         case dead
+        /// HONEST LIVENESS — the box HAS checked in before but its heartbeat has
+        /// gone stale (server-authoritative `liveness == "unreachable"`). Unlike
+        /// `.dead` (never came online) this is a previously-live box that's now
+        /// offline; the UI shows "offline — last seen <…>", NOT the decommission
+        /// path. Reachable again on the next live heartbeat.
+        case offline
     }
 
-    /// Classify a registered/pending pod. `online` short-circuits on
-    /// `cameOnline`. Otherwise a live unlock request wins (waitingForApproval);
-    /// failing that, a recent registration is `comingOnline` and an old one is
-    /// `dead`. Pending (pre-registration) pods are reported `comingOnline` so
-    /// they never read as dead — the list keeps its own Pending pill for them.
+    /// Classify a registered/pending pod. When the server-authoritative
+    /// `liveness` field is present (Fix A) it is TRUSTED — the phone no longer
+    /// infers "online" from mere registration:
+    ///   - `.live`        → `.online`.
+    ///   - `.unreachable` → `.offline` (a real heartbeat existed but went stale).
+    ///   - `.never`       → a live request wins (waitingForApproval); else still
+    ///                      `.comingOnline` (awaiting first heartbeat, NOT dead).
+    /// When `liveness` is absent (pre-field Worker / pending / demo), the legacy
+    /// registration-derived path holds: `online` short-circuits on `cameOnline`;
+    /// a live unlock request wins; a recent registration is `comingOnline`, an
+    /// old one `dead`; pending (pre-registration) pods read `comingOnline`.
     public func livenessState(
         hasLiveUnlockRequest: Bool,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
     ) -> LivenessState {
+        if let liveness {
+            switch liveness {
+            case .live: return .online
+            case .unreachable:
+                // A box stuck waiting for an owner approval (boot-unlock /
+                // entitlement) is actively trying to come up — surface the
+                // approval rather than reading it as merely offline.
+                if hasLiveUnlockRequest { return .waitingForApproval }
+                return .offline
+            case .never:
+                if hasLiveUnlockRequest { return .waitingForApproval }
+                return .comingOnline
+            }
+        }
         if status == .online && cameOnline { return .online }
         if hasLiveUnlockRequest { return .waitingForApproval }
         if status == .pending { return .comingOnline }
         let age = now - registeredAt
         if registeredAt > 0 && age <= PodInfo.comingOnlineGraceMs { return .comingOnline }
         return .dead
+    }
+
+    /// Humanized "last seen" for an `.unreachable` box, e.g. "2 hours" or
+    /// "just now" — feeds the "offline — last seen <…>" copy. nil ⇒ no
+    /// reachability age available.
+    public func humanizedLastSeen() -> String? {
+        guard let ms = lastSeenMsAgo, ms >= 0 else { return nil }
+        return PodInfo.humanizeAge(ms)
+    }
+
+    /// Shared, locale-free age humanizer (mirrors the webapp `formatAge`).
+    public static func humanizeAge(_ ms: Int64) -> String {
+        let sec = ms / 1000
+        if sec < 60 { return "just now" }
+        let min = sec / 60
+        if min < 60 { return "\(min) minute\(min == 1 ? "" : "s") ago" }
+        let hr = min / 60
+        if hr < 24 { return "\(hr) hour\(hr == 1 ? "" : "s") ago" }
+        let day = hr / 24
+        return "\(day) day\(day == 1 ? "" : "s") ago"
     }
 }

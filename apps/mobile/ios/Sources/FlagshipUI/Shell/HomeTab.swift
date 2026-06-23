@@ -722,6 +722,14 @@ struct ServerDetailContainer: View {
                     // that's actually reachable — a dead box never paired and
                     // never will, so it stays on the decommission path).
                     notPaired: detailVm.needsPairing && pairFqdn != nil,
+                    // HONEST LIVENESS (Fix B) — surface the box's real reachability
+                    // rather than a catch-all "Connecting…". `.offline` =
+                    // server-authoritative unreachable (was live, now stale);
+                    // `.comingOnline` for a non-pending box = `never` (awaiting
+                    // first heartbeat). Pending pods are handled by their own route.
+                    offline: pod.map { app.liveness(for: $0) == .offline } ?? false,
+                    lastSeen: pod?.humanizedLastSeen(),
+                    comingUp: pod.map { app.liveness(for: $0) == .comingOnline && $0.status != .pending } ?? false,
                     pairing: isPairing,
                     onRefresh: {
                         async let a: Void = detailVm.load()
@@ -744,7 +752,11 @@ struct ServerDetailContainer: View {
             // Point the box session at THIS pod so per-pod detail targets the
             // tapped pod — not the global leader/sessionPod. Without this,
             // opening pod B while pod A is the session anchor loads A's data.
-            if let p = pod, p.status == .online {
+            // Sync for any registered (non-pending) pod with an fqdn — including
+            // an offline/coming-up one — so its honest state renders from a real
+            // load attempt against ITS base URL + ITS per-pod token (Fix B),
+            // never the global anchor's.
+            if let p = pod, p.status != .pending, !p.fqdn.isEmpty {
                 await PodSessionSync.sync(currentPod: p, store: sessionStore)
             }
             if detailVm == nil {
@@ -763,11 +775,18 @@ struct ServerDetailContainer: View {
             // park that stops metrics polling on disappear. It ALSO stops once
             // the BFF reports "not paired": retrying that never helps (it needs
             // the owner to tap Pair), so we park and let the pairing card drive.
+            // A server-authoritatively offline / coming-up box (HONEST LIVENESS,
+            // Fix B) won't answer its BFF — don't hammer it. One attempt, then
+            // park and let the honest placeholder + pull-to-refresh drive.
+            let livenessState = pod.map { app.liveness(for: $0) }
+            let wontAnswer = livenessState == .offline
+                || (livenessState == .comingOnline && pod?.status != .pending)
             var delay: UInt64 = 2_000_000_000
             while !Task.isCancelled {
                 await detailVm?.load()
                 if let d = detailVm?.detail, case .loaded = d { break }
                 if detailVm?.needsPairing == true { break }
+                if wontAnswer { break }
                 try? await Task.sleep(nanoseconds: delay)
                 delay = min(delay * 2, 15_000_000_000)
             }

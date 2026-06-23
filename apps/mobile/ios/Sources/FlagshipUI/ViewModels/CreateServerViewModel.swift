@@ -385,7 +385,10 @@ public final class CreateServerViewModel {
             // Only persist the token AFTER `.com` accepted the deposit — a token
             // the box will never see would auth nothing. The box claims it on
             // first boot, so by the time the server is online + selected the
-            // session token already matches and the BFF authenticates.
+            // session token already matches and the BFF authenticates. Persist
+            // under THIS box's pod id (Fix B) so creating a 2nd box doesn't clobber
+            // the 1st's token; also seed the active slot for the immediate flow.
+            await sessionStore.setSessionToken(pairing.token, forPodId: PodInfo.podId(forFqdn: serverDomain))
             await sessionStore.setSessionToken(pairing.token)
             pairingKeyPrivHex = pairing.pairingKeyPrivHex
         } catch {

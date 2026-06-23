@@ -91,11 +91,14 @@ public struct PendingServerReconciler {
         // A nil (couldn't reach the directory) leaves all state untouched.
         guard let directory = await fetchPods(username) else { return }
 
-        // Surface every registered server as `.online` — REGARDLESS of
-        // lastReported/cert (the channel `.com` returns null for a
-        // content-blind / just-live box). A registered fqdn matching a pending
-        // pod flips it online in place (identity unified on the fqdn); a new
-        // fqdn is added fresh.
+        // HONEST LIVENESS (Fix A) — surface every registered server with its
+        // server-authoritative `liveness` (`live`/`unreachable`/`never`), NOT a
+        // blanket `.online`. The phone STOPS trusting mere registration: a box
+        // that registered its STK but never heartbeats reads "still coming up",
+        // a previously-live box that's now stale reads "offline — last seen <…>",
+        // and only a `live` box anchors a session / qualifies as a live leader.
+        // A registered fqdn matching a pending pod flips it in place (identity
+        // unified on the fqdn); a new fqdn is added fresh.
         let registeredEntries = directory.pods.filter { $0.revokedAt == nil }
         for entry in registeredEntries where !entry.serverDomain.isEmpty {
             let fqdn = entry.serverDomain
@@ -115,7 +118,10 @@ public struct PendingServerReconciler {
                 // boolean was dropped from /pods): this per-pod flag is the
                 // "from the last full reconcile" unlock signal, OR'd at read-time
                 // with the live watcher inbox in `AppState.isAwaitingUnlock`.
-                awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue }
+                awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue },
+                liveness: PodInfo.Liveness(rawValue: entry.liveness ?? ""),
+                lastSeenMsAgo: entry.lastSeenMsAgo,
+                lastReported: entry.lastReported
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed
