@@ -1052,6 +1052,46 @@ export interface ServerTransferStorage {
   remove(serverDomain: string): Promise<void>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// server_evictions — the graceful-decommission lane (migration 0063)
+// (docs/server-replacement-graceful-decommission.md §8b).
+//
+// One row per RETIRED box instance, keyed by (podCanonical, retiredStkPubHex).
+// Each row is the owner-IRK-signed decommission order for that retired
+// instance. The SAME table serves three readers: the RETIRING box fetches its
+// own order by its STK (to consume + wind down), the SUCCESSOR fetches the
+// full chain (every retired instance for the FQDN, to hold the revoked set),
+// and the hub derives its revoked-set from the chain. GC'd after both sides
+// ack (the §9 epoch barrier is recorded but does not gate GC).
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The owner-IRK-signed decommission order for one retired box instance under
+ * a pod FQDN. The chain of these (every retired instance for a `podCanonical`)
+ * is the revoked-set the successor + hub consult. One row per
+ * (podCanonical, retiredStkPubHex) — re-issuing the same order upserts.
+ */
+export interface ServerEvictionRecord {
+  podCanonical: string;          // FQDN, lowercased
+  retiredStkPubHex: string;      // the retired instance STK pubkey, hex lowercased
+  orderJson: string;             // JSON.stringify of the ServerDecommission order
+  orderSignatureHex: string;     // owner-IRK signature over the order's canonical bytes
+  issuedAt: number;
+  oldAckedAt: number | null;     // retiring box confirmed it consumed the order
+  newAckedAt: number | null;     // successor confirmed it holds the chain
+  epochCompleteAt: number | null;// retiring box reported final-backup epoch complete (the §9 barrier)
+}
+
+export interface ServerEvictionStorage {
+  recordEviction(rec: ServerEvictionRecord): Promise<void>;                 // upsert on (podCanonical, retiredStkPubHex)
+  getEviction(podCanonical: string, retiredStkPubHex: string): Promise<ServerEvictionRecord | undefined>;
+  listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]>;     // the full chain, ordered by issuedAt asc
+  markOldAcked(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
+  markNewAcked(podCanonical: string, now: number): Promise<number>;          // marks all rows for the pod; returns count
+  markEpochComplete(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
+  gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs; returns count
+}
+
 export interface DaemonStatusRecord {
   serverDomain: string;
   certSha256: string | null;
@@ -1250,6 +1290,7 @@ export interface Storage {
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
+  serverEvictions: ServerEvictionStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;

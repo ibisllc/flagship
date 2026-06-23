@@ -10,6 +10,8 @@ import type {
   PairingDepositRecord,
   ServerTransferRecord,
   ServerTransferStorage,
+  ServerEvictionRecord,
+  ServerEvictionStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -1763,6 +1765,135 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
   }
 }
 
+interface ServerEvictionRow {
+  pod_canonical: string;
+  retired_stk_pub_hex: string;
+  order_json: string;
+  order_signature_hex: string;
+  issued_at: number;
+  old_acked_at: number | null;
+  new_acked_at: number | null;
+  epoch_complete_at: number | null;
+}
+
+function rowToServerEviction(r: ServerEvictionRow): ServerEvictionRecord {
+  return {
+    podCanonical: r.pod_canonical,
+    retiredStkPubHex: r.retired_stk_pub_hex,
+    orderJson: r.order_json,
+    orderSignatureHex: r.order_signature_hex,
+    issuedAt: r.issued_at,
+    oldAckedAt: r.old_acked_at,
+    newAckedAt: r.new_acked_at,
+    epochCompleteAt: r.epoch_complete_at,
+  };
+}
+
+export class D1ServerEvictionStorage implements ServerEvictionStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async recordEviction(rec: ServerEvictionRecord): Promise<void> {
+    // One row per retired instance — INSERT OR REPLACE on the
+    // (pod_canonical, retired_stk_pub_hex) PK so re-issuing the same order
+    // upserts. Store hex lowercase.
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_evictions
+           (pod_canonical, retired_stk_pub_hex, order_json, order_signature_hex,
+            issued_at, old_acked_at, new_acked_at, epoch_complete_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      )
+      .bind(
+        rec.podCanonical.toLowerCase(),
+        rec.retiredStkPubHex.toLowerCase(),
+        rec.orderJson,
+        rec.orderSignatureHex.toLowerCase(),
+        rec.issuedAt,
+        rec.oldAckedAt,
+        rec.newAckedAt,
+        rec.epochCompleteAt,
+      )
+      .run();
+  }
+
+  async getEviction(
+    podCanonical: string,
+    retiredStkPubHex: string,
+  ): Promise<ServerEvictionRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM server_evictions WHERE pod_canonical = ?1 AND retired_stk_pub_hex = ?2",
+      )
+      .bind(podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .first<ServerEvictionRow>();
+    return r ? rowToServerEviction(r) : undefined;
+  }
+
+  async listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]> {
+    const res = await this.db
+      .prepare(
+        "SELECT * FROM server_evictions WHERE pod_canonical = ?1 ORDER BY issued_at ASC",
+      )
+      .bind(podCanonical.toLowerCase())
+      .all<ServerEvictionRow>();
+    return (res.results ?? []).map(rowToServerEviction);
+  }
+
+  async markOldAcked(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_evictions SET old_acked_at = ?1
+         WHERE pod_canonical = ?2 AND retired_stk_pub_hex = ?3`,
+      )
+      .bind(now, podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async markNewAcked(podCanonical: string, now: number): Promise<number> {
+    // Marks every row for the pod (the successor acks the whole chain at once).
+    const w = await this.db
+      .prepare("UPDATE server_evictions SET new_acked_at = ?1 WHERE pod_canonical = ?2")
+      .bind(now, podCanonical.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+
+  async markEpochComplete(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_evictions SET epoch_complete_at = ?1
+         WHERE pod_canonical = ?2 AND retired_stk_pub_hex = ?3`,
+      )
+      .bind(now, podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async gcEvictions(now: number, ttlMs: number): Promise<number> {
+    // Delete rows acked by the successor past their TTL.
+    const w = await this.db
+      .prepare(
+        "DELETE FROM server_evictions WHERE new_acked_at IS NOT NULL AND new_acked_at <= ?1",
+      )
+      .bind(now - ttlMs)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+}
+
 interface BoxSealedLeaseRow {
   server_domain: string;
   lease_id: string;
@@ -3070,6 +3201,7 @@ export class D1Storage implements Storage {
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
+  serverEvictions: ServerEvictionStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
@@ -3111,6 +3243,7 @@ export class D1Storage implements Storage {
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.secretMailbox = new D1SecretMailboxStorage(db);
     this.serverTransfers = new D1ServerTransferStorage(db);
+    this.serverEvictions = new D1ServerEvictionStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);

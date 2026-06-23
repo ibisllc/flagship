@@ -31,6 +31,8 @@ import type {
   PairingDepositRecord,
   ServerTransferRecord,
   ServerTransferStorage,
+  ServerEvictionRecord,
+  ServerEvictionStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -939,6 +941,89 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
   }
 }
 
+export class InMemoryServerEvictionStorage implements ServerEvictionStorage {
+  // Composite key: `${podCanonical} ${retiredStkPubHex}` — one row per
+  // retired instance under a pod FQDN.
+  private rows = new Map<string, ServerEvictionRecord>();
+  private k(pod: string, stk: string): string {
+    return `${pod.toLowerCase()} ${stk.toLowerCase()}`;
+  }
+
+  async recordEviction(rec: ServerEvictionRecord): Promise<void> {
+    // Upsert on (podCanonical, retiredStkPubHex) — re-issuing the same order
+    // replaces. Store hex lowercase.
+    this.rows.set(this.k(rec.podCanonical, rec.retiredStkPubHex), {
+      ...rec,
+      podCanonical: rec.podCanonical.toLowerCase(),
+      retiredStkPubHex: rec.retiredStkPubHex.toLowerCase(),
+      orderSignatureHex: rec.orderSignatureHex.toLowerCase(),
+    });
+  }
+
+  async getEviction(
+    podCanonical: string,
+    retiredStkPubHex: string,
+  ): Promise<ServerEvictionRecord | undefined> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    return r ? { ...r } : undefined;
+  }
+
+  async listEvictions(podCanonical: string): Promise<ServerEvictionRecord[]> {
+    const pod = podCanonical.toLowerCase();
+    const out: ServerEvictionRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.podCanonical === pod) out.push({ ...r });
+    }
+    // The full chain, ordered by issuedAt asc.
+    return out.sort((a, b) => a.issuedAt - b.issuedAt);
+  }
+
+  async markOldAcked(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    if (!r) return false;
+    r.oldAckedAt = now;
+    return true;
+  }
+
+  async markNewAcked(podCanonical: string, now: number): Promise<number> {
+    const pod = podCanonical.toLowerCase();
+    let count = 0;
+    for (const r of this.rows.values()) {
+      if (r.podCanonical !== pod) continue;
+      r.newAckedAt = now;
+      count += 1;
+    }
+    return count;
+  }
+
+  async markEpochComplete(
+    podCanonical: string,
+    retiredStkPubHex: string,
+    now: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(this.k(podCanonical, retiredStkPubHex));
+    if (!r) return false;
+    r.epochCompleteAt = now;
+    return true;
+  }
+
+  async gcEvictions(now: number, ttlMs: number): Promise<number> {
+    const cutoff = now - ttlMs;
+    let count = 0;
+    for (const [k, r] of this.rows) {
+      if (r.newAckedAt !== null && r.newAckedAt <= cutoff) {
+        this.rows.delete(k);
+        count += 1;
+      }
+    }
+    return count;
+  }
+}
+
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   // Composite key: `${serverDomain} ${leaseId}`.
   private rows = new Map<string, BoxSealedLeaseRecord>();
@@ -1388,6 +1473,7 @@ export class InMemoryStorage implements Storage {
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   secretMailbox = new InMemorySecretMailboxStorage();
   serverTransfers = new InMemoryServerTransferStorage();
+  serverEvictions = new InMemoryServerEvictionStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();

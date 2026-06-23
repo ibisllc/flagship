@@ -1095,6 +1095,132 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // serverEvictions — the graceful-decommission lane. One row per retired
+  // instance under a pod FQDN (re-issue upserts); the chain lists by
+  // issuedAt asc; markNewAcked marks the whole pod; gc deletes acked+old.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverEvictions", () => {
+    const pod = "home.alice.flagship.services";
+    const mkEvict = (stk: string, issuedAt = 100) => ({
+      podCanonical: pod,
+      retiredStkPubHex: stk,
+      orderJson: JSON.stringify({ retire: stk, issuedAt }),
+      orderSignatureHex: "ff".repeat(64),
+      issuedAt,
+      oldAckedAt: null,
+      newAckedAt: null,
+      epochCompleteAt: null,
+    });
+
+    it("record → get returns the order; list returns the chain ordered by issuedAt asc", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 300));
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("cc".repeat(32), 200));
+        const got = await s.serverEvictions.getEviction(pod, "aa".repeat(32));
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return {
+          gotStk: got?.retiredStkPubHex,
+          gotJson: got?.orderJson,
+          chainOrder: chain.map((e) => e.issuedAt),
+          chainStks: chain.map((e) => e.retiredStkPubHex),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        gotStk: "aa".repeat(32),
+        gotJson: JSON.stringify({ retire: "aa".repeat(32), issuedAt: 100 }),
+        chainOrder: [100, 200, 300],
+        chainStks: ["aa".repeat(32), "cc".repeat(32), "bb".repeat(32)],
+      });
+    });
+
+    it("re-recording the same retired STK upserts (one row, latest order)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction({
+          ...mkEvict("aa".repeat(32), 100),
+          orderJson: JSON.stringify({ v: 2 }),
+        });
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { count: chain.length, json: chain[0]?.orderJson };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ count: 1, json: JSON.stringify({ v: 2 }) });
+    });
+
+    it("markOldAcked / markEpochComplete hit one row; markNewAcked marks the whole pod", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 200));
+        const oldAck = await s.serverEvictions.markOldAcked(pod, "aa".repeat(32), 10);
+        const epoch = await s.serverEvictions.markEpochComplete(pod, "aa".repeat(32), 11);
+        const newCount = await s.serverEvictions.markNewAcked(pod, 12);
+        const missing = await s.serverEvictions.markOldAcked(pod, "ee".repeat(32), 13);
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return {
+          oldAck,
+          epoch,
+          newCount,
+          missing,
+          rowA: {
+            old: chain[0]?.oldAckedAt,
+            epoch: chain[0]?.epochCompleteAt,
+            new: chain[0]?.newAckedAt,
+          },
+          rowB: {
+            old: chain[1]?.oldAckedAt,
+            epoch: chain[1]?.epochCompleteAt,
+            new: chain[1]?.newAckedAt,
+          },
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        oldAck: true,
+        epoch: true,
+        newCount: 2,
+        missing: false,
+        rowA: { old: 10, epoch: 11, new: 12 },
+        rowB: { old: null, epoch: null, new: 12 },
+      });
+    });
+
+    it("gcEvictions deletes acked+old rows; keeps un-acked and acked-but-recent", async () => {
+      const r = await bothAdapters(async (s) => {
+        // acked long ago → deleted.
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.markNewAcked(pod, 1000);
+        // a second pod, never acked → kept.
+        await s.serverEvictions.recordEviction({
+          ...mkEvict("bb".repeat(32), 200),
+          podCanonical: "other.bob.flagship.services",
+        });
+        // gc at now=10000, ttl=5000 → cutoff 5000; pod-1's newAckedAt=1000 ≤ cutoff → gone.
+        const removed = await s.serverEvictions.gcEvictions(10000, 5000);
+        const pod1 = await s.serverEvictions.listEvictions(pod);
+        const pod2 = await s.serverEvictions.listEvictions("other.bob.flagship.services");
+        return { removed, pod1Len: pod1.length, pod2Len: pod2.length };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 1, pod1Len: 0, pod2Len: 1 });
+    });
+
+    it("gcEvictions keeps an acked row still within its TTL", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.markNewAcked(pod, 9000);
+        // cutoff = 10000 - 5000 = 5000; newAckedAt=9000 > cutoff → kept.
+        const removed = await s.serverEvictions.gcEvictions(10000, 5000);
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { removed, len: chain.length };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 0, len: 1 });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // acmeAccountKeyDelivery — one-slot-per-box upsert (put replaces),
   // deleteByAccountKeyId count.
   // ────────────────────────────────────────────────────────────────────
