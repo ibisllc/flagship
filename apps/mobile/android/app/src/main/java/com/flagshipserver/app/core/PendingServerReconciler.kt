@@ -41,6 +41,12 @@ import com.flagshipserver.app.api.SecretMailboxClient
 class PendingServerReconciler(
     private val app: AppState,
     private val mailbox: SecretMailboxClient,
+    /** Fired ONCE per registered (non-revoked) box surfaced this pass, with its
+     *  FQDN + REGISTERED identity pubkey (hex). The secret-free-recipe SWK
+     *  deposit hangs off this — a box that registered without an embedded SWK now
+     *  has a directory identity to seal it to. Best-effort + idempotent in the
+     *  handler (it no-ops unless a deposit is owed). Default no-op. */
+    private val onRegistered: suspend (fqdn: String, identityPubKeyHex: String) -> Unit = { _, _ -> },
 ) {
     /** Run the full reconcile from the single merged `/pods` fetch.
      *  Best-effort: a network failure (or no signed-in user) leaves the
@@ -79,6 +85,12 @@ class PendingServerReconciler(
                 // the live watcher inbox in AppState.liveness.
                 awaitingUnlock = entry.pendingRequests.any { it.type == SecretPurpose.UNLOCK_KEY.wire },
             )
+            // Secret-free recipe: a registered box now has a directory identity
+            // to seal the SWK to. The handler no-ops unless a deposit is owed for
+            // this fqdn (idempotent via PendingSwkDepositStore).
+            if (entry.identityPubKey.isNotEmpty()) {
+                onRegistered(fqdn, entry.identityPubKey)
+            }
         }
 
         // The non-pending pods are the live ones now (including the ones we
