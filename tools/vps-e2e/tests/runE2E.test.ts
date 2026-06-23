@@ -108,6 +108,9 @@ function happyHttp() {
   // app's /health then echoes it (value-in-container, never to model).
   const envState: { proof: string } = { proof: "" };
   return scriptedHttp([
+    // The harness gets its name from .com like any client; the mock hands back
+    // the planned name so the rest of the run is unchanged.
+    { match: (u) => u.includes("/api/username/suggest"), reply: okJson({ name: "alice", retryAfterMs: 2000 }) },
     { match: (u) => u.includes("/api/username/claim"), reply: okJson({ ok: true }) },
     { match: (u) => u.includes("/api/auth-code/issue"), reply: okJson({ ok: true }) },
     { match: (u) => u.includes("/api/routing/register-rck"), reply: okJson({ ok: true }) },
