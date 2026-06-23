@@ -51,12 +51,15 @@ const toHex = (b: Uint8Array) =>
   Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 
 describe("webapp isValidUsername — bare account handle rule", () => {
-  it("accepts lowercase letters/digits, rejects dots/hyphens/specials/empty/uppercase", async () => {
+  it("accepts lowercase letters/digits + interior dashes; rejects dots/specials/empty/uppercase/`--`", async () => {
     const { isValidUsername } = await loadLib();
     expect(isValidUsername("alice")).toBe(true);
     expect(isValidUsername("alice42")).toBe(true);
+    expect(isValidUsername("demo-alice")).toBe(true); // interior single dash now allowed
     expect(isValidUsername("alice.reviewer")).toBe(false);
-    expect(isValidUsername("demo-alice")).toBe(false);
+    expect(isValidUsername("demo--alice")).toBe(false); // `--` is the slug-creator delimiter
+    expect(isValidUsername("-alice")).toBe(false); // leading dash
+    expect(isValidUsername("alice-")).toBe(false); // trailing dash
     expect(isValidUsername("Alice")).toBe(false);
     expect(isValidUsername("")).toBe(false);
     expect(isValidUsername(undefined as any)).toBe(false);

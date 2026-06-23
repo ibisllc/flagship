@@ -47,8 +47,9 @@
 
 import { controlApex } from "./apex.js";
 
-/** Login field is a bare handle: 3–30 lowercase letters/digits, no dots,
- *  no hyphens. Mirror of bootstrap.js / state.js / control-plane labels.ts. */
+/** Login field is a bare handle: 3–30 lowercase letters/digits, interior single
+ *  dashes OK (no leading/trailing), no dots, no `--`. Mirror of control-plane
+ *  labels.ts (docs/service-addressing-double-dash.md). */
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** A locally-synthesized `unknown` resolution. We never have to call the
@@ -69,16 +70,19 @@ function localUnknown(username) {
   };
 }
 
-/** True iff `username` is a syntactically valid bare login handle. The
- *  resolve endpoint also legitimately serves demo names that carry
- *  hyphens, but the LOGIN INPUT is hyphen-free per the redesign — the
- *  caller validates the input separately; this is the network-skip
- *  fast-path only.
+/** True iff `username` is a syntactically valid bare login handle. Dashed
+ *  handles ARE valid logins now (random names are `<adjective>-<noun>`), so this
+ *  accepts interior single dashes but still rejects `--` (the slug↔creator
+ *  delimiter). Network-skip fast-path for an obviously-invalid handle.
  *  @param {string} username
  *  @returns {boolean}
  */
 export function isBareLoginHandle(username) {
-  return typeof username === "string" && USERNAME_RE.test(username);
+  return (
+    typeof username === "string" &&
+    USERNAME_RE.test(username) &&
+    !username.includes("--")
+  );
 }
 
 /** GET `/api/account/resolve/<username>` — the login/join preflight.

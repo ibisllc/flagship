@@ -24,8 +24,9 @@
 import { controlApex } from "./apex.js";
 
 /** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
- *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
- *  labels.ts. */
+ *  3–30, interior single dashes OK (no leading/trailing), no `--` (the
+ *  slug↔creator delimiter). Mirror of control-plane labels.ts
+ *  (docs/service-addressing-double-dash.md). The `--` ban is checked separately. */
 const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
@@ -40,7 +41,11 @@ function canonical(parts) {
 
 /** True iff `username` is a syntactically valid bare account handle. */
 export function isValidUsername(username) {
-  return typeof username === "string" && USERNAME_RE.test(username);
+  return (
+    typeof username === "string" &&
+    USERNAME_RE.test(username) &&
+    !username.includes("--")
+  );
 }
 
 /** POST the standalone, idempotent username claim. A 409 means the name

@@ -170,12 +170,14 @@ describe("webapp resolveAccount — login preflight wire", () => {
 });
 
 describe("webapp isBareLoginHandle — login input rule", () => {
-  it("accepts lowercase letters/digits, rejects dots/hyphens/specials/empty", async () => {
+  it("accepts lowercase letters/digits + interior dashes; rejects dots/`--`/specials/empty", async () => {
     const { isBareLoginHandle } = await loadLib();
     expect(isBareLoginHandle("alice")).toBe(true);
     expect(isBareLoginHandle("alice42")).toBe(true);
+    expect(isBareLoginHandle("happy-otter")).toBe(true);     // dashed handles ARE valid logins now
     expect(isBareLoginHandle("alice.reviewer")).toBe(false); // dot-form retired
-    expect(isBareLoginHandle("demo-alice")).toBe(false);     // hyphen — not a login handle
+    expect(isBareLoginHandle("demo--alice")).toBe(false);    // `--` is the slug-creator delimiter
+    expect(isBareLoginHandle("-alice")).toBe(false);         // leading dash
     expect(isBareLoginHandle("Alice")).toBe(false);
     expect(isBareLoginHandle("")).toBe(false);
     expect(isBareLoginHandle(undefined as any)).toBe(false);

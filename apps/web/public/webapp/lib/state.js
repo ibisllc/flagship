@@ -40,7 +40,7 @@ export function lockSession() {
   _session.username = null;
 }
 
-const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
+const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior dashes OK, no `--` (checked separately) — see packages/control-plane/src/labels.ts
 
 /**
  * Lazy-init the user's chosen username. Used by pairing + promo flows
@@ -61,7 +61,9 @@ export async function ensureUsername() {
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
-      if (!USERNAME_RE.test(v)) return "3–30 lowercase letters and digits, no hyphens";
+      if (!USERNAME_RE.test(v) || v.includes("--")) {
+        return "3–30 lowercase letters/digits with interior single dashes";
+      }
       return null;
     },
   });
@@ -88,7 +90,7 @@ export async function ensureUsername() {
  */
 export async function checkUsernameAvailability(handle) {
   if (!handle) return { ok: false, reason: "empty" };
-  if (!USERNAME_RE.test(handle)) return { ok: false, reason: "invalid" };
+  if (!USERNAME_RE.test(handle) || handle.includes("--")) return { ok: false, reason: "invalid" };
   try {
     const r = await fetch(`${controlApex()}/api/username/${encodeURIComponent(handle)}`);
     if (r.status === 404) return { ok: true, available: true };
