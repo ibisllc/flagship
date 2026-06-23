@@ -1,6 +1,8 @@
 # Multi-pod liveness, per-pod sessions, and per-service leadership — fixes + gossip
 
-**Status:** design spec; build underway (see "Sequencing"). Surfaced live from
+**Status:** Phases 1-5 BUILT + CI-green (bug fixes + the full gossip broadcast
+path); Phase 6 (owner-vote UI + `.com` relay + CGK post-boot provisioning) is the
+remaining live-enablement layer (reburn-gated). Surfaced live from
 `frank`/`leticia` on `harry` (a fresh `frank` install on the box that used to run
 `leticia`; `leticia` is now just turned off). Three independent client/directory
 bugs, none of them secret-persistence (a fresh install regenerates every on-disk
@@ -284,6 +286,45 @@ makes a *non*-decommissioned silent box read correctly, each server's page
 reachable, and leadership a real, gossip-held, owner-tilted property. The eviction
 check the hub already does for decommission is exactly the "non-evicted" half of
 C.2's grant-on-capability — they compose cleanly.
+
+## As-built status (this branch)
+
+**Phases 1-5 are built + CI-green** (all three reported bugs fixed; the full
+gossip path built and unit-tested):
+
+- **Phase 1 (`.com` Fix A):** `liveness`/`lastSeenMsAgo` + oldest-first order on
+  `/pods`; `FRESHNESS_WINDOW = 15 min`; bridged `lastReported` classified `never`
+  (not `unreachable`). control-plane tests green.
+- **Phase 2 (clients):** webapp + iOS (1229 XCTests) + Android (1124) — honest
+  liveness states, per-pod base URL + per-pod token store (keyed `pod-<fqdn>`, with
+  a legacy-token migration), and the `pods.first`/dangling-leader guess **deleted**
+  (a new box can no longer seize leadership; a dangling leader re-anchors to the
+  oldest pod).
+- **Phase 3 (protocol):** `deriveCGK`, gossip canonical+HMAC+`seal/open`,
+  `set-leader` vote, `electLeadForService`/`compareClout`, `birthDateFromAuthCode`
+  — TS (708) + Swift (16) + Kotlin, pinned cross-platform vectors.
+- **Phase 4 (hub):** `broadcast--<user>.flagship.services` content-blind
+  per-account fan-out — reuses the SNI router's existing hub→box stream origination
+  (`FRAME_OPEN`/`DATA`), delivers the opaque body to each sibling's
+  `POST /internal/gossip`, returns `204`. `broadcast`/`servers`/`all` reserved.
+  apps/web tests green.
+- **Phase 5 (daemon):** CGK read (env → `/var/flagship/cgk.hex` → install-blob
+  sibling, mirror of SWK; absent ⇒ gossip disabled, no brick); the `/internal/gossip`
+  ingest + SiblingView (45 s announce, ~112 s liveness window); per-service election
+  + claim/yield **live-wired to `runtime.urlController`** (claim/release the tier-2
+  `<slug>.<user>` FQDN). server-daemon tests green.
+
+**Two honest seams (pre-existing daemon limitations, documented):** the
+`urlController.release` is a *soft* release today (no dedicated release frame — a
+yielded slot relies on socket-death / FCFS takeover); and the daemon's self-vote
+getter is wired but returns `null` until Phase 6 feeds it a received `set-leader`.
+
+**Phase 6 (remaining, reburn-gated):** the owner's control surface + turning gossip
+on for real boxes — (a) **CGK post-boot provisioning** via a sealed `.com` deposit
+lane (mirror the secret-free SWK delivery — do NOT embed CGK in the recipe; the repo
+is secret-free-recipe by default), (b) the "Set preferred server" action signing
+`set-leader` + its deposit/consume so the self-vote getter lights up, (c) the `.com`
+relay of computed per-service leads for client display.
 
 ## Open questions
 
