@@ -135,6 +135,26 @@ describe("validateServerLabel — loose RFC-1123 DNS label", () => {
   });
 });
 
+describe("gossip fan-out reserved names (Phase 4): broadcast / servers / all", () => {
+  // A user must not be able to create a username OR a server named after the
+  // reserved fleet-wide gossip addresses — otherwise a box could shadow the
+  // `broadcast--<user>.flagship.services` fan-out routing.
+  for (const name of ["broadcast", "servers", "all"]) {
+    it(`rejects "${name}" as a username (reserved)`, () => {
+      const r = validateUserLabel(name);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/reserved/);
+      expect(_labelInternal.RESERVED_USER_LABELS.has(name)).toBe(true);
+    });
+    it(`rejects "${name}" as a server name (reserved)`, () => {
+      const r = validateServerLabel(name);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/reserved/);
+      expect(_labelInternal.RESERVED_SERVER_LABELS.has(name)).toBe(true);
+    });
+  }
+});
+
 describe("the two rules diverge on purpose", () => {
   it("interior dashes are now OK for BOTH (the rules converged on dashes)", () => {
     // The username rule used to forbid dashes; with the `--` composite delimiter
