@@ -39,6 +39,11 @@ public protocol FlagshipServerClient: Sendable {
     /// the webapp `revokeServer` + the Android `revokeServer` shape.
     func revokeServer(_ req: ServerRevocationRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
+    /// Sign-up handle suggestion. POST /api/username/suggest with a throwaway
+    /// `deviceKey` (the per-device regenerate throttle, NOT the account IRK). A
+    /// 200 carries a name + `retryAfterMs` cooldown; a 429 carries
+    /// `throttled` + the cooldown remaining. See docs/username-suggestion-queue.md.
+    func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion
     /// Login/join preflight. GET /api/account/resolve/<username>. The
     /// sign-in space is access-control evaluation, not a fetch: this
     /// reads what credentials + factors exist for the named account and
@@ -1368,6 +1373,31 @@ public struct RckRegisterRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
+/// on a 429 `name` is nil + `throttled` is true. `retryAfterMs` is the cooldown
+/// until the next regenerate is allowed either way.
+public struct UsernameSuggestion: Codable, Equatable, Sendable {
+    public let name: String?
+    public let retryAfterMs: Int
+    public let throttled: Bool
+    public init(name: String?, retryAfterMs: Int, throttled: Bool) {
+        self.name = name
+        self.retryAfterMs = retryAfterMs
+        self.throttled = throttled
+    }
+}
+
+/// Small curated word pairs for the Mock suggestion (no DNS/queue offline).
+enum MockSuggestWords {
+    static let adjectives = ["happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly"]
+    static let nouns = ["otter", "panda", "fox", "heron", "robin", "finch", "badger", "beaver", "gecko", "comet"]
+    static func random() -> String {
+        let a = adjectives.randomElement() ?? "happy"
+        let n = nouns.randomElement() ?? "otter"
+        return "\(a)-\(n)"
+    }
+}
+
 public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     public let username: String
     public let available: Bool
@@ -1952,6 +1982,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func revokeServer(_ req: ServerRevocationRequest) async throws {
         try await tick()
         revokedServers.append(req)
+    }
+
+    /// Mock suggestion — a fresh random `<adjective>-<noun>` each call, fixed
+    /// 2 s cooldown, never throttled (offline/dev convenience; no DNS).
+    public func suggestUsername(deviceKey _: String) async throws -> UsernameSuggestion {
+        try await tick()
+        return .init(name: MockSuggestWords.random(), retryAfterMs: 2000, throttled: false)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -2957,6 +2994,26 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         let body = try JSONEncoder().encode(["username": username])
         return try await postJsonReturning("/api/users/check", body: body)
+    }
+
+    public func suggestUsername(deviceKey: String) async throws -> UsernameSuggestion {
+        struct Wire: Decodable { let name: String?; let retryAfterMs: Int? }
+        let body = try JSONEncoder().encode(["deviceKey": deviceKey])
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/username/suggest"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 429 {
+            let w = try? JSONDecoder().decode(Wire.self, from: data)
+            return .init(name: nil, retryAfterMs: w?.retryAfterMs ?? 3000, throttled: true)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        let w = try JSONDecoder().decode(Wire.self, from: data)
+        return .init(name: w.name, retryAfterMs: w.retryAfterMs ?? 2000, throttled: false)
     }
 
     public func resolveAccount(username: String) async throws -> AccountResolution {

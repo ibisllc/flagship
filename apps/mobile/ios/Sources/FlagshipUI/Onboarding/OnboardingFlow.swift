@@ -54,7 +54,7 @@ public struct OnboardingFlow: View {
                     // pushes the Phase-2 Open-account step (NOT
                     // server-mint): account identity is created on its
                     // own, server provisioning is a later, optional act.
-                    ChooseUsernameScreen(
+                    SuggestUsernameScreen(
                         onContinue: { username in
                             path.append(.openAccount(username: username))
                         }

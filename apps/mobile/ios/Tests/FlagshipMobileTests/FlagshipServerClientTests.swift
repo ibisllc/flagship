@@ -96,6 +96,17 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(r.reason, "already claimed")
     }
 
+    func test_suggestUsername_returnsAValidRandomHandle() async throws {
+        // The Mock suggests a fresh <adjective>-<noun> with a positive cooldown
+        // and never throttles (offline/dev convenience).
+        let c = makeClient()
+        let s = try await c.suggestUsername(deviceKey: "abcd")
+        XCTAssertNotNil(s.name)
+        XCTAssertFalse(s.throttled)
+        XCTAssertGreaterThan(s.retryAfterMs, 0)
+        XCTAssertNotNil(s.name?.range(of: "^[a-z]+-[a-z]+$", options: .regularExpression))
+    }
+
     func test_usernameAvailable_acceptsInteriorDashRejectsDoubleDash() async throws {
         // Interior single dashes are now allowed; `--` is the reserved
         // `<slug>--<creator>` delimiter and must be rejected. Worker's labels.ts
