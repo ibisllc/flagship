@@ -55,6 +55,7 @@ const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
 const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
 const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
+const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
 const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
 const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v1";
 
@@ -197,6 +198,43 @@ export interface AccountSelfDelete {
  */
 export interface ServersSelfDelete {
   username: string;
+  issuedAt: number;
+}
+
+/**
+ * Owner-IRK-signed "this box instance is replaced — retire yourself" order
+ * (docs/server-replacement-graceful-decommission.md). The SELF-AUTHORIZING
+ * eviction notice: a box that receives it (by any channel) and verifies the
+ * signature + the STK-match runs the WHOLE closeout directly — no callback.
+ *
+ * - `retiredStkPubHex` (I2) binds the order to ONE specific box instance (its
+ *   STK pubkey). The replacement box has a different STK and ignores it, so a
+ *   replayed old order can never retire the new tenant.
+ * - `diskDisposition`: "keep" | "wipe-after-handoff" | "wipe-now" (§6a). Never
+ *   the unconditional account-deletion wipe — gated on the data being safely
+ *   elsewhere first.
+ * - The successor carries the FULL chain of these (the eviction lineage); the
+ *   hub holds the revoked STKs only ephemerally, rebuilt from what a connecting
+ *   box presents — so no permanent revoked-set on `.com`/the hub (§8b).
+ *
+ * Commits to (podCanonical, retiredStkPubHex, finalBackup, diskDisposition,
+ * backupEpoch, nonce, issuedAt).
+ */
+export type DiskDisposition = "keep" | "wipe-after-handoff" | "wipe-now";
+
+export interface ServerDecommission {
+  /** The FQDN being handed off (`<server>.<user>.flagship.services`). */
+  podCanonical: string;
+  /** The specific retiring instance's STK pubkey (hex). */
+  retiredStkPubHex: string;
+  /** Flush a final peer-backup before releasing routing. */
+  finalBackup: boolean;
+  /** What to do with the disk after release. */
+  diskDisposition: DiskDisposition;
+  /** Monotonic final-flush epoch (§9); 0 when finalBackup is false. */
+  backupEpoch: number;
+  /** Per-order nonce (replay distinctness within the same instance). */
+  nonce: string;
   issuedAt: number;
 }
 
@@ -561,6 +599,25 @@ function canonicalServersSelfDelete(c: ServersSelfDelete): Bytes {
   );
 }
 
+function canonicalServerDecommission(c: ServerDecommission): Bytes {
+  legacyFieldGuard("podCanonical", c.podCanonical);
+  legacyFieldGuard("retiredStkPubHex", c.retiredStkPubHex);
+  legacyFieldGuard("diskDisposition", c.diskDisposition);
+  legacyFieldGuard("nonce", c.nonce);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_DECOMMISSION,
+      c.podCanonical.toLowerCase(),
+      c.retiredStkPubHex.toLowerCase(),
+      c.finalBackup ? "1" : "0",
+      c.diskDisposition,
+      c.backupEpoch,
+      c.nonce.toLowerCase(),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
 function canonicalServerTransferOffer(c: ServerTransferOffer): Bytes {
   legacyFieldGuard("serverDomain", c.serverDomain);
   legacyFieldGuard("transferNonce", c.transferNonce);
@@ -881,6 +938,18 @@ export function verifyAccountSelfDelete(c: AccountSelfDelete, sig: Bytes, irkPub
 
 export function signServersSelfDelete(c: ServersSelfDelete, irk: Keypair): Bytes {
   return ed.sign(canonicalServersSelfDelete(c), irk.privateKey);
+}
+
+export function signServerDecommission(c: ServerDecommission, irk: Keypair): Bytes {
+  return ed.sign(canonicalServerDecommission(c), irk.privateKey);
+}
+
+export function verifyServerDecommission(c: ServerDecommission, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalServerDecommission(c), irkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyServersSelfDelete(c: ServersSelfDelete, sig: Bytes, irkPub: Bytes): boolean {
