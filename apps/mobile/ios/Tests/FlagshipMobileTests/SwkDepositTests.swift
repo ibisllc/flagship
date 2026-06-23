@@ -83,6 +83,12 @@ final class SwkDepositCoordinatorTests: XCTestCase {
     // A fixed 32-byte SWK for the test (the production path derives via Keystore).
     private let swk = Data(repeating: 0x33, count: 32)
 
+    private func freshCgkStore() -> PendingCgkDepositStore {
+        let suite = "flagship.cgkDeposit.tests.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
+        return PendingCgkDepositStore(defaults: d)
+    }
+
     private func coordinator(store: PendingSwkDepositStore, mailbox: MockSecretMailboxClient) -> SwkDepositCoordinator {
         let irk = ownerIrk()
         let swkHex = HexUtil.encode(swk)
@@ -90,7 +96,9 @@ final class SwkDepositCoordinatorTests: XCTestCase {
             username: "alice",
             mailbox: mailbox,
             store: store,
-            deriveIrkAndSwk: { _, _ in (irk, swkHex) }
+            cgkStore: freshCgkStore(),
+            deriveIrkAndSwk: { _, _ in (irk, swkHex) },
+            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) }
         )
     }
 
@@ -148,6 +156,45 @@ final class SwkDepositCoordinatorTests: XCTestCase {
             .depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
         XCTAssertFalse(store.isDeposited(for: serverDomain))
         XCTAssertTrue(store.isPending(for: serverDomain), "stays owed for the next reconcile")
+    }
+
+    /// CGK provisioning: when a CGK deposit is owed, it fires sealed to the box
+    /// identity (the EXACT twin of the SWK deposit) and round-trips through the
+    /// box-side verify/unseal.
+    func test_depositsCgk_whenOwed_sealsToBoxIdentity_opensExact() async throws {
+        let swkStore = freshStore()
+        let cgkStore = freshCgkStore()
+        cgkStore.markPending(for: serverDomain)
+        let mailbox = MockSecretMailboxClient()
+        let irk = ownerIrk()
+        let cgk = Data(repeating: 0x55, count: 32)
+        let coord = SwkDepositCoordinator(
+            username: "alice", mailbox: mailbox, store: swkStore, cgkStore: cgkStore,
+            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(self.swk)) },
+            deriveCgkHex: { _ in HexUtil.encode(cgk) }
+        )
+        await coord.depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        XCTAssertEqual(mailbox.cgkDeposits.count, 1)
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty, "SWK not owed (only CGK)")
+        let body = mailbox.cgkDeposits[0].body
+        XCTAssertEqual(body.deposit.stkPub, boxIdentityPubHex())
+
+        let parsed = try parseCarrier(body.deposit.sealed)
+        let delivery = CgkDelivery.Delivery(
+            serverDomain: parsed.serverDomain, sealed: parsed.sealed, issuedAt: parsed.issuedAt
+        )
+        XCTAssertTrue(irk.publicKey.isValidSignature(
+            parsed.signature, for: try CgkDelivery.canonicalBytes(delivery)
+        ))
+        let x25519Priv = Curve25519Map.edwardsSeedToMontgomery(boxSeed)
+        let opened = try SecretSeal.openWithX25519(blob: parsed.sealed, recipientX25519Priv: x25519Priv)
+        XCTAssertEqual(HexUtil.encode(opened), HexUtil.encode(cgk))
+
+        // Idempotency: marked deposited, second pass does not re-deposit.
+        XCTAssertTrue(cgkStore.isDeposited(for: serverDomain))
+        await coord.depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+        XCTAssertEqual(mailbox.cgkDeposits.count, 1, "no double-deposit")
     }
 
     // Mirror of carrierHexToSwkDelivery for the assertion side.

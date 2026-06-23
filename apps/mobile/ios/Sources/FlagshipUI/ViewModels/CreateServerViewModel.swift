@@ -136,6 +136,12 @@ public final class CreateServerViewModel {
     /// seals + deposits it once the box registers. Untouched when embed-secrets
     /// is ON (the order is baked into the recipe instead).
     private let pairingDepositStore: PendingPairingDepositStore
+    /// Per-service leadership: records that a CGK deposit is OWED for this server.
+    /// The CGK is NEVER embedded in the recipe (it is the per-cloud gossip secret),
+    /// so it is owed on EVERY created server, regardless of embed-secrets. The Home
+    /// reconcile seals + deposits it (sealed to the box identity) once the box
+    /// registers, on the same biometric pass as the SWK.
+    private let cgkDepositStore: PendingCgkDepositStore
     /// `.com` mailbox client — kept for parity with the create flow (the pairing
     /// deposit itself now happens post-registration via SwkDepositCoordinator).
     private let mailbox: any SecretMailboxClient
@@ -152,6 +158,7 @@ public final class CreateServerViewModel {
         diskEncryption: DiskEncryptionStore = DiskEncryptionStore(),
         swkDepositStore: PendingSwkDepositStore = PendingSwkDepositStore(),
         pairingDepositStore: PendingPairingDepositStore = PendingPairingDepositStore(),
+        cgkDepositStore: PendingCgkDepositStore = PendingCgkDepositStore(),
         mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
         sessionStore: any SessionStoring = SessionStore()
     ) {
@@ -162,6 +169,7 @@ public final class CreateServerViewModel {
         self.diskEncryption = diskEncryption
         self.swkDepositStore = swkDepositStore
         self.pairingDepositStore = pairingDepositStore
+        self.cgkDepositStore = cgkDepositStore
         self.draftStore = draftStore
         self.mailbox = mailbox
         self.sessionStore = sessionStore
@@ -421,6 +429,10 @@ public final class CreateServerViewModel {
                 pairingDepositStore.markPending(for: serverDomain, pairingOrderJson: pairingOrderJson)
             }
         }
+        // The CGK is NEVER embedded in the recipe (the per-cloud gossip secret is
+        // always post-boot delivered), so it is owed on EVERY created server,
+        // independent of the embed-secrets choice.
+        cgkDepositStore.markPending(for: serverDomain)
 
         return SignedInstallBlob(
             blob: blob,

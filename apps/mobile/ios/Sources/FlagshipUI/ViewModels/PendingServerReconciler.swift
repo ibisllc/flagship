@@ -121,7 +121,9 @@ public struct PendingServerReconciler {
                 awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue },
                 liveness: PodInfo.Liveness(rawValue: entry.liveness ?? ""),
                 lastSeenMsAgo: entry.lastSeenMsAgo,
-                lastReported: entry.lastReported
+                lastReported: entry.lastReported,
+                identityPubKeyHex: entry.identityPubKey,
+                leadsServices: entry.leadsServices
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed
