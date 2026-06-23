@@ -63,6 +63,23 @@ describe("derived keys", () => {
     const bak = deriveBAK(fixed, "srv-A");
     expect(swk).not.toEqual(bak.privateKey);
   });
+
+  // Cross-platform PINNED vector. The phone (iOS/Android) derives the SWK from
+  // the recovered UMK + serverId and embeds it in the install-blob recipe; the
+  // daemon re-derives nothing (it consumes the embedded value), but the phone
+  // MUST produce a byte-identical SWK across platforms or the wrong key lands on
+  // the box. The Swift/Kotlin deriveSWK twins assert this exact (seed, serverId)
+  // → hex so they can never drift from this TS reference.
+  //   umk.seed = 32 × 0x07, serverId = "srv-vector-1"
+  //   SWK = HKDF-SHA256(seed, info="flagship.swk.v1|srv-vector-1", 32)
+  it("deriveSWK pinned cross-platform vector", () => {
+    const hex = Array.from(deriveSWK(fixed, "srv-vector-1"))
+      .map((x) => x.toString(16).padStart(2, "0"))
+      .join("");
+    expect(hex).toBe(
+      "55c865a17c9106f0cb6847da659706ed7601e6769253f9b11d851e013b421377",
+    );
+  });
 });
 
 describe("per-app stable identity", () => {

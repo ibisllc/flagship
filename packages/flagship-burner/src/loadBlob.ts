@@ -35,6 +35,15 @@ export interface LoadedBlob {
    * for recipes that don't carry it (older recipes / non-pairing burns).
    */
   pairingKeyPrivHex?: string;
+  /**
+   * SWK provisioning: the recipe's UNSIGNED Service Workload Key (a 32-byte hex,
+   * = `deriveSWK(umk, serverId)`), if present. NOT part of the signed InstallBlob
+   * — a top-level recipe sibling the phone adds (exactly like
+   * {@link pairingKeyPrivHex}) so the daemon can turn on the service/build
+   * platform at first boot. Threaded into the on-disk install-blob.json via
+   * {@link UserDataOptions.swkHex}; undefined for recipes that don't carry it.
+   */
+  swkHex?: string;
   /** Where the blob came from — useful for the auto-shred step. */
   source: { kind: "file"; path: string } | { kind: "stdin" };
 }
@@ -106,6 +115,15 @@ export function loadBlobFromString(
     typeof rawPairingKey === "string" && /^[0-9a-f]{64}$/i.test(rawPairingKey)
       ? rawPairingKey.toLowerCase()
       : undefined;
+  // SWK provisioning: the optional Service Workload Key is likewise a TOP-LEVEL
+  // recipe sibling (read off the ORIGINAL parsed object, before the envelope
+  // flatten drops top-level siblings). UNSIGNED — recipe metadata, never part of
+  // the verified InstallBlob.
+  const rawSwk = (parsed as Record<string, unknown>).swkHex;
+  const swkHex =
+    typeof rawSwk === "string" && /^[0-9a-f]{64}$/i.test(rawSwk)
+      ? rawSwk.toLowerCase()
+      : undefined;
   // Accept both the flattened recipe and the issued envelope that .com / the
   // website hand out: { blob: {...}, blobSignature: "..." }.
   let obj = parsed as Record<string, unknown>;
@@ -147,7 +165,7 @@ export function loadBlobFromString(
       "bad-signature",
     );
   }
-  return { blob, blobSignatureHex: sigHex, pairingKeyPrivHex, source };
+  return { blob, blobSignatureHex: sigHex, pairingKeyPrivHex, swkHex, source };
 }
 
 export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
