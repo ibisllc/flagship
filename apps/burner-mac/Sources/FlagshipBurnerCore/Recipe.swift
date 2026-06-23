@@ -177,6 +177,14 @@ public enum RecipeLoader {
             if let pairing = obj["pairingKeyPrivHex"] as? String {
                 blob["pairingKeyPrivHex"] = pairing
             }
+            // SWK provisioning: same mechanism — carry the UNSIGNED top-level
+            // `swkHex` sibling INTO the flattened blob so it lands in the on-disk
+            // install-blob.json the daemon reads + persists at first boot. NOT
+            // part of the signed blob (so canonical bytes / sha-pins are
+            // unchanged), and the envelope flatten would otherwise drop it.
+            if let swk = obj["swkHex"] as? String {
+                blob["swkHex"] = swk
+            }
             return (try? JSONSerialization.data(withJSONObject: blob)) ?? data
         }
         return data
