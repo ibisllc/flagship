@@ -939,6 +939,65 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // secretMailbox swk lane — secret-free-recipe SWK delivery: the phone
+  // deposits the sealed SWK-delivery carrier; the box consumes it once on
+  // first boot. Same consume-once + dedup + GC semantics as the other lanes;
+  // the carrier wraps a SEALED secret (not a public order).
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (swk lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("deposit → consume-once → second consume returns undefined", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putSwkDeposit(mk("aa".repeat(16), "cafebabe"));
+        const first = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 11);
+        return { putOk: put.ok, firstSealed: first?.sealedHex, secondDefined: second !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ putOk: true, firstSealed: "cafebabe", secondDefined: false });
+    });
+
+    it("duplicate nonce rejected; expired rows never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSwkDeposit(mk("bb".repeat(16), "one", 1000));
+        const dup = await s.secretMailbox.putSwkDeposit(mk("bb".repeat(16), "two", 1000));
+        await s.secretMailbox.putSwkDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeSwkDeposit("old.alice.flagship.services", 100);
+        return { dupOk: dup.ok, expiredDefined: expired !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ dupOk: false, expiredDefined: false });
+    });
+
+    it("the swk lane does not bleed into the self-delete lane (lane isolation)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSwkDeposit(mk("dd".repeat(16), "swkblob"));
+        // A self-delete consume must NOT return the swk row.
+        const cross = await s.secretMailbox.consumeSelfDeleteDeposit(
+          "home.alice.flagship.services",
+          10,
+        );
+        const own = await s.secretMailbox.consumeSwkDeposit("home.alice.flagship.services", 11);
+        return { crossDefined: cross !== undefined, ownSealed: own?.sealedHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ crossDefined: false, ownSealed: "swkblob" });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // serverTransfers — the transfer-a-box broker lane. One offer per box
   // (re-issue replaces); claim is a one-time CAS; getOffer GCs an unclaimed
   // expired offer but keeps a claimed one.
