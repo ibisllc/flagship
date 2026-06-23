@@ -32,6 +32,7 @@ import com.flagshipserver.app.core.deriveSessionKey
 import com.flagshipserver.app.core.deriveSharedSecret
 import com.flagshipserver.app.core.encodeLedSas
 import com.flagshipserver.app.core.encodeSasForDisplay
+import com.flagshipserver.app.core.ledSasGlances
 import com.flagshipserver.app.core.openWiFiConfig
 import com.flagshipserver.app.core.parseWifiDepositBlob
 import com.flagshipserver.app.core.signPair
@@ -524,5 +525,114 @@ class NfcPairViewModelTest {
         assertEquals("no deposit must be made", 0, rdz.deposits.size)
         // lastDeposit should be null even if a future regression caches.
         assertNull(rdz.deposits.firstOrNull())
+    }
+
+    // ── N-PHONE-6: LED-SAS capture ────────────────────────────────────
+
+    /** Recover the expected per-glance pattern the way the box would. */
+    private fun expectedGlances(fx: Fixture, ePhonePub: ByteArray): List<String> {
+        val ssBox = deriveSharedSecret(fx.eBoxPriv, ePhonePub)
+        val sas = deriveSAS(
+            sharedSecret = ssBox,
+            stkPub = fx.payload.stkPub,
+            eBoxPub = fx.payload.eBoxPub,
+            ePhonePub = ePhonePub,
+            nonce = fx.payload.nonce,
+            sessionId = fx.payload.sessionId,
+            v = fx.payload.v,
+        )
+        return ledSasGlances(encodeLedSas(sas))
+    }
+
+    private fun tappedVm(fx: Fixture, gen: () -> Pair<ByteArray, ByteArray>): NfcPairViewModel {
+        val reader = MockNfcPairReader(Result.success(ReadPairResult(fx.payload, fx.signature)))
+        val vm = NfcPairViewModel(reader, MockNfcRendezvousClient(), ephemeralKeyGen = gen)
+        vm.startTap(activity())
+        return vm
+    }
+
+    @Test fun ledCapture_correctGlances_confirms() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (keys, gen) = stableKeyGen()
+        val vm = tappedVm(fx, gen)
+        advanceUntilIdle()
+        val glances = expectedGlances(fx, keys.second)
+
+        vm.beginLedSasCapture()
+        assertEquals(glances, vm.ledCapture.first()!!.expectedGlances)
+        assertEquals(0, vm.ledCapture.first()!!.currentGlance)
+
+        glances.forEach { vm.recordLedGlance(it) }
+
+        val cap = vm.ledCapture.first()!!
+        assertEquals(LedSasCapture.Verdict.CONFIRMED, cap.verdict)
+        assertNull(cap.currentGlance)
+        assertTrue(cap.isComplete)
+    }
+
+    @Test fun ledCapture_oneWrongGlance_failsClosed_notBestOfThree() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (keys, gen) = stableKeyGen()
+        val vm = tappedVm(fx, gen)
+        advanceUntilIdle()
+        val glances = expectedGlances(fx, keys.second)
+
+        vm.beginLedSasCapture()
+        vm.recordLedGlance(glances[0])
+        vm.recordLedGlance(glances[1])
+        val wrong = if (glances[2] == "RRR") "GGG" else "RRR"
+        vm.recordLedGlance(wrong)
+
+        assertEquals(LedSasCapture.Verdict.MISMATCH, vm.ledCapture.first()!!.verdict)
+    }
+
+    @Test fun ledCapture_malformedGlanceIgnored_doesNotAdvance() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (_, gen) = stableKeyGen()
+        val vm = tappedVm(fx, gen)
+        advanceUntilIdle()
+
+        vm.beginLedSasCapture()
+        assertEquals(0, vm.ledCapture.first()!!.currentGlance)
+        vm.recordLedGlance("RG")   // too short
+        vm.recordLedGlance("RGX")  // unknown symbol
+        val cap = vm.ledCapture.first()!!
+        assertEquals(0, cap.observed.size)
+        assertEquals(0, cap.currentGlance)
+        assertEquals(LedSasCapture.Verdict.PENDING, cap.verdict)
+    }
+
+    @Test fun ledCapture_resetClearsCapture() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (keys, gen) = stableKeyGen()
+        val vm = tappedVm(fx, gen)
+        advanceUntilIdle()
+
+        vm.beginLedSasCapture()
+        vm.recordLedGlance(expectedGlances(fx, keys.second)[0])
+        assertNotNull(vm.ledCapture.first())
+        vm.resetLedSasCapture()
+        assertNull(vm.ledCapture.first())
+    }
+
+    @Test fun ledCapture_requiresActivePairing() = runTest(dispatcher) {
+        val reader = MockNfcPairReader(
+            Result.failure(NfcPairReaderException(NfcPairReaderError.Timeout, "x")),
+        )
+        val vm = NfcPairViewModel(reader, MockNfcRendezvousClient())
+        // No successful tap → no SAS → begin is a no-op.
+        vm.beginLedSasCapture()
+        assertNull(vm.ledCapture.first())
+    }
+
+    @Test fun ledCapture_clearedOnReset() = runTest(dispatcher) {
+        val fx = makeFixture()
+        val (_, gen) = stableKeyGen()
+        val vm = tappedVm(fx, gen)
+        advanceUntilIdle()
+        vm.beginLedSasCapture()
+        vm.reset()
+        assertNull(vm.ledCapture.first())
+        assertTrue(vm.phase.first() is NfcPairPhase.Idle)
     }
 }
