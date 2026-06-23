@@ -52,6 +52,8 @@ import {
   handleConsumePairingDeposit,
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
+  handlePostSwkDeposit,
+  handleConsumeSwkDeposit,
   handleConsumeSelfDeleteDeposit,
   handlePostDecommission,
   handleGetDecommission,
@@ -510,6 +512,9 @@ const ROUTE_RE = {
   // Entitlement deposit-on-unlock: POST phone deposit (IRK mailbox-auth, the
   // PUBLIC IRK-signed entitlement) / GET box consume-once read.
   ENTITLEMENT_DEPOSIT: /^\/api\/server\/([^/]+)\/entitlement-deposit$/,
+  // Secret-free-recipe SWK delivery: POST phone deposit (IRK mailbox-auth, the
+  // SEALED SWK-delivery carrier) / GET box consume-once read (sealed only).
+  SWK_DEPOSIT: /^\/api\/server\/([^/]+)\/swk-deposit$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
   // Graceful server-replacement decommission (docs/server-replacement-graceful-
   // decommission.md). The bare `decommission` path is method-discriminated:
@@ -1498,6 +1503,22 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.ENTITLEMENT_DEPOSIT))) {
       return finishPlain(
         await handleConsumeEntitlementDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Secret-free-recipe SWK delivery — phone deposit (IRK mailbox-auth, the
+    // SEALED SWK-delivery carrier) + box consume-once read (sealed-only, public).
+    if (method === "POST" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
+      return finishPlain(
+        await handlePostSwkDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SWK_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeSwkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // Account-death content-wipe — box consume-once read of the owner-IRK-signed

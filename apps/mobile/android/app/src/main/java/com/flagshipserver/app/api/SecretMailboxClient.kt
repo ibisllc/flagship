@@ -66,6 +66,12 @@ interface SecretMailboxClient {
      *  §6). `.com` mailbox-auths the depositor as the domain's registered owner,
      *  re-verifies the order under that owner's IRK, and records the eviction so
      *  the box self-retires on its next outbound poll. Throws on non-2xx. */
+    /** POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth. Secret-free
+     * recipe: after the box registers, the phone seals the SWK to its registered
+     * identity and IRK-signs the wrapper, depositing the sealed carrier for the box
+     * to claim on boot. Reuses PairingDepositBody. */
+    suspend fun depositSwk(serverDomain: String, body: PairingDepositBody)
+
     suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
 }
 
@@ -461,6 +467,20 @@ class LiveSecretMailboxClient(
         )
     }
 
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/swk-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
     override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
         val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
         val bytes = transport.json
@@ -527,6 +547,14 @@ class MockSecretMailboxClient : SecretMailboxClient {
     val entitlementDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
     override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
         entitlementDeposits.add(serverDomain to body)
+    }
+
+    val swkDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    /** When set, the next [depositSwk] throws this, then clears it. */
+    var swkDepositError: Throwable? = null
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        swkDepositError?.let { swkDepositError = null; throw it }
+        swkDeposits.add(serverDomain to body)
     }
 
     /** When set, the next [depositDecommission] throws this, then clears it. */

@@ -726,7 +726,8 @@ export type SecretMailboxPurpose =
   | "entitlement"
   | "pairing"
   | "entitlement-deposit"
-  | "self-delete";
+  | "self-delete"
+  | "swk";
 
 /**
  * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
@@ -898,6 +899,24 @@ export interface SecretMailboxStorage {
    * the order undeliverable; it is safe because the order is owner-IRK-signed.
    */
   consumeSelfDeleteDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Secret-free-recipe SWK delivery (docs/recipe-delivery-and-remote-install.md)
+   * — the PHONE seals the box's Service Workload Key to the box's OWN identity
+   * (generated at first boot) and IRK-signs the wrapper, then deposits it here so
+   * the box claims it on boot and turns on its service platform with NO secret in
+   * the recipe. Stored like a pairing deposit (a `purpose:"swk"` row whose
+   * `sealedHex` holds the SWK-delivery carrier). UNLIKE the entitlement/self-delete
+   * deposits, the carrier wraps a SEALED secret — `.com` holds ciphertext only
+   * (I1/I3); the box unseals it with its identity key. Caller has IRK-mailbox-auth'd.
+   */
+  putSwkDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box first-boot: atomically consume the freshest un-expired SWK deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read
+   * at the handler — the carrier is SEALED for the box identity, so disclosure is
+   * harmless (mirrors the pairing-deposit release posture).
+   */
+  consumeSwkDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -66,6 +66,12 @@ public protocol SecretMailboxClient: Sendable {
     /// re-verifies the order under that owner's IRK, and records the eviction so
     /// the box self-retires on its next outbound poll. Throws on non-2xx.
     func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws
+
+    /// POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth. Secret-free
+    /// recipe: the recipe carries NO SWK; after the box registers, the phone seals
+    /// the SWK to the box's REGISTERED identity and IRK-signs the wrapper, depositing
+    /// the sealed carrier here for the box to claim on boot. Reuses `PairingDepositBody`.
+    func depositSwk(serverDomain: String, body: PairingDepositBody) async throws
 }
 
 /// The decommission deposit body. `auth`/`authSignature` are the SAME IRK
@@ -614,6 +620,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/swk-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad swk-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
@@ -743,6 +764,16 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public private(set) var entitlementDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
     public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
         entitlementDeposits.append((serverDomain, body))
+    }
+    public private(set) var swkDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    /// When set, `depositSwk` throws it once (to exercise best-effort/retry paths).
+    public var swkDepositError: Error?
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        if let e = swkDepositError {
+            swkDepositError = nil
+            throw e
+        }
+        swkDeposits.append((serverDomain, body))
     }
     /// Optional error to throw on the next `depositDecommission`, then cleared.
     public var nextDecommissionError: Error?

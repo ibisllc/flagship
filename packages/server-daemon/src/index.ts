@@ -121,6 +121,10 @@ import {
   pollReplacementRestored,
 } from "./decommissionConsumer.js";
 import { buildRehomePoller, readRehomeMarker } from "./transferRehomeConsumer.js";
+import {
+  buildSwkDepositPoller,
+  fileSwkMarkerStore,
+} from "./swkDepositConsumer.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -482,6 +486,35 @@ async function main(): Promise<void> {
     privateKey: identityPrivKey,
     publicKey: ed.getPublicKey(identityPrivKey),
   };
+
+  // ---- Secret-free-recipe SWK delivery consumer ----
+  // (docs/recipe-delivery-and-remote-install.md). When NO SWK is provisioned
+  // (env / swk.hex / install-blob swkHex all absent — the default secret-free
+  // recipe), poll the `.com` swk lane: the owner's phone seals the SWK to THIS
+  // box's identity and IRK-signs the wrapper; we verify under the config-pinned
+  // owner IRK, unseal with the identity key, persist swk.hex, and RESTART so the
+  // SWK resolution above picks it up and the service platform constructs. Runs
+  // ONLY in the no-SWK + production (cfg present) state — the recipe-embedded
+  // swkHex path is entirely untouched; demo/gym (cfg-absent) is a no-op.
+  if (!swkHex && cfg && env.controlPlaneBaseUrl) {
+    const swkPoller = buildSwkDepositPoller({
+      serverDomain: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
+      boxIdentityPriv: identityPrivKey,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
+      restart: () => {
+        console.log("[daemon] SWK provisioned via deposit — restarting to enable the service platform");
+        process.exit(0);
+      },
+      markerStore: fileSwkMarkerStore(`${dataDir}/swk-claimed.json`),
+      onLog: (m) => console.log(m),
+    });
+    swkPoller.start();
+    process.once("SIGTERM", () => swkPoller.stop());
+    process.once("SIGINT", () => swkPoller.stop());
+    console.log("[daemon] no SWK yet — swk-deposit consumer armed (secret-free recipe)");
+  }
 
   // ---- Paired-session store (phone-paired browser bearer tokens) ----
   const pairedSessions = new FilePairedSessionStore(defaultPairedSessionPath(dataDir));

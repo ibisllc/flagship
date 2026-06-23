@@ -31,6 +31,8 @@ import com.flagshipserver.app.core.BootApprovalWatcher
 import com.flagshipserver.app.core.BoxRequest
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.PendingServerReconciler
+import com.flagshipserver.app.core.PendingSwkDepositStore
+import com.flagshipserver.app.core.SwkDepositCoordinator
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
@@ -61,7 +63,24 @@ fun HomeTab() {
     // fetch (registered servers + active orders). Surfaces in-flight orders
     // (the never-ported "home2" fix) and ages out dead pending ghosts. A pure
     // read — NO biometric prompt; Face ID stays only on mutations.
-    val reconciler = remember(mailbox) { PendingServerReconciler(app, mailbox) }
+    val reconcilerContext = LocalContext.current
+    val reconciler = remember(mailbox) {
+        // Secret-free recipe: deposit the SWK once a box registered without it
+        // embedded. The coordinator no-ops unless a deposit is owed (idempotent
+        // via PendingSwkDepositStore), so this is safe on every reconcile.
+        val swkStore = PendingSwkDepositStore.from(reconcilerContext)
+        PendingServerReconciler(
+            app = app,
+            mailbox = mailbox,
+            onRegistered = { fqdn, identityPubKeyHex ->
+                val user = app.currentUser.value
+                if (!user.isNullOrEmpty()) {
+                    SwkDepositCoordinator.live(user, mailbox, swkStore)
+                        .depositIfNeeded(fqdn, identityPubKeyHex)
+                }
+            },
+        )
+    }
     // Account-level "what is each box asking me to approve?" poller. Populates
     // app.boxRequestInbox (the unified Box Request Inbox, docs/box-request-inbox.md)
     // so the list / detail / checklist read a per-server waiting state from ONE

@@ -88,6 +88,25 @@ public final class CreateServerViewModel {
     /// default + a pre-diskEncryption verifier still accepts it (absence ⇒
     /// "luks"), mirroring how bootUnlockMode "auto" stays off the wire.
     public var encryptDisk: Bool = true
+    /// ADVANCED MODE — one toggle, OFF by default ("for people who know what
+    /// they're doing"). On mobile it gates the offline path: embed-secrets (the
+    /// SWK in the recipe) so a box can install with NO post-registration phone
+    /// step. (Choose-your-own-ISO + debug/local-CLI are website/webapp-only —
+    /// they have no mobile analogue.) When OFF, the offline sub-options snap back
+    /// to the secret-free default.
+    public var advancedMode: Bool = false {
+        didSet {
+            if !advancedMode { embedSecrets = false }
+        }
+    }
+    /// Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
+    /// the recipe is secret-free of the SWK and the phone DEPOSITS it after the
+    /// box registers (docs/recipe-delivery-and-remote-install.md). ON (only
+    /// reachable under Advanced mode) embeds `swkHex` in the recipe so the box
+    /// installs fully offline with no later deposit — for air-gapped / offline
+    /// installs by people who understand the trade-off (the recipe then carries
+    /// a secret).
+    public var embedSecrets: Bool = false
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -108,6 +127,10 @@ public final class CreateServerViewModel {
     private let bootUnlock: BootUnlockStore
     private let draftStore: CreateServerDraftStore
     private let diskEncryption: DiskEncryptionStore
+    /// Secret-free recipe: records that an SWK deposit is OWED for this server
+    /// when embed-secrets is OFF, so the Home reconcile deposits it once the box
+    /// registers. Untouched (no record) when embed-secrets is ON.
+    private let swkDepositStore: PendingSwkDepositStore
     /// `.com` mailbox client — used at mint time to pre-register the create-time
     /// pairing deposit (so the creating device comes online ALREADY paired).
     private let mailbox: any SecretMailboxClient
@@ -122,6 +145,7 @@ public final class CreateServerViewModel {
         bootUnlock: BootUnlockStore = BootUnlockStore(),
         draftStore: CreateServerDraftStore = CreateServerDraftStore(),
         diskEncryption: DiskEncryptionStore = DiskEncryptionStore(),
+        swkDepositStore: PendingSwkDepositStore = PendingSwkDepositStore(),
         mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
         sessionStore: any SessionStoring = SessionStore()
     ) {
@@ -130,6 +154,7 @@ public final class CreateServerViewModel {
         self.relay = relay
         self.bootUnlock = bootUnlock
         self.diskEncryption = diskEncryption
+        self.swkDepositStore = swkDepositStore
         self.draftStore = draftStore
         self.mailbox = mailbox
         self.sessionStore = sessionStore
@@ -368,11 +393,26 @@ public final class CreateServerViewModel {
             pairingKeyPrivHex = nil
         }
 
+        // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
+        //   embed-secrets ON (advanced/offline): keep the SWK in the recipe; the
+        //     box installs fully offline with NO post-registration deposit.
+        //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the
+        //     SWK; record that a deposit is OWED so the Home reconcile seals +
+        //     deposits the SWK once the box registers (one tap then, not now).
+        let embeddedSwkHex: String?
+        if embedSecrets {
+            embeddedSwkHex = boxSwkHex
+            swkDepositStore.clear(for: serverDomain)
+        } else {
+            embeddedSwkHex = nil
+            swkDepositStore.markPending(for: serverDomain)
+        }
+
         return SignedInstallBlob(
             blob: blob,
             signatureHex: HexUtil.encode(blobSig),
             pairingKeyPrivHex: pairingKeyPrivHex,
-            swkHex: boxSwkHex
+            swkHex: embeddedSwkHex
         )
     }
 }

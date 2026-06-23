@@ -409,6 +409,10 @@ public struct HomeTab: View {
     private func reconcileServerTruth() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
         let mailbox = self.mailbox
+        // Secret-free recipe: deposit the SWK once a box registered without it
+        // embedded. The coordinator no-ops unless a deposit is owed (idempotent
+        // via PendingSwkDepositStore), so this is safe on every reconcile.
+        let swkDeposit = SwkDepositCoordinator(username: user, mailbox: mailbox)
         let reconciler = PendingServerReconciler(
             app: app,
             fetchPods: { username in
@@ -421,6 +425,9 @@ public struct HomeTab: View {
                 } catch {
                     return nil
                 }
+            },
+            onRegistered: { fqdn, identityPubKeyHex in
+                await swkDeposit.depositIfNeeded(serverDomain: fqdn, identityPubKeyHex: identityPubKeyHex)
             }
         )
         await reconciler.reconcile()

@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,6 +69,7 @@ import com.flagshipserver.app.core.CreateTimePairing
 import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
+import com.flagshipserver.app.core.PendingSwkDepositStore
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
@@ -125,6 +127,18 @@ fun CreateServerScreen(
     // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
     // "none": plaintext disk, for boxes that can't keep network at boot.
     var encryptDisk by remember { mutableStateOf(true) }
+    // ADVANCED MODE — one toggle, OFF by default ("for people who know what
+    // they're doing"). On mobile it gates the offline path: embed-secrets (the
+    // box SWK in the recipe), so a box installs fully offline with no
+    // post-registration phone step. (Choose-your-own-ISO + debug/local-CLI have
+    // no mobile analogue — they live on the website/webapp.) When OFF, the
+    // offline sub-options snap back to the secret-free default.
+    var advancedMode by remember { mutableStateOf(false) }
+    // Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
+    // the recipe is secret-free of the SWK and the phone DEPOSITS it once the box
+    // registers (docs/recipe-delivery-and-remote-install.md).
+    var embedSecrets by remember { mutableStateOf(false) }
+    val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     // Backup policy — draft-only metadata (phone-only default). Hydrated from
     // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
     // the wire (applied later via an owner-signed set-backup-policy order).
@@ -160,6 +174,13 @@ fun CreateServerScreen(
                 onBootUnlockMode = { bootUnlockMode = it },
                 encryptDisk = encryptDisk,
                 onEncryptDisk = { encryptDisk = it },
+                advancedMode = advancedMode,
+                onAdvancedMode = {
+                    advancedMode = it
+                    if (!it) embedSecrets = false
+                },
+                embedSecrets = embedSecrets,
+                onEmbedSecrets = { embedSecrets = it },
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -197,6 +218,12 @@ fun CreateServerScreen(
                                 // Only "none" rides the wire; "luks" (default)
                                 // stays absent (legacy bytes + webapp parity).
                                 diskEncryption = if (encryptDisk) null else "none",
+                                // Secret-free recipe: embed the SWK in the recipe
+                                // ONLY when Advanced + embed-secrets is on; OFF
+                                // (default) keeps the recipe secret-free and the
+                                // phone deposits the SWK after registration.
+                                embedSecrets = embedSecrets,
+                                swkDepositStore = swkDepositStore,
                                 // Create-time pairing: deposit a sealed pairing
                                 // order with .com + persist the session token so
                                 // the box comes online ALREADY paired.
@@ -294,6 +321,10 @@ private fun DesignPhase(
     onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
     encryptDisk: Boolean,
     onEncryptDisk: (Boolean) -> Unit,
+    advancedMode: Boolean,
+    onAdvancedMode: (Boolean) -> Unit,
+    embedSecrets: Boolean,
+    onEmbedSecrets: (Boolean) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -328,6 +359,13 @@ private fun DesignPhase(
             BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
             Spacer(Modifier.height(FS.space.s4))
             DiskEncryptionPicker(encryptDisk = encryptDisk, onEncryptDisk = onEncryptDisk)
+            Spacer(Modifier.height(FS.space.s4))
+            AdvancedModePicker(
+                advancedMode = advancedMode,
+                onAdvancedMode = onAdvancedMode,
+                embedSecrets = embedSecrets,
+                onEmbedSecrets = onEmbedSecrets,
+            )
             Spacer(Modifier.height(FS.space.s4))
             BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
 }
@@ -443,6 +481,64 @@ private fun DiskEncryptionPicker(
         subtitle = "Less safe — anyone with the disk can read it. Choose this only for a box that can't keep network at boot (Wi-Fi-only): it boots with no connection.",
         onClick = { onEncryptDisk(false) },
     )
+}
+
+// Advanced mode — ONE toggle, OFF by default, "for people who know what they're
+// doing". It gates the offline path: embed-secrets (the box SWK in the recipe),
+// so a box installs fully offline with no post-registration phone step. The
+// DEFAULT (Advanced off) is the secret-free recipe — the phone deposits the SWK
+// after the box registers. (Choose-your-own-ISO + debug/local-CLI have no mobile
+// analogue; they live on the website/webapp.)
+@Composable
+private fun AdvancedModePicker(
+    advancedMode: Boolean,
+    onAdvancedMode: (Boolean) -> Unit,
+    embedSecrets: Boolean,
+    onEmbedSecrets: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Advanced mode",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+            )
+            Text(
+                "For people who know what they're doing.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+            )
+        }
+        Switch(
+            checked = advancedMode,
+            onCheckedChange = onAdvancedMode,
+            modifier = Modifier.testTag("cs-advanced-toggle"),
+        )
+    }
+    if (advancedMode) {
+        Spacer(Modifier.height(FS.space.s2))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Embed secrets for offline install",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = embedSecrets,
+                onCheckedChange = onEmbedSecrets,
+                modifier = Modifier.testTag("cs-embed-secrets-toggle"),
+            )
+        }
+        Text(
+            if (embedSecrets)
+                "The recipe carries the box's app key. The box installs fully offline — no later step on your phone — but the recipe now holds a secret. Keep it safe."
+            else
+                "Off (recommended): the recipe holds no app key. Your phone delivers it securely once the box comes online.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp),
+        )
+    }
 }
 
 // Backup policy — draft-only metadata, three tiers, default "phone-only".
@@ -603,6 +699,11 @@ private suspend fun prepareDelivery(
     // default (omitted from the signed canonical bytes + the wire, like
     // bootUnlockMode's "auto").
     diskEncryption: String? = null,
+    // Secret-free recipe: when true (advanced/offline) the SWK is embedded in the
+    // recipe and NO deposit is owed; when false (the DEFAULT) the recipe is
+    // secret-free of the SWK and a deposit is recorded as owed.
+    embedSecrets: Boolean = false,
+    swkDepositStore: PendingSwkDepositStore? = null,
     // Create-time pairing: optional so the unit tests' direct calls stay simple;
     // production passes both so the deposit + token-persist run.
     mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
@@ -661,7 +762,21 @@ private suspend fun prepareDelivery(
     // and embed it as an UNSIGNED `swkHex` recipe sibling the daemon persists at
     // first boot. The box can't derive it (no UMK). Reuses the in-hand UMK seed —
     // no extra biometric.
-    val boxSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
+    // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
+    //   embed-secrets ON (advanced/offline): keep the SWK in the recipe; the box
+    //     installs fully offline with NO post-registration deposit.
+    //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the SWK;
+    //     record that a deposit is OWED so the Home reconcile seals + deposits the
+    //     SWK once the box registers (one tap then, not now).
+    val derivedSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
+    val embeddedSwkHex: String?
+    if (embedSecrets) {
+        embeddedSwkHex = derivedSwkHex
+        swkDepositStore?.clear(serverDomain)
+    } else {
+        embeddedSwkHex = null
+        swkDepositStore?.markPending(serverDomain)
+    }
 
     // Create-time pairing: pre-register a sealed `add-paired-session` order with
     // `.com` and embed the pairing key's private half in the recipe, so the
@@ -713,7 +828,7 @@ private suspend fun prepareDelivery(
         ),
         blobSignature = blobSigHex,
         pairingKeyPrivHex = pairingKeyPrivHex,
-        swkHex = boxSwkHex,
+        swkHex = embeddedSwkHex,
     )
 
     return PendingDelivery(
