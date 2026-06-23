@@ -116,6 +116,7 @@ import {
   handlePostUsernameRename,
   handleGetUsernameAlias,
   handleGetUserPods,
+  handleUserStream,
   handleListOutstandingOrders,
   handleGetUsersDevices,
   handleAccountResolve,
@@ -557,6 +558,10 @@ const ROUTE_RE = {
   //   DELETE delivery-revoke (IRK-signed)
   ACME_ACCOUNT_KEY_DELIVERY: /^\/api\/server\/([^/]+)\/acme-account-key$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  // Unified live-update channel — a single foreground long-poll that returns
+  // the same payload as /pods PLUS a change-detection `cursor`, holding until
+  // the user's meaningful state changes (or ~25s). Unauthenticated, like /pods.
+  USER_STREAM: /^\/api\/users\/([^/]+)\/stream$/,
   // #43 — IRK-signed list of the account's IN-FLIGHT install orders, the
   // authority the phone reconciles its local pending-server cache against.
   USER_OUTSTANDING_ORDERS: /^\/api\/users\/([^/]+)\/outstanding-orders$/,
@@ -1880,6 +1885,22 @@ export async function tryControlPlane(
           secretMailbox: storage.secretMailbox,
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_STREAM))) {
+    return finish(
+      await handleUserStream(
+        {
+          daemonStatus: storage.daemonStatus,
+          servers: storage.servers,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          provisionStatus: storage.provisionStatus,
+          secretMailbox: storage.secretMailbox,
+        },
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("cursor"),
       ),
     );
   }
