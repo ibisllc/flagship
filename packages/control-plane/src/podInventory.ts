@@ -129,10 +129,39 @@ export interface PendingPodEntry {
   state: "pending";
 }
 
-export async function handleGetUserPods(
+/** A registered, online pod, shaped for the merged `/pods` list. */
+export interface OnlinePodEntry {
+  serverDomain: string;
+  identityPubKey: string;
+  registeredAt: number;
+  revokedAt: number | null;
+  routingTarget: string | null;
+  lastReported: number | null;
+  currentCert: { sha256: string | null; validUntil: number | null; issuer: string | null } | null;
+  signedStatus: { report: unknown; signatureHex: string } | null;
+  appsServed: string[];
+  pendingRequests: PendingRequestSummary[];
+  state: "online";
+}
+
+/** The full pod-inventory projection (the `/pods` payload, sans HTTP wrapper). */
+export interface PodInventory {
+  username: string;
+  pods: OnlinePodEntry[];
+  pending: PendingPodEntry[];
+  fetchedAt: number;
+}
+
+/**
+ * Build the consolidated pod inventory for a user. This is the SINGLE source
+ * of the `/pods` payload — both `handleGetUserPods` (the unauthenticated GET)
+ * and `handleUserStream` (the long-poll) call it, so they never drift. Cheap
+ * to re-call in a loop: a handful of indexed storage reads, no external I/O.
+ */
+export async function buildPodInventory(
   deps: PodInventoryDeps,
   username: string,
-): Promise<HandlerResponseWithHeaders> {
+): Promise<PodInventory> {
   const servers = await deps.servers.listForUser(username);
   const statuses = await deps.daemonStatus.listForUser(username);
   const statusByDomain = new Map<string, (typeof statuses)[number]>();
@@ -172,8 +201,8 @@ export async function handleGetUserPods(
     }
   }
 
-  const pods = await Promise.all(
-    servers.map(async (s) => {
+  const pods: OnlinePodEntry[] = await Promise.all(
+    servers.map(async (s): Promise<OnlinePodEntry> => {
       const routing = await deps.routing.get(s.serverDomain);
       const status = statusByDomain.get(s.serverDomain.toLowerCase());
       const pendingRequests = pendingByDomain.get(s.serverDomain.toLowerCase()) ?? [];
@@ -301,7 +330,14 @@ export async function handleGetUserPods(
     }
   }
 
-  return ok({ username, pods, pending, fetchedAt: now });
+  return { username, pods, pending, fetchedAt: now };
+}
+
+export async function handleGetUserPods(
+  deps: PodInventoryDeps,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  return ok(await buildPodInventory(deps, username));
 }
 
 interface DaemonStatusBody {
