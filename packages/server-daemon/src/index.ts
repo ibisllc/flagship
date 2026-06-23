@@ -427,6 +427,22 @@ async function main(): Promise<void> {
       await persistSwkHex(swkHexFilePath, fromBlob);
     }
   }
+  // When NOTHING above provisions an SWK the box stays platform-less — say so
+  // LOUDLY rather than silently. Reached only by a legacy recipe (minted before
+  // SWK provisioning) or a corrupted/missing sibling; once phone-provisioning is
+  // in every recipe it should never fire. We deliberately do NOT mint a local
+  // random fallback: that would let the box come up "working" with its secrets
+  // AND peer-backups sealed under a key nothing can reproduce (backupLoop
+  // encrypts chunks with the SWK), silently breaking the recovery guarantee the
+  // deterministic deriveSWK(umk, serverId) exists to provide. Failing visibly —
+  // reburn from a current recipe — is safer than an unrecoverable-data trap.
+  if (!swkHex) {
+    console.error(
+      "[daemon] no SWK provisioned — build/service platform DISABLED. This box's " +
+        "recipe is missing its Service Workload Key (deriveSWK); reburn from a " +
+        "current recipe to enable build-a-service.",
+    );
+  }
   const { backupLoop, repairAccumulator, repairScheduler } =
     wirePeerBackup({ swkHex });
 
