@@ -28,6 +28,7 @@ import {
 import { controlApex } from "../lib/apex.js";
 import { isServerDecommissioned } from "../lib/serverReplacement.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
+import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
 
@@ -347,6 +348,15 @@ export function homeSearchMatches(query, fields) {
  * leases mean the daemon is reachable without phone tap) and otherwise
  * label the row as "phone-tap only" — accurate to the default.
  */
+/** The services this pod currently LEADS, from `/pods` `leadsServices` (Phase 6).
+ *  Tolerant of absence (the field is additive; a `.com`/box that doesn't relay it
+ *  yields []). Returns a clean string[] of slugs. */
+export function leadsOf(pod) {
+  const raw = pod?.leadsServices;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s) => String(s ?? "").trim()).filter(Boolean);
+}
+
 export function renderServerCard(server, pod, opts = {}) {
   const c = classifyServer(server, pod, opts);
   const pillClass = c.kind === "online" ? "pill ok"
@@ -366,7 +376,14 @@ export function renderServerCard(server, pod, opts = {}) {
     : "phone-tap only";
   // Subtitle folds the app count + auto-unlock state into one muted line; the
   // cert countdown (when <30d) rides the mono detail line.
-  const subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  let subtitle = `${serviceCount} service${serviceCount === 1 ? "" : "s"} · ${autoUnlock}`;
+  // Per-service leadership (Phase 6): `/pods` relays `leadsServices: [slug]` —
+  // the services THIS box currently leads (highest-clout live runner). Additive
+  // + tolerant of absence: only append when the box actually leads ≥1 service.
+  const leads = leadsOf(pod);
+  if (leads.length) {
+    subtitle += ` · leads ${leads.length === 1 ? leads[0] : `${leads.length} services`}`;
+  }
   // A box that registered during install but whose daemon never checked in
   // (`never-seen`) is a dead install — offer the decommission / free-the-name
   // delete via the RELEASE flow (NOT the lost/stolen revoke). A live server is
@@ -389,7 +406,13 @@ export function renderServerCard(server, pod, opts = {}) {
     detail: certCountdown ? String(certCountdown) : "",
     // Status pill stacks UNDER the text — labels like "never came online" need a
     // full line rather than being crushed into the right margin against the title.
-    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
+    // Per-service leadership (Phase 6): a "lead" pill rides alongside when this
+    // box currently leads ≥1 service (additive; absent ⇒ no pill).
+    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>${
+      leads.length
+        ? ` <span class="pill ok" title="leads ${escapeHtml(leads.join(", "))}">lead</span>`
+        : ""
+    }`,
     trailingBelow: true,
   });
   return `
@@ -939,6 +962,13 @@ export async function renderHome() {
       // swkDeposit.js); best-effort + non-blocking so it never delays a render.
       if (pod?.identityPubKey) {
         depositSwkIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+        // Secret-free CGK (Phase 6): every registered box is owed the per-cloud
+        // gossip key so it can run per-service leadership. Seal + deposit it to
+        // the box identity; no-ops once deposited (idempotent via cgkDeposit.js).
+        depositCgkIfNeeded({
           serverDomain: String(s.serverId),
           identityPubKeyHex: String(pod.identityPubKey),
         }).catch(() => {});
