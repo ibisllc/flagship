@@ -798,6 +798,12 @@ private suspend fun prepareDelivery(
             // Persist the token only after `.com` accepted the deposit — the box
             // claims it on first boot, so by the time the server is online the
             // session token already matches and the BFF authenticates.
+            // MULTI-POD (Fix B): write under THIS pod's id (`pod-<lowercased-fqdn>`)
+            // so creating a 2nd box never clobbers the 1st box's token, AND keep
+            // the single active slot pointed at the box being created.
+            val podId = com.flagshipserver.app.core.PodInfo.podId(serverDomain)
+            sessionStore?.setSessionToken(pairing.token, forPodId = podId)
+            sessionStore?.setPodBaseUrl("https://$serverDomain")
             sessionStore?.setSessionToken(pairing.token)
             pairingKeyPrivHex = pairing.pairingKeyPrivHex
         } catch (_: Throwable) {

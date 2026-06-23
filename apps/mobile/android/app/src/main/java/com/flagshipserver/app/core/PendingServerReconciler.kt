@@ -84,6 +84,12 @@ class PendingServerReconciler(
                 // the last full reconcile" unlock signal, OR'd at read-time with
                 // the live watcher inbox in AppState.liveness.
                 awaitingUnlock = entry.pendingRequests.any { it.type == SecretPurpose.UNLOCK_KEY.wire },
+                // HONEST LIVENESS (Fix A) — the server-authoritative reachability;
+                // null on a pre-field Worker so upsertRegisteredPod falls back to
+                // the legacy registration-is-online path.
+                liveness = PodInfo.Liveness.fromWire(entry.liveness),
+                lastSeenMsAgo = entry.lastSeenMsAgo,
+                lastReported = entry.lastReported,
             )
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed for

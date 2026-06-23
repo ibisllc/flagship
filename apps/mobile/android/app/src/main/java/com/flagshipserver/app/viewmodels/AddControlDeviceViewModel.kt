@@ -67,17 +67,21 @@ class AddControlDeviceViewModel(
 
     /** Fire once per user confirm (the biometric fires inside [signer]). */
     suspend fun send(scanned: String) {
-        // Idempotency — a token already on disk means this device is paired.
-        val existing = store.sessionToken.value
-        if (!existing.isNullOrEmpty()) {
-            _phase.value = AddControlDevicePhase.AlreadyPaired
-            return
-        }
         val serverDomain = resolveServerDomain(scanned)
         if (serverDomain == null) {
             _phase.value = AddControlDevicePhase.Failed(
                 "That QR didn't carry a server address. Make sure you're scanning the pairing QR.",
             )
+            return
+        }
+        // Idempotency (Fix B) — a PER-POD token already on disk for THIS box means
+        // this device is paired with it. Keyed per pod so pairing a 2nd box isn't
+        // blocked by the 1st box's token (the old single-slot guard did exactly
+        // that).
+        val podId = com.flagshipserver.app.core.PodInfo.podId(serverDomain)
+        val existing = store.sessionToken(forPodId = podId)
+        if (!existing.isNullOrEmpty()) {
+            _phase.value = AddControlDevicePhase.AlreadyPaired
             return
         }
 
@@ -130,6 +134,11 @@ class AddControlDeviceViewModel(
 
         // Persist ONLY after the box accepted the order — a token the daemon
         // never stored would auth nothing and defeat the idempotency guard.
+        // MULTI-POD (Fix B): write the token under THIS pod's id
+        // (`pod-<lowercased-fqdn>`) so a 2nd box's pairing can't overwrite the
+        // 1st's; then activate it into the single active slots. Base URL is
+        // deterministic from the fqdn (`https://<fqdn>`).
+        store.setSessionToken(token, forPodId = podId)
         store.setPodBaseUrl("https://$serverDomain")
         store.setSessionToken(token)
         _phase.value = AddControlDevicePhase.Paired
