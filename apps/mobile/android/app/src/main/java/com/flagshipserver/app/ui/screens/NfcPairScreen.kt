@@ -11,6 +11,8 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +62,7 @@ import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.LedSasCapture
 import com.flagshipserver.app.viewmodels.NfcPairPhase
 import com.flagshipserver.app.viewmodels.NfcPairViewModel
 import com.flagshipserver.app.viewmodels.PairConfirmation
@@ -209,21 +212,7 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmati
                 style = TextStyle(fontSize = 12.sp),
             )
             if (confirmation.sasLed.isNotEmpty()) {
-                Text(
-                    "Optional check: the box's LED blinks this pattern " +
-                        "(${confirmation.sasDisplay})",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    confirmation.sasLed.forEach { symbol ->
-                        Box(
-                            Modifier
-                                .size(14.dp)
-                                .background(ledSymbolColor(symbol), CircleShape),
-                        )
-                    }
-                }
+                LedSasCaptureBlock(vm = vm, confirmation = confirmation)
             }
             Text(
                 "Tell the box how to reach your network. These credentials " +
@@ -257,6 +246,117 @@ private fun AskingForWifiCard(vm: NfcPairViewModel, confirmation: PairConfirmati
             )
 
             FSPrimaryButton(label = "Send", onClick = { vm.sendSealedWifi() })
+        }
+    }
+}
+
+/**
+ * N-PHONE-6 — the active "optional SAS glance". Shows the expected LED
+ * pattern and lets the user record what the box actually blinked, one
+ * glance at a time, then renders the strict 3-of-3 verdict.
+ */
+@Composable
+private fun LedSasCaptureBlock(vm: NfcPairViewModel, confirmation: PairConfirmation) {
+    val capture by vm.ledCapture.collectAsState()
+    // The in-progress glance the user is assembling (3 taps → one glance).
+    var working by remember { mutableStateOf("") }
+
+    Text(
+        "Check the box's LED — it blinks this 3×3 pattern " +
+            "(${confirmation.sasDisplay}). Optional, but it catches a wrong " +
+            "box in a crowded room.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp),
+    )
+    // The full expected pattern, grouped into 3 glances of 3.
+    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+        for (g in 0 until 3) {
+            val lo = g * 3
+            if (lo + 3 <= confirmation.sasLed.length) {
+                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    confirmation.sasLed.substring(lo, lo + 3).forEach { symbol ->
+                        Box(
+                            Modifier
+                                .size(12.dp)
+                                .background(ledSymbolColor(symbol), CircleShape),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    val cap = capture
+    when {
+        cap == null -> {
+            FSGhostButton(
+                label = "Verify the LED pattern",
+                onClick = { working = ""; vm.beginLedSasCapture() },
+            )
+        }
+        cap.verdict == LedSasCapture.Verdict.CONFIRMED -> {
+            Text(
+                "✓ LED pattern matched — this is your box.",
+                color = FS.colors.success,
+                style = TextStyle(fontSize = 14.sp),
+            )
+        }
+        cap.verdict == LedSasCapture.Verdict.MISMATCH -> {
+            Text(
+                "✗ That didn't match. Don't send Wi-Fi — you may be looking " +
+                    "at the wrong box.",
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 14.sp),
+            )
+            FSGhostButton(
+                label = "Try the LED check again",
+                onClick = { working = ""; vm.resetLedSasCapture() },
+            )
+        }
+        else -> {
+            val g = cap.currentGlance ?: 0
+            Text(
+                "Glance ${g + 1} of 3 — tap the 3 colors the LED just blinked:",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+            )
+            // In-progress glance chips.
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                working.forEach { sym ->
+                    Box(
+                        Modifier
+                            .size(16.dp)
+                            .background(ledSymbolColor(sym), CircleShape),
+                    )
+                }
+                repeat(3 - working.length) {
+                    Box(
+                        Modifier
+                            .size(16.dp)
+                            .border(1.dp, FS.colors.textMuted, CircleShape),
+                    )
+                }
+            }
+            // The 4-color tap pad.
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                listOf('R', 'G', 'B', 'Y').forEach { sym ->
+                    Box(
+                        Modifier
+                            .size(32.dp)
+                            .background(ledSymbolColor(sym), CircleShape)
+                            .semantics { contentDescription = "led-color-$sym" }
+                            .clickable {
+                                if (working.length < 3) {
+                                    working += sym
+                                    if (working.length == 3) {
+                                        vm.recordLedGlance(working)
+                                        working = ""
+                                    }
+                                }
+                            },
+                    )
+                }
+            }
         }
     }
 }

@@ -534,4 +534,112 @@ final class NfcPairViewModelTests: XCTestCase {
             XCTAssertEqual(err as? NfcPairReaderError, .signatureMismatch)
         }
     }
+
+    // MARK: - N-PHONE-6: LED-SAS capture
+
+    /// Recover the expected per-glance pattern the way the box would —
+    /// independent box-side ECDH → SAS → encodeLedSas → split.
+    private func expectedGlances(_ fx: Fixture) throws -> [String] {
+        let ssBox = try deriveSharedSecret(
+            ePhonePriv: fx.boxKeys.eBoxPriv,
+            eBoxPub: fx.phoneEphemeralPriv.publicKey.rawRepresentation
+        )
+        let sas = deriveSAS(
+            sharedSecret: ssBox,
+            stkPub: fx.payload.stkPub,
+            eBoxPub: fx.payload.eBoxPub,
+            ePhonePub: fx.phoneEphemeralPriv.publicKey.rawRepresentation,
+            nonce: fx.payload.nonce,
+            sessionId: fx.payload.sessionId,
+            v: fx.payload.v
+        )
+        return try ledSasGlances(try encodeLedSas(sas))
+    }
+
+    private func tappedVM(_ fx: Fixture) async -> NfcPairViewModel {
+        let vm = makeVM(
+            reader: MockNfcPairReader(result: .success(
+                ReadPairResult(payload: fx.payload, signature: fx.signature)
+            )),
+            rendezvous: MockNfcRendezvousClient(),
+            fixedEphemeral: fx.phoneEphemeralPriv
+        )
+        await vm.startTap()
+        return vm
+    }
+
+    func test_ledCapture_correctGlances_confirms() async throws {
+        let fx = try makeFixture()
+        let vm = await tappedVM(fx)
+        let glances = try expectedGlances(fx)
+
+        vm.beginLedSasCapture()
+        XCTAssertEqual(vm.ledCapture?.expectedGlances, glances)
+        XCTAssertEqual(vm.ledCapture?.currentGlance, 0)
+
+        for g in glances { vm.recordLedGlance(g) }
+
+        XCTAssertEqual(vm.ledCapture?.verdict, .confirmed)
+        XCTAssertEqual(vm.ledCapture?.currentGlance, nil)
+        XCTAssertEqual(vm.ledCapture?.isComplete, true)
+    }
+
+    func test_ledCapture_oneWrongGlance_failsClosed_notBestOfThree() async throws {
+        let fx = try makeFixture()
+        let vm = await tappedVM(fx)
+        let glances = try expectedGlances(fx)
+
+        vm.beginLedSasCapture()
+        // First two correct, last one wrong → must reject.
+        vm.recordLedGlance(glances[0])
+        vm.recordLedGlance(glances[1])
+        let wrong = glances[2] == "RRR" ? "GGG" : "RRR"
+        vm.recordLedGlance(wrong)
+
+        XCTAssertEqual(vm.ledCapture?.verdict, .mismatch)
+    }
+
+    func test_ledCapture_malformedGlanceIgnored_doesNotAdvance() async throws {
+        let fx = try makeFixture()
+        let vm = await tappedVM(fx)
+
+        vm.beginLedSasCapture()
+        XCTAssertEqual(vm.ledCapture?.currentGlance, 0)
+        // Garbled reads (wrong length / unknown symbol) re-prompt the
+        // same glance rather than counting as a mismatch.
+        vm.recordLedGlance("RG")    // too short
+        vm.recordLedGlance("RGX")   // unknown symbol
+        XCTAssertEqual(vm.ledCapture?.observed.count, 0)
+        XCTAssertEqual(vm.ledCapture?.currentGlance, 0)
+        XCTAssertEqual(vm.ledCapture?.verdict, .pending)
+    }
+
+    func test_ledCapture_resetClearsCapture() async throws {
+        let fx = try makeFixture()
+        let vm = await tappedVM(fx)
+        vm.beginLedSasCapture()
+        vm.recordLedGlance((try expectedGlances(fx))[0])
+        XCTAssertNotNil(vm.ledCapture)
+        vm.resetLedSasCapture()
+        XCTAssertNil(vm.ledCapture)
+    }
+
+    func test_ledCapture_requiresActivePairing() throws {
+        // No tap → no SAS → begin is a no-op.
+        let vm = makeVM(
+            reader: MockNfcPairReader(result: .failure(.timeout)),
+            rendezvous: MockNfcRendezvousClient()
+        )
+        vm.beginLedSasCapture()
+        XCTAssertNil(vm.ledCapture)
+    }
+
+    func test_ledCapture_clearedOnReset() async throws {
+        let fx = try makeFixture()
+        let vm = await tappedVM(fx)
+        vm.beginLedSasCapture()
+        vm.reset()
+        XCTAssertNil(vm.ledCapture)
+        XCTAssertEqual(vm.phase, .idle)
+    }
 }

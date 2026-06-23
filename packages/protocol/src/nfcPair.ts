@@ -448,3 +448,83 @@ export function encodeLedSas(sas: Bytes): string {
 export function encodeSasForDisplay(sas: Bytes, chars = 6): string {
   return hex(sas).slice(0, chars);
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// N-PHONE-6: LED-SAS capture/decode + match (phone-side verify path)
+//
+// The encode half (`encodeLedSas`) is box-side: it derives the 9-pulse
+// RGBY sequence the box blinks on its status LED. N-PHONE-6 is the phone
+// completing the verification — the user (or a camera decoder) reads the
+// LED across LED_SAS_GLANCES_REQUIRED glances of LED_SAS_PULSES_PER_GLANCE
+// pulses each, and the phone confirms the observation equals the locally
+// derived expected sequence. The 3-of-3 rule (locked decision §10) is
+// strict: EVERY glance must match for the box to be authenticated.
+//
+// This is fail-closed by construction: the LED-SAS *is* the authenticator
+// on the degraded path (proximity didn't run), so a single mismatched
+// glance must abort — never "best of three". The camera frame-decode that
+// turns pixels into RGBY symbols is the hardware/CV seam; this engine takes
+// already-decoded glance strings, so it is fully unit-testable without a
+// camera.
+
+/** A verdict for one captured glance against the expected sub-sequence. */
+export type LedGlanceVerdict = "match" | "mismatch";
+
+/**
+ * Split an encoded LED-SAS sequence into per-glance sub-sequences. The
+ * box blinks the whole pattern but the user matches it one glance at a
+ * time, so the phone presents (and the camera captures) it grouped.
+ * Throws if the sequence isn't exactly the locked glance×pulse length.
+ */
+export function ledSasGlances(sequence: string): string[] {
+  const expectedLen = LED_SAS_GLANCES_REQUIRED * LED_SAS_PULSES_PER_GLANCE;
+  if (sequence.length !== expectedLen) {
+    throw new Error(
+      `ledSasGlances: expected ${expectedLen} pulses, got ${sequence.length}`,
+    );
+  }
+  const out: string[] = [];
+  for (let g = 0; g < LED_SAS_GLANCES_REQUIRED; g++) {
+    out.push(
+      sequence.slice(g * LED_SAS_PULSES_PER_GLANCE, (g + 1) * LED_SAS_PULSES_PER_GLANCE),
+    );
+  }
+  return out;
+}
+
+/**
+ * Validate that a captured glance is well-formed: exactly
+ * LED_SAS_PULSES_PER_GLANCE symbols, each from LED_SAS_ALPHABET. A garbled
+ * camera read (wrong length / unknown symbol) is NOT a security mismatch —
+ * it's a "couldn't read, try again" condition, distinct from a mismatch.
+ */
+export function isWellFormedGlance(glance: string): boolean {
+  if (glance.length !== LED_SAS_PULSES_PER_GLANCE) return false;
+  for (const ch of glance) {
+    if (!LED_SAS_ALPHABET.includes(ch as LedSasSymbol)) return false;
+  }
+  return true;
+}
+
+/** Compare one captured glance to the expected one (constant index). */
+export function verifyLedGlance(observed: string, expected: string): LedGlanceVerdict {
+  return observed === expected ? "match" : "mismatch";
+}
+
+/**
+ * Full phone-side LED-SAS verify: derive the expected sequence from the
+ * SAS bytes, split into glances, and require every observed glance to
+ * match its expected counterpart (3-of-3, strict). Returns false on the
+ * first mismatch OR on any malformed glance. `observedGlances` must carry
+ * exactly LED_SAS_GLANCES_REQUIRED entries.
+ */
+export function verifyLedSas(sas: Bytes, observedGlances: string[]): boolean {
+  if (observedGlances.length !== LED_SAS_GLANCES_REQUIRED) return false;
+  const expected = ledSasGlances(encodeLedSas(sas));
+  for (let i = 0; i < LED_SAS_GLANCES_REQUIRED; i++) {
+    const obs = observedGlances[i]!;
+    if (!isWellFormedGlance(obs)) return false;
+    if (verifyLedGlance(obs, expected[i]!) === "mismatch") return false;
+  }
+  return true;
+}
