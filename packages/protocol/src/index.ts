@@ -18,4 +18,5 @@ export * from "./pushRelay.js";
 export * from "./serviceCert.js";
 export * from "./serviceInvite.js";
 export * from "./swkDelivery.js";
+export * from "./cloudGossip.js";
 export { ed } from "./edSync.js";
