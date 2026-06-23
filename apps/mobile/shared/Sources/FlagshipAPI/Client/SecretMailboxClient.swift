@@ -57,6 +57,14 @@ public protocol SecretMailboxClient: Sendable {
     /// no separate tap. `deposit.sealed` is the PUBLIC entitlement carrier (what
     /// the box presents at HELLO), not a secret. Reuses `PairingDepositBody`.
     func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws
+
+    /// POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth.
+    /// Secret-free recipe: the recipe carries NO SWK; after the box registers,
+    /// the phone seals the SWK to the box's REGISTERED identity and IRK-signs the
+    /// wrapper, depositing it here for the box to claim on boot. `deposit.sealed`
+    /// is the SEALED SWK-delivery carrier — `.com` holds ciphertext only (I1).
+    /// Reuses `PairingDepositBody`; `deposit.stkPub` MUST be the registered STK.
+    func depositSwk(serverDomain: String, body: PairingDepositBody) async throws
 }
 
 /// The create-time pairing deposit body. `auth`/`authSignature` are the SAME
@@ -572,6 +580,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/swk-deposit") else {
+            throw ScreensClientError.http(status: 0, message: "bad swk-deposit URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     private struct BootResponsePost: Encodable { let response: SecretResponseBody }
     private struct LeaseDepositPost: Encodable { let lease: BoxSealedLeaseWire; let signature: String }
 
@@ -686,5 +709,15 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public private(set) var entitlementDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
     public func depositEntitlement(serverDomain: String, body: PairingDepositBody) async throws {
         entitlementDeposits.append((serverDomain, body))
+    }
+    public private(set) var swkDeposits: [(serverDomain: String, body: PairingDepositBody)] = []
+    /// When set, `depositSwk` throws it once (to exercise best-effort/retry paths).
+    public var swkDepositError: Error?
+    public func depositSwk(serverDomain: String, body: PairingDepositBody) async throws {
+        if let e = swkDepositError {
+            swkDepositError = nil
+            throw e
+        }
+        swkDeposits.append((serverDomain, body))
     }
 }
