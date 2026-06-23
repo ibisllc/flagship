@@ -46,25 +46,29 @@ final class RecipeTests: XCTestCase {
         XCTAssertEqual(r.authCode.serial, "01GOLDENTEST")
     }
 
-    /// Create-time pairing: the recipe's UNSIGNED top-level `pairingKeyPrivHex`
-    /// sibling (beside `blob`/`blobSignature`) must survive the envelope flatten
-    /// so it lands in the on-disk install-blob.json the daemon reads.
-    func testEnvelopeFlattenCarriesPairingKeySibling() throws {
+    /// Secret-free pairing (offline/embed): the recipe's UNSIGNED top-level
+    /// plaintext `pairingOrder` sibling (beside `blob`/`blobSignature`) must
+    /// survive the envelope flatten so it lands in the on-disk install-blob.json
+    /// the daemon reads (`addEmbeddedPairing`). No pairing keypair, no
+    /// `pairingKeyPrivHex`.
+    func testEnvelopeFlattenCarriesPairingOrderSibling() throws {
         var blob = try JSONSerialization.jsonObject(with: data(Self.goldenJSON)) as! [String: Any]
         let sig = blob.removeValue(forKey: "blobSignatureHex") as! String
-        let pairing = String(repeating: "ab", count: 32)
-        let envelope: [String: Any] = ["blob": blob, "blobSignature": sig, "pairingKeyPrivHex": pairing]
+        let pairingOrder = "{\"request\":{\"type\":\"add-paired-session\"},\"signature\":\"ab\"}"
+        let envelope: [String: Any] = ["blob": blob, "blobSignature": sig, "pairingOrder": pairingOrder]
         let flat = try JSONSerialization.jsonObject(
             with: RecipeLoader.normalizeEnvelope(try JSONSerialization.data(withJSONObject: envelope))
         ) as! [String: Any]
-        XCTAssertEqual(flat["pairingKeyPrivHex"] as? String, pairing)
+        XCTAssertEqual(flat["pairingOrder"] as? String, pairingOrder)
         XCTAssertEqual(flat["serverDomain"] as? String, "home.golden.flagship.services")
+        // The dead `pairingKeyPrivHex` sibling is no longer carried.
+        XCTAssertNil(flat["pairingKeyPrivHex"])
         // A recipe WITHOUT the sibling must not invent one (byte-identical path).
         let plain: [String: Any] = ["blob": blob, "blobSignature": sig]
         let flatNoPair = try JSONSerialization.jsonObject(
             with: RecipeLoader.normalizeEnvelope(try JSONSerialization.data(withJSONObject: plain))
         ) as! [String: Any]
-        XCTAssertNil(flatNoPair["pairingKeyPrivHex"])
+        XCTAssertNil(flatNoPair["pairingOrder"])
     }
 
     /// SWK provisioning: the recipe's UNSIGNED top-level `swkHex` sibling (beside

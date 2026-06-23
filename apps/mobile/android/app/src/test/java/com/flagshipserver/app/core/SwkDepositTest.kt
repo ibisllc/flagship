@@ -54,11 +54,23 @@ class SwkDepositTest {
     private val boxPubHex = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(boxSeed).publicKey)
     private val swk = ByteArray(32) { 0x33 }
 
-    private fun coordinator(store: PendingSwkDepositStore, mailbox: MockSecretMailboxClient) =
+    private fun freshPairingStore(): PendingPairingDepositStore {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = ctx.getSharedPreferences("pairing.${System.nanoTime()}", Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        return PendingPairingDepositStore(prefs)
+    }
+
+    private fun coordinator(
+        store: PendingSwkDepositStore,
+        mailbox: MockSecretMailboxClient,
+        pairingStore: PendingPairingDepositStore = freshPairingStore(),
+    ) =
         SwkDepositCoordinator(
             username = "alice",
             mailbox = mailbox,
             store = store,
+            pairingStore = pairingStore,
             deriveIrkAndSwk = { Triple(Ed25519Sign(irkKp.privateKey), HexUtil.encode(irkKp.publicKey), HexUtil.encode(swk)) },
         )
 
@@ -111,5 +123,61 @@ class SwkDepositTest {
         coordinator(store, mailbox).depositIfNeeded(serverDomain, boxPubHex)
         assertFalse(store.isDeposited(serverDomain))
         assertTrue(store.isPending(serverDomain))
+    }
+
+    // ── Secret-free PAIRING (riding the same coordinator) ──
+
+    @Test
+    fun pairingStoreLifecycle() {
+        val store = freshPairingStore()
+        val json = "{\"request\":{},\"signature\":\"ab\"}"
+        assertEquals(null, store.pendingOrder(serverDomain))
+        assertFalse(store.isDeposited(serverDomain))
+        store.markPending(serverDomain, json)
+        assertEquals(json, store.pendingOrder(serverDomain))
+        store.markDeposited(serverDomain)
+        assertEquals(null, store.pendingOrder(serverDomain))
+        assertTrue(store.isDeposited(serverDomain))
+        store.clear(serverDomain)
+        assertFalse(store.isDeposited(serverDomain))
+    }
+
+    private fun stashedOrderJson(): String =
+        CreateTimePairing.build(
+            serverDomain = serverDomain, label = "iPhone",
+            irk = Ed25519Sign(irkKp.privateKey), now = 1_750_000_000_000L, token = "ab".repeat(32),
+        ).pairingOrderJson
+
+    @Test
+    fun depositsPairingOrderSealsToBoxOpensVerbatim() = runBlocking {
+        val swkStore = freshStore()
+        val pairingStore = freshPairingStore()
+        val json = stashedOrderJson()
+        pairingStore.markPending(serverDomain, json)
+        val mailbox = MockSecretMailboxClient()
+
+        coordinator(swkStore, mailbox, pairingStore).depositIfNeeded(serverDomain, boxPubHex)
+
+        // No SWK owed; only the pairing deposit went out.
+        assertTrue(mailbox.swkDeposits.isEmpty())
+        assertEquals(1, mailbox.pairingDeposits.size)
+        val (_, body) = mailbox.pairingDeposits[0]
+        assertEquals(boxPubHex, body.deposit.stkPub)
+        // The box opens deposit.sealed with its identity seed → the exact JSON.
+        val plain = SecretSeal.openWithEd25519Seed(HexUtil.decode(body.deposit.sealed)!!, boxSeed)
+        assertEquals(json, String(plain, Charsets.UTF_8))
+
+        // Idempotent: marked deposited, second pass does not re-deposit.
+        assertTrue(pairingStore.isDeposited(serverDomain))
+        coordinator(swkStore, mailbox, pairingStore).depositIfNeeded(serverDomain, boxPubHex)
+        assertEquals(1, mailbox.pairingDeposits.size)
+    }
+
+    @Test
+    fun pairingNoOpWhenNothingOwed() = runBlocking {
+        val mailbox = MockSecretMailboxClient()
+        coordinator(freshStore(), mailbox, freshPairingStore()).depositIfNeeded(serverDomain, boxPubHex)
+        assertTrue(mailbox.pairingDeposits.isEmpty())
+        assertTrue(mailbox.swkDeposits.isEmpty())
     }
 }

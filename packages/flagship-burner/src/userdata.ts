@@ -108,15 +108,18 @@ export interface UserDataOptions {
   wifiSSID?: string;
   wifiPassword?: string;
   /**
-   * Create-time pairing: the phone-chosen pairing key's PRIVATE half (32-byte
-   * Ed25519 seed hex). The daemon uses it ONCE at first boot to open the sealed
-   * `add-paired-session` deposit the creating phone left in `.com`, so the box
-   * comes online ALREADY paired (no "Pair this server" tap). An UNSIGNED recipe
-   * sibling — NOT part of the signed InstallBlob — so it never affects the
-   * recipe signature; absent ⇒ the on-disk blob is byte-identical to before.
-   * Carried from the recipe via {@link LoadedBlob.pairingKeyPrivHex}.
+   * OFFLINE secret-free pairing (advanced/embed mode): the owner-IRK-signed
+   * `add-paired-session` order embedded in PLAINTEXT (`{request, signature}`
+   * JSON). The daemon reads it at first boot, verifies the owner-IRK signature,
+   * and adds the paired session LOCALLY — no `.com` call — so the box comes
+   * online ALREADY paired with NO secret in the recipe. An UNSIGNED recipe
+   * sibling — NOT part of the signed InstallBlob — so it never affects the recipe
+   * signature; absent ⇒ the on-disk blob is byte-identical to before (and the
+   * default online recipe leaves it absent: the phone deposits the order sealed
+   * to the box identity into `.com` AFTER registration instead).
+   * Carried from the recipe via {@link LoadedBlob.pairingOrder}.
    */
-  pairingKeyPrivHex?: string;
+  pairingOrder?: string;
   /**
    * SWK provisioning: the Service Workload Key (32-byte hex, = `deriveSWK(umk,
    * serverId)`). The daemon reads it at first boot, persists it to
@@ -194,7 +197,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
         installBlobToJson(
           opts.blob,
           opts.blobSignatureHex,
-          opts.pairingKeyPrivHex,
+          opts.pairingOrder,
           opts.swkHex,
         ),
       ),
@@ -2086,7 +2089,7 @@ echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
 export function installBlobToJson(
   b: InstallBlob,
   blobSignatureHex: string,
-  pairingKeyPrivHex?: string,
+  pairingOrder?: string,
   swkHex?: string,
 ): Record<string, unknown> {
   return {
@@ -2111,15 +2114,16 @@ export function installBlobToJson(
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
     blobSignatureHex,
-    // Create-time pairing: the phone-chosen pairing key's private half, used
-    // ONLY by the daemon to open the sealed `add-paired-session` deposit the
-    // creating phone left in .com. An UNSIGNED recipe sibling (never part of
-    // the signed InstallBlob's canonical bytes), so it's appended only when the
-    // recipe carries it — a recipe WITHOUT it serializes byte-identically to
-    // before (existing burns + sha pins unchanged).
-    ...(pairingKeyPrivHex ? { pairingKeyPrivHex } : {}),
+    // OFFLINE secret-free pairing (advanced/embed): the owner-IRK-signed
+    // `add-paired-session` order in PLAINTEXT (`{request, signature}` JSON),
+    // which the daemon verifies + adds LOCALLY at first boot (no `.com`). An
+    // UNSIGNED recipe sibling (never part of the signed InstallBlob's canonical
+    // bytes), appended only when the recipe carries it — a recipe WITHOUT it
+    // serializes byte-identically to before (existing burns + sha pins
+    // unchanged). The default online recipe leaves it absent.
+    ...(pairingOrder ? { pairingOrder } : {}),
     // SWK provisioning: the phone-derived Service Workload Key. Like
-    // pairingKeyPrivHex, an UNSIGNED recipe sibling (never part of the signed
+    // pairingOrder, an UNSIGNED recipe sibling (never part of the signed
     // InstallBlob's canonical bytes), appended only when the recipe carries it —
     // a recipe WITHOUT it serializes byte-identically to before (existing burns +
     // sha pins unchanged). The daemon reads it from install-blob.json at first

@@ -32,6 +32,7 @@ import com.flagshipserver.app.core.BoxRequest
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.PendingServerReconciler
 import com.flagshipserver.app.core.PendingSwkDepositStore
+import com.flagshipserver.app.core.PendingPairingDepositStore
 import com.flagshipserver.app.core.SwkDepositCoordinator
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
@@ -65,17 +66,19 @@ fun HomeTab() {
     // read — NO biometric prompt; Face ID stays only on mutations.
     val reconcilerContext = LocalContext.current
     val reconciler = remember(mailbox) {
-        // Secret-free recipe: deposit the SWK once a box registered without it
-        // embedded. The coordinator no-ops unless a deposit is owed (idempotent
-        // via PendingSwkDepositStore), so this is safe on every reconcile.
+        // Secret-free recipe: deposit the SWK + the secret-free PAIRING order once
+        // a box registered without them embedded. The coordinator no-ops unless a
+        // deposit is owed (idempotent via the two stores), so this is safe on
+        // every reconcile.
         val swkStore = PendingSwkDepositStore.from(reconcilerContext)
+        val pairingStore = PendingPairingDepositStore.from(reconcilerContext)
         PendingServerReconciler(
             app = app,
             mailbox = mailbox,
             onRegistered = { fqdn, identityPubKeyHex ->
                 val user = app.currentUser.value
                 if (!user.isNullOrEmpty()) {
-                    SwkDepositCoordinator.live(user, mailbox, swkStore)
+                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore)
                         .depositIfNeeded(fqdn, identityPubKeyHex)
                 }
             },

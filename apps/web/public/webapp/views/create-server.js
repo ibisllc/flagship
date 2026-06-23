@@ -34,8 +34,9 @@ import {
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
-import { depositCreateTimePairing } from "../lib/bootApproval.js";
+import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
+import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken } from "../lib/api.js";
 
 registerView("view-create-server");
@@ -448,10 +449,12 @@ function enableRecipeDownload(blobBundle) {
   btn.disabled = false;
   btn.textContent = "Download recipe (.json)";
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
-  // Create-time pairing: carry the unsigned pairing-key sibling into the
-  // downloaded recipe so the burner writes it to the box's install-blob.json
-  // (the daemon opens the deposit with it). Absent ⇒ recipe is byte-identical.
-  if (blobBundle.pairingKeyPrivHex) recipe.pairingKeyPrivHex = blobBundle.pairingKeyPrivHex;
+  // Secret-free pairing (offline/embed): carry the unsigned plaintext
+  // `pairingOrder` sibling (the owner-IRK-signed `add-paired-session` order) into
+  // the downloaded recipe so the burner writes it to the box's install-blob.json
+  // and the daemon adds the session locally with NO `.com` call. Absent (the
+  // default online path) ⇒ recipe is byte-identical + carries ZERO pairing secret.
+  if (blobBundle.pairingOrder) recipe.pairingOrder = blobBundle.pairingOrder;
   // SWK provisioning: carry the unsigned `swkHex` sibling into the downloaded
   // recipe so the burner writes it to the box's install-blob.json (the daemon
   // persists it at first boot). Absent ⇒ recipe is byte-identical.
@@ -704,40 +707,36 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // trips it and re-derives the same `de=none` token for box verification).
   if (blob.diskEncryption !== undefined) onWireBlob.diskEncryption = blob.diskEncryption;
 
-  // Create-time pairing: pre-register a sealed `add-paired-session` order with
-  // `.com` and embed the pairing key's private half in the recipe, so the
-  // booting box claims it and the webapp comes online ALREADY paired (no manual
-  // "Pair this server" step). Best-effort: a failure leaves the manual pairing
-  // path as the fallback and NEVER blocks creation.
-  let pairingKeyPrivHex;
+  // Secret-free pairing: build the owner-IRK-signed `add-paired-session` order
+  // at create time (the FIRST recipe carries ZERO pairing secret — no pairing
+  // keypair, no `pairingKeyPrivHex`). Persist its token as this device's session
+  // token so the BFF auths once the box claims the order. Best-effort: a failure
+  // leaves the manual pairing path as the fallback and NEVER blocks creation.
+  let pairingOrderJson;
   try {
-    const pairing = await depositCreateTimePairing({ serverDomain: blob.serverDomain });
-    // Persist the token only after `.com` accepted the deposit — the box claims
-    // it on first boot, so by the time the server is online the session token
-    // already matches and the BFF authenticates.
+    const pairing = await buildPairingOrder({ serverDomain: blob.serverDomain });
     setSessionToken(pairing.token);
-    pairingKeyPrivHex = pairing.pairingKeyPrivHex;
+    pairingOrderJson = pairing.pairingOrderJson;
   } catch (e) {
-    console.warn("create-time pairing deposit failed (non-fatal):", e);
+    console.warn("create-time pairing order build failed (non-fatal):", e);
   }
 
-  // The pairing key rides the recipe as a TOP-LEVEL sibling (not inside `blob`,
-  // never in the signed canonical bytes). The relay-deliver path stringifies the
-  // whole bundle, and the download-recipe builder splats it alongside `blob`.
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
-  if (pairingKeyPrivHex) bundle.pairingKeyPrivHex = pairingKeyPrivHex;
-  // SWK provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
-  //   embed-secrets ON (advanced/offline): derive the box's deterministic SWK
-  //     (DOTS info "flagship.swk.v1|<serverId>") + carry it as an UNSIGNED
-  //     `swkHex` recipe sibling; the box installs fully offline, NO deposit.
-  //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the SWK;
-  //     record that a deposit is OWED so the Home reconcile seals + deposits the
-  //     SWK once the box registers (one delivery then, not now).
+  // SWK + pairing provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
+  //   embed-secrets ON (advanced/offline): bake BOTH the box's deterministic SWK
+  //     and the plaintext `pairingOrder` into the recipe as UNSIGNED siblings;
+  //     the box self-configures + self-pairs fully offline, NO `.com` deposit.
+  //   embed-secrets OFF (the DEFAULT): the recipe stays secret-free; stash the
+  //     SWK + the pairing order so the Home reconcile seals + deposits each once
+  //     the box registers (one delivery then, not now).
   if (inputs.embedSecrets) {
     bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
     clearSwkDeposit(blob.serverDomain);
+    if (pairingOrderJson) bundle.pairingOrder = pairingOrderJson;
+    clearPairingDeposit(blob.serverDomain);
   } else {
     markSwkDepositPending(blob.serverDomain);
+    if (pairingOrderJson) markPairingDepositPending(blob.serverDomain, pairingOrderJson);
   }
   return bundle;
 }
