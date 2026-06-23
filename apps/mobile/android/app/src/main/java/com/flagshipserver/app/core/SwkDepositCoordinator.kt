@@ -28,33 +28,58 @@ class SwkDepositCoordinator(
     private val username: String,
     private val mailbox: SecretMailboxClient,
     private val store: PendingSwkDepositStore,
+    /** Stash of the create-time pairing order owed per server (secret-free
+     *  pairing). Deposited on the SAME pass as the SWK (one biometric → both). */
+    private val pairingStore: PendingPairingDepositStore,
     /** Derives (IRK signer, IRK pub hex, box SWK hex) for the given serverId
      *  under one biometric. Injectable so tests don't hit the Keystore. */
     private val deriveIrkAndSwk: suspend (serverId: String) -> Triple<Ed25519Sign, String, String>,
 ) {
-    /** Deposit the SWK for a box that has registered (carrying
-     *  `identityPubKeyHex`) — IF a deposit is still owed for it. No-op otherwise. */
+    /** Deposit what's OWED for a box that has registered (carrying
+     *  `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
+     *  secret-free PAIRING order (pairs the creating device with no manual tap).
+     *  Both ride ONE biometric (the IRK derived once) and are sealed to the box
+     *  identity. No-op when nothing is owed. */
     suspend fun depositIfNeeded(serverDomain: String, identityPubKeyHex: String) {
-        if (!store.isPending(serverDomain)) return
+        val swkOwed = store.isPending(serverDomain)
+        val pairingOrderJson = pairingStore.pendingOrder(serverDomain)
+        if (!swkOwed && pairingOrderJson == null) return
         val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
         if (boxIdentityPub.size != 32) return
         try {
             val (irk, irkPubHex, swkHex) = deriveIrkAndSwk(serverDomain)
-            val swk = HexUtil.decode(swkHex) ?: return
-            if (swk.size != 32) return
-            val body = SwkDelivery.buildDeposit(
-                username = username,
-                serverDomain = serverDomain,
-                swk = swk,
-                boxIdentityPub = boxIdentityPub,
-                irk = irk,
-                irkPubHex = irkPubHex,
-            )
-            mailbox.depositSwk(serverDomain, body)
-            // Only flip to `deposited` AFTER `.com` accepted it.
-            store.markDeposited(serverDomain)
+
+            if (swkOwed) {
+                val swk = HexUtil.decode(swkHex)
+                if (swk != null && swk.size == 32) {
+                    val body = SwkDelivery.buildDeposit(
+                        username = username,
+                        serverDomain = serverDomain,
+                        swk = swk,
+                        boxIdentityPub = boxIdentityPub,
+                        irk = irk,
+                        irkPubHex = irkPubHex,
+                    )
+                    mailbox.depositSwk(serverDomain, body)
+                    // Only flip to `deposited` AFTER `.com` accepted it.
+                    store.markDeposited(serverDomain)
+                }
+            }
+
+            if (pairingOrderJson != null) {
+                val body = PairingOrderDeposit.buildDeposit(
+                    username = username,
+                    serverDomain = serverDomain,
+                    pairingOrderJson = pairingOrderJson,
+                    boxIdentityPub = boxIdentityPub,
+                    irk = irk,
+                    irkPubHex = irkPubHex,
+                )
+                mailbox.depositPairing(serverDomain, body)
+                pairingStore.markDeposited(serverDomain)
+            }
         } catch (_: Throwable) {
-            // Leave the `pending` marker so the next reconcile retries.
+            // Leave the `pending` marker(s) so the next reconcile retries.
         }
     }
 
@@ -65,10 +90,12 @@ class SwkDepositCoordinator(
             username: String,
             mailbox: SecretMailboxClient,
             store: PendingSwkDepositStore,
+            pairingStore: PendingPairingDepositStore,
         ): SwkDepositCoordinator = SwkDepositCoordinator(
             username = username,
             mailbox = mailbox,
             store = store,
+            pairingStore = pairingStore,
             deriveIrkAndSwk = { serverId ->
                 val irk = Keystore.deriveIRK("Authorize $serverId to run apps")
                 val irkPubHex = Keystore.irkPubHex()

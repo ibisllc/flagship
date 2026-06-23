@@ -70,6 +70,7 @@ import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.core.PendingSwkDepositStore
+import com.flagshipserver.app.core.PendingPairingDepositStore
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
@@ -139,6 +140,7 @@ fun CreateServerScreen(
     // registers (docs/recipe-delivery-and-remote-install.md).
     var embedSecrets by remember { mutableStateOf(false) }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
+    val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Backup policy — draft-only metadata (phone-only default). Hydrated from
     // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
     // the wire (applied later via an owner-signed set-backup-policy order).
@@ -224,9 +226,10 @@ fun CreateServerScreen(
                                 // phone deposits the SWK after registration.
                                 embedSecrets = embedSecrets,
                                 swkDepositStore = swkDepositStore,
-                                // Create-time pairing: deposit a sealed pairing
-                                // order with .com + persist the session token so
-                                // the box comes online ALREADY paired.
+                                pairingDepositStore = pairingDepositStore,
+                                // Secret-free pairing: build the order + persist the
+                                // session token now; the order is sealed + deposited
+                                // post-registration so the box comes online paired.
                                 mailbox = mailbox,
                                 sessionStore = sessionStore,
                             )
@@ -704,8 +707,11 @@ private suspend fun prepareDelivery(
     // secret-free of the SWK and a deposit is recorded as owed.
     embedSecrets: Boolean = false,
     swkDepositStore: PendingSwkDepositStore? = null,
+    // Secret-free pairing: stashes the create-time order owed when embed-secrets
+    // is OFF, so the Home reconcile seals + deposits it post-registration.
+    pairingDepositStore: PendingPairingDepositStore? = null,
     // Create-time pairing: optional so the unit tests' direct calls stay simple;
-    // production passes both so the deposit + token-persist run.
+    // production passes the session store so the token-persist runs.
     mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
 ): PendingDelivery {
@@ -762,47 +768,46 @@ private suspend fun prepareDelivery(
     // and embed it as an UNSIGNED `swkHex` recipe sibling the daemon persists at
     // first boot. The box can't derive it (no UMK). Reuses the in-hand UMK seed —
     // no extra biometric.
-    // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
-    //   embed-secrets ON (advanced/offline): keep the SWK in the recipe; the box
-    //     installs fully offline with NO post-registration deposit.
-    //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the SWK;
-    //     record that a deposit is OWED so the Home reconcile seals + deposits the
-    //     SWK once the box registers (one tap then, not now).
     val derivedSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
+
+    // Secret-free pairing: build the owner-IRK-signed `add-paired-session` order
+    // at create time (the FIRST recipe carries ZERO pairing secret — no pairing
+    // keypair, no `pairingKeyPrivHex`). Reuses the IRK above (no extra biometric).
+    // Persist the token as this device's session token so the BFF auths once the
+    // box claims the order. The order JSON is routed by mode below. Best-effort: a
+    // build failure leaves the manual pairing path as the fallback.
+    var pairingOrderJson: String? = null
+    try {
+        val pairing = CreateTimePairing.build(
+            serverDomain = serverDomain,
+            label = "Android",
+            irk = irk,
+        )
+        sessionStore?.setSessionToken(pairing.token)
+        pairingOrderJson = pairing.pairingOrderJson
+    } catch (_: Throwable) {
+        // non-fatal — fall back to manual pairing when the box is up
+    }
+
+    // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
+    //   embed-secrets ON (advanced/offline): bake BOTH the SWK and the plaintext
+    //     `pairingOrder` into the recipe; the box self-configures + self-pairs
+    //     fully offline with NO post-registration deposit.
+    //   embed-secrets OFF (the DEFAULT): the recipe is secret-free; stash the SWK
+    //     + the pairing order so the Home reconcile seals + deposits each once the
+    //     box registers (one tap then, not now).
     val embeddedSwkHex: String?
+    val embeddedPairingOrder: String?
     if (embedSecrets) {
         embeddedSwkHex = derivedSwkHex
         swkDepositStore?.clear(serverDomain)
+        embeddedPairingOrder = pairingOrderJson
+        pairingDepositStore?.clear(serverDomain)
     } else {
         embeddedSwkHex = null
         swkDepositStore?.markPending(serverDomain)
-    }
-
-    // Create-time pairing: pre-register a sealed `add-paired-session` order with
-    // `.com` and embed the pairing key's private half in the recipe, so the
-    // booting box claims it and this device comes online ALREADY paired (no
-    // manual "Pair this server" step). Reuses the IRK above (no extra biometric).
-    // Best-effort: a failure leaves the manual pairing path as a fallback and
-    // NEVER blocks creation.
-    var pairingKeyPrivHex: String? = null
-    if (mailbox != null) {
-        try {
-            val pairing = CreateTimePairing.build(
-                username = username,
-                serverDomain = serverDomain,
-                label = "Android",
-                irk = irk,
-                irkPubHex = irkPubHex,
-            )
-            mailbox.depositPairing(serverDomain, pairing.body)
-            // Persist the token only after `.com` accepted the deposit — the box
-            // claims it on first boot, so by the time the server is online the
-            // session token already matches and the BFF authenticates.
-            sessionStore?.setSessionToken(pairing.token)
-            pairingKeyPrivHex = pairing.pairingKeyPrivHex
-        } catch (_: Throwable) {
-            // non-fatal — fall back to manual pairing when the box is up
-        }
+        embeddedPairingOrder = null
+        pairingOrderJson?.let { pairingDepositStore?.markPending(serverDomain, it) }
     }
 
     val bundle = InstallBlobBundle(
@@ -827,7 +832,7 @@ private suspend fun prepareDelivery(
             diskEncryption = diskEncryption,
         ),
         blobSignature = blobSigHex,
-        pairingKeyPrivHex = pairingKeyPrivHex,
+        pairingOrder = embeddedPairingOrder,
         swkHex = embeddedSwkHex,
     )
 

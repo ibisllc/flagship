@@ -10,77 +10,102 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 /**
- * Pins the create-time pairing contract: the deposit the phone builds must be
- * exactly what the daemon's `consumePendingPairing` opens + verifies — sealed
- * FOR the recipe pairing key, carrying an owner-IRK-signed `add-paired-session`
- * order. Mirror of the iOS CreateTimePairingTests + the daemon round-trip.
+ * Pins the SECRET-FREE pairing contract (the first recipe carries ZERO pairing
+ * secrets): the create-time order JSON the phone builds must be byte-identical to
+ * the cross-platform vector in `packages/protocol/tests/pairingOrder.test.ts`,
+ * and routed by mode — EMBEDDED plaintext (offline) or SEALED to the box identity
+ * + deposited (default online). No pairing keypair, no `pairingKeyPrivHex`.
  */
 class CreateTimePairingTest {
-    private val host = "home.alice.flagship.services"
+    private val host = "kitchen.alice.flagship.services"
+    private val issuedAt = 1_750_000_000_000L
+
+    // Pinned UMK seed → IRK + the deterministic-Tink order signature + envelope
+    // JSON from the protocol vector.
+    private val umk = ByteArray(32) { 7 }
+    private val pinnedIrkPub =
+        "3e4a50e7afdfae54c86e1ccd70a8691d48155e9613cbdbf4d17bad5b6ba68045"
+    private val pinnedSignature =
+        "6e63a086d673fa6e5dd8010aba6367a2aba1861210d21a63bce5dc1331b02f64" +
+        "566120c1647b355a51b10a334e01203d48c4d4c279d21d135203d415a70fe109"
+    private val token = "a".repeat(64)
+    private val label = "Alice's iPhone"
+    private val pinnedJson =
+        "{\"request\":{\"type\":\"add-paired-session\"," +
+        "\"serverId\":\"$host\",\"token\":\"$token\"," +
+        "\"label\":\"$label\",\"issuedAt\":$issuedAt}," +
+        "\"signature\":\"$pinnedSignature\"}"
+
+    private fun irkKeyPair(): Ed25519Sign.KeyPair =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(ServerKeys.deriveProtocolIrkSeed(umk))
 
     @Test
-    fun depositRoundTripsToTheSignedOrder() {
+    fun pairingOrderJsonMatchesPinnedVector() {
+        val kp = irkKeyPair()
+        assertEquals(pinnedIrkPub, HexUtil.encode(kp.publicKey))
+        val built = CreateTimePairing.build(
+            serverDomain = host, label = label, irk = Ed25519Sign(kp.privateKey),
+            now = issuedAt, token = token,
+        )
+        // Tink Ed25519 is deterministic (RFC 8032) → the order JSON is byte-stable.
+        assertEquals(pinnedJson, built.pairingOrderJson)
+        assertEquals(token, built.token)
+        // The pinned signature verifies under the pinned IRK pub over the order
+        // canonical bytes (verify() throws on mismatch).
+        val canonical = listOf(
+            "flagship/order/add-paired-session/v1", host, token, label, issuedAt.toString(),
+        ).joinToString("|").toByteArray(Charsets.UTF_8)
+        Ed25519Verify(kp.publicKey).verify(HexUtil.decode(pinnedSignature)!!, canonical)
+    }
+
+    @Test
+    fun defaultDepositSealsOrderToBoxIdentity() {
         val irkKp = Ed25519Sign.KeyPair.newKeyPair()
         val irk = Ed25519Sign(irkKp.privateKey)
-        val irkPubHex = HexUtil.encode(irkKp.publicKey)
-        val pairingKp = Ed25519Sign.KeyPair.newKeyPair()
-        val token = "ab".repeat(32)
-
         val built = CreateTimePairing.build(
-            username = "alice",
-            serverDomain = host,
-            label = "Alice Phone",
-            irk = irk,
-            irkPubHex = irkPubHex,
-            now = 1_700_000_000_000L,
-            token = token,
-            pairingKeyPair = pairingKp,
+            serverDomain = host, label = "iPhone", irk = irk, now = issuedAt, token = "cd".repeat(32),
         )
+        val boxKp = Ed25519Sign.KeyPair.newKeyPair()
 
-        assertEquals(token, built.token)
-        assertEquals(HexUtil.encode(pairingKp.privateKey), built.pairingKeyPrivHex)
-        assertEquals(HexUtil.encode(pairingKp.publicKey), built.body.deposit.stkPub)
-        assertEquals(host, built.body.deposit.serverDomain)
-        assertEquals(irkPubHex, built.body.auth.phoneIrkPub)
+        val body = PairingOrderDeposit.buildDeposit(
+            username = "alice", serverDomain = host,
+            pairingOrderJson = built.pairingOrderJson,
+            boxIdentityPub = boxKp.publicKey, irk = irk,
+            irkPubHex = HexUtil.encode(irkKp.publicKey), now = issuedAt,
+        )
+        // I2: the deposit binds the box's REGISTERED identity pub.
+        assertEquals(HexUtil.encode(boxKp.publicKey), body.deposit.stkPub)
+        assertEquals(host, body.deposit.serverDomain)
+        assertEquals(HexUtil.encode(irkKp.publicKey), body.auth.phoneIrkPub)
 
-        // The daemon's exact move: open with the recipe pairing key, parse
-        // {request, signature}, re-verify the order under the owner IRK.
-        val sealed = HexUtil.decode(built.body.deposit.sealed)!!
-        val plain = SecretSeal.openWithEd25519Seed(sealed, pairingKp.privateKey)
+        // The box opens deposit.sealed with its identity seed → the EXACT JSON.
+        val sealed = HexUtil.decode(body.deposit.sealed)!!
+        val plain = SecretSeal.openWithEd25519Seed(sealed, boxKp.privateKey)
+        assertEquals(built.pairingOrderJson, String(plain, Charsets.UTF_8))
+
+        // The opened JSON parses back to the signed order.
         val env = Json.parseToJsonElement(String(plain, Charsets.UTF_8)).jsonObject
         val req = env["request"]!!.jsonObject
         assertEquals("add-paired-session", req["type"]!!.jsonPrimitive.content)
         assertEquals(host, req["serverId"]!!.jsonPrimitive.content)
-        assertEquals(token, req["token"]!!.jsonPrimitive.content)
-
-        val canonical = listOf(
-            "flagship/order/add-paired-session/v1",
-            host,
-            token,
-            req["label"]!!.jsonPrimitive.content,
-            req["issuedAt"]!!.jsonPrimitive.content,
-        ).joinToString("|").toByteArray(Charsets.UTF_8)
-        val sig = HexUtil.decode(env["signature"]!!.jsonPrimitive.content)!!
-        // Tink's verify() returns Unit and THROWS on a bad signature — reaching
-        // the next line means the owner-IRK signature verified.
-        Ed25519Verify(irkKp.publicKey).verify(sig, canonical)
     }
 
     @Test
-    fun wrongPairingKeyCannotOpen() {
+    fun wrongIdentityCannotOpenDeposit() {
         val irkKp = Ed25519Sign.KeyPair.newKeyPair()
-        val built = CreateTimePairing.build(
-            username = "alice",
-            serverDomain = host,
-            label = "x",
-            irk = Ed25519Sign(irkKp.privateKey),
-            irkPubHex = HexUtil.encode(irkKp.publicKey),
+        val irk = Ed25519Sign(irkKp.privateKey)
+        val built = CreateTimePairing.build(serverDomain = host, label = "x", irk = irk)
+        val boxKp = Ed25519Sign.KeyPair.newKeyPair()
+        val body = PairingOrderDeposit.buildDeposit(
+            username = "alice", serverDomain = host,
+            pairingOrderJson = built.pairingOrderJson, boxIdentityPub = boxKp.publicKey,
+            irk = irk, irkPubHex = HexUtil.encode(irkKp.publicKey),
         )
-        val sealed = HexUtil.decode(built.body.deposit.sealed)!!
+        val sealed = HexUtil.decode(body.deposit.sealed)!!
         val stranger = Ed25519Sign.KeyPair.newKeyPair().privateKey
         try {
             SecretSeal.openWithEd25519Seed(sealed, stranger)
-            fail("a stranger pairing key must not open the sealed deposit")
+            fail("a stranger identity key must not open the sealed deposit")
         } catch (_: Throwable) {
             // expected — inert ciphertext for the wrong recipient
         }
