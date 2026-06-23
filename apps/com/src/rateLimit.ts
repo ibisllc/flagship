@@ -49,6 +49,7 @@ export interface RateLimitEnv {
 /** Endpoint identifier — drives the per-endpoint thresholds + 429 body. */
 export type RateLimitEndpoint =
   | "username-claim"
+  | "username-suggest"
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
@@ -161,6 +162,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "username-claim": [
     { axis: "ip", limit: 5, windowSec: 3600 },
     { axis: "irk", limit: 1, windowSec: 60 },
+  ],
+  // Coarse abuse backstop for the suggestion endpoint. The honest-user
+  // escalating cooldown is the per-device throttle in control-plane; this just
+  // caps a single IP draining/polling the queue (device keys are free to mint).
+  "username-suggest": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 200, windowSec: 3600 },
   ],
   "auth-code-issue": [
     { axis: "ip", limit: 20, windowSec: 3600 },
@@ -400,6 +408,7 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
 export function endpointFor(method: string, pathname: string): RateLimitEndpoint | null {
   const m = method.toUpperCase();
   if (m === "POST" && pathname === "/api/username/claim") return "username-claim";
+  if (m === "POST" && pathname === "/api/username/suggest") return "username-suggest";
   if (m === "POST" && pathname === "/api/auth-code/issue") return "auth-code-issue";
   if (m === "POST" && pathname === "/api/server/register") return "server-register";
   if (

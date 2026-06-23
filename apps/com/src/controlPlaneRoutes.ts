@@ -100,7 +100,7 @@ import {
   handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
-  handleRandomUsername,
+  handleSuggestUsername,
   handleUsernameClaim,
   handleUsersCheck,
   parseTestAccountsEnv,
@@ -428,7 +428,7 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
-  USERNAME_RANDOM: /^\/api\/username\/random$/,
+  USERNAME_SUGGEST: /^\/api\/username\/suggest$/,
   USERS_CHECK: /^\/api\/users\/check$/,
   ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_RENAME: /^\/api\/username\/rename$/,
@@ -784,10 +784,20 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
   }
-  // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "random" would otherwise
-  // be read as a username lookup. Suggests available random handles for sign-up.
-  if (method === "GET" && ROUTE_RE.USERNAME_RANDOM.test(path)) {
-    return finish(await handleRandomUsername(storage.usernames));
+  // MUST precede USERNAME_LOOKUP (`/api/username/:u`) — "suggest" would otherwise
+  // be read as a username lookup. Hands ONE random handle for sign-up, popped from
+  // the pre-validated queue + escalating per-device throttle.
+  if (method === "POST" && ROUTE_RE.USERNAME_SUGGEST.test(path)) {
+    return finish(
+      await handleSuggestUsername(
+        {
+          queue: storage.suggestionQueue,
+          usernames: storage.usernames,
+          throttle: storage.suggestThrottle,
+        },
+        await readJson(request),
+      ),
+    );
   }
   if (method === "POST" && ROUTE_RE.USERS_CHECK.test(path)) {
     return finish(
