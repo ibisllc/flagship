@@ -128,7 +128,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
   const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
-    pairingKeyPrivHex: loaded.pairingKeyPrivHex,
+    pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
@@ -183,7 +183,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
-    pairingKeyPrivHex: loaded.pairingKeyPrivHex,
+    pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
