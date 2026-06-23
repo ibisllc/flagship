@@ -163,7 +163,9 @@ final class MultipodLivenessTests: XCTestCase {
         let s = SessionStore(defaults: uniqueDefaults())
         let podB = PodInfo(podId: PodInfo.podId(forFqdn: "b.harry.flagship.services"),
                            name: "B", fqdn: "b.harry.flagship.services", status: .online)
-        await s.setSessionToken("token-B", forPodId: "b.harry.flagship.services")
+        // The per-pod token is keyed on the SAME id PodSessionSync derives —
+        // `PodInfo.podId(forFqdn:)` (the "pod-<fqdn>" identity used everywhere).
+        await s.setSessionToken("token-B", forPodId: PodInfo.podId(forFqdn: "b.harry.flagship.services"))
         await PodSessionSync.sync(currentPod: podB, store: s)
         let active = await s.sessionToken
         let base = await s.podBaseUrl

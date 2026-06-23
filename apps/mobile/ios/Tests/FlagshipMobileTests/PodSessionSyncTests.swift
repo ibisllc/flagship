@@ -55,11 +55,15 @@ final class PodSessionSyncTests: XCTestCase {
             leaderPodId: "frank",   // the dead, oldest pod is the leader (the bug)
             currentPodId: "frank"
         )
-        // OLD behavior: currentPod = dead leader ⇒ base URL nulled (the brick).
+        // HONEST LIVENESS (Fix B): syncing the offline leader now targets ITS
+        // base URL deterministically (so its detail page can attempt a load and
+        // render the honest "offline — last seen" state) — it no longer nulls
+        // the base URL. Brick-prevention for the GLOBAL Home/Services anchor is
+        // handled separately by `sessionPod`, which prefers the live pod.
         await PodSessionSync.sync(currentPod: app.currentPod, store: s)
-        let urlOld = await s.podBaseUrl
-        XCTAssertNil(urlOld)
-        // FIX: sessionPod anchors on the live pod.
+        let urlLeader = await s.podBaseUrl
+        XCTAssertEqual(urlLeader, "https://frank.harry.flagship.services")
+        // The global anchor still skips the dead leader for the live pod.
         await PodSessionSync.sync(currentPod: app.sessionPod, store: s)
         let urlNew = await s.podBaseUrl
         XCTAssertEqual(urlNew, "https://leticia.harry.flagship.services")
