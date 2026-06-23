@@ -22,7 +22,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
-import { bytesToHex, signWithIrk } from "../keystore.js";
+import { bytesToHex, signWithIrk, deriveSwkFromSeed } from "../keystore.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import {
@@ -437,6 +437,10 @@ function enableRecipeDownload(blobBundle) {
   // downloaded recipe so the burner writes it to the box's install-blob.json
   // (the daemon opens the deposit with it). Absent ⇒ recipe is byte-identical.
   if (blobBundle.pairingKeyPrivHex) recipe.pairingKeyPrivHex = blobBundle.pairingKeyPrivHex;
+  // SWK provisioning: carry the unsigned `swkHex` sibling into the downloaded
+  // recipe so the burner writes it to the box's install-blob.json (the daemon
+  // persists it at first boot). Absent ⇒ recipe is byte-identical.
+  if (blobBundle.swkHex) recipe.swkHex = blobBundle.swkHex;
   btn.onclick = () => {
     const json = JSON.stringify(recipe, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -707,6 +711,12 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // whole bundle, and the download-recipe builder splats it alongside `blob`.
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
   if (pairingKeyPrivHex) bundle.pairingKeyPrivHex = pairingKeyPrivHex;
+  // SWK provisioning: derive the box's deterministic SWK from the in-memory UMK
+  // seed + the SAME serverId (serverDomain) used for the STK, via the protocol
+  // derivation (DOTS info "flagship.swk.v1|<serverId>"). The box can't derive it
+  // (no UMK), so it rides the recipe as an UNSIGNED `swkHex` sibling the daemon
+  // persists at first boot to turn on the service/build platform.
+  bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
   return bundle;
 }
 
