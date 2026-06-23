@@ -159,6 +159,90 @@ export function inlineConfirm({
   });
 }
 
+/**
+ * Username suggestion step — shows ONE suggested handle with a regenerate
+ * button (rate-limited: disabled with a live "Try again in Ns" countdown for
+ * `retryAfterMs` after each suggestion), a "you can change it later" note, and
+ * Use / Cancel. `fetchNext` is injected so the modal stays network-free; it
+ * resolves to `{ name, retryAfterMs }` or `{ throttled: true, retryAfterMs }`.
+ * Resolves to the chosen name, or null on cancel.
+ */
+export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext } = {}) {
+  return new Promise((resolve) => {
+    const host = ensureHost();
+    const overlay = buildOverlay();
+    overlay.innerHTML = `
+      <div class="modal-card" role="document">
+        <h3 class="modal-title">Your handle</h3>
+        <p class="modal-suggest-name" data-suggest-name></p>
+        <button class="secondary full-width" data-suggest-regen>↻ Try another</button>
+        <p class="note modal-suggest-note">You can change your username later.</p>
+        <div class="row-2 mt-3">
+          <button class="secondary" data-modal-cancel>Cancel</button>
+          <button data-modal-ok>Continue</button>
+        </div>
+      </div>
+    `;
+    host.appendChild(overlay);
+    document.body.classList.add("modal-open");
+
+    let current = initialName;
+    let timer = null;
+    const nameEl = overlay.querySelector("[data-suggest-name]");
+    const regenBtn = overlay.querySelector("[data-suggest-regen]");
+    const okBtn = overlay.querySelector("[data-modal-ok]");
+    const cancelBtn = overlay.querySelector("[data-modal-cancel]");
+
+    const stopTimer = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const idle = () => { regenBtn.disabled = false; regenBtn.textContent = "↻ Try another"; };
+    const armCooldown = (ms) => {
+      stopTimer();
+      let remain = Math.ceil((Number(ms) || 0) / 1000);
+      if (remain <= 0) return idle();
+      regenBtn.disabled = true;
+      const tick = () => {
+        if (remain <= 0) { stopTimer(); return idle(); }
+        regenBtn.textContent = `Try again in ${remain}s`;
+        remain -= 1;
+      };
+      tick();
+      timer = setInterval(tick, 1000);
+    };
+
+    const close = (v) => {
+      stopTimer();
+      overlay.remove();
+      document.body.classList.remove("modal-open");
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); close(null); }
+    };
+
+    regenBtn.addEventListener("click", async () => {
+      if (regenBtn.disabled) return;
+      regenBtn.disabled = true;
+      regenBtn.textContent = "…";
+      let res;
+      try { res = await fetchNext(); }
+      catch { return armCooldown(2000); }
+      if (res && res.name && !res.throttled) {
+        current = res.name;
+        nameEl.textContent = current;
+      }
+      armCooldown(res ? res.retryAfterMs : 2000);
+    });
+    okBtn.addEventListener("click", () => close(current));
+    cancelBtn.addEventListener("click", () => close(null));
+    overlay.addEventListener("click", (ev) => { if (ev.target === overlay) close(null); });
+    document.addEventListener("keydown", onKey);
+
+    nameEl.textContent = current;
+    armCooldown(retryAfterMs);
+  });
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")

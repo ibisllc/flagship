@@ -12,7 +12,7 @@ import {
 import { humanError } from "../lib/humanError.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
-import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
+import { inlineConfirm, inlinePrompt, inlineSuggestUsername } from "../lib/modal.js";
 import { recoverFromCloud } from "../lib/recovery.js";
 import {
   activateDemoAccount,
@@ -73,14 +73,30 @@ async function showNoSuchAccount(username) {
   });
 }
 
-/** Fetch a few available random handles for the sign-up "shuffle". */
-async function fetchRandomCandidates() {
-  const r = await fetch(`${controlApex()}/api/username/random`, { cache: "no-store" });
-  if (!r.ok) throw new Error(`couldn't get a handle (HTTP ${r.status})`);
+/** A throwaway per-sign-up device id, just for the regenerate throttle (the
+ *  real IRK isn't the rate-limit key — see docs/username-suggestion-queue.md). */
+function newSuggestDeviceKey() {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** Ask the server for ONE random handle. Returns `{ name, retryAfterMs }`, or
+ *  `{ throttled: true, retryAfterMs }` when regenerating too fast. */
+async function fetchSuggestion(deviceKey) {
+  const r = await fetch(`${controlApex()}/api/username/suggest`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ deviceKey }),
+    cache: "no-store",
+  });
   const body = await r.json().catch(() => ({}));
-  const list = Array.isArray(body.candidates) ? body.candidates.filter((s) => typeof s === "string") : [];
-  if (!list.length) throw new Error("no handle available — try again");
-  return list;
+  if (r.status === 429) {
+    return { throttled: true, retryAfterMs: Number(body.retryAfterMs) || 3000 };
+  }
+  if (!r.ok || typeof body.name !== "string") {
+    throw new Error(`couldn't get a handle (HTTP ${r.status})`);
+  }
+  return { name: body.name, retryAfterMs: Number(body.retryAfterMs) || 2000 };
 }
 
 /** CREATE ACCOUNT: a free, random, dashless handle. Passphrase → device key →
@@ -114,37 +130,21 @@ async function createAccount() {
     return toast(humanError(e), "err");
   }
 
-  // Pick a random handle — shuffle until they accept.
-  let candidates;
+  // Hand them ONE random handle + a (rate-limited) regenerate button. No
+  // free-text field — a custom name is the paid name-change.
+  const deviceKey = newSuggestDeviceKey();
+  let first;
   try {
-    candidates = await fetchRandomCandidates();
+    first = await fetchSuggestion(deviceKey);
   } catch (e) {
     return toast(e.message ?? String(e), "err");
   }
-  let chosen = null;
-  let i = 0;
-  while (chosen == null) {
-    const name = candidates[i];
-    const accept = await inlineConfirm({
-      title: "Your handle",
-      message: `Your account name will be "${name}". It's random and free — you can change it later for a fee. Use it, or shuffle for another?`,
-      okLabel: "Use this name",
-      cancelLabel: "Shuffle",
-    });
-    if (accept) {
-      chosen = name;
-      break;
-    }
-    i += 1;
-    if (i >= candidates.length) {
-      try {
-        candidates = await fetchRandomCandidates();
-      } catch (e) {
-        return toast(e.message ?? String(e), "err");
-      }
-      i = 0;
-    }
-  }
+  const chosen = await inlineSuggestUsername({
+    initialName: first.name,
+    retryAfterMs: first.retryAfterMs,
+    fetchNext: () => fetchSuggestion(deviceKey),
+  });
+  if (!chosen) return; // cancelled
 
   // Claim that EXACT name (idempotent, IRK-signed). No editable field, so a
   // free custom name is impossible — that's the paid name-change.

@@ -264,7 +264,11 @@ describe("/webapp PWA static surface", () => {
     // Random-by-default cover: a "Create account" action (random handle) +
     // a SIGN-IN-only username field that resolves to the access options.
     expect(r.body).toContain("createAccount");
-    expect(r.body).toContain("/api/username/random");
+    // One throttled suggestion at a time (no batch shuffle); regenerate is the
+    // only edit affordance + a device-key for the per-device cooldown.
+    expect(r.body).toContain("/api/username/suggest");
+    expect(r.body).toContain("inlineSuggestUsername");
+    expect(r.body).toContain("deviceKey");
     expect(r.body).toContain("bootstrap-continue");
     expect(r.body).toContain("resolveAccount");
     expect(r.body).toContain("accessOptions");
@@ -273,6 +277,16 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("bootstrapFromExistingSeed");
     expect(r.body).toContain("enterRecovery"); // keyfile import
     expect(r.body).toContain("enterJoin"); // scan a pairing code
+  });
+
+  it("/webapp/lib/modal.js ships the rate-limited username suggestion step", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/modal.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("inlineSuggestUsername");
+    expect(r.body).toContain("Try again in"); // the escalating-cooldown countdown
+    expect(r.body).toContain("data-suggest-regen"); // the regenerate button
+    expect(r.body).toContain("change your username later"); // the subtext
   });
 
   it("/webapp/keystore.js exposes bootstrapFromExistingSeed for the recovery flow", async () => {
