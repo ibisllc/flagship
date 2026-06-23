@@ -40,6 +40,9 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func fetchPods(username: String) async throws -> PodsDirectoryResponse {
             PodsDirectoryResponse(username: username, pods: directory)
         }
+        func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse {
+            LiveSyncResponse(cursor: "mock", username: username, pods: directory)
+        }
         func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
             deposited.append((lease, signatureHex, bootAuth))
         }

@@ -169,13 +169,15 @@ public struct HomeTab: View {
             // suppress the nudge for one session than to surface a
             // network blip on the landing screen.
             await refreshRecoveryStatus()
-            // Start the account-level approval poll so a box waiting for its
-            // unlock surfaces an Approve affordance on the list/checklist
-            // without waiting for a push or a per-card poller.
+            // The account-level "which boxes are waiting for approval?" feed now
+            // rides the app-scope LiveSync canal (the `/stream` long-poll feeds
+            // `app.boxRequestInbox` directly), so HomeTab no longer starts the
+            // BootApprovalWatcher's own 5s `/pods` timer — that would be a
+            // redundant second poll of the same data. The watcher is still built
+            // so pull-to-refresh (`onRefresh` below) can force ONE immediate
+            // directory read via `pollOnce()`; it just doesn't run on a timer.
             if approvalWatcher == nil {
-                let w = BootApprovalWatcher(app: app, pollAwaiting: pollPendingApprovals)
-                approvalWatcher = w
-                w.start()
+                approvalWatcher = BootApprovalWatcher(app: app, pollAwaiting: pollPendingApprovals)
             }
         }
         .onDisappear { approvalWatcher?.stop() }

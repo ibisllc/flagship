@@ -33,6 +33,16 @@ public protocol SecretMailboxClient: Sendable {
     /// plane (canonical id-cert source).
     func fetchPods(username: String) async throws -> PodsDirectoryResponse
 
+    /// GET /api/users/:u/stream?cursor=<hex> — the unified live-update channel
+    /// (the hanging GET). A SUPERSET of `/pods` (same `pods`/`pending`) plus an
+    /// opaque `cursor`: pass the last cursor, the server returns immediately if
+    /// anything meaningful changed (or you sent none / a stale one), else HOLDS
+    /// up to ~25s and returns on the next change (or a timeout, same cursor).
+    /// Unauthenticated, exactly like `/pods`. The single foreground canal that
+    /// feeds AppState (collapsing the many per-screen pollers); the caller falls
+    /// back to `fetchPods` if this errors / is unreachable.
+    func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse
+
     /// PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
     /// the boot worker (owner-IRK via the `bootAuth` header). The `lease`
     /// body keeps its own IRK signature so the box re-verifies it. Enables
@@ -486,6 +496,41 @@ public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// The wire shape of `GET /api/users/:u/stream` — the live-update channel. A
+/// SUPERSET of `PodsDirectoryResponse` (same `pods`/`pending`) plus the opaque
+/// `cursor` the client echoes back to detect change. `pods`/`pending` decode
+/// with the SAME lenient rules as `/pods`, so the projection into AppState is
+/// identical whether the data arrived via the stream or the fallback fetch.
+public struct LiveSyncResponse: Codable, Equatable, Sendable {
+    /// Opaque change-detection cursor — store it, echo it back next request.
+    public let cursor: String
+    public let username: String
+    public let pods: [PodDirectoryEntry]
+    public let pending: [PendingPodEntry]
+    public init(cursor: String, username: String, pods: [PodDirectoryEntry], pending: [PendingPodEntry] = []) {
+        self.cursor = cursor; self.username = username; self.pods = pods; self.pending = pending
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.cursor = try c.decodeIfPresent(String.self, forKey: .cursor) ?? ""
+        self.username = try c.decode(String.self, forKey: .username)
+        self.pods = try c.decode([PodDirectoryEntry].self, forKey: .pods)
+        self.pending = try c.decodeIfPresent([PendingPodEntry].self, forKey: .pending) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cursor, username, pods, pending
+    }
+
+    /// Project to the `/pods`-shaped directory response the reconciler consumes
+    /// (it doesn't need the cursor). Lets the same reconcile path serve both the
+    /// live stream and the fallback fetch with no branching.
+    public var directory: PodsDirectoryResponse {
+        PodsDirectoryResponse(username: username, pods: pods, pending: pending)
+    }
+}
+
 /// The wire shape of a box-sealed lease deposit body's `lease` object.
 /// Field names match the Worker handler (handlePostBoxSealedLease).
 public struct BoxSealedLeaseWire: Codable, Equatable, Sendable {
@@ -573,6 +618,36 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         let response: PodsDirectoryResponse = try await getReturning("/api/users/\(encoded)/pods")
         onPods?(response)
         return response
+    }
+
+    public func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var path = "/api/users/\(encoded)/stream"
+        if let cursor, !cursor.isEmpty {
+            let q = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor
+            path += "?cursor=\(q)"
+        }
+        // The hanging GET holds up to ~25s server-side; give the request a
+        // generous timeout so a healthy hold isn't mistaken for a failure (the
+        // caller's loop falls back to /pods on a real error). String-concat the
+        // URL so the `?cursor=` query lands verbatim.
+        guard let url = URL(string: baseUrl.absoluteString + path) else {
+            throw ScreensClientError.http(status: 0, message: "bad stream URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.timeoutInterval = 40
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        let decoded = try JSONDecoder().decode(LiveSyncResponse.self, from: data)
+        // Reuse the A′-pin observer path — the stream carries the same
+        // `signedStatus` as /pods, so the pin registry stays fed off the canal.
+        onPods?(decoded.directory)
+        return decoded
     }
 
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
@@ -751,6 +826,35 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending)
     }
+
+    /// Scripted live-sync responses for tests: each `fetchLiveSync` call pops the
+    /// next entry; once exhausted it returns a DETERMINISTIC snapshot built from
+    /// `directory`/`directoryPending` with a content-stable cursor (so a loop
+    /// keeps a stable cursor and never hangs). Set `liveSyncError` to make the
+    /// next call throw (exercising the /pods fallback).
+    public var liveSyncScript: [LiveSyncResponse] = []
+    public var liveSyncError: Error?
+    /// Cursors observed across calls — lets a test assert the cursor is echoed.
+    public private(set) var liveSyncCursors: [String?] = []
+
+    public func fetchLiveSync(username: String, cursor: String?) async throws -> LiveSyncResponse {
+        liveSyncCursors.append(cursor)
+        if let err = liveSyncError {
+            liveSyncError = nil
+            throw err
+        }
+        if !liveSyncScript.isEmpty {
+            return liveSyncScript.removeFirst()
+        }
+        // Deterministic fallback snapshot — a content-stable cursor so a steady
+        // state holds the same cursor (no churn) and the test loop terminates.
+        let stableCursor = "mock-\(directory.count)-\(directoryPending.count)"
+        return LiveSyncResponse(
+            cursor: stableCursor, username: username,
+            pods: directory, pending: directoryPending
+        )
+    }
+
     public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
         deposited.append((lease, signatureHex, bootAuth))
     }
