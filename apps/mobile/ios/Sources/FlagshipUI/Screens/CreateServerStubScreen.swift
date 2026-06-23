@@ -101,6 +101,8 @@ public struct CreateServerStubScreen: View {
                         bootUnlockPicker(c: c)
                         Divider().background(c.border)
                         diskEncryptionToggle(c: c)
+                        Divider().background(c.border)
+                        advancedSection(c: c)
                     default:
                         backupPolicyPicker(c: c)
                     }
@@ -270,6 +272,49 @@ public struct CreateServerStubScreen: View {
                  : "Less safe — the disk is left unencrypted. Only for boxes that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
                 .font(.caption)
                 .foregroundColor(c.textMuted)
+        }
+    }
+
+    // MARK: - Advanced mode
+    //
+    // ONE toggle, OFF by default, "for people who know what they're doing".
+    // It gates the offline path: embed-secrets (the box SWK in the recipe), so a
+    // box can install fully offline with no post-registration phone step. The
+    // DEFAULT (Advanced off) is the secret-free recipe — the phone deposits the
+    // SWK after the box registers. (Choose-your-own-ISO + debug/local-CLI have no
+    // mobile analogue; they live on the website/webapp.)
+    @ViewBuilder
+    private func advancedSection(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Toggle(isOn: $vm.advancedMode) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Advanced mode")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                    Text("For people who know what they're doing.")
+                        .font(.caption)
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .tint(c.primary)
+            .accessibilityIdentifier("cs-advanced-toggle")
+
+            if vm.advancedMode {
+                Toggle(isOn: $vm.embedSecrets) {
+                    Text("Embed secrets for offline install")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("cs-embed-secrets-toggle")
+                .padding(.leading, FS.space.s3)
+                Text(vm.embedSecrets
+                     ? "The recipe carries the box's app key. The box installs fully offline — no later step on your phone — but the recipe now holds a secret. Keep it safe."
+                     : "Off (recommended): the recipe holds no app key. Your phone delivers it securely once the box comes online.")
+                    .font(.caption)
+                    .foregroundColor(c.textMuted)
+                    .padding(.leading, FS.space.s3)
+            }
         }
     }
 

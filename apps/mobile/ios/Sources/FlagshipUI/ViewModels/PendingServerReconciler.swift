@@ -52,21 +52,31 @@ public struct PendingServerReconciler {
     /// couldn't reach the directory this pass; leave existing state as-is.
     public typealias PodsFetcher = @MainActor (_ username: String) async -> PodsDirectoryResponse?
 
+    /// Fired ONCE per registered (non-revoked) box surfaced this pass, with its
+    /// FQDN + REGISTERED identity pubkey (hex). The secret-free-recipe SWK
+    /// deposit hangs off this: a box that registered without an embedded SWK now
+    /// has a directory identity to seal the SWK to. Best-effort + idempotent in
+    /// the handler (it no-ops unless a deposit is owed). Default no-op.
+    public typealias RegisteredHandler = @MainActor (_ fqdn: String, _ identityPubKeyHex: String) async -> Void
+
     private let app: AppState
     private let store: PendingServerStore
     private let fetchPods: PodsFetcher
+    private let onRegistered: RegisteredHandler
     private let now: () -> Int64
 
     public init(
         app: AppState,
         store: PendingServerStore = PendingServerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
-        fetchPods: @escaping PodsFetcher
+        fetchPods: @escaping PodsFetcher,
+        onRegistered: @escaping RegisteredHandler = { _, _ in }
     ) {
         self.app = app
         self.store = store
         self.now = now
         self.fetchPods = fetchPods
+        self.onRegistered = onRegistered
     }
 
     /// Run the full reconcile from the single merged `/pods` fetch. Best-effort:
@@ -107,6 +117,12 @@ public struct PendingServerReconciler {
                 // with the live watcher inbox in `AppState.isAwaitingUnlock`.
                 awaitingUnlock: entry.pendingRequests.contains { $0.type == SecretPurpose.unlockKey.rawValue }
             )
+            // Secret-free recipe: a registered box now has a directory identity
+            // to seal the SWK to. The handler no-ops unless a deposit is owed
+            // for this fqdn (idempotent via PendingSwkDepositStore).
+            if !entry.identityPubKey.isEmpty {
+                await onRegistered(fqdn, entry.identityPubKey)
+            }
         }
 
         // The registered servers are the non-pending pods now (including the
