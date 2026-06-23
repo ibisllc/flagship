@@ -256,9 +256,14 @@ describe("webapp classifyServer — three states of a registered-but-not-online 
 
   it("waiting-for-approval: a box awaiting ENTITLEMENT is NOT dead either (Box Request Inbox)", () => {
     // ezra's case: registered long ago, never checked in, but the directory's
-    // cheap `awaitingEntitlement` flag means it's actively asking to be
-    // authorized to serve — must read "waiting for approval", not "never seen".
-    const pod = { lastReported: null, registeredAt: now - 60 * 60 * 1000, awaitingEntitlement: true };
+    // cheap `pendingRequests` digest carries a live entitlement request — it's
+    // actively asking to be authorized to serve, so it must read "waiting for
+    // approval", not "never seen". (An entitlement entry, no separate boolean.)
+    const pod = {
+      lastReported: null,
+      registeredAt: now - 60 * 60 * 1000,
+      pendingRequests: [{ id: "n", type: "entitlement", issuedAt: 1, expiresAt: now + 60_000 }],
+    };
     const c = classifyServer(server, pod, { hasLiveUnlockRequest: false, now });
     expect(c.kind).toBe("waiting-for-approval");
     const html = renderServerCard(server, pod, { hasLiveUnlockRequest: false, now });

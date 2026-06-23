@@ -67,6 +67,29 @@ final class RecipeTests: XCTestCase {
         XCTAssertNil(flatNoPair["pairingKeyPrivHex"])
     }
 
+    /// SWK provisioning: the recipe's UNSIGNED top-level `swkHex` sibling (beside
+    /// `blob`/`blobSignature`) must survive the envelope flatten so it lands in
+    /// the on-disk install-blob.json the daemon persists at first boot. Mirrors
+    /// the pairing-key sibling — NOT part of the signed blob, so signatures /
+    /// sha-pins are unchanged.
+    func testEnvelopeFlattenCarriesSwkSibling() throws {
+        var blob = try JSONSerialization.jsonObject(with: data(Self.goldenJSON)) as! [String: Any]
+        let sig = blob.removeValue(forKey: "blobSignatureHex") as! String
+        let swk = "55c865a17c9106f0cb6847da659706ed7601e6769253f9b11d851e013b421377"
+        let envelope: [String: Any] = ["blob": blob, "blobSignature": sig, "swkHex": swk]
+        let flat = try JSONSerialization.jsonObject(
+            with: RecipeLoader.normalizeEnvelope(try JSONSerialization.data(withJSONObject: envelope))
+        ) as! [String: Any]
+        XCTAssertEqual(flat["swkHex"] as? String, swk)
+        XCTAssertEqual(flat["serverDomain"] as? String, "home.golden.flagship.services")
+        // A recipe WITHOUT the sibling must not invent one (byte-identical path).
+        let plain: [String: Any] = ["blob": blob, "blobSignature": sig]
+        let flatNoSwk = try JSONSerialization.jsonObject(
+            with: RecipeLoader.normalizeEnvelope(try JSONSerialization.data(withJSONObject: plain))
+        ) as! [String: Any]
+        XCTAssertNil(flatNoSwk["swkHex"])
+    }
+
     func testAcceptsGoldenRecipe() throws {
         let r = try RecipeLoader.load(data: data(Self.goldenJSON))
         XCTAssertEqual(r.serverDomain, "home.golden.flagship.services")

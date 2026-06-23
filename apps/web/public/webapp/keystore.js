@@ -497,6 +497,17 @@ export async function signWithAccountId(umkSeed, canonicalBytes) {
   );
 }
 
+/** The box's Service Workload Key (SWK) — byte-identical to @flagship/protocol
+ *  `deriveSWK`: HKDF-SHA256(umkSeed, salt=empty, info="flagship.swk.v1|<serverId>",
+ *  32). DOTS info — the protocol/daemon derivation the box's STK + tunnel + the
+ *  service/build platform key off. The box can't derive it (no UMK), so the
+ *  create-server recipe builder embeds the hex as an UNSIGNED `swkHex` sibling
+ *  the daemon persists at first boot. Returns lowercase hex. (Distinct from the
+ *  app-backup SWK, which uses a SLASH info "flagship/swk/v1|…".) */
+export async function deriveSwkFromSeed(umkSeed, serverId) {
+  return bytesToHex(await hkdf32(umkSeed, `flagship.swk.v1|${serverId}`));
+}
+
 export async function deriveBakFromSeed(umkSeed, serverId) {
   const seed = await hkdf32(umkSeed, `flagship.bak.v1|${serverId}`);
   const pkcs8 = pkcs8FromSeed(seed);

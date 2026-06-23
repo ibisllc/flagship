@@ -229,41 +229,50 @@ class AppState(
     }
 
     /**
-     * Lowercased fqdns of servers with a LIVE pending boot-unlock request (a
-     * box waiting for the owner's approval). Populated by ONE account-level
-     * poll (BootApprovalWatcher) so the list / card / detail can read a
-     * per-server "is it waiting for me?" without N pollers. Empty ⇒ none
-     * waiting (or not polled yet). Mirror of iOS AppState.serversAwaitingApproval.
+     * The Box Request Inbox (docs/box-request-inbox.md): ONE typed object, keyed
+     * by lowercased fqdn → the list of approvals that box is currently asking its
+     * owner for. Mirrors the backend's `/pods` `pendingRequests` digest —
+     * `unlock-key` and `entitlement` are two `type` values in ONE inbox, not two
+     * parallel sets. Populated by ONE account-level poll (BootApprovalWatcher) so
+     * the list / card / detail read a per-server "what is it asking me?" without N
+     * pollers. Empty ⇒ nothing waiting (or not polled yet). The legacy
+     * hasLiveUnlockRequest / hasLiveEntitlementRequest accessors are DERIVED from
+     * this by filtering on `type`. Mirror of iOS AppState.boxRequestInbox.
      */
-    private val _serversAwaitingApproval = MutableStateFlow<Set<String>>(emptySet())
-    val serversAwaitingApproval: StateFlow<Set<String>> = _serversAwaitingApproval.asStateFlow()
-    fun setServersAwaitingApproval(fqdns: Set<String>) {
-        _serversAwaitingApproval.value = fqdns.map { it.lowercase() }.toSet()
+    private val _boxRequestInbox = MutableStateFlow<Map<String, List<BoxRequest>>>(emptyMap())
+    val boxRequestInbox: StateFlow<Map<String, List<BoxRequest>>> = _boxRequestInbox.asStateFlow()
+    fun setBoxRequestInbox(inbox: Map<String, List<BoxRequest>>) {
+        _boxRequestInbox.value = inbox.mapKeys { it.key.lowercase() }
     }
 
-    /** True iff [fqdn] has a live pending unlock request right now. */
+    /** Every pending request across all of the owner's boxes, newest first —
+     *  the flat inbox the inbox view renders from. */
+    val boxRequests: List<BoxRequest>
+        get() = _boxRequestInbox.value.values.flatten().sortedByDescending { it.issuedAt }
+
+    /** The pending requests for [fqdn] of a given type (case-folds the lookup). */
+    fun boxRequests(fqdn: String, type: SecretPurpose): List<BoxRequest> =
+        (_boxRequestInbox.value[fqdn.lowercase()] ?: emptyList()).filter { it.type == type }
+
+    /** Lowercased fqdns with a live request of [type] — the display set a view
+     *  projects from the unified inbox (mirrors the old serversAwaiting* shape,
+     *  now derived). */
+    fun serversAwaiting(type: SecretPurpose): Set<String> =
+        _boxRequestInbox.value.filterValues { reqs -> reqs.any { it.type == type } }.keys
+
+    /** True iff [fqdn] has a live pending unlock request right now. Derived from
+     *  the unified inbox (`type == UNLOCK_KEY`). */
     fun hasLiveUnlockRequest(fqdn: String): Boolean =
-        _serversAwaitingApproval.value.contains(fqdn.lowercase())
+        boxRequests(fqdn, SecretPurpose.UNLOCK_KEY).isNotEmpty()
 
-    /**
-     * Lowercased fqdns of boxes with a LIVE entitlement (serve-auth) request —
-     * the Box Request Inbox's entitlement lane (docs/box-request-inbox.md). The
-     * proactive surfacing the entitlement relay previously lacked (a stuck box
-     * re-asked forever but nothing in the app showed it). Mirror of iOS.
-     */
-    private val _serversAwaitingEntitlement = MutableStateFlow<Set<String>>(emptySet())
-    val serversAwaitingEntitlement: StateFlow<Set<String>> = _serversAwaitingEntitlement.asStateFlow()
-    fun setServersAwaitingEntitlement(fqdns: Set<String>) {
-        _serversAwaitingEntitlement.value = fqdns.map { it.lowercase() }.toSet()
-    }
-
-    /** True iff [fqdn] is waiting for the owner to authorize it to serve. */
+    /** True iff [fqdn] is waiting for the owner to authorize it to serve.
+     *  Derived from the unified inbox (`type == ENTITLEMENT`). */
     fun hasLiveEntitlementRequest(fqdn: String): Boolean =
-        _serversAwaitingEntitlement.value.contains(fqdn.lowercase())
+        boxRequests(fqdn, SecretPurpose.ENTITLEMENT).isNotEmpty()
 
     /** Liveness for [pod] using the cheap directory `awaitingUnlock` flag OR
-     *  the account-level (biometric-watcher) waiting set — either means the box
-     *  is actively waiting, so it must not read "never came online". */
+     *  the account-level Box Request Inbox — either means the box is actively
+     *  waiting, so it must not read "never came online". */
     fun liveness(pod: PodInfo): PodInfo.LivenessState =
         pod.livenessState(
             hasLiveUnlockRequest = pod.awaitingUnlock ||

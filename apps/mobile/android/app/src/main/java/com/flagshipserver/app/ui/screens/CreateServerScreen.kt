@@ -72,6 +72,7 @@ import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
 import com.flagshipserver.app.core.SerialGen
+import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.SlugUtil
@@ -654,6 +655,14 @@ private suspend fun prepareDelivery(
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
+    // SWK provisioning: derive the box's deterministic SWK from the SAME UMK seed
+    // + serverId (serverDomain) used for the STK/BAK above, via ServerKeys.deriveSwk
+    // (DOTS info "flagship.swk.v1|<serverId>" — the protocol/daemon derivation),
+    // and embed it as an UNSIGNED `swkHex` recipe sibling the daemon persists at
+    // first boot. The box can't derive it (no UMK). Reuses the in-hand UMK seed —
+    // no extra biometric.
+    val boxSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
+
     // Create-time pairing: pre-register a sealed `add-paired-session` order with
     // `.com` and embed the pairing key's private half in the recipe, so the
     // booting box claims it and this device comes online ALREADY paired (no
@@ -704,6 +713,7 @@ private suspend fun prepareDelivery(
         ),
         blobSignature = blobSigHex,
         pairingKeyPrivHex = pairingKeyPrivHex,
+        swkHex = boxSwkHex,
     )
 
     return PendingDelivery(

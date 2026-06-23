@@ -16,6 +16,8 @@ import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
+import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
@@ -43,6 +45,12 @@ val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { MockQrRelayCl
  *  (OkHttp transport) in MainActivity; previews + tests get the in-memory
  *  Mock. The SecretRequestsScreen builds a SecretRequestCoordinator over this. */
 val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { MockSecretMailboxClient() }
+
+/** Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for
+ *  the acquirer's claim, hands off the re-sealed disk key. Hits `.com`, not a
+ *  box-pinned pipe. Production MainActivity wires the live client; previews +
+ *  tests get the in-memory Mock. */
+val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> { MockServerTransferClient() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests

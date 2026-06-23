@@ -19,6 +19,13 @@ data class InstallBlobBundle(
     // bytes); null when create-time pairing didn't run. Omitted from JSON when
     // null (encodeDefaults=false), so a non-pairing recipe is byte-identical.
     val pairingKeyPrivHex: String? = null,
+    // The box's deterministic SWK (lowercase hex) — an UNSIGNED recipe sibling
+    // (top-level, NOT inside `blob` / never in the signed canonical bytes) the
+    // burner carries to the on-disk install-blob.json; the daemon persists it at
+    // first boot to turn on the service/build platform (the box can't derive it:
+    // no UMK). Omitted from JSON when null (encodeDefaults=false), so a recipe
+    // without it is byte-identical. Derived via ServerKeys.deriveSwk (DOTS).
+    val swkHex: String? = null,
 )
 
 @Serializable

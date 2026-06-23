@@ -4,7 +4,7 @@
 // The key binds the IDE connection to exactly this one build session.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { enterBuildJournal } from "./build-journal.js";
@@ -37,7 +37,8 @@ async function createConnection() {
     buildId = r.buildId;
     renderConnection(r.connection);
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    // A 404 on this entry call means the box has no service/build platform.
+    toast(buildEntryError(e), "err");
   } finally {
     btn.disabled = false;
     btn.textContent = "Create a connection";

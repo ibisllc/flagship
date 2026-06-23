@@ -9,12 +9,18 @@ import Foundation
 public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var simulatedLatency: TimeInterval = 0.18
     public var shouldFail: Bool = false
+    /// When set, `tick()` throws an `.http` error with this status (used to
+    /// exercise status-specific handling, e.g. a 404 build-platform-absent).
+    public var simulatedFailureStatus: Int? = nil
 
     public init() {}
 
     private func tick() async throws {
         if simulatedLatency > 0 {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
+        }
+        if let status = simulatedFailureStatus {
+            throw ScreensClientError.http(status: status, message: "simulated failure")
         }
         if shouldFail {
             throw ScreensClientError.http(status: 503, message: "simulated failure")

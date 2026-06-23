@@ -28,7 +28,8 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.BootApprovalWatcher
-import com.flagshipserver.app.core.PendingApprovalSets
+import com.flagshipserver.app.core.BoxRequest
+import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.PendingServerReconciler
 import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.RecoveryBannerStore
@@ -61,33 +62,45 @@ fun HomeTab() {
     // (the never-ported "home2" fix) and ages out dead pending ghosts. A pure
     // read — NO biometric prompt; Face ID stays only on mutations.
     val reconciler = remember(mailbox) { PendingServerReconciler(app, mailbox) }
-    // Account-level "which boxes are waiting for my unlock approval?" poller.
-    // Populates app.serversAwaitingApproval so the list / detail / checklist
-    // read a per-server waiting state from ONE fetch (no N pollers).
+    // Account-level "what is each box asking me to approve?" poller. Populates
+    // app.boxRequestInbox (the unified Box Request Inbox, docs/box-request-inbox.md)
+    // so the list / detail / checklist read a per-server waiting state from ONE
+    // fetch (no N pollers).
     val approvalWatcher = remember(mailbox) {
         BootApprovalWatcher(
             app = app,
-            // DIRECTORY-DRIVEN, no biometric: read the cheap `awaitingUnlock`
-            // flag straight from the unauthenticated `/pods` directory. (The old
-            // path derived the IRK to read the mailbox, firing Face ID on a
-            // timer.) Best-effort: a blip returns the prior set.
+            // DIRECTORY-DRIVEN, no biometric: build the unified inbox from the
+            // cheap `pendingRequests` digest straight off the unauthenticated
+            // `/pods` directory. (The old path derived the IRK to read the
+            // mailbox, firing Face ID on a timer.) Best-effort: a blip returns the
+            // prior inbox. Unknown/future purposes a not-yet-updated client can't
+            // satisfy are dropped here, so the inbox only holds actionable rows.
             pollAwaiting = pollAwaiting@{
-                val prior = PendingApprovalSets(
-                    app.serversAwaitingApproval.value,
-                    app.serversAwaitingEntitlement.value,
-                )
+                val prior = app.boxRequestInbox.value
                 val user = app.currentUser.value
                 if (user.isNullOrEmpty()) return@pollAwaiting prior
                 val dir = runCatching { mailbox.fetchPods(user) }.getOrElse { return@pollAwaiting prior }
-                PendingApprovalSets(
-                    unlock = dir.pods.filter { it.awaitingUnlock }.map { it.serverDomain.lowercase() }.toSet(),
-                    entitlement = dir.pods.filter { it.awaitingEntitlement }.map { it.serverDomain.lowercase() }.toSet(),
-                )
+                val inbox = mutableMapOf<String, List<BoxRequest>>()
+                for (pod in dir.pods) {
+                    val reqs = pod.pendingRequests.mapNotNull { r ->
+                        val purpose = SecretPurpose.fromWire(r.type) ?: return@mapNotNull null
+                        BoxRequest(
+                            nonceHex = r.id,
+                            serverDomain = pod.serverDomain,
+                            type = purpose,
+                            issuedAt = r.issuedAt,
+                            expiresAt = r.expiresAt,
+                        )
+                    }
+                    if (reqs.isNotEmpty()) inbox[pod.serverDomain.lowercase()] = reqs
+                }
+                inbox
             },
         )
     }
-    val awaitingApproval by app.serversAwaitingApproval.collectAsState()
-    val awaitingEntitlement by app.serversAwaitingEntitlement.collectAsState()
+    val boxInbox by app.boxRequestInbox.collectAsState()
+    val awaitingApproval = app.serversAwaiting(SecretPurpose.UNLOCK_KEY)
+    val awaitingEntitlement = app.serversAwaiting(SecretPurpose.ENTITLEMENT)
     val ctx = LocalContext.current
     // Persistent dismiss for the post-creation backup-reminder banner
     // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
@@ -101,7 +114,7 @@ fun HomeTab() {
     // whenever the signed-in account changes. Best-effort + silent.
     LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
 
-    // Account-level approval poll: keep app.serversAwaitingApproval fresh so a
+    // Account-level approval poll: keep app.boxRequestInbox fresh so a
     // box waiting for unlock surfaces its Approve affordance on the list /
     // checklist without a push or a per-card poller. 5s cadence, matching iOS.
     LaunchedEffect(app.currentUser.value) {
@@ -236,10 +249,12 @@ fun HomeTab() {
                     )
                 }
             } else {
-                // The Box Request Inbox's entitlement lane (account-level set,
-                // refreshed by the watcher) — collected so the serve-auth card
-                // arms/clears on its own.
-                val awaitingEnt by app.serversAwaitingEntitlement.collectAsState()
+                // The unified Box Request Inbox (docs/box-request-inbox.md),
+                // refreshed by the watcher — collected so the serve-auth card
+                // arms/clears on its own as the entitlement lane changes.
+                val inbox by app.boxRequestInbox.collectAsState()
+                val awaitingEnt = inbox[pod.fqdn.lowercase()]
+                    ?.any { it.type == SecretPurpose.ENTITLEMENT } ?: false
                 ServerDetailScreen(
                     podId = podId,
                     // The directory's cheap `awaitingUnlock` flag (no biometric)
@@ -248,7 +263,7 @@ fun HomeTab() {
                     // page even when its BFF can't load (a locked box can't
                     // answer its daemon).
                     awaitingUnlock = pod.awaitingUnlock,
-                    awaitingEntitlement = awaitingEnt.contains(pod.fqdn.lowercase()),
+                    awaitingEntitlement = awaitingEnt,
                     serverFqdn = pod.fqdn,
                     onBack = { nav.popBackStack() },
                 )

@@ -38,6 +38,28 @@ describe("webapp keystore — pure crypto interop with @flagship/protocol", () =
     expect(Array.from(bak.publicKey)).toEqual(Array.from(expected.publicKey));
   });
 
+  it("SWK derivation (box, DOTS info) matches @flagship/protocol deriveSWK", async () => {
+    const seed = new Uint8Array(32).fill(7);
+    const serverId = "srv-test";
+    const k = await loadKeystore();
+    const swkHex = await k.deriveSwkFromSeed(seed, serverId);
+    const { deriveSWK } = await import("@flagship/protocol");
+    const expected = Array.from(deriveSWK({ seed }, serverId))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    expect(swkHex).toBe(expected);
+  });
+
+  it("SWK derivation reproduces the pinned cross-platform vector", async () => {
+    // packages/protocol/tests/keys.test.ts:
+    //   umk.seed = 32 × 0x07, serverId = "srv-vector-1"
+    const k = await loadKeystore();
+    const swkHex = await k.deriveSwkFromSeed(new Uint8Array(32).fill(7), "srv-vector-1");
+    expect(swkHex).toBe(
+      "55c865a17c9106f0cb6847da659706ed7601e6769253f9b11d851e013b421377",
+    );
+  });
+
   it("wrap → unwrap returns the original UMK seed (PBKDF2 + AES-GCM)", async () => {
     const k = await loadKeystore();
     const seed = new Uint8Array(32).fill(0x42);

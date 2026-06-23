@@ -208,6 +208,24 @@ data class SignedDaemonStatus(
     val signatureHex: String = "",
 )
 
+/** One un-answered box→owner approval request, from the cheap UNAUTHENTICATED
+ *  `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
+ *  Detection tier only: `type` is the secret-request purpose; the full signed
+ *  request is fetched over the authenticated mailbox path when the owner taps to
+ *  satisfy it. Mirrors control-plane `PendingRequestSummary` / iOS
+ *  `PendingRequestSummaryWire`. */
+@Serializable
+data class PendingRequestSummaryWire(
+    /** requestNonceHex — the box's reply is keyed by (serverDomain, this). */
+    val id: String,
+    /** Secret-request purpose: "unlock-key" | "entitlement" | …future types. */
+    val type: String,
+    /** issuedAt from the signed SecretRequest (ms). */
+    val issuedAt: Long = 0,
+    /** Row TTL (ms). */
+    val expiresAt: Long = 0,
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -231,17 +249,13 @@ data class PodDirectoryEntry(
      *  null when the daemon never reported (or `.com` dropped it). Consumed by
      *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
     val signedStatus: SignedDaemonStatus? = null,
-    /** Cheap directory signal: the box has a LIVE boot-unlock request parked
-     *  right now. Lets the phone show "waiting for approval" for a locked box
-     *  (instead of "never came online") without the biometric mailbox read.
-     *  Defaulted ⇒ absent on a pre-field Worker is false. Mirror of iOS. */
-    val awaitingUnlock: Boolean = false,
-    /** Same idea for the entitlement relay: the box posted its entitlement
-     *  secret-request and is "waiting for approval" (authorize it to serve), NOT
-     *  "never came online". Part of the Box Request Inbox digest
-     *  (docs/box-request-inbox.md). Defaulted ⇒ absent on a pre-field Worker is
-     *  false. Mirror of iOS. */
-    val awaitingEntitlement: Boolean = false,
+    /** The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
+     *  — the list of approvals this box is currently asking its owner for
+     *  (`unlock-key`, `entitlement`, …future types). The unified client inbox is
+     *  the flatMap of this across pods; it replaced the old compat
+     *  `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods once
+     *  every surface read this). Defaulted ⇒ absent is empty. Mirror of iOS. */
+    val pendingRequests: List<PendingRequestSummaryWire> = emptyList(),
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

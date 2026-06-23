@@ -150,6 +150,21 @@ public extension EnvironmentValues {
     }
 }
 
+/// Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for
+/// the acquirer's claim, and hands off the re-sealed disk key. Hits `.com`
+/// (the namespace-migration broker), not a box-pinned pipe. Defaults to the
+/// in-process Mock so previews/tests are inert.
+private struct ServerTransferClientKey: EnvironmentKey {
+    static let defaultValue: any ServerTransferClient = MockServerTransferClient()
+}
+
+public extension EnvironmentValues {
+    var serverTransferClient: any ServerTransferClient {
+        get { self[ServerTransferClientKey.self] }
+        set { self[ServerTransferClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed

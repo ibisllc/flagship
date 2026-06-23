@@ -45,6 +45,10 @@ public struct ServerDetailScreen: View {
     /// Run once per tap from the "Pair this server" button. NEVER fired
     /// automatically on appearance — a biometric must be user-initiated.
     var onPair: () -> Void = {}
+    /// Fired after the decommission/free-the-name card succeeds, so the
+    /// container can pop the nav stack (this page now points at a server
+    /// that no longer exists).
+    var onDeleted: () -> Void = {}
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -59,7 +63,8 @@ public struct ServerDetailScreen: View {
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
-        onPair: @escaping () -> Void = {}
+        onPair: @escaping () -> Void = {},
+        onDeleted: @escaping () -> Void = {}
     ) {
         self.state = state
         self.metrics = metrics
@@ -74,6 +79,7 @@ public struct ServerDetailScreen: View {
         self.onOpenTier = onOpenTier
         self.onRefresh = onRefresh
         self.onPair = onPair
+        self.onDeleted = onDeleted
     }
 
     /// FQDN for the boot-unlock approval card: the loaded detail's own FQDN,
@@ -128,7 +134,7 @@ public struct ServerDetailScreen: View {
                         // dead-server explanation + the decommission card
                         // instead of the transient "Connecting…" placeholder.
                         neverCameOnline(c: c)
-                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName)
+                        DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName, onDeleted: onDeleted)
                     } else if notPaired {
                         // The box IS online, but this device never minted a
                         // paired-session token, so the BFF 401s. Retrying won't
@@ -162,8 +168,9 @@ public struct ServerDetailScreen: View {
                         // Registered but never came online: offer the
                         // decommission/free-the-name action with its FQDN
                         // (the release path) ALONGSIDE the lost/stolen Revoke.
-                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName)
+                        DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
                     }
+                    TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -704,6 +711,9 @@ struct DecommissionDeadServerCard: View {
 
     let serverDomain: String
     let displayName: String?
+    /// Pop back to Home after a successful delete — the pod is gone, so this
+    /// page now points at a server that no longer exists.
+    var onDeleted: () -> Void = {}
 
     @State private var confirming = false
     @State private var working = false
@@ -751,7 +761,66 @@ struct DecommissionDeadServerCard: View {
             status: .online,
             cameOnline: false
         )
-        await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
+        // On success the helper releases the name + removes the pod, so pop
+        // back to Home. On failure it keeps the pod + shows a toast, so we
+        // stay on this page for a retry.
+        let ok = await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts)
+        if ok { onDeleted() }
+    }
+}
+
+/// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+/// Owner-only — the offer is IRK-signed behind the biometric inside
+/// `TransferGiverViewModel`, so only the box's owner can complete it. Opens the
+/// existing `TransferGiverScreen` (type-to-confirm → QR → disk-key hand-off) in
+/// a sheet. Lives just above the danger zone as an irreversible management action.
+struct TransferCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.serverTransferClient) private var transfer
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("TRANSFER")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Transfer to another account", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-transfer-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                TransferGiverScreen(
+                    vm: TransferGiverViewModel(
+                        client: transfer,
+                        mailbox: mailbox,
+                        serverDomain: serverDomain,
+                        username: app.currentUser ?? ""
+                    ),
+                    serverDomain: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
     }
 }
 

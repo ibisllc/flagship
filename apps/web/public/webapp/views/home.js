@@ -161,20 +161,21 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  *     window → genuinely dead, offer the free-the-name delete.
  *
  * @param {object} server  registered server (may carry `revoked`)
- * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert / awaitingUnlock)
+ * @param {object} pod      directory pod entry (lastReported / registeredAt / currentCert / pendingRequests)
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
   if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
   if (!pod || pod.lastReported == null) {
-    // Registered but never checked in. A live unlock OR entitlement request
-    // means it's actively waiting for the owner — not dead. `awaitingUnlock` /
-    // `awaitingEntitlement` are the cheap, unauthenticated directory signals (a
-    // live parked request); the explicit opt is the biometric-read fallback.
-    // Any one ⇒ waiting (folding entitlement in is what stops a box stuck on
-    // serve-authorization from reading "never came online").
-    if (opts.hasLiveUnlockRequest || pod?.awaitingUnlock || pod?.awaitingEntitlement) {
+    // Registered but never checked in. ANY live request (unlock OR entitlement
+    // OR a future type) means it's actively waiting for the owner — not dead.
+    // `pendingRequests` is the cheap, unauthenticated Box Request Inbox digest
+    // off /pods (the typed list of parked requests); the explicit opt is the
+    // biometric-read fallback. A non-empty digest ⇒ waiting (folding every type
+    // in is what stops a box stuck on serve-authorization from reading "never
+    // came online").
+    if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
       return { kind: "waiting-for-approval", label: "waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.

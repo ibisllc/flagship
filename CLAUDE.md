@@ -131,7 +131,119 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
+
+### 2026-06-23 — build-a-service ENABLED on real boxes: phone-provisioned SWK at first boot (+ honest "not set up" copy)
+
+**Why:** "Import from Git repo" (and ALL of build-a-service / `/api/services`) returned
+**404 → "Couldn't load"** on real phone-provisioned boxes. Root cause (diagnosed
+from the user-confirmed 404): the daemon constructs `servicePlatform` ONLY when it
+has a **Service Workload Key (SWK)** (index.ts ~575), and the phone→box SWK handoff
+was never wired — only the demo/gym cloud-init minted one. So every real box ran
+platform-less and the entire `/api/build/*` + `/api/services` surface 404'd. NOT a
+client bug, NOT the repo (a real clone/access failure returns 200 + a verdict card,
+never "Couldn't load").
+
+**The fix — provision the SWK from the phone; recovery is FREE.** The SWK is ALREADY
+a deterministic key: `deriveSWK(umk, serverId)` = HKDF(umk.seed,
+"flagship.swk.v1|serverId", 32). So the phone derives it at create-time (SAME UMK
+seed + serverId as BAK, behind the EXISTING create biometric — no extra Face ID) and
+embeds `swkHex` as an **UNSIGNED recipe sibling** (mirrors `pairingKeyPrivHex` — does
+NOT enter canonical bytes, **NO burner sha-pin change**, never transits `.com` in
+plaintext). The daemon reads it at first boot (env → `/var/flagship/swk.hex` →
+install-blob sibling), persists it, then `servicePlatform` constructs → `/api/build/*`
++ `/api/services` mount. **Recovery is automatic:** the SWK is deterministic, so a
+replaced box re-burned with a recipe re-derived from the recovered UMK gets the
+byte-identical SWK → peer-backup shares decrypt. No escrow, no recovery wiring.
+
+**⚠️ Correctness note (the trap):** there are TWO "SWK" derivations — the BOX one
+(`ServerKeys.deriveSwk`, info `flagship.swk.v1`, **DOTS**) and the app-backup one
+(iOS `Keystore.deriveSWK`, `flagship/swk/v1`, **SLASHES**, deliberately distinct).
+Box provisioning uses the DOTS one on all surfaces, pinned to a cross-platform vector
+(`seed=32×0x07, serverId="srv-vector-1"` → `55c865a1…b421377`).
+
+**Peer-backup side-effect — NONE.** Providing the SWK constructs `BackupLoop` but it
+starts DISABLED (owner toggles via a phone IRK order) and `RepairScheduler` is a
+no-op without a daemon wired — no peers/registry needed, no crash/loop/log-spam. SWK
+presence enables build-modes ONLY; activating peer-backup stays a separate explicit
+step.
+
+**Also (honest stopgap for un-reburned boxes):** the build screens now map the
+platform-absent **404 → "This server isn't set up to build services yet"**
+(iOS/Android/webapp, scoped to the build ENTRY calls — git "Check repo", MCP create,
+sessions list; session-scoped 404s untouched) instead of the misleading "Couldn't
+load."
+
+Layers (TS plumbing + native clients + Swift burner + the copy fix), each gated:
+daemon first-boot consume+persist (`server-daemon`); TS burner `installBlobToJson`
+swkHex sibling + `loadBlob`/`cli` (`flagship-burner`); `deriveSWK` vector
+(`protocol`); iOS/Android/webapp derive+embed at create (`ServerKeys.deriveSwk`
+[+ webapp new `deriveSwkFromSeed`]); Swift burner sibling-preserve (`burner-mac`);
+build-404 copy (all 3 clients).
+
+Gates: `tsc -b` clean · daemon swkConsume + burner swkSibling + protocol vector **29**
+(broader TS sweep 901/901) · iOS `xcodebuild` **TEST SUCCEEDED** (+ BoxSwkProvisioning
+6) · Android `:app:testDebugUnitTest` BUILD SUCCESSFUL · webapp keystore+create-view
+**57** + build-modes view **12** · burner-mac `swift test` **118**. 8 commits on
+`main` (`d86aa25b` copy · `cbe798c5` TS-plumbing merge · `2a790598`/`dbbadd85`/
+`b35225df`/`56511f06` clients+burner).
+
+**REMAINING (owner, NOT CI-validatable): a REBURN to validate the first-boot SWK
+handoff live.** CI proves the byte-compatibility + the consume path; it cannot prove
+the physical first boot. **Already-burned boxes have NO SWK until reburned** (they
+show the new "not set up to build services yet" copy meanwhile). Owner steps: rebuild
+iOS/Android apps + rebuild the burner + reburn → create a server → it comes online →
+"Build a service / Import from Git repo" should work (`/api/services` 200, `/api/build`
+mounted). NOTE: the live LLM provider is still NOT wired in the daemon, so the
+git-import FIT path + scratch session creation work, but AI "adapt" / scratch
+streaming still needs that separate (pre-existing) wiring. The webapp half of this
+(`keystore.js` + `create-server.js` + the build-404 copy) rides the next `.com`
+Worker deploy.
+
+### 2026-06-22 (do-now sweep) — transfer entry + Box Request Inbox finalize + NFC LED-SAS verify + migration-ledger fix
+
+Cleared the agent-doable "do-now" backlog via four focused worktree agents (each
+isolated off the shared branch, merged only after its OWN gates passed; CLAUDE.md
+owned by the orchestrator, not the agents):
+
+- **Transfer-a-box server-detail entry — DONE (`main` `312607c7`).** The "Transfer
+  to another account" entry + nav into the existing `TransferGiverScreen` is wired
+  on iOS + Android (the webapp already had it). Closes the last transfer-a-box
+  client hookup. Native-only diff (no TS). iOS **1184/0** · Android BUILD
+  SUCCESSFUL · webapp transfer view 7/7.
+- **Box Request Inbox finalize — DONE (`main` `cd178bad`·`2a232d5b`·`bcb56bbd`).**
+  The three deferred refinements: (1) UNIFIED the two parallel mobile sets
+  (`serversAwaitingApproval`/`serversAwaitingEntitlement`) into one
+  `pendingRequests`-typed inbox object (new `BoxRequest` on iOS+Android; the
+  watcher publishes it from one poll; the `isAwaiting*`/`liveness` accessors derive
+  by request `type`); (2) DROPPED the two legacy `/pods` booleans
+  (`awaitingUnlock`/`awaitingEntitlement`) — every reader (webapp `classifyServer`,
+  iOS/Android `PendingServerReconciler`) moved to `pendingRequests`; (3) SPLIT the
+  unlock-approval copy first-boot vs reboot off the existing `cameOnline` signal
+  (no new backend) — first boot keeps "Unlock device and authorize it to join your
+  cloud", an established reboot reads just "Unlock device". iOS **1185/0** ·
+  Android BUILD SUCCESSFUL · control-plane podInventory **27** · webapp
+  boxInbox/bootApproval green · full vitest **6236**.
+- **NFC `N-PHONE-6` LED-SAS verify — DONE (`feat/retail` `faba05a9`).** The box
+  could emit an LED-SAS but no phone could decode/verify it; added the fail-closed
+  **3-of-3** verify engine (`@flagship/protocol` + byte-identical Swift/Kotlin) +
+  an active glance-capture UI on both clients (the camera frame→symbol decoder is
+  the documented remaining seam). protocol **635** · iOS **1089/0** · Android BUILD
+  SUCCESSFUL. Stays on `feat/retail` (retail is branch-gated off `main`).
+- **Migration-ledger drift fix — DONE (`main` `9baf2438`).** `KNOWN_MIGRATIONS`
+  listed only through 0059 while `0060_server_transfer_disk_key` had landed on disk
+  with the transfer-a-box merge, so `schemaStatus.test.ts` failed on every full
+  run; registered 0060.
+- **CI grep-gate (GA "Bucket C" #4) — found ALREADY SHIPPED** on `main`
+  (`scripts/release-guard.sh` + `.github/workflows/release-guard.yml`, 2026-06-19);
+  no work needed (a fresh Node reimpl was built in a worktree then discarded to
+  avoid churning a tested, merged gate).
+- **`recovery.flagshipserver.com` "doesn't resolve" open-work item — STALE.** It is
+  already a `custom_domain` in `apps/com/wrangler.toml` (line 44); only a deploy is
+  owed, not a fix.
+
+Not deployed: the inbox backend + webapp changes ride the next `.com` Worker
+deploy; mobile shows the inbox/transfer changes after Xcode/Gradle rebuilds.
 
 ### 2026-06-22 — claims GATED to recently-suggested names (the generator is the gatekeeper)
 
@@ -353,8 +465,9 @@ commits on `main`, each gated:
   SUCCESSFUL · Swift shared 5/5. **Deployed** (`.com` Worker carries the broker;
   migrations 0059+0060 applied+stamped). **REMAINING (owner, NOT CI-validatable):
   a reburn for the box-side re-home + the giver→acquirer disk-key handshake live
-  e2e**, and the small server-detail "Transfer to another account" entry +
-  nav-route into `TransferGiverScreen` (the VMs/screens exist; just the hookup).
+  e2e** (the server-detail "Transfer to another account" entry + nav into
+  `TransferGiverScreen` was wired 2026-06-22, `main` `312607c7` — see the do-now
+  sweep entry above).
 
 Gates: `tsc -b` clean · storage parity +2 · control-plane accountDeletion **23** +
 secretMailbox · server-daemon selfDeleteConsumer **10** (full daemon+storage+
@@ -422,10 +535,10 @@ control-plane **1068**) · webapp boxInbox **5** + bootApproval crypto **6** + v
 `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (+2 new). Mobile shows it after an
 Xcode/Gradle rebuild; backend + webapp deploy with `.com`.
 
-**Remaining (deferred):** the two `/pods` booleans stay (derived from
-`pendingRequests`) for one release, dropped once nothing reads them; a unified
-`pendingRequests`-typed inbox object on mobile (vs the two parallel sets) and an
-SSE/WebSocket + push transport are the spec's later refinements.
+**Remaining (deferred):** an SSE/WebSocket + push transport (vs the current
+foreground poll) is the spec's last refinement. The two `/pods` booleans were
+dropped and the unified `pendingRequests`-typed mobile inbox object landed
+2026-06-22 (see the do-now sweep entry at the top of this section).
 
 ### 2026-06-21 — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
 
@@ -1167,9 +1280,13 @@ re-rebased onto refactored `main` and re-validated.
 >    `packages/flagship-burner/src/userdata.ts` + the Swift
 >    `UserData.swift` mirror) **and re-enable the `luksRemoveKey` guard** (it is
 >    deliberately guarded OFF, not deleted, so the slot survives bring-up).
-> 4. **Add a CI grep-gate that FAILS a RELEASE build** if the `debug`-user or
->    burn-time-passphrase constants (items 2–3) are present — so a forgotten
->    backdoor can never ship. (The dev/non-release path keeps them.)
+> 4. **✅ DONE — CI grep-gate that FAILS a RELEASE build** if the `debug`-user or
+>    burn-time-passphrase constants (items 2–3) are present — shipped 2026-06-19 as
+>    `scripts/release-guard.sh` + `.github/workflows/release-guard.yml` (enforces on
+>    `release-*`/`v*` tags + manual release dispatch; advisory on PRs; the
+>    dev/non-release path keeps the constants). It correctly fails RED today (the
+>    constants are still present pre-GA, by design) — so removing items 2–3 is what
+>    turns it green.
 > 5. **Remove the demo/dev flips in the burner + apps** — demo-mode and the
 >    3-tap live/mock toggle (iOS `DeveloperSettings`/`DemoFixtures` + the
 >    Welcome-box 3-tap; the burner's demo path).

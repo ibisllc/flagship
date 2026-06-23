@@ -42,7 +42,7 @@ public struct HomeScreen: View {
     /// Lowercased fqdns of servers with a LIVE pending boot-unlock request
     /// (the box is waiting for the owner's approval). Drives the per-card
     /// liveness classification — a waiting box reads "Waiting for approval",
-    /// never "Never came online". Source: AppState.serversAwaitingApproval.
+    /// never "Never came online". Source: AppState.serversAwaiting(.unlockKey).
     let awaitingApproval: Set<String>
     /// The entitlement (serve-auth) waiting set — same role as `awaitingApproval`
     /// for the other inbox lane, so a box waiting on entitlement reads "Waiting
