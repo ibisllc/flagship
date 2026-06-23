@@ -163,3 +163,112 @@ final class SwkDepositCoordinatorTests: XCTestCase {
         )
     }
 }
+
+/// The PendingPairingDepositStore three-state lifecycle (stash → deposited).
+final class PendingPairingDepositStoreTests: XCTestCase {
+    private func freshStore() -> PendingPairingDepositStore {
+        let suite = "flagship.pairingDeposit.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return PendingPairingDepositStore(defaults: defaults)
+    }
+
+    func test_lifecycle() {
+        let store = freshStore()
+        let d = "home.harry.flagship.services"
+        let json = "{\"request\":{},\"signature\":\"ab\"}"
+        XCTAssertNil(store.pendingOrder(for: d))
+        XCTAssertFalse(store.isDeposited(for: d))
+        store.markPending(for: d, pairingOrderJson: json)
+        XCTAssertEqual(store.pendingOrder(for: d), json)
+        store.markDeposited(for: d)
+        XCTAssertNil(store.pendingOrder(for: d))
+        XCTAssertTrue(store.isDeposited(for: d))
+        store.clear(for: d)
+        XCTAssertNil(store.pendingOrder(for: d))
+        XCTAssertFalse(store.isDeposited(for: d))
+    }
+}
+
+/// The coordinator's PAIRING branch (riding the same SwkDepositCoordinator):
+/// when a pairing order is owed, it seals the order JSON to the box identity +
+/// deposits it (the box opens it verbatim); idempotent; failure keeps the stash.
+@MainActor
+final class PairingDepositCoordinatorTests: XCTestCase {
+    private let serverDomain = "kitchen.alice.flagship.services"
+
+    private func ownerIrk() -> Curve25519.Signing.PrivateKey {
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32))
+    }
+    private let boxSeed = Data(repeating: 0x09, count: 32)
+    private func boxIdentityPubHex() -> String {
+        HexUtil.encode(try! Curve25519.Signing.PrivateKey(rawRepresentation: boxSeed).publicKey.rawRepresentation)
+    }
+
+    private func freshSwkStore() -> PendingSwkDepositStore {
+        let suite = "flagship.swkDeposit.tests.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
+        return PendingSwkDepositStore(defaults: d)
+    }
+    private func freshPairingStore() -> PendingPairingDepositStore {
+        let suite = "flagship.pairingDeposit.tests.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
+        return PendingPairingDepositStore(defaults: d)
+    }
+
+    private func coordinator(swk: PendingSwkDepositStore, pairing: PendingPairingDepositStore, mailbox: MockSecretMailboxClient) -> SwkDepositCoordinator {
+        let irk = ownerIrk()
+        return SwkDepositCoordinator(
+            username: "alice", mailbox: mailbox, store: swk, pairingStore: pairing,
+            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) }
+        )
+    }
+
+    /// Build a stashable order JSON the way the create flow does.
+    private func stashedOrderJson(irk: Curve25519.Signing.PrivateKey) throws -> String {
+        try CreateTimePairing.build(
+            username: "alice", serverDomain: serverDomain, label: "iPhone",
+            irk: irk, now: 1_750_000_000_000, token: "ab".repeated(32)
+        ).pairingOrderJson
+    }
+
+    func test_depositsPairingOrder_sealsToBoxIdentity_opensVerbatim() async throws {
+        let swk = freshSwkStore()
+        let pairing = freshPairingStore()
+        let irk = ownerIrk()
+        let json = try stashedOrderJson(irk: irk)
+        pairing.markPending(for: serverDomain, pairingOrderJson: json)
+        let mailbox = MockSecretMailboxClient()
+
+        await coordinator(swk: swk, pairing: pairing, mailbox: mailbox)
+            .depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        // No SWK owed here, only the pairing deposit went out.
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty)
+        XCTAssertEqual(mailbox.pairingDeposits.count, 1)
+        let body = mailbox.pairingDeposits[0].body
+        XCTAssertEqual(body.deposit.stkPub, boxIdentityPubHex())
+        // The box opens deposit.sealed with its identity seed → the exact JSON.
+        let sealed = try XCTUnwrap(HexUtil.decode(body.deposit.sealed))
+        let plain = try SecretSeal.openWithEd25519Seed(blob: sealed, recipientEd25519Seed: boxSeed)
+        XCTAssertEqual(String(data: plain, encoding: .utf8), json)
+
+        // Idempotent: marked deposited, a second pass does NOT re-deposit.
+        XCTAssertTrue(pairing.isDeposited(for: serverDomain))
+        await coordinator(swk: swk, pairing: pairing, mailbox: mailbox)
+            .depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+        XCTAssertEqual(mailbox.pairingDeposits.count, 1)
+    }
+
+    func test_noOpWhenNothingOwed() async {
+        let mailbox = MockSecretMailboxClient()
+        await coordinator(swk: freshSwkStore(), pairing: freshPairingStore(), mailbox: mailbox)
+            .depositIfNeeded(serverDomain: serverDomain, identityPubKeyHex: boxIdentityPubHex())
+        XCTAssertTrue(mailbox.pairingDeposits.isEmpty)
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty)
+    }
+}
+
+private extension String {
+    func repeated(_ n: Int) -> String { String(repeating: self, count: n) }
+}

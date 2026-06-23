@@ -27,6 +27,9 @@ public struct SwkDepositCoordinator {
     private let username: String
     private let mailbox: any SecretMailboxClient
     private let store: PendingSwkDepositStore
+    /// Stash of the create-time pairing order owed per server (secret-free
+    /// pairing). Deposited on the SAME pass as the SWK (one biometric → both).
+    private let pairingStore: PendingPairingDepositStore
     /// Derives (IRK, box SWK hex) under one biometric for the given serverId.
     /// Injectable so tests don't hit the Keychain/biometric.
     private let deriveIrkAndSwk: (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String)
@@ -35,6 +38,7 @@ public struct SwkDepositCoordinator {
         username: String,
         mailbox: any SecretMailboxClient,
         store: PendingSwkDepositStore = PendingSwkDepositStore(),
+        pairingStore: PendingPairingDepositStore = PendingPairingDepositStore(),
         deriveIrkAndSwk: @escaping (_ serverId: String, _ reason: String) async throws -> (irk: Curve25519.Signing.PrivateKey, swkHex: String) = { serverId, reason in
             let m = try await Keystore.deriveIRKBoxStkAndSwk(serverId: serverId, reason: reason)
             return (m.irk, m.boxSwkHex)
@@ -43,29 +47,49 @@ public struct SwkDepositCoordinator {
         self.username = username
         self.mailbox = mailbox
         self.store = store
+        self.pairingStore = pairingStore
         self.deriveIrkAndSwk = deriveIrkAndSwk
     }
 
-    /// Deposit the SWK for a box that has registered (carrying `identityPubKeyHex`)
-    /// — IF a deposit is still owed for it. No-op otherwise.
+    /// Deposit what's OWED for a box that has registered (carrying
+    /// `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
+    /// secret-free PAIRING order (pairs the creating device with no manual tap).
+    /// Both ride ONE biometric (the IRK derived once) and are sealed to the box
+    /// identity. No-op when nothing is owed.
     public func depositIfNeeded(serverDomain: String, identityPubKeyHex: String) async {
-        guard store.isPending(for: serverDomain) else { return }
+        let swkOwed = store.isPending(for: serverDomain)
+        let pairingOrderJson = pairingStore.pendingOrder(for: serverDomain)
+        guard swkOwed || pairingOrderJson != nil else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
         do {
             let (irk, swkHex) = try await deriveIrkAndSwk(serverDomain, "Authorize \(serverDomain) to run apps")
-            guard let swk = HexUtil.decode(swkHex), swk.count == 32 else { return }
-            let body = try SwkDelivery.buildDeposit(
-                username: username,
-                serverDomain: serverDomain,
-                swk: swk,
-                boxIdentityPub: boxIdentityPub,
-                irk: irk
-            )
-            try await mailbox.depositSwk(serverDomain: serverDomain, body: body)
-            // Only flip to `deposited` AFTER `.com` accepted it.
-            store.markDeposited(for: serverDomain)
+
+            if swkOwed, let swk = HexUtil.decode(swkHex), swk.count == 32 {
+                let body = try SwkDelivery.buildDeposit(
+                    username: username,
+                    serverDomain: serverDomain,
+                    swk: swk,
+                    boxIdentityPub: boxIdentityPub,
+                    irk: irk
+                )
+                try await mailbox.depositSwk(serverDomain: serverDomain, body: body)
+                // Only flip to `deposited` AFTER `.com` accepted it.
+                store.markDeposited(for: serverDomain)
+            }
+
+            if let pairingOrderJson {
+                let body = try PairingOrderDeposit.buildDeposit(
+                    username: username,
+                    serverDomain: serverDomain,
+                    pairingOrderJson: pairingOrderJson,
+                    boxIdentityPub: boxIdentityPub,
+                    irk: irk
+                )
+                try await mailbox.depositPairing(serverDomain: serverDomain, body: body)
+                pairingStore.markDeposited(for: serverDomain)
+            }
         } catch {
-            // Leave the `pending` marker so the next reconcile retries.
+            // Leave the `pending` marker(s) so the next reconcile retries.
         }
     }
 }

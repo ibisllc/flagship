@@ -131,11 +131,16 @@ public final class CreateServerViewModel {
     /// when embed-secrets is OFF, so the Home reconcile deposits it once the box
     /// registers. Untouched (no record) when embed-secrets is ON.
     private let swkDepositStore: PendingSwkDepositStore
-    /// `.com` mailbox client — used at mint time to pre-register the create-time
-    /// pairing deposit (so the creating device comes online ALREADY paired).
+    /// Secret-free pairing: stashes the create-time `add-paired-session` order
+    /// owed for this server when embed-secrets is OFF, so the Home reconcile
+    /// seals + deposits it once the box registers. Untouched when embed-secrets
+    /// is ON (the order is baked into the recipe instead).
+    private let pairingDepositStore: PendingPairingDepositStore
+    /// `.com` mailbox client — kept for parity with the create flow (the pairing
+    /// deposit itself now happens post-registration via SwkDepositCoordinator).
     private let mailbox: any SecretMailboxClient
     /// Pod session store — the create-time pairing token is persisted here so
-    /// the BFF authenticates the moment the box claims the deposit.
+    /// the BFF authenticates the moment the box claims the order.
     private let sessionStore: any SessionStoring
 
     public init(
@@ -146,6 +151,7 @@ public final class CreateServerViewModel {
         draftStore: CreateServerDraftStore = CreateServerDraftStore(),
         diskEncryption: DiskEncryptionStore = DiskEncryptionStore(),
         swkDepositStore: PendingSwkDepositStore = PendingSwkDepositStore(),
+        pairingDepositStore: PendingPairingDepositStore = PendingPairingDepositStore(),
         mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
         sessionStore: any SessionStoring = SessionStore()
     ) {
@@ -155,6 +161,7 @@ public final class CreateServerViewModel {
         self.bootUnlock = bootUnlock
         self.diskEncryption = diskEncryption
         self.swkDepositStore = swkDepositStore
+        self.pairingDepositStore = pairingDepositStore
         self.draftStore = draftStore
         self.mailbox = mailbox
         self.sessionStore = sessionStore
@@ -364,14 +371,14 @@ public final class CreateServerViewModel {
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
 
-        // Create-time pairing: pre-register a sealed `add-paired-session` order
-        // with `.com` and embed the pairing key's private half in the recipe so
-        // the booting box claims it and comes online ALREADY paired — no manual
-        // "Pair this server" tap on the creating device. Reuses the IRK from the
-        // single biometric above (no extra Face ID). Best-effort: a deposit
-        // failure leaves the recipe-embedded key + the manual pairing path as
-        // fallbacks, so it can NEVER block server creation.
-        var pairingKeyPrivHex: String?
+        // Secret-free pairing: build the owner-IRK-signed `add-paired-session`
+        // order at create time (the FIRST recipe carries ZERO pairing secret — no
+        // pairing keypair, no `pairingKeyPrivHex`). Reuses the IRK from the single
+        // biometric above (no extra Face ID). Persist the token as this device's
+        // session token so the BFF auths once the box claims the order. The order
+        // JSON is routed by mode below. Best-effort: a build failure leaves the
+        // manual pairing path as the fallback and NEVER blocks creation.
+        var pairingOrderJson: String?
         do {
             let pairing = try CreateTimePairing.build(
                 username: username,
@@ -381,37 +388,39 @@ public final class CreateServerViewModel {
                 label: "iPhone",
                 irk: irk
             )
-            try await mailbox.depositPairing(serverDomain: serverDomain, body: pairing.body)
-            // Only persist the token AFTER `.com` accepted the deposit — a token
-            // the box will never see would auth nothing. The box claims it on
-            // first boot, so by the time the server is online + selected the
-            // session token already matches and the BFF authenticates.
             await sessionStore.setSessionToken(pairing.token)
-            pairingKeyPrivHex = pairing.pairingKeyPrivHex
+            pairingOrderJson = pairing.pairingOrderJson
         } catch {
-            // Non-fatal — fall back to the manual pairing flow when the box is up.
-            pairingKeyPrivHex = nil
+            pairingOrderJson = nil
         }
 
         // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).
-        //   embed-secrets ON (advanced/offline): keep the SWK in the recipe; the
-        //     box installs fully offline with NO post-registration deposit.
-        //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the
-        //     SWK; record that a deposit is OWED so the Home reconcile seals +
-        //     deposits the SWK once the box registers (one tap then, not now).
+        //   embed-secrets ON (advanced/offline): bake BOTH the SWK and the
+        //     plaintext `pairingOrder` into the recipe; the box self-configures +
+        //     self-pairs fully offline with NO post-registration deposit.
+        //   embed-secrets OFF (the DEFAULT): the recipe is secret-free; stash the
+        //     SWK + the pairing order so the Home reconcile seals + deposits each
+        //     once the box registers (one tap then, not now).
         let embeddedSwkHex: String?
+        let embeddedPairingOrder: String?
         if embedSecrets {
             embeddedSwkHex = boxSwkHex
             swkDepositStore.clear(for: serverDomain)
+            embeddedPairingOrder = pairingOrderJson
+            pairingDepositStore.clear(for: serverDomain)
         } else {
             embeddedSwkHex = nil
             swkDepositStore.markPending(for: serverDomain)
+            embeddedPairingOrder = nil
+            if let pairingOrderJson {
+                pairingDepositStore.markPending(for: serverDomain, pairingOrderJson: pairingOrderJson)
+            }
         }
 
         return SignedInstallBlob(
             blob: blob,
             signatureHex: HexUtil.encode(blobSig),
-            pairingKeyPrivHex: pairingKeyPrivHex,
+            pairingOrder: embeddedPairingOrder,
             swkHex: embeddedSwkHex
         )
     }
@@ -420,21 +429,23 @@ public final class CreateServerViewModel {
 public struct SignedInstallBlob: Sendable {
     public let blob: InstallBlob
     public let signatureHex: String
-    /// Create-time pairing: the pairing key's private seed (hex) the booting box
-    /// uses to open the sealed `add-paired-session` deposit. An UNSIGNED recipe
-    /// sibling (never in the signed blob's canonical bytes); nil when create-time
-    /// pairing didn't run (e.g. the `.com` deposit failed → manual-pair fallback).
-    public let pairingKeyPrivHex: String?
+    /// Secret-free pairing (offline/embed): the plaintext `{request, signature}`
+    /// `add-paired-session` order (PairingOrderEnvelope JSON). An UNSIGNED recipe
+    /// sibling (never in the signed blob's canonical bytes); the box verifies the
+    /// owner-IRK order at boot and adds the session locally. nil in the DEFAULT
+    /// online path (the order is sealed + deposited post-registration instead) or
+    /// when create-time pairing didn't run.
+    public let pairingOrder: String?
     /// The box's deterministic SWK (lowercase hex), an UNSIGNED recipe sibling
     /// the burner carries to `/var/flagship/install-blob.json`; the daemon
     /// persists it at first boot to turn on the service/build platform. nil only
     /// for legacy/mock paths that don't provision it.
     public let swkHex: String?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingKeyPrivHex: String? = nil, swkHex: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil) {
         self.blob = blob
         self.signatureHex = signatureHex
-        self.pairingKeyPrivHex = pairingKeyPrivHex
+        self.pairingOrder = pairingOrder
         self.swkHex = swkHex
     }
 
@@ -444,7 +455,7 @@ public struct SignedInstallBlob: Sendable {
         /// Top-level recipe sibling (alongside `blob`/`blobSignature`); the
         /// burner carries it into the on-disk install-blob.json. Omitted from
         /// JSON when nil so a non-pairing recipe is byte-identical to before.
-        public let pairingKeyPrivHex: String?
+        public let pairingOrder: String?
         /// Top-level recipe sibling carrying the box's SWK (hex); the burner
         /// preserves it into the on-disk install-blob.json. Omitted from JSON
         /// when nil so a recipe without it is byte-identical to before.
@@ -512,7 +523,7 @@ public struct SignedInstallBlob: Sendable {
             blobSignature: signatureHex,
             // Synthesized Codable uses encodeIfPresent for optionals ⇒ omitted
             // when nil, so a non-pairing recipe serializes byte-identically.
-            pairingKeyPrivHex: pairingKeyPrivHex,
+            pairingOrder: pairingOrder,
             swkHex: swkHex
         )
     }
