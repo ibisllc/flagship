@@ -1214,11 +1214,30 @@ export interface SuggestThrottleStorage {
   prune(olderThan: number): Promise<number>;
 }
 
+/**
+ * The "recently-offered handles" roster (docs/username-suggestion-queue.md). A
+ * username is claimable ONLY if the server recently SUGGESTED it — so the
+ * generator (which vets not-claimed + not-`.com` before a name can be offered)
+ * is the gatekeeper for what's claimable. One row per name handed out; consumed
+ * on claim, pruned on expiry.
+ */
+export interface UsernameOfferStorage {
+  /** Upsert that `name` was offered to `deviceKey` at `at`. */
+  record(name: string, deviceKey: string, at: number): Promise<void>;
+  /** True iff `name` has an offer with `offeredAt >= notBefore`. */
+  isOffered(name: string, notBefore: number): Promise<boolean>;
+  /** Delete the offer for `name` (on a successful claim). */
+  consume(name: string): Promise<void>;
+  /** Delete offers with `offeredAt < olderThan`. Returns rows removed. */
+  prune(olderThan: number): Promise<number>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
   suggestionQueue: SuggestionQueueStorage;
   suggestThrottle: SuggestThrottleStorage;
+  usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;

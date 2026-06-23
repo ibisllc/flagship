@@ -4,6 +4,7 @@ import type {
   SuggestionQueueStorage,
   SuggestThrottleStorage,
   SuggestThrottleRecord,
+  UsernameOfferStorage,
   CtAlertRecord,
   CtAlertStorage,
   TrustExceptionRecord,
@@ -1374,6 +1375,7 @@ export class InMemoryStorage implements Storage {
   schemaVersion = new InMemorySchemaVersionStorage();
   suggestionQueue = new InMemorySuggestionQueueStorage();
   suggestThrottle = new InMemorySuggestThrottleStorage();
+  usernameOffers = new InMemoryUsernameOfferStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -1578,6 +1580,31 @@ export class InMemorySuggestionQueueStorage implements SuggestionQueueStorage {
   }
   async list(): Promise<string[]> {
     return this.ordered();
+  }
+}
+
+/** In-memory recently-offered-handles roster (claim gate). */
+export class InMemoryUsernameOfferStorage implements UsernameOfferStorage {
+  private byName = new Map<string, { deviceKey: string; offeredAt: number }>();
+  async record(name: string, deviceKey: string, at: number): Promise<void> {
+    this.byName.set(name.toLowerCase(), { deviceKey, offeredAt: at });
+  }
+  async isOffered(name: string, notBefore: number): Promise<boolean> {
+    const r = this.byName.get(name.toLowerCase());
+    return r !== undefined && r.offeredAt >= notBefore;
+  }
+  async consume(name: string): Promise<void> {
+    this.byName.delete(name.toLowerCase());
+  }
+  async prune(olderThan: number): Promise<number> {
+    let removed = 0;
+    for (const [k, v] of [...this.byName.entries()]) {
+      if (v.offeredAt < olderThan) {
+        this.byName.delete(k);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 }
 

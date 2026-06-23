@@ -69,6 +69,7 @@ import type {
   SuggestionQueueStorage,
   SuggestThrottleStorage,
   SuggestThrottleRecord,
+  UsernameOfferStorage,
   CtAlertStorage,
   TrustExceptionRecord,
   TrustExceptionStorage,
@@ -3056,6 +3057,7 @@ export class D1Storage implements Storage {
   schemaVersion: SchemaVersionStorage;
   suggestionQueue: SuggestionQueueStorage;
   suggestThrottle: SuggestThrottleStorage;
+  usernameOffers: UsernameOfferStorage;
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
@@ -3096,6 +3098,7 @@ export class D1Storage implements Storage {
     this.schemaVersion = new D1SchemaVersionStorage(db);
     this.suggestionQueue = new D1SuggestionQueueStorage(db);
     this.suggestThrottle = new D1SuggestThrottleStorage(db);
+    this.usernameOffers = new D1UsernameOfferStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -3266,6 +3269,43 @@ export class D1SuggestThrottleStorage implements SuggestThrottleStorage {
   async prune(olderThan: number): Promise<number> {
     const r = await this.db
       .prepare(`DELETE FROM username_suggest_throttle WHERE last_at < ?1`)
+      .bind(olderThan)
+      .run();
+    return r.meta?.changes ?? 0;
+  }
+}
+
+/** D1 recently-offered-handles roster (migration 0062) — the claim gate. */
+export class D1UsernameOfferStorage implements UsernameOfferStorage {
+  constructor(private readonly db: D1Database) {}
+  async record(name: string, deviceKey: string, at: number): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO username_offer (name, device_key, offered_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(name) DO UPDATE SET device_key = excluded.device_key, offered_at = excluded.offered_at`,
+      )
+      .bind(name.toLowerCase(), deviceKey, at)
+      .run();
+  }
+  async isOffered(name: string, notBefore: number): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `SELECT 1 FROM username_offer WHERE name = ?1 AND offered_at >= ?2 LIMIT 1`,
+      )
+      .bind(name.toLowerCase(), notBefore)
+      .first();
+    return !!r;
+  }
+  async consume(name: string): Promise<void> {
+    await this.db
+      .prepare(`DELETE FROM username_offer WHERE name = ?1`)
+      .bind(name.toLowerCase())
+      .run();
+  }
+  async prune(olderThan: number): Promise<number> {
+    const r = await this.db
+      .prepare(`DELETE FROM username_offer WHERE offered_at < ?1`)
       .bind(olderThan)
       .run();
     return r.meta?.changes ?? 0;

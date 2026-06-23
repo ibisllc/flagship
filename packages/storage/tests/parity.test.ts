@@ -303,6 +303,53 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // usernameOffers (0062) — record/upsert + isOffered recency window +
+  // consume + prune-by-offeredAt (the claim gate roster).
+  // ────────────────────────────────────────────────────────────────────
+  describe("usernameOffers", () => {
+    it("record then isOffered honors the recency window; consume removes it", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("happy-otter", "devA", 1000);
+        return {
+          fresh: await s.usernameOffers.isOffered("happy-otter", 500), // 1000 >= 500
+          stale: await s.usernameOffers.isOffered("happy-otter", 1500), // 1000 < 1500
+          missing: await s.usernameOffers.isOffered("nope", 0),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ fresh: true, stale: false, missing: false });
+    });
+
+    it("record upserts (case-insensitive) and consume deletes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("Brave-Fox", "d1", 10);
+        await s.usernameOffers.record("brave-fox", "d2", 20); // upsert, refresh offeredAt
+        const before = await s.usernameOffers.isOffered("brave-fox", 15); // 20 >= 15
+        await s.usernameOffers.consume("BRAVE-FOX");
+        const after = await s.usernameOffers.isOffered("brave-fox", 0);
+        return { before, after };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ before: true, after: false });
+    });
+
+    it("prune drops offers older than the cutoff", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernameOffers.record("old-owl", "d", 50);
+        await s.usernameOffers.record("new-elk", "d", 500);
+        const removed = await s.usernameOffers.prune(200);
+        return {
+          removed,
+          old: await s.usernameOffers.isOffered("old-owl", 0),
+          new: await s.usernameOffers.isOffered("new-elk", 0),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 1, old: false, new: true });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // usernameAliases — the ?1-reuse path (isConsumed binds 1 value into 2
   // predicates) + alias-chain resolution + conflicting-alias rejection.
   // ────────────────────────────────────────────────────────────────────
