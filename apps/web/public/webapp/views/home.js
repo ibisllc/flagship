@@ -26,6 +26,7 @@ import {
   remove as profileRemove,
 } from "../lib/profilesStore.js";
 import { controlApex } from "../lib/apex.js";
+import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -870,6 +871,15 @@ export async function renderHome() {
         String(s.serverId ?? "").toLowerCase(),
       );
       const pod = podStatusByDomain.get(s.serverId.toLowerCase());
+      // Secret-free recipe: a registered box now has a directory identity to
+      // seal the SWK to. No-ops unless a deposit is owed (idempotent via
+      // swkDeposit.js); best-effort + non-blocking so it never delays a render.
+      if (pod?.identityPubKey) {
+        depositSwkIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+      }
       const cls = classifyServer(s, pod, { hasLiveUnlockRequest });
       const bucket = statusBucketForKind(cls.kind);
       entries.push({

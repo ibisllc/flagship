@@ -758,6 +758,17 @@
           </label>
           <p id="cs-encrypt-disk-hint" class="faint-sm">On by default: the disk is encrypted and unlocks over the network at boot, so your data is unreadable if the box is stolen. Turn this off only for a box that <strong>can't keep a network connection at boot</strong> (e.g. Wi-Fi-only) — it'll boot without needing the network, but the disk is then <strong>not encrypted</strong>, which is less safe.</p>
 
+          <label class="inline-check mt-3">
+            <input type="checkbox" id="cs-advanced" /> Advanced mode
+          </label>
+          <p class="faint-sm">For people who know what they're doing.</p>
+          <div id="cs-advanced-options" class="hidden">
+            <label class="inline-check mt-2">
+              <input type="checkbox" id="cs-embed-secrets" /> Embed secrets for offline install
+            </label>
+            <p id="cs-embed-secrets-hint" class="faint-sm">Off (recommended): the recipe holds no app key — the webapp delivers it securely once the box comes online. On embeds the box's app key in the recipe so it installs fully offline (e.g. an air-gapped or USB-only box), but the recipe then carries a secret — keep it safe.</p>
+          </div>
+
           <div class="row-2 mt-2">
             <button class="secondary" id="cs-save-draft">Save draft</button>
             <button class="secondary" id="cs-new">New</button>

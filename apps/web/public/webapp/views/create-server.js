@@ -35,6 +35,7 @@ import {
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 import { controlApex, controlHost, serverFqdn } from "../lib/apex.js";
 import { depositCreateTimePairing } from "../lib/bootApproval.js";
+import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { setSessionToken } from "../lib/api.js";
 
 registerView("view-create-server");
@@ -369,7 +370,21 @@ function readInputs() {
   // InstallBlob so a relay can't downgrade an encrypted box to plaintext.
   // Default "luks" (encrypted); the user opts OUT explicitly.
   const diskEncryption = readDiskEncryption();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption };
+  // Secret-free recipe: embed-secrets is reachable ONLY under Advanced mode.
+  // Default OFF ⇒ the recipe is secret-free of the SWK + the webapp deposits it
+  // after the box registers. ON (advanced/offline) ⇒ embed `swkHex` in the recipe.
+  const embedSecrets = readEmbedSecrets();
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets };
+}
+
+// Read the embed-secrets choice. Only honored when Advanced mode is on; the
+// checkbox lives inside the (hidden-by-default) advanced section. Absent control
+// or Advanced off ⇒ false (the secret-free default). Exported for the unit test.
+export function readEmbedSecrets() {
+  const adv = $("cs-advanced");
+  const embed = $("cs-embed-secrets");
+  if (!adv || !adv.checked || !embed) return false;
+  return !!embed.checked;
 }
 
 // Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
@@ -711,12 +726,19 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // whole bundle, and the download-recipe builder splats it alongside `blob`.
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
   if (pairingKeyPrivHex) bundle.pairingKeyPrivHex = pairingKeyPrivHex;
-  // SWK provisioning: derive the box's deterministic SWK from the in-memory UMK
-  // seed + the SAME serverId (serverDomain) used for the STK, via the protocol
-  // derivation (DOTS info "flagship.swk.v1|<serverId>"). The box can't derive it
-  // (no UMK), so it rides the recipe as an UNSIGNED `swkHex` sibling the daemon
-  // persists at first boot to turn on the service/build platform.
-  bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
+  // SWK provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
+  //   embed-secrets ON (advanced/offline): derive the box's deterministic SWK
+  //     (DOTS info "flagship.swk.v1|<serverId>") + carry it as an UNSIGNED
+  //     `swkHex` recipe sibling; the box installs fully offline, NO deposit.
+  //   embed-secrets OFF (the DEFAULT): the recipe is secret-free of the SWK;
+  //     record that a deposit is OWED so the Home reconcile seals + deposits the
+  //     SWK once the box registers (one delivery then, not now).
+  if (inputs.embedSecrets) {
+    bundle.swkHex = await deriveSwkFromSeed(session.umk, blob.serverDomain);
+    clearSwkDeposit(blob.serverDomain);
+  } else {
+    markSwkDepositPending(blob.serverDomain);
+  }
   return bundle;
 }
 
@@ -846,8 +868,25 @@ function wireServerNameValidation() {
   input.addEventListener("blur", update);
 }
 
+// Show/hide the Advanced-mode sub-options + reset embed-secrets when Advanced
+// is turned off (so toggling it off can never leave a secret-embedding choice).
+function syncAdvancedVisibility() {
+  const adv = $("cs-advanced");
+  const opts = $("cs-advanced-options");
+  if (!adv || !opts) return;
+  if (adv.checked) {
+    opts.classList.remove("hidden");
+  } else {
+    opts.classList.add("hidden");
+    const embed = $("cs-embed-secrets");
+    if (embed) embed.checked = false;
+  }
+}
+
 export function initCreateServerView() {
   wireServerNameValidation();
+  $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
+  syncAdvancedVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-open-build")?.addEventListener("click", () => {
