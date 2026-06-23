@@ -445,3 +445,141 @@ export function _resetMigrationSentinelForTests(storage = defaultStorage()) {
   storage.removeItem(MIGRATED_KEY);
   storage.removeItem(LEGACY_CLEANUP_KEY);
 }
+
+// ── Fix B — per-pod session token + base URL ──────────────────────────────
+//
+// Previously `sessionToken` and `podBaseUrl` were single per-profile slots,
+// so pairing a second pod overwrote the first pod's token. We split them
+// into pod-keyed sub-maps stored as JSON blobs under:
+//
+//   profiles[cloudName].podTokens   = { [podId]: token }
+//   profiles[cloudName].podBaseUrls = { [podId]: baseUrl }
+//
+// The podId is the pod's lower-cased FQDN (the stable identity used
+// everywhere else in the webapp). This is a SEPARATE layer from the legacy
+// per-profile `sessionToken` / `podBaseUrl` slots, which remain for callers
+// that haven't been updated yet and are migrated on first read (see
+// `migratePerPodTokens`).
+//
+// API:
+//   getSessionTokenFor(podId)           — read pod's token
+//   setSessionTokenFor(podId, token)    — write pod's token
+//   removeSessionTokenFor(podId)        — remove pod's token
+//   getPodBaseUrlFor(podId)             — always deterministic: https://<podId>
+//   migrateSingleTokenToPod(podId)      — one-time attribution of the legacy
+//                                         single token to the anchor pod id
+//   listPodTokenIds()                   — list all pod ids with a stored token
+
+function readPodSubMap(subKey, storage) {
+  const cloudName = getActiveCloudName(storage);
+  if (!cloudName) return {};
+  const state = readState(storage);
+  const profile = state.profiles[cloudName] ?? {};
+  const raw = profile[subKey];
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePodSubMap(subKey, map, storage) {
+  const cloudName = getActiveCloudName(storage);
+  if (!cloudName) return;
+  const state = readState(storage);
+  state.profiles[cloudName] = state.profiles[cloudName] ?? { createdAt: Date.now() };
+  state.profiles[cloudName][subKey] = JSON.stringify(map);
+  writeState(state, storage);
+}
+
+/**
+ * Return the stored session token for `podId` (lower-cased FQDN), or null.
+ * @param {string} podId  lower-cased FQDN of the pod
+ * @param {{ storage?: Storage, cloudName?: string }} [opts]
+ */
+export function getSessionTokenFor(podId, opts = {}) {
+  const storage = opts.storage ?? defaultStorage();
+  if (!podId) return null;
+  const key = String(podId).toLowerCase();
+  const map = readPodSubMap("podTokens", storage);
+  return typeof map[key] === "string" ? map[key] : null;
+}
+
+/**
+ * Persist the session token for `podId`. Pass null/undefined to remove.
+ * @param {string} podId  lower-cased FQDN of the pod
+ * @param {string|null|undefined} token
+ * @param {{ storage?: Storage }} [opts]
+ */
+export function setSessionTokenFor(podId, token, opts = {}) {
+  const storage = opts.storage ?? defaultStorage();
+  if (!podId) return;
+  const key = String(podId).toLowerCase();
+  const map = readPodSubMap("podTokens", storage);
+  if (token == null) {
+    delete map[key];
+  } else {
+    map[key] = String(token);
+  }
+  writePodSubMap("podTokens", map, storage);
+}
+
+/**
+ * Remove the session token for `podId`.
+ * @param {string} podId
+ * @param {{ storage?: Storage }} [opts]
+ */
+export function removeSessionTokenFor(podId, opts = {}) {
+  setSessionTokenFor(podId, null, opts);
+}
+
+/**
+ * Derive the base URL for `podId` — always `https://<podId>` (deterministic
+ * from the FQDN). This never requires storage; it's a pure helper.
+ * Mirrors `lib/podSwitcher.js podBaseUrlFor`.
+ * @param {string} podId  lower-cased FQDN
+ * @returns {string}
+ */
+export function getPodBaseUrlFor(podId) {
+  const host = String(podId ?? "").trim().toLowerCase();
+  return host ? `https://${host}` : "";
+}
+
+/**
+ * List the pod IDs (FQDNs) that have a stored session token under the active
+ * profile. Returns [] when no profile is active.
+ * @param {{ storage?: Storage }} [opts]
+ * @returns {string[]}
+ */
+export function listPodTokenIds(opts = {}) {
+  const storage = opts.storage ?? defaultStorage();
+  const map = readPodSubMap("podTokens", storage);
+  return Object.keys(map).filter((k) => typeof map[k] === "string" && map[k]);
+}
+
+/**
+ * Best-effort migration: if the active profile has a legacy single
+ * `sessionToken` but no per-pod token for `anchorPodId`, attribute the
+ * legacy token to that pod. Idempotent: a no-op when the pod already has a
+ * token or when there's no legacy token.
+ *
+ * Call this during pairing or when navigating to a pod's detail, with the
+ * current anchor pod's lower-cased FQDN as `anchorPodId`.
+ *
+ * @param {string} anchorPodId  lower-cased FQDN of the pod to attribute to
+ * @param {{ storage?: Storage }} [opts]
+ * @returns {{ migrated: boolean }}
+ */
+export function migrateSingleTokenToPod(anchorPodId, opts = {}) {
+  const storage = opts.storage ?? defaultStorage();
+  if (!anchorPodId) return { migrated: false };
+  // Only migrate when the pod doesn't already have a per-pod token.
+  if (getSessionTokenFor(anchorPodId, { storage })) return { migrated: false };
+  // Look for the legacy single-slot token on the active profile.
+  const legacyToken = get("sessionToken", { storage });
+  if (!legacyToken) return { migrated: false };
+  setSessionTokenFor(anchorPodId, legacyToken, { storage });
+  return { migrated: true };
+}
