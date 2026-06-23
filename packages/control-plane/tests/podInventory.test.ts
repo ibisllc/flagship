@@ -14,6 +14,7 @@ import {
   handleGetUserPods,
   handlePostDaemonStatus,
   orderRefForSerial,
+  FRESHNESS_WINDOW_MS,
   type PodInventoryDeps,
 } from "../src/podInventory.js";
 
@@ -62,6 +63,9 @@ interface PodsResponse {
     serverDomain: string;
     state: string;
     lastReported: number | null;
+    liveness: "live" | "unreachable" | "never";
+    lastSeenMsAgo: number | null;
+    registeredAt: number;
     currentCert: { sha256: string | null } | null;
     pendingRequests: Array<{
       id: string;
@@ -641,5 +645,171 @@ describe("POST /api/daemon-status — verbatim signed tuple persisted + relayed"
     };
     expect(out.pods[0]?.currentCert?.sha256).toBe("ab".repeat(32));
     expect(out.pods[0]?.signedStatus).toBeNull();
+  });
+});
+
+// ── Per-pod liveness fields: liveness + lastSeenMsAgo ────────────────────────
+
+describe("GET /api/users/:u/pods — liveness fields (liveness + lastSeenMsAgo)", () => {
+  it("fresh real heartbeat → liveness:'live' with a non-null lastSeenMsAgo < FRESHNESS_WINDOW_MS", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const age = 60_000; // 1 min — well within the 15-min window
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 30 * 86_400_000,
+      certIssuer: "Let's Encrypt",
+      servicesServedJson: "[]",
+      lastReported: NOW - age,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    expect(pod.liveness).toBe("live");
+    expect(pod.lastSeenMsAgo).toBe(age);
+    expect(pod.lastSeenMsAgo).toBeLessThan(FRESHNESS_WINDOW_MS);
+  });
+
+  it("real heartbeat older than FRESHNESS_WINDOW_MS → liveness:'unreachable' with a sensible lastSeenMsAgo", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const age = FRESHNESS_WINDOW_MS + 60_000; // 1 min past the window
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 30 * 86_400_000,
+      certIssuer: "Let's Encrypt",
+      servicesServedJson: "[]",
+      lastReported: NOW - age,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    expect(pod.liveness).toBe("unreachable");
+    expect(pod.lastSeenMsAgo).toBe(age);
+    expect(pod.lastSeenMsAgo).toBeGreaterThan(FRESHNESS_WINDOW_MS);
+  });
+
+  it("no daemon_status row and no bridge → liveness:'never', lastSeenMsAgo:null", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage); // registered, no daemon_status, no authCodes
+
+    const r = await handleGetUserPods(deps(storage, { authCodes: undefined }), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    expect(pod.liveness).toBe("never");
+    expect(pod.lastSeenMsAgo).toBeNull();
+  });
+
+  it("provision-bridged box (no daemon_status row, provision_status 'live') → liveness:'never' even after > FRESHNESS_WINDOW_MS", async () => {
+    // This is the critical bridge-caveat test: the provision-status 'live'
+    // timestamp is STATIC (set once). A naive freshness check would wrongly
+    // flip it to 'unreachable' after 15 min. The bridge must be classified
+    // as 'never' (awaiting first real heartbeat), not 'unreachable'.
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    // The bridge timestamp is far in the past — well beyond the window.
+    const bridgeAge = FRESHNESS_WINDOW_MS + 60 * 60_000; // 1 hour past the window
+    await storage.authCodes.put(
+      authCode("BRIDGESER", "home1", { status: "used", usedAt: NOW - bridgeAge - 1_000 }),
+    );
+    await storage.provisionStatus.putProvisionStatus("BRIDGESER", {
+      phase: "live",
+      ts: NOW - bridgeAge,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    // lastReported is set (for wire compat with existing clients) but liveness
+    // must be 'never', not 'unreachable', because the timestamp is from the bridge.
+    expect(pod.lastReported).not.toBeNull();
+    expect(pod.liveness).toBe("never");
+    expect(pod.lastSeenMsAgo).toBeNull();
+  });
+
+  it("real heartbeat right at the freshness boundary (age === FRESHNESS_WINDOW_MS - 1) → 'live'", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const age = FRESHNESS_WINDOW_MS - 1;
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 30 * 86_400_000,
+      certIssuer: "Let's Encrypt",
+      servicesServedJson: "[]",
+      lastReported: NOW - age,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    expect(pod.liveness).toBe("live");
+  });
+
+  it("real heartbeat right at the freshness boundary (age === FRESHNESS_WINDOW_MS) → 'unreachable'", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const age = FRESHNESS_WINDOW_MS;
+    await storage.daemonStatus.put({
+      serverDomain: "home1.harry.flagship.services",
+      certSha256: "ab".repeat(32),
+      certValidUntil: NOW + 30 * 86_400_000,
+      certIssuer: "Let's Encrypt",
+      servicesServedJson: "[]",
+      lastReported: NOW - age,
+    });
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const pod = (r.body as PodsResponse).pods[0]!;
+    expect(pod.liveness).toBe("unreachable");
+  });
+});
+
+// ── Deterministic oldest-first pod ordering ───────────────────────────────────
+
+describe("GET /api/users/:u/pods — deterministic oldest-first order", () => {
+  it("returns pods sorted by registeredAt ASC regardless of storage insertion order", async () => {
+    const storage = new InMemoryStorage();
+    // Insert newest first to exercise the sort — storage may not order by registeredAt.
+    await storage.servers.put({
+      serverDomain: "newest.harry.flagship.services",
+      username: "harry",
+      identityPubKeyHex: "33".repeat(32),
+      registeredAt: NOW - 1_000, // newest
+    });
+    await storage.servers.put({
+      serverDomain: "middle.harry.flagship.services",
+      username: "harry",
+      identityPubKeyHex: "44".repeat(32),
+      registeredAt: NOW - 30_000, // middle
+    });
+    await storage.servers.put({
+      serverDomain: "oldest.harry.flagship.services",
+      username: "harry",
+      identityPubKeyHex: "55".repeat(32),
+      registeredAt: NOW - 60_000, // oldest
+    });
+
+    const r = await handleGetUserPods(deps(storage, { authCodes: undefined }), "harry");
+    const out = r.body as PodsResponse;
+    expect(out.pods).toHaveLength(3);
+    expect(out.pods[0]!.serverDomain).toBe("oldest.harry.flagship.services");
+    expect(out.pods[1]!.serverDomain).toBe("middle.harry.flagship.services");
+    expect(out.pods[2]!.serverDomain).toBe("newest.harry.flagship.services");
+    // Confirm registeredAt is monotonically increasing.
+    expect(out.pods[0]!.registeredAt).toBeLessThan(out.pods[1]!.registeredAt);
+    expect(out.pods[1]!.registeredAt).toBeLessThan(out.pods[2]!.registeredAt);
+  });
+
+  it("single pod is stable (no sort errors)", async () => {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    const r = await handleGetUserPods(deps(storage, { authCodes: undefined }), "harry");
+    expect((r.body as PodsResponse).pods).toHaveLength(1);
+  });
+
+  it("empty pod list is stable", async () => {
+    const storage = new InMemoryStorage();
+    const r = await handleGetUserPods(deps(storage, { authCodes: undefined }), "harry");
+    expect((r.body as PodsResponse).pods).toEqual([]);
   });
 });
