@@ -54,11 +54,20 @@ class PendingServerReconciler(
     suspend fun reconcile() {
         val username = app.currentUser.value
         if (username.isNullOrEmpty()) return
-
         // ONE unauthenticated fetch — registered servers AND active orders.
         // A throw (couldn't reach the directory) leaves all state untouched.
         val directory: PodsDirectoryResponse =
             runCatching { mailbox.fetchPods(username) }.getOrNull() ?: return
+        reconcile(directory)
+    }
+
+    /** Reconcile from a directory the caller ALREADY fetched — the LiveSync
+     *  path hands the `/stream` snapshot here so the same projection runs with
+     *  no second round-trip. Identical logic to [reconcile]; only the data
+     *  source differs. No-ops on no signed-in user. */
+    suspend fun reconcile(directory: PodsDirectoryResponse) {
+        val username = app.currentUser.value
+        if (username.isNullOrEmpty()) return
 
         // Surface every registered server as ONLINE — REGARDLESS of any
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod

@@ -102,15 +102,52 @@ export async function fetchFirstBootMap(deps = {}) {
 }
 
 /**
+ * Project a raw `/pods`/`/stream` `pods[]` array into the typed BoxRequest
+ * digest — the same flatMap `fetchInbox` does, but over already-fetched pods
+ * (so LiveSync can feed the inbox WITHOUT a second /pods round-trip). Pure.
+ * @param {any[]} pods
+ * @returns {BoxRequest[]}
+ */
+export function inboxFromPods(pods) {
+  const out = [];
+  for (const pod of pods ?? []) {
+    const domain = pod?.serverDomain;
+    if (!domain) continue;
+    for (const pr of pod.pendingRequests ?? []) {
+      if (!pr || !pr.type || !pr.id) continue;
+      out.push({
+        id: `${domain}#${pr.id}`,
+        serverDomain: domain,
+        type: pr.type,
+        issuedAt: pr.issuedAt ?? 0,
+        expiresAt: pr.expiresAt ?? 0,
+      });
+    }
+  }
+  out.sort((a, b) => b.issuedAt - a.issuedAt);
+  return out;
+}
+
+/**
  * The app-scope inbox store (mirrors ToastCenter / activeOperations: a tiny
- * observable + a foreground poll loop). The UI reads only from here.
+ * observable). The UI reads only from here via `subscribe`.
+ *
+ * The inbox no longer runs its OWN poll interval — it is FED by LiveSync (the
+ * single live-update canal): pass `deps.source` (a LiveSync handle) and `start`
+ * subscribes to it, projecting each snapshot's `pods[]` into the digest. The
+ * `subscribe` interface (and `markSatisfied`) are unchanged, so callers don't
+ * care where the data comes from. When no `source` is supplied (older callers /
+ * tests) it degrades to a self-contained `/pods` interval, so behavior is never
+ * worse than before.
  */
 export function createBoxInbox(deps = {}) {
   /** @type {BoxRequest[]} */
   let requests = [];
   const listeners = new Set();
   let timer = null;
+  let unsubscribeSource = null;
   const intervalMs = deps.intervalMs ?? 5000;
+  const source = deps.source ?? null;
 
   function emit() {
     for (const fn of listeners) {
@@ -122,7 +159,19 @@ export function createBoxInbox(deps = {}) {
     }
   }
 
+  /** Feed the inbox from an already-fetched `pods[]` (the LiveSync path). */
+  function feedFromPods(pods) {
+    requests = inboxFromPods(pods);
+    emit();
+  }
+
   async function refresh() {
+    if (source) {
+      // LiveSync owns the fetch; a manual refresh just re-projects its current
+      // snapshot (the loop keeps it fresh). Avoids a redundant /pods read.
+      feedFromPods(source.get?.().pods ?? []);
+      return requests;
+    }
     try {
       const next = await fetchInbox(deps);
       requests = next;
@@ -148,8 +197,19 @@ export function createBoxInbox(deps = {}) {
     },
     /** One immediate poll (also used by a manual refresh). */
     refresh,
-    /** Begin the foreground loop: immediate first tick, then every intervalMs. */
+    /** Feed the inbox directly from a pods[] array (used by LiveSync). */
+    feedFromPods,
+    /**
+     * Begin feeding the inbox. Preferred: subscribe to the injected LiveSync
+     * `source` (the single canal — no extra /pods interval). Fallback (no
+     * source): the legacy self-contained foreground interval.
+     */
     start() {
+      if (source) {
+        if (unsubscribeSource) return;
+        unsubscribeSource = source.subscribe((snap) => feedFromPods(snap?.pods ?? []));
+        return;
+      }
       if (timer) return;
       void refresh();
       timer = setInterval(() => {
@@ -158,8 +218,12 @@ export function createBoxInbox(deps = {}) {
         void refresh();
       }, intervalMs);
     },
-    /** Stop the loop (call on sign-out / lock). */
+    /** Stop feeding (call on sign-out / lock). */
     stop() {
+      if (unsubscribeSource) {
+        unsubscribeSource();
+        unsubscribeSource = null;
+      }
       if (timer) {
         clearInterval(timer);
         timer = null;

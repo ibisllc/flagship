@@ -12,12 +12,19 @@ struct ContentView: View {
     @Environment(TrustCenter.self) private var trust
     @Environment(DeveloperSettings.self) private var dev
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.sessionStore) private var sessionStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var pendingWatchers: PendingPodWatcherRegistry?
     /// #91 — foreground long-poll for AI-chat alerts → local notification +
     /// operations sliver. Lazily built once a pod is paired; gated on
     /// paired+unlocked so nothing surfaces over the lock.
     @State private var aiChatPoller: AiChatAlertPoller?
+    /// The single app-scope live-update canal — ONE `/stream` long-poll that
+    /// feeds AppState (pods + Box Request Inbox). Lazily built; foreground-only
+    /// via `scenePhase` + paired+unlocked, started/stopped at the shell so it
+    /// spans every tab (home / install checklist / server-detail).
+    @State private var liveSync: LiveSyncCoordinator?
 
     var body: some View {
         ZStack {
@@ -47,8 +54,15 @@ struct ContentView: View {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
             syncAiChatPoller()
+            syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             syncPodSession()
+        }
+        .onChange(of: scenePhase) { _, _ in
+            // Foreground-only: pause the live-update canal when the app leaves
+            // .active (background/inactive), resume on return. The coordinator's
+            // own isActive gate also folds in paired+unlocked.
+            syncLiveSync()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
@@ -69,6 +83,7 @@ struct ContentView: View {
             PodStatusPublisher(app: app).publish()
             syncPendingWatchers()
             syncAiChatPoller()
+            syncLiveSync()
             operations.syncDeployOperations(pods: app.isPaired ? app.pods : [])
             // Cold-launch restore: point the screens client at the
             // already-selected online server before the first load.
@@ -104,6 +119,41 @@ struct ContentView: View {
         let pod = app.isPaired ? app.sessionPod : nil
         let store = sessionStore
         Task { await PodSessionSync.sync(currentPod: pod, store: store) }
+    }
+
+    /// Lazily build + lifecycle the single live-update canal. Foreground-only:
+    /// started when `scenePhase == .active` AND the user is paired; stopped
+    /// otherwise. The coordinator long-polls `/stream` and feeds AppState (pods
+    /// + Box Request Inbox), so the per-screen watchers no longer need their own
+    /// fetch timers. App-scope (built here at the shell), so it spans every tab.
+    @MainActor
+    private func syncLiveSync() {
+        if liveSync == nil {
+            let app = self.app
+            let mailbox = self.mailbox
+            liveSync = LiveSyncCoordinator(
+                app: app,
+                mailbox: mailbox,
+                isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
+                makeReconciler: { fetch in
+                    // Same reconcile path Home uses: surface registered/pending
+                    // pods, drop ghosts, and run the secret-free SWK deposit for
+                    // newly-registered boxes (idempotent, best-effort).
+                    let swkDeposit: SwkDepositCoordinator? = (app.currentUser.map {
+                        SwkDepositCoordinator(username: $0, mailbox: mailbox)
+                    })
+                    return PendingServerReconciler(
+                        app: app,
+                        fetchPods: fetch,
+                        onRegistered: { fqdn, identityPubKeyHex in
+                            await swkDeposit?.depositIfNeeded(serverDomain: fqdn, identityPubKeyHex: identityPubKeyHex)
+                        }
+                    )
+                }
+            )
+        }
+        let shouldRun = app.isPaired && scenePhase == .active
+        if shouldRun { liveSync?.start() } else { liveSync?.stop() }
     }
 
     /// Lazily wire the registry on first use, then re-sync on every

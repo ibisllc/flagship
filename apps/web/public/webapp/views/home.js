@@ -29,6 +29,7 @@ import { controlApex } from "../lib/apex.js";
 import { isServerDecommissioned } from "../lib/serverReplacement.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
+import { liveSync } from "../lib/liveSync.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -76,6 +77,21 @@ const PENNANT_SVG = `
 export async function fetchPodInventory(username) {
   const out = { statusByDomain: new Map(), pending: [] };
   if (!username) return out;
+  // Prefer the LiveSync canal: while it's running it holds a fresh `{ pods,
+  // pending }` snapshot fed by the /stream long-poll, so we read THAT instead
+  // of a second /pods fetch. A cold start (LiveSync not yet started, or no
+  // snapshot) falls through to a one-shot /pods read (today's behavior — the
+  // safety net).
+  const snap = liveSync.get?.();
+  if (snap && (snap.pods?.length || snap.pending?.length)) {
+    for (const p of snap.pods ?? []) {
+      out.statusByDomain.set(String(p.serverDomain ?? "").toLowerCase(), p);
+    }
+    out.pending = (snap.pending ?? []).filter(
+      (p) => p && typeof p.fqdn === "string" && p.fqdn.length > 0,
+    );
+    return out;
+  }
   try {
     const r = await fetch(
       `${controlApex()}/api/users/${encodeURIComponent(username)}/pods`,
@@ -971,11 +987,13 @@ export async function renderHome() {
     // Reconcile the sliver's deploy operations against this tick's pending
     // set. Build operations (vibe-code) are untouched.
     activeOperations.syncDeployOperations(deployPods);
-    // L9 — arm the 5s account-level approval poll (parity with iOS/Android) so
-    // a box that starts waiting AFTER this paint surfaces its Approve
-    // affordance on its own. Seeded with THIS tick's set so it only repaints on
-    // a genuine change; cleared on navigation away (flagship:view-shown) + lock.
-    startApprovalPoll(awaitingApproval);
+    // LiveSync canal — instead of a standalone 5s `/pods` approval poll, Home
+    // re-paints when the app-scope LiveSync stream reports a change (a box
+    // starts/stops waiting, a pending order advances, a new pod appears). The
+    // /stream long-poll returns the instant state changes, so a waiting box
+    // lights up its Approve affordance with no separate poller. The
+    // subscription is cleared on navigation away (flagship:view-shown) + lock.
+    armHomeLiveSync();
     // Silent auto-renewal of long-lived leases. Fires on every home
     // enter (cheap — no-ops when no leases are close to expiry) and
     // refreshes the timer so the cadence resets each time the user
@@ -1162,64 +1180,84 @@ export function stopRenewals() {
   stopApprovalPoll();
 }
 
-// ── L9 — account-level boot-approval poll (parity with iOS/Android) ──
+// ── Home live updates via the LiveSync canal (replaces the L9 approval poll) ──
 //
 // iOS runs BootApprovalWatcher's ~5s `/pods`-driven loop while Home is on
-// screen (HomeTab.swift `.onAppear` start / `.onDisappear` stop); Android
-// runs the same cadence in a `LaunchedEffect` on HomeTab. The webapp used to
-// fetch the awaiting-approval set ONCE per renderHome(), so a box that started
-// waiting AFTER Home painted never surfaced its "Approve unlock" affordance
-// until the next manual refresh. This adds the matching 5s poll: while Home is
-// visible we re-fetch the awaiting set and, only when it actually changes,
-// repaint Home so a waiting box lights up (and a now-unlocked one clears) on
-// its own. The interval is cleared the moment we navigate away (and on lock).
+// screen; Android runs the same cadence in a `LaunchedEffect`. The webapp used
+// to arm its OWN 5s `/pods` interval on Home so a box that started waiting
+// AFTER the paint surfaced its "Approve unlock" affordance. That standalone
+// poll is now SUPERSEDED by the app-scope LiveSync stream: the /stream
+// long-poll returns the instant ANY meaningful state changes (a box starts/
+// stops waiting, a pending order advances a phase, a new pod appears), so Home
+// simply subscribes to LiveSync and repaints on change — one canal, no second
+// poller. The subscription is dropped the moment we navigate away (and on lock).
+//
+// `APPROVAL_POLL_MS` is retained as the documented cadence reference (iOS/
+// Android still poll on it as their fallback) and `stopApprovalPoll` is kept as
+// the lock-time teardown hook other modules call.
 export const APPROVAL_POLL_MS = 5_000;
-let approvalPollTimer = null;
-// Churn-free change detection: a stable sorted-key signature of the last
-// awaiting set we acted on, so a steady re-poll never triggers a needless
-// repaint (mirrors iOS comparing the published Set before re-rendering).
-let approvalPollLastSig = null;
+/** Unsubscribe handle for the Home LiveSync subscription, or null when idle. */
+let homeLiveSyncUnsub = null;
+// Churn-free change detection: a stable signature of the last snapshot we
+// repainted for, so a re-emit with identical pod/pending state never triggers
+// a needless repaint (mirrors the iOS Set compare before re-rendering).
+let homeLiveSyncLastSig = null;
 
-/** A stable signature for an awaiting-approval Set (sorted, joined). */
-function approvalSetSignature(set) {
-  return [...set].sort().join("|");
+/** A stable signature for a LiveSync snapshot — the bits that change a card's
+ *  classification (liveness, cert, the pendingRequests digest, pending phases). */
+function liveSyncSnapshotSignature(snap) {
+  const pods = (snap?.pods ?? [])
+    .map((p) => {
+      const reqs = (p.pendingRequests ?? [])
+        .map((r) => `${r.id}:${r.type}:${r.expiresAt}`)
+        .sort()
+        .join(",");
+      return [
+        p.serverDomain,
+        p.lastReported ?? "",
+        p.currentCert?.sha256 ?? "",
+        reqs,
+      ].join("|");
+    })
+    .sort();
+  const pending = (snap?.pending ?? [])
+    .map((o) => `${o.fqdn}|${o.phase ?? ""}`)
+    .sort();
+  return JSON.stringify({ pods, pending });
 }
 
-/** Re-fetch the awaiting set; repaint Home only if it changed. Best-effort —
- *  a failure yields an empty set from fetchAwaitingApprovalSet, which the
- *  signature compare treats as "no waiting box" (cards fall back to the
- *  age-based grace classification on the next paint). */
-async function pollApprovalsOnce() {
-  const set = await fetchAwaitingApprovalSet();
-  const sig = approvalSetSignature(set);
-  if (sig === approvalPollLastSig) return;
-  approvalPollLastSig = sig;
-  // Only repaint while Home is still the active view (the interval may fire
-  // once more in flight as we navigate away).
-  if (currentViewId() === "view-home") await renderHome();
+/** Subscribe Home to the LiveSync canal. On a snapshot change (and only a real
+ *  change) repaint Home — but only while Home is still the active view. The
+ *  subscription replaces the old 5s setInterval; LiveSync runs app-scope so the
+ *  stream is already live, we just react to it. Idempotent. */
+function armHomeLiveSync() {
+  if (homeLiveSyncUnsub) return;
+  // Seed the signature with the current snapshot so the immediate replay the
+  // subscribe fires doesn't trigger a redundant repaint of the paint we just did.
+  homeLiveSyncLastSig = liveSyncSnapshotSignature(liveSync.get?.());
+  homeLiveSyncUnsub = liveSync.subscribe((snap) => {
+    const sig = liveSyncSnapshotSignature(snap);
+    if (sig === homeLiveSyncLastSig) return;
+    homeLiveSyncLastSig = sig;
+    if (currentViewId() === "view-home") void renderHome().catch(() => {});
+  });
 }
 
-/** Arm the 5s approval poll. Seeds the change-detection signature with the
- *  current set so the first interval only repaints on a genuine change. */
-function startApprovalPoll(initialSet) {
-  approvalPollLastSig = approvalSetSignature(initialSet ?? new Set());
-  if (approvalPollTimer) clearInterval(approvalPollTimer);
-  approvalPollTimer = setInterval(() => {
-    void pollApprovalsOnce().catch(() => {});
-  }, APPROVAL_POLL_MS);
-}
-
-/** Disarm the approval poll (navigation away from Home, or lock). */
+/** Disarm the Home LiveSync subscription (navigation away from Home, or lock).
+ *  Kept under the original `stopApprovalPoll` name so the lock-time teardown +
+ *  the navigate-away listener that call it keep working unchanged. */
 export function stopApprovalPoll() {
-  if (approvalPollTimer) clearInterval(approvalPollTimer);
-  approvalPollTimer = null;
-  approvalPollLastSig = null;
+  if (homeLiveSyncUnsub) {
+    homeLiveSyncUnsub();
+    homeLiveSyncUnsub = null;
+  }
+  homeLiveSyncLastSig = null;
 }
 
-// Clear the poll the moment any view OTHER than Home takes the stage. renderHome
-// (re-)arms it on entry, so this only needs to handle leaving Home. Guarded for
-// the headless unit environment (home.js is imported for its pure functions in
-// `node` vitest, where there's no `document`).
+// Drop the Home subscription the moment any view OTHER than Home takes the
+// stage. renderHome (re-)arms it on entry, so this only needs to handle leaving
+// Home. Guarded for the headless unit environment (home.js is imported for its
+// pure functions in `node` vitest, where there's no `document`).
 if (typeof document !== "undefined") {
   document.addEventListener("flagship:view-shown", (ev) => {
     if (ev.detail?.id !== "view-home") stopApprovalPoll();

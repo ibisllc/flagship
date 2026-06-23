@@ -316,6 +316,44 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            // LiveSync — the single app-scope live-update canal. ONE /stream
+            // long-poll feeds AppState (pods + Box Request Inbox), collapsing the
+            // per-screen Home pollers into one channel. It is wired HERE (at the
+            // shell, not a tab) so it spans every screen, and self-gates on
+            // paired+unlocked — locking on onStop (which clears isUnlocked) pauses
+            // it, matching the iOS .background semantics (foreground-only). Falls
+            // back to /pods when /stream is down, so behavior never degrades.
+            val liveSync = remember(effectiveMailbox) {
+                com.flagshipserver.app.core.LiveSyncCoordinator(
+                    app = appState,
+                    mailbox = effectiveMailbox,
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                    makeReconciler = {
+                        // Same reconcile path Home uses, incl. the secret-free
+                        // SWK/pairing deposit for newly-registered boxes
+                        // (idempotent, best-effort, no-op unless owed).
+                        val swkStore = com.flagshipserver.app.core.PendingSwkDepositStore.from(appContext)
+                        val pairingStore = com.flagshipserver.app.core.PendingPairingDepositStore.from(appContext)
+                        com.flagshipserver.app.core.PendingServerReconciler(
+                            app = appState,
+                            mailbox = effectiveMailbox,
+                            onRegistered = { fqdn, identityPubKeyHex ->
+                                val user = appState.currentUser.value
+                                if (!user.isNullOrEmpty()) {
+                                    com.flagshipserver.app.core.SwkDepositCoordinator
+                                        .live(user, effectiveMailbox, swkStore, pairingStore)
+                                        .depositIfNeeded(fqdn, identityPubKeyHex)
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            val liveSyncPaired by appState.isPaired.collectAsState()
+            LaunchedEffect(liveSyncPaired) {
+                if (liveSyncPaired) liveSync.start(this) else liveSync.stop()
+            }
+
             val sizeClass = calculateWindowSizeClass(this)
 
             // Appearance override (Settings → Appearance). AUTO follows the

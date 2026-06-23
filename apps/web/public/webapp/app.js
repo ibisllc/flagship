@@ -24,6 +24,7 @@ import {
 } from "./lib/aiChatAlerts.js";
 import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
+import { liveSync } from "./lib/liveSync.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
 import {
   initTrustSliver,
@@ -581,6 +582,20 @@ async function boot() {
   setTrustSliverUnlockedResolver(sliversUnlocked);
   initTrustSliver();
   setTrustSliverTapHandler((certHash) => runTrustOverride(certHash));
+
+  // ── LiveSync — the single app-scope live-update canal ──
+  // ONE long-poll loop against /api/users/:u/stream feeds the SHARED state the
+  // views read (Home's pod inventory + the Box Request Inbox), collapsing the
+  // many separate foreground pollers into one held request. It runs app-scope,
+  // across every tab (home, install checklist, server-detail) — NOT scoped to
+  // one screen. The singleton self-gates: its `active` check pauses the loop
+  // while the tab is hidden or no user is signed in, and resumes with an
+  // immediate request on focus / sign-in. It falls back to a plain /pods poll
+  // when /stream is down, so behavior never degrades below today's. We `start()`
+  // it once here; a `visibilitychange` re-`start()` makes the resume snappy
+  // (the loop also self-recovers within the fallback cadence regardless).
+  liveSync.start();
+  document.addEventListener("visibilitychange", () => liveSync.start());
 
   // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
   // hide them; unlocking back into the app reveals any running operations / a
