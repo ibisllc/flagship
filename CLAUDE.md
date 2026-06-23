@@ -133,6 +133,51 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 (do-now sweep) — transfer entry + Box Request Inbox finalize + NFC LED-SAS verify + migration-ledger fix
+
+Cleared the agent-doable "do-now" backlog via four focused worktree agents (each
+isolated off the shared branch, merged only after its OWN gates passed; CLAUDE.md
+owned by the orchestrator, not the agents):
+
+- **Transfer-a-box server-detail entry — DONE (`main` `312607c7`).** The "Transfer
+  to another account" entry + nav into the existing `TransferGiverScreen` is wired
+  on iOS + Android (the webapp already had it). Closes the last transfer-a-box
+  client hookup. Native-only diff (no TS). iOS **1184/0** · Android BUILD
+  SUCCESSFUL · webapp transfer view 7/7.
+- **Box Request Inbox finalize — DONE (`main` `cd178bad`·`2a232d5b`·`bcb56bbd`).**
+  The three deferred refinements: (1) UNIFIED the two parallel mobile sets
+  (`serversAwaitingApproval`/`serversAwaitingEntitlement`) into one
+  `pendingRequests`-typed inbox object (new `BoxRequest` on iOS+Android; the
+  watcher publishes it from one poll; the `isAwaiting*`/`liveness` accessors derive
+  by request `type`); (2) DROPPED the two legacy `/pods` booleans
+  (`awaitingUnlock`/`awaitingEntitlement`) — every reader (webapp `classifyServer`,
+  iOS/Android `PendingServerReconciler`) moved to `pendingRequests`; (3) SPLIT the
+  unlock-approval copy first-boot vs reboot off the existing `cameOnline` signal
+  (no new backend) — first boot keeps "Unlock device and authorize it to join your
+  cloud", an established reboot reads just "Unlock device". iOS **1185/0** ·
+  Android BUILD SUCCESSFUL · control-plane podInventory **27** · webapp
+  boxInbox/bootApproval green · full vitest **6236**.
+- **NFC `N-PHONE-6` LED-SAS verify — DONE (`feat/retail` `faba05a9`).** The box
+  could emit an LED-SAS but no phone could decode/verify it; added the fail-closed
+  **3-of-3** verify engine (`@flagship/protocol` + byte-identical Swift/Kotlin) +
+  an active glance-capture UI on both clients (the camera frame→symbol decoder is
+  the documented remaining seam). protocol **635** · iOS **1089/0** · Android BUILD
+  SUCCESSFUL. Stays on `feat/retail` (retail is branch-gated off `main`).
+- **Migration-ledger drift fix — DONE (`main` `9baf2438`).** `KNOWN_MIGRATIONS`
+  listed only through 0059 while `0060_server_transfer_disk_key` had landed on disk
+  with the transfer-a-box merge, so `schemaStatus.test.ts` failed on every full
+  run; registered 0060.
+- **CI grep-gate (GA "Bucket C" #4) — found ALREADY SHIPPED** on `main`
+  (`scripts/release-guard.sh` + `.github/workflows/release-guard.yml`, 2026-06-19);
+  no work needed (a fresh Node reimpl was built in a worktree then discarded to
+  avoid churning a tested, merged gate).
+- **`recovery.flagshipserver.com` "doesn't resolve" open-work item — STALE.** It is
+  already a `custom_domain` in `apps/com/wrangler.toml` (line 44); only a deploy is
+  owed, not a fix.
+
+Not deployed: the inbox backend + webapp changes ride the next `.com` Worker
+deploy; mobile shows the inbox/transfer changes after Xcode/Gradle rebuilds.
+
 ### 2026-06-22 — unified username-first cover (webapp) + Box Request Inbox visibility gaps
 
 **Box Request Inbox visibility gaps (all surfaces, shipped):** a box waiting on
@@ -219,8 +264,9 @@ commits on `main`, each gated:
   SUCCESSFUL · Swift shared 5/5. **Deployed** (`.com` Worker carries the broker;
   migrations 0059+0060 applied+stamped). **REMAINING (owner, NOT CI-validatable):
   a reburn for the box-side re-home + the giver→acquirer disk-key handshake live
-  e2e**, and the small server-detail "Transfer to another account" entry +
-  nav-route into `TransferGiverScreen` (the VMs/screens exist; just the hookup).
+  e2e** (the server-detail "Transfer to another account" entry + nav into
+  `TransferGiverScreen` was wired 2026-06-22, `main` `312607c7` — see the do-now
+  sweep entry above).
 
 Gates: `tsc -b` clean · storage parity +2 · control-plane accountDeletion **23** +
 secretMailbox · server-daemon selfDeleteConsumer **10** (full daemon+storage+
@@ -288,10 +334,10 @@ control-plane **1068**) · webapp boxInbox **5** + bootApproval crypto **6** + v
 `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (+2 new). Mobile shows it after an
 Xcode/Gradle rebuild; backend + webapp deploy with `.com`.
 
-**Remaining (deferred):** the two `/pods` booleans stay (derived from
-`pendingRequests`) for one release, dropped once nothing reads them; a unified
-`pendingRequests`-typed inbox object on mobile (vs the two parallel sets) and an
-SSE/WebSocket + push transport are the spec's later refinements.
+**Remaining (deferred):** an SSE/WebSocket + push transport (vs the current
+foreground poll) is the spec's last refinement. The two `/pods` booleans were
+dropped and the unified `pendingRequests`-typed mobile inbox object landed
+2026-06-22 (see the do-now sweep entry at the top of this section).
 
 ### 2026-06-21 — account-deletion ceremony + username reclaim SHIPPED (all 4 surfaces)
 
@@ -1033,9 +1079,13 @@ re-rebased onto refactored `main` and re-validated.
 >    `packages/flagship-burner/src/userdata.ts` + the Swift
 >    `UserData.swift` mirror) **and re-enable the `luksRemoveKey` guard** (it is
 >    deliberately guarded OFF, not deleted, so the slot survives bring-up).
-> 4. **Add a CI grep-gate that FAILS a RELEASE build** if the `debug`-user or
->    burn-time-passphrase constants (items 2–3) are present — so a forgotten
->    backdoor can never ship. (The dev/non-release path keeps them.)
+> 4. **✅ DONE — CI grep-gate that FAILS a RELEASE build** if the `debug`-user or
+>    burn-time-passphrase constants (items 2–3) are present — shipped 2026-06-19 as
+>    `scripts/release-guard.sh` + `.github/workflows/release-guard.yml` (enforces on
+>    `release-*`/`v*` tags + manual release dispatch; advisory on PRs; the
+>    dev/non-release path keeps the constants). It correctly fails RED today (the
+>    constants are still present pre-GA, by design) — so removing items 2–3 is what
+>    turns it green.
 > 5. **Remove the demo/dev flips in the burner + apps** — demo-mode and the
 >    3-tap live/mock toggle (iOS `DeveloperSettings`/`DemoFixtures` + the
 >    Welcome-box 3-tap; the burner's demo path).
