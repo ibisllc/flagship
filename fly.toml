@@ -65,6 +65,18 @@ kill_timeout = "30s"
     port = 8443
     handlers = ["tls", "http"]
 
+  # External :80 → 301 to https:// at the Fly edge. A box serves ONLY HTTPS
+  # (TLS terminates on the daemon over the :443 passthrough), so a bare
+  # `http://<server>.<user>.flagship.services` would otherwise hang
+  # (ERR_EMPTY_RESPONSE). `force_https` bounces it to :443 where the SNI
+  # passthrough takes over. This only ever sees the plaintext Host — which Fly
+  # ALREADY reads from the :443 ClientHello SNI to route — never encrypted
+  # content, so it doesn't weaken the content-blind model.
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
   [[services.tcp_checks]]
     interval = "30s"
     timeout = "5s"
