@@ -489,6 +489,67 @@ fun encodeSasForDisplay(sas: ByteArray, chars: Int = 6): String {
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// N-PHONE-6: LED-SAS capture/decode + match (phone-side verify path)
+//
+// Kotlin mirror of the TS `verifyLedSas` family in nfcPair.ts. The encode
+// half is box-side; this is the phone confirming an observed LED capture
+// equals the locally derived expected sequence, glance by glance, under
+// the strict 3-of-3 rule (locked decision §10) — a single mismatch aborts
+// (the LED-SAS *is* the authenticator on the degraded path). The camera
+// frame→symbol decode is the hardware/CV seam; this takes already-decoded
+// glance strings, so it stays fully unit-testable without a camera.
+
+enum class LedGlanceVerdict { MATCH, MISMATCH }
+
+class LedSasVerifyError(val expected: Int, val got: Int) :
+    Throwable("ledSasGlances: expected $expected pulses, got $got")
+
+/** Split an encoded LED-SAS sequence into per-glance sub-sequences. */
+fun ledSasGlances(sequence: String): List<String> {
+    val expectedLen = LED_SAS_GLANCES_REQUIRED * LED_SAS_PULSES_PER_GLANCE
+    if (sequence.length != expectedLen) {
+        throw LedSasVerifyError(expected = expectedLen, got = sequence.length)
+    }
+    return (0 until LED_SAS_GLANCES_REQUIRED).map { g ->
+        val lo = g * LED_SAS_PULSES_PER_GLANCE
+        sequence.substring(lo, lo + LED_SAS_PULSES_PER_GLANCE)
+    }
+}
+
+/** A captured glance is well-formed iff it is exactly the locked pulse
+ * count and every symbol is in LED_SAS_ALPHABET. A garbled read is
+ * distinct from a mismatch. */
+fun isWellFormedGlance(glance: String): Boolean {
+    if (glance.length != LED_SAS_PULSES_PER_GLANCE) return false
+    return glance.all { LED_SAS_ALPHABET.contains(it) }
+}
+
+/** Exact-match a captured glance against the expected one. */
+fun verifyLedGlance(observed: String, expected: String): LedGlanceVerdict =
+    if (observed == expected) LedGlanceVerdict.MATCH else LedGlanceVerdict.MISMATCH
+
+/**
+ * Full phone-side LED-SAS verify: derive the expected sequence from the
+ * SAS bytes and require every observed glance to match (3-of-3, strict).
+ * Returns false on the first mismatch OR any malformed glance, and on a
+ * wrong observed-glance count.
+ */
+fun verifyLedSas(sas: ByteArray, observedGlances: List<String>): Boolean {
+    if (observedGlances.size != LED_SAS_GLANCES_REQUIRED) return false
+    val expected = try {
+        ledSasGlances(encodeLedSas(sas))
+    } catch (_: Throwable) {
+        return false
+    }
+    for (i in 0 until LED_SAS_GLANCES_REQUIRED) {
+        val obs = observedGlances[i]
+        if (!isWellFormedGlance(obs)) return false
+        if (verifyLedGlance(obs, expected[i]) == LedGlanceVerdict.MISMATCH) return false
+    }
+    return true
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // Rendezvous deposit blob — ePhonePub || ciphertext
 //
 // Mirrors `buildWifiDepositBlob` / `parseWifiDepositBlob` in

@@ -49,6 +49,9 @@ import com.flagshipserver.app.core.deriveSessionKey
 import com.flagshipserver.app.core.deriveSharedSecret
 import com.flagshipserver.app.core.encodeLedSas
 import com.flagshipserver.app.core.encodeSasForDisplay
+import com.flagshipserver.app.core.isWellFormedGlance
+import com.flagshipserver.app.core.ledSasGlances
+import com.flagshipserver.app.core.verifyLedSas
 import com.flagshipserver.app.core.sealWiFiConfig
 import com.google.crypto.tink.subtle.X25519
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +76,32 @@ data class PairConfirmation(
     /** Wall-clock ms when the box's 30 s session lock expires. */
     val sessionExpiresAtMs: Long,
 )
+
+/**
+ * N-PHONE-6 — drives the glance-by-glance LED-SAS verify shown alongside
+ * the Wi-Fi form (the active "optional SAS glance"). The expected
+ * sequence is derived locally; the user (or, in a later build, the camera
+ * decoder) records what the box's LED actually blinked, one glance at a
+ * time, and the strict 3-of-3 verdict comes from the protocol mirror's
+ * `verifyLedSas`. A single mismatched glance fails the whole check — the
+ * LED-SAS is the authenticator on the degraded path, so it can't be
+ * best-of-3.
+ */
+data class LedSasCapture(
+    /** Per-glance expected sub-sequences ("RGB", "YYB", "GRB"). */
+    val expectedGlances: List<String>,
+    /** What the user recorded so far (index-aligned with expectedGlances). */
+    val observed: List<String> = emptyList(),
+    val verdict: Verdict = Verdict.PENDING,
+) {
+    enum class Verdict { PENDING, CONFIRMED, MISMATCH }
+
+    /** The glance index awaited, or null when every glance is recorded. */
+    val currentGlance: Int?
+        get() = if (observed.size < expectedGlances.size) observed.size else null
+    val isComplete: Boolean
+        get() = observed.size == expectedGlances.size
+}
 
 /** UI-driving state machine. */
 sealed interface NfcPairPhase {
@@ -113,12 +142,20 @@ class NfcPairViewModel(
     private val _phase = MutableStateFlow<NfcPairPhase>(NfcPairPhase.Idle)
     val phase: StateFlow<NfcPairPhase> = _phase.asStateFlow()
 
+    // N-PHONE-6 capture — observable so the confirmation composable can
+    // render the glance-by-glance verify. Null until beginLedSasCapture().
+    private val _ledCapture = MutableStateFlow<LedSasCapture?>(null)
+    val ledCapture: StateFlow<LedSasCapture?> = _ledCapture.asStateFlow()
+
     // Captured between ReadingTag → AskingForWifi → Sealing. Cleared on
     // reset() / Success / Failure so the materials never linger past a
     // completed (or failed) attempt.
     private var verifiedPayload: PairPayload? = null
     private var ephemeralPriv: ByteArray? = null
     private var ephemeralPub: ByteArray? = null
+    /** The SAS bytes for the active pairing — held so the LED-SAS capture
+     *  can verify observed glances against the locally derived sequence. */
+    private var sasBytes: ByteArray? = null
 
     /** Wall-clock ms of the verified tap — anchors the session-lock window. */
     private var tapAtMs: Long? = null
@@ -165,6 +202,8 @@ class NfcPairViewModel(
                     verifiedPayload = result.payload
                     ephemeralPriv = priv
                     ephemeralPub = pub
+                    sasBytes = sas
+                    _ledCapture.value = null
                     tapAtMs = tapped
                     PairConfirmation(
                         boxLabel = result.payload.hint.mdnsName,
@@ -300,6 +339,47 @@ class NfcPairViewModel(
         }
     }
 
+    // ── N-PHONE-6: LED-SAS capture API (active "optional SAS glance"). ──
+
+    /** Begin the glance-by-glance LED-SAS verify. Requires an active
+     *  pairing (the SAS bytes are derived at the verified tap). No-ops if
+     *  the SAS can't be expanded. */
+    fun beginLedSasCapture() {
+        val sas = sasBytes ?: return
+        val glances = try {
+            ledSasGlances(encodeLedSas(sas))
+        } catch (_: Throwable) {
+            return
+        }
+        _ledCapture.value = LedSasCapture(expectedGlances = glances)
+    }
+
+    /** Record one observed glance. When the final glance lands, run the
+     *  strict 3-of-3 verify and publish the verdict. A malformed glance is
+     *  ignored (a garbled read shouldn't advance) so the screen re-prompts
+     *  the same glance. */
+    fun recordLedGlance(glance: String) {
+        val capture = _ledCapture.value ?: return
+        if (capture.isComplete) return
+        if (!isWellFormedGlance(glance)) return
+        val observed = capture.observed + glance
+        val next = if (observed.size == capture.expectedGlances.size) {
+            val ok = verifyLedSas(sasBytes ?: ByteArray(0), observed)
+            capture.copy(
+                observed = observed,
+                verdict = if (ok) LedSasCapture.Verdict.CONFIRMED else LedSasCapture.Verdict.MISMATCH,
+            )
+        } else {
+            capture.copy(observed = observed)
+        }
+        _ledCapture.value = next
+    }
+
+    /** Discard the capture so the user can re-run from the first glance. */
+    fun resetLedSasCapture() {
+        _ledCapture.value = null
+    }
+
     /** Reset back to Idle. Clears any captured pairing material so a
      *  fresh tap starts a fresh handshake. */
     fun reset() {
@@ -315,6 +395,9 @@ class NfcPairViewModel(
         ephemeralPriv?.fill(0)
         ephemeralPriv = null
         ephemeralPub = null
+        sasBytes?.fill(0)
+        sasBytes = null
+        _ledCapture.value = null
         tapAtMs = null
     }
 

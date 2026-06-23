@@ -9,6 +9,8 @@ import FlagshipCore
 public struct NfcPairScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: NfcPairViewModel
+    /// In-progress glance the user is assembling (3 taps → one glance).
+    @State private var workingGlance: [Character] = []
 
     public init(vm: NfcPairViewModel) {
         self.vm = vm
@@ -93,22 +95,7 @@ public struct NfcPairScreen: View {
             }
         }
         if !confirmation.sasLed.isEmpty {
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Optional check: the box's LED blinks this pattern")
-                        .font(FS.font.caption()).foregroundColor(c.textMuted)
-                    HStack(spacing: FS.space.s2) {
-                        ForEach(Array(confirmation.sasLed.enumerated()), id: \.offset) { _, symbol in
-                            Circle()
-                                .fill(ledColor(symbol))
-                                .frame(width: 14, height: 14)
-                        }
-                        Spacer()
-                        Text(confirmation.sasDisplay)
-                            .font(FS.font.mono()).foregroundColor(c.textMuted)
-                    }
-                }
-            }
+            ledSasCaptureCard(c: c, confirmation: confirmation)
         }
         FSField(
             value: $vm.ssid,
@@ -148,6 +135,133 @@ public struct NfcPairScreen: View {
         FSGhostButton("Cancel", block: true) {
             vm.reset()
         }
+    }
+
+    /// N-PHONE-6 — the active "optional SAS glance". Shows the expected
+    /// LED pattern and lets the user record what the box actually blinked,
+    /// one glance at a time, then renders the strict 3-of-3 verdict.
+    @ViewBuilder
+    private func ledSasCaptureCard(c: FSColors, confirmation: NfcPairViewModel.PairConfirmation) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack {
+                    Text("Check the box's LED")
+                        .font(FS.font.caption()).foregroundColor(c.text)
+                    Spacer()
+                    Text(confirmation.sasDisplay)
+                        .font(FS.font.mono()).foregroundColor(c.textMuted)
+                }
+                Text("The box's status LED blinks this 3-by-3 pattern. Optional, but it catches a wrong box in a crowded room.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+
+                // The full expected pattern, grouped into 3 glances.
+                HStack(spacing: FS.space.s3) {
+                    ForEach(0..<3, id: \.self) { g in
+                        HStack(spacing: FS.space.s1) {
+                            ForEach(Array(glance(confirmation.sasLed, g).enumerated()), id: \.offset) { _, sym in
+                                Circle().fill(ledColor(sym)).frame(width: 12, height: 12)
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+
+                if let capture = vm.ledCapture {
+                    ledCaptureProgress(c: c, capture: capture)
+                } else {
+                    FSGhostButton("Verify the LED pattern", block: true) {
+                        vm.beginLedSasCapture()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ledCaptureProgress(
+        c: FSColors,
+        capture: NfcPairViewModel.LedSasCapture
+    ) -> some View {
+        switch capture.verdict {
+        case .confirmed:
+            HStack(spacing: FS.space.s2) {
+                Image(systemName: "checkmark.seal.fill").foregroundColor(.green)
+                Text("LED pattern matched — this is your box.")
+                    .font(FS.font.bodySm()).foregroundColor(c.text)
+            }
+        case .mismatch:
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "xmark.octagon.fill").foregroundColor(c.danger)
+                    Text("That didn't match. Don't send Wi-Fi — you may be looking at the wrong box.")
+                        .font(FS.font.bodySm()).foregroundColor(c.text)
+                }
+                FSGhostButton("Try the LED check again", block: true) {
+                    vm.resetLedSasCapture()
+                }
+            }
+        case .pending:
+            if let g = capture.currentGlance {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Glance \(g + 1) of 3 — tap the 3 colors the LED just blinked:")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    // One row per pulse-color; the user assembles a glance
+                    // by tapping 3 colors. We collect into a working buffer
+                    // shown as chips, then submit when 3 are chosen.
+                    glancePicker(c: c)
+                }
+            } else {
+                ProgressView().tint(c.primary)
+            }
+        }
+    }
+
+    /// A simple 4-color tap pad that records one full glance (3 pulses)
+    /// then submits it. State for the in-progress glance lives in the
+    /// screen; completed glances live in the view model's capture.
+    @ViewBuilder
+    private func glancePicker(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            HStack(spacing: FS.space.s2) {
+                ForEach(Array(workingGlance.enumerated()), id: \.offset) { _, sym in
+                    Circle().fill(ledColor(sym)).frame(width: 16, height: 16)
+                }
+                if workingGlance.count < 3 {
+                    ForEach(0..<(3 - workingGlance.count), id: \.self) { _ in
+                        Circle().strokeBorder(c.textMuted, lineWidth: 1).frame(width: 16, height: 16)
+                    }
+                }
+                Spacer()
+            }
+            HStack(spacing: FS.space.s2) {
+                ForEach(["R", "G", "B", "Y"], id: \.self) { sym in
+                    Button {
+                        if workingGlance.count < 3 {
+                            workingGlance.append(Character(sym))
+                            if workingGlance.count == 3 {
+                                vm.recordLedGlance(String(workingGlance))
+                                workingGlance = []
+                            }
+                        }
+                    } label: {
+                        Circle()
+                            .fill(ledColor(Character(sym)))
+                            .frame(width: 32, height: 32)
+                            .overlay(Circle().strokeBorder(c.text.opacity(0.2), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    /// The first `LED_SAS_PULSES_PER_GLANCE` symbols of glance `g`.
+    private func glance(_ seq: String, _ g: Int) -> [Character] {
+        let chars = Array(seq)
+        let lo = g * 3
+        guard lo + 3 <= chars.count else { return [] }
+        return Array(chars[lo..<(lo + 3)])
     }
 
     @ViewBuilder

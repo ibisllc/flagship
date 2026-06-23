@@ -221,6 +221,55 @@ final class NfcPairTests: XCTestCase {
         XCTAssertThrowsError(try encodeLedSas(short))
     }
 
+    // MARK: - N-PHONE-6: LED-SAS verify (decode/match)
+
+    func test_ledSasGlances_splitsIntoThreeGlancesOfThree() throws {
+        // 0b00011011, 0b11100100, 0b10010110 → "RGBYYBGRB"
+        let sas = Data([0b00011011, 0b11100100, 0b10010110, 0xFF])
+        XCTAssertEqual(try encodeLedSas(sas), "RGBYYBGRB")
+        XCTAssertEqual(try ledSasGlances(try encodeLedSas(sas)), ["RGB", "YYB", "GRB"])
+    }
+
+    func test_ledSasGlances_rejectsWrongLength() {
+        XCTAssertThrowsError(try ledSasGlances("RGB"))
+        XCTAssertThrowsError(try ledSasGlances("RGBYYBGRBR"))
+    }
+
+    func test_isWellFormedGlance_acceptsOnlyThreeAlphabetSymbols() {
+        XCTAssertTrue(isWellFormedGlance("RGB"))
+        XCTAssertFalse(isWellFormedGlance("RG"))    // too short
+        XCTAssertFalse(isWellFormedGlance("RGBY"))  // too long
+        XCTAssertFalse(isWellFormedGlance("RGX"))   // unknown symbol
+        XCTAssertFalse(isWellFormedGlance("rgb"))   // case-sensitive
+    }
+
+    func test_verifyLedGlance_isExactMatch() {
+        XCTAssertEqual(verifyLedGlance(observed: "RGB", expected: "RGB"), .match)
+        XCTAssertEqual(verifyLedGlance(observed: "RGB", expected: "RGY"), .mismatch)
+    }
+
+    func test_verifyLedSas_confirmsCorrect_failsClosedOnAnyMismatch() {
+        let sas = Data([0b00011011, 0b11100100, 0b10010110, 0xFF])
+        XCTAssertTrue(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYB", "GRB"]))
+        // A single wrong glance fails the whole check (not best-of-3).
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYR", "GRB"]))
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGY", "YYB", "GRB"]))
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYB", "GRY"]))
+    }
+
+    func test_verifyLedSas_rejectsMalformedOrWrongCount() {
+        let sas = Data([0b00011011, 0b11100100, 0b10010110, 0xFF])
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YY", "GRB"]))  // malformed
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYX", "GRB"])) // unknown
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYB"]))        // too few
+        XCTAssertFalse(verifyLedSas(sas: sas, observedGlances: ["RGB", "YYB", "GRB", "RGB"])) // too many
+    }
+
+    func test_verifyLedSas_agreesWithBoxDerivedSequence() throws {
+        let sas = Data([0x11, 0x22, 0x33, 0x44])
+        XCTAssertTrue(verifyLedSas(sas: sas, observedGlances: try ledSasGlances(try encodeLedSas(sas))))
+    }
+
     // MARK: - Cross-language golden vectors
 
     /// Walk up from the test source file until we find the repo's

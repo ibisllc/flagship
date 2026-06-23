@@ -469,6 +469,77 @@ public func encodeSasForDisplay(_ sas: Data, chars: Int = 6) -> String {
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// N-PHONE-6: LED-SAS capture/decode + match (phone-side verify path)
+//
+// Swift mirror of the TS `verifyLedSas` family in nfcPair.ts. The encode
+// half is box-side; this is the phone confirming an observed LED capture
+// equals the locally derived expected sequence, glance by glance, under
+// the strict 3-of-3 rule (locked decision §10) — a single mismatch aborts
+// (the LED-SAS *is* the authenticator on the degraded path). The camera
+// frame→symbol decode is the hardware/CV seam; this takes already-decoded
+// glance strings, so it stays fully unit-testable without a camera.
+
+public enum LedGlanceVerdict: Equatable, Sendable {
+    case match
+    case mismatch
+}
+
+public enum LedSasVerifyError: Error, Equatable {
+    case wrongSequenceLength(expected: Int, got: Int)
+}
+
+/// Split an encoded LED-SAS sequence into per-glance sub-sequences.
+/// Throws if the sequence isn't exactly the locked glance×pulse length.
+public func ledSasGlances(_ sequence: String) throws -> [String] {
+    let expectedLen = LED_SAS_GLANCES_REQUIRED * LED_SAS_PULSES_PER_GLANCE
+    let chars = Array(sequence)
+    guard chars.count == expectedLen else {
+        throw LedSasVerifyError.wrongSequenceLength(expected: expectedLen, got: chars.count)
+    }
+    var out: [String] = []
+    out.reserveCapacity(LED_SAS_GLANCES_REQUIRED)
+    for g in 0..<LED_SAS_GLANCES_REQUIRED {
+        let lo = g * LED_SAS_PULSES_PER_GLANCE
+        let hi = lo + LED_SAS_PULSES_PER_GLANCE
+        out.append(String(chars[lo..<hi]))
+    }
+    return out
+}
+
+/// A captured glance is well-formed iff it has exactly
+/// LED_SAS_PULSES_PER_GLANCE symbols, each in LED_SAS_ALPHABET. A garbled
+/// read is distinct from a mismatch.
+public func isWellFormedGlance(_ glance: String) -> Bool {
+    let chars = Array(glance)
+    if chars.count != LED_SAS_PULSES_PER_GLANCE { return false }
+    for ch in chars where !LED_SAS_ALPHABET.contains(ch) { return false }
+    return true
+}
+
+/// Exact-match a captured glance against the expected one.
+public func verifyLedGlance(observed: String, expected: String) -> LedGlanceVerdict {
+    observed == expected ? .match : .mismatch
+}
+
+/// Full phone-side LED-SAS verify: derive the expected sequence from the
+/// SAS bytes and require every observed glance to match (3-of-3, strict).
+/// Returns false on the first mismatch OR any malformed glance, and on a
+/// wrong observed-glance count.
+public func verifyLedSas(sas: Data, observedGlances: [String]) -> Bool {
+    if observedGlances.count != LED_SAS_GLANCES_REQUIRED { return false }
+    guard let seq = try? encodeLedSas(sas),
+          let expected = try? ledSasGlances(seq) else {
+        return false
+    }
+    for i in 0..<LED_SAS_GLANCES_REQUIRED {
+        let obs = observedGlances[i]
+        if !isWellFormedGlance(obs) { return false }
+        if verifyLedGlance(observed: obs, expected: expected[i]) == .mismatch { return false }
+    }
+    return true
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // Rendezvous deposit blob — ePhonePub || ciphertext
 //
 // Mirrors `buildWifiDepositBlob` / `parseWifiDepositBlob` in
