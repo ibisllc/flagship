@@ -10,7 +10,7 @@ import CryptoKit
 @MainActor
 final class InviteAcceptViewModelTests: XCTestCase {
     private let server = "home.alice.flagship.services"
-    private let serviceRef = "alice-notes"
+    private let serviceRef = "alice--notes"
     private let inviteId = String(repeating: "ea", count: 32)
     private let contactAid = String(repeating: "08", count: 32)
     private let acceptSig = String(repeating: "1c", count: 64) // 128-hex

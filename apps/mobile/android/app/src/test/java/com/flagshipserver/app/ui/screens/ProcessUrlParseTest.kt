@@ -16,10 +16,10 @@ import org.robolectric.annotation.Config
 class ProcessUrlParseTest {
     @Test fun validAccessLinkParses() {
         val link = parseAccessLink(
-            "flagship://access?server=home.alice.flagship.services&svc=notes&ref=alice-notes&page=abc123",
+            "flagship://access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
         )
         assertEquals(
-            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice-notes", "abc123"),
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123"),
             link,
         )
     }

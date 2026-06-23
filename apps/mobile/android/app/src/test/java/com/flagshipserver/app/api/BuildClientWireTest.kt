@@ -77,11 +77,11 @@ class BuildClientWireTest {
     }
 
     @Test fun decode_sessions() {
-        val wire = """{"builds":[{"buildId":"b1","mode":"git","serviceId":"harry-wiki","startedAt":1,"lastAt":2,"entryCount":4,"lastKind":"installed"}]}"""
+        val wire = """{"builds":[{"buildId":"b1","mode":"git","serviceId":"harry--wiki","startedAt":1,"lastAt":2,"entryCount":4,"lastKind":"installed"}]}"""
         val r = json.decodeFromString(BuildSessionsResponse.serializer(), wire)
         val b = r.builds.single()
         assertEquals("git", b.mode)
-        assertEquals("harry-wiki", b.serviceId)
+        assertEquals("harry--wiki", b.serviceId)
         assertEquals(4, b.entryCount)
     }
 

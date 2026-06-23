@@ -32,11 +32,11 @@ final class InviteRedeemViewModelTests: XCTestCase {
 
     func testRedeemPresentsContactAidNotGlobal() async {
         let mock = MockServiceAccessClient()
-        mock.redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: HexUtil.encode(contactAid().publicKey.rawRepresentation), firstBind: true)
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: HexUtil.encode(contactAid().publicKey.rawRepresentation), firstBind: true)
         let vm = makeVM(mock, authorAidHex: authorAid, inviteId: nil)
         await vm.redeem()
         if case .done(let ref, let first) = vm.phase {
-            XCTAssertEqual(ref, "alice-notes")
+            XCTAssertEqual(ref, "alice--notes")
             XCTAssertTrue(first)
         } else { XCTFail("expected .done, got \(vm.phase)") }
         XCTAssertEqual(mock.redeemCalls.count, 1)
@@ -60,33 +60,33 @@ final class InviteRedeemViewModelTests: XCTestCase {
     func testManualPendingBuildsAcceptanceReply() async {
         let mock = MockServiceAccessClient()
         // The box returns {pending} for a manual-approve invite.
-        mock.redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "", firstBind: false, pending: true)
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: false, pending: true)
         let vm = makeVM(mock, authorAidHex: authorAid, inviteId: inviteId)
         await vm.redeem()
         guard case .pendingApproval(let ref, let replyLink) = vm.phase else {
             return XCTFail("expected .pendingApproval, got \(vm.phase)")
         }
-        XCTAssertEqual(ref, "alice-notes")
+        XCTAssertEqual(ref, "alice--notes")
         // The reply is a valid invite-accept deeplink the AUTHOR can open.
         guard case .inviteAccept(let s, let iid, let r, let aid, let sigHex, _) = DeepLink.parse(URL(string: replyLink)!) else {
             return XCTFail("reply link must parse to .inviteAccept")
         }
         XCTAssertEqual(s, server)
         XCTAssertEqual(iid, inviteId)
-        XCTAssertEqual(r, "alice-notes")
+        XCTAssertEqual(r, "alice--notes")
         XCTAssertEqual(aid, HexUtil.encode(contactAid().publicKey.rawRepresentation))
         // The acceptance sig in the reply verifies under the contact AID over the
         // canonical accept bytes (binds inviteId + serviceRef + contactAID).
         // (acceptedAt is the VM's now() = 1700.)
         let bytes = try! ServiceInvite.canonicalAccept(
-            inviteId: inviteId, serviceRef: "alice-notes",
+            inviteId: inviteId, serviceRef: "alice--notes",
             contactAID: contactAid().publicKey.rawRepresentation, acceptedAt: 1700)
         XCTAssertTrue(contactAid().publicKey.isValidSignature(Data(HexUtil.decode(sigHex)!), for: bytes))
     }
 
     func testManualPendingWithoutInviteIdFails() async {
         let mock = MockServiceAccessClient()
-        mock.redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "", firstBind: false, pending: true)
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: false, pending: true)
         // No inviteId in the link ⇒ can't sign the acceptance ⇒ a clear failure.
         let vm = makeVM(mock, authorAidHex: authorAid, inviteId: nil)
         await vm.redeem()

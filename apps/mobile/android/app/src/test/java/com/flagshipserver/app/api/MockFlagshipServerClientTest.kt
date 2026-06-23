@@ -99,13 +99,17 @@ class MockFlagshipServerClientTest {
     }
 
     @Test fun usernameAvailable_enforces3to30Length() = runTest {
-        // Mirror of validateUserLabel: 3–30 chars, no hyphens.
+        // Mirror of validateUserLabel: 3–30 chars, interior single dashes OK,
+        // no leading/trailing dash, no `--` (docs/service-addressing-double-dash.md).
         val c = make()
         assertTrue(c.usernameAvailable("ab").available.not())            // too short
         assertTrue(c.usernameAvailable("abc").available)                 // min
         assertTrue(c.usernameAvailable("a".repeat(30)).available)        // max
         assertTrue(c.usernameAvailable("a".repeat(31)).available.not())  // too long
-        assertTrue(c.usernameAvailable("media-server").available.not())  // hyphen
+        assertTrue(c.usernameAvailable("media-server").available)        // interior single dash OK
+        assertTrue(c.usernameAvailable("media--server").available.not()) // `--` is the reserved delimiter
+        assertTrue(c.usernameAvailable("-media").available.not())        // leading dash
+        assertTrue(c.usernameAvailable("media-").available.not())        // trailing dash
     }
 
     @Test fun recoveryEnvelope_registerThenFetch() = runTest {

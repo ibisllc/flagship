@@ -74,13 +74,16 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         XCTAssertTrue(vm.status.allowsContinue)
     }
 
-    func test_hyphenatedUsername_rejected() async {
-        // Usernames are hyphen-free now (so serviceId `<creator>-<slug>`
-        // parses unambiguously). A hyphenated handle is invalid.
+    func test_interiorDashAccepted_doubleDashRejected() async {
+        // Interior single dashes are now valid; `--` is the reserved
+        // `<slug>--<creator>` delimiter and stays invalid
+        // (docs/service-addressing-double-dash.md).
         let vm = makeViewModel(makeServer())
         await vm.evaluate("play-q2")
+        XCTAssertEqual(vm.status, .available)
+        await vm.evaluate("play--q2")
         if case .invalid = vm.status {} else {
-            XCTFail("expected invalid status, got \(vm.status)")
+            XCTFail("expected invalid status for `--`, got \(vm.status)")
         }
     }
 
@@ -106,9 +109,9 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         // overwriting with a local copy — gives ops freedom to
         // tweak the wording without an app update.
         let vm = makeViewModel(makeServer())
-        await vm.evaluate("-leading-hyphen")
+        await vm.evaluate("-leadingdash")
         if case .invalid(let reason) = vm.status {
-            XCTAssertTrue(reason.lowercased().contains("hyphen"), "expected a no-hyphens reason, got: \(reason)")
+            XCTAssertTrue(reason.lowercased().contains("dash"), "expected a dash-rule reason, got: \(reason)")
         } else {
             XCTFail("expected invalid status, got \(vm.status)")
         }

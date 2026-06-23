@@ -20,7 +20,7 @@ final class ServiceUninstallTests: XCTestCase {
     }
 
     private func makeVM(
-        serviceId: String = "alice-notes",
+        serviceId: String = "alice--notes",
         username: String? = "alice",
         serverDomain: String? = nil,
         uninstallClient: MockServiceUninstallClient,
@@ -77,7 +77,7 @@ final class ServiceUninstallTests: XCTestCase {
     func test_uninstall_happyPath_sendsValidlySignedDelete() async {
         let k = key()
         let mock = MockServiceUninstallClient()
-        let vm = makeVM(serviceId: "alice-notes", uninstallClient: mock, signer: { _ in k })
+        let vm = makeVM(serviceId: "alice--notes", uninstallClient: mock, signer: { _ in k })
 
         let ok = await vm.uninstall()
         XCTAssertTrue(ok)
@@ -87,7 +87,7 @@ final class ServiceUninstallTests: XCTestCase {
         XCTAssertEqual(mock.sent.count, 1)
         let sent = mock.sent[0]
         XCTAssertEqual(sent.serverDomain, serverDomain)
-        XCTAssertEqual(sent.serviceId, "alice-notes")
+        XCTAssertEqual(sent.serviceId, "alice--notes")
         XCTAssertEqual(sent.request["serverId"], serverDomain)
         XCTAssertEqual(sent.request["creator"], "alice")
         XCTAssertEqual(sent.request["slug"], "notes")
@@ -108,11 +108,11 @@ final class ServiceUninstallTests: XCTestCase {
         // (the authoritative source), not merely a serviceId split.
         let k = key()
         let mock = MockServiceUninstallClient()
-        // MockScreensClient seeds apps whose serviceId is `<creator>-<slug>`;
+        // MockScreensClient seeds apps whose serviceId is `<creator>--<slug>`;
         // pick one that exists so load() populates detail.
         let client = MockScreensClient()
-        let firstId = (try? await client.appsList().apps.first?.serviceId) ?? "alice-notes"
-        let parts = firstId.split(separator: "-", maxSplits: 1).map(String.init)
+        let firstId = (try? await client.appsList().apps.first?.serviceId) ?? "alice--notes"
+        let parts = firstId.components(separatedBy: "--")
         let vm = ServiceDetailViewModel(
             serviceId: firstId,
             client: client,

@@ -80,8 +80,10 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         ?: pods.firstOrNull()?.fqdn
         ?: "unknown"
     val serviceLabel = remember(serviceId) {
-        val dash = serviceId.indexOf('-')
-        if (dash > 0) serviceId.substring(dash + 1).replaceFirstChar { it.uppercase() } else serviceId
+        // serviceId = "<creator>--<slug>"; show the slug half (split on `--`,
+        // docs/service-addressing-double-dash.md).
+        val delim = serviceId.indexOf("--")
+        if (delim > 0) serviceId.substring(delim + 2).replaceFirstChar { it.uppercase() } else serviceId
     }
 
     val vm = remember(serviceId, serverDomain) {

@@ -21,7 +21,7 @@ class SecuredSessionsViewModelTest {
     private val server = "home.alice.flagship.services"
     private val sid = "ab".repeat(32)
     private fun session(id: String = sid) = SecuredSession(
-        secretId = id, serverId = server, serviceRef = "alice-notes",
+        secretId = id, serverId = server, serviceRef = "alice--notes",
         serviceUrl = "https://notes.$server", browserAgent = "Firefox", startedAt = 1_000L,
     )
 

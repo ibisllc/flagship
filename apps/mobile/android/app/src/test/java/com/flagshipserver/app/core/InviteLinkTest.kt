@@ -81,7 +81,7 @@ class InviteLinkTest {
         val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
         val accept = buildJsonObject {
             put("inviteId", JsonPrimitive(iid))
-            put("serviceRef", JsonPrimitive("alice-notes"))
+            put("serviceRef", JsonPrimitive("alice--notes"))
             put("contactAID", JsonPrimitive("c".repeat(64)))
             put("acceptedAt", JsonPrimitive(1700L))
         }
@@ -91,7 +91,7 @@ class InviteLinkTest {
         val acc = InviteLink.decodeAcceptance(reply)!!
         assertEquals("home.alice.flagship.services", acc.serverDomain)
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
-        assertEquals("alice-notes", acc.accept["serviceRef"]!!.jsonPrimitive.content)
+        assertEquals("alice--notes", acc.accept["serviceRef"]!!.jsonPrimitive.content)
         assertEquals("c".repeat(64), acc.accept["contactAID"]!!.jsonPrimitive.content)
         assertEquals(1700L, acc.accept["acceptedAt"]!!.jsonPrimitive.content.toLong())
         assertEquals("a".repeat(128), acc.acceptSigHex)
@@ -102,7 +102,7 @@ class InviteLinkTest {
     @Test fun frozenAcceptReplyInterop() {
         val server = "home.alice.flagship.services"
         val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        val ref = "alice-notes"
+        val ref = "alice--notes"
         val aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
         val sig = "1f".repeat(64)
         val at = 1_700_006_000_000L
@@ -124,7 +124,7 @@ class InviteLinkTest {
      *  decodes (the create is ignored — the box fetches it). */
     @Test fun decodeAcceptanceAcceptsLegacyBundle() {
         val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        val legacyJson = """{"v":2,"accept":{"inviteId":"$iid","serviceRef":"alice-notes","contactAID":"${"c".repeat(64)}","acceptedAt":1700},"acceptSig":"${"a".repeat(128)}","create":{"inviteId":"$iid"},"createSig":"${"b".repeat(128)}"}"""
+        val legacyJson = """{"v":2,"accept":{"inviteId":"$iid","serviceRef":"alice--notes","contactAID":"${"c".repeat(64)}","acceptedAt":1700},"acceptSig":"${"a".repeat(128)}","create":{"inviteId":"$iid"},"createSig":"${"b".repeat(128)}"}"""
         val b64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(legacyJson.toByteArray(Charsets.UTF_8))
         val acc = InviteLink.decodeAcceptance("flagship://accept?b=$b64")!!
         assertNull(acc.serverDomain)

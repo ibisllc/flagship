@@ -31,7 +31,7 @@ import org.junit.Test
 
 class ServiceAccessViewModelTest {
     private val server = "home.alice.flagship.services"
-    private val serviceRef = "alice-notes"
+    private val serviceRef = "alice--notes"
     private val username = "alice"
 
     // Deterministic author keys: IRK seed 9×32 (set-mode/allow-remove signer);

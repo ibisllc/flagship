@@ -92,7 +92,7 @@ final class UIRedesignComponentsTests: XCTestCase {
     // ─── AppsOwnerFilter ───────────────────────────────────────────────────
 
     private func app(creator: String, slug: String = "notes") -> AppSummary {
-        AppSummary(serviceId: "\(creator)-\(slug)", creator: creator, slug: slug,
+        AppSummary(serviceId: "\(creator)--\(slug)", creator: creator, slug: slug,
                    urlLabel: slug, summary: nil, url: "https://\(slug).flagship.services",
                    status: "running", version: "1", installedAt: 0)
     }

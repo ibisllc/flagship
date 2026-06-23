@@ -100,10 +100,10 @@ public struct ServiceDetailScreen: View {
                 // renamed the URL stem (display label hides the
                 // package name elsewhere). `urlLabel` is the canonical
                 // package handle: `scratchpad` if the user is the
-                // creator, `scratchpad-meta` / `scratchpad-harry`
+                // creator, `scratchpad--meta` / `scratchpad--harry`
                 // otherwise.
                 // V9 — `id:` is the IMMUTABLE composite package id
-                // (`<creator>-<slug>`, single dash), NOT the URL
+                // (`<creator>--<slug>`, double dash), NOT the URL
                 // label. urlLabel rotates whenever the user hits
                 // Replace stem; serviceId stays put for the life of
                 // the package — it's what the manifest, the membership

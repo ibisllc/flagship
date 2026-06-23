@@ -2001,14 +2001,16 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
         // Username rules. Mirrors the Worker's USERNAME_RE in
         // labels.ts so the Mock's wire shape (reason strings +
-        // ordering) matches what a real Worker would return — keep
-        // these in sync. 3–30 chars, NO hyphens (alphanumerics only).
-        let usernameRe = "^[a-z0-9]{3,30}$"
-        if lower.range(of: usernameRe, options: .regularExpression) == nil {
+        // ordering) matches what a real Worker would return — keep these in
+        // sync with control-plane labels.ts. 3–30 chars, interior single dashes
+        // OK, no leading/trailing dash, no `--` (the slug-creator delimiter —
+        // docs/service-addressing-double-dash.md).
+        let usernameRe = "^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$"
+        if lower.range(of: usernameRe, options: .regularExpression) == nil || lower.contains("--") {
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must be 3–30 lowercase letters or digits (no hyphens)",
+                reason: "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)",
                 demoServer: demoBlock
             )
         }
@@ -2481,17 +2483,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         let alias = appAliasByUser[username.lowercased()]?[serviceId]
         // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
-        // `<creator>-<slug>` (single dash; FIRST hyphen splits, since
-        // usernames are hyphen-free). The fragment is CONDITIONAL on
-        // who runs it: just `<slug>` when the running user authored
-        // it, else `<slug>-<creator>`.
+        // `<creator>--<slug>` (DOUBLE dash splits — both halves may carry single
+        // dashes; docs/service-addressing-double-dash.md). The fragment is
+        // CONDITIONAL on who runs it: just `<slug>` when the running user
+        // authored it, else `<slug>--<creator>`.
         let defaultLabel: String = {
-            if let i = serviceId.firstIndex(of: "-"),
-               i != serviceId.startIndex,
-               serviceId.index(after: i) != serviceId.endIndex {
-                let creator = serviceId[serviceId.startIndex..<i].lowercased()
-                let slug = String(serviceId[serviceId.index(after: i)...]).lowercased()
-                return creator == username.lowercased() ? slug : "\(slug)-\(creator)"
+            if let r = serviceId.range(of: "--"),
+               r.lowerBound != serviceId.startIndex,
+               r.upperBound != serviceId.endIndex {
+                let creator = serviceId[serviceId.startIndex..<r.lowerBound].lowercased()
+                let slug = String(serviceId[r.upperBound...]).lowercased()
+                return creator == username.lowercased() ? slug : "\(slug)--\(creator)"
             }
             return serviceId.lowercased()
         }()

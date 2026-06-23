@@ -124,14 +124,14 @@ class InviteDeepLinkTest {
         val link = DeepLink.parse(
             Uri.parse(
                 "flagship://access?server=home.alice.flagship.services&svc=notes" +
-                    "&ref=alice-notes&page=cb2421036efeb738c6017d8ee92e7b89",
+                    "&ref=alice--notes&page=cb2421036efeb738c6017d8ee92e7b89",
             ),
         )
         assertEquals(
             DeepLink.AuthorizeKnock(
                 serverId = "home.alice.flagship.services",
                 svc = "notes",
-                serviceRef = "alice-notes",
+                serviceRef = "alice--notes",
                 pageId = "cb2421036efeb738c6017d8ee92e7b89",
             ),
             link,
@@ -141,16 +141,16 @@ class InviteDeepLinkTest {
     @Test fun accessLinkUrlEncodedRefDecoded() {
         // The daemon URL-encodes svc/ref/page; getQueryParameter decodes them.
         val link = DeepLink.parse(
-            Uri.parse("flagship://access?server=home.alice.flagship.services&svc=&ref=alice-notes&page=abc123"),
+            Uri.parse("flagship://access?server=home.alice.flagship.services&svc=&ref=alice--notes&page=abc123"),
         )
         assertEquals(
-            DeepLink.AuthorizeKnock("home.alice.flagship.services", "", "alice-notes", "abc123"),
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "", "alice--notes", "abc123"),
             link,
         )
     }
 
     @Test fun accessLinkMissingServerIsNull() {
-        assertNull(DeepLink.parse(Uri.parse("flagship://access?ref=alice-notes&page=abc123")))
+        assertNull(DeepLink.parse(Uri.parse("flagship://access?ref=alice--notes&page=abc123")))
     }
 
     @Test fun accessLinkMissingRefIsNull() {
@@ -158,17 +158,17 @@ class InviteDeepLinkTest {
     }
 
     @Test fun accessLinkMissingPageIsNull() {
-        assertNull(DeepLink.parse(Uri.parse("flagship://access?server=home.alice.flagship.services&ref=alice-notes")))
+        assertNull(DeepLink.parse(Uri.parse("flagship://access?server=home.alice.flagship.services&ref=alice--notes")))
     }
 
     @Test fun appLinkResolvesAccessScheme() {
         // AppLink.resolve (the MainActivity entry point) hands flagship://
         // straight to DeepLink.parse.
         val link = AppLink.resolve(
-            Uri.parse("flagship://access?server=home.alice.flagship.services&svc=notes&ref=alice-notes&page=abc123"),
+            Uri.parse("flagship://access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123"),
         )
         assertEquals(
-            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice-notes", "abc123"),
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123"),
             link,
         )
     }

@@ -49,13 +49,13 @@ class InviteRedeemViewModelTest {
         )
 
     @Test fun redeem_usesContactAid_andPostsRawSecret() = runTest {
-        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice-notes","boundAID":"${HexUtil.encode(contactPub)}","firstBind":true}""")
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","boundAID":"${HexUtil.encode(contactPub)}","firstBind":true}""")
         val vm = makeVM(t)
         vm.redeem()
         val p = vm.phase.value
         assertTrue(p is InviteRedeemPhase.Done)
         p as InviteRedeemPhase.Done
-        assertEquals("alice-notes", p.serviceRef)
+        assertEquals("alice--notes", p.serviceRef)
         assertTrue(p.firstBind)
         assertTrue(t.lastUrl!!.endsWith("/api/service-invites/redeem"))
         val body = t.lastBodyJson()!!
@@ -69,7 +69,7 @@ class InviteRedeemViewModelTest {
     }
 
     @Test fun redeem_legacyLink_fallsBackToGlobalAid() = runTest {
-        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice-notes","boundAID":"${HexUtil.encode(globalPub)}","firstBind":true}""")
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","boundAID":"${HexUtil.encode(globalPub)}","firstBind":true}""")
         val vm = makeVM(t, authorHex = null) // no author AID in the link
         vm.redeem()
         assertTrue(vm.phase.value is InviteRedeemPhase.Done)
@@ -80,21 +80,21 @@ class InviteRedeemViewModelTest {
         // The box returns {pending} + the owner's relayed create (used only to
         // learn the inviteId/serviceRef to sign over — NOT shipped in the reply).
         val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        val create = """{"inviteId":"$iid","authorAID":"$authorAidHex","serviceRef":"alice-notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
-        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice-notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
+        val create = """{"inviteId":"$iid","authorAID":"$authorAidHex","serviceRef":"alice--notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
+        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice--notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
         val vm = makeVM(t)
         vm.redeem()
         val p = vm.phase.value
         assertTrue(p is InviteRedeemPhase.AwaitingApproval)
         p as InviteRedeemPhase.AwaitingApproval
-        assertEquals("alice-notes", p.serviceRef)
+        assertEquals("alice--notes", p.serviceRef)
         // Canonical reply form (cross-client) carrying ONLY {accept, acceptSig}.
         assertTrue(p.replyLink.startsWith("flagship://invite-accept?"))
         // The reply decodes back to a verifiable acceptance bound to THIS contact AID.
         val acc = InviteLink.decodeAcceptance(p.replyLink)!!
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
         assertEquals(HexUtil.encode(contactPub), acc.accept["contactAID"]!!.jsonPrimitive.content)
-        val acceptBytes = ServiceInvite.canonicalAccept(iid, "alice-notes", contactPub, 1700)
+        val acceptBytes = ServiceInvite.canonicalAccept(iid, "alice--notes", contactPub, 1700)
         assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
     }
 
@@ -103,14 +103,14 @@ class InviteRedeemViewModelTest {
         // friend signs the acceptance over it (here it differs from whatever the
         // box happens to echo in the relayed create — the LINK wins).
         val linkInviteId = "ea".repeat(32)
-        val create = """{"inviteId":"$linkInviteId","authorAID":"$authorAidHex","serviceRef":"alice-notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
-        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice-notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
+        val create = """{"inviteId":"$linkInviteId","authorAID":"$authorAidHex","serviceRef":"alice--notes","secretHash":"${"d".repeat(64)}","encryptedBundle":"00","issuedAt":1500}"""
+        val t = RedeemTransport(status = 200, respBody = """{"pending":true,"approvalMode":"manual","serviceRef":"alice--notes","create":$create,"createSig":"${"b".repeat(128)}"}""")
         val vm = makeVM(t, inviteIdHex = linkInviteId)
         vm.redeem()
         val p = vm.phase.value as InviteRedeemPhase.AwaitingApproval
         val acc = InviteLink.decodeAcceptance(p.replyLink)!!
         assertEquals(linkInviteId, acc.accept["inviteId"]!!.jsonPrimitive.content)
-        val acceptBytes = ServiceInvite.canonicalAccept(linkInviteId, "alice-notes", contactPub, 1700)
+        val acceptBytes = ServiceInvite.canonicalAccept(linkInviteId, "alice--notes", contactPub, 1700)
         assertTrue(ServiceInvite.verify(HexUtil.decode(acc.acceptSigHex)!!, acceptBytes, contactPub))
     }
 

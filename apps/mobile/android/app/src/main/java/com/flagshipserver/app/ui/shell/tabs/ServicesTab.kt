@@ -95,13 +95,14 @@ fun ServicesTab() {
             ServiceDetailScreen(nav, serviceId = id)
         }
         // W10 — per-app env-var KV editor, reachable from the detail screen's
-        // "Configure environment" row. serviceId = "<creator>-<slug>"; split at
-        // the FIRST '-' (creator is hyphen-free) for the ServiceEnvScreen args.
+        // "Configure environment" row. serviceId = "<creator>--<slug>"; split on
+        // the `--` delimiter (both halves may carry single dashes —
+        // docs/service-addressing-double-dash.md) for the ServiceEnvScreen args.
         composable("service-env/{serviceId}") { entry ->
             val id = entry.arguments?.getString("serviceId") ?: return@composable
-            val dashIdx = id.indexOf('-')
-            val creator = if (dashIdx > 0) id.substring(0, dashIdx) else ""
-            val slug = if (dashIdx > 0) id.substring(dashIdx + 1) else id
+            val delimIdx = id.indexOf("--")
+            val creator = if (delimIdx > 0) id.substring(0, delimIdx) else ""
+            val slug = if (delimIdx > 0) id.substring(delimIdx + 2) else id
             ServiceEnvScreen(nav, appId = id, creator = creator, slug = slug)
         }
         composable("build/source") { BuildSourceChooserScreen(nav) }

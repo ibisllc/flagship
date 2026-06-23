@@ -134,7 +134,7 @@ class MockBuildClient(
                 BuildSummary(
                     buildId = "bld-plants01",
                     mode = "scratch",
-                    serviceId = "harry-plants",
+                    serviceId = "harry--plants",
                     startedAt = now() - 60_000L * 60 * 26,
                     lastAt = now() - 60_000L * 60 * 25,
                     entryCount = 7,
@@ -143,7 +143,7 @@ class MockBuildClient(
                 BuildSummary(
                     buildId = "bld-wiki0002",
                     mode = "git",
-                    serviceId = "harry-wiki",
+                    serviceId = "harry--wiki",
                     startedAt = now() - 60_000L * 60 * 3,
                     lastAt = now() - 60_000L * 60 * 2,
                     entryCount = 4,
@@ -162,7 +162,7 @@ class MockBuildClient(
             entries = listOf(
                 BuildJournalEntry(seq = 1, ts = now() - 300_000, buildId = buildId, mode = "git", kind = "git-import", actor = "owner", summary = "Cloned repo"),
                 BuildJournalEntry(seq = 2, ts = now() - 240_000, buildId = buildId, mode = "git", kind = "fitness", actor = "box", summary = "Flagship-ready ✓"),
-                BuildJournalEntry(seq = 3, ts = now() - 60_000, buildId = buildId, mode = "git", kind = "deployed", actor = "box", summary = "Installed", serviceId = "harry-wiki"),
+                BuildJournalEntry(seq = 3, ts = now() - 60_000, buildId = buildId, mode = "git", kind = "deployed", actor = "box", summary = "Installed", serviceId = "harry--wiki"),
             ),
         )
     }

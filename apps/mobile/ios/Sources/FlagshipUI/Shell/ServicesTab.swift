@@ -413,11 +413,12 @@ struct ServiceDetailContainer: View {
                 Menu {
                     Button {
                         // W10 — open the per-app env-var KV editor.
-                        // serviceId = "<creator>-<slug>"; split at the
-                        // first '-' (creator is hyphen-free).
-                        if let dashIdx = serviceId.firstIndex(of: "-") {
-                            let creator = String(serviceId[..<dashIdx])
-                            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+                        // serviceId = "<creator>--<slug>"; split on the `--`
+                        // delimiter (both halves may carry single dashes —
+                        // docs/service-addressing-double-dash.md).
+                        if let delim = serviceId.range(of: "--") {
+                            let creator = String(serviceId[..<delim.lowerBound])
+                            let slug = String(serviceId[delim.upperBound...])
                             path.append(.serviceEnv(appId: serviceId, creator: creator, slug: slug))
                         }
                     } label: {
@@ -837,8 +838,8 @@ struct InviteManageContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }
@@ -857,8 +858,8 @@ struct ServiceAccessContainer: View {
     }
 
     private var serviceLabel: String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }
@@ -922,8 +923,8 @@ struct InviteIssueContainer: View {
     }
 
     private func appLabel(for serviceId: String) -> String {
-        if let dashIdx = serviceId.firstIndex(of: "-") {
-            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        if let delim = serviceId.range(of: "--") {
+            return String(serviceId[delim.upperBound...]).capitalized
         }
         return serviceId
     }

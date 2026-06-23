@@ -245,13 +245,15 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 modifier = Modifier.semantics { testTag = "vibecode-envvar-send-btn" },
                                 onClick = {
                                     val appId = s.appId ?: return@FSPrimaryButton
-                                    val dashIdx = appId.indexOf('-')
-                                    if (dashIdx <= 0) {
+                                    // serviceId = "<creator>--<slug>"; split on `--`
+                                    // (docs/service-addressing-double-dash.md).
+                                    val delimIdx = appId.indexOf("--")
+                                    if (delimIdx <= 0) {
                                         errorMessage = "Invalid app id shape"
                                         return@FSPrimaryButton
                                     }
-                                    val creator = appId.substring(0, dashIdx)
-                                    val slug = appId.substring(dashIdx + 1)
+                                    val creator = appId.substring(0, delimIdx)
+                                    val slug = appId.substring(delimIdx + 2)
                                     scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {

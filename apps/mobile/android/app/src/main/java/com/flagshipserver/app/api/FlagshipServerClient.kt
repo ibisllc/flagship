@@ -1228,16 +1228,17 @@ class MockFlagshipServerClient(
                 demoServer = demoBlock,
             )
         }
-        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase
-        // alphanumerics, no hyphens. Keep in sync.
+        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase chars,
+        // interior single dashes OK, no leading/trailing dash, and no `--` (the
+        // `<slug>--<creator>` delimiter — docs/service-addressing-double-dash.md).
         if (lower.length < 3 || lower.length > 30) {
             return UsernameAvailabilityResponse(lower, false, "Must be 3–30 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
             return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)
         }
-        if (!lower.matches(Regex("^[a-z0-9]+$"))) {
-            return UsernameAvailabilityResponse(lower, false, "Letters and digits only.", demoServer = demoBlock)
+        if (!lower.matches(Regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$")) || lower.contains("--")) {
+            return UsernameAvailabilityResponse(lower, false, "Letters, digits, and interior dashes only (no double dash).", demoServer = demoBlock)
         }
         val prior = _claimedUsernames[lower]
         if (prior != null && prior != "_self") {
@@ -1519,15 +1520,16 @@ class MockFlagshipServerClient(
         tick()
         val alias = appAliasByUser[username.lowercase()]?.get(serviceId)
         // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
-        // `<creator>-<slug>` (FIRST hyphen splits — usernames are
-        // hyphen-free). Fragment is CONDITIONAL: `<slug>` when the
-        // running user authored it, else `<slug>-<creator>`.
+        // `<creator>--<slug>` (the `--` delimiter splits — both halves may
+        // carry single dashes; docs/service-addressing-double-dash.md).
+        // Fragment is CONDITIONAL: `<slug>` when the running user authored
+        // it, else `<slug>--<creator>`.
         val defaultLabel = run {
-            val i = serviceId.indexOf('-')
-            if (i > 0 && i < serviceId.length - 1) {
+            val i = serviceId.indexOf("--")
+            if (i > 0 && i < serviceId.length - 2) {
                 val creator = serviceId.substring(0, i).lowercase()
-                val slug = serviceId.substring(i + 1).lowercase()
-                if (creator == username.lowercase()) slug else "$slug-$creator"
+                val slug = serviceId.substring(i + 2).lowercase()
+                if (creator == username.lowercase()) slug else "$slug--$creator"
             } else {
                 serviceId.lowercase()
             }

@@ -129,15 +129,15 @@ final class InviteDeepLinkTests: XCTestCase {
     func testAcceptReplyLinkRoundTrips() {
         let sig = String(repeating: "1c", count: 64) // 128-hex
         let link = ServiceInviteLinks.acceptReplyLink(
-            serverDomain: "home.alice.flagship.services", inviteId: inviteId, serviceRef: "alice-notes",
+            serverDomain: "home.alice.flagship.services", inviteId: inviteId, serviceRef: "alice--notes",
             contactAidHex: authorAid, acceptSigHex: sig, acceptedAt: 1_700_000_000_000)!
         XCTAssertEqual(
             DeepLink.parse(URL(string: link)!),
-            .inviteAccept(serverDomain: "home.alice.flagship.services", inviteId: inviteId, serviceRef: "alice-notes", contactAidHex: authorAid, acceptSigHex: sig, acceptedAt: 1_700_000_000_000))
+            .inviteAccept(serverDomain: "home.alice.flagship.services", inviteId: inviteId, serviceRef: "alice--notes", contactAidHex: authorAid, acceptSigHex: sig, acceptedAt: 1_700_000_000_000))
     }
 
     func testAcceptReplyBadSigIsNil() {
-        let url = URL(string: "flagship://invite-accept?server=home.alice.flagship.services&iid=\(inviteId)&ref=alice-notes&aid=\(authorAid)&sig=tooShort&at=1")!
+        let url = URL(string: "flagship://invite-accept?server=home.alice.flagship.services&iid=\(inviteId)&ref=alice--notes&aid=\(authorAid)&sig=tooShort&at=1")!
         XCTAssertNil(DeepLink.parse(url))
     }
 
@@ -148,7 +148,7 @@ final class InviteDeepLinkTests: XCTestCase {
     func testFrozenAcceptReplyInterop() {
         let server = "home.alice.flagship.services"
         let iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        let ref = "alice-notes"
+        let ref = "alice--notes"
         let aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
         let sig = String(repeating: "1f", count: 64) // 128-hex
         let at: Int64 = 1_700_006_000_000

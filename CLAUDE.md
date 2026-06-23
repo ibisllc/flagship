@@ -133,6 +133,52 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 — `--` service-addressing + dashed-username grammar: FOUNDATION (TS+webapp) + NATIVE migration
+
+**The slug↔creator delimiter is now `--` and usernames may carry interior dashes,
+end-to-end across all surfaces** (spec: `docs/service-addressing-double-dash.md`).
+Decision recap: app ids/url labels need a way to identify a service uniquely
+*throughout the system*, so the composite is `<creator>--<slug>` (and the flattened
+url form `<slug>--<creator>`, bare slug when self-authored — `--` is only ever
+visible on a same-slug multi-vendor collision). Usernames therefore relax from
+`^[a-z0-9]{3,30}$` (dashless) to `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$` (3–30, interior
+single dashes, no leading/trailing) **plus an explicit `--` ban** (the regex alone
+would permit `--`). Routing/certs/voi.ci are **delimiter-agnostic** (the SNI router
+splits on the first DOT and treats the leftmost label as opaque; the per-box wildcard
+covers any leftmost label) so this change touches naming/parsing only — never the
+cert or routing layer (§4.E of the spec).
+
+- **Foundation (pushed to `main`, 5 commits):** `packages/protocol/serviceId.ts`
+  (`SERVICE_ID_DELIM = "--"`, `composeServiceId`/`parseServiceId`/`deriveUrlFragment`);
+  control-plane `labels.ts` (`USERNAME_RE` + `isValidUsernameShape` `--` ban) +
+  `randomUsername.ts` (the `<adjective>-<noun>-<NNNN>` generator + `GET
+  /api/username/random`); services-zone `validation.ts` (`parseAppLabel` splits on
+  `--`); daemon parse/generate sites (`cloneService`/`updateClient`/`deploySession`/
+  `deployArtifact`); the webapp username-first cover flip + dashed grammar. ~50 TS
+  daemon/control-plane test fixtures converted single→double dash. `tsc -b` clean,
+  **3430** vitest green.
+- **Native migration (iOS + Android, THIS pass):** mirrored the grammar + the
+  `serviceId` **local-derivation fallbacks** (the only native parse of the
+  composite — clients prefer the daemon-provided `urlLabel`; this is the offline
+  fallback). iOS: `FlagshipServerClient.swift` (`usernameRe` + reason + `--` ban;
+  the `firstIndex(of:"-")` split → `range(of:"--")`), `ChooseUsernameViewModel`,
+  `ServiceDetailViewModel`, `ServicesTab` (×4), `VibeCodeChatScreen`,
+  `ServiceDetailScreen` copy. Android: `ChooseUsernameScreen.kt` (`usernameRegex` +
+  `usernameShapeOk`), `api/FlagshipServerClient.kt` (mock grammar + `indexOf("--")`
+  split), `ServiceAccessScreen`/`ServicesTab`/`VibeCodeChatScreen`/`ServiceDetailScreen`.
+  Demo/mock serviceId fixtures (`harry--plants`, `alice--notes`, `meta--scratchpad`,
+  `trent--scratchpad`, the `scratchpad--trent` url label) + their split-derived test
+  expectations converted across ~34 native files. Username-grammar tests rewritten
+  (single dash now valid, `--`/leading/trailing rejected, new reason strings).
+
+Gates: iOS `xcodebuild test` **1183/1184** (the 1 = a cross-suite flake —
+`ServiceUninstallTests.test_uninstall_resolvesCreatorSlugFromLoadedDetail` passes
+isolated + intra-class 8/8) · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL**
+(1054). Mobile shows it after an Xcode/Gradle rebuild. **NOT yet built (deferred,
+per the spec's later phases):** the display rule polish (`<slug>--<creator>` only on
+same-slug collision), recovery-enrollment gate, paid name-change re-home, dibs
+domain-proof.
+
 ### 2026-06-22 — naming/recovery model DECIDED + spec; "claim after a wait" removed
 
 **Owner-directed naming + recovery model (spec: `docs/naming-recovery-and-name-change.md`).**

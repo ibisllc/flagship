@@ -455,16 +455,17 @@ public final class ServiceDetailViewModel {
             return false
         }
         // Prefer the authoritative creator/slug from the loaded detail; fall
-        // back to splitting the serviceId at the first hyphen (creator is
-        // hyphen-free — mirrors composeServiceId / parseServiceId).
+        // back to splitting the serviceId on the `--` delimiter (both halves
+        // may carry single dashes — mirrors composeServiceId / parseServiceId,
+        // docs/service-addressing-double-dash.md).
         let creator: String
         let slug: String
         if let app = detail.value?.app {
             creator = app.creator
             slug = app.slug
-        } else if let dash = serviceId.firstIndex(of: "-") {
-            creator = String(serviceId[..<dash])
-            slug = String(serviceId[serviceId.index(after: dash)...])
+        } else if let delim = serviceId.range(of: "--") {
+            creator = String(serviceId[..<delim.lowerBound])
+            slug = String(serviceId[delim.upperBound...])
         } else {
             removePhase = .failed("Couldn't identify the service to remove.")
             return false

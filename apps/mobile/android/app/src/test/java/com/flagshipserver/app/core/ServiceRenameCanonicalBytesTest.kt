@@ -13,13 +13,13 @@ class ServiceRenameCanonicalBytesTest {
     @Test fun matchesDocumentedFieldOrder() {
         val bytes = ServiceRenameClaim.canonicalBytes(
             username = "alice",
-            serviceId = "meta-scratchpad",
+            serviceId = "meta--scratchpad",
             newDisplayLabel = "MyNotes",
             issuedAt = 1700000000000L,
         )
         // tag | username | serviceId | newDisplayLabel(lowercased) | issuedAt
         assertEquals(
-            "flagship/service-rename/v1|alice|meta-scratchpad|mynotes|1700000000000",
+            "flagship/service-rename/v1|alice|meta--scratchpad|mynotes|1700000000000",
             String(bytes, Charsets.UTF_8),
         )
     }

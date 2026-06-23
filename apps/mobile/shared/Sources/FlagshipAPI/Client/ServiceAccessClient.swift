@@ -502,11 +502,11 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var state = ServiceAccessState(mode: "open", allowCount: 0)
     public var removeAllowResult = RemoveAllowResult(ok: true, removed: true)
     public var rows: [ServiceInviteRow] = []
-    public var redeemResult = RedeemResult(serviceRef: "alice-notes", boundAidHex: "00", firstBind: true)
-    public var acceptResult = AcceptResult(bound: true, serviceRef: "alice-notes", boundAidHex: "00")
+    public var redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "00", firstBind: true)
+    public var acceptResult = AcceptResult(bound: true, serviceRef: "alice--notes", boundAidHex: "00")
     public var authorizeKnockResult = AuthorizeKnockResult(
         secretId: String(repeating: "ab", count: 32),
-        serviceRef: "alice-notes",
+        serviceRef: "alice--notes",
         browserAgent: "Mozilla/5.0 (Macintosh)",
         startedAt: 1_700_000_000_000,
         expiresAt: 1_700_000_000_000 + 12 * 60 * 60_000

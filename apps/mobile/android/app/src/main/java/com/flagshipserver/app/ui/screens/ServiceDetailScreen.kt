@@ -462,7 +462,7 @@ private fun Header(app: AppSummary) {
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
     )
-    // `id:` is the IMMUTABLE composite package id (`<creator>-<slug>`, single
+    // `id:` is the IMMUTABLE composite package id (`<creator>--<slug>`, double
     // dash). It never changes — Replace only rotates the user-facing URL stem.
     Text(
         text = buildString {

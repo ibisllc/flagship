@@ -29,7 +29,7 @@ class InviteIssueViewModelTest {
         }
         val book = InMemoryInviteLabelBook()
         val vm = InviteIssueViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             appUrl = "https://plants.harry.flagship.services",
             client = client,
             labelBook = book,
@@ -50,18 +50,18 @@ class InviteIssueViewModelTest {
         assertEquals("deadbeefcafebabe1234567890abcdef".repeat(2), issued.secret)
         assertEquals(1_800_000_000_000L, issued.expiresAt)
         assertEquals(
-            "https://plants.harry.flagship.services/invite#k=${issued.secret}&a=harry-plants",
+            "https://plants.harry.flagship.services/invite#k=${issued.secret}&a=harry--plants",
             issued.shareUrl,
         )
 
         assertEquals(1, client.appInviteIssueCalls.size)
         val req = client.appInviteIssueCalls[0]
-        assertEquals("harry-plants", req.serviceId)
+        assertEquals("harry--plants", req.serviceId)
         assertEquals("admin", req.role)
         assertEquals("00112233445566778899aabbccddeeff", req.opaqueTag)
         assertEquals("from harry's phone", req.contextNote)
 
-        val row = book.get("harry-plants", "00112233445566778899aabbccddeeff")
+        val row = book.get("harry--plants", "00112233445566778899aabbccddeeff")
         assertEquals("John (work)", row?.displayName)
         assertEquals("imessage", row?.channel)
         assertEquals("+1 555 0142", row?.sentTo)
@@ -70,7 +70,7 @@ class InviteIssueViewModelTest {
     @Test fun issue_emptyContext_sendsNullOnTheWire() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = InviteIssueViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             appUrl = "https://x.flagship.services",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
@@ -86,7 +86,7 @@ class InviteIssueViewModelTest {
     @Test fun issue_emptyDisplayName_failsLocallyAndSkipsWire() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = InviteIssueViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             appUrl = "https://x.flagship.services",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
@@ -105,7 +105,7 @@ class InviteIssueViewModelTest {
     @Test fun issue_tagIsDistinctPerCall() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0)
         val vm = InviteIssueViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             appUrl = "https://x.flagship.services",
             client = client,
             labelBook = InMemoryInviteLabelBook(),
@@ -127,7 +127,7 @@ class InviteIssueViewModelTest {
     @Test fun issue_clientFailure_landsInFailed() = runTest {
         val client = MockScreensClient(simulatedLatencyMs = 0).apply { shouldFail = true }
         val vm = InviteIssueViewModel(
-            serviceId = "harry-plants",
+            serviceId = "harry--plants",
             appUrl = "https://x.flagship.services",
             client = client,
             labelBook = InMemoryInviteLabelBook(),

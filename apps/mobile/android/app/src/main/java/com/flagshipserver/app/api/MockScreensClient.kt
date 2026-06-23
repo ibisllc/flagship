@@ -47,9 +47,9 @@ class MockScreensClient(
             serviceCount = serviceCount,
             pairedSessionCount = 2,
             recentInstallEvents = listOf(
-                RecentInstallEvent(now() - 60_000L * 30, "installed", "harry-plants", "via vibe-code"),
-                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "harry-wiki", "v1.4.0"),
-                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry-wiki", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 30, "installed", "harry--plants", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "harry--wiki", "v1.4.0"),
+                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry--wiki", "via vibe-code"),
             ),
         )
     }
@@ -62,12 +62,12 @@ class MockScreensClient(
         val fqdn = "$podContext.harry.flagship.services"
         return AppsListResponse(
             apps = listOf(
-                AppSummary("harry-plants", "harry", "plants", "plants",
+                AppSummary("harry--plants", "harry", "plants", "plants",
                     "Houseplant watering tracker", "https://plants.$fqdn/", "running", "0.0.3", now() - 60_000 * 30),
-                AppSummary("harry-wiki", "harry", "wiki", "wiki",
+                AppSummary("harry--wiki", "harry", "wiki", "wiki",
                     "Personal notes + recipes", "https://wiki.$fqdn/", "running", "1.4.0", now() - 60_000 * 60 * 26),
-                AppSummary("trent-scratchpad", "trent", "scratchpad", "scratchpad-trent",
-                    "Markdown scratchpad", "https://scratchpad-trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
+                AppSummary("trent--scratchpad", "trent", "scratchpad", "scratchpad--trent",
+                    "Markdown scratchpad", "https://scratchpad--trent.$fqdn/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
             )
         )
     }
@@ -245,8 +245,8 @@ class MockScreensClient(
     // invariant). The test surface exposes only the NAMES.
     private val mockEnvNames: MutableMap<String, MutableSet<String>> =
         mutableMapOf(
-            "harry-plants" to mutableSetOf("WEATHER_API_KEY"),
-            "harry-wiki" to mutableSetOf(),
+            "harry--plants" to mutableSetOf("WEATHER_API_KEY"),
+            "harry--wiki" to mutableSetOf(),
         )
 
     override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse {
@@ -274,7 +274,7 @@ class MockScreensClient(
         val n = now()
         return VibeCodeSessionPublicState(
             id = sessionId,
-            appId = "harry-plants",
+            appId = "harry--plants",
             status = "awaiting-tool-response",
             messages = listOf(
                 VibeCodeSessionMessage(role = "user", text = "Build me a plants tracker", timestamp = n - 30_000),
@@ -328,12 +328,12 @@ class MockScreensClient(
                     newIrkPrefix = "feedbeef0123",
                     apps = listOf(
                         AppReissuanceSummary(
-                            serviceId = "harry-plants", slug = "plants",
+                            serviceId = "harry--plants", slug = "plants",
                             rewrittenCount = 1, unchangedCount = 0,
                             error = null, completedAt = now() - 2 * day + 1_500,
                         ),
                         AppReissuanceSummary(
-                            serviceId = "harry-wiki", slug = "wiki",
+                            serviceId = "harry--wiki", slug = "wiki",
                             rewrittenCount = 3, unchangedCount = 1,
                             error = null, completedAt = now() - 2 * day + 3_500,
                         ),

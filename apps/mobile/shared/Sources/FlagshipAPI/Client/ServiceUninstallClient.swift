@@ -47,7 +47,7 @@ public final class LiveServiceUninstallClient: ServiceUninstallClient, @unchecke
         request: [String: Any],
         signatureHex: String
     ) async throws {
-        // serviceId is `<creator>-<slug>`; percent-encode for the path so a
+        // serviceId is `<creator>--<slug>`; percent-encode for the path so a
         // slug with a reserved char can't break the URL (the daemon
         // re-derives the id from the signed creator/slug and 400s on a
         // mismatch, so this only needs to be a faithful path segment).

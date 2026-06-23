@@ -98,10 +98,10 @@ final class BuildModesModelsTests: XCTestCase {
     // MARK: - deploy
 
     func test_buildDeployResponse_decodes() throws {
-        let json = #"{"ok":true,"serviceId":"harry-plants","url":"https://plants.home.harry.flagship.services/"}"#
+        let json = #"{"ok":true,"serviceId":"harry--plants","url":"https://plants.home.harry.flagship.services/"}"#
         let r = try dec.decode(BuildDeployResponse.self, from: Data(json.utf8))
         XCTAssertTrue(r.ok)
-        XCTAssertEqual(r.serviceId, "harry-plants")
+        XCTAssertEqual(r.serviceId, "harry--plants")
         XCTAssertEqual(r.url, "https://plants.home.harry.flagship.services/")
     }
 
@@ -109,12 +109,12 @@ final class BuildModesModelsTests: XCTestCase {
 
     func test_buildSessionsResponse_decodes() throws {
         let json = """
-        {"builds":[{"buildId":"b1","mode":"scratch","serviceId":"harry-plants","startedAt":1,"lastAt":2,"entryCount":9,"lastKind":"deployed"},{"buildId":"b2","mode":"git","startedAt":3,"lastAt":4,"entryCount":3,"lastKind":"fitness-check"}]}
+        {"builds":[{"buildId":"b1","mode":"scratch","serviceId":"harry--plants","startedAt":1,"lastAt":2,"entryCount":9,"lastKind":"deployed"},{"buildId":"b2","mode":"git","startedAt":3,"lastAt":4,"entryCount":3,"lastKind":"fitness-check"}]}
         """
         let r = try dec.decode(BuildSessionsResponse.self, from: Data(json.utf8))
         XCTAssertEqual(r.builds.count, 2)
         XCTAssertEqual(r.builds[0].mode, "scratch")
-        XCTAssertEqual(r.builds[0].serviceId, "harry-plants")
+        XCTAssertEqual(r.builds[0].serviceId, "harry--plants")
         XCTAssertNil(r.builds[1].serviceId)
         XCTAssertEqual(r.builds[1].lastKind, "fitness-check")
     }

@@ -20,7 +20,7 @@ public struct SecuredSession: Codable, Equatable, Sendable, Identifiable {
     public var secretId: String
     /// The box fqdn the session lives on (the `serverId` the authorize bound).
     public var serverId: String
-    /// The `<creator>-<slug>` ref the box keys the allow-list on.
+    /// The `<creator>--<slug>` ref the box keys the allow-list on.
     public var serviceRef: String
     /// The canonical `https://<svc>.<server>` URL the browser is viewing —
     /// what the owner recognizes the session by. Display only.

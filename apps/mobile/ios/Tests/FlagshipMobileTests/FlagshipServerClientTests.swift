@@ -96,14 +96,16 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(r.reason, "already claimed")
     }
 
-    func test_usernameAvailable_rejectsHyphen() async throws {
-        // Usernames are hyphen-free so serviceId `<creator>-<slug>` parses
-        // unambiguously. Worker's labels.ts USERNAME_RE is
-        // /^[a-z0-9]{3,30}$/ — the iOS Mock must agree.
+    func test_usernameAvailable_acceptsInteriorDashRejectsDoubleDash() async throws {
+        // Interior single dashes are now allowed; `--` is the reserved
+        // `<slug>--<creator>` delimiter and must be rejected. Worker's labels.ts
+        // USERNAME_RE is /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/ + a `--` ban — the
+        // iOS Mock must agree (docs/service-addressing-double-dash.md).
         let c = makeClient()
-        let r = try await c.usernameAvailable("play-q2")
-        XCTAssertFalse(r.available)
-        XCTAssertTrue((r.reason ?? "").lowercased().contains("hyphen"))
+        let single = try await c.usernameAvailable("play-q2")
+        XCTAssertTrue(single.available)
+        let double = try await c.usernameAvailable("play--q2")
+        XCTAssertFalse(double.available)
     }
 
     func test_usernameAvailable_rejectsLeadingOrTrailingHyphen() async throws {
@@ -120,10 +122,10 @@ final class FlagshipServerClientTests: XCTestCase {
         let c = makeClient()
         let short = try await c.usernameAvailable("ab")
         XCTAssertFalse(short.available)
-        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
         let long = try await c.usernameAvailable(String(repeating: "a", count: 31))
         XCTAssertFalse(long.available)
-        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters/digits with interior single dashes (no leading/trailing or double dash)")
         let okMin = try await c.usernameAvailable("abc")
         XCTAssertTrue(okMin.available)
     }

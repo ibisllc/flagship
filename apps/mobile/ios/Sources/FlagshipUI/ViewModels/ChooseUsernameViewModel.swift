@@ -33,12 +33,12 @@ public final class ChooseUsernameViewModel {
     }
 
     /// Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts):
-    /// 3–30 lowercase alphanumerics, NO hyphens. Used ONLY as a
-    /// network-down fallback to keep the continue button useful when the
-    /// Worker is unreachable; the authoritative check is the Worker's
-    /// response. Usernames are alphanumerics only so `<creator>-<slug>`
-    /// app ids parse unambiguously.
-    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9]{3,30}$"#
+    /// 3–30 lowercase chars, interior single dashes OK (no leading/trailing,
+    /// no `--`). Used ONLY as a network-down fallback to keep the continue
+    /// button useful when the Worker is unreachable; the authoritative check is
+    /// the Worker's response. The `--` ban is what keeps the `<slug>--<creator>`
+    /// app-id delimiter unambiguous (docs/service-addressing-double-dash.md).
+    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$"#
 
     /// 350ms matches Android (ChooseUsernameScreen.kt) so both clients
     /// rate-limit the Worker identically.
@@ -85,10 +85,11 @@ public final class ChooseUsernameViewModel {
             // Network down — fall back to a permissive label check
             // so the screen still moves. The real claim path will
             // surface the proper error when connectivity returns.
-            if lower.range(of: Self.usernameFallbackRegex, options: .regularExpression) != nil {
+            if lower.range(of: Self.usernameFallbackRegex, options: .regularExpression) != nil
+                && !lower.contains("--") {
                 status = .networkFallbackAvailable
             } else {
-                status = .invalid("3–30 lowercase letters and digits, no hyphens.")
+                status = .invalid("3–30 lowercase letters, digits, and interior dashes (no double dash).")
             }
             lastChecked = lower
             return

@@ -29,9 +29,12 @@ import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.delay
 
 // Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts):
-// lowercase alphanumerics only, no hyphens, 3–30 chars. Hyphen-free
-// usernames keep the composite app id `<creator>-<slug>` unambiguous.
-private val usernameRegex = Regex("^[a-z0-9]{3,30}$")
+// 3–30 lowercase chars, interior single dashes OK (no leading/trailing dash),
+// and NO `--` (the `<slug>--<creator>` app-id delimiter — keep in sync with
+// docs/service-addressing-double-dash.md). The `--` ban is checked separately.
+private val usernameRegex = Regex("^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$")
+private fun usernameShapeOk(name: String): Boolean =
+    usernameRegex.matches(name) && !name.contains("--")
 
 /**
  * D.2.2 — ChooseUsernameScreen.
@@ -73,7 +76,7 @@ fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
             flagshipServer.usernameAvailable(username)
         } catch (_: Throwable) { null }
         if (resp == null) {
-            status = if (usernameRegex.matches(username)) UsernameCheck.Available else UsernameCheck.Invalid
+            status = if (usernameShapeOk(username)) UsernameCheck.Available else UsernameCheck.Invalid
             return@LaunchedEffect
         }
         status = when {

@@ -27,7 +27,7 @@ import org.junit.Test
 class KnockAuthorizeViewModelTest {
     private val serverId = "home.alice.flagship.services"
     private val svc = "notes"
-    private val serviceRef = "alice-notes"
+    private val serviceRef = "alice--notes"
     private val pageId = "cb2421036efeb738c6017d8ee92e7b89"
     private val umkSeed = ByteArray(32) { 0x16 }
     private val aidKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ServerKeys.deriveAccountIdSeed(umkSeed))
@@ -48,14 +48,14 @@ class KnockAuthorizeViewModelTest {
     @Test fun authorize_signsPageIdBoundEnvelope_andPersistsSession() = runTest {
         val t = KnockTransport(
             status = 200,
-            respBody = """{"authorized":true,"secretId":"${"ab".repeat(32)}","serviceRef":"alice-notes","browserAgent":"Firefox","startedAt":1700004000000,"expiresAt":1700004000000}""",
+            respBody = """{"authorized":true,"secretId":"${"ab".repeat(32)}","serviceRef":"alice--notes","browserAgent":"Firefox","startedAt":1700004000000,"expiresAt":1700004000000}""",
         )
         val vm = makeVM(t)
         vm.authorize()
         val p = vm.phase.value
         assertTrue(p is KnockAuthorizePhase.Done)
         p as KnockAuthorizePhase.Done
-        assertEquals("alice-notes", p.serviceRef)
+        assertEquals("alice--notes", p.serviceRef)
         assertEquals("Firefox", p.browserAgent)
         // POSTed to the box's knock authorize endpoint.
         assertTrue(t.lastUrl!!.endsWith("/api/service-access/knock/authorize"))
@@ -112,7 +112,7 @@ class KnockAuthorizeViewModelTest {
     }
 
     @Test fun target_apexServiceHasNoLabel() = runTest {
-        val t = KnockTransport(status = 200, respBody = """{"secretId":"${"cd".repeat(32)}","serviceRef":"alice-notes","browserAgent":"","startedAt":0,"expiresAt":0}""")
+        val t = KnockTransport(status = 200, respBody = """{"secretId":"${"cd".repeat(32)}","serviceRef":"alice--notes","browserAgent":"","startedAt":0,"expiresAt":0}""")
         val vm = KnockAuthorizeViewModel(
             serverId = serverId, svc = "", serviceRef = serviceRef, pageId = pageId,
             client = ServiceAccessClient(boxTransport = t, comTransport = t),

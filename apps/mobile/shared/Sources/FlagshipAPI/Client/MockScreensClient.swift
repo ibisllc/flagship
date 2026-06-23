@@ -48,9 +48,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serviceCount: serviceCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry-plants", detail: "via vibe-code"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry-wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry-wiki", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry--plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry--wiki", detail: "v1.4.0"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry--wiki", detail: "via vibe-code"),
             ]
         )
     }
@@ -66,7 +66,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let fqdn = "\(podContext).harry.flagship.services"
         return AppsListResponse(apps: [
             AppSummary(
-                serviceId: "harry-plants",
+                serviceId: "harry--plants",
                 creator: "harry",
                 slug: "plants",
                 urlLabel: "plants",
@@ -77,7 +77,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 30
             ),
             AppSummary(
-                serviceId: "harry-wiki",
+                serviceId: "harry--wiki",
                 creator: "harry",
                 slug: "wiki",
                 urlLabel: "wiki",
@@ -88,10 +88,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 26
             ),
             AppSummary(
-                serviceId: "trent-scratchpad",
+                serviceId: "trent--scratchpad",
                 creator: "trent",
                 slug: "scratchpad",
-                urlLabel: "scratchpad-trent",
+                urlLabel: "scratchpad--trent",
                 summary: "Markdown scratchpad",
                 url: "https://scratchpad-trent.\(fqdn)/",
                 status: "stopped",
@@ -409,8 +409,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// mock's in-memory map. Never echoed in any response (mirrors the
     /// daemon's "values never leave" invariant).
     private var mockEnvNames: [String: [String]] = [
-        "harry-plants": ["WEATHER_API_KEY"],
-        "harry-wiki": []
+        "harry--plants": ["WEATHER_API_KEY"],
+        "harry--wiki": []
     ]
 
     public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
@@ -437,7 +437,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return VibeCodeSessionPublicState(
             id: sessionId,
-            appId: "harry-plants",
+            appId: "harry--plants",
             status: "awaiting-tool-response",
             messages: [
                 VibeCodeSessionMessage(role: "user", text: "Build me a plants tracker", timestamp: now - 30_000),
@@ -860,7 +860,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildSummary(
                 buildId: "bld-plants01",
                 mode: "scratch",
-                serviceId: "harry-plants",
+                serviceId: "harry--plants",
                 startedAt: now - 60_000 * 60,
                 lastAt: now - 60_000 * 58,
                 entryCount: 9,
@@ -896,7 +896,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             BuildJournalEntry(
                 seq: 3, ts: now - 60_000 * 58, buildId: buildId,
                 mode: "scratch", kind: "deployed", actor: "system",
-                summary: "deployed to home pod", serviceId: "harry-plants"
+                summary: "deployed to home pod", serviceId: "harry--plants"
             ),
         ])
     }

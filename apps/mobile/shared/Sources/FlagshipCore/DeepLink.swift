@@ -73,7 +73,7 @@ public enum DeepLink: Equatable, Sendable {
     /// deeplink (also a QR for cross-device + a copyable "Get link" string);
     /// THIS phone authorizes it by AID-signing a `KnockAuthorization` bound to
     /// the page. Carries the box `server` fqdn, the URL `svc` label (display
-    /// only), the `ref` serviceRef (a `<creator>-<slug>` the box keys its
+    /// only), the `ref` serviceRef (a `<creator>--<slug>` the box keys its
     /// allow-list on), and the single-use `page` id (the box-minted pageId the
     /// authorization signature binds). Reachable two ways:
     ///   - the box's `flagship://access?server=…&svc=…&ref=…&page=…` deeplink

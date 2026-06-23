@@ -7,7 +7,7 @@ import CryptoKit
 @MainActor
 final class ServiceAccessViewModelTests: XCTestCase {
     private let server = "home.alice.flagship.services"
-    private let serviceRef = "alice-notes"
+    private let serviceRef = "alice--notes"
     private let username = "alice"
     private let control = URL(string: "https://flagshipserver.com")!
 
