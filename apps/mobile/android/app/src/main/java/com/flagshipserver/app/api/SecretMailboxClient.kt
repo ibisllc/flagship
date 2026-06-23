@@ -58,6 +58,15 @@ interface SecretMailboxClient {
      *  (what the box presents at HELLO), not a secret. Reuses [PairingDepositBody]
      *  — identical wire shape. */
     suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/swk-deposit — phone, IRK mailbox-auth.
+     *  Secret-free recipe (docs/recipe-delivery-and-remote-install.md): the
+     *  recipe carries NO SWK; after the box registers, the phone seals the SWK
+     *  to the box's REGISTERED identity and IRK-signs the wrapper, depositing it
+     *  here for the box to claim on boot. `deposit.sealed` is the SEALED
+     *  SWK-delivery carrier — `.com` holds ciphertext only (I1). Reuses
+     *  [PairingDepositBody]; `deposit.stkPub` MUST be the registered STK. */
+    suspend fun depositSwk(serverDomain: String, body: PairingDepositBody)
 }
 
 /** The create-time pairing deposit body. `auth`/`authSignature` are the SAME IRK
@@ -427,6 +436,20 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(PairingDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/swk-deposit",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -480,5 +503,13 @@ class MockSecretMailboxClient : SecretMailboxClient {
     val entitlementDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
     override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
         entitlementDeposits.add(serverDomain to body)
+    }
+
+    val swkDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
+    /** When set, [depositSwk] throws it once (exercises best-effort/retry). */
+    var swkDepositError: Throwable? = null
+    override suspend fun depositSwk(serverDomain: String, body: PairingDepositBody) {
+        swkDepositError?.let { swkDepositError = null; throw it }
+        swkDeposits.add(serverDomain to body)
     }
 }
