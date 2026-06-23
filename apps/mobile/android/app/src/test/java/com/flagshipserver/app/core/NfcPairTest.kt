@@ -253,6 +253,56 @@ class NfcPairTest {
         }
     }
 
+    // ── N-PHONE-6: LED-SAS verify (decode/match) ──────────────────────
+
+    @Test fun ledSasGlances_splitsIntoThreeGlancesOfThree() {
+        // 0b00011011, 0b11100100, 0b10010110 → "RGBYYBGRB"
+        val sas = byteArrayOf(0b00011011, 0b11100100.toByte(), 0b10010110.toByte(), 0xff.toByte())
+        val seq = encodeLedSas(sas)
+        assertEquals("RGBYYBGRB", seq)
+        assertEquals(listOf("RGB", "YYB", "GRB"), ledSasGlances(seq))
+    }
+
+    @Test fun ledSasGlances_rejectsWrongLength() {
+        assertThrows(LedSasVerifyError::class.java) { ledSasGlances("RGB") }
+        assertThrows(LedSasVerifyError::class.java) { ledSasGlances("RGBYYBGRBR") }
+    }
+
+    @Test fun isWellFormedGlance_acceptsOnlyThreeAlphabetSymbols() {
+        assertTrue(isWellFormedGlance("RGB"))
+        assertFalse(isWellFormedGlance("RG"))    // too short
+        assertFalse(isWellFormedGlance("RGBY"))  // too long
+        assertFalse(isWellFormedGlance("RGX"))   // unknown symbol
+        assertFalse(isWellFormedGlance("rgb"))   // case-sensitive
+    }
+
+    @Test fun verifyLedGlance_isExactMatch() {
+        assertEquals(LedGlanceVerdict.MATCH, verifyLedGlance("RGB", "RGB"))
+        assertEquals(LedGlanceVerdict.MISMATCH, verifyLedGlance("RGB", "RGY"))
+    }
+
+    @Test fun verifyLedSas_confirmsCorrect_failsClosedOnAnyMismatch() {
+        val sas = byteArrayOf(0b00011011, 0b11100100.toByte(), 0b10010110.toByte(), 0xff.toByte())
+        assertTrue(verifyLedSas(sas, listOf("RGB", "YYB", "GRB")))
+        // A single wrong glance fails the whole check (not best-of-3).
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YYR", "GRB")))
+        assertFalse(verifyLedSas(sas, listOf("RGY", "YYB", "GRB")))
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YYB", "GRY")))
+    }
+
+    @Test fun verifyLedSas_rejectsMalformedOrWrongCount() {
+        val sas = byteArrayOf(0b00011011, 0b11100100.toByte(), 0b10010110.toByte(), 0xff.toByte())
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YY", "GRB")))   // malformed
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YYX", "GRB")))  // unknown symbol
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YYB")))         // too few
+        assertFalse(verifyLedSas(sas, listOf("RGB", "YYB", "GRB", "RGB"))) // too many
+    }
+
+    @Test fun verifyLedSas_agreesWithBoxDerivedSequence() {
+        val sas = byteArrayOf(0x11, 0x22, 0x33, 0x44)
+        assertTrue(verifyLedSas(sas, ledSasGlances(encodeLedSas(sas))))
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Cross-language golden vectors
 

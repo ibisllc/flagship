@@ -282,7 +282,7 @@ _Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-v
 - **N-PHONE-3** iOS read+write tap with LAN+LED-SAS fallback (per Q2). _agent._
 - **N-PHONE-4** Android NFC read/write + pairing UI. _agent._ ✅ DONE read-only half (feat/retail `a5b4c77`; write tap = N-PHONE-3)
 - **N-PHONE-5** ECDH + K_session derivation + claim submit (both platforms). _agent._ ✅ DONE (feat/retail `837c179`+`3a628fd`+`a5b4c77`, both platforms incl. deposit-blob ePhonePub fix + 30s session-lock + SAS glance + LED-SAS fallback seam)
-- **N-PHONE-6** LED-SAS fallback UI (camera capture + decode of the LED pulse pattern). _agent._
+- **N-PHONE-6** LED-SAS fallback UI (camera capture + decode of the LED pulse pattern). _agent._ ✅ DONE — verify engine (`verifyLedSas`/`ledSasGlances`/`isWellFormedGlance`/`verifyLedGlance`, byte-identical TS+Swift+Kotlin) + the active glance-by-glance "optional SAS glance" capture UI (iOS `NfcPairViewModel.beginLedSasCapture`/`recordLedGlance`/`resetLedSasCapture` + screen tap-pad; Android `LedSasCapture` StateFlow + `LedSasCaptureBlock`). Strict 3-of-3 fail-closed. **Remaining:** the camera frame→RGBY-symbol decoder is the hardware/CV seam (mounts where `recordLedGlance` is called; manual color tap is the v1 capture). The no-PAIR LAN re-acquire that the `ledSasFallback` phase routes to still needs the box-side mDNS/rendezvous PAIR-serve (N-BOX-7/8).
 
 ### N-CLOUD — Cloud / Worker
 - [x] **N-CLOUD-1** Activation API — `POST /api/serial/activate` (retailer-scoped auth) + `GET /api/serial/{serial}/status` (in-store-only per Q1). _agent — `packages/control-plane/src/serialActivation.ts` + 22 tests; HMAC scheme = SHA-256(FLAGSHIP_RETAILER_HMAC_SECRET, canonical), ±5 min freshness; D1 migration 0039_box_serials.sql._

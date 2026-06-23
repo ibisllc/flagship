@@ -16,6 +16,10 @@ import {
   deriveSharedSecret,
   encodeLedSas,
   encodeSasForDisplay,
+  ledSasGlances,
+  isWellFormedGlance,
+  verifyLedGlance,
+  verifyLedSas,
   openWiFiConfig,
   sealWiFiConfig,
   signBoxUnpair,
@@ -328,6 +332,60 @@ describe("N-PROTO-4: SAS + LED-SAS encoding", () => {
     pub[30] = 0xab;
     pub[31] = 0xcd;
     expect(stkPubToSuffix6(pub)).toBe("00abcd");
+  });
+});
+
+describe("N-PHONE-6: LED-SAS capture/decode + match", () => {
+  // 0b00011011, 0b11100100, 0b10010110 → "RGBYYBGRB" (see encode test above).
+  const sas = new Uint8Array([0b00011011, 0b11100100, 0b10010110, 0xff]);
+  const expectedSeq = "RGBYYBGRB";
+
+  it("splits the 9-pulse sequence into 3 glances of 3", () => {
+    expect(ledSasGlances(expectedSeq)).toEqual(["RGB", "YYB", "GRB"]);
+  });
+
+  it("rejects a wrong-length sequence in ledSasGlances", () => {
+    expect(() => ledSasGlances("RGB")).toThrow();
+    expect(() => ledSasGlances(expectedSeq + "R")).toThrow();
+  });
+
+  it("isWellFormedGlance accepts only 3 alphabet symbols", () => {
+    expect(isWellFormedGlance("RGB")).toBe(true);
+    expect(isWellFormedGlance("YYB")).toBe(true);
+    expect(isWellFormedGlance("RG")).toBe(false); // too short
+    expect(isWellFormedGlance("RGBY")).toBe(false); // too long
+    expect(isWellFormedGlance("RGX")).toBe(false); // unknown symbol
+    expect(isWellFormedGlance("rgb")).toBe(false); // case-sensitive
+  });
+
+  it("verifyLedGlance is exact-match", () => {
+    expect(verifyLedGlance("RGB", "RGB")).toBe("match");
+    expect(verifyLedGlance("RGB", "RGY")).toBe("mismatch");
+  });
+
+  it("verifyLedSas confirms a correct 3-of-3 capture", () => {
+    expect(verifyLedSas(sas, ["RGB", "YYB", "GRB"])).toBe(true);
+  });
+
+  it("verifyLedSas rejects any single mismatched glance (fail-closed, not best-of-3)", () => {
+    expect(verifyLedSas(sas, ["RGB", "YYR", "GRB"])).toBe(false); // glance 2 wrong
+    expect(verifyLedSas(sas, ["RGY", "YYB", "GRB"])).toBe(false); // glance 1 wrong
+    expect(verifyLedSas(sas, ["RGB", "YYB", "GRY"])).toBe(false); // glance 3 wrong
+  });
+
+  it("verifyLedSas rejects a malformed glance (garbled read, not a mismatch)", () => {
+    expect(verifyLedSas(sas, ["RGB", "YY", "GRB"])).toBe(false); // short
+    expect(verifyLedSas(sas, ["RGB", "YYX", "GRB"])).toBe(false); // unknown symbol
+  });
+
+  it("verifyLedSas requires exactly the glance count", () => {
+    expect(verifyLedSas(sas, ["RGB", "YYB"])).toBe(false); // too few
+    expect(verifyLedSas(sas, ["RGB", "YYB", "GRB", "RGB"])).toBe(false); // too many
+  });
+
+  it("verifyLedSas agrees with the box-derived sequence from a real SAS", () => {
+    const derived = encodeLedSas(sas);
+    expect(verifyLedSas(sas, ledSasGlances(derived))).toBe(true);
   });
 });
 
