@@ -461,6 +461,25 @@
           <div class="card placeholder">Say what you'd like to build to get started.</div>
         </div>
 
+        <!-- First-turn settings: YOU name it + choose who can see it. (The AI
+             was chosen on the previous step — not asked again.) Hidden once the
+             session has started. -->
+        <div class="vc-first-turn" id="vc-first-turn">
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input id="vc-name" type="text" autocapitalize="none" autocorrect="off"
+                   spellcheck="false" placeholder="plant-tracker">
+            <span class="note">Lowercase letters, digits, and dashes — this is its web address.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Visible to</span>
+            <select id="vc-visibility">
+              <option value="just-me">Just me</option>
+              <option value="link">Anyone with the link</option>
+            </select>
+          </label>
+        </div>
+
         <!-- Composer: textarea + attach affordance + attachment chips -->
         <div class="vc-composer card mt-2">
           <div id="vc-attach-chips" class="vc-chips hidden" aria-label="Attached files"></div>

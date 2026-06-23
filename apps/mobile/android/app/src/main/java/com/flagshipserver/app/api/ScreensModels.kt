@@ -111,6 +111,11 @@ data class VibeCodeStartRequest(
     val model: String? = null,
     /** Optional BYOK credential. Omitted ⇒ box uses promo/credits. */
     val credential: BuildCredential? = null,
+    /** Owner-chosen service name/slug (the web-address label) from the
+     *  Describe form. A hint the daemon uses for the deployed slug. */
+    val name: String? = null,
+    /** Owner-chosen reach: "just-me" or "link". Applied at install. */
+    val visibility: String? = null,
 )
 
 @Serializable

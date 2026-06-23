@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 /// D.6.1 — VibeCodeProviderPickScreen.
 public struct VibeCodeProviderPickScreen: View {
@@ -80,22 +81,48 @@ private struct PromoBadge: View {
     }
 }
 
-/// D.6.3 — VibeCodeDescribeScreen.
+/// D.6.3 — VibeCodeDescribeScreen. The "new service" form: describe the app, name
+/// it, and choose who can see it. The AI was already chosen on the provider-pick
+/// step upstream, so it is NOT asked again here. Name + visibility are decided by
+/// the user (not fixed) and ride the build request.
 public struct VibeCodeDescribeScreen: View {
+    /// Who can reach the built service. Raw values are the wire contract carried
+    /// on `VibeCodeStartRequest.visibility` (mirrored on every client).
+    public enum Visibility: String, CaseIterable, Sendable {
+        case justMe = "just-me"
+        case anyoneWithLink = "link"
+        var label: String { self == .justMe ? "Just me" : "Anyone with the link" }
+    }
+
+    @Environment(AppState.self) private var app
     @State private var prompt: String = "A little site to track which of my houseplants I've watered, with a photo per plant. Send me a push when one's been thirsty 5+ days."
-    @State private var name: String = "plants"
+    @State private var name: String = ""
+    @State private var visibility: Visibility = .justMe
     @FocusState private var promptFocused: Bool
-    var onBuild: (String) -> Void = { _ in }
-    public init(onBuild: @escaping (String) -> Void = { _ in }) { self.onBuild = onBuild }
+
+    /// Continuation — (prompt, chosen service name/slug, visibility raw value).
+    var onBuild: (String, String, String) -> Void = { _, _, _ in }
+    public init(onBuild: @escaping (String, String, String) -> Void = { _, _, _ in }) {
+        self.onBuild = onBuild
+    }
+
+    /// The address label the box will serve at. Lowercased; only the safe slug
+    /// characters survive (the daemon is the authority, this is just the preview
+    /// + what we send).
+    private var slug: String {
+        name.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" }
+    }
+    private var canBuild: Bool { !slug.isEmpty }
 
     public var body: some View {
-        FSScreen {
+        let user = app.currentUser ?? "you"
+        return FSScreen {
             ScrollView {
                 VStack(alignment: .leading, spacing: FS.space.s6) {
                     Spacer().frame(height: FS.space.s12)
                     Text("New service").font(FS.font.h2())
                     FSColorReader { c in
-                        Text("Describe what you want. Your Flagship will build it and run it at \(name).harry.flagship.services.")
+                        Text("Describe what you want. Your Flagship will build it and run it at \(slug.isEmpty ? "<name>" : slug).\(user).flagship.services.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                     }
 
@@ -109,13 +136,34 @@ public struct VibeCodeDescribeScreen: View {
                         }
                     }
 
-                    FSCard {
-                        LabeledRow(label: "Name", value: name)
-                        LabeledRow(label: "Visible to", value: "Just me")
-                        LabeledRow(label: "AI", value: "Claude (Flagship credits)")
+                    // YOU decide the name + who can see it. (The AI was chosen on
+                    // the previous step — not asked again.)
+                    FSField(
+                        value: $name,
+                        label: "Name",
+                        placeholder: "plant-tracker",
+                        helper: "Lowercase letters, digits, and dashes — this is its web address."
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .accessibilityIdentifier("describe-name-field")
+
+                    FSColorReader { c in
+                        VStack(alignment: .leading, spacing: FS.space.s2) {
+                            Text("Visible to").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            Picker("Visible to", selection: $visibility) {
+                                ForEach(Visibility.allCases, id: \.self) { v in
+                                    Text(v.label).tag(v)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("describe-visibility")
+                        }
                     }
 
-                    FSPrimaryButton("Build it", block: true, large: true, action: { onBuild(prompt) })
+                    FSPrimaryButton("Build it", enabled: canBuild, block: true, large: true, action: {
+                        onBuild(prompt, slug, visibility.rawValue)
+                    })
                     FSColorReader { c in
                         Text("about 90 seconds")
                             .font(.system(size: 13))

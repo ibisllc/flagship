@@ -523,15 +523,19 @@ struct VibeCodeDescribeContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(ToastCenter.self) private var toasts
     var body: some View {
-        VibeCodeDescribeScreen(onBuild: { prompt in
+        VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             Task {
                 do {
                     // Seed the box's model with the credential chosen at the
                     // AI-key step (kept on the holder so the describe screen
-                    // could re-render without losing it).
+                    // could re-render without losing it). Name + visibility are
+                    // the owner's choices on the form (no longer fixed).
                     let cred = holder.credential
                     let resp = try await client.vibeCodeStart(
-                        VibeCodeStartRequest(prompt: prompt, model: nil, credential: cred)
+                        VibeCodeStartRequest(
+                            prompt: prompt, model: nil, credential: cred,
+                            name: name, visibility: visibility
+                        )
                     )
                     if resp.needsCredential == true {
                         // The box still has no usable model — route BACK into

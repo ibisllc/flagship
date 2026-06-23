@@ -649,6 +649,17 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!attach.ok) return jerr(400, attach.reason);
       const cred = parseCredential((body as { credential?: unknown }).credential);
       if (cred === "invalid") return jerr(400, "malformed credential");
+      // Owner choices from the Describe form (no longer fixed). `name` is a
+      // slug hint — sanitize to the safe address charset; `visibility` is the
+      // reach. Both optional (legacy clients omit them).
+      const preferredName =
+        typeof body.name === "string"
+          ? body.name.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 63)
+          : undefined;
+      const visibility =
+        body.visibility === "just-me" || body.visibility === "link"
+          ? body.visibility
+          : undefined;
       const session = deps.vibeCode.registry.create({
         username: deps.vibeCode.username,
         serverFqdn: deps.vibeCode.serverFqdn,
@@ -686,6 +697,8 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           prompt: body.prompt,
           model: body.model,
           ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
+          ...(preferredName ? { preferredName } : {}),
+          ...(visibility ? { visibility } : {}),
         }).catch((e: Error) => {
           session.fail(e.message ?? "stream failed", true);
         });

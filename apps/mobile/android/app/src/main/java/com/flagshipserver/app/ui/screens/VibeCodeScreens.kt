@@ -2,6 +2,7 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -48,6 +50,7 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -170,10 +173,17 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             "A little site to track which of my houseplants I've watered, with a photo per plant. Send me a push when one's been thirsty 5+ days.",
         )
     }
-    var name by remember { mutableStateOf("plants") }
+    // YOU decide the name + who can see it (no longer fixed). The AI was chosen
+    // on the previous step — not asked again here.
+    var name by remember { mutableStateOf("") }
+    var visibility by remember { mutableStateOf("just-me") }
+    // The web-address label: lowercased, only the safe slug characters survive.
+    val slug = name.lowercase().filter { it.isLetterOrDigit() || it == '-' }
 
     val screens = LocalScreensClient.current
     val toasts = LocalToastCenter.current
+    val appState = LocalAppState.current
+    val username = appState.currentUser.value ?: "you"
     val scope = rememberCoroutineScope()
     // A credential picked at the AI-key step (BYOK path) — null for promo.
     val credential = remember { PendingBuildCredential.peek() }
@@ -194,7 +204,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
         )
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            text = "Describe what you want. Your Flagship will build it and run it at $name.harry.flagship.services.",
+            text = "Describe what you want. Your Flagship will build it and run it at ${if (slug.isEmpty()) "<name>" else slug}.$username.flagship.services.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
         )
@@ -240,11 +250,46 @@ fun VibeCodeDescribeScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s8))
 
-        // Structured below-the-fold fields
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            LabelRow("Name", name)
-            LabelRow("Visible to", "Just me")
-            LabelRow("AI", "Claude (Flagship credits)")
+        // Owner-editable name (→ slug/address) + who can see it. (AI was chosen
+        // on the previous step — not asked again.)
+        FSField(
+            value = name,
+            onValueChange = { name = it },
+            label = "Name",
+            placeholder = "plant-tracker",
+            helper = "Lowercase letters, digits, and dashes — this is its web address.",
+            fieldTag = "vibe-describe-name",
+        )
+
+        Spacer(Modifier.height(FS.space.s4))
+
+        Text(
+            text = "Visible to",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            for ((value, label) in listOf("just-me" to "Just me", "link" to "Anyone with the link")) {
+                val selected = visibility == value
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(FS.radius.sm))
+                        .background(if (selected) FS.colors.primary else FS.colors.surfaceSunken)
+                        .border(1.dp, if (selected) FS.colors.primary else FS.colors.border, RoundedCornerShape(FS.radius.sm))
+                        .clickable { visibility = value }
+                        .padding(vertical = 10.dp)
+                        .testTag("vibe-describe-visibility-$value"),
+                ) {
+                    Text(
+                        text = label,
+                        color = if (selected) Color.White else FS.colors.text,
+                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(FS.space.s4))
@@ -283,7 +328,10 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             BuildCredential(it.provider, it.apiKey, it.baseUrl)
                         }
                         val resp = screens.vibeCodeStart(
-                            VibeCodeStartRequest(prompt = prompt, credential = cred),
+                            VibeCodeStartRequest(
+                                prompt = prompt, credential = cred,
+                                name = slug, visibility = visibility,
+                            ),
                         )
                         if (resp.needsCredential) {
                             // Box wants a key — route into the AI-key step.
@@ -305,7 +353,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                     }
                 }
             },
-            enabled = !starting,
+            enabled = !starting && slug.isNotEmpty(),
             block = true,
             large = true,
         )

@@ -204,9 +204,19 @@ async function send() {
   try {
     if (!activeSessionId) {
       // First turn — start the session, carrying the BYOK credential so the
-      // box can drive the build with the owner's chosen key.
+      // box can drive the build with the owner's chosen key. YOU decide the
+      // name (→ slug/web address) + who can see it; both ride the start.
       const startBody = { prompt: text, attachments };
       if (buildCredential) startBody.credential = buildCredential;
+      const nameEl = $("vc-name");
+      const slug = nameEl
+        ? nameEl.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
+        : "";
+      if (slug) startBody.name = slug;
+      const visEl = $("vc-visibility");
+      if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
+        startBody.visibility = visEl.value;
+      }
       const r = await screensFetch("/api/screens/vibe-code/start", {
         method: "POST",
         body: JSON.stringify(startBody),
@@ -234,6 +244,10 @@ async function send() {
       // sliver as "building <subject> on <server>" until it deploys or fails.
       buildSubject = subjectFromPrompt(text);
       registerBuildOp();
+      // Name + visibility are first-turn-only — fold them away now the session
+      // is running (they can't change mid-build).
+      const ft = $("vc-first-turn");
+      if (ft) ft.classList.add("hidden");
     } else if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
@@ -456,6 +470,13 @@ function reset() {
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
   promptEl.value = "";
+  // Restore the first-turn name + visibility settings for a fresh build.
+  const ft = $("vc-first-turn");
+  if (ft) ft.classList.remove("hidden");
+  const nameEl = $("vc-name");
+  if (nameEl) nameEl.value = "";
+  const visEl = $("vc-visibility");
+  if (visEl) visEl.value = "just-me";
   $("vc-status").textContent = "idle";
   $("vc-messages").innerHTML =
     '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
