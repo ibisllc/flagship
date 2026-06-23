@@ -45,6 +45,15 @@ struct SecretRequestsContainer: View {
                         ForEach(requests) { req in
                             SecretRequestCard(
                                 request: req,
+                                // First boot vs established reboot: a box that has
+                                // never come online (no daemon check-in, no cert)
+                                // is on its FIRST boot, where this approval also
+                                // authorizes it to serve — so show the full copy.
+                                // A box that has come online before is just
+                                // re-unlocking, so the "…join your cloud" phrase is
+                                // noise. Unknown (pod not in the list yet) defaults
+                                // to first-boot = the fuller copy (today's wording).
+                                isFirstBoot: isFirstBoot(req.serverDomain),
                                 isInFlight: inFlightId == req.id,
                                 onApprove: { await approve(req) }
                             )
@@ -114,6 +123,18 @@ struct SecretRequestsContainer: View {
         }
     }
 
+    /// True when the box behind [serverDomain] has NOT come online before — its
+    /// FIRST boot, where the unlock approval also authorizes serving. Reads the
+    /// per-pod `cameOnline` already on `AppState.pods` (populated by the /pods
+    /// reconcile). A box absent from the list (no reconcile yet) defaults to
+    /// first-boot, i.e. the fuller copy = today's wording.
+    private func isFirstBoot(_ serverDomain: String) -> Bool {
+        guard let pod = app.pods.first(where: {
+            $0.fqdn.lowercased() == serverDomain.lowercased()
+        }) else { return true }
+        return !pod.cameOnline
+    }
+
     private func approve(_ req: SecretRequestCoordinator.VerifiedRequest) async {
         guard let coord = makeCoordinator() else { return }
         inFlightId = req.id
@@ -138,16 +159,23 @@ struct SecretRequestsContainer: View {
 private struct SecretRequestCard: View {
     @Environment(\.colorScheme) private var scheme
     let request: SecretRequestCoordinator.VerifiedRequest
+    /// The box behind this request has never come online — its FIRST boot.
+    let isFirstBoot: Bool
     let isInFlight: Bool
     let onApprove: () async -> Void
 
     private var purposeLabel: String {
-        // Approving the unlock now ALSO deposits the box's entitlement (consent
-        // to boot ⇒ consent to serve), so the box comes online with this one
-        // approval. (A first-boot-only "Unlock device" / established-reboot split
-        // is a future refinement once per-pod liveness is threaded in here.)
+        // On a FIRST boot the unlock approval ALSO deposits the box's entitlement
+        // (consent to boot ⇒ consent to serve), so it both unlocks AND authorizes
+        // the box to join the cloud — the fuller copy. On an established reboot
+        // the box is already authorized, so the approval is purely a disk unlock;
+        // the "…join your cloud" phrase is just noise. (The deposit still fires on
+        // every approval — harmless on reboots — so this is copy only.)
         switch request.purpose {
-        case .unlockKey:    return "Unlock device and authorize it to join your cloud"
+        case .unlockKey:
+            return isFirstBoot
+                ? "Unlock device and authorize it to join your cloud"
+                : "Unlock device"
         case .entitlement:  return "Authorize device to join your cloud"
         case .none:         return "Boot secret"
         }

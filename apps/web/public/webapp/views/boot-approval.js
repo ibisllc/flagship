@@ -15,6 +15,7 @@ import {
   satisfy,
   BOX_REQUEST_TYPES,
 } from "../lib/bootApproval.js";
+import { fetchFirstBootMap } from "../lib/boxInbox.js";
 
 registerView("view-boot-approval");
 
@@ -22,9 +23,9 @@ let inFlightId = null;
 let pollTimer = null;
 const POLL_MS = 5000;
 
-function typeTitle(purpose) {
+function typeTitle(purpose, ctx) {
   const spec = BOX_REQUEST_TYPES[purpose];
-  if (spec) return spec.title();
+  if (spec) return spec.title(ctx);
   return "Approval request";
 }
 
@@ -38,8 +39,11 @@ function infoRow(label, value) {
   `;
 }
 
-function requestCard(req) {
+function requestCard(req, firstBootMap = {}) {
   const info = req.deviceInfo || {};
+  // First boot vs established reboot, derived from the cheap /pods directory:
+  // unknown ⇒ first-boot (the fuller copy, today's wording).
+  const firstBoot = firstBootMap[req.serverDomain] ?? true;
   // Any type the registry knows how to satisfy is actionable here (the webapp
   // is now at parity with mobile — it answers unlock-key AND entitlement).
   const actionable = !!BOX_REQUEST_TYPES[req.purpose];
@@ -52,7 +56,7 @@ function requestCard(req) {
   return `
     <div class="card" data-boot-request-id="${escapeHtml(req.id)}">
       <div class="value server-fqdn">${escapeHtml(req.serverDomain)}</div>
-      <p class="note small">${escapeHtml(typeTitle(req.purpose))}</p>
+      <p class="note small">${escapeHtml(typeTitle(req.purpose, { firstBoot }))}</p>
       ${
         req.deviceInfo
           ? `<div class="mt-1">
@@ -102,7 +106,11 @@ export async function renderBootApproval() {
     root.innerHTML = `<div class="card placeholder">No box is waiting for approval right now.</div>`;
     return;
   }
-  root.innerHTML = verified.map(requestCard).join("");
+  // Cheap, non-biometric: which boxes are on their FIRST boot (so the unlock
+  // copy reads fuller). Best-effort — a blip leaves the map empty ⇒ every card
+  // defaults to first-boot (today's wording), never a worse state.
+  const firstBootMap = await fetchFirstBootMap().catch(() => ({}));
+  root.innerHTML = verified.map((req) => requestCard(req, firstBootMap)).join("");
   bindCards(root, verified);
 }
 

@@ -66,6 +66,42 @@ export async function fetchInbox(deps = {}) {
 }
 
 /**
+ * Cheap, unauthenticated map of "is this box on its FIRST boot?" across the
+ * owner's pods — `true` when the box has never come online (no daemon check-in
+ * AND no cert), which is exactly when an unlock approval also authorizes serving
+ * (so the copy reads fuller). Same `/pods` read as the inbox digest, no
+ * biometric. A box absent from the map ⇒ caller defaults to first-boot (the
+ * fuller copy). Mirrors the mobile `PodInfo.cameOnline` derivation.
+ * @param {{ fetch?: typeof fetch, comBase?: string, getSession?: Function }} [deps]
+ * @returns {Promise<Record<string, boolean>>} serverDomain → firstBoot
+ */
+export async function fetchFirstBootMap(deps = {}) {
+  const session = deps.getSession ? deps.getSession() : getSession();
+  const username = session.username;
+  if (!username) return {};
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || COM_BASE;
+  let body;
+  try {
+    const r = await f(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, {
+      cache: "no-store",
+    });
+    if (!r.ok) return {};
+    body = await r.json();
+  } catch {
+    return {};
+  }
+  /** @type {Record<string, boolean>} */
+  const out = {};
+  for (const pod of body?.pods ?? []) {
+    if (!pod?.serverDomain) continue;
+    const cameOnline = pod.lastReported != null || pod.currentCert != null;
+    out[pod.serverDomain] = !cameOnline;
+  }
+  return out;
+}
+
+/**
  * The app-scope inbox store (mirrors ToastCenter / activeOperations: a tiny
  * observable + a foreground poll loop). The UI reads only from here.
  */

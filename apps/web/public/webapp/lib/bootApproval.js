@@ -456,11 +456,25 @@ async function respondEntitlement(req, deps = {}) {
  * present it and how to satisfy it. Adding a future type is one entry here +
  * a `purpose` string — no new plumbing, no new watcher. The webapp is now at
  * parity with mobile: it answers BOTH `unlock-key` and `entitlement`.
+ *
+ * `title(ctx)` takes an optional `{ firstBoot }` context: on a FIRST boot the
+ * unlock approval ALSO deposits the box's entitlement (consent to boot ⇒ consent
+ * to serve), so it both unlocks AND authorizes serving — the fuller copy. On an
+ * established reboot the box is already authorized, so the "…join your cloud"
+ * phrase is noise. `firstBoot` defaults true (unknown ⇒ the fuller copy = the old
+ * wording). The deposit still fires on every approval — harmless on reboots — so
+ * this is copy only.
  */
 export const BOX_REQUEST_TYPES = {
   "unlock-key": {
-    title: () => "Unlock device and authorize it to join your cloud",
-    detail: () => "Unlocks the encrypted disk and authorizes this box to serve your account.",
+    title: (ctx = {}) =>
+      (ctx.firstBoot ?? true)
+        ? "Unlock device and authorize it to join your cloud"
+        : "Unlock device",
+    detail: (ctx = {}) =>
+      (ctx.firstBoot ?? true)
+        ? "Unlocks the encrypted disk and authorizes this box to serve your account."
+        : "Unlocks the encrypted disk so this box comes back online.",
     respond: respondUnlock,
   },
   entitlement: {

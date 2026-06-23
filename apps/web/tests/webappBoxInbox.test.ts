@@ -87,4 +87,14 @@ describe("Box Request type registry (mobile/webapp parity)", () => {
   it("satisfy() rejects an unknown request type", async () => {
     await expect(satisfy({ purpose: "bogus" } as never)).rejects.toThrow(/unsupported request type/);
   });
+
+  it("unlock-key title splits first-boot (full) vs established reboot (short)", () => {
+    const unlock = BOX_REQUEST_TYPES["unlock-key"];
+    // First boot ⇒ the fuller copy (also authorizes serving).
+    expect(unlock.title({ firstBoot: true })).toBe("Unlock device and authorize it to join your cloud");
+    // Established reboot ⇒ just the disk unlock; no "…join your cloud" noise.
+    expect(unlock.title({ firstBoot: false })).toBe("Unlock device");
+    // Unknown (no context) ⇒ defaults to the fuller copy (today's wording).
+    expect(unlock.title()).toBe("Unlock device and authorize it to join your cloud");
+  });
 });
