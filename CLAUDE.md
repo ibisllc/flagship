@@ -133,6 +133,69 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 — graceful server REPLACEMENT & decommission hand-off (full stack, all surfaces)
+
+**Why:** re-issuing a recipe and booting a 2nd box for an ACTIVE server makes the
+two FIGHT for the route — the hub is `podCanonical` last-register-wins, so two live
+boxes flap the FQDN and serve DIVERGENT data (split-brain), churn ACME, etc. So
+replacing a server now first RETIRES the incumbent: a signed eviction notice tells
+it to flush a final backup, release routing, and power off (optionally wipe), and
+only then does the replacement claim the name. Spec:
+`docs/server-replacement-graceful-decommission.md`.
+
+**The model (3 invariants):** (I1) only an **owner-IRK-signed** order causes a box to
+release/power-off — `.com`/Fly may store/replay/hint, never authorize; (I2) the order
+is **instance-bound** to the retiring box's STK (`retiredStkPubHex`), so a replayed
+order can never retire the NEW tenant; (I3) **backup ≠ routing** — the closeout is
+entirely OUTBOUND (box→`.com` for the order, box→peers for the flush), so revoking
+routing never blocks the final backup (audited: the deposit records ONLY the eviction,
+never `servers.revoke`; peer-backup auth is STK/namespace-based). The successor carries
+the FULL eviction chain + the phone remembers all evictions; the hub's revoked-set is
+EPHEMERAL (rebuilt from what a connecting box presents / a `.com` lookup, purged on
+disconnect), so `.com` GCs after acks + T. Disk disposition is a signed choice:
+`keep` / `wipe-after-handoff` (recommended — wipe only after the replacement confirms
+a good restore; fail-safe to keep on timeout) / `wipe-now`. L3: the phone retires the
+old instance so an encrypted zombie's unlock is never re-approved.
+
+**Built — all layers, CI-green, on `feat/graceful-decommission`:**
+- **protocol** — `flagship/server-decommission/v1` owner-IRK envelope
+  (`legacyEnvelopes.ts`), byte-identical Swift (`ServerDecommissionOrders.swift`) +
+  Kotlin mirrors, pinned cross-platform vector.
+- **storage** — `server_evictions` lane (migration **0063**): one table serving the
+  retiring box's order-fetch + the successor's chain + the hub revoked-set + the ack/GC
+  lifecycle. InMemory + D1 + parity (70).
+- **control-plane** (`serverDecommission.ts`) — deposit (owner mailbox-auth + verify
+  under the owner IRK) · box-fetch-own-order (public, revoke-tolerant) · chain-fetch ·
+  epoch-complete (§9 barrier) · advisory acks · `*/10` GC cron (30-day TTL).
+- **hub** (`tunnelHub.ts` + `evictionCache.ts`) — `evictionLookup` rejects an evicted
+  STK at HELLO with reason `"replaced"`, **fail-OPEN** on a `.com` outage (a blip must
+  not brick registration); the signed order rides the box's own poll (the HELLO_ACK
+  reason is a single string).
+- **daemon** (`decommissionConsumer.ts`) — heartbeat poll → verify under
+  `cfg.irkPublicKey` → STK-gate → final-flush + epoch-report → release routing →
+  disposition (`executeLockAndPower` / `realWipeContent`, `wipe-after-handoff` fails
+  safe). Never throws. Wired into `wireOwnerHandlers`.
+- **clients** (iOS/Android/webapp) — "Replace this server" on server-detail: backup
+  pre-flight gate (HARD; native reads `peerBackupStatus`, fail-closed) · disposition
+  picker · resolve the box STK BEFORE the biometric (I2) · sign + deposit · L3 retire
+  (`removePod` / a per-profile suppression set).
+
+Gates: `tsc -b` clean · full `vitest` **6364** (+ storage parity 70, control-plane
+decommission 16, hub eviction 4, daemon consumer 16, webapp 9) · iOS `xcodebuild test`
+**9/9** (ReplaceServer) · Android `:app:testDebugUnitTest` **9/9** · Swift vector 5/5 ·
+Kotlin BUILD SUCCESSFUL.
+
+**Deploy prereqs (owner):** apply migration **0063** before the next `.com` Worker
+deploy (the predeploy migration gate blocks otherwise); the hub `evictionLookup` rides
+the `.services` Fly deploy. **REMAINING (owner, NOT CI-validatable):** a REBURN to
+validate the box-side `decommissionConsumer` live (the consume/verify/disposition path
+is unit-tested; the physical retire is not). **Documented refinements (not v1):** the
+§8b "box PRESENTS the chain on HELLO" optimization (v1 has the hub query `.com`); the
+encryption-conditional GC (v1 uses a generous TTL); a per-pod `backupEnrolled` signal
+on `/pods` (the client gate currently keys off the create-time choice / `peerBackupStatus`,
+fail-closed); epoch-tagged SHARDED peer-backup (the §9 barrier report is wired; sharding
+is a pre-existing v2 TODO).
+
 ### 2026-06-23 — build-a-service ENABLED on real boxes: phone-provisioned SWK at first boot (+ honest "not set up" copy)
 
 **Why:** "Import from Git repo" (and ALL of build-a-service / `/api/services`) returned
