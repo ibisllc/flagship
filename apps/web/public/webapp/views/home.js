@@ -28,6 +28,7 @@ import {
 import { controlApex } from "../lib/apex.js";
 import { isServerDecommissioned } from "../lib/serverReplacement.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
+import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -886,6 +887,13 @@ export async function renderHome() {
       // swkDeposit.js); best-effort + non-blocking so it never delays a render.
       if (pod?.identityPubKey) {
         depositSwkIfNeeded({
+          serverDomain: String(s.serverId),
+          identityPubKeyHex: String(pod.identityPubKey),
+        }).catch(() => {});
+        // Secret-free pairing: seal + deposit the stashed create-time order to
+        // the box's directory identity so it pairs with no manual tap. No-ops
+        // unless a deposit is owed (idempotent via pairingDeposit.js).
+        depositPairingIfNeeded({
           serverDomain: String(s.serverId),
           identityPubKeyHex: String(pod.identityPubKey),
         }).catch(() => {});

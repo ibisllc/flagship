@@ -691,27 +691,66 @@ async function buildEntitlementCarrier({ username, podPubKeyHex, podCanonical, i
   return bytesToHex(te(json));
 }
 
+export function pairingOrderToJson(request, signature) {
+  return JSON.stringify({
+    request: {
+      type: "add-paired-session",
+      serverId: request.serverId,
+      token: request.token,
+      label: request.label,
+      issuedAt: request.issuedAt,
+    },
+    signature: bytesToHex(signature),
+  });
+}
+
 /**
- * Create-time pairing — the webapp's half of pairing the creating device with a
- * server BEFORE the box exists. Mirror of iOS `CreateTimePairing.build` + the
- * daemon's `consumePendingPairing`.
- *
- * The box generates its own identity key only at first boot, so we can't seal a
- * pairing order to it now. We mint a fresh PAIRING keypair, seal an owner-IRK-
- * signed `add-paired-session` order FOR its public half, DEPOSIT the sealed blob
- * to `.com` (content-blind), and return:
- *   - `token` — persist as the session token so the BFF auths once the box
- *     claims the deposit, and
- *   - `pairingKeyPrivHex` — embed in the recipe (unsigned sibling) so the
- *     booting box opens the deposit and comes online ALREADY paired.
+ * Build the owner-IRK-signed `add-paired-session` order at CREATE time (the
+ * secret-free pairing path -- NO pairing keypair, NO recipe-embedded secret).
+ * Reuses the create-server biometric IRK. Returns the `token` (persist as this
+ * device's session token so the BFF auths the moment the box claims the order)
+ * + the plaintext `pairingOrderJson` (`pairingOrderToJson` shape) the caller
+ * either EMBEDS (offline) or STASHES to seal + deposit post-registration.
  *
  * @param {{ serverDomain: string, label?: string }} args
- * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function,
- *   now?: () => number, token?: string, pairingKeyPair?: CryptoKeyPair }} [deps]
- * @returns {Promise<{ token: string, pairingKeyPrivHex: string }>}
+ * @param {{ signWithIrk?: Function, now?: () => number, token?: string }} [deps]
+ * @returns {Promise<{ token: string, pairingOrderJson: string }>}
  */
-export async function depositCreateTimePairing(args, deps = {}) {
+export async function buildPairingOrder(args, deps = {}) {
   const { serverDomain } = args;
+  const session = getSession();
+  if (!session.username) throw new Error("sign in first");
+  if (!session.umk) throw new Error("unlock the webapp first");
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  const token = deps.token || bytesToHex(randomBytes(32));
+  const label = String(args.label || "webapp")
+    .replace(/[| -]/g, " ").trim() || "webapp";
+  const orderCanonical = te(
+    ["flagship/order/add-paired-session/v1", serverDomain, token, label, now].join("|"),
+  );
+  const orderSig = await sign(session.umk, orderCanonical);
+  const pairingOrderJson = pairingOrderToJson(
+    { serverId: serverDomain, token, label, issuedAt: now },
+    orderSig,
+  );
+  return { token, pairingOrderJson };
+}
+
+/**
+ * DEFAULT (online) pairing deposit -- the secret-free twin of `depositSwk`.
+ * Once the box has registered (carrying its IDENTITY pub in `/pods`), SEAL the
+ * create-time `pairingOrderJson` to that identity and deposit it on `.com`'s
+ * blind `pairing-deposit` lane. `.com` holds only ciphertext (I1); the box
+ * unseals with its identity key, verifies the owner-IRK order, and adds the
+ * session (no manual tap). Sealing is a public-key op -- NO second biometric.
+ *
+ * @param {{ serverDomain: string, identityPubKeyHex: string, pairingOrderJson: string }} args
+ * @param {{ fetch?: typeof fetch, comBase?: string, signWithIrk?: Function, now?: () => number }} [deps]
+ */
+export async function depositPairingOrder(args, deps = {}) {
+  const { serverDomain, identityPubKeyHex, pairingOrderJson } = args;
   const session = getSession();
   const username = session.username;
   if (!username) throw new Error("sign in first");
@@ -721,28 +760,14 @@ export async function depositCreateTimePairing(args, deps = {}) {
   const sign = deps.signWithIrk || defaultSignWithIrk;
   const now = (deps.now || Date.now)();
 
-  // 1. Fresh recipe pairing keypair. Export the raw Ed25519 pub (the seal
-  //    recipient) + the 32-byte seed (RFC 8410 pkcs8 = 16-byte prefix || seed).
-  const kp = deps.pairingKeyPair
-    || (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]));
-  const pairingPub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
-  const pairingSeed = pkcs8.slice(pkcs8.length - 32);
-  const pairingKeyPrivHex = bytesToHex(pairingSeed);
+  const boxIdentityPub = hexToBytes(String(identityPubKeyHex).toLowerCase());
+  // Seal the plaintext order JSON DIRECTLY to the box identity -- the daemon's
+  // pairing-deposit consumer unseals `deposit.sealed` and decodes it as the
+  // `{request, signature}` JSON (no carrier wrapper, unlike the SWK lane).
+  const sealed = await sealForBoxStk(te(pairingOrderJson), boxIdentityPub);
+  const stkPubHex = String(identityPubKeyHex).toLowerCase();
 
-  // 2. Owner-IRK-signed add-paired-session order (mirror podPair.js canonical).
-  const token = deps.token || bytesToHex(randomBytes(32));
-  const label = String(args.label || "webapp")
-    .replace(/[| -]/g, " ").trim() || "webapp";
-  const order = { type: "add-paired-session", serverId: serverDomain, token, label, issuedAt: now };
-  const orderCanonical = te(
-    ["flagship/order/add-paired-session/v1", serverDomain, token, label, now].join("|"),
-  );
-  const orderSig = await sign(session.umk, orderCanonical);
-  const envelope = te(JSON.stringify({ request: order, signature: bytesToHex(orderSig) }));
-  const sealed = await sealForBoxStk(envelope, pairingPub);
-
-  // 3. IRK mailbox-auth (same shape as fetchVerifiedRequests).
+  // IRK mailbox-auth -- same shape as the SWK / entitlement deposit.
   const phoneIrkPubHex = await irkPubHex(session.umk);
   const nonceHex = bytesToHex(randomBytes(32));
   const authCore = {
@@ -753,14 +778,13 @@ export async function depositCreateTimePairing(args, deps = {}) {
     session.umk,
     canonicalDeviceEndpointClaim({ ...authCore, phoneIrkPubHex, nonceHex }),
   );
-
   const body = {
     auth: authCore,
     authSignature: bytesToHex(authSig),
     deposit: {
       serverDomain,
       requestNonceHex: bytesToHex(randomBytes(32)),
-      stkPub: bytesToHex(pairingPub),
+      stkPub: stkPubHex,
       sealed: bytesToHex(sealed),
       issuedAt: now,
     },
@@ -774,7 +798,7 @@ export async function depositCreateTimePairing(args, deps = {}) {
     const txt = await r.text().catch(() => "");
     throw new Error(`pairing-deposit: HTTP ${r.status} ${txt}`.trim());
   }
-  return { token, pairingKeyPrivHex };
+  return { ok: true };
 }
 
 // Exported for the conversion / seal unit test cross-check.
