@@ -432,6 +432,8 @@ class AppState(
         liveness: PodInfo.Liveness? = null,
         lastSeenMsAgo: Long? = null,
         lastReported: Long? = null,
+        identityPubKeyHex: String = "",
+        leadsServices: List<String> = emptyList(),
     ): String {
         // HONEST LIVENESS (Fix A) — derive the pod's status from the
         // server-authoritative `liveness` field instead of trusting that a
@@ -457,7 +459,8 @@ class AppState(
             // (don't clobber a richer name). A box whose reachability changed,
             // came online, or is now waiting for an approval is re-flowed below.
             if (old.status == derivedStatus && old.cameOnline && !awaitingUnlock &&
-                old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo
+                old.liveness == liveness && old.lastSeenMsAgo == lastSeenMsAgo &&
+                old.leadsServices == leadsServices
             ) {
                 return old.podId
             }
@@ -474,6 +477,9 @@ class AppState(
                     liveness = liveness,
                     lastSeenMsAgo = lastSeenMsAgo,
                     lastReported = lastReported ?: old.lastReported,
+                    // Keep a known STK; never downgrade to empty on a sparse update.
+                    identityPubKeyHex = identityPubKeyHex.ifEmpty { old.identityPubKeyHex },
+                    leadsServices = leadsServices,
                 )
             }
             return old.podId
@@ -492,6 +498,8 @@ class AppState(
                 liveness = liveness,
                 lastSeenMsAgo = lastSeenMsAgo,
                 lastReported = lastReported,
+                identityPubKeyHex = identityPubKeyHex,
+                leadsServices = leadsServices,
             ),
         )
         return id
@@ -641,6 +649,18 @@ data class PodInfo(
      *  from `/pods`), threaded for completeness. null ⇒ never reported. Mirror
      *  of iOS PodInfo.lastReported. */
     val lastReported: Long? = null,
+    /** The box's registered STK (its identity pubkey, hex) from `/pods`
+     *  (`identityPubKey`). Threaded onto the model so the "Set as preferred
+     *  server" owner vote can name THIS box's STK (`preferredStkPubHex`) without a
+     *  second directory fetch. Empty for pending/demo pods. Mirror of iOS
+     *  PodInfo.identityPubKeyHex. */
+    val identityPubKeyHex: String = "",
+    /** Per-service leadership (Phase 6) — the service slugs this box currently
+     *  LEADS, relayed verbatim from `/pods` (`leadsServices`). Additive + tolerant
+     *  of absence: empty when `.com` didn't carry it (pre-field Worker) or the box
+     *  leads nothing. Surfaced as a small "lead" indicator on the server card.
+     *  Mirror of iOS PodInfo.leadsServices. */
+    val leadsServices: List<String> = emptyList(),
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 

@@ -334,6 +334,7 @@ class MainActivity : FragmentActivity() {
                         // (idempotent, best-effort, no-op unless owed).
                         val swkStore = com.flagshipserver.app.core.PendingSwkDepositStore.from(appContext)
                         val pairingStore = com.flagshipserver.app.core.PendingPairingDepositStore.from(appContext)
+                        val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(appContext)
                         com.flagshipserver.app.core.PendingServerReconciler(
                             app = appState,
                             mailbox = effectiveMailbox,
@@ -341,7 +342,7 @@ class MainActivity : FragmentActivity() {
                                 val user = appState.currentUser.value
                                 if (!user.isNullOrEmpty()) {
                                     com.flagshipserver.app.core.SwkDepositCoordinator
-                                        .live(user, effectiveMailbox, swkStore, pairingStore)
+                                        .live(user, effectiveMailbox, swkStore, pairingStore, cgkStore)
                                         .depositIfNeeded(fqdn, identityPubKeyHex)
                                 }
                             },
