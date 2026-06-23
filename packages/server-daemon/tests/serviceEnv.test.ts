@@ -92,32 +92,32 @@ function runStoreContract(label: string, factory: () => Promise<AppEnvStore>): v
     // former appByok round-trip, now generic).
     it("put then get round-trips the full env map", async () => {
       const env: AppEnv = { OPENAI_API_KEY: SECRET, REGION: "us" };
-      await store.put("alice-envapp", env);
-      expect(await store.get("alice-envapp")).toEqual(env);
+      await store.put("alice--envapp", env);
+      expect(await store.get("alice--envapp")).toEqual(env);
     });
 
     // Justification: names() is the ONLY non-runtime accessor and must
     // never carry a value (replaces the byok `describe()` redaction).
     it("names() returns sorted KEY NAMES only — never a value", async () => {
-      await store.put("alice-envapp", { B_KEY: SECRET, A_KEY: "x" });
-      const names = await store.names("alice-envapp");
+      await store.put("alice--envapp", { B_KEY: SECRET, A_KEY: "x" });
+      const names = await store.names("alice--envapp");
       expect(names).toEqual(["A_KEY", "B_KEY"]);
       expect(JSON.stringify(names)).not.toContain(SECRET);
     });
 
     // Justification: env is strictly scoped to one serviceId.
     it("get is scoped per app — another app sees nothing", async () => {
-      await store.put("alice-envapp", { K: SECRET });
-      expect(await store.get("alice-otherapp")).toBeNull();
-      expect(await store.names("alice-otherapp")).toEqual([]);
+      await store.put("alice--envapp", { K: SECRET });
+      expect(await store.get("alice--otherapp")).toBeNull();
+      expect(await store.names("alice--otherapp")).toEqual([]);
     });
 
     // Justification: uninstall must be able to fully drop the values.
     it("forget removes the env; idempotent", async () => {
-      await store.put("alice-envapp", { K: SECRET });
-      await store.forget("alice-envapp");
-      await store.forget("alice-envapp");
-      expect(await store.get("alice-envapp")).toBeNull();
+      await store.put("alice--envapp", { K: SECRET });
+      await store.forget("alice--envapp");
+      await store.forget("alice--envapp");
+      expect(await store.get("alice--envapp")).toBeNull();
     });
   });
 }
@@ -142,7 +142,7 @@ describe("FileAppEnvStore — sealed at rest + persistence", () => {
   // Justification (invariant c): no plaintext value on disk.
   it("never writes a value in plaintext to disk + file is 0o600", async () => {
     const store = new FileAppEnvStore(dir, swk);
-    await store.put("alice-envapp", { OPENAI_API_KEY: SECRET });
+    await store.put("alice--envapp", { OPENAI_API_KEY: SECRET });
     const files = await readdir(dir);
     const blobPath = join(dir, files[0]!);
     const blob = await readFile(blobPath, "utf8");
@@ -154,19 +154,19 @@ describe("FileAppEnvStore — sealed at rest + persistence", () => {
   // Justification: a fresh process recovers the sealed env via load().
   it("a new store instance recovers the env after load()", async () => {
     const a = new FileAppEnvStore(dir, swk);
-    await a.put("alice-envapp", { K: SECRET });
+    await a.put("alice--envapp", { K: SECRET });
     const b = new FileAppEnvStore(dir, swk);
     await b.load();
-    expect(await b.get("alice-envapp")).toEqual({ K: SECRET });
+    expect(await b.get("alice--envapp")).toEqual({ K: SECRET });
   });
 
   // Justification (invariant c): the wrong SWK cannot recover values.
   it("a store with the wrong SWK cannot recover the env", async () => {
     const a = new FileAppEnvStore(dir, swk);
-    await a.put("alice-envapp", { K: SECRET });
+    await a.put("alice--envapp", { K: SECRET });
     const wrong = new FileAppEnvStore(dir, fakeSwk());
     await wrong.load();
-    expect(await wrong.get("alice-envapp")).toBeNull();
+    expect(await wrong.get("alice--envapp")).toBeNull();
   });
 });
 
@@ -208,7 +208,7 @@ describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong
       verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(true);
-    expect(await store.get("alice-envapp")).toEqual({ OPENAI_API_KEY: SECRET });
+    expect(await store.get("alice--envapp")).toEqual({ OPENAI_API_KEY: SECRET });
   });
 
   // Justification (invariant b, negative): a wrong-signer order is
@@ -223,7 +223,7 @@ describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong
       verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
-    expect(await store.get("alice-envapp")).toBeNull();
+    expect(await store.get("alice--envapp")).toBeNull();
   });
 
   // Justification (invariant b, negative): a tampered (unsigned) body
@@ -238,7 +238,7 @@ describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong
       verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
-    expect(await store.get("alice-envapp")).toBeNull();
+    expect(await store.get("alice--envapp")).toBeNull();
   });
 
   // Justification: reserved FLAGSHIP_ names can never be set by an owner.
@@ -251,7 +251,7 @@ describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong
       verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
-    expect(await store.get("alice-envapp")).toBeNull();
+    expect(await store.get("alice--envapp")).toBeNull();
   });
 });
 
@@ -286,7 +286,7 @@ describe("ServicePlatform — values injected into the deployed app's env; lifec
   // container's process environment.
   it("injects the owner-set values into the container env on deploy", async () => {
     const store = new InMemoryAppEnvStore();
-    await store.put("alice-envapp", { OPENAI_API_KEY: SECRET });
+    await store.put("alice--envapp", { OPENAI_API_KEY: SECRET });
     const { platform, hostIrk, specs } = build(store);
     const req = installReq();
     const r = await platform.install({
@@ -299,14 +299,14 @@ describe("ServicePlatform — values injected into the deployed app's env; lifec
     const injected = specs[0]!.env ?? {};
     expect(injected.OPENAI_API_KEY).toBe(SECRET);
     // Reserved vars still win and are present.
-    expect(injected.FLAGSHIP_APP_ID).toBe("alice-envapp");
+    expect(injected.FLAGSHIP_APP_ID).toBe("alice--envapp");
   });
 
   // Justification (invariant g): the former appByok install/uninstall
   // lifecycle, now generic — uninstall forgets the values.
   it("uninstall forgets the env so values don't outlive the app", async () => {
     const store = new InMemoryAppEnvStore();
-    await store.put("alice-envapp", { K: SECRET });
+    await store.put("alice--envapp", { K: SECRET });
     const { platform, hostIrk } = build(store);
     const req = installReq();
     await platform.install({
@@ -321,14 +321,14 @@ describe("ServicePlatform — values injected into the deployed app's env; lifec
       verify: () => true,
     });
     expect(ur.ok).toBe(true);
-    expect(await store.get("alice-envapp")).toBeNull();
+    expect(await store.get("alice--envapp")).toBeNull();
   });
 
   // Justification (invariant f): the public /api/services listing never
   // contains a value (the former appByok public-surface negative).
   it("the public app listing never contains a value", async () => {
     const store = new InMemoryAppEnvStore();
-    await store.put("alice-envapp", { K: SECRET });
+    await store.put("alice--envapp", { K: SECRET });
     const { platform, hostIrk } = build(store);
     const req = installReq();
     await platform.install({
@@ -368,11 +368,11 @@ describe("vibecode prompt — names only, value sentinel never present", () => {
   // produces the names list cannot carry a value.
   it("store.names() output (the prompt input) carries zero values", async () => {
     const store = new InMemoryAppEnvStore();
-    await store.put("alice-envapp", {
+    await store.put("alice--envapp", {
       OPENAI_API_KEY: SECRET,
       STRIPE_SECRET_KEY: "sk-live-DO-NOT-LEAK",
     });
-    const names = await store.names("alice-envapp");
+    const names = await store.names("alice--envapp");
     const prompt = buildUserContext({
       username: HOST,
       hostname: "home",
@@ -402,8 +402,8 @@ describe("export/share artifact — declared names only, never a value", () => {
   // names only — never a value.
   it("exportEnvSchema yields declared names but no value", async () => {
     const store = new InMemoryAppEnvStore();
-    await store.put("alice-envapp", { OPENAI_API_KEY: SECRET, REGION: "us" });
-    const schema = await exportEnvSchema(store, "alice-envapp");
+    await store.put("alice--envapp", { OPENAI_API_KEY: SECRET, REGION: "us" });
+    const schema = await exportEnvSchema(store, "alice--envapp");
     expect(schema.names).toEqual(["OPENAI_API_KEY", "REGION"]);
     expect(JSON.stringify(schema)).not.toContain(SECRET);
   });
@@ -509,7 +509,7 @@ describe("set-app-env HTTP — response never echoes a value", () => {
     const sig = signSetServiceEnv(r, makeKey()); // attacker key
     const res = await handle({
       method: "POST",
-      path: "/api/services/alice-envapp/env",
+      path: "/api/services/alice--envapp/env",
       headers: {},
       body: Buffer.from(
         JSON.stringify({ request: r, signature: Buffer.from(sig).toString("hex") }),
@@ -518,7 +518,7 @@ describe("set-app-env HTTP — response never echoes a value", () => {
     expect(res).not.toBeNull();
     expect(res!.status).toBe(400);
     expect(res!.body.toString("utf8")).not.toContain(SECRET);
-    expect(await store.get("alice-envapp")).toBeNull();
+    expect(await store.get("alice--envapp")).toBeNull();
   });
 
   // Justification (invariant f): a valid set-env success body carries
@@ -545,7 +545,7 @@ describe("set-app-env HTTP — response never echoes a value", () => {
     };
     const res = await handle({
       method: "POST",
-      path: "/api/services/alice-envapp/env",
+      path: "/api/services/alice--envapp/env",
       headers: {},
       body: Buffer.from(
         JSON.stringify({ request: r, signature: Buffer.from(signSetServiceEnv(r, hostIrk)).toString("hex") }),
@@ -553,6 +553,6 @@ describe("set-app-env HTTP — response never echoes a value", () => {
     });
     expect(res!.status).toBe(200);
     expect(res!.body.toString("utf8")).not.toContain(SECRET);
-    expect(await store.get("alice-envapp")).toEqual({ OPENAI_API_KEY: SECRET });
+    expect(await store.get("alice--envapp")).toEqual({ OPENAI_API_KEY: SECRET });
   });
 });

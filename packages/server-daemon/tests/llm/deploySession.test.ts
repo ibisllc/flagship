@@ -121,9 +121,9 @@ describe("buildDeploySession", () => {
         // surface the actual reason in the failure message for debugging
         throw new Error(`deploy failed: ${r.reason}`);
       }
-      expect(r.serviceId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice--habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
-      expect(r.image).toMatch(/^flagship-vibe-alice-habits:\d+$/);
+      expect(r.image).toMatch(/^flagship-vibe-alice--habits:\d+$/);
       // docker build was invoked at the working dir
       expect(calls.some((c) => c.startsWith("docker build "))).toBe(true);
       expect(calls.some((c) => c.includes(wd.dir))).toBe(true);
@@ -131,9 +131,9 @@ describe("buildDeploySession", () => {
       expect(calls.some((c) => c.startsWith("docker run ") && c.includes(r.image))).toBe(true);
 
       // source tree was actually written
-      const dockerfile = await readFile(join(wd.dir, "alice-habits", "Dockerfile"), "utf8");
+      const dockerfile = await readFile(join(wd.dir, "alice--habits", "Dockerfile"), "utf8");
       expect(dockerfile).toContain("FROM busybox");
-      const main = await readFile(join(wd.dir, "alice-habits", "src", "main.js"), "utf8");
+      const main = await readFile(join(wd.dir, "alice--habits", "src", "main.js"), "utf8");
       expect(main).toContain("console.log");
     } finally {
       await wd.cleanup();
@@ -249,7 +249,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: fakeFetch as never,
       });
@@ -323,7 +323,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: failingFetch as never,
       });
@@ -426,7 +426,7 @@ describe("buildDeploySession", () => {
       };
       const forgejoAdmin = new ForgejoAppAdmin({
         baseUrl: "http://forgejo.local",
-        orgName: "alice-flagship",
+        orgName: "alice--flagship",
         serviceToken: "tk",
         fetchImpl: fakeFetch as never,
       });
@@ -482,7 +482,7 @@ describe("buildDeploySession", () => {
 
       const r = await deploy(session);
       if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
-      expect(r.serviceId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice--habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
 
       // The container was actually launched (docker run with the patched image).

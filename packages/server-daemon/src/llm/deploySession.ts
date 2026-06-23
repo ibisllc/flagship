@@ -91,7 +91,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // Kept inline rather than importing ServicePlatform as a value just
     // for the static; the format is pinned by servicePlatform.serviceId +
     // its test.
-    const serviceId = `${creator}-${slug}`;
+    const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
 
     // 1. Write the source tree. We blow away any prior working tree
@@ -181,7 +181,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
 
     // 7. Compose the canonical URL. ServicePlatform exposes urlLabel via
     // its static helper; we rebuild it here to avoid coupling.
-    const urlLabel = creator === deps.hostUsername ? slug : `${slug}-${creator}`;
+    const urlLabel = creator === deps.hostUsername ? slug : `${slug}--${creator}`;
     const url = `https://${urlLabel}.${session.meta.serverFqdn}`;
     return { ok: true, serviceId, url, image };
   };

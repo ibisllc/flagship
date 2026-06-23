@@ -88,7 +88,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
 
     const creator = deps.hostUsername;
     const slug = manifest.name;
-    const serviceId = `${creator}-${slug}`;
+    const serviceId = `${creator}--${slug}`; // docs/service-addressing-double-dash.md
     const appDir = join(deps.workingDir, serviceId);
 
     await note(buildId, mode, "build-started", `building ${slug}`);

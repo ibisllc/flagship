@@ -46,19 +46,13 @@ no-credential "grace takeover" recovery path and the 90-day GC reclaim.
 
 ## 3. Username grammar & reserved names
 
-**Grammar — KEEP DASHLESS (decided 2026-06-22; the audit found an active
-collision).** The handle stays `^[a-z0-9]{3,30}$` (no hyphens). Reason:
-`packages/services-zone/src/validation.ts` parses app URLs as
-`<slug>-<creator>.<host>.flagship.services` by splitting on the **last dash** and
-**requires the creator (username) to be dashless** for that split to be
-unambiguous (it says so explicitly: *"the dash is reserved as the slug-creator
-separator in app URLs"*). Allowing dashes in usernames would break every app URL
-+ the daemon's label parsing — not worth it for a separator. So **random names
-are CONCATENATED**: `<adjective><noun><NNNN>` (e.g. `happyotter4821`), built from
-short curated words so they stay readable and ≤30 chars, and they satisfy the
-EXISTING grammar with **zero validator/parser changes**. (If we ever truly want
-dashes, that's a separate, larger change to the `<slug>-<creator>` scheme across
-`services-zone` + the daemon — out of scope here.)
+**Grammar — DASHES ALLOWED (decided 2026-06-22, superseding the earlier
+dashless call).** Usernames move to `^[a-z0-9]([a-z0-9-]{1,28}[a-z0-9])?$` (3–30,
+no leading/trailing dash, no `--`). This is enabled by switching the slug↔creator
+composite delimiter to a **double dash `--`** so the composite still parses
+unambiguously — full propagation spec in **`docs/service-addressing-double-dash.md`**.
+So **random names are `<adjective>-<noun>-<NNNN>`** (e.g. `happy-otter-4821`),
+readable and ≤30 chars.
 
 **Reserved / blocklist (new).** A claim (random OR custom) must reject:
 - **Infra/impersonation labels:** `admin, root, www, api, boot, recovery,

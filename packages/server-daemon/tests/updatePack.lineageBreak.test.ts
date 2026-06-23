@@ -70,7 +70,7 @@ function makeIdentity(seed: number): Keypair {
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
 
-const APP_ID = "alice-game1";
+const APP_ID = "alice--game1";
 
 describe("LineageVerifier — pure decision tests", () => {
   let repo: string;

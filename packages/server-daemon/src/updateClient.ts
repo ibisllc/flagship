@@ -668,13 +668,13 @@ function bytesToHex(b: Bytes): string {
 }
 
 function parseServiceId(serviceId: string): [string, string] {
-  // `<creator>-<slug>`, single dash. Split at the FIRST hyphen
-  // (creator is hyphen-free, so the first '-' is the boundary).
-  const i = serviceId.indexOf("-");
-  if (i <= 0 || i >= serviceId.length - 1) {
-    throw new Error(`serviceId ${serviceId} is not in <creator>-<slug> form`);
+  // `<creator>--<slug>`, DOUBLE dash (docs/service-addressing-double-dash.md):
+  // both halves may carry single dashes, so the single `--` is the boundary.
+  const parts = serviceId.split("--");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`serviceId ${serviceId} is not in <creator>--<slug> form`);
   }
-  return [serviceId.slice(0, i), serviceId.slice(i + 1)];
+  return [parts[0], parts[1]];
 }
 
 // Used in tests; export so they can scan migrations directly.

@@ -116,15 +116,14 @@ export function buildCloneApp(
 }
 
 function parseServiceId(serviceId: string): [string, string] {
-  // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
-  // the creator is a username and usernames are hyphen-free, so the
-  // first hyphen is always the creator/slug boundary even when the
-  // slug itself contains hyphens.
-  const i = serviceId.indexOf("-");
-  if (i <= 0 || i >= serviceId.length - 1) {
-    throw new Error(`serviceId ${serviceId} not in <creator>-<slug> form`);
+  // `<creator>--<slug>`, DOUBLE dash (docs/service-addressing-double-dash.md).
+  // Both halves may carry single dashes (dashed usernames + dashed slugs); the
+  // single `--` is always the creator/slug boundary.
+  const parts = serviceId.split("--");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`serviceId ${serviceId} not in <creator>--<slug> form`);
   }
-  return [serviceId.slice(0, i), serviceId.slice(i + 1)];
+  return [parts[0], parts[1]];
 }
 
 function bytesToHex(b: Uint8Array): string {
