@@ -115,6 +115,11 @@ import {
   fileMarkerStore,
   realWipeContent,
 } from "./selfDeleteConsumer.js";
+import {
+  buildDecommissionPoller,
+  fileMarkerStore as decommissionMarkerStore,
+  pollReplacementRestored,
+} from "./decommissionConsumer.js";
 import { buildRehomePoller, readRehomeMarker } from "./transferRehomeConsumer.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
@@ -761,6 +766,7 @@ async function main(): Promise<void> {
     hostPowerRunner,
     servicePlatformRef: servicePlatformRefForServer,
     identityKeypair,
+    backupLoop,
   });
 
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
@@ -1738,6 +1744,8 @@ async function wireOwnerHandlers(deps: {
   servicePlatformRef: ServicePlatformRef;
   /** The box's STK (identity) keypair — signs the gating-v2 revocation poll. */
   identityKeypair: Keypair;
+  /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
+  backupLoop: BackupLoop | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
@@ -1860,6 +1868,57 @@ async function wireOwnerHandlers(deps: {
     process.once("SIGTERM", () => selfDeletePoller.stop());
     process.once("SIGINT", () => selfDeletePoller.stop());
     console.log("[daemon] self-delete content-wipe poller armed");
+  }
+  // Graceful-decommission (docs/server-replacement-graceful-decommission.md
+  // §10 + §9): poll this box's OWN eviction order on the heartbeat cadence. When
+  // the owner replaces this server, `.com` deposits an owner-IRK-signed
+  // ServerDecommission order naming THIS instance's STK; we verify it under the
+  // config-pinned owner IRK (I1), confirm it names our STK (I2), flush a final
+  // backup if asked (§9 — rides the STK/namespace, not routing, so it works even
+  // after routing is revoked, I3), release routing, and apply the signed disk
+  // disposition (keep → power off; wipe-now → wipe + power off; wipe-after-handoff
+  // → idle until `.com` confirms the replacement restored, else power off WITHOUT
+  // wiping). Idempotent via the `/var/flagship/decommissioned` marker. Best-effort.
+  {
+    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+    const myStkHex = bytesToHexLocal(identityKeypair.publicKey);
+    const decommissionPoller = buildDecommissionPoller({
+      serverDomain: env.serverFqdn,
+      myStkHex,
+      ownerIrkPub: cfg.irkPublicKey,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
+      // Final-flush: trigger an immediate BackupLoop pass (the epoch is recorded
+      // by the §9 epoch-complete report the consumer POSTs after this resolves).
+      backupFlush: async (_epoch) => {
+        deps.backupLoop?.runOnce([]);
+      },
+      // Release routing = drop the tunnel + stop serving (runtime.close()).
+      releaseRouting: () => runtime.close(),
+      // Reuse the account-deletion content-wipe machinery (stop data-services +
+      // `docker compose down -v` + prune + drop the app-data tree).
+      wipeContent: realWipeContent,
+      // Converge on the shared lock-and-poweroff latch — suppress auto-unlock,
+      // then power off (the same primitive the dead-man + manual power-off use).
+      lockAndPower: () =>
+        executeLockAndPower({ mode: "off", suppressor: autoUnlockSuppressor, runner: hostPowerRunner }),
+      // wipe-after-handoff: bounded poll of `.com`'s eviction-chain for a restored
+      // successor; on timeout the consumer powers off WITHOUT wiping (fail-safe).
+      awaitHandoffConfirm: () =>
+        pollReplacementRestored({
+          serverDomain: env.serverFqdn,
+          myStkHex,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+          maxAttempts: 24, // ~2h at the default interval — generous for a reburn+restore
+          intervalMs: 5 * 60_000,
+          onLog: (m) => console.log(m),
+        }),
+      onLog: (m) => console.log(m),
+    });
+    decommissionPoller.start();
+    process.once("SIGTERM", () => decommissionPoller.stop());
+    process.once("SIGINT", () => decommissionPoller.stop());
+    console.log("[daemon] graceful-decommission poller armed");
   }
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
   // A): poll `.com` for "did my owner change?". On a completed transfer the
