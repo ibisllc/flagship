@@ -133,6 +133,51 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 (later) — SECRET-FREE recipe by default: post-boot sealed SWK delivery + single Advanced-mode toggle
+
+Implements the near-term bucket of `docs/recipe-delivery-and-remote-install.md`.
+**Evolves the earlier 2026-06-23 "phone-provisioned SWK" entry below:** the SWK is
+no longer embedded in the recipe by DEFAULT — the default recipe is now secret-free
+of the SWK, and the SWK is delivered to the box AFTER it boots.
+
+**Why:** so the recipe can be handed off (a partner/friend/colo builds the box)
+without carrying the box's master sealing key. Per the spec: secret-free by default;
+embedding secrets becomes an explicit Advanced opt-in (offline install).
+
+**How (post-boot sealed delivery — built on existing primitives):**
+- The box boots with its SWK-independent **identity key** (bootstraps registration);
+  no SWK yet ⇒ service platform stays off initially.
+- The phone reads the box's `identityPubKey` from `/pods` once it registers, derives
+  the SWK (`deriveSWK`/`ServerKeys.deriveSwk`, dots), **seals it to that identity**
+  (`sealForEd25519Recipient`, ed→x25519) + IRK-signs the wrapper
+  (`flagship/swk-delivery/v1`), and POSTs it to a new **content-blind `.com`
+  `swk-deposit` lane** (`secret_mailbox` `purpose:"swk"`, no migration — mirrors the
+  entitlement deposit; `.com` holds ciphertext only).
+- The daemon's `swkDepositConsumer` polls the lane when it has no SWK → verifies
+  under the owner IRK + unseals with the box identity → persists `/var/flagship/swk.hex`
+  → `process.exit` so systemd restarts and the service platform constructs. Self-
+  healing: forged/wrong-box → keep polling, never persist/brick; idempotent.
+- **Single "Advanced mode" toggle** (iOS/Android/webapp create flow), OFF by default,
+  gating "embed secrets for offline" (+ ISO-pick / debug where they exist). **OFF
+  (default) ⇒ secret-free recipe + the post-boot deposit; ON ⇒ the old `swkHex`-in-
+  recipe behavior, no deposit.** Pinned cross-platform vector (`660cf5eb…`) for the
+  envelope on TS + Swift + Kotlin + webapp.
+
+Gates: `tsc -b` clean · full vitest **6402 / 0 fail** (new: protocol swkDelivery,
+control-plane swk-deposit lane, storage parity, daemon consumer) · iOS `xcodebuild`
+**1209/0** · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL**. Built via two
+worker agents (S1 additive TS rail; S2 native clients) in an isolated worktree;
+integrated with a concurrent **graceful-decommission** feature that touched the same
+`SecretMailboxClient` files (kept both `depositSwk` + `depositDecommission`).
+
+**Deferred (per the spec's sequencing):** pairing-key removal (the recipe still
+carries `pairingKeyPrivHex` — needed for full hand-off safety, but reworking
+create-time pairing is a separate feature), and the whole "later" bucket (phone↔burner
+session + QR-matched secret injection, Android USB-OTG burning, export/delegated-build
+UX, `.com` transparency receipt, image-measurement attestation). **REMAINING (owner):
+a REBURN to validate the post-boot deposit→claim→platform-up handshake live** — CI
+proves the envelope/lane/consumer + byte-compat, not the physical boot.
+
 ### 2026-06-23 — graceful server REPLACEMENT & decommission hand-off (full stack, all surfaces)
 
 **Why:** re-issuing a recipe and booting a 2nd box for an ACTIVE server makes the
