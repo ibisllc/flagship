@@ -125,6 +125,8 @@ import {
   buildSwkDepositPoller,
   fileSwkMarkerStore,
 } from "./swkDepositConsumer.js";
+import { readAuthCodeBirthDate, wireGossip } from "./gossip/index.js";
+import type { GossipLoop } from "./gossip/gossipLoop.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -802,11 +804,43 @@ async function main(): Promise<void> {
     backupLoop,
   });
 
+  // ---- Per-service leadership gossip loop (Phase 5) ----
+  // CONTINUOUSLY gossips with account siblings to compute, per service, who
+  // leads — then claims/releases the tier-2 leader-routed `<slug>.<user>` route
+  // accordingly. ENTIRELY best-effort: disabled (no-op) when no CGK is
+  // provisioned or no owner config exists. The `/internal/gossip` ingest handler
+  // mounts on the live runtime; the announce+elect loop starts here. The route
+  // claim/release is LIVE-wired to runtime.urlController (claim/release push a
+  // tunnel HELLO update). Never throws / never bricks the daemon.
+  const gossipLoop = await (async () => {
+    if (!cfg) return null;
+    try {
+      const result = await wireGossip({
+        user: cfg.userId,
+        serverFqdn: env.serverFqdn!,
+        identityPubHex: bytesToHexLocal(identityKeypair.publicKey),
+        birthDate: (await readAuthCodeBirthDate()) ?? Date.now(),
+        urlController: runtime.urlController,
+        listServiceSlugs: () =>
+          servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
+        onLog: (m) => console.log(m),
+      });
+      if (result.enabled && result.handler && result.loop) {
+        runtime.addHandler(result.handler);
+        result.loop.start();
+        return result.loop;
+      }
+    } catch (e) {
+      console.warn(`[gossip] wiring failed (non-fatal): ${(e as Error).message}`);
+    }
+    return null;
+  })();
+
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
   await wireLocalHttpApi({ cfg });
 
   // ---- Graceful-shutdown hooks (browser bundle + schedulers) ----
-  wireShutdownHooks({ browserBundle, updateScheduler, repairScheduler });
+  wireShutdownHooks({ browserBundle, updateScheduler, repairScheduler, gossipLoop });
 
   // Stay alive forever (tunnel client + TLS server are event-driven and
   // hold the event loop on their own).
@@ -2044,6 +2078,7 @@ function wireShutdownHooks(deps: {
   browserBundle: BrowserBundle | null;
   updateScheduler: UpdateScheduler;
   repairScheduler: RepairScheduler;
+  gossipLoop: GossipLoop | null;
 }): void {
   if (deps.browserBundle) {
     const bundle = deps.browserBundle;
@@ -2054,6 +2089,10 @@ function wireShutdownHooks(deps: {
   process.once("SIGINT", () => deps.updateScheduler.stop());
   process.once("SIGTERM", () => deps.repairScheduler.stop());
   process.once("SIGINT", () => deps.repairScheduler.stop());
+  if (deps.gossipLoop) {
+    process.once("SIGTERM", () => deps.gossipLoop!.stop());
+    process.once("SIGINT", () => deps.gossipLoop!.stop());
+  }
 }
 
 async function tryReadFile(path: string): Promise<string | null> {
