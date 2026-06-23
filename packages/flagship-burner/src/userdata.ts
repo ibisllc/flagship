@@ -117,6 +117,16 @@ export interface UserDataOptions {
    * Carried from the recipe via {@link LoadedBlob.pairingKeyPrivHex}.
    */
   pairingKeyPrivHex?: string;
+  /**
+   * SWK provisioning: the Service Workload Key (32-byte hex, = `deriveSWK(umk,
+   * serverId)`). The daemon reads it at first boot, persists it to
+   * /var/flagship/swk.hex, and turns on the service/build platform (and
+   * peer-backup participation, which stays inert until the owner toggles it).
+   * An UNSIGNED recipe sibling — NOT part of the signed InstallBlob — so it never
+   * affects the recipe signature; absent ⇒ the on-disk blob is byte-identical to
+   * before. Carried from the recipe via {@link LoadedBlob.swkHex}.
+   */
+  swkHex?: string;
 }
 
 /**
@@ -180,7 +190,14 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
   }
   return {
     blobB64: utf8ToBase64(
-      JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex, opts.pairingKeyPrivHex)),
+      JSON.stringify(
+        installBlobToJson(
+          opts.blob,
+          opts.blobSignatureHex,
+          opts.pairingKeyPrivHex,
+          opts.swkHex,
+        ),
+      ),
     ),
     ref,
     repo,
@@ -2070,6 +2087,7 @@ export function installBlobToJson(
   b: InstallBlob,
   blobSignatureHex: string,
   pairingKeyPrivHex?: string,
+  swkHex?: string,
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -2100,6 +2118,13 @@ export function installBlobToJson(
     // recipe carries it — a recipe WITHOUT it serializes byte-identically to
     // before (existing burns + sha pins unchanged).
     ...(pairingKeyPrivHex ? { pairingKeyPrivHex } : {}),
+    // SWK provisioning: the phone-derived Service Workload Key. Like
+    // pairingKeyPrivHex, an UNSIGNED recipe sibling (never part of the signed
+    // InstallBlob's canonical bytes), appended only when the recipe carries it —
+    // a recipe WITHOUT it serializes byte-identically to before (existing burns +
+    // sha pins unchanged). The daemon reads it from install-blob.json at first
+    // boot and persists it to /var/flagship/swk.hex.
+    ...(swkHex ? { swkHex } : {}),
   };
 }
 

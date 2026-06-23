@@ -311,6 +311,46 @@ async function pairingKeyFromInstallBlob(): Promise<Uint8Array | null> {
   }
 }
 
+/**
+ * Read the recipe's Service Workload Key (`swkHex`) from the on-disk install
+ * blob. The phone embeds it as an UNSIGNED recipe sibling (= `deriveSWK(umk,
+ * serverId)`, never in the signed InstallBlob's canonical bytes, mirroring
+ * `pairingKeyPrivHex`); the burner writes it into /var/flagship/install-blob.json.
+ * The daemon consumes it at first boot to turn on the service/build platform.
+ * Returns the validated 64-hex string (lowercased) or null when absent/malformed
+ * (older recipes, or a recipe minted before SWK provisioning) — the box then
+ * stays platform-less, exactly as before.
+ */
+export async function swkHexFromInstallBlob(): Promise<string | null> {
+  const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
+  const raw = await tryReadFile(blobPath);
+  if (!raw) return null;
+  try {
+    const b = JSON.parse(raw) as { swkHex?: unknown };
+    const v = b.swkHex;
+    if (typeof v !== "string" || !/^[0-9a-f]{64}$/i.test(v)) return null;
+    return v.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort persist of the SWK hex to /var/flagship/swk.hex (mode 0600), so
+ *  reboots resolve via the existing on-disk path and never re-read the blob.
+ *  Non-fatal: a write failure just means the next boot re-reads the blob. */
+export async function persistSwkHex(path: string, swkHex: string): Promise<void> {
+  try {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
+    await rename(tmp, path);
+  } catch (e) {
+    console.warn(
+      `[daemon] could not persist swk.hex (${(e as Error).message}); will re-read the install blob next boot`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
@@ -363,12 +403,30 @@ async function main(): Promise<void> {
     `[daemon] services endpoints (${endpoints.source}): tunnelHub=${endpoints.endpoints.tunnelHub}`,
   );
 
-  // ---- Backup loop (peer-backup participation) ----
-  // SWK is provisioned by the phone at first boot. Until that's wired,
-  // we accept FLAGSHIP_SWK_HEX from env / disk so the loop can be
-  // constructed and toggled by phone orders.
-  const swkHex =
-    process.env.FLAGSHIP_SWK_HEX ?? (await tryReadFile("/var/flagship/swk.hex"));
+  // ---- Service Workload Key (SWK) resolution ----
+  // The SWK gates the service/build platform (and peer-backup participation,
+  // which stays inert until the owner toggles it). The phone provisions it at
+  // first boot by embedding `swkHex` (= deriveSWK(umk, serverId)) as an UNSIGNED
+  // recipe sibling that the burner writes into install-blob.json. Resolution
+  // order:
+  //   1. FLAGSHIP_SWK_HEX env       (dev runs)
+  //   2. /var/flagship/swk.hex      (already-provisioned box, the stable path)
+  //   3. install-blob.json swkHex   (first boot — the phone's provisioning)
+  // When (3) supplies it and swk.hex doesn't yet exist, PERSIST it to swk.hex so
+  // every later boot resolves via (2) — best-effort, never fatal. A malformed
+  // blob sibling is ignored by swkHexFromInstallBlob (returns null) ⇒ the box
+  // stays platform-less rather than crashing.
+  const swkHexFilePath = "/var/flagship/swk.hex";
+  let swkHex: string | null =
+    process.env.FLAGSHIP_SWK_HEX ?? (await tryReadFile(swkHexFilePath));
+  if (!swkHex) {
+    const fromBlob = await swkHexFromInstallBlob();
+    if (fromBlob) {
+      swkHex = fromBlob;
+      console.log("[daemon] SWK provisioned from install blob; service platform enabled");
+      await persistSwkHex(swkHexFilePath, fromBlob);
+    }
+  }
   const { backupLoop, repairAccumulator, repairScheduler } =
     wirePeerBackup({ swkHex });
 
