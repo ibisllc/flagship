@@ -76,6 +76,7 @@ import {
 import { TunnelRegistry } from "./tunnel/registry.js";
 import { RemoteUsernameResolver } from "./lib/remoteUsernameResolver.js";
 import { RevocationCache } from "./tunnel/revocationCache.js";
+import { EvictionCache } from "./tunnel/evictionCache.js";
 import {
   registerControlRedirections,
   coldStartRedirections,
@@ -427,6 +428,17 @@ export async function start(opts: {
   const revocationLookup = (username: string): Promise<Set<string> | null> =>
     revocationCache.lookup(username);
 
+  // Per-podCanonical eviction chain, pulled from .com's
+  // `/api/server/:pod/eviction-chain` (graceful decommission §8). After
+  // entitlement/STK verification, the hub asks whether THIS box instance's
+  // STK has been retired for its podCanonical; if so it NACKs "replaced".
+  // 30s TTL so it's not a per-HELLO round trip. Fail-OPEN: a fetch failure
+  // returns null so a .com blip can't brick fleet-wide registration (the
+  // durable order / zombie-poll still closes the fight).
+  const evictionCache = new EvictionCache({ controlPlaneBaseUrl: comBaseUrl });
+  const evictionLookup = (podCanonical: string): Promise<Set<string> | null> =>
+    evictionCache.lookup(podCanonical);
+
   // Relay blessing (docs/maintainer-trust-enforcement.md): on the data
   // plane, self-generate a hub key and fetch a `.com`-CA-signed
   // ServiceBlessing daily so each HELLO_ACK can prove the relay holds a
@@ -455,6 +467,7 @@ export async function start(opts: {
     authLookup: remoteAuthLookup,
     irkLookup,
     revocationLookup,
+    evictionLookup,
     ...(blessingProvider ? { blessingSource: blessingProvider } : {}),
   });
 

@@ -98,6 +98,24 @@ export interface TunnelHubOptions {
    */
   revocationLookup?: (username: string) => Promise<Set<string> | null>;
   /**
+   * Optional: per-podCanonical set of EVICTED box STK pubkeys (lowercased
+   * hex) — the graceful-decommission eviction chain's `retiredStkPubHex`
+   * set (docs/server-replacement-graceful-decommission.md §8). The hub
+   * calls this AFTER entitlement/STK verification succeeds; if the
+   * connecting box's own STK pubkey is in the returned set, the HELLO is
+   * rejected with the typed reason "replaced" (the box's `.com` poll then
+   * delivers the signed decommission order).
+   *
+   * Returning `null` means "couldn't fetch — accept anyway" (FAIL-OPEN:
+   * a `.com` outage must NOT brick a box's ability to register
+   * fleet-wide; the worst case is a brief flap the order/zombie-poll
+   * still closes — §8 availability trade-off). This is the deliberate
+   * INVERSE of irkLookup's fail-closed contract above: an unverifiable
+   * *signature* is fatal, but an unreachable *eviction list* is not.
+   * Returning an empty Set means "definitely no evictions for this pod."
+   */
+  evictionLookup?: (podCanonical: string) => Promise<Set<string> | null>;
+  /**
    * Optional relay-blessing source. When set, every accepting HELLO_ACK
    * carries the hub's `.com`-CA-signed ServiceBlessing + a `hubSig` over
    * the box's HELLO nonce. Omitted ⇒ a plain ack (old behavior).
@@ -274,6 +292,16 @@ function attachTunnel(
         ws.close(auth.closeCode, "auth failed");
         return;
       }
+      // Eviction gate (graceful decommission §8). Consulted ONLY after the
+      // entitlement/STK verification above succeeds — a forged entitlement
+      // is rejected by `authenticateHello` first, so this never adjudicates
+      // an unverified box. Fail-OPEN on a `.com` outage (see checkEvicted).
+      const evicted = await checkEvicted(helloOk, opts);
+      if (evicted) {
+        send(helloAckFrame(false, "replaced"));
+        ws.close(1008, "replaced");
+        return;
+      }
       const built = buildClaimedCanonicals(
         helloOk.rootEntitlement.podCanonical,
         helloOk.serviceEntitlement,
@@ -329,6 +357,15 @@ function attachTunnel(
       const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
+        return;
+      }
+      // Eviction gate on the HELLO refresh too: a box evicted mid-session
+      // self-retires on its next HELLO. Same after-verification ordering +
+      // fail-open contract as the initial accept path.
+      const evicted = await checkEvicted(helloOk, opts);
+      if (evicted) {
+        send(helloAckFrame(false, "replaced"));
+        ws.close(1008, "replaced");
         return;
       }
       const built = buildClaimedCanonicals(
@@ -787,6 +824,35 @@ async function authenticateHello(
 }
 
 /**
+ * Eviction gate for the graceful-decommission hand-off (§8). Returns
+ * `true` iff the connecting box's own STK pubkey is on the eviction
+ * chain for its podCanonical (so the HELLO must be rejected as
+ * "replaced"), `false` otherwise.
+ *
+ * The box's STK pubkey is `rootEntitlement.podPubKey` — `authenticateHello`
+ * has already bound it to the HELLO-envelope signer (`verifyTunnelHelloV2`)
+ * and, when `authLookup` is wired, to `.com`'s registered STK — so by the
+ * time we get here it is the proven identity of the connecting instance,
+ * not an attacker-asserted field.
+ *
+ * FAIL-OPEN: a `null` from `evictionLookup` (a `.com` outage) is treated
+ * as "not evicted" — registration proceeds. A momentary `.com` blip must
+ * never brick the fleet's ability to register; the worst case is a brief
+ * route flap that the durable order / zombie-poll still closes (§8). This
+ * is the deliberate inverse of the fail-CLOSED signature checks above.
+ */
+async function checkEvicted(
+  hello: ParsedHelloV2,
+  opts: TunnelHubOptions,
+): Promise<boolean> {
+  if (!opts.evictionLookup) return false;
+  const retired = await opts.evictionLookup(hello.rootEntitlement.podCanonical);
+  if (!retired) return false; // null ⇒ outage ⇒ fail-open
+  const myStkHex = bytesToHex(hello.rootEntitlement.podPubKey).toLowerCase();
+  return retired.has(myStkHex);
+}
+
+/**
  * Send a domain-granted-style snapshot to every member of the set.
  * We reuse FRAME_DOMAIN_GRANTED for now (one frame per slot) so the
  * existing tunnel-client onDomainGranted path keeps working. The
@@ -935,6 +1001,11 @@ function hexToBytes(hex: string): Uint8Array {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+function bytesToHex(b: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, "0");
+  return s;
 }
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
