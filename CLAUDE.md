@@ -133,6 +133,48 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 — random username SUGGESTION (queue + escalating throttle), all surfaces
+
+**Sign-up now HANDS the user one random `<adjective>-<noun>` handle** — the only
+affordance is a rate-limited regenerate button (no typed field; a custom name is the
+future paid name-change). Spec: `docs/username-suggestion-queue.md`. Replaces the batch
+`GET /api/username/random` shuffle with `POST /api/username/suggest`.
+
+- **Dropped the number suffix** (`happy-otter-4821` → `happy-otter`) + widened the word
+  lists for headroom (the `.com` exclusion thins the pool).
+- **`.com` exclusion** — a candidate is dropped if `<name>.com` OR the de-dashed
+  `<namewithoutdashes>.com` is a registered domain, via a DoH (`cloudflare-dns.com`,
+  NS query) lookup done on the `*/10` cron (off the request path; a DoH failure ⇒
+  exclude).
+- **Pre-validated queue + reject-is-lost** — `username_suggestion_queue` (migration
+  **0061**) holds names that passed grammar + not-claimed + not-`.com`; a suggestion
+  POPS the oldest (delete-and-return), so a refused name is gone — defeating the
+  reject-then-predict attack (an attacker can't leave a known name at the head for a
+  victim, nor learn an upcoming name without popping it). Empty-queue inline fallback
+  (no DNS) so sign-up never blocks.
+- **Escalating per-device throttle** — `username_suggest_throttle` (0061) carries an
+  increasing cooldown (2s → 5s → 10s → 20s → 30s cap, resets after 10 min idle),
+  enforced backend-side per client-generated ephemeral device key (NOT the IRK — it
+  doesn't exist yet at the suggestion screen); a coarse per-IP CF rate-limit bucket
+  (`username-suggest`) is the abuse backstop. 200 carries `retryAfterMs`; too-fast ⇒ 429.
+  Unsigned (mutates only ephemeral/advisory state). Cron also prunes stale throttle rows.
+- **Clients (webapp · iOS · Android):** one suggested name shown large, a "Try another"
+  button that disables with a live "Try again in Ns" countdown, the "You can change your
+  username later." subtext, and Continue (claims the shown name through the existing
+  open-account path). Webapp `inlineSuggestUsername` modal; iOS `SuggestUsernameScreen` +
+  VM; Android `SuggestUsernameScreen` + VM. The typed `ChooseUsername*` create screens
+  were deleted on iOS + Android.
+
+Gates: `tsc -b` clean · storage parity **62** (+ queue/throttle blocks) · control-plane
+**1086** (+ randomUsername **20**) · apps/com rate-limit/route/scheduled **217** · webapp
+static **32** · iOS `xcodebuild test` **1181/0** (SuggestUsernameViewModel + Mock suggest
++ smoke updated) · Android `:app:testDebugUnitTest` **BUILD SUCCESSFUL** (+ VM + Mock
+tests). **Deploy note:** apply migration **0061** before the next Worker deploy (the
+predeploy migration gate blocks otherwise); the cron warms the queue on the next `*/10`
+tick. Mobile shows it after an Xcode/Gradle rebuild. **Deferred:** hard `.com`/dibs
+enforcement at CLAIM time (here it only filters suggestions); a signed suggest envelope
+if the per-IP backstop proves insufficient; an Android gym onboarding tap-through update.
+
 ### 2026-06-22 — `--` service-addressing + dashed-username grammar: FOUNDATION (TS+webapp) + NATIVE migration
 
 **The slug↔creator delimiter is now `--` and usernames may carry interior dashes,
@@ -2181,7 +2223,7 @@ This file is the in-repo source of truth. For deeper detail, read the relevant l
 ### Living design specs (index)
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
 - **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`
-- **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `sample-users.md`
+- **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
 - **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
