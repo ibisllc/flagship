@@ -36,6 +36,18 @@ public struct ServerDetailScreen: View {
     /// retrying never helps until the owner pairs, so the failed state shows the
     /// one-tap "Pair this server" affordance instead.
     let notPaired: Bool
+    /// HONEST LIVENESS (Fix B) — the box is `unreachable`: it checked in before
+    /// but its heartbeat is now stale. Distinct from a transient connect failure
+    /// and from `deadServer` (never came online). Renders "offline — last seen
+    /// <…>" instead of a perpetual "Connecting…".
+    let offline: Bool
+    /// Humanized "last seen <…>" for the offline state, from the pod's
+    /// `lastSeenMsAgo`. nil ⇒ unknown age.
+    let lastSeen: String?
+    /// HONEST LIVENESS (Fix B) — the box is `never`: registered but awaiting its
+    /// first heartbeat. Renders "still coming up" rather than "Connecting…" or
+    /// the decommission path. NOT terminal (unlike `deadServer`).
+    let comingUp: Bool
     /// True while a pairing attempt is in flight (Face ID → sign → POST), so the
     /// button shows progress and can't be double-fired.
     let pairing: Bool
@@ -59,6 +71,9 @@ public struct ServerDetailScreen: View {
         awaitingUnlock: Bool = false,
         awaitingEntitlement: Bool = false,
         notPaired: Bool = false,
+        offline: Bool = false,
+        lastSeen: String? = nil,
+        comingUp: Bool = false,
         pairing: Bool = false,
         onOpenSessions: @escaping () -> Void = {},
         onOpenTier: @escaping () -> Void = {},
@@ -74,6 +89,9 @@ public struct ServerDetailScreen: View {
         self.awaitingUnlock = awaitingUnlock
         self.awaitingEntitlement = awaitingEntitlement
         self.notPaired = notPaired
+        self.offline = offline
+        self.lastSeen = lastSeen
+        self.comingUp = comingUp
         self.pairing = pairing
         self.onOpenSessions = onOpenSessions
         self.onOpenTier = onOpenTier
@@ -126,7 +144,14 @@ public struct ServerDetailScreen: View {
                 }
                 switch state {
                 case .idle, .loading:
-                    ServerCardSkeleton()
+                    // HONEST LIVENESS (Fix B) — an unreachable/coming-up box won't
+                    // answer its BFF, so show its honest state straight away rather
+                    // than a skeleton that resolves into "Connecting…".
+                    if offline || comingUp {
+                        livenessPlaceholder(c: c)
+                    } else {
+                        ServerCardSkeleton()
+                    }
                 case .failed:
                     if deadServer {
                         // This box registered during install but never came
@@ -135,11 +160,16 @@ public struct ServerDetailScreen: View {
                         // instead of the transient "Connecting…" placeholder.
                         neverCameOnline(c: c)
                         DecommissionDeadServerCard(serverDomain: deadServerFqdn ?? "", displayName: serverName, onDeleted: onDeleted)
+                    } else if offline || comingUp {
+                        // The box is server-authoritatively unreachable (`offline`)
+                        // or hasn't sent its first heartbeat (`comingUp`). Honest
+                        // copy — NOT a perpetual "Connecting…".
+                        livenessPlaceholder(c: c)
                     } else if notPaired {
-                        // The box IS online, but this device never minted a
-                        // paired-session token, so the BFF 401s. Retrying won't
-                        // help — offer the one-tap pairing affordance (Face ID
-                        // fires only on the tap, never on appearance).
+                        // The box IS reachable, but this device never minted a
+                        // paired-session token for it (its per-pod token slot is
+                        // empty), so the BFF 401s. Retrying won't help — offer the
+                        // one-tap pairing affordance (Face ID fires only on the tap).
                         notPairedCard(c: c)
                     } else {
                         // A BFF load failure here is transient (the box is online —
@@ -264,6 +294,54 @@ public struct ServerDetailScreen: View {
             }
         }
         .accessibilityIdentifier("server-detail-never-online")
+    }
+
+    /// HONEST LIVENESS (Fix B) — the honest copy for an `offline` (was live,
+    /// now stale) or `comingUp` (registered, awaiting first heartbeat) box.
+    /// Neither is the transient "Connecting…" nor the terminal "never came
+    /// online" decommission path. Pull-to-refresh re-checks.
+    @ViewBuilder
+    private func livenessPlaceholder(c: FSColors) -> some View {
+        if offline {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        Image(systemName: "wifi.slash")
+                            .imageScale(.large)
+                            .foregroundColor(c.textMuted)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(lastSeen.map { "Offline — last seen \($0)" } ?? "Offline")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text("This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online. Pull down to re-check.")
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .accessibilityIdentifier("server-detail-offline")
+        } else {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        ProgressView()
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Still coming up…")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text("This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install. Pull down to re-check.")
+                                .font(FS.font.bodySm())
+                                .foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .accessibilityIdentifier("server-detail-coming-up")
+        }
     }
 
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {

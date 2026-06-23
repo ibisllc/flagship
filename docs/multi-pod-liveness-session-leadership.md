@@ -1,10 +1,13 @@
-# Multi-pod liveness, per-pod sessions, and stable leadership — fixes
+# Multi-pod liveness, per-pod sessions, and per-service leadership — fixes + gossip
 
-**Status:** design spec (no code yet). Surfaced live from `frank`/`leticia` on
-`harry` (a fresh `frank` install on the box that used to run `leticia`; `leticia`
-is now just turned off). Three independent client/directory bugs, none of them
-secret-persistence (a fresh install regenerates every on-disk secret; the boxes
-share only the phone-held account keys, by design).
+**Status:** Phases 1-5 BUILT + CI-green (bug fixes + the full gossip broadcast
+path); Phase 6 (owner-vote UI + `.com` relay + CGK post-boot provisioning) is the
+remaining live-enablement layer (reburn-gated). Surfaced live from
+`frank`/`leticia` on `harry` (a fresh `frank` install on the box that used to run
+`leticia`; `leticia` is now just turned off). Three independent client/directory
+bugs, none of them secret-persistence (a fresh install regenerates every on-disk
+secret; the boxes share only the phone-held account keys, by design). The fix for
+the third bug grows into a full, `.com`-independent, per-service leadership system.
 
 ## The three bugs (root causes, verified)
 
@@ -29,9 +32,10 @@ share only the phone-held account keys, by design).
   is non-deterministic (it returned the *newest*, `frank`, first). `addPod`
   already guards (`if leaderPodId == nil`), so the bug is the **dangling-leader
   fallback**: when the persisted `leaderPodId` points at a pod that left the live
-  set (e.g. an older box that got revoked → filtered out), `currentPod =
-  currentPodId's pod ?? leaderPod ?? pods.first` falls through to `pods.first` =
-  whatever `/pods` returned first = `frank`. No oldest-wins order, no stickiness.
+  set, `currentPod = currentPodId's pod ?? leaderPod ?? pods.first` falls through
+  to `pods.first` = whatever `/pods` returned first = `frank`. No oldest-wins
+  order, no stickiness — and, more deeply, **the client is inventing a leader at
+  all**, which it should never do.
 
 ---
 
@@ -41,8 +45,7 @@ share only the phone-held account keys, by design).
 cadence). It already lands for live boxes.
 
 1. **`.com` computes liveness server-side** (`podInventory.ts`) so all three
-   clients agree. Add a per-pod field — keep the existing `state` for wire
-   compat, add:
+   clients agree. Keep the existing `state` for wire compat, add:
    - `liveness: "live" | "unreachable" | "never"` and `lastSeenMsAgo: number | null`.
    - `live` ⟺ `lastReported != null && (now - lastReported) < FRESHNESS_WINDOW`.
    - `never` ⟺ registered but never reported (and not bridged-live) — a box still
@@ -65,12 +68,13 @@ cadence). It already lands for live boxes.
 4. **Clients** stop trusting registration for liveness: iOS `PodInfo` gains
    `lastReported`/`liveness`; `PendingServerReconciler` sets `.status` (and the
    richer `livenessState`) from `liveness`, not "registered". The server card +
-   the leader/anchor eligibility (Fix C) read the real signal. Webapp + Android
+   leader/anchor eligibility (Fix C) read the real signal. Webapp + Android
    mirror.
 5. **Stronger signal (optional, future):** the tunnel hub's live registry is
    real-time (a turned-off box's tunnel drops immediately). A hub→`.com`
    connected-pod report would make liveness instantaneous instead of
-   window-delayed — noted, not required for v1.
+   window-delayed — noted, not required for v1. (The gossip system below makes the
+   *boxes* learn each other's liveness in real time regardless.)
 
 ---
 
@@ -100,64 +104,249 @@ single global anchor is simply wrong — there is no reason to store one.
 
 ---
 
-## Fix C — deterministic + sticky leadership
+## Fix C — per-service leadership by gossip (+ a "preferred server" default)
 
-The user's invariant: **first-ever server is leader; the last remaining after
-deletions is leader; adding a new server never changes the leader.**
+The reframe that fixes Bug C properly: **there is no global "leader of all
+servers."** Machines are independent; a global boss is a fiction. There are only
+two real things, and conflating them is what produced the bug.
 
-1. **Deterministic order:** `.com` `listForUser` → `ORDER BY registered_at ASC`
-   (oldest first). Now `pods.first` is meaningfully the *oldest*, and every client
-   list/leader fallback is stable.
-2. **Leadership is sticky + heals deterministically.** `leaderPodId` persists.
-   - Set once for the first server (`addPod`, already correct).
-   - **Adding a new server never reassigns it** (already guarded — keep it).
-   - Reassign ONLY when the current leader genuinely **leaves the registered set**
-     (deleted/revoked, not merely offline — an offline leader may come back), to
-     the **oldest remaining** (= `pods.first` after the ASC order).
-   - The user can still explicitly `setLeader`.
-3. **Kill the dangling-leader fallback.** Today `currentPod = leaderPod ??
-   pods.first` silently promotes `pods.first` when `leaderPodId` doesn't resolve.
-   Instead: on reconcile, if `leaderPodId` is absent from the live registered set,
-   **explicitly re-anchor** it to the oldest remaining (deterministic with the new
-   order) — don't let a transient resolution failure float leadership to whatever
-   `/pods` happened to return first.
-4. **(Clarify) what "leader" governs.** Confirm whether this `leaderPodId` is
-   purely the iOS default-selected pod or also the routing leader (tier-2
-   `<service>.<user>` leader-routing / RCK). If the latter, the sticky rule must
-   also drive routing-leader selection so the two never disagree. (Open question
-   below.)
+1. **Per-service lead — the routable truth.** For each service `slug--author`, the
+   lead is the **highest-clout live server that actually runs it**. That is what
+   `<service>.<user>` routes to. Computed locally by every box from gossip.
+   Different services may have different leads; the common case (one box runs
+   everything) just makes one box lead everything — an *outcome*, never an
+   assumption.
+2. **Preferred server — a frontend default + a clout signal, NOT a role.** The
+   server the phone prefers and shows as "your server." Its only effects: (a) the
+   UI's default selected pod, and (b) the owner's vote raises that server's clout
+   so it wins per-service leadership wherever it runs.
+
+This kills Bug C at the root: the client never invents a leader. It *reads*
+per-service leads the servers computed, and "current server" is the
+preferred-server default, not `pods.first`.
+
+### C.0 — Clout (the deterministic ranking every box computes)
+
+Over the **live** members running a given service, highest clout wins:
+
+1. **Most-recent owner vote.** A server holding an owner-signed preferred-server
+   designation outranks all un-voted servers; among voted, the **newest
+   `issuedAt`** wins.
+2. **Oldest birth certificate.** The owner-IRK signature that admitted the box to
+   the cloud — the **immutable create-time authCode** (signed once, dated,
+   tamper-proof). The most *senior* box wins by default. This **replaces the old
+   `.com` `registered_at` ordering**: seniority is now a signed, verifiable,
+   `.com`-independent fact, not a mutable DB field.
+3. **Alphabetical** (server identity / domain) — the (≈impossible) exact-tie
+   breaker.
+
+A pure function of signed inputs → every box computes the same answer → agreement
+with no coordinator. "Free-for-all with jitter, but only claim if you outrank the
+current holder."
+
+### C.1 — The gossip system (`broadcast--user`)
+
+The servers of a cloud tell each other, continuously, everything needed to compute
+clout + per-service leads — **without the phone wiring up siblings, and without
+`.com` being the authority.**
+
+- **Each box periodically announces** (the gossip payload):
+  `name N · authkey A + birth-date D · owner-vote V + date (if any) · services
+  [slug--author, …] · liveness`.
+- **Transport — `https://broadcast--user.flagship.services`:** a reserved
+  per-account fan-out name (keep the ugly `--`; it's a machine URL). It **cannot
+  be SNI-passthrough** — it targets N boxes, not one — so the **hub terminates its
+  TLS** (a `*.flagship.services` wildcard cert covers it) and **fans the POST body
+  to every connected box of `<user>`** over their tunnels.
+- **Content-blind via a shared secret.** The body is symmetric
+  encrypted+authenticated with the **Cloud Gossip Key (CGK)**, so the hub fans an
+  **opaque blob** and learns only metadata (account, size, timing) — consistent
+  with "Fly is content-blind." CGK is **derived, not stored**:
+  `CGK = HKDF-SHA256(umk.seed, "flagship.cloud-gossip.v1", 32)`. Every box —
+  including one created months later — derives the identical key; the phone can
+  always recompute it; nothing is escrowed. (DOTS-tagged like the box SWK,
+  deliberately distinct from it.)
+- **Returns nothing.** Fire-and-forget. A box learns its siblings only from the
+  *incoming* broadcasts the hub delivers to its own inbound endpoint — no
+  membership count or liveness leaks back through the reply.
+- **Bootstrap = mesh, steady-state = star.** On coming online, or when a service
+  has no live lead, boxes broadcast freely (mesh) to discover each other; once a
+  per-service lead is settled, the churn drops toward a star (only the lead must
+  keep announcing for that service). **No phone-provided sibling list required** —
+  the broadcast finds them. **Self-hosted without Fly** = the owner wires sibling
+  reachability manually (the documented trade-off of going Fly-less).
+
+### C.2 — Claiming the route (gentleman's agreement + the loser yields)
+
+Per-service leadership becomes *real* routing by the lead claiming
+`<service>.<user>` at the hub. The hub stays **dumb and content-blind**:
+
+- **Grant-on-capability.** The hub grants the route to any claimant that proves
+  it's an entitled, non-evicted server of the account running that service — the
+  **existing HELLO entitlement check + the decommission eviction check**. The hub
+  does NOT judge leadership and its **last-write-wins is left untouched** (minimal
+  surgery, no new hub failure mode). Domain management is harness code, not the
+  vibecoded app — so we can assume peaceful, restrained claims.
+- **The daemon rule (each gossip round, per service it touches):** *if I am the
+  highest-clout live runner of S and don't hold the route → claim it; if I am NOT
+  and I currently hold it → release it.* The **release half** is what kills the
+  original flap: frank/leticia fought forever only because nothing ever yielded
+  (no liveness, no gossip, last-write-wins forever). Now a transient double-claim
+  (failover, partition-heal) **self-heals in one gossip round** when the loser
+  sees it's outranked and yields.
+- **Letters of support (documented escalation, NOT built):** if we ever distrust a
+  daemon to yield, or a real race bites, the lead could present a quorum of
+  signed sibling endorsements the hub verifies. Unneeded for v1
+  (harness-controlled daemons on the owner's own hardware + loser-yields closes
+  the window). Cheap middle ground if wanted: the claim HELLO already carries the
+  claimant's signed birth-date/vote, so the hub could refuse to replace a holder
+  with a **provably lower-clout** claimant — a comparison of two signed
+  timestamps, default off.
+
+### C.3 — The owner's vote (preferred-server designation)
+
+- The owner signs `flagship/set-leader/v1` (owner IRK:
+  `user | preferredStkPubHex | issuedAt | nonce`; `"none"` clears) and delivers it
+  to the boxes (via `.com` deposit and/or the broadcast). It is a **clout input,
+  not a command**: the designated box includes the vote in its gossip; everyone
+  recomputes; the designee — now highest-clout wherever it runs a service —
+  claims those routes (loser-yields hands them over).
+- **The vote rides the claim:** when the designee claims a route it presents the
+  signed vote; the yielding box verifies it and steps down. The vote needs no
+  separate authoritative channel — it's the top tier of clout, justified by the
+  claim it rides on.
+- **Lifecycle:** the vote wins only while its server is **live and runs the
+  service** (a dead/absent designee just loses the clout contest → normal
+  seniority resumes); a **newer** vote beats an older; `"none"` reverts to pure
+  seniority. The UI shows the designee as the **preferred server** immediately and
+  as the per-service **lead** once it has claimed; the brief "becoming → leader"
+  is the claim landing, not a heavyweight ceremony.
+
+### C.4 — What `.com` and the clients do (relay, not authority)
+
+- The boxes are canonical. **`.com` relays** the gossip-computed per-service leads
+  + the preferred-server designation to the clients for display (or clients read
+  leads directly from the boxes). **If `.com` is down, the boxes still elect +
+  route among themselves** over the broadcast — leadership survives a `.com`
+  outage, which is the whole point of grounding it in the boxes.
+- Clients **read** the preferred-server (default pod) + per-service leads; the iOS
+  `pods.first`/sticky/dangling-leader guessing is **deleted**.
+
+### C.5 — Protocol artifacts (cross-platform: TS/Swift/Kotlin byte-identical + pinned vectors)
+
+- **CGK** — `HKDF-SHA256(umk.seed, "flagship.cloud-gossip.v1", 32)`.
+- **Gossip announcement** — canonical bytes
+  (`flagship/gossip/v1 | user | name | birthAuthHex | birthDate | voteStkHex |
+  voteDate | services(joined) | liveness | issuedAt`), **HMAC-SHA256'd with CGK**
+  (authenticity among siblings) and CGK-encrypted for transport.
+- **`flagship/set-leader/v1`** — owner-IRK preferred-server vote
+  (`user | preferredStkPubHex | issuedAt | nonce`; `"none"` clears). Mirrors the
+  `server-decommission` envelope shape.
+- **Clout ranking** — the pure C.0 function, so box, phone, and `.com` relay all
+  agree byte-for-byte on who leads.
+- **Birth certificate** — the create-time owner-IRK authCode is the seniority
+  source; define its canonical birth-date extraction.
 
 ---
 
 ## Sequencing, tests, surface
 
-- **`.com` (smallest, highest-leverage, ship first):** `ORDER BY registered_at
-  ASC` (Fix C.1) + the `liveness`/`lastSeenMsAgo` fields (Fix A.1-3). Pure
-  additive; `podInventory` tests + a freshness-window unit test + the
-  provision-bridge edge case. Rides the next Worker deploy.
-- **iOS / Android clients:** `PodInfo.liveness` plumbing + reconciler change (A);
-  per-pod base-URL + per-pod token store (B); sticky/heal leadership (C). XCTest /
-  unit tests: a silent pod classifies `unreachable`; opening a non-anchor pod
-  loads against its own fqdn+token; a new server doesn't change the leader; a
-  removed leader re-anchors to the oldest.
-- **webapp:** mirror A (render liveness) + B (per-pod podBaseUrl/token) + C
-  (ordering already comes from `.com`).
-- **Interaction with the decommission feature (just shipped):** orthogonal but
-  complementary — decommission *removes* a replaced box (revoke+evict); these
-  fixes make a *non*-decommissioned silent box read correctly, each server's page
-  reachable, and leadership stable. A decommissioned box (revoked) is already
-  filtered; an offline-but-registered box now reads `unreachable` instead of
-  `online`.
+Build smallest→largest. **Phases 1-2 alone close all three reported bugs;** 3-6
+add the gossip leadership system.
+
+- **Phase 1 — `.com` directory truth (Fix A):** `liveness`/`lastSeenMsAgo`
+  server-side + the provision-bridge caveat + a deterministic display order.
+  `podInventory` tests + a freshness-window unit + the bridge edge case. Closes
+  Bug A's directory half for every client at once. *(Pure additive, `.com` only.)*
+- **Phase 2 — clients consume (Fix A display + Fix B + Fix C-read):**
+  `PodInfo.liveness` plumbing + the reconciler change (stop "REGARDLESS of
+  liveness"); per-pod base URL + per-pod token store; **delete the
+  `pods.first`/sticky/dangling-leader guess** → render liveness + read the
+  relayed preferred-server / per-service leads. iOS + Android + webapp. **This
+  alone resolves all three reported bugs** (Bug C is gone the moment the client
+  stops inventing a leader).
+- **Phase 3 — protocol foundation:** CGK, gossip announcement (HMAC + encrypt),
+  `set-leader` vote, clout ranking, birth-cert date — TS/Swift/Kotlin +
+  pinned vectors. Pure, no live wiring; unblocks everything below.
+- **Phase 4 — the broadcast fan-out:** the hub's `broadcast--user` TLS termination
+  + content-blind per-account fan-out (returns nothing) + the reserved-name
+  carve-out (a user can't create `broadcast`/`servers`/`all`). Hub/`.com` tests for
+  fan-out scoping + payload opacity.
+- **Phase 5 — the daemon gossip + claim/yield:** the box gossip loop (announce +
+  receive + decrypt + compute per-service leads) + the claim/yield rule against
+  the hub. Reburn-gated for the live loop; unit-tested with a mocked transport
+  (convergence, loser-yields, clout ties, a dead-sibling re-elect).
+- **Phase 6 — owner vote UI + relay:** the "Set preferred server" action (sign
+  `set-leader`) + the "preferred / becoming / lead" display, all three clients;
+  `.com` relay of the computed leads + the designation. Reburn-gated live.
+
+**Interaction with the decommission feature:** orthogonal but complementary —
+decommission *removes* a replaced box (owner-signed eviction at the hub); this
+makes a *non*-decommissioned silent box read correctly, each server's page
+reachable, and leadership a real, gossip-held, owner-tilted property. The eviction
+check the hub already does for decommission is exactly the "non-evicted" half of
+C.2's grant-on-capability — they compose cleanly.
+
+## As-built status (this branch)
+
+**Phases 1-5 are built + CI-green** (all three reported bugs fixed; the full
+gossip path built and unit-tested):
+
+- **Phase 1 (`.com` Fix A):** `liveness`/`lastSeenMsAgo` + oldest-first order on
+  `/pods`; `FRESHNESS_WINDOW = 15 min`; bridged `lastReported` classified `never`
+  (not `unreachable`). control-plane tests green.
+- **Phase 2 (clients):** webapp + iOS (1229 XCTests) + Android (1124) — honest
+  liveness states, per-pod base URL + per-pod token store (keyed `pod-<fqdn>`, with
+  a legacy-token migration), and the `pods.first`/dangling-leader guess **deleted**
+  (a new box can no longer seize leadership; a dangling leader re-anchors to the
+  oldest pod).
+- **Phase 3 (protocol):** `deriveCGK`, gossip canonical+HMAC+`seal/open`,
+  `set-leader` vote, `electLeadForService`/`compareClout`, `birthDateFromAuthCode`
+  — TS (708) + Swift (16) + Kotlin, pinned cross-platform vectors.
+- **Phase 4 (hub):** `broadcast--<user>.flagship.services` content-blind
+  per-account fan-out — reuses the SNI router's existing hub→box stream origination
+  (`FRAME_OPEN`/`DATA`), delivers the opaque body to each sibling's
+  `POST /internal/gossip`, returns `204`. `broadcast`/`servers`/`all` reserved.
+  apps/web tests green.
+- **Phase 5 (daemon):** CGK read (env → `/var/flagship/cgk.hex` → install-blob
+  sibling, mirror of SWK; absent ⇒ gossip disabled, no brick); the `/internal/gossip`
+  ingest + SiblingView (45 s announce, ~112 s liveness window); per-service election
+  + claim/yield **live-wired to `runtime.urlController`** (claim/release the tier-2
+  `<slug>.<user>` FQDN). server-daemon tests green.
+
+**Two honest seams (pre-existing daemon limitations, documented):** the
+`urlController.release` is a *soft* release today (no dedicated release frame — a
+yielded slot relies on socket-death / FCFS takeover); and the daemon's self-vote
+getter is wired but returns `null` until Phase 6 feeds it a received `set-leader`.
+
+**Phase 6 (remaining, reburn-gated):** the owner's control surface + turning gossip
+on for real boxes — (a) **CGK post-boot provisioning** via a sealed `.com` deposit
+lane (mirror the secret-free SWK delivery — do NOT embed CGK in the recipe; the repo
+is secret-free-recipe by default), (b) the "Set preferred server" action signing
+`set-leader` + its deposit/consume so the self-vote getter lights up, (c) the `.com`
+relay of computed per-service leads for client display.
 
 ## Open questions
 
-- **Liveness window value** (15 min proposed) + the tri-state copy
-  ("unreachable" vs "offline" vs "last seen …").
-- **Does `leaderPodId` also drive routing-leader / RCK selection?** If yes, the
-  sticky rule must be the single source for both.
+- **Liveness window value** (15 min proposed) + the tri-state copy ("unreachable"
+  vs "offline" vs "last seen …").
 - **Per-pod token migration:** how existing single-slot tokens migrate to the
   pod-keyed store (best-effort: attribute the current token to the current
   anchor's pod, re-pair others on demand).
-- **Heartbeat reliability:** should v1 also push the "daemon-status heartbeat not
-  landing" fix so `lastReported` is universally fresh (and the provision-bridge
-  caveat retires)?
+- **CGK rotation:** derived-from-UMK means it only rotates when the UMK does. Is a
+  rotatable gossip key ever needed (e.g. to evict a compromised box from the
+  gossip without a full UMK roll)? If so, layer an epoch into the HKDF info string
+  and broadcast the epoch bump — deferred unless a real need appears.
+- **Gossip cadence + the inbound endpoint:** the announce interval (vs the ~15 min
+  liveness window — gossip should be tighter, ~30-60 s, so failover beats the
+  directory window), and the box-side inbound path the hub fans to (a dedicated
+  authenticated `/internal/gossip` on the box's normal port).
+- **Reserved-name collision:** carve `broadcast`/`servers`/`all` (and the chosen
+  one) out of the user-creatable server/service namespace before shipping Phase 4.
+- **Birth-cert artifact, exactly:** confirm the create-time authCode (not the
+  re-mintable entitlement) is the seniority source on every platform, and pin its
+  date field in the vectors so seniority can never be gamed by a re-issue.
+- **`.com` relay vs direct read:** do clients read per-service leads from `.com`
+  (simple, one fetch) or directly from a box (more live, `.com`-independent)? v1
+  relays via `.com` for the UI; the boxes remain canonical so the direct path can
+  be added without a model change.

@@ -81,6 +81,13 @@ const RESERVED_USER_LABELS = new Set([
   "qa",
   "ci",
   "staging",
+  // Per-account gossip fan-out reserved names (Phase 4) — mirror of
+  // control-plane labels.ts. `broadcast` is the reserved fan-out label
+  // `broadcast--<user>.flagship.services` the hub mirrors gossip through;
+  // `servers`/`all` are reserved collective addresses for the same regime.
+  "broadcast",
+  "servers",
+  "all",
 ]);
 
 export type LabelValidation =

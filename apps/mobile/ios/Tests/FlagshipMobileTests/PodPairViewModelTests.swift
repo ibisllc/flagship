@@ -54,7 +54,9 @@ final class PodPairViewModelTests: XCTestCase {
     func testIdempotentNoOpWhenTokenExists() async {
         let mock = MockLockPowerClient()
         let s = store()
-        await s.setSessionToken("existing-token")
+        // Fix B — idempotency is now keyed PER POD, so the existing token must be
+        // stored under this server's pod id (not just the legacy active slot).
+        await s.setSessionToken("existing-token", forPodId: PodInfo.podId(forFqdn: server))
         var signerCalled = false
         let vm = PodPairViewModel(
             client: mock,
@@ -68,8 +70,8 @@ final class PodPairViewModelTests: XCTestCase {
         XCTAssertEqual(vm.phase, .alreadyPaired)
         XCTAssertFalse(signerCalled, "must not derive the IRK (no Face ID) when already paired")
         XCTAssertTrue(mock.sent.isEmpty, "must not POST when already paired")
-        // The existing token is untouched.
-        let token = await s.sessionToken
+        // The existing per-pod token is untouched.
+        let token = await s.sessionToken(forPodId: PodInfo.podId(forFqdn: server))
         XCTAssertEqual(token, "existing-token")
     }
 

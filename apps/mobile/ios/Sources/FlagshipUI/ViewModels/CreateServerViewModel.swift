@@ -388,6 +388,11 @@ public final class CreateServerViewModel {
                 label: "iPhone",
                 irk: irk
             )
+            // Persist under THIS box's pod id (Fix B) so creating a 2nd box doesn't
+            // clobber the 1st's token; also seed the active slot for the immediate
+            // flow. (Secret-free: the pairing ORDER is deposited later by the Home
+            // reconcile, not inline here.)
+            await sessionStore.setSessionToken(pairing.token, forPodId: PodInfo.podId(forFqdn: serverDomain))
             await sessionStore.setSessionToken(pairing.token)
             pairingOrderJson = pairing.pairingOrderJson
         } catch {

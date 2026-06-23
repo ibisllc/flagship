@@ -14,6 +14,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.HttpResponse
 import com.flagshipserver.app.core.JsonHttpTransport
+import com.flagshipserver.app.core.PodInfo
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.coroutines.test.runTest
@@ -98,13 +99,20 @@ class AddControlDeviceViewModelTest {
             AddPairedSessionOrder.canonicalBytes(server, "00".repeat(32), "Pixel 9", 1_700_000_000_000L),
         )
 
-        // Token persisted ONLY after the 200.
+        // Token persisted ONLY after the 200 — both the active slot AND the
+        // per-pod store (Fix B), keyed by this box's pod id.
         assertEquals("00".repeat(32), store.sessionToken.value)
         assertEquals("https://$server", store.podBaseUrl.value)
+        assertEquals("00".repeat(32), store.sessionToken(forPodId = PodInfo.podId(server)))
     }
 
     @Test fun send_idempotent_whenTokenAlreadyPresent() = runTest {
-        val store = InMemorySessionStore().apply { setSessionToken("existing") }
+        // MULTI-POD (Fix B): idempotency now keys on THIS pod's per-pod token, so
+        // seed it under the pod id (not the legacy single slot — that no longer
+        // implies "paired with this box", which is the whole point of Fix B).
+        val store = InMemorySessionStore().apply {
+            setSessionToken("existing", forPodId = PodInfo.podId(server))
+        }
         val transport = RecordingTransport("""{"ok":true}""")
         var signerCalled = false
         val vm = AddControlDeviceViewModel(
@@ -116,7 +124,30 @@ class AddControlDeviceViewModelTest {
         assertTrue(vm.phase.value is AddControlDevicePhase.AlreadyPaired)
         assertEquals(null, transport.lastUrl) // never posted
         assertEquals(false, signerCalled) // never prompted the biometric
-        assertEquals("existing", store.sessionToken.value)
+        assertEquals("existing", store.sessionToken(forPodId = PodInfo.podId(server)))
+    }
+
+    @Test fun send_pairingSecondBox_doesNotOverwriteFirstBoxToken() = runTest {
+        // A 1st box is paired (its token under its own pod id). Pairing a DIFFERENT
+        // box must NOT be blocked by the 1st's token, and must write the new token
+        // under the NEW pod id while leaving the 1st box's token intact.
+        val secondBox = "work.alice.flagship.services"
+        val firstPodId = PodInfo.podId(server)
+        val secondPodId = PodInfo.podId(secondBox)
+        val store = InMemorySessionStore().apply { setSessionToken("first-token", forPodId = firstPodId) }
+        val kp = Ed25519Sign.KeyPair.newKeyPair()
+        val vm = AddControlDeviceViewModel(
+            store = store,
+            signer = { Ed25519Sign(kp.privateKey) },
+            client = LockPowerClient(transport = RecordingTransport("""{"ok":true}"""), podBaseUrl = { "https://$it" }),
+            label = "Pixel 9",
+            now = { 1_700_000_000_000L },
+            makeToken = { "ab".repeat(16) },
+        )
+        vm.send(secondBox)
+        assertTrue(vm.phase.value is AddControlDevicePhase.Paired)
+        assertEquals("first-token", store.sessionToken(forPodId = firstPodId))    // intact
+        assertEquals("ab".repeat(16), store.sessionToken(forPodId = secondPodId)) // new
     }
 
     @Test fun send_unresolvableQr_failsWithoutSigning() = runTest {

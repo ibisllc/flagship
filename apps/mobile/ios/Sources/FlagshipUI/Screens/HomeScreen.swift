@@ -666,6 +666,7 @@ public enum PodStatusStyle {
     public static func label(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
         case .dead:               return "Never came online"
+        case .offline:            return "Offline"
         case .waitingForApproval: return "Waiting for approval"
         case .comingOnline:
             return status == .pending ? "Pending" : "Coming online…"
@@ -682,6 +683,7 @@ public enum PodStatusStyle {
     public static func pillKind(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> FSPillKind {
         switch liveness {
         case .dead:               return .offline
+        case .offline:            return .offline
         case .waitingForApproval: return .provisioning
         case .comingOnline:       return .provisioning
         case .online:
@@ -707,6 +709,7 @@ public enum PodStatusStyle {
     static func pillAccessibilityId(liveness: PodInfo.LivenessState, status: PodInfo.Status) -> String {
         switch liveness {
         case .dead:               return "pod-card-never-online"
+        case .offline:            return "pod-card-offline"
         case .waitingForApproval: return "pod-card-waiting-approval"
         case .comingOnline where status != .pending: return "pod-card-coming-online"
         default:                  return "pod-card-status"
@@ -744,7 +747,7 @@ public enum HomeStatusFilter: CaseIterable, Hashable {
             default: return false
             }
         case .offline:
-            if liveness == .dead { return true }
+            if liveness == .dead || liveness == .offline { return true }
             return liveness == .online && pod.status == .offline
         }
     }

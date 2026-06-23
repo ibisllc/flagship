@@ -170,7 +170,43 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
 export function classifyServer(server, pod, opts = {}) {
   if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
+
+  // Fix A — honor the new /pods `liveness` field when present.
+  //
+  // The .com control plane now emits `liveness: "live"|"unreachable"|"never"`
+  // on each pod entry (alongside the existing `lastReported`). When present,
+  // trust it as the authoritative signal — it folds in the latest HELLO
+  // timestamps and avoids the client computing stale ages off a cached
+  // `lastReported`. When absent (pre-update Worker / test fixture), the
+  // existing `lastReported`-age logic acts as the faithful fallback.
+  //
+  // Mapping:
+  //   "live"        → online (cert-expiry sub-checks still apply)
+  //   "unreachable" → offline, using `lastSeenMsAgo` for the human age
+  //   "never"       → "still coming up" / awaiting first heartbeat
+  //
+  // Approval / grace-window states take precedence over `liveness === "never"`
+  // so a box stuck on serve-authorization still reads "waiting for approval".
+  const liveness = pod?.liveness;
+
+  if (liveness === "unreachable") {
+    // The box has checked in before but is not reachable right now.
+    const msAgo = typeof pod.lastSeenMsAgo === "number" ? pod.lastSeenMsAgo : null;
+    const ageLabel = msAgo != null ? formatAge(msAgo) : "unknown";
+    return { kind: "offline", label: `offline (last seen ${ageLabel} ago)` };
+  }
+
+  if (liveness === "never") {
+    // Box registered but never sent a heartbeat. Check approval / grace states
+    // first — they override "never" (same logic as the no-lastReported path).
+    if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
+      return { kind: "waiting-for-approval", label: "waiting for approval" };
+    }
+    return { kind: "never-seen", label: "still coming up" };
+  }
+
   if (!pod || pod.lastReported == null) {
+    // No liveness field AND no lastReported — fall back to the existing logic.
     // Registered but never checked in. ANY live request (unlock OR entitlement
     // OR a future type) means it's actively waiting for the owner — not dead.
     // `pendingRequests` is the cheap, unauthenticated Box Request Inbox digest

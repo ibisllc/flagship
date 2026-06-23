@@ -49,8 +49,16 @@ export class TunnelRegistry {
    */
   private readonly redirections = new Map<string, string>();
   private readonly allocator: AppUserAllocator;
+  /**
+   * The data-plane apex these pod canonicals live under — `flagship.services`
+   * in prod, `gym.flagship.services` in the test env. Held here (not only in
+   * the allocator) so the registry can do its own apex-RELATIVE user-zone
+   * extraction for account-scoped lookups (the gossip fan-out).
+   */
+  private readonly apex: string;
 
   constructor(opts: { allocator?: AppUserAllocator; apex?: string } = {}) {
+    this.apex = (opts.apex ?? "flagship.services").toLowerCase();
     this.allocator = opts.allocator ?? new AppUserAllocator({ apex: opts.apex });
   }
 
@@ -175,6 +183,41 @@ export class TunnelRegistry {
       if (t) out.push(t);
     }
     return out;
+  }
+
+  /**
+   * Every connected tunnel whose pod canonical lives in `<username>`'s zone —
+   * i.e. the user-zone label immediately left of the apex suffix equals
+   * `username`. This is the account-scoped membership the gossip fan-out
+   * (`broadcast--<user>.flagship.services`) delivers to: a box POSTs an opaque
+   * blob and the hub mirrors it to every OTHER box of the same account.
+   *
+   * Apex-RELATIVE (the user is the last label after the apex suffix is
+   * stripped, never a fixed offset from the right) so the `gym.` test apex
+   * parses correctly. A pod canonical is `<server>.<user>.<apex>`, so the
+   * user label is the LAST label of the apex-stripped head.
+   */
+  tunnelsForUser(username: string): RegisteredTunnel[] {
+    const user = username.trim().toLowerCase();
+    if (!user) return [];
+    const out: RegisteredTunnel[] = [];
+    for (const [pc, t] of this.tunnels) {
+      if (this.userOfPod(pc) === user) out.push(t);
+    }
+    return out;
+  }
+
+  /** The user-zone label of a pod canonical, apex-relative, or null. */
+  private userOfPod(podCanonical: string): string | null {
+    const suffix = "." + this.apex;
+    const lower = podCanonical.toLowerCase();
+    if (!lower.endsWith(suffix)) return null;
+    const head = lower.slice(0, -suffix.length);
+    if (head.length === 0) return null;
+    const parts = head.split(".");
+    if (parts.length < 2) return null; // need at least <server>.<user>
+    const user = parts[parts.length - 1]!;
+    return /^[a-z0-9][a-z0-9-]{0,62}$/.test(user) ? user : null;
   }
 
   size(): number {

@@ -298,6 +298,24 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            // MULTI-POD (Fix B) — PodSessionSync. When the current/leader pod
+            // changes, point the single active base-URL + token slots at THAT
+            // pod's per-pod token (deterministic base URL `https://<fqdn>`).
+            // First-activation also runs the legacy-single-token migration so a
+            // box paired before the per-pod store attributes its existing token
+            // to its pod (idempotent). A pod with no stored token activates with a
+            // null token → the BFF 401s → "pair this device", never borrowing
+            // another pod's token. Mirror of iOS PodSessionSync.
+            val currentPodId by appState.currentPodId.collectAsState()
+            val pods by appState.pods.collectAsState()
+            LaunchedEffect(currentPodId, pods) {
+                val pod = pods.firstOrNull { it.podId == currentPodId }
+                if (pod != null && pod.fqdn.isNotEmpty()) {
+                    sessionStore.migrateSingleTokenToPod(pod.podId)
+                    sessionStore.activatePod(pod.podId, "https://${pod.fqdn}")
+                }
+            }
+
             val sizeClass = calculateWindowSizeClass(this)
 
             // Appearance override (Settings → Appearance). AUTO follows the

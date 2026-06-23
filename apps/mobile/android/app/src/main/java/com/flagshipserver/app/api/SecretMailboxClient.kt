@@ -295,6 +295,16 @@ data class PodDirectoryEntry(
      *  `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods once
      *  every surface read this). Defaulted ⇒ absent is empty. Mirror of iOS. */
     val pendingRequests: List<PendingRequestSummaryWire> = emptyList(),
+    /** HONEST LIVENESS (Fix A) — the server-authoritative reachability for this
+     *  box, computed by `.com` from the daemon-status heartbeat against a
+     *  freshness window: `"live"` | `"unreachable"` | `"never"`. null ⇒ a
+     *  pre-field Worker (the reconciler falls back to the registration-derived
+     *  `cameOnline` path). Mirror of iOS PodDirectoryEntry.liveness. */
+    val liveness: String? = null,
+    /** Wall-clock ms since the box's last heartbeat (`lastSeenMsAgo`), or null
+     *  if it never checked in / a pre-field Worker. Humanized into "offline —
+     *  last seen <…>" for an `unreachable` box. Mirror of iOS. */
+    val lastSeenMsAgo: Long? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

@@ -8,10 +8,20 @@
 //   2. The user's own pod (`<server>.<user>.flagship.services`) —
 //      after pairing, the webapp talks to its own daemon for /api/screens/*.
 //
-// `screensFetch` reads the target through the per-profile profilesStore
-// `podBaseUrl` slot. Falls back to same-origin for dev/desk pairings.
+// Fix B — per-pod session token + base URL:
+//   `screensFetchFrom(podFqdn, path)` targets a specific pod directly using
+//   its per-pod token. The legacy `screensFetch()` (active-pod slot) is
+//   preserved for call-sites not yet updated.
 
-import { get as profileGet, set as profileSet } from "./profilesStore.js";
+import {
+  get as profileGet,
+  set as profileSet,
+  getSessionTokenFor,
+  setSessionTokenFor,
+  getPodBaseUrlFor,
+} from "./profilesStore.js";
+
+// ── Legacy per-profile single-slot API (kept for backward compatibility) ──
 
 export function setPodBaseUrl(url) {
   profileSet("podBaseUrl", url || null);
@@ -27,6 +37,36 @@ export function setSessionToken(tok) {
 
 export function getSessionToken() {
   return profileGet("sessionToken") || "";
+}
+
+// ── Fix B — per-pod token + URL helpers ──
+
+/**
+ * Return the session token for a specific pod (keyed by lower-cased FQDN),
+ * or null when not paired.
+ * @param {string} podFqdn  lower-cased FQDN (e.g. "home.alice.flagship.services")
+ */
+export function getSessionTokenForPod(podFqdn) {
+  return getSessionTokenFor(podFqdn) || null;
+}
+
+/**
+ * Persist the session token for a specific pod.
+ * @param {string} podFqdn  lower-cased FQDN
+ * @param {string|null} tok
+ */
+export function setSessionTokenForPod(podFqdn, tok) {
+  setSessionTokenFor(podFqdn, tok || null);
+}
+
+/**
+ * The base URL for a specific pod — always deterministic: `https://<podFqdn>`.
+ * Never stored: derived from the FQDN on the fly.
+ * @param {string} podFqdn  lower-cased FQDN
+ * @returns {string}
+ */
+export function podBaseUrl(podFqdn) {
+  return getPodBaseUrlFor(podFqdn);
 }
 
 export class ScreensError extends Error {
@@ -75,6 +115,55 @@ export async function screensFetchFrom(base, path, init = {}) {
   const tok = getSessionToken();
   if (!tok) {
     throw new ScreensError("no session token; re-pair", 0);
+  }
+  const url = `${base.replace(/\/+$/, "")}${path}`;
+  const headers = {
+    "x-flagship-session": tok,
+    ...(init.headers || {}),
+  };
+  if (init.body && !headers["content-type"]) {
+    headers["content-type"] = "application/json";
+  }
+  const r = await fetch(url, { ...init, headers });
+  const text = await r.text();
+  let body = null;
+  try {
+    body = text.length ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!r.ok) {
+    const msg = body && typeof body === "object" && "error" in body ? body.error : `HTTP ${r.status}`;
+    throw new ScreensError(msg, r.status);
+  }
+  return body;
+}
+
+/**
+ * Fix B — fetch a `/api/screens/*` endpoint using a SPECIFIC POD's own token
+ * and deterministic base URL (`https://<podFqdn>`). Each pod authenticates
+ * with its own paired session token so that multiple pods never share a single
+ * token slot.
+ *
+ * Throws descriptive ScreensErrors for the key error states so callers can
+ * show honest copy:
+ *   - liveness "unreachable"/"never" → caller should not even reach here
+ *     (show offline/coming-up copy before calling screensFetch)
+ *   - no stored token → "Pair this device with this server" prompt
+ *   - base is empty (bad FQDN) → not paired error
+ *
+ * @param {string} podFqdn  lower-cased FQDN of the target pod
+ * @param {string} path     URL path (e.g. "/api/screens/server-detail")
+ * @param {RequestInit} [init]
+ */
+export async function screensFetchForPod(podFqdn, path, init = {}) {
+  const base = podBaseUrl(podFqdn);
+  if (!base) {
+    throw new ScreensError("not paired to a server yet", 0);
+  }
+  const tok = getSessionTokenForPod(podFqdn);
+  if (!tok) {
+    throw new ScreensError("no session token for this pod; pair this device with this server", 0);
   }
   const url = `${base.replace(/\/+$/, "")}${path}`;
   const headers = {

@@ -80,9 +80,12 @@ public final class PodPairViewModel {
     /// `.alreadyPaired` / `.failed`. Fire it once per user tap — the biometric
     /// fires inside `signer`, so never call this in a loop or on appearance.
     public func pair() async {
-        // Idempotency — a token already on disk means this device is paired;
-        // do nothing (no re-pair, no biometric).
-        if let existing = await store.sessionToken, !existing.isEmpty {
+        // Idempotency — a token already stored FOR THIS POD means this device is
+        // paired with this box; do nothing (no re-pair, no biometric). Keyed
+        // per-pod (Fix B) so pairing a 2nd box isn't short-circuited by the 1st
+        // box's token sitting in the active slot.
+        let podId = PodInfo.podId(forFqdn: serverDomain)
+        if let existing = await store.sessionToken(forPodId: podId), !existing.isEmpty {
             phase = .alreadyPaired
             return
         }
@@ -129,7 +132,10 @@ public final class PodPairViewModel {
 
         // Only persist after the box accepted the order — a token the daemon
         // never stored would auth nothing and would defeat the idempotency
-        // guard above on the retry.
+        // guard above on the retry. Persist under THIS pod's id (Fix B) so a
+        // 2nd box's pairing never overwrites the 1st box's token, AND mirror it
+        // into the active slot so the just-paired box's BFF auths immediately.
+        await store.setSessionToken(token, forPodId: podId)
         await store.setSessionToken(token)
         phase = .paired
     }

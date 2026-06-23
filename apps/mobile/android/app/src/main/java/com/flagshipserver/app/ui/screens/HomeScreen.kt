@@ -420,6 +420,7 @@ fun ServerRow(
 
     val pillTag: String? = when (liveness) {
         PodInfo.LivenessState.DEAD -> "pod-card-never-online"
+        PodInfo.LivenessState.OFFLINE -> "pod-card-offline"
         PodInfo.LivenessState.WAITING_FOR_APPROVAL -> "pod-card-waiting-approval"
         PodInfo.LivenessState.COMING_ONLINE ->
             if (pod.status == PodInfo.Status.PENDING) null else "pod-card-coming-online"
@@ -447,7 +448,7 @@ fun ServerRow(
                     // server that actually came online.
                     if (isLeader && pod.cameOnline) FSPill("Leader", kind = FSPillKind.Online)
                     FSPill(
-                        label = PodStatusStyle.label(liveness, pod.status),
+                        label = PodStatusStyle.label(pod, liveness),
                         kind = PodStatusStyle.pillKind(liveness, pod.status),
                         modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
                     )
@@ -559,7 +560,7 @@ fun PodCard(
                 }
                 Spacer(Modifier.height(FS.space.s1))
                 FSPill(
-                    label = PodStatusStyle.label(liveness, pod.status),
+                    label = PodStatusStyle.label(pod, liveness),
                     kind = PodStatusStyle.pillKind(liveness, pod.status),
                 )
                 val demo = pod.demoServer

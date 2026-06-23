@@ -783,6 +783,10 @@ private suspend fun prepareDelivery(
             label = "Android",
             irk = irk,
         )
+        // MULTI-POD (Fix B): persist under THIS pod's id (`pod-<lowercased-fqdn>`)
+        // so creating a 2nd box never clobbers the 1st box's token; also keep the
+        // single active slot pointed at the box being created.
+        sessionStore?.setSessionToken(pairing.token, forPodId = com.flagshipserver.app.core.PodInfo.podId(serverDomain))
         sessionStore?.setSessionToken(pairing.token)
         pairingOrderJson = pairing.pairingOrderJson
     } catch (_: Throwable) {

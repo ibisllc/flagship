@@ -81,6 +81,7 @@ import {
   registerControlRedirections,
   coldStartRedirections,
 } from "./routes/controlRedirections.js";
+import { registerGossipFanout } from "./routes/gossipFanout.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -379,6 +380,13 @@ export async function start(opts: {
   // #87 — custom-domain control channel. Must register before listen.
   const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
   registerControlRedirections(app, { registry, secret: servicesControlSecret });
+  // Per-account gossip fan-out (Phase 4): recognize
+  // `broadcast--<user>.<apex>` at this TLS-terminating surface and mirror the
+  // verbatim opaque body to every connected box of that account. Only on the
+  // data plane (it needs the live tunnel registry).
+  if (surface === "services" || surface === "both") {
+    registerGossipFanout(app, { registry, apex: servicesApex });
+  }
   await app.listen({ port: httpPort, host });
   // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
   // 5-minute cache so reconnects don't hammer the API.

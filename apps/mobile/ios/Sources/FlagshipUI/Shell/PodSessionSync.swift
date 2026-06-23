@@ -2,39 +2,49 @@ import Foundation
 import FlagshipCore
 import FlagshipAPI
 
-/// Keeps the `LiveScreensClient`'s session store pointed at the currently
-/// selected, online server's daemon.
+/// Keeps the `LiveScreensClient`'s session store pointed at the pod whose
+/// surface is being shown — its deterministic base URL AND its per-pod
+/// session token.
 ///
-/// THE BUG THIS FIXES: `podBaseUrl` was only ever meant to be written by the
-/// original pairing flow — but that flow never actually called
-/// `setPodBaseUrl` (the setter had zero call-sites). A server surfaced by
-/// `/pods` reconciliation (`AppState.upsertRegisteredPod`) therefore had no
-/// base URL, so `LiveScreensClient` threw `.notPaired` on every load even
-/// though the box's daemon BFF was up and reachable. The fix is to derive
-/// `podBaseUrl` from `PodInfo.fqdn` the moment we have a current online pod.
+/// THE BUG THIS FIXES (Fix B, multi-pod): the store used to hold ONE global
+/// `podBaseUrl` derived from the single resolved `currentPod`, and ONE active
+/// session-token slot. Opening any non-anchor pod's authenticated detail
+/// therefore borrowed the WRONG base URL + token → a perpetual "Connecting…".
+/// Now:
+///   - The base URL is DETERMINISTIC from the pod's fqdn (`https://<fqdn>`),
+///     so opening pod X targets X directly — no single-global-anchor dependency.
+///   - The active session-token slot is set from the POD-KEYED token store
+///     (`sessionToken(forPodId:)`). A pod with no stored token activates with a
+///     nil token, so the BFF 401s → "pair this device with this server" — it
+///     NEVER borrows another pod's token.
 ///
-/// `LiveScreensClient` already authenticates every request with the
-/// `x-flagship-session` token, so once the base URL is set the existing
-/// signed-request path satisfies the daemon's 401 — nothing else is needed
-/// to reach `/api/screens/*`.
+/// `LiveScreensClient` still reads the single active `podBaseUrl` /
+/// `sessionToken` slots, so the per-pod store is transparent to it.
 ///
-/// Selection / switch / sign-out all funnel through `sync(currentPod:)`:
-///   - current pod is `.online` with a non-empty fqdn → write its base URL;
-///   - anything else (no server, pending-only, offline, switching away,
-///     signed out) → clear it, so a stale URL never points the screens
-///     client at the wrong (or a gone) server.
+/// Selection / switch / sign-out funnel through `sync(currentPod:)`:
+///   - a pod with a non-empty fqdn (any reachability) → target its base URL +
+///     activate its token (the detail screen renders the honest state — offline
+///     / coming-up / connecting — from the pod's liveness + the load result);
+///   - pending-only / no-fqdn / nil (signed out) → clear both, so a stale URL
+///     or another pod's token never points the screens client at the wrong box.
 public enum PodSessionSync {
-    /// Reconcile the store's `podBaseUrl` against the current pod.
-    /// `currentPod` is the resolved `AppState.currentPod` (the selected
-    /// pod, falling back to the leader). Pass `nil` to clear unconditionally
-    /// (sign-out / unpaired).
+    /// Reconcile the store's active slots against `currentPod`. Pass `nil` to
+    /// clear unconditionally (sign-out / unpaired).
     public static func sync(currentPod: PodInfo?, store: any SessionStoring) async {
         guard let pod = currentPod,
-              pod.status == .online,
+              pod.status != .pending,
               !pod.fqdn.isEmpty else {
-            await store.setPodBaseUrl(nil)
+            // No reachable target — clear the active base URL + token. (The
+            // per-pod token store is untouched: a pod keeps its token for when
+            // it's selected again.)
+            await store.activatePod(nil, baseUrl: nil)
             return
         }
-        await store.setPodBaseUrl(CompanionTicketURL.podBaseUrl(forFqdn: pod.fqdn))
+        let podId = PodInfo.podId(forFqdn: pod.fqdn)
+        // Best-effort: attribute a legacy single token to this pod the first
+        // time it's activated (migration for the pre-Fix-B single-slot world).
+        await store.migrateSingleTokenToPod(podId)
+        let baseUrl = CompanionTicketURL.podBaseUrl(forFqdn: pod.fqdn)
+        await store.activatePod(podId, baseUrl: baseUrl)
     }
 }

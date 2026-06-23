@@ -36,5 +36,48 @@ public actor SessionStore {
     public func clear() {
         defaults.removeObject(forKey: podBaseKey)
         defaults.removeObject(forKey: sessionTokenKey)
+        defaults.removeObject(forKey: podTokensKey)
+    }
+
+    // MARK: - Per-pod token store (Fix B)
+
+    private let podTokensKey = "flagship.podTokens"
+
+    private func readPodTokens() -> [String: String] {
+        guard let data = defaults.data(forKey: podTokensKey),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return map
+    }
+
+    private func writePodTokens(_ map: [String: String]) {
+        if map.isEmpty { defaults.removeObject(forKey: podTokensKey); return }
+        if let data = try? JSONEncoder().encode(map) { defaults.set(data, forKey: podTokensKey) }
+    }
+
+    public func sessionToken(forPodId podId: String) -> String? {
+        guard !podId.isEmpty else { return nil }
+        return readPodTokens()[podId.lowercased()]
+    }
+
+    public func setSessionToken(_ token: String?, forPodId podId: String) {
+        guard !podId.isEmpty else { return }
+        var map = readPodTokens()
+        let key = podId.lowercased()
+        if let token { map[key] = token } else { map.removeValue(forKey: key) }
+        writePodTokens(map)
+    }
+
+    public func podTokenIds() -> [String] {
+        Array(readPodTokens().keys)
+    }
+
+    public func migrateSingleTokenToPod(_ anchorPodId: String) {
+        let key = anchorPodId.lowercased()
+        guard !key.isEmpty else { return }
+        var map = readPodTokens()
+        guard map[key] == nil else { return }                 // already attributed
+        guard let legacy = defaults.string(forKey: sessionTokenKey), !legacy.isEmpty else { return }
+        map[key] = legacy
+        writePodTokens(map)
     }
 }

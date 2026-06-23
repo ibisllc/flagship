@@ -356,6 +356,16 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// `awaitingUnlock` / `awaitingEntitlement` booleans (dropped from /pods
     /// once every surface read this). Lenient: absent ⇒ empty.
     public let pendingRequests: [PendingRequestSummaryWire]
+    /// HONEST LIVENESS (multi-pod Fix A) — `.com`'s server-authoritative
+    /// reachability for this box (`liveness: "live"|"unreachable"|"never"`),
+    /// computed from the daemon-status heartbeat against a freshness window.
+    /// nil ⇒ a pre-field Worker response that didn't carry it. Decoded as a raw
+    /// string (forward-compatible: an unknown future value yields nil rather
+    /// than failing the whole pods-list decode).
+    public let liveness: String?
+    /// Wall-clock ms since the box's last heartbeat (`lastSeenMsAgo`), or nil
+    /// when it never checked in / a pre-field Worker.
+    public let lastSeenMsAgo: Int64?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -364,13 +374,17 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         registeredAt: Int64? = nil,
         hasCert: Bool = false,
         signedStatus: SignedDaemonStatus? = nil,
-        pendingRequests: [PendingRequestSummaryWire] = []
+        pendingRequests: [PendingRequestSummaryWire] = [],
+        liveness: String? = nil,
+        lastSeenMsAgo: Int64? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
         self.registeredAt = registeredAt; self.hasCert = hasCert
         self.signedStatus = signedStatus
         self.pendingRequests = pendingRequests
+        self.liveness = liveness
+        self.lastSeenMsAgo = lastSeenMsAgo
     }
 
     public init(from decoder: Decoder) throws {
@@ -380,6 +394,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.revokedAt = try c.decodeIfPresent(Int64.self, forKey: .revokedAt)
         self.lastReported = try c.decodeIfPresent(Int64.self, forKey: .lastReported)
         self.registeredAt = try c.decodeIfPresent(Int64.self, forKey: .registeredAt)
+        self.liveness = try c.decodeIfPresent(String.self, forKey: .liveness)
+        self.lastSeenMsAgo = try c.decodeIfPresent(Int64.self, forKey: .lastSeenMsAgo)
         self.pendingRequests = (try? c.decodeIfPresent([PendingRequestSummaryWire].self, forKey: .pendingRequests)) ?? []
         // `currentCert` is an object-or-null on the wire; decode it as a
         // presence flag (we only need "is there a cert" here).
@@ -400,6 +416,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
+        try c.encodeIfPresent(liveness, forKey: .liveness)
+        try c.encodeIfPresent(lastSeenMsAgo, forKey: .lastSeenMsAgo)
         if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
     }
 
@@ -409,7 +427,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, pendingRequests
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, pendingRequests, liveness, lastSeenMsAgo
     }
 }
 
