@@ -98,6 +98,7 @@ import com.flagshipserver.app.viewmodels.PowerOffPhase
 import com.flagshipserver.app.viewmodels.PowerOffViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerPhase
 import com.flagshipserver.app.viewmodels.RevokeServerReason
+import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
 import java.text.SimpleDateFormat
@@ -203,6 +204,8 @@ fun ServerDetailScreen(
             DeadManCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            ReplaceServerCard(serverDomain = d.value.serverFqdn, onReplaced = onBack)
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
@@ -1057,6 +1060,73 @@ private fun DeadManCard(serverDomain: String) {
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
                 )
+            }
+        }
+    }
+}
+
+// "Replace this server" entry on server-detail (docs/server-replacement-graceful-
+// decommission.md). Owner-only — the decommission order is IRK-signed behind the
+// biometric inside ReplaceServerViewModel. Opens ReplaceServerScreen (backup
+// pre-flight gate → disposition picker → mint + deposit) in a full-screen dialog.
+// A graceful retire distinct from Revoke (which bricks); this hands the FQDN to a
+// replacement. Mirror of iOS ReplaceServerCard.
+@Composable
+private fun ReplaceServerCard(serverDomain: String, onReplaced: () -> Unit) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val screens = LocalScreensClient.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Replace",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSDangerButton(
+                label = "Replace this server",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-replace-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val podId = com.flagshipserver.app.core.PodInfo.podId(serverDomain)
+        val vm = remember(serverDomain) {
+            ReplaceServerViewModel(
+                serverFqdn = serverDomain,
+                username = username ?: "",
+                mailbox = mailbox,
+                screens = screens,
+                // L3 — retire the box instance locally so a rebooting encrypted
+                // zombie is never re-surfaced for unlock approval.
+                onRetired = { app.removePod(podId) },
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = {
+                        showSheet = false
+                        // If the pod was retired, pop back to Home.
+                        if (app.pods.value.none { it.podId == podId }) onReplaced()
+                    })
+                }
+                ReplaceServerScreen(vm = vm, serverFqdn = serverDomain)
             }
         }
     }

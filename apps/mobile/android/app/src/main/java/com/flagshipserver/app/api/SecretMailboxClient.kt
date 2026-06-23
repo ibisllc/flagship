@@ -58,6 +58,39 @@ interface SecretMailboxClient {
      *  (what the box presents at HELLO), not a secret. Reuses [PairingDepositBody]
      *  — identical wire shape. */
     suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody)
+
+    /** POST /api/server/:domain/decommission — phone, IRK mailbox-auth (the SAME
+     *  `DeviceEndpointClaim` shape the self-delete / pairing / entitlement deposits
+     *  use). Deposits an owner-IRK-signed `ServerDecommission` eviction order for
+     *  the retiring box instance (docs/server-replacement-graceful-decommission.md
+     *  §6). `.com` mailbox-auths the depositor as the domain's registered owner,
+     *  re-verifies the order under that owner's IRK, and records the eviction so
+     *  the box self-retires on its next outbound poll. Throws on non-2xx. */
+    suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
+}
+
+/** The decommission deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `order` is the
+ *  `ServerDecommission` field set and `signature` is the owner-IRK signature over
+ *  its canonical bytes. Field names match the Worker handler
+ *  (`handlePostDecommission`) exactly: `{ auth, authSignature, order, signature }`. */
+@Serializable
+data class DecommissionDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val order: Order,
+    val signature: String,
+) {
+    @Serializable
+    data class Order(
+        val podCanonical: String,
+        val retiredStkPubHex: String,
+        val finalBackup: Boolean,
+        val diskDisposition: String,
+        val backupEpoch: Long,
+        val nonce: String,
+        val issuedAt: Long,
+    )
 }
 
 /** The create-time pairing deposit body. `auth`/`authSignature` are the SAME IRK
@@ -427,6 +460,20 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(DecommissionDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/decommission",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -480,5 +527,13 @@ class MockSecretMailboxClient : SecretMailboxClient {
     val entitlementDeposits: MutableList<Pair<String, PairingDepositBody>> = mutableListOf()
     override suspend fun depositEntitlement(serverDomain: String, body: PairingDepositBody) {
         entitlementDeposits.add(serverDomain to body)
+    }
+
+    /** When set, the next [depositDecommission] throws this, then clears it. */
+    var nextDecommissionError: Throwable? = null
+    val decommissionDeposits: MutableList<Pair<String, DecommissionDepositBody>> = mutableListOf()
+    override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
+        nextDecommissionError?.let { nextDecommissionError = null; throw it }
+        decommissionDeposits.add(serverDomain to body)
     }
 }
