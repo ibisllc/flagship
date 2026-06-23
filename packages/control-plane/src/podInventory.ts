@@ -169,6 +169,10 @@ export interface OnlinePodEntry {
   revokedAt: number | null;
   routingTarget: string | null;
   lastReported: number | null;
+  /** Server-side liveness classification from the daemon-status heartbeat
+   *  cadence (multi-pod work); set alongside `lastReported` in the builder. */
+  liveness: "live" | "unreachable" | "never";
+  lastSeenMsAgo: number | null;
   currentCert: { sha256: string | null; validUntil: number | null; issuer: string | null } | null;
   signedStatus: { report: unknown; signatureHex: string } | null;
   appsServed: string[];
