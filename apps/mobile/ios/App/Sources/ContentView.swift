@@ -98,7 +98,10 @@ struct ContentView: View {
     /// detached write captures a value, not the AppState.
     @MainActor
     private func syncPodSession() {
-        let pod = app.isPaired ? app.currentPod : nil
+        // Anchor on a LIVE pod (`sessionPod`), not `currentPod` — the latter
+        // defaults to the leader = oldest pod, which may be a dead zombie that
+        // would null the base URL and brick the box surface for every pod.
+        let pod = app.isPaired ? app.sessionPod : nil
         let store = sessionStore
         Task { await PodSessionSync.sync(currentPod: pod, store: store) }
     }

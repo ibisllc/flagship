@@ -295,6 +295,19 @@ public final class AppState {
         return leaderPod ?? pods.first
     }
 
+    /// The pod the BOX session (the screens-client `podBaseUrl`) should target.
+    /// Unlike `currentPod` — which resolves to the LEADER and thus, by default,
+    /// the OLDEST pod (`pods.first`) regardless of liveness — this prefers a LIVE
+    /// pod. A registered-but-dead pod (e.g. an old zombie that defaults to leader)
+    /// must NOT anchor the session: `PodSessionSync` clears the base URL on a
+    /// non-`.online` anchor, which would brick the box surface for EVERY pod,
+    /// including healthy ones. So: the selected pod if it's online, else the first
+    /// online pod; nil only when no pod is online (nothing to connect to anyway).
+    public var sessionPod: PodInfo? {
+        if let p = currentPod, p.status == .online { return p }
+        return pods.first(where: { $0.status == .online })
+    }
+
     public func completeOnboarding(username: String, pods: [PodInfo]) {
         self.currentUser = username
         self.pods = pods

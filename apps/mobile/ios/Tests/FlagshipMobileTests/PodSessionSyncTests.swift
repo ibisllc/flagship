@@ -40,6 +40,31 @@ final class PodSessionSyncTests: XCTestCase {
         XCTAssertEqual(url, "https://home.harry.flagship.services")
     }
 
+    /// Regression for the leticia burn-test bug: a dead/oldest pod was the leader,
+    /// so `currentPod` (= leader) nulled the box base URL and bricked the box
+    /// surface for the one healthy pod. Driving the sync from `sessionPod`
+    /// anchors on the live pod instead.
+    func test_sessionPodFromAppState_skipsDeadLeaderForLivePod() async {
+        let s = store()
+        let app = AppState(
+            isPaired: true, currentUser: "harry",
+            pods: [
+                PodInfo(podId: "frank", name: "frank", fqdn: "frank.harry.flagship.services", status: .offline),
+                onlinePod("leticia.harry.flagship.services")
+            ],
+            leaderPodId: "frank",   // the dead, oldest pod is the leader (the bug)
+            currentPodId: "frank"
+        )
+        // OLD behavior: currentPod = dead leader ⇒ base URL nulled (the brick).
+        await PodSessionSync.sync(currentPod: app.currentPod, store: s)
+        let urlOld = await s.podBaseUrl
+        XCTAssertNil(urlOld)
+        // FIX: sessionPod anchors on the live pod.
+        await PodSessionSync.sync(currentPod: app.sessionPod, store: s)
+        let urlNew = await s.podBaseUrl
+        XCTAssertEqual(urlNew, "https://leticia.harry.flagship.services")
+    }
+
     func test_pendingPod_clearsPodBaseUrl() async {
         let s = store()
         await s.setPodBaseUrl("https://stale.harry.flagship.services")

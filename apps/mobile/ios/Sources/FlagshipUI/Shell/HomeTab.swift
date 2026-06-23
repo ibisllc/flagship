@@ -715,6 +715,12 @@ struct ServerDetailContainer: View {
         // which catches the case where `.onDisappear` doesn't fire
         // reliably during navigation churn on iPad.
         .task {
+            // Point the box session at THIS pod so per-pod detail targets the
+            // tapped pod — not the global leader/sessionPod. Without this,
+            // opening pod B while pod A is the session anchor loads A's data.
+            if let p = pod, p.status == .online {
+                await PodSessionSync.sync(currentPod: p, store: sessionStore)
+            }
             if detailVm == nil {
                 detailVm = HomeViewModel(client: client, podContext: podId)
             }
@@ -745,7 +751,14 @@ struct ServerDetailContainer: View {
             let parkUntilCancelled = AsyncStream<Never> { _ in }
             for await _ in parkUntilCancelled { }
         }
-        .onDisappear { metricsVm?.stopPolling() }
+        .onDisappear {
+            metricsVm?.stopPolling()
+            // Revert the box session to the global live anchor when leaving the
+            // per-pod detail, so Home/Services talk to a live pod again.
+            let store = sessionStore
+            let anchor = app.sessionPod
+            Task { await PodSessionSync.sync(currentPod: anchor, store: store) }
+        }
     }
 
     /// One pairing attempt (Face ID → sign `add-paired-session` → POST →
