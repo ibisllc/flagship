@@ -133,6 +133,34 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-22**.
 
+### 2026-06-22 — claims GATED to recently-suggested names (the generator is the gatekeeper)
+
+**A username is now claimable ONLY if the server recently SUGGESTED it** (or it's
+already owned by the claimant — the idempotent re-claim). This closes the hole where
+`POST /api/username/claim` accepted any signed name directly: now the generator — which
+vets a candidate (not claimed, not a `.com`) *before* it can be offered — is the
+gatekeeper for what's claimable. Migration **0062** + `UsernameOfferStorage`: a
+"recently-offered handles" roster (`username_offer`), keyed by name. `handleSuggestUsername`
+records each handed-out name; `handleUsernameClaim` requires the name on the roster within
+`OFFER_TTL_MS` (1h — generous vs. a real sign-up) and consumes it on success. The roster
+dep is optional (legacy test-setups omit it → ungated) with a `bypassOfferGate` escape
+hatch reserved for a future trusted ops/dibs path; the prod Worker wires it on both routes;
+the `*/10` cron prunes expired offers. **No client changes** — the name a user claims is
+exactly the one just offered. **Test tools** that claimed their own name (smoke-register,
+live-e2e) now fetch one from `/api/username/suggest` first.
+
+Also completed the **dashed-username webapp validators** (latent since the `--` change):
+`isValidUsername`/`isBareLoginHandle`/state/bootstrap now accept interior dashes + ban
+`--`, and `isBareLoginHandle` accepting dashes is what lets the new random handles sign
+*in*; fixed the now-wrong "no hyphens" messages + 2 tests that had been red.
+
+Gates: `tsc -b` clean · storage parity **65** (+ offer roster) · control-plane **1446**
+(+ claim-gate **8**, suggest-records-offer) · apps/web vitest **1481** · apps/com route/
+scheduled green. **Deferred:** vps-e2e (standalone owner-run harness, not in any gate) still
+picks its own name → hits the gate until given the same suggest-first update; hard `.com`/
+dibs enforcement now effectively holds at sign-up (the only claimable names are vetted
+suggestions) — the dibs proof-of-ownership claim path is still the separate feature.
+
 ### 2026-06-22 — random username SUGGESTION (queue + escalating throttle), all surfaces
 
 **Sign-up now HANDS the user one random `<adjective>-<noun>` handle** — the only
