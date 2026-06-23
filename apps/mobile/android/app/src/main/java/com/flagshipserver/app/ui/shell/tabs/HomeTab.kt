@@ -132,19 +132,16 @@ fun HomeTab() {
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
 
-    // Reconcile the server list against `/pods` on first appearance and
-    // whenever the signed-in account changes. Best-effort + silent.
+    // The pod-list reconcile + the account-level "which boxes are waiting for
+    // approval?" feed now ride the app-scope LiveSync canal (the `/stream`
+    // long-poll feeds BOTH app.pods — via the reconciler — and
+    // app.boxRequestInbox). So HomeTab no longer runs its own one-shot
+    // reconcile on user-change NOR the standalone 5s approval poll — those would
+    // be redundant second polls of the same data. One immediate reconcile on
+    // sign-in keeps the first paint fresh even before LiveSync's first tick
+    // lands; the `reconciler`/`approvalWatcher` objects stay for pull-to-refresh
+    // (`onRefresh` below forces one immediate directory read).
     LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
-
-    // Account-level approval poll: keep app.boxRequestInbox fresh so a
-    // box waiting for unlock surfaces its Approve affordance on the list /
-    // checklist without a push or a per-card poller. 5s cadence, matching iOS.
-    LaunchedEffect(app.currentUser.value) {
-        while (true) {
-            approvalWatcher.pollOnce()
-            kotlinx.coroutines.delay(5_000)
-        }
-    }
 
     // Refresh cloud-recovery enrolment state AND E7 account-reset
     // detection when the tab first appears AND whenever a pod

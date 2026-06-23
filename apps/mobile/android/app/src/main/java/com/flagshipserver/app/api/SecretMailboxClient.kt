@@ -33,6 +33,15 @@ interface SecretMailboxClient {
      *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
 
+    /** GET /api/users/:u/stream?cursor=<hex> — the unified live-update channel
+     *  (the hanging GET). A SUPERSET of `/pods` (same `pods`/`pending`) plus an
+     *  opaque `cursor`: pass the last cursor, the server returns immediately if
+     *  anything meaningful changed (or you sent none / a stale one), else HOLDS
+     *  up to ~25s and returns on the next change (or a timeout, same cursor).
+     *  Unauthenticated, exactly like `/pods`. The single foreground canal that
+     *  feeds AppState; the caller falls back to [fetchPods] if this errors. */
+    suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse
+
     /** PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
      *  the boot worker (owner-IRK via `bootAuth`). The `lease` body keeps its
      *  own IRK signature so the box re-verifies it; the worker stores
@@ -345,6 +354,26 @@ data class PodsDirectoryResponse(
     }
 }
 
+/** The wire shape of `GET /api/users/:u/stream` — the live-update channel. A
+ *  SUPERSET of [PodsDirectoryResponse] (same `pods`/`pending`) plus the opaque
+ *  `cursor` the client echoes back to detect change. Decodes with the SAME
+ *  lenient defaults, so the projection into AppState is identical whether the
+ *  data arrived via the stream or the fallback fetch. */
+@Serializable
+data class LiveSyncResponse(
+    /** Opaque change-detection cursor — store it, echo it back next request. */
+    val cursor: String = "",
+    val username: String,
+    val pods: List<PodDirectoryEntry> = emptyList(),
+    val pending: List<PendingPodEntry> = emptyList(),
+) {
+    /** Project to the `/pods`-shaped directory the reconciler consumes (it
+     *  doesn't need the cursor). Lets the same reconcile path serve both the
+     *  live stream and the fallback fetch with no branching. */
+    val directory: PodsDirectoryResponse
+        get() = PodsDirectoryResponse(username, pods, pending)
+}
+
 // MARK: - Live
 
 class LiveSecretMailboxClient(
@@ -408,6 +437,24 @@ class LiveSecretMailboxClient(
             responseSerializer = PodsDirectoryResponse.serializer(),
         )
         onPods?.let { observe -> runCatching { observe(response) } }
+        return response
+    }
+
+    override suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        var url = "$base/api/users/$encoded/stream"
+        if (!cursor.isNullOrEmpty()) {
+            url += "?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
+        }
+        // The hanging GET holds up to ~25s server-side; the transport's read
+        // timeout must allow that (the caller falls back to /pods on a real
+        // error). The stream carries the same `signedStatus` as /pods, so reuse
+        // the A′-pin observer off the projected directory.
+        val response = transport.getJson(
+            url,
+            responseSerializer = LiveSyncResponse.serializer(),
+        )
+        onPods?.let { observe -> runCatching { observe(response.directory) } }
         return response
     }
 
@@ -530,6 +577,27 @@ class MockSecretMailboxClient : SecretMailboxClient {
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
         PodsDirectoryResponse(username, directory, pendingOrders)
+
+    /** Scripted live-sync responses for tests: each [fetchLiveSync] call pops the
+     *  next entry; once exhausted it returns a DETERMINISTIC snapshot built from
+     *  [directory]/[pendingOrders] with a content-stable cursor (so a loop keeps
+     *  a stable cursor and never hangs). Set [liveSyncError] to make the next
+     *  call throw (exercising the /pods fallback). */
+    var liveSyncScript: MutableList<LiveSyncResponse> = mutableListOf()
+    var liveSyncError: Throwable? = null
+    /** Cursors observed across calls — lets a test assert the cursor is echoed. */
+    val liveSyncCursors: MutableList<String?> = mutableListOf()
+
+    override suspend fun fetchLiveSync(username: String, cursor: String?): LiveSyncResponse {
+        liveSyncCursors.add(cursor)
+        liveSyncError?.let { err ->
+            liveSyncError = null
+            throw err
+        }
+        if (liveSyncScript.isNotEmpty()) return liveSyncScript.removeAt(0)
+        val stableCursor = "mock-${directory.size}-${pendingOrders.size}"
+        return LiveSyncResponse(stableCursor, username, directory, pendingOrders)
+    }
 
     override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
         deposited.add(Triple(lease, signatureHex, bootAuth))
