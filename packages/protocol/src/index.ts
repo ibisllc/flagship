@@ -17,4 +17,5 @@ export * from "./daemonStatus.js";
 export * from "./pushRelay.js";
 export * from "./serviceCert.js";
 export * from "./serviceInvite.js";
+export * from "./swkDelivery.js";
 export { ed } from "./edSync.js";
