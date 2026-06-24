@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import Argon2Kit
+import FlagshipArgon2
 import FlagshipCore
 
 /// `.flagshipkey` — a passphrase-wrapped, portable backup of the User
@@ -92,7 +92,7 @@ public enum Keyfile {
 
     /// argon2id KDF. input = UTF8(passphrase); dkLen = 32. Maps the
     /// file's m (memory KiB) / t (iterations) / p (parallelism) onto the
-    /// reference C library via Argon2Kit. Pinned to argon2id + V13.
+    /// vendored reference C library via FlagshipArgon2. Pinned to argon2id + V13.
     static func deriveKey(passphrase: String, salt: Data, params: ArgonParams) throws -> SymmetricKey {
         let digest = try Argon2.hash(
             password: Data(passphrase.utf8),
