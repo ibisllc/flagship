@@ -397,6 +397,54 @@ cert-prewarm handler; the harness's on-delete unclaim; and the lead's cert pre-w
 **No `FRAME_OPEN` routing grant, no fly-directed routing** — eliminated, along with its
 ordering race. Validate alongside the 2-box reburn (the nudge path is now load-bearing).
 
+## Direct lead-read (clients read leadership from a box, not just the `.com` relay)
+
+Phase 6 relays per-service leads to clients via the daemon-status heartbeat → `/pods`
+(`leadsServices`) — simple, but **`.com`-dependent** and only **heartbeat-fresh** (~5
+min). Direct lead-read lets a client read the **live** leadership view straight from a
+box (the canonical source), so the app's "lead"/"preferred" display is fresh and
+survives a `.com` outage. Additive: the relay stays as the fallback.
+
+**Every box already has the data.** The gossip is a full broadcast — each announcement
+carries the box's whole `services` list (the clout election needs it), so every box's
+`SiblingView` already holds "who runs what" for every live box. So any one box can
+compute the lead for **every live-hosted service**, not just its own — a pure local
+function (`electLeadForService`) over data it already received. (A box only *acts* on
+its own services for claim/yield; knowing the rest is free, and is exactly what makes a
+single-box read serve the whole map.)
+
+**The box endpoint — `GET /api/leads`** (served on the box's own pinned pipe, same
+unauthenticated + CORS posture as the existing `GET /api/services`; leadership is
+already-public routing info, like `/pods`). Returns the full map computed from the
+SiblingView:
+```
+200 {
+  "asOf": <unix-ms>,            // when computed
+  "self": "<this-box-fqdn>",    // the answering box
+  "gossipActive": <bool>,       // false when gossip is disabled (no CGK) → leads {}
+  "leads": {
+    "<service-slug>": {          // the slug as it appears in the gossip `services` list
+      "leaderFqdn": "<box-fqdn>",   // the elected lead's box (client matches to a pod)
+      "leaderStkHex": "<hex>",      // the lead's STK pub (robust id)
+      "live": <bool>
+    }, ...
+  }
+}
+```
+Only live-hosted services appear; gossip-disabled → `gossipActive:false`, empty `leads`.
+
+**Client behavior (iOS/Android/webapp):** when rendering the lead/preferred indicators,
+if a box is reachable (the anchor/session box; any reachable box works since the read is
+unauthenticated), `GET https://<fqdn>/api/leads` and **prefer** its map over the `.com`
+`/pods` `leadsServices`. Populate the SAME per-pod leads model the UI already reads (the
+global `leads` map inverts to "pod → services it leads"). **Best-effort:** a 404
+(un-reburned box), error, unreachable, or `gossipActive:false` → fall back to the relay;
+never regress. The read is on-demand (leads view appears / refresh), not a new poller.
+
+**What it does NOT change:** routing (the hub routes by claim, untouched), the gossip,
+or the `.com` relay (kept as fallback). No protocol envelope, no `.com`/storage change,
+no migration. Daemon endpoint needs a reburn to go live; clients fall back meanwhile.
+
 ## Open questions
 
 - **Liveness window value** (15 min proposed) + the tri-state copy ("unreachable"

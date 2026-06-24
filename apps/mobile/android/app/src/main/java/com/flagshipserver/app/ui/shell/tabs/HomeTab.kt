@@ -124,6 +124,36 @@ fun HomeTab() {
             },
         )
     }
+    // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
+    // box-pinned pipe, preferred over the `.com` `/pods` relay when a box is
+    // reachable. Best-effort + on-demand (the appearance reconcile + pull-to-
+    // refresh, NOT a new always-on poller); the Live client rides
+    // HttpClientFactory.build() (box cert-fingerprint pinning) under the hood.
+    val leads = remember { com.flagshipserver.app.api.LiveLeadsClient() }
+    // PREFER a live box-direct leadership read over the relay value the relay
+    // reconcile just applied. For each ONLINE box, fetch `GET /api/leads`; the
+    // FIRST box that answers gives a GLOBAL (slug → leaderFqdn) view of the whole
+    // account, so one successful read covers every pod. Invert it into the per-pod
+    // ("fqdn → slugs") model the badge renders and apply it, overriding the relay
+    // value for matched pods. Any failure / 404 / gossip-off yields null and the
+    // relay value stands — never a regression. Mirror of iOS HomeTab.preferDirectLeads.
+    val preferDirectLeads: suspend () -> Unit = preferDirectLeads@{
+        val current = app.pods.value
+        val onlineFqdns = current
+            .filter { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
+            .map { it.fqdn }
+        if (onlineFqdns.isEmpty()) return@preferDirectLeads
+        val knownFqdns = current.map { it.fqdn }
+        for (fqdn in onlineFqdns) {
+            val map = leads.fetchLeads(fqdn) ?: continue
+            // A successful read is a complete account-wide view — invert + apply
+            // and we're done (no need to poll the other boxes this pass).
+            app.applyDirectLeads(
+                com.flagshipserver.app.api.DirectLeadsInversion.invert(map.leads, knownFqdns),
+            )
+            return@preferDirectLeads
+        }
+    }
     val boxInbox by app.boxRequestInbox.collectAsState()
     val awaitingApproval = app.serversAwaiting(SecretPurpose.UNLOCK_KEY)
     val awaitingEntitlement = app.serversAwaiting(SecretPurpose.ENTITLEMENT)
@@ -145,7 +175,12 @@ fun HomeTab() {
     // sign-in keeps the first paint fresh even before LiveSync's first tick
     // lands; the `reconciler`/`approvalWatcher` objects stay for pull-to-refresh
     // (`onRefresh` below forces one immediate directory read).
-    LaunchedEffect(app.currentUser.value) { reconciler.reconcile() }
+    LaunchedEffect(app.currentUser.value) {
+        reconciler.reconcile()
+        // Prefer a live box-direct leadership read over the relay value the
+        // reconcile applied — best-effort, on-demand (no new poller).
+        preferDirectLeads()
+    }
 
     // Refresh cloud-recovery enrolment state AND E7 account-reset
     // detection when the tab first appears AND whenever a pod
@@ -229,7 +264,16 @@ fun HomeTab() {
                     // failure the pod is kept so the name never strands.
                     scope.launch { decommissionServer(pod, app, server, toasts) }
                 },
-                onRefresh = { scope.launch { vm.load(); reconciler.reconcile(); approvalWatcher.pollOnce() } },
+                onRefresh = {
+                    scope.launch {
+                        vm.load()
+                        reconciler.reconcile()
+                        // Prefer a fresher box-direct leadership read over the
+                        // relay value the reconcile just applied (best-effort).
+                        preferDirectLeads()
+                        approvalWatcher.pollOnce()
+                    }
+                },
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },

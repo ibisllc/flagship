@@ -576,6 +576,44 @@ public final class AppState {
         currentPodId = podId
     }
 
+    /// PREFER a fresher, box-direct leadership view over the `.com` `/pods`
+    /// relay (Phase 6). `directByFqdn` is the inverted per-pod model
+    /// (lowercased fqdn → the slugs that box leads) produced from a box's
+    /// `GET /api/leads` (see `DirectLeadsInversion`). For each known pod we
+    /// OVERRIDE its `leadsServices` with the direct value — including an empty
+    /// list, so a box that just YIELDED a service stops showing the stale relay
+    /// badge. A pod absent from the map keeps its relay value untouched (we
+    /// learned nothing fresher about it), so this never regresses and is a
+    /// pure no-op when the map is empty. Best-effort: call it only with the
+    /// result of a SUCCESSFUL direct read; on any fetch failure the caller
+    /// simply doesn't call this and the relay value stands.
+    public func applyDirectLeads(_ directByFqdn: [String: [String]]) {
+        guard !directByFqdn.isEmpty else { return }
+        for idx in pods.indices {
+            let key = pods[idx].fqdn.lowercased()
+            guard let slugs = directByFqdn[key] else { continue }
+            if pods[idx].leadsServices == slugs { continue }
+            let old = pods[idx]
+            pods[idx] = PodInfo(
+                podId: old.podId,
+                name: old.name,
+                description: old.description,
+                fqdn: old.fqdn,
+                status: old.status,
+                pendingAuthCodeSerial: old.pendingAuthCodeSerial,
+                demoServer: old.demoServer,
+                cameOnline: old.cameOnline,
+                registeredAt: old.registeredAt,
+                awaitingUnlock: old.awaitingUnlock,
+                liveness: old.liveness,
+                lastSeenMsAgo: old.lastSeenMsAgo,
+                lastReported: old.lastReported,
+                identityPubKeyHex: old.identityPubKeyHex,
+                leadsServices: slugs
+            )
+        }
+    }
+
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
         // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,

@@ -16,6 +16,8 @@ export interface SiblingRecord {
   id: string;
   /** The sibling's FQDN — the final lexicographic clout tie-break. */
   domain: string;
+  /** The sibling's STK pub hex (its birth-cert authority hex), lowercased. */
+  stkHex: string;
   birthDate: number;
   /** STK pubkey hex the owner's latest set-leader vote points at, or "none". */
   voteStkHex: string;
@@ -34,6 +36,8 @@ export interface SiblingRecord {
 export interface ViewMember {
   id: string;
   domain: string;
+  /** The member's STK pub hex (its birth-cert authority hex), lowercased. */
+  stkHex: string;
   birthDate: number;
   voteIssuedAt: number | null;
   liveness: "live" | "unreachable" | "never";
@@ -67,6 +71,7 @@ export class SiblingView {
     this.records.set(id, {
       id,
       domain: a.name.toLowerCase(),
+      stkHex: a.birthAuthHex.toLowerCase(),
       birthDate: a.birthDate,
       voteStkHex: a.voteStkHex,
       voteDate: a.voteDate,
@@ -96,6 +101,7 @@ export class SiblingView {
     return this.liveSiblings(now).map((r) => ({
       id: r.id,
       domain: r.domain,
+      stkHex: r.stkHex,
       birthDate: r.birthDate,
       voteIssuedAt: r.voteStkHex !== "none" && r.voteDate > 0 ? r.voteDate : null,
       liveness: r.liveness,

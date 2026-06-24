@@ -133,6 +133,40 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-24**.
 
+### 2026-06-24 — direct lead-read: clients read live per-service leadership straight from a box
+
+**Why:** Phase 6 relayed per-service leads to clients via the daemon-status heartbeat →
+`/pods` (`leadsServices`) — simple but **`.com`-dependent** and only **heartbeat-fresh
+(~5 min)**. Direct lead-read lets a client read the **live** leadership view from a box
+(the canonical source), so the "lead"/"preferred" display is fresh and survives a `.com`
+outage. Additive — the relay stays as the fallback. Spec:
+`docs/multi-pod-liveness-session-leadership.md` → "Direct lead-read".
+
+**Key property:** the gossip is a full broadcast, so every box's `SiblingView` already
+holds "who runs what" for every live box — any one box can compute the lead for **every
+live-hosted service**, not just its own (a box only *acts* on its own for claim/yield).
+So a single box read serves the WHOLE account map.
+
+**Built — 4 worktree workers, CI-green:**
+- **daemon** (`gossip/leadsHttp.ts` + `election.leadsSnapshot()`): `GET /api/leads` on the
+  box's pinned pipe (unauthenticated + CORS, mirroring `/api/services`) → `{asOf, self,
+  gossipActive, leads:{slug:{leaderFqdn,leaderStkHex,live}}}` computed from the SiblingView
+  (union of all live members' slugs → `electLeadForService`). Gossip-disabled → `gossipActive:false`,
+  empty (always 200). Threaded `birthAuthHex`→`stkHex` through the view for the leader id.
+- **clients** (webapp `directLeads.js` · iOS `LeadsClient.swift` · Android `LeadsClient.kt`):
+  after the relay reconcile (Home appear + pull-refresh, on-demand — no new poller), fetch
+  `/api/leads` from the first reachable online box, **invert** the global `slug→leaderFqdn`
+  map into the per-pod `fqdn→[slugs]` model the Phase-6 lead pill already reads, and PREFER
+  it; a 404 (un-reburned box) / error / `gossipActive:false` → fall back to the relay, never
+  regress.
+
+Gates: `tsc -b` clean · `vitest apps/web + server-daemon` **3256** (daemon leads 12 · webapp
+20) · iOS `LeadsClientTests` **12/12** (full suite green bar the known unrelated
+`MaintainersConformanceTests` node_modules-fixture flake) · Android `LeadsClientTest` **13/13**
+(`:app:testDebugUnitTest` BUILD SUCCESSFUL, same 1 known flake). **No protocol/`.com`/storage
+change, no migration.** Webapp rides the next `.com` Worker deploy; the box `GET /api/leads`
+needs a **reburn** (un-reburned boxes 404 → clients use the relay). iOS/Android need rebuilds.
+
 ### 2026-06-24 — vendored argon2: killed the flaky Argon2Kit git submodule (iOS build reliability)
 
 **Why:** the iOS app's `Argon2Kit` dependency (the argon2id KDF for the `.flagshipkey`

@@ -118,6 +118,21 @@ public extension EnvironmentValues {
     }
 }
 
+/// Direct (box-read) per-service leadership — `GET /api/leads` over the box's
+/// pinned canonical pipe, preferred over the `.com` `/pods` `leadsServices`
+/// relay when a box is reachable. Defaults to the in-process Mock (returns nil =
+/// "no fresher source"), so previews/tests keep the relay value untouched.
+private struct LeadsClientKey: EnvironmentKey {
+    static let defaultValue: any LeadsClient = MockLeadsClient()
+}
+
+public extension EnvironmentValues {
+    var leadsClient: any LeadsClient {
+        get { self[LeadsClientKey.self] }
+        set { self[LeadsClientKey.self] = newValue }
+    }
+}
+
 /// Per-service access gating (docs/service-access-gating.md): the owner-IRK
 /// toggle + allow-list manager (box + `.com`) and the friend AID-signed redeem
 /// (box). Box calls ride the pinned canonical pipe; `.com` calls (invite
