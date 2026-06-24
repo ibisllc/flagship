@@ -315,10 +315,11 @@ gossip path built and unit-tested):
   + claim/yield **live-wired to `runtime.urlController`** (claim/release the tier-2
   `<slug>.<user>` FQDN). server-daemon tests green.
 
-**Two honest seams (pre-existing daemon limitations, documented):** the
-`urlController.release` is a *soft* release today (no dedicated release frame — a
-yielded slot relies on socket-death / FCFS takeover); and the daemon's self-vote
-getter is wired but returns `null` until Phase 6 feeds it a received `set-leader`.
+**Two honest seams (now addressed):** the daemon's self-vote getter (returned
+`null`) was lit by Phase 6's `setLeaderConsumer`; the `urlController.release` *soft*
+release is resolved by the **routing-resolution** design below (a cold/unclaimed
+meta-URL is re-resolved on demand, so a stale claim no longer matters — and the one
+real teardown case is closed by the on-delete unclaim).
 
 **Phase 6 (BUILT, reburn-gated for live):** the owner's control surface + turning
 gossip on for real boxes — (a) **CGK post-boot provisioning** via the
@@ -329,6 +330,72 @@ restarts → gossip wires), (b) the "Set preferred server" action signs `set-lea
 daemon reports `leadsServices` in its (signature-safe) heartbeat → `/pods` relays it
 → clients show "lead"/"preferred". Pinned cross-platform CGK-delivery vector on
 TS/Swift/Kotlin/webapp. A **reburn** validates the box-side deposit→claim→loop live.
+
+## Routing resolution — eager-claim + nudge-on-miss + park-or-drop
+
+How a leader-routed meta-URL (`<service>.<user>`, a purchased add-on domain) reaches
+the right box when the holder just changed or never claimed — closing the soft-release
+seam **without** any fly-directed "add this domain to your routing" message.
+
+**The invariant (kept):** a box only ever receives traffic for a name it has already
+**claimed** (`registry.register` via its tunnel HELLO `controlledDomains`). TLS
+terminates on the box, so it can only serve a name it holds the cert + service for —
+the claim *is* "I am ready to terminate this." No box is ever sent unexpected traffic.
+
+**Fast path (unchanged):** the gossip-elected per-service lead proactively claims the
+meta-URLs it leads (and pre-warms their certs); `registry.findBySni` routes off the
+claim table. A handoff to a higher-clout lead self-heals — the new lead's claim
+**overwrites** (last-register-wins). A dead lead's claim is dropped on **socket-close**
+(`unregister` → redistribute orphans).
+
+**Cold miss (new):** a request arrives for a meta-URL with no live claimer →
+
+1. The hub **parks** the pre-TLS-handshake TCP stream (it has only peeked the SNI; it
+   never decrypts).
+2. The hub **nudges** the user's online boxes (reuses the Phase-4 fan-out:
+   `deliverGossipToBox` → a plaintext `POST /internal/route-nudge {domain}`; the nudge
+   isn't secret, so it is *not* CGK-sealed — the hub has no CGK).
+3. Each box, on the nudge, consults its gossip election for that service:
+   `electLeadForService(self + live siblings, slug)`. If self is the elected lead (or
+   the only live runner — the single-box case elects self trivially) **and** runs the
+   service, it **claims** the domain the normal way (`urlController.claim` + ensure the
+   pre-warmed cert) — which lands in the hub's registry.
+4. The hub, watching for the claim, pipes the parked stream the instant it lands.
+5. **No claim within the hold window, or the chosen box is unreachable → the hub drops
+   the connection** (decision 1: a dropped connection *is* "service unavailable"; a
+   literal HTTP 503 is impossible here — the hub has no cert to terminate
+   `<service>.<user>` under passthrough).
+
+**Why there is no race (the key property):** the box **claims before any traffic is
+sent to it** — the claim is a HELLO/control-channel update fully applied to the
+registry, and the request stream is opened only *after*. There is no "serve-this-domain
+then here's-the-request" pair to order, because the hub never sends a routing
+directive. The only residual is two boxes briefly both claiming during a failover blip
+→ last-register-wins picks one; the loser stops claiming next round. Benign, pre-existing.
+
+**Decisions:**
+- **(1) Can't reach / no holder → drop the connection** (no literal 503 under
+  passthrough; a branded holding page would need the hub to hold a meta-URL cert,
+  rejected to preserve content-blindness).
+- **(2) Single-flight:** N parked requests for the same cold domain share ONE nudge +
+  ONE election and all release together on the claim. (Without it: redundant but
+  idempotent re-elections.)
+- **(3) Cache invalidation:** covered by **socket-close** (death) + the **on-delete
+  unclaim** (teardown) + **claim-overwrite** (handoff). No TTL backstop until a stale
+  entry is actually observed.
+- **(4) Cert pre-warm:** the elected lead pre-mints/loads the meta-URL cert so its
+  claim is instantly serveable and the parked request never waits on ACME.
+
+**On service delete (the harness, closing the last release case):** the box (1) removes
+the service from its local routing/serving, (2) re-broadcasts gossip without it (so
+siblings recompute leads), and (3) **unclaims the domain at the hub** (a lightweight
+`registry`-drop so the next request re-resolves) — then deletes quietly.
+
+**Net pieces to build:** the hub's park-on-miss + nudge + wait-for-claim + drop-on-
+timeout (single-flight per domain); the box's `/internal/route-nudge` → elect → claim +
+cert-prewarm handler; the harness's on-delete unclaim; and the lead's cert pre-warm.
+**No `FRAME_OPEN` routing grant, no fly-directed routing** — eliminated, along with its
+ordering race. Validate alongside the 2-box reburn (the nudge path is now load-bearing).
 
 ## Open questions
 
