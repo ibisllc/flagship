@@ -337,6 +337,50 @@ describe("runElectionRound application", () => {
     const a2 = await runElectionRound({ self, liveSiblings: [], claimer });
     expect(a2).toEqual([]);
   });
+
+  it("pre-warms the cert for each newly-led service BEFORE claiming", async () => {
+    const self: SelfMember = {
+      id: "self.harry.flagship.services",
+      domain: "self.harry.flagship.services",
+      birthDate: 100,
+      voteIssuedAt: null,
+      services: ["blog", "chat"],
+    };
+    const claimer = new MockClaimer();
+    const prewarmed: string[] = [];
+    await runElectionRound({
+      self,
+      liveSiblings: [],
+      claimer,
+      prewarmLead: async (service) => {
+        // pre-warm must run before the corresponding claim
+        expect(claimer.holds(service)).toBe(false);
+        prewarmed.push(service);
+      },
+    });
+    expect(prewarmed.sort()).toEqual(["blog", "chat"]);
+    expect([...claimer.held].sort()).toEqual(["blog", "chat"]);
+  });
+
+  it("a throwing prewarmLead never blocks the claim (best-effort)", async () => {
+    const self: SelfMember = {
+      id: "self.harry.flagship.services",
+      domain: "self.harry.flagship.services",
+      birthDate: 100,
+      voteIssuedAt: null,
+      services: ["blog"],
+    };
+    const claimer = new MockClaimer();
+    await runElectionRound({
+      self,
+      liveSiblings: [],
+      claimer,
+      prewarmLead: async () => {
+        throw new Error("cert store down");
+      },
+    });
+    expect(claimer.holds("blog")).toBe(true);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

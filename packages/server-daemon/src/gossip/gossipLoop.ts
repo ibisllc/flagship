@@ -23,6 +23,7 @@ import {
 } from "@flagship/protocol";
 import { runElectionRound, selfLeadsForRound, type SelfMember } from "./election.js";
 import type { RouteClaimer } from "./routeClaimer.js";
+import type { CertPrewarm } from "./routeNudge.js";
 import type { SiblingView } from "./siblingView.js";
 
 /** Default announce cadence — within the 30-60s window the spec calls for. */
@@ -53,6 +54,14 @@ export interface GossipLoopDeps {
   cgk: Uint8Array;
   view: SiblingView;
   claimer: RouteClaimer;
+  /**
+   * Cert pre-warm seam — ensure the `<slug>.<user>` cert is loaded the moment
+   * this box becomes the elected lead for a service (so the route is instantly
+   * serveable). Optional; omitted on certless/demo paths.
+   */
+  certPrewarm?: CertPrewarm;
+  /** Maps a service slug → its tier-2 `<slug>.<user>.<apex>` FQDN (for pre-warm). */
+  fqdnForService?: (service: string) => string;
   /** Re-read THIS box's announce state each tick (services change over time). */
   readSelf: () => SelfAnnounceState;
   /** Broadcast endpoint, e.g. https://broadcast--harry.flagship.services . */
@@ -137,6 +146,13 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       self,
       liveSiblings,
       claimer: deps.claimer,
+      ...(deps.certPrewarm && deps.fqdnForService
+        ? {
+            prewarmLead: async (service: string) => {
+              await deps.certPrewarm!.ensure(deps.fqdnForService!(service));
+            },
+          }
+        : {}),
       onLog: deps.onLog,
     });
   }

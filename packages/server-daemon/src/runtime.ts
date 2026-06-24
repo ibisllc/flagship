@@ -271,6 +271,14 @@ export interface DaemonRuntimeOptions {
      * runtime environment. Tests inject an `InMemoryAppEnvStore`.
      */
     envStore?: import("./serviceEnvStore.js").AppEnvStore;
+    /**
+     * Fired after a service is successfully uninstalled — the per-service
+     * leadership gossip wires this to release the box's `<slug>.<user>` route at
+     * the hub + re-announce. Plumbed straight through to ServicePlatform. The
+     * caller passes a late-binding thunk because the gossip loop is wired AFTER
+     * the runtime (and thus ServicePlatform) is up.
+     */
+    onServiceRemoved?: (slug: string) => void | Promise<void>;
   };
 }
 
@@ -372,6 +380,14 @@ export interface DaemonRuntime {
    * key lives on every box serving that service.
    */
   revokeCurrentCert(reason?: number): Promise<void>;
+  /**
+   * The persisted ACME cert store (or null when running store-less, e.g. a
+   * dataDir-less test/cert-only profile). Exposed so the per-service leadership
+   * gossip can PRE-WARM an already-provisioned tier-2 `<service>.<user>` cert
+   * into the CertManager the moment this box becomes the route lead — the lead
+   * must not first discover it needs a cert at request time.
+   */
+  certStore: PersistentAcmeStore | null;
 }
 
 export interface UpgradeRequest {
@@ -1056,6 +1072,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
+      onServiceRemoved: apOpts.onServiceRemoved ?? null,
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
@@ -1212,6 +1229,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       extraUpgrades.push(h);
     },
     revokeCurrentCert: (reason = 1) => revokeCurrentCert({ issuer, certManager, reason }),
+    certStore: store,
   };
 }
 
