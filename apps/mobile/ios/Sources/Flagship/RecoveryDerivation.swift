@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import Argon2Kit
+import FlagshipArgon2
 
 /// Passphrase → (fetchToken, prfSalt) derivation for WebAuthn-PRF cloud
 /// recovery (Tasks #2 + #4). This is the iOS mirror of the webapp's
