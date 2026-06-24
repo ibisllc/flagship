@@ -50,6 +50,19 @@ export const GOSSIP_BOX_PATH = "/internal/gossip";
 export const GOSSIP_BOX_METHOD = "POST";
 
 /**
+ * The box-side inbound route-NUDGE endpoint contract the daemon must serve.
+ * `POST /internal/route-nudge`, body = a plaintext JSON `{"domain":"<sni>"}`
+ * (NOT CGK-sealed — the hub holds no key and the nudge isn't secret; it only
+ * names a leader-routed meta-URL that just MISSED at the hub so the box can
+ * re-run its per-service election and `register` the name). Reply IGNORED by
+ * the hub, exactly like the gossip fan-out. Stated here so the daemon lane
+ * matches the hub byte-for-byte.
+ */
+export const NUDGE_BOX_PATH = "/internal/route-nudge";
+export const NUDGE_BOX_METHOD = "POST";
+export const NUDGE_CONTENT_TYPE = "application/json";
+
+/**
  * Parse `broadcast--<user>.<apex>` → `<user>`, or null if `host` is not a
  * gossip fan-out target under this apex. Case-insensitive; strips any `:port`.
  * The `<user>` must be a single valid user-zone label (no further dots) so a
@@ -95,22 +108,78 @@ export function deliverGossipToBox(
   opaqueBody: Uint8Array,
   opts: { host?: string } = {},
 ): boolean {
+  return originateRequestToBox(tunnel, {
+    method: GOSSIP_BOX_METHOD,
+    path: GOSSIP_BOX_PATH,
+    contentType: "application/octet-stream",
+    body: opaqueBody,
+    host: opts.host,
+  });
+}
+
+/**
+ * Deliver one route-nudge to one connected box over its tunnel.
+ *
+ * SAME stream-origination seam as the gossip fan-out — opens a multiplexed
+ * stream toward the box and writes a synthetic
+ * `POST /internal/route-nudge` whose body is the plaintext JSON
+ * `{"domain":"<domain>"}`. The `<domain>` is the SNI that just missed at the
+ * hub for a leader-routed meta-URL; the box re-runs its per-service election
+ * and (if it elects itself) `register`s the name, which lands in the registry
+ * and lets the parked stream pipe through. The box-side response is
+ * read-and-discarded — the nudge is fire-and-forget, like gossip.
+ *
+ * NOT CGK-sealed: the hub has no key and the domain isn't secret. Best-effort;
+ * returns true if the request bytes were handed to the tunnel.
+ */
+export function deliverNudgeToBox(
+  tunnel: RegisteredTunnel,
+  domain: string,
+  opts: { host?: string } = {},
+): boolean {
+  const body = new TextEncoder().encode(JSON.stringify({ domain }));
+  return originateRequestToBox(tunnel, {
+    method: NUDGE_BOX_METHOD,
+    path: NUDGE_BOX_PATH,
+    contentType: NUDGE_CONTENT_TYPE,
+    body,
+    host: opts.host,
+  });
+}
+
+/**
+ * THE SEAM (generalized). Originate a multiplexed stream toward a connected box
+ * and write a synthetic HTTP/1.1 request carrying `body` verbatim, then attach
+ * a no-op response sink (the hub never surfaces the box's reply). Best-effort:
+ * a send failure (tunnel mid-close) is swallowed and returns false. Returns
+ * true if the request bytes were handed to the tunnel.
+ */
+function originateRequestToBox(
+  tunnel: RegisteredTunnel,
+  req: {
+    method: string;
+    path: string;
+    contentType: string;
+    body: Uint8Array;
+    host?: string;
+  },
+): boolean {
   const streamId = tunnel.nextStreamId();
   // Host header: the box's own canonical (it terminates TLS for its own zone),
   // so its HTTP server routes the synthetic request like any inbound one. The
   // SNI the hub "opens" with is likewise the box canonical.
-  const host = opts.host ?? tunnel.podCanonical;
+  const host = req.host ?? tunnel.podCanonical;
   const head =
-    `${GOSSIP_BOX_METHOD} ${GOSSIP_BOX_PATH} HTTP/1.1\r\n` +
+    `${req.method} ${req.path} HTTP/1.1\r\n` +
     `Host: ${host}\r\n` +
-    `Content-Type: application/octet-stream\r\n` +
-    `Content-Length: ${opaqueBody.byteLength}\r\n` +
+    `Content-Type: ${req.contentType}\r\n` +
+    `Content-Length: ${req.body.byteLength}\r\n` +
     `Connection: close\r\n` +
     `\r\n`;
   const headBytes = new TextEncoder().encode(head);
-  const requestBytes = new Uint8Array(headBytes.byteLength + opaqueBody.byteLength);
+  const requestBytes = new Uint8Array(headBytes.byteLength + req.body.byteLength);
   requestBytes.set(headBytes, 0);
-  requestBytes.set(opaqueBody, headBytes.byteLength);
+  requestBytes.set(req.body, headBytes.byteLength);
 
   let done = false;
   const teardown = () => {
@@ -128,7 +197,7 @@ export function deliverGossipToBox(
   // drains/closes cleanly without buffering, and never surfaces a body upward.
   tunnel.attachStream(streamId, {
     onData() {
-      /* response bytes discarded — fan-out returns nothing */
+      /* response bytes discarded — fire-and-forget */
     },
     onRemoteClose() {
       teardown();
@@ -143,6 +212,23 @@ export function deliverGossipToBox(
     teardown();
     return false;
   }
+}
+
+/**
+ * Fan a route-nudge for `domain` out to EVERY connected box of `username`'s
+ * account. Reuses `tunnelsForUser` (same membership the gossip fan-out uses).
+ * Returns the number of boxes the nudge was handed to. Fire-and-forget per box.
+ */
+export function fanOutNudge(
+  registry: TunnelRegistry,
+  username: string,
+  domain: string,
+): number {
+  let delivered = 0;
+  for (const t of registry.tunnelsForUser(username)) {
+    if (deliverNudgeToBox(t, domain)) delivered++;
+  }
+  return delivered;
 }
 
 export interface GossipFanoutResult {
