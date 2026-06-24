@@ -117,6 +117,10 @@ export function buildRouteNudgeHandler(deps: RouteNudgeDeps) {
       const self: SelfMember = {
         id: deps.serverFqdn.toLowerCase(),
         domain: deps.serverFqdn.toLowerCase(),
+        // The nudge path only asks "do I lead this slug?" (it never reports a
+        // leader's STK hex), so stkHex is irrelevant to this election — only
+        // `/api/leads`/leadsSnapshot consumes it. Empty placeholder.
+        stkHex: "",
         birthDate: deps.birthDate,
         voteIssuedAt: deps.selfVoteIssuedAt?.() ?? null,
         services: myServices,
