@@ -57,6 +57,9 @@ struct FlagshipApp: App {
         // `.com` cert can't intercept a power-off / affirmation either.
         self.liveLockPower = LiveLockPowerClient(urlSession: pinnedSession)
         self.liveFrontPage = LiveFrontPageClient(urlSession: pinnedSession)
+        // Box-direct leadership read (`GET /api/leads`) rides the SAME box-pinned
+        // session so a rogue `.com` cert can't feed a forged direct view.
+        self.liveLeads = LiveLeadsClient(urlSession: pinnedSession)
         // Owner-signed service uninstall (`DELETE /api/services/:id`) rides the
         // SAME box-pinned session so a rogue `.com` cert can't intercept it.
         self.liveServiceUninstall = LiveServiceUninstallClient(urlSession: pinnedSession)
@@ -311,6 +314,12 @@ struct FlagshipApp: App {
     // session and live/mock split as lock/power.
     private let mockFrontPage = MockFrontPageClient()
     private let liveFrontPage: any FrontPageClient
+    // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
+    // box-pinned session, preferred over the `.com` `/pods` relay when a box is
+    // reachable. The Mock returns nil ("no fresher source") so dev/preview/demo
+    // keep the relay value untouched.
+    private let mockLeads = MockLeadsClient()
+    private let liveLeads: any LeadsClient
     // Service-uninstall box-direct client — same pinned session and live/mock
     // split as lock/power + front-page.
     private let mockServiceUninstall = MockServiceUninstallClient()
@@ -351,6 +360,9 @@ struct FlagshipApp: App {
     private var activeFrontPage: any FrontPageClient {
         dev.useLiveClient ? liveFrontPage : mockFrontPage
     }
+    private var activeLeads: any LeadsClient {
+        dev.useLiveClient ? liveLeads : mockLeads
+    }
     private var activeServiceUninstall: any ServiceUninstallClient {
         dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
     }
@@ -379,6 +391,7 @@ struct FlagshipApp: App {
                 .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.lockPowerClient, activeLockPower)
                 .environment(\.frontPageClient, activeFrontPage)
+                .environment(\.leadsClient, activeLeads)
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.serviceAccessClient, activeServiceAccess)
                 .environment(\.serverTransferClient, activeServerTransfer)

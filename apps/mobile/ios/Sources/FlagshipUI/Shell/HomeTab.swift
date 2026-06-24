@@ -9,6 +9,7 @@ public struct HomeTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.leadsClient) private var leads
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
@@ -120,6 +121,9 @@ public struct HomeTab: View {
                         // the screen reload + a fresh approval poll (so a box
                         // that just started waiting surfaces its Approve card).
                         await reconcileServerTruth()
+                        // Prefer a fresher box-direct leadership read over the
+                        // relay value the reconcile just applied (best-effort).
+                        await preferDirectLeads()
                         await approvalWatcher?.pollOnce()
                         await vm.load()
                     },
@@ -163,6 +167,9 @@ public struct HomeTab: View {
             if !didReconcileServerTruth {
                 didReconcileServerTruth = true
                 await reconcileServerTruth()
+                // Prefer a live box-direct leadership read over the relay value
+                // the reconcile applied — best-effort, on-demand (no new poller).
+                await preferDirectLeads()
             }
             // Refresh cloud-recovery enrollment status when the tab
             // first appears. A failed lookup is silent — better to
@@ -433,6 +440,34 @@ public struct HomeTab: View {
             }
         )
         await reconciler.reconcile()
+    }
+
+    /// PREFER a live, box-direct leadership read over the `.com` `/pods`
+    /// `leadsServices` relay (which is ~5 min stale + `.com`-dependent). For
+    /// each ONLINE box, fetch `GET /api/leads` over the box-pinned pipe; the
+    /// FIRST box that answers gives a GLOBAL (slug → leaderFqdn) view of the
+    /// whole account's leadership, so one successful read covers every pod.
+    /// Invert it into the per-pod ("fqdn → slugs") model the badge renders and
+    /// apply it, overriding the relay value for matched pods. Best-effort +
+    /// on-demand (called from the appearance reconcile + pull-to-refresh, NOT a
+    /// new always-on poller): any failure / 404 / gossip-off yields nil and the
+    /// relay value stands — never a regression. Runs AFTER the relay reconcile
+    /// so the direct view wins.
+    private func preferDirectLeads() async {
+        // Online boxes are the only ones reachable on their pinned pipe. Their
+        // fqdns are also the match set for the inversion (we only badge a pod we
+        // actually show).
+        let onlineFqdns = app.pods.filter { $0.status == .online }.map { $0.fqdn }
+        guard !onlineFqdns.isEmpty else { return }
+        let knownFqdns = app.pods.map { $0.fqdn }
+        for fqdn in onlineFqdns {
+            guard let map = await leads.fetchLeads(podFqdn: fqdn) else { continue }
+            // A successful read is a complete account-wide view — invert + apply
+            // and we're done (no need to poll the other boxes this pass).
+            let byFqdn = DirectLeadsInversion.invert(leads: map.leads, knownFqdns: knownFqdns)
+            app.applyDirectLeads(byFqdn)
+            return
+        }
     }
 
     /// Re-add persisted pending servers on launch, and drop any that have since
