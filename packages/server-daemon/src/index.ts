@@ -137,6 +137,8 @@ import {
   wireGossip,
   resolveCgk,
   buildCertPrewarm,
+  buildLeadsHttpHandler,
+  type LeadsSnapshot,
 } from "./gossip/index.js";
 import type { GossipLoop } from "./gossip/gossipLoop.js";
 import {
@@ -651,6 +653,15 @@ async function main(): Promise<void> {
   // the gossip loop wires) can report the live "services I lead" set (Phase 6
   // Part 3). Back-patched once the loop exists; null/absent ⇒ no leadsServices.
   const gossipLoopRef: { current: GossipLoop | null } = { current: null };
+  // Late-binding source for `GET /api/leads` — the box's client-facing read of the
+  // live per-service leadership map. Defaults to gossip-disabled (empty) and is
+  // back-patched once gossip wires (below). The handler itself is registered the
+  // moment the runtime is up, so /api/leads is ALWAYS served (200, gossipActive
+  // false until/unless gossip enables) — mirroring /api/services' always-present
+  // route (which 503s rather than 404s when its platform is absent).
+  const leadsSnapshotRef: { current: () => LeadsSnapshot } = {
+    current: () => ({ gossipActive: false, leads: {} }),
+  };
   // Late-binding cell for the on-service-delete teardown: ServicePlatform is
   // built inside startDaemonRuntime (below), but the route claimer + gossip loop
   // it must drive aren't wired until AFTER the runtime is up. Back-patched once
@@ -799,6 +810,17 @@ async function main(): Promise<void> {
     console.log(
       `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,
     );
+
+    // Client-facing per-service leadership read. Registered the moment the
+    // runtime is up so `/api/leads` is ALWAYS served on the box's pinned pipe
+    // (unauth + CORS-wrapped, exactly like /api/services). `leadsSnapshotRef`
+    // defaults to gossip-disabled and is back-patched when gossip wires below.
+    runtime.addHandler(
+      buildLeadsHttpHandler({
+        serverFqdn: env.serverFqdn!,
+        snapshot: () => leadsSnapshotRef.current(),
+      }),
+    );
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt
     // (cert acquisition is async + retried so a transient ACME failure can't
@@ -930,6 +952,9 @@ async function main(): Promise<void> {
         result.loop.start();
         // Back-patch the heartbeat's lead source so /pods can relay leadsServices.
         gossipLoopRef.current = result.loop;
+        // Light up `/api/leads` with the LIVE full map (it served gossipActive:false
+        // until now). result.leadsSnapshot reflects the current SiblingView on demand.
+        leadsSnapshotRef.current = result.leadsSnapshot;
         // Back-patch the on-service-delete teardown so an uninstall releases the
         // box's `<slug>.<user>` route at the hub + re-announces.
         if (result.releaseRouteForRemovedService) {

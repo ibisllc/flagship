@@ -199,6 +199,7 @@ describe("per-service election", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100,
       voteIssuedAt: null,
       services: ["blog"],
@@ -210,6 +211,7 @@ describe("per-service election", () => {
         {
           id: "b.harry.flagship.services",
           domain: "b.harry.flagship.services",
+          stkHex: "bb".repeat(32),
           birthDate: 200,
           voteIssuedAt: null,
           liveness: "live",
@@ -225,6 +227,7 @@ describe("per-service election", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 300, // younger → loses to the older sibling
       voteIssuedAt: null,
       services: ["blog"],
@@ -237,6 +240,7 @@ describe("per-service election", () => {
         {
           id: "b.harry.flagship.services",
           domain: "b.harry.flagship.services",
+          stkHex: "bb".repeat(32),
           birthDate: 100, // older → leads
           voteIssuedAt: null,
           liveness: "live",
@@ -252,6 +256,7 @@ describe("per-service election", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100, // oldest, but unvoted
       voteIssuedAt: null,
       services: ["blog"],
@@ -264,6 +269,7 @@ describe("per-service election", () => {
         {
           id: "b.harry.flagship.services",
           domain: "b.harry.flagship.services",
+          stkHex: "bb".repeat(32),
           birthDate: 999,
           voteIssuedAt: 5000, // owner voted for b → b leads
           liveness: "live",
@@ -279,6 +285,7 @@ describe("per-service election", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100,
       voteIssuedAt: null,
       services: ["blog"],
@@ -293,6 +300,7 @@ describe("per-service election", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 300,
       voteIssuedAt: null,
       services: ["blog"],
@@ -304,6 +312,7 @@ describe("per-service election", () => {
         {
           id: "b.harry.flagship.services",
           domain: "b.harry.flagship.services",
+          stkHex: "bb".repeat(32),
           birthDate: 100, // would outrank, but…
           voteIssuedAt: null,
           liveness: "unreachable", // …not live ⇒ excluded
@@ -325,6 +334,7 @@ describe("runElectionRound application", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100,
       voteIssuedAt: null,
       services: ["blog", "chat"],
@@ -342,6 +352,7 @@ describe("runElectionRound application", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100,
       voteIssuedAt: null,
       services: ["blog", "chat"],
@@ -366,6 +377,7 @@ describe("runElectionRound application", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
+      stkHex: "aa".repeat(32),
       birthDate: 100,
       voteIssuedAt: null,
       services: ["blog"],

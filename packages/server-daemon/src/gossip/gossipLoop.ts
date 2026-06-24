@@ -21,7 +21,13 @@ import {
   macGossip,
   sealGossip,
 } from "@flagship/protocol";
-import { runElectionRound, selfLeadsForRound, type SelfMember } from "./election.js";
+import {
+  leadsSnapshot as computeLeadsSnapshot,
+  runElectionRound,
+  selfLeadsForRound,
+  type SelfMember,
+  type ServiceLead,
+} from "./election.js";
 import type { RouteClaimer } from "./routeClaimer.js";
 import type { CertPrewarm } from "./routeNudge.js";
 import type { SiblingView } from "./siblingView.js";
@@ -85,6 +91,16 @@ export interface GossipLoop {
    * can relay per-pod "lead" badges (Phase 6 Part 3).
    */
   currentLeads(): string[];
+  /**
+   * The FULL per-service leadership map computed LIVE from the current
+   * SiblingView (self + live siblings), pruned to the current clock. Unlike
+   * `currentLeads()` (a snapshot of the last election round, only THIS box's
+   * leads), this elects over the UNION of every live member's service slugs —
+   * so a box answers for services it doesn't host. Computed on demand so the
+   * `/api/leads` reader always reflects the freshest gossip. Keyed by slug;
+   * a slug with no live runner is absent.
+   */
+  leadsSnapshot(): Record<string, ServiceLead>;
 }
 
 export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
@@ -127,16 +143,22 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
     }
   }
 
-  async function elect(s: SelfAnnounceState): Promise<void> {
-    const t = now();
-    deps.view.prune(t);
-    const self: SelfMember = {
+  /** Build the SelfMember for this box from its current announce state. */
+  function selfMember(s: SelfAnnounceState): SelfMember {
+    return {
       id: s.name.toLowerCase(),
       domain: s.name.toLowerCase(),
+      stkHex: s.birthAuthHex.toLowerCase(),
       birthDate: s.birthDate,
       voteIssuedAt: s.vote && s.vote.date > 0 ? s.vote.date : null,
       services: s.services,
     };
+  }
+
+  async function elect(s: SelfAnnounceState): Promise<void> {
+    const t = now();
+    deps.view.prune(t);
+    const self: SelfMember = selfMember(s);
     const liveSiblings = deps.view.liveMembers(t);
     // Record the leads BEFORE applying claim/release so the heartbeat reports the
     // election outcome even if a claim apply throws (the route is soft, the
@@ -184,5 +206,12 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
     },
     tick,
     currentLeads: () => [...leads],
+    leadsSnapshot: () => {
+      const t = now();
+      deps.view.prune(t);
+      const self = selfMember(deps.readSelf());
+      const liveSiblings = deps.view.liveMembers(t);
+      return computeLeadsSnapshot({ self, liveSiblings });
+    },
   };
 }

@@ -30,6 +30,18 @@ import {
 import { buildRouteNudgeHandler, type CertPrewarm } from "./routeNudge.js";
 import { SiblingView } from "./siblingView.js";
 
+/** The FULL leadership map a `/api/leads` reader serves. */
+export interface LeadsSnapshot {
+  /** True iff gossip is wired (a CGK is provisioned). */
+  gossipActive: boolean;
+  /**
+   * Per-service-slug → elected leader, over {self} ∪ {live siblings}. Only
+   * live-hosted services appear. Empty when gossip is disabled. The slug is the
+   * SAME identifier the gossip + route-nudge use (ServicePlatform's app slug).
+   */
+  leads: Record<string, { leaderFqdn: string; leaderStkHex: string; live: boolean }>;
+}
+
 export interface WireGossipResult {
   enabled: boolean;
   /** HTTP handler for `/internal/gossip` — null when disabled. */
@@ -51,6 +63,12 @@ export interface WireGossipResult {
    * idempotent, never throws. null when gossip is disabled.
    */
   releaseRouteForRemovedService: ((slug: string) => Promise<void>) | null;
+  /**
+   * Compute the FULL live per-service leadership map from the SiblingView (self +
+   * live siblings). ALWAYS present (even when gossip is disabled): when disabled
+   * it returns `{ gossipActive:false, leads:{} }`. Mounted by `/api/leads`.
+   */
+  leadsSnapshot: () => LeadsSnapshot;
 }
 
 export interface WireGossipDeps {
@@ -137,6 +155,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
       loop: null,
       view: null,
       releaseRouteForRemovedService: null,
+      leadsSnapshot: () => ({ gossipActive: false, leads: {} }),
     };
   }
 
@@ -232,6 +251,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     loop,
     view,
     releaseRouteForRemovedService,
+    leadsSnapshot: () => ({ gossipActive: true, leads: loop.leadsSnapshot() }),
   };
 }
 
@@ -240,10 +260,12 @@ export { buildGossipIngestHandler } from "./gossipHttp.js";
 export { buildGossipLoop, ANNOUNCE_INTERVAL_MS, LIVENESS_WINDOW_MS } from "./gossipLoop.js";
 export {
   decideClaimActions,
+  leadsSnapshot,
   runElectionRound,
   selfLeadsForRound,
   type ClaimAction,
   type SelfMember,
+  type ServiceLead,
 } from "./election.js";
 export {
   type RouteClaimer,
@@ -258,3 +280,4 @@ export {
   type RouteNudgeDeps,
 } from "./routeNudge.js";
 export { resolveCgk } from "./cgk.js";
+export { buildLeadsHttpHandler, type LeadsHttpDeps } from "./leadsHttp.js";
