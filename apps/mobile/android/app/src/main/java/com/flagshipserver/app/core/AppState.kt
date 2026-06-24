@@ -561,6 +561,29 @@ class AppState(
         return podId
     }
 
+    /** PREFER a fresher, box-direct leadership view over the `.com` `/pods`
+     *  relay (Phase 6). [directByFqdn] is the inverted per-pod model
+     *  (lowercased fqdn → the slugs that box leads) produced from a box's
+     *  `GET /api/leads` (see DirectLeadsInversion). For each known pod we
+     *  OVERRIDE its `leadsServices` with the direct value — including an empty
+     *  list, so a box that just YIELDED a service stops showing the stale relay
+     *  badge. A pod absent from the map keeps its relay value untouched (we
+     *  learned nothing fresher about it), so this never regresses and is a pure
+     *  no-op when the map is empty. Best-effort: call it only with the result of
+     *  a SUCCESSFUL direct read; on any fetch failure the caller simply doesn't
+     *  call this and the relay value stands. Mirror of iOS AppState.applyDirectLeads. */
+    fun applyDirectLeads(directByFqdn: Map<String, List<String>>) {
+        if (directByFqdn.isEmpty()) return
+        var changed = false
+        val next = _pods.value.map { pod ->
+            val slugs = directByFqdn[pod.fqdn.lowercase()] ?: return@map pod
+            if (pod.leadsServices == slugs) return@map pod
+            changed = true
+            pod.copy(leadsServices = slugs)
+        }
+        if (changed) _pods.value = next
+    }
+
     fun setLeader(podId: String) {
         if (_pods.value.none { it.podId == podId }) return
         _leaderPodId.value = podId
