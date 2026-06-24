@@ -133,6 +133,43 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
 
+### 2026-06-23 — routing resolution: eager-claim + nudge-on-miss + park-or-drop (closes the soft-release seam)
+
+**Why:** the per-service leadership work (above) left one seam — `urlController.release`
+was a *soft* release (a yielded route relied on socket-death / FCFS). The fix (owner-designed):
+make the hub **resolve a cold meta-URL on demand** instead of trusting a persistent claim
+table, WITHOUT any fly-directed "add this domain to your routing" message. Spec:
+`docs/multi-pod-liveness-session-leadership.md` → "Routing resolution".
+
+**The model:** the invariant stays "a box only gets traffic for a name it has CLAIMED"
+(TLS terminates on the box; a claim = "I can terminate this"). The gossip-elected lead
+proactively claims + pre-warms its meta-URL certs (fast path). On a **cold miss** the hub
+**parks** the pre-handshake TCP stream, **nudges** the user's online boxes (plaintext
+`POST /internal/route-nudge {domain}` over the Phase-4 stream-origination — not secret, not
+CGK-sealed), the gossip-elected lead **claims the name the normal way** (HELLO
+`controlledDomains` → registry), and the hub pipes the parked stream the instant the claim
+lands. **No claim in ~4s / unreachable → drop the connection** (no literal 503 under
+passthrough). Because the box claims *before* any traffic, there is **no message-ordering
+race** — the `FRAME_OPEN` routing-grant idea (and its race) is eliminated. On service
+*delete*, the harness now also **unclaims at the hub** + re-announces (the one real teardown
+case). Single-flight: N parked requests for one domain share one nudge + one wait.
+
+**Built — 2 worktree workers (hub + daemon), CI-green:**
+- **hub** (`apps/web`): `sniRouter` park-on-miss → `fanOutNudge` → poll-for-claim (4s) →
+  pipe-or-destroy; per-router single-flight `ParkLot`; `registry` nudge-eligibility
+  (`isNudgeableSni`: first-party `<…>.<user>` + user has online tunnels + not a known box
+  canonical); `deliverNudgeToBox` extracted from the gossip origination.
+- **daemon** (`packages/server-daemon`): `gossip/routeNudge.ts` — `POST /internal/route-nudge`
+  → parse tier-2 SNI → run `electLeadForService` on demand → if self-lead, **pre-warm cert
+  then claim** (else 204 no-op); `onServiceRemoved` → `release` + re-announce; cert pre-warm
+  loads an already-provisioned `<slug>.<user>` cert (CANNOT mint unilaterally — a
+  never-minted meta-URL cert still needs the phone's `ServiceCertAuthority`; documented).
+
+Gates: `tsc -b` clean · `vitest apps/web + server-daemon` **3227** (hub nudge 6 · daemon
+route-nudge 25 + on-delete/prewarm). **REMAINING (owner):** rides the next `.services` Fly
+deploy (hub) + a **reburn** for the daemon nudge-handler live; the nudge path is now
+load-bearing, so validate it in the 2-box reburn test.
+
 ### 2026-06-23 (latest) — unified live-update channel: ONE foreground long-poll replaces the pollers
 
 **Usability: the UI updates with NO manual refresh** while the app is focused (a
