@@ -132,7 +132,12 @@ import {
   fileSetLeaderVoteStore,
   type SetLeaderConsumer,
 } from "./setLeaderConsumer.js";
-import { readAuthCodeBirthDate, wireGossip, resolveCgk } from "./gossip/index.js";
+import {
+  readAuthCodeBirthDate,
+  wireGossip,
+  resolveCgk,
+  buildCertPrewarm,
+} from "./gossip/index.js";
 import type { GossipLoop } from "./gossip/gossipLoop.js";
 import {
   addEmbeddedPairing,
@@ -646,6 +651,13 @@ async function main(): Promise<void> {
   // the gossip loop wires) can report the live "services I lead" set (Phase 6
   // Part 3). Back-patched once the loop exists; null/absent ⇒ no leadsServices.
   const gossipLoopRef: { current: GossipLoop | null } = { current: null };
+  // Late-binding cell for the on-service-delete teardown: ServicePlatform is
+  // built inside startDaemonRuntime (below), but the route claimer + gossip loop
+  // it must drive aren't wired until AFTER the runtime is up. Back-patched once
+  // gossip wires; null ⇒ no-op (no gossip / no claimer = nothing to release).
+  const onServiceRemovedRef: { current: ((slug: string) => Promise<void>) | null } = {
+    current: null,
+  };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     identity: identityKeypair,
@@ -726,6 +738,9 @@ async function main(): Promise<void> {
         tabRegistry: browserBundle?.tabRegistry,
         pullStateStore,
         cloneService,
+        // On-service-delete teardown of the per-service route. Late-bound: the
+        // gossip claimer + loop are wired below, after the runtime is up.
+        onServiceRemoved: (slug) => onServiceRemovedRef.current?.(slug),
       },
       additionalHandlers,
       updateServer,
@@ -876,12 +891,22 @@ async function main(): Promise<void> {
     if (!cfg) return null;
     try {
       const selfStkHex = bytesToHexLocal(identityKeypair.publicKey);
+      // Cert pre-warm seam: when this box becomes the route lead for a tier-2
+      // `<slug>.<user>` meta-URL (gossip election round AND the route-nudge
+      // handler), load its already-provisioned cert from the persisted ACME
+      // store into the CertManager so the parked request isn't waiting on ACME.
+      // It cannot MINT (that's the phone's IRK-signed `/api/service-certs/mint`
+      // flow) — pre-warm = "load if already provisioned".
+      const certPrewarm = runtime.certStore
+        ? buildCertPrewarm({ certManager: runtime.certManager, store: runtime.certStore })
+        : undefined;
       const result = await wireGossip({
         user: cfg.userId,
         serverFqdn: env.serverFqdn!,
         identityPubHex: selfStkHex,
         birthDate: (await readAuthCodeBirthDate()) ?? Date.now(),
         urlController: runtime.urlController,
+        ...(certPrewarm ? { certPrewarm } : {}),
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
         // The owner's set-leader vote rides THIS box's gossip frame only when it
@@ -899,9 +924,17 @@ async function main(): Promise<void> {
       });
       if (result.enabled && result.handler && result.loop) {
         runtime.addHandler(result.handler);
+        // The hub's on-demand route-nudge: mount on the SAME chain as
+        // /internal/gossip so an unclaimed-meta-URL request claims instantly.
+        if (result.routeNudgeHandler) runtime.addHandler(result.routeNudgeHandler);
         result.loop.start();
         // Back-patch the heartbeat's lead source so /pods can relay leadsServices.
         gossipLoopRef.current = result.loop;
+        // Back-patch the on-service-delete teardown so an uninstall releases the
+        // box's `<slug>.<user>` route at the hub + re-announces.
+        if (result.releaseRouteForRemovedService) {
+          onServiceRemovedRef.current = result.releaseRouteForRemovedService;
+        }
         return result.loop;
       }
     } catch (e) {

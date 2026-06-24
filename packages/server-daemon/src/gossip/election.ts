@@ -126,6 +126,14 @@ export async function runElectionRound(deps: {
   self: SelfMember;
   liveSiblings: ViewMember[];
   claimer: RouteClaimer;
+  /**
+   * Cert pre-warm hook — fired with the service slug just BEFORE this box
+   * claims a route it newly leads, so the `<slug>.<user>` cert is loaded/ensured
+   * before the route is serveable (the lead must not first discover it needs a
+   * cert at request time). Best-effort; a throw/rejection never blocks the
+   * claim.
+   */
+  prewarmLead?: (service: string) => Promise<void>;
   onLog?: (m: string) => void;
 }): Promise<ClaimAction[]> {
   const actions = decideClaimActions({
@@ -135,8 +143,14 @@ export async function runElectionRound(deps: {
   });
   for (const a of actions) {
     try {
-      if (a.kind === "claim") await deps.claimer.claim(a.service);
-      else await deps.claimer.release(a.service);
+      if (a.kind === "claim") {
+        if (deps.prewarmLead) {
+          await deps.prewarmLead(a.service).catch(() => {});
+        }
+        await deps.claimer.claim(a.service);
+      } else {
+        await deps.claimer.release(a.service);
+      }
       deps.onLog?.(`[gossip] ${a.kind} route for service "${a.service}"`);
     } catch (e) {
       deps.onLog?.(
