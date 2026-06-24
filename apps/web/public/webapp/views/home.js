@@ -31,6 +31,7 @@ import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
+import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -355,6 +356,37 @@ export function leadsOf(pod) {
   const raw = pod?.leadsServices;
   if (!Array.isArray(raw)) return [];
   return raw.map((s) => String(s ?? "").trim()).filter(Boolean);
+}
+
+/**
+ * Apply a direct-leads inverted map (from `invertLeadsMap`) to the pod
+ * status map returned by `fetchPodInventory`. Returns a NEW Map whose
+ * pod entries have `leadsServices` overlaid from the direct source when
+ * the inverted map has data for that pod's FQDN; pods not in the inverted
+ * map keep the relay's `leadsServices` as-is (fall-back).
+ *
+ * This is the prefer-then-fallback logic: direct read is fresher than the
+ * ~5-min-stale relay snapshot, but any failure in the direct read leaves
+ * an empty invertedMap and the relay data passes through untouched.
+ *
+ * @param {Map<string, object>} podStatusByDomain  fqdn → pod entry (from fetchPodInventory)
+ * @param {Map<string, string[]>} invertedMap       fqdn → slug[] (from invertLeadsMap)
+ * @returns {Map<string, object>}
+ */
+export function applyDirectLeads(podStatusByDomain, invertedMap) {
+  if (!invertedMap || invertedMap.size === 0) return podStatusByDomain;
+  const out = new Map();
+  for (const [fqdn, pod] of podStatusByDomain) {
+    const directSlugs = invertedMap.get(fqdn);
+    if (directSlugs !== undefined) {
+      // Prefer direct read: overlay leadsServices from the fresh box response.
+      out.set(fqdn, { ...pod, leadsServices: directSlugs });
+    } else {
+      // No direct data for this pod — keep the relay's leadsServices (or none).
+      out.set(fqdn, pod);
+    }
+  }
+  return out;
 }
 
 export function renderServerCard(server, pod, opts = {}) {
@@ -908,9 +940,29 @@ export async function renderHome() {
     // just-created, not-yet-registered server rides this same call.
     // Failures here are non-fatal: registered cards fall back to the bare
     // label + active/revoked pill and pending simply doesn't surface.
-    const { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
+    let { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
       session.username,
     );
+    // Direct lead-read (Phase 6 follow-on): if any box is reachable, fetch
+    // /api/leads directly for a fresher snapshot than the ~5-min relay.
+    // Best-effort: any failure leaves podStatusByDomain untouched (fall back
+    // to relay). We pick the first "live" pod as the source — its /api/leads
+    // response covers the GLOBAL map for all boxes in this account.
+    {
+      let firstLiveFqdn = null;
+      for (const [fqdn, pod] of podStatusByDomain) {
+        if (pod?.liveness === "live" || (pod?.lastReported != null && Date.now() - pod.lastReported <= 15 * 60 * 1000)) {
+          firstLiveFqdn = fqdn;
+          break;
+        }
+      }
+      if (firstLiveFqdn) {
+        const leadsMap = await fetchLeads(firstLiveFqdn).catch(() => null);
+        if (leadsMap) {
+          podStatusByDomain = applyDirectLeads(podStatusByDomain, invertLeadsMap(leadsMap));
+        }
+      }
+    }
     // L3 (docs §8b) — a box retired by "Replace this server" is suppressed from
     // the list so the phone never re-surfaces or re-approves the zombie instance
     // (the replacement re-registers under the same FQDN with a fresh STK; until
