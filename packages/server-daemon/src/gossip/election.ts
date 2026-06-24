@@ -18,10 +18,80 @@ import type { ViewMember } from "./siblingView.js";
 export interface SelfMember {
   id: string;
   domain: string;
+  /** This box's STK pub hex (its birth-cert authority hex), lowercased. */
+  stkHex: string;
   birthDate: number;
   voteIssuedAt: number | null;
   /** The slugs THIS box runs (drives both eligibility and which services to elect). */
   services: string[];
+}
+
+/** One service's elected leader, as `leadsSnapshot` exposes it. */
+export interface ServiceLead {
+  /** The elected lead's box fqdn/podCanonical (so a client can match it to a pod). */
+  leaderFqdn: string;
+  /** The elected lead's STK/birthAuth pub hex (lowercased). */
+  leaderStkHex: string;
+  /** Always true today — only live-hosted services appear (a live runner was elected). */
+  live: boolean;
+}
+
+/**
+ * The FULL per-service leadership map over {self-as-live} ∪ {live siblings}.
+ *
+ * Unlike `selfLeadsForRound` (which answers only "which of MY services do I
+ * lead"), this computes the leader for the UNION of every live member's service
+ * slugs — so a box answers for services it doesn't itself host (a service hosted
+ * only by a sibling still resolves a leader). A slug with no live runner never
+ * appears. Pure + deterministic.
+ */
+export function leadsSnapshot(deps: {
+  self: SelfMember;
+  liveSiblings: ViewMember[];
+}): Record<string, ServiceLead> {
+  const { self, liveSiblings } = deps;
+  const selfClout: CloutMember = {
+    id: self.id,
+    domain: self.domain,
+    birthDate: self.birthDate,
+    voteIssuedAt: self.voteIssuedAt,
+    liveness: "live",
+    services: self.services,
+  };
+  const members: CloutMember[] = [
+    selfClout,
+    ...liveSiblings.map((s) => ({
+      id: s.id,
+      domain: s.domain,
+      birthDate: s.birthDate,
+      voteIssuedAt: s.voteIssuedAt,
+      liveness: s.liveness,
+      services: s.services,
+    })),
+  ];
+  // STK hex per member id (the elector returns a CloutMember whose `id` is the
+  // fqdn; map back to the STK hex the member announced).
+  const stkById = new Map<string, string>();
+  stkById.set(self.id, self.stkHex);
+  for (const s of liveSiblings) stkById.set(s.id, s.stkHex);
+
+  // Union of slugs across all LIVE members (self is always live in its round).
+  const slugs = new Set<string>(self.services);
+  for (const s of liveSiblings) {
+    if (s.liveness === "live") for (const slug of s.services) slugs.add(slug);
+  }
+
+  const out: Record<string, ServiceLead> = {};
+  for (const slug of slugs) {
+    const lead = electLeadForService(members, slug);
+    if (lead === null) continue; // no live runner — absent
+    out[slug] = {
+      leaderFqdn: lead.domain,
+      leaderStkHex: stkById.get(lead.id) ?? "",
+      live: true,
+    };
+  }
+  return out;
 }
 
 export type ClaimAction =

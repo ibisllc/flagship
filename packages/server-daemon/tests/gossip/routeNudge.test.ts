@@ -56,6 +56,7 @@ function nudgeReq(domain: unknown, method = "POST") {
 
 const liveSibling = (over: Partial<ViewMember> & { id: string }): ViewMember => ({
   domain: over.id,
+  stkHex: "cc".repeat(32),
   birthDate: 1000,
   voteIssuedAt: null,
   liveness: "live",
