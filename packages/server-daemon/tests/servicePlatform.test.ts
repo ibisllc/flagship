@@ -396,6 +396,77 @@ describe("ServicePlatform.uninstall (idempotent)", () => {
     expect(r2.ok).toBe(true);
     if (r2.ok) expect(r2.alreadyGone).toBe(true);
   });
+
+  it("fires onServiceRemoved(slug) on a real uninstall — the per-service route teardown", async () => {
+    const irk = makeKey();
+    const { runner } = fakeRunner();
+    const removed: string[] = [];
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      onServiceRemoved: async (slug) => {
+        removed.push(slug);
+      },
+    });
+    const installReq = {
+      serverId: HOST_FQDN,
+      creator: HOST_USERNAME,
+      slug: "game1",
+      manifestJson: SELF_MANIFEST,
+      addOwnerToMembership: true,
+      issuedAt: Date.now(),
+    };
+    await platform.install({ request: installReq, signature: new Uint8Array(64), verify: () => true });
+
+    const uninstallReq = { serverId: HOST_FQDN, creator: HOST_USERNAME, slug: "game1", issuedAt: Date.now() };
+    await platform.uninstall({
+      request: uninstallReq,
+      signature: signUninstallService(uninstallReq, irk),
+      verify: () => true,
+    });
+    expect(removed).toEqual(["game1"]);
+
+    // The idempotent already-gone path does NOT re-fire the hook.
+    await platform.uninstall({
+      request: { ...uninstallReq, issuedAt: Date.now() },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(removed).toEqual(["game1"]);
+  });
+
+  it("a throwing onServiceRemoved never fails the uninstall (best-effort)", async () => {
+    const irk = makeKey();
+    const { runner } = fakeRunner();
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      onServiceRemoved: async () => {
+        throw new Error("gossip release exploded");
+      },
+    });
+    const installReq = {
+      serverId: HOST_FQDN,
+      creator: HOST_USERNAME,
+      slug: "game1",
+      manifestJson: SELF_MANIFEST,
+      addOwnerToMembership: true,
+      issuedAt: Date.now(),
+    };
+    await platform.install({ request: installReq, signature: new Uint8Array(64), verify: () => true });
+    const uninstallReq = { serverId: HOST_FQDN, creator: HOST_USERNAME, slug: "game1", issuedAt: Date.now() };
+    const r = await platform.uninstall({
+      request: uninstallReq,
+      signature: signUninstallService(uninstallReq, irk),
+      verify: () => true,
+    });
+    expect(r.ok).toBe(true);
+    expect(platform.byServiceId("alice--game1")).toBeUndefined();
+  });
 });
 
 describe("buildServiceHttpHandlers", () => {
