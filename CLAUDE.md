@@ -131,7 +131,40 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-23**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-24**.
+
+### 2026-06-24 — vendored argon2: killed the flaky Argon2Kit git submodule (iOS build reliability)
+
+**Why:** the iOS app's `Argon2Kit` dependency (the argon2id KDF for the `.flagshipkey`
+backup + recovery derivations) pulls `phc-winner-argon2` as a **git submodule**, and
+SPM's submodule clone is flaky in this environment — intermittently failing the Xcode
+build with "Missing package product 'Argon2Kit'" (`invalid index-pack output` inside
+SPM's nested `.git/modules` layout, even though a plain `git clone --recurse-submodules`
+of the same repo works fine).
+
+**Fix — vendored the reference argon2 locally.** Replaced the external `Argon2Kit` with
+a locally-vendored copy of `phc-winner-argon2` (rev `62358ba`, the exact revision
+Argon2Kit 0.1.1 pinned; portable `ref.c` build) under `apps/mobile/ios/Vendor/CArgon2/`
+(with LICENSE + `VENDORED.md` provenance) + a thin `FlagshipArgon2` Swift wrapper
+exposing the IDENTICAL `Argon2.hash(...).rawData` API. The two call sites
+(`Keyfile.swift`, `RecoveryDerivation.swift`) change ONLY their `import`. `Argon2Kit` +
+both `Package.resolved` removed ⇒ SPM never clones a submodule again (hermetic,
+reproducible builds for everyone + CI).
+
+**Byte-identical PROVEN:** the recovery KAT (`test_recoveryParams_rawHash_matchesCrossPlatformMasterKey`)
+derives the SAME master key as the existing cross-platform `RecoveryDerivation` vector,
+so iOS still matches Android/webapp exactly — no `.flagshipkey` / recovery break. (Android
+BouncyCastle + webapp WASM argon2 untouched.) Gates: iOS `xcodebuild` argon2 suite **14/0**
+on main (`VendoredArgon2Tests` 2 + `KeyfileTests` 9 + `RecoveryDerivationTests` 3); full
+iOS suite **1241/1242** in the agent worktree (the 1 = the known
+`MaintainersConformanceTests` node_modules-fixture miss, argon2-unrelated); `tsc -b` clean
+(iOS-only change). Vendoring is industry-standard + safe for a tiny/stable/permissive
+reference lib; the discipline is the pinned revision + the byte-compat KAT.
+
+**Note for builders:** if an Xcode build ever hits the Argon2Kit error on an OLD recipe/
+checkout, it's gone now (no submodule). The interim workaround was to pre-populate the
+`SourcePackages/checkouts/Argon2Kit` checkout with `git clone --recurse-submodules`;
+unnecessary post-vendor.
 
 ### 2026-06-23 — routing resolution: eager-claim + nudge-on-miss + park-or-drop (closes the soft-release seam)
 
