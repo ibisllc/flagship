@@ -98,7 +98,49 @@ final class WizardModel: ObservableObject {
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
         client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
+        client.onConsentGranted = { [weak self] setting, grantJSON in
+            Task { @MainActor in self?.applyConsentGranted(setting: setting, grantJSON: grantJSON) }
+        }
+        client.onConsentDenied = { [weak self] setting in
+            Task { @MainActor in self?.applyConsentDenied(setting: setting) }
+        }
         client.connect()
+    }
+
+    // MARK: - Advanced consent (debug)
+
+    /// The signed debug-access grant the phone returned (embedded at flash).
+    @Published var debugGrantJSON: String? = nil
+    /// True while we're waiting for the phone to approve the Debug toggle.
+    @Published var debugConsentPending: Bool = false
+
+    /// Whether debug is armed (a valid grant is in hand to embed).
+    var debugArmed: Bool { debugGrantJSON != nil }
+
+    /// User flipped the Advanced "Debug mode" toggle. ON ⇒ ask the phone to
+    /// approve (it shows a security warning + Face ID and returns a signed
+    /// grant). OFF ⇒ drop the grant. Only meaningful in a live session.
+    func setDebugRequested(_ on: Bool) {
+        guard burnerStage == .session else { return }
+        if !on { debugGrantJSON = nil; debugConsentPending = false; return }
+        guard let domain = verified?.serverDomain else { return }
+        debugConsentPending = true
+        sessionClient?.requestConsent(
+            setting: "debug",
+            serverDomain: domain,
+            warning: "Turning on debug lets someone log into this server's console. Only approve this for a box you're actively debugging.")
+    }
+
+    private func applyConsentGranted(setting: String, grantJSON: String) {
+        guard setting == "debug" else { return }
+        debugGrantJSON = grantJSON
+        debugConsentPending = false
+    }
+
+    private func applyConsentDenied(setting: String) {
+        guard setting == "debug" else { return }
+        debugGrantJSON = nil
+        debugConsentPending = false
     }
 
     private func applyEngineStage(_ stage: BurnerPairingEngine.Stage) {
@@ -146,6 +188,8 @@ final class WizardModel: ObservableObject {
         verified = nil
         recipeError = nil
         pairMatchCode = nil
+        debugGrantJSON = nil
+        debugConsentPending = false
         beginPairing()
     }
 
@@ -338,7 +382,18 @@ final class WizardModel: ObservableObject {
     /// picks the right one for the detected ISO family; building both is cheap
     /// (pure string work) and keeps the privilege-split flow simple.
     private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
-        let data = try Data(contentsOf: recipe)
+        var data = try Data(contentsOf: recipe)
+        // Debug access is consent-as-crypto: when the phone approved the Debug
+        // toggle it returned a signed grant. Embed it as the recipe's UNSIGNED
+        // `debugGrant` sibling (mirrors swkHex/pairingOrder); the box-side gate
+        // verifies it against the owner IRK and enables the debug user from it.
+        // We do NOT bake the debug user into the preseed (debugMode: false) —
+        // the daemon is the single, owner-authorized enabler.
+        if let grant = debugGrantJSON,
+           var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            obj["debugGrant"] = grant
+            if let merged = try? JSONSerialization.data(withJSONObject: obj) { data = merged }
+        }
         let parsed = try RecipeLoader.load(data: data)
         // Disk encryption follows the phone-signed recipe: an explicit "none"
         // (the Wi-Fi-only fallback) leaves the root unencrypted; otherwise the
@@ -351,14 +406,14 @@ final class WizardModel: ObservableObject {
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                debugMode: effectiveDebugMode)
+                                                debugMode: false)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
                                                  wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                 debugMode: effectiveDebugMode)
+                                                 debugMode: false)
         return (yaml, preseed)
     }
 

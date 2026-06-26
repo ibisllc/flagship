@@ -10,15 +10,18 @@ public struct BurnerPairScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: BurnerPairViewModel
     var onDelivered: (_ serverDomain: String, _ serial: String) -> Void
+    var onClose: () -> Void
     var onCancel: () -> Void
 
     public init(
         vm: BurnerPairViewModel,
         onDelivered: @escaping (_ serverDomain: String, _ serial: String) -> Void,
+        onClose: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.vm = vm
         self.onDelivered = onDelivered
+        self.onClose = onClose
         self.onCancel = onCancel
     }
 
@@ -52,6 +55,15 @@ public struct BurnerPairScreen: View {
             if case .delivered(let domain) = vm.phase {
                 onDelivered(domain, vm.lastDeliveredSerial ?? "")
             }
+        }
+        .alert("Security warning", isPresented: Binding(
+            get: { vm.pendingConsent != nil },
+            set: { if !$0 { Task { await vm.denyConsent() } } }
+        )) {
+            Button("Approve with Face ID") { Task { await vm.approveConsent() } }
+            Button("Don't allow", role: .cancel) { Task { await vm.denyConsent() } }
+        } message: {
+            Text(vm.pendingConsent?.warning ?? "")
         }
     }
 
@@ -143,14 +155,14 @@ public struct BurnerPairScreen: View {
 
     private func deliveredPage(domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Recipe sent", "Your computer's burner has the recipe. Write it to a USB stick there, then boot your hardware.", c: c)
+            header("Recipe sent", "Your computer's burner has the recipe. Keep this screen open while you pick the USB drive and any Advanced options on the computer — approve any security prompts here.", c: c)
             FSCard {
                 Label(domain, systemImage: "checkmark.seal.fill")
                     .font(FS.font.h4())
                     .foregroundColor(c.text)
             }
             FSPrimaryButton("Done", block: true, large: true) {
-                onDelivered(domain, vm.lastDeliveredSerial ?? "")
+                onClose()
             }
         }
     }

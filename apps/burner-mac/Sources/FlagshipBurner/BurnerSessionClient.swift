@@ -23,6 +23,9 @@ final class BurnerSessionClient: NSObject {
     var onStage: ((BurnerPairingEngine.Stage) -> Void)?
     var onRecipe: ((Data) -> Void)?
     var onLog: ((String) -> Void)?
+    /// (setting, grantJSON) when the phone approves a consent request.
+    var onConsentGranted: ((String, String) -> Void)?
+    var onConsentDenied: ((String) -> Void)?
 
     var qrPayload: String { engine.qrPayload }
     var humanCodeDisplay: String { engine.humanCodeDisplay }
@@ -86,9 +89,20 @@ final class BurnerSessionClient: NSObject {
             if case .ended = stage { close() }
         case .recipe(let data):
             onRecipe?(data)
+        case .consentGranted(let setting, let grantJSON):
+            onConsentGranted?(setting, grantJSON)
+        case .consentDenied(let setting):
+            onConsentDenied?(setting)
         case .log(let message):
             onLog?(message)
         }
+    }
+
+    /// Ask the phone to approve a security-sensitive Advanced setting; the
+    /// phone replies (over the session) with a signed grant or a denial.
+    func requestConsent(setting: String, serverDomain: String, warning: String) {
+        sendRaw(BurnerPairingEngine.encode(
+            engine.consentRequest(setting: setting, serverDomain: serverDomain, warning: warning)))
     }
 
     /// Send a pre-serialized frame to the relay (e.g. a Phase-4 consent

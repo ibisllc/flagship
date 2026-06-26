@@ -266,11 +266,17 @@ struct WizardView: View {
     private var modePicker: some View {
         HStack(spacing: FB.Spacing.s3) {
             ModePill(selection: $model.mode)
-            // Debug is an Advanced-only concern — hidden in Simple.
+            // Debug is an Advanced-only concern — hidden in Simple. Turning it
+            // on asks the PHONE to approve (Face ID → a signed grant); the box
+            // only enables debug access from that grant. Consent-as-crypto.
             if model.mode == .advanced {
                 Spacer(minLength: FB.Spacing.s2)
-                FBCheck(isOn: $model.debugMode, label: "Debug mode", tint: FB.Colors.primary)
-                    .help("Burn a DEBUG image — keeps the 'debug' console login + DEBUG banner. Off = production (the only way to get debug features).")
+                FBCheck(
+                    isOn: Binding(get: { model.debugArmed },
+                                  set: { model.setDebugRequested($0) }),
+                    label: model.debugConsentPending ? "Debug — confirm on phone…" : "Debug mode",
+                    tint: FB.Colors.primary)
+                    .help("Asks your phone to approve debug access (Face ID). The box enables the debug console login only with that signed approval — there's no way to enable it from the burner alone.")
             }
         }
         .disabled(model.isRunning)

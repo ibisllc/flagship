@@ -36,6 +36,12 @@ public final class BurnerPairingEngine {
         case send(Outbound)
         case stage(Stage)
         case recipe(Data)
+        /// The phone approved a security-sensitive setting and returned the
+        /// signed grant envelope (debug-access) to embed. `grantJSON` is the
+        /// `{grant, signatureHex}` blob the box-side gate consumes verbatim.
+        case consentGranted(setting: String, grantJSON: String)
+        /// The phone declined / failed a consent request.
+        case consentDenied(setting: String)
         case log(String)
     }
 
@@ -128,10 +134,33 @@ public final class BurnerPairingEngine {
             } catch {
                 return [.log((error as? LocalizedError)?.errorDescription ?? "Couldn't read the recipe.")]
             }
+        case "consent-result":
+            guard let setting = frame["setting"] as? String else { return [] }
+            // Approved with a signed grant envelope, or declined.
+            if let grant = frame["grant"] as? [String: Any],
+               let grantData = try? JSONSerialization.data(withJSONObject: grant),
+               let grantJSON = String(data: grantData, encoding: .utf8) {
+                return [.consentGranted(setting: setting, grantJSON: grantJSON)]
+            }
+            if let grantStr = frame["grant"] as? String, !grantStr.isEmpty {
+                return [.consentGranted(setting: setting, grantJSON: grantStr)]
+            }
+            return [.consentDenied(setting: setting)]
         default:
-            // consent-result and other Phase-4 frames handled by a later hook.
             return []
         }
+    }
+
+    /// Build a consent-request to send to the phone (e.g. when the user
+    /// toggles a security-sensitive Advanced setting). The phone shows a
+    /// security warning, requires Face ID, and replies with a signed grant.
+    public func consentRequest(setting: String, serverDomain: String, warning: String) -> Outbound {
+        .raw(json: BurnerPairingEngine.jsonObject([
+            "kind": "consent-request",
+            "setting": setting,
+            "serverDomain": serverDomain,
+            "warning": warning,
+        ]))
     }
 
     private func end(_ reason: String) -> [Action] {

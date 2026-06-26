@@ -86,10 +86,17 @@ public struct CreateServerStubScreen: View {
                 NavigationStack {
                     BurnerPairScreen(
                         vm: pairVM,
-                        onDelivered: { domain, serial in
+                        onDelivered: { domain, _ in
+                            // Surface the pending pod NOW, but keep the sheet open
+                            // so the phone can answer the burner's consent prompts.
+                            onDeliveredVisible(domain, vm.name, vm.description)
+                        },
+                        onClose: {
+                            let serial = pairVM.lastDeliveredSerial ?? ""
+                            let dom = pairVM.deliveredDomain
                             showPair = false
                             vm.lastDeliveredSerial = serial
-                            vm.phase = .delivered(serial: serial, serverDomain: domain)
+                            if let dom { vm.phase = .delivered(serial: serial, serverDomain: dom) }
                         },
                         onCancel: { showPair = false }
                     )

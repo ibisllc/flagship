@@ -43,6 +43,18 @@ public final class BurnerPairViewModel {
 
     /// Set after delivery so the host can record the pending pod.
     public private(set) var lastDeliveredSerial: String?
+    public private(set) var deliveredDomain: String?
+
+    /// A pending security-sensitive consent the burner asked for (the
+    /// session stays open after delivery to receive these). The screen shows
+    /// a warning + Face ID; approve signs a grant the burner embeds.
+    public struct PendingConsent: Equatable, Sendable {
+        public let setting: String
+        public let serverDomain: String
+        public let warning: String
+    }
+    public var pendingConsent: PendingConsent?
+    public var consentBusy = false
 
     private let client: any BurnerPairClient
     /// The already-configured minter — `mintInstallBlob()` is called as-is so
@@ -108,9 +120,8 @@ public final class BurnerPairViewModel {
         case .burnerHello(let pkB64):
             if burnerPk == nil { burnerPk = Base64URL.decode(pkB64) }
             try? sendHelloIfReady()
-        case .consentRequest:
-            // Phase 4 — handled by a later consent hook.
-            break
+        case .consentRequest(let setting, let serverDomain, let warning):
+            pendingConsent = PendingConsent(setting: setting, serverDomain: serverDomain, warning: warning)
         case .peerGone:
             await fail("The computer's burner app disconnected.")
         case .expired:
@@ -154,6 +165,7 @@ public final class BurnerPairViewModel {
         do {
             let blob = try await minter.mintInstallBlob()
             lastDeliveredSerial = blob.blob.authCode.serial
+            deliveredDomain = blob.blob.serverDomain
             let payload = try JSONEncoder().encode(blob.onWire())
             let sealed = try QrRelay.seal(payload: payload, with: key)
             await client.send(.deliver(ciphertextB64: sealed.ciphertextBase64Url,
@@ -163,6 +175,40 @@ public final class BurnerPairViewModel {
         } catch {
             await fail(error.localizedDescription)
         }
+    }
+
+    /// Approve the pending consent: Face ID → sign the debug-access grant →
+    /// send it back over the session for the burner to embed.
+    public func approveConsent() async {
+        guard let pending = pendingConsent, !consentBusy else { return }
+        consentBusy = true
+        defer { consentBusy = false }
+        do {
+            let irk = try await Keystore.deriveIRK(reason: "Approve debug access for \(pending.serverDomain)")
+            let grant = DebugAccess.Grant(serverDomain: pending.serverDomain, sshAuthorizedKey: "",
+                                          issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
+            let sig = try DebugAccess.sign(grant, irk: irk)
+            let envelope = DebugAccess.envelopeJSON(grant, signatureHex: sig)
+            let frame = ["kind": "consent-result", "setting": pending.setting, "grant": envelope]
+            if let data = try? JSONSerialization.data(withJSONObject: frame),
+               let json = String(data: data, encoding: .utf8) {
+                await client.send(.raw(json: json))
+            }
+            pendingConsent = nil
+        } catch {
+            // Face ID cancelled / failed → tell the burner it was declined.
+            await denyConsent()
+        }
+    }
+
+    public func denyConsent() async {
+        guard let pending = pendingConsent else { return }
+        let frame = ["kind": "consent-result", "setting": pending.setting]
+        if let data = try? JSONSerialization.data(withJSONObject: frame),
+           let json = String(data: data, encoding: .utf8) {
+            await client.send(.raw(json: json))
+        }
+        pendingConsent = nil
     }
 
     public func cancel() async {

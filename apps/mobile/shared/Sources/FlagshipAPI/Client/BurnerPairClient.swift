@@ -13,7 +13,7 @@ public enum BurnerInbound: Sendable, Equatable {
     case peerPresent           // the burner was already connected when we joined
     case peerJoined            // the burner joined after us
     case burnerHello(burnerPkB64: String)
-    case consentRequest(setting: String, warning: String)   // Phase 4
+    case consentRequest(setting: String, serverDomain: String, warning: String)
     case peerGone
     case expired
     case relayError(String)
@@ -164,8 +164,9 @@ public final class LiveBurnerPairClient: BurnerPairClient, @unchecked Sendable {
                 return .burnerHello(burnerPkB64: pk)
             case "consent-request":
                 let setting = (frame["setting"] as? String) ?? ""
+                let serverDomain = (frame["serverDomain"] as? String) ?? ""
                 let warning = (frame["warning"] as? String) ?? ""
-                return .consentRequest(setting: setting, warning: warning)
+                return .consentRequest(setting: setting, serverDomain: serverDomain, warning: warning)
             default:
                 return nil
             }
