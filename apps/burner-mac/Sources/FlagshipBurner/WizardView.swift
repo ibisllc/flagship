@@ -389,8 +389,8 @@ struct WizardView: View {
                 .buttonStyle(.link)
                 Spacer()
                 HelpIcon(
-                    title: "Where to get a certificate",
-                    blurb: "Order a server on flagshipserver.com — the /ready page gives you a JSON certificate to copy or download, then paste or drop it here.",
+                    title: "Where to get a recipe",
+                    blurb: "Pairing with the Flagship phone app is the easy path. This screen is for a recipe someone sent you out of band — paste it or drop the JSON file here.",
                     url: FlagshipLinks.certificate
                 )
             }

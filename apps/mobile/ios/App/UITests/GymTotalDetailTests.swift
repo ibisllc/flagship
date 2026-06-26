@@ -191,7 +191,7 @@ final class GymTotalDetailTests: XCTestCase {
         )
         XCTAssertTrue(
             app.buttons["cs-continue-button"].exists,
-            "The final design step should offer Continue (→ the QR/scan phase)."
+            "The final design step should offer Continue (→ the delivery chooser)."
         )
         gymShot(app, "create-step2-backup")
     }

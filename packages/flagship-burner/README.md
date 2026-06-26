@@ -7,9 +7,10 @@ registers itself with `.com` and is live in minutes.
 ## Architecture (v1)
 
 ```
-phone (trust root) ──QR sign── webapp ──QR-pipe / file download── Burner ──dd──> USB
-                                                                    │
-                                                                    └ verifies blob locally; never calls .com
+phone (trust root) ──signs recipe──┬─ pair session (phone scans the Burner's QR/code) ─┐
+                                   ├─ save/share recipe file ─────────────────────────┤→ Burner ──dd──> USB
+                                   └─ copy recipe to clipboard ───────────────────────┘   │
+                                                                                          └ verifies blob locally; never calls .com
 ```
 
 The Burner never reaches `flagshipserver.com`. The phone's signature on the
