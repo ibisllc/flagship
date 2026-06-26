@@ -46,11 +46,125 @@ final class WizardModel: ObservableObject {
     /// immediately round-trip back through `didSet` into the store.
     private var suppressWifiPersist = false
 
+    // MARK: - Pairing / session gate
+
+    /// Top-level burner state. The live phone session is the gate: `.locked`
+    /// shows the QR + short code; `.pairing` shows the SAS to confirm on the
+    /// phone; `.session` is the unlocked burn UI (Advanced available);
+    /// `.recipeFile` is the out-of-band "I have a recipe" path (Simple only,
+    /// no Advanced — there's no live session to authorize anything).
+    enum BurnerUIStage: Equatable { case locked, pairing, session, recipeFile }
+
+    @Published var burnerStage: BurnerUIStage = .locked
+    /// The QR payload + short code shown on the locked cover (from the engine).
+    @Published var pairQrPayload: String? = nil
+    @Published var pairCodeDisplay: String? = nil
+    /// One-line status under the QR ("Waiting for your phone…", etc.).
+    @Published var pairStatus: String = "Waiting for your phone…"
+    /// The 6-digit SAS to confirm on the phone (set in `.pairing`).
+    @Published var pairMatchCode: String? = nil
+    /// Why the last session ended (shown briefly on the cover after a drop).
+    @Published var lastSessionEndReason: String? = nil
+
+    /// Advanced features (BYO ISO, debug, embed-secrets, save-ISO) are only
+    /// available inside a live phone session — the out-of-band recipe path
+    /// is deliberately Simple-only.
+    var advancedAllowed: Bool { burnerStage == .session }
+
+    private var sessionClient: BurnerSessionClient? = nil
+
     init() {
         suppressWifiPersist = true
         wifiSSID = WifiCredentialStore.loadSSID()
         wifiPassword = WifiCredentialStore.loadPassword()
         suppressWifiPersist = false
+        beginPairing()
+    }
+
+    // MARK: - Pairing lifecycle
+
+    /// Spin up a fresh pairing session: new ephemeral keypair, new QR + code,
+    /// connect to the relay, and wait for a phone. Called on launch and after
+    /// a session drops (so the cover always shows a live, joinable code).
+    func beginPairing() {
+        sessionClient?.close()
+        let client = BurnerSessionClient()
+        sessionClient = client
+        pairQrPayload = client.qrPayload
+        pairCodeDisplay = client.humanCodeDisplay
+        pairMatchCode = nil
+        pairStatus = "Waiting for your phone…"
+        burnerStage = .locked
+        client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
+        client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
+        client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
+        client.connect()
+    }
+
+    private func applyEngineStage(_ stage: BurnerPairingEngine.Stage) {
+        switch stage {
+        case .waitingForPhone:
+            burnerStage = .locked
+        case .awaitingConfirm(let code):
+            pairMatchCode = code
+            pairStatus = "Phone connected — confirm the code matches."
+            burnerStage = .pairing
+        case .paired:
+            pairStatus = "Paired."
+            burnerStage = .session
+        case .ended(let reason):
+            relock(reason)
+        }
+    }
+
+    /// A recipe arrived over the live session. Stage it to a 0600 temp file
+    /// (same as the paste path) and run the existing verify.
+    private func handleSessionRecipe(_ data: Data) {
+        let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        let staging = tmpDir.appendingPathComponent("flagship-recipe-\(UUID().uuidString).json")
+        do {
+            try data.write(to: staging, options: [.atomic])
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)], ofItemAtPath: staging.path)
+        } catch {
+            appendLog(stream: .stderr, text: "Couldn't stage the received recipe: \(error.localizedDescription)")
+            return
+        }
+        pastedRecipeStaging = staging
+        recipe = staging
+        Task { await runVerify() }
+    }
+
+    /// Tear the session down and return to the locked cover with a fresh QR.
+    /// Triggered when the socket/ping-pong breaks (the core requirement: a
+    /// dropped session re-locks the burner).
+    func relock(_ reason: String?) {
+        // Don't yank a burn that's mid-write out from under the user.
+        guard !isRunning else { return }
+        lastSessionEndReason = reason
+        recipe = nil
+        verified = nil
+        recipeError = nil
+        pairMatchCode = nil
+        beginPairing()
+    }
+
+    /// "I have a recipe" — the out-of-band path. No live session; Simple-only.
+    func enterRecipeFileMode() {
+        sessionClient?.close()
+        sessionClient = nil
+        mode = .simple
+        debugMode = false
+        useSystemISO = false
+        burnerStage = .recipeFile
+    }
+
+    /// Back from the recipe-file path to the pairing cover.
+    func returnToCover() {
+        recipe = nil
+        verified = nil
+        recipeError = nil
+        beginPairing()
     }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
     /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user

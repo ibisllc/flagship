@@ -51,7 +51,7 @@ struct WizardView: View {
                 // the text fields entirely while the log is up, so neither the
                 // fields nor any leftover focus ring can float over the log.
                 if !showLog {
-                    panes
+                    stageContent
                         .padding(.horizontal, FB.Spacing.s5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -77,14 +77,34 @@ struct WizardView: View {
 
     // MARK: - Body
 
+    /// The live phone session is the gate: locked cover → SAS confirm →
+    /// the burn form. "I have a recipe" jumps straight to a Simple-only
+    /// burn form (no Advanced — no session to authorize it).
+    @ViewBuilder private var stageContent: some View {
+        switch model.burnerStage {
+        case .locked:    coverView
+        case .pairing:   pairingConfirmView
+        case .session, .recipeFile: panes
+        }
+    }
+
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-            modePicker
-            recipeRow
+            // Advanced (BYO ISO + Debug) only exists inside a live session.
+            if model.advancedAllowed {
+                modePicker
+            } else {
+                recipeFileHeader
+            }
+            if model.burnerStage == .recipeFile {
+                recipeRow
+            } else {
+                sessionRecipeRow
+            }
             // Advanced brings its own stock Ubuntu/Debian ISO; Simple fetches a
             // server-named Debian base ISO and shows the download progress. The
             // "Use system-provided ISO" checkbox lets Advanced fetch it too.
-            if model.mode == .advanced {
+            if model.advancedAllowed && model.mode == .advanced {
                 isoRow
             }
             diskRow
@@ -93,6 +113,152 @@ struct WizardView: View {
             bakeRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Header for the out-of-band recipe path: a back link to the pairing
+    /// cover, so a user who picked "I have a recipe" by mistake can return.
+    private var recipeFileHeader: some View {
+        HStack(spacing: FB.Spacing.s2) {
+            Button {
+                model.returnToCover()
+            } label: {
+                Label("Pair a phone instead", systemImage: "chevron.left")
+                    .font(FB.Font.caption())
+            }
+            .buttonStyle(.link)
+            .disabled(model.isRunning)
+            Spacer()
+        }
+    }
+
+    /// In a live session the recipe is delivered by the phone — show its
+    /// status rather than a drop target.
+    private var sessionRecipeRow: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            if let v = model.verified {
+                StatusCard(icon: "checkmark.seal.fill",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Recipe received from your phone.")
+            } else if let err = model.recipeError {
+                StatusCard(icon: "exclamationmark.triangle.fill",
+                           tint: FB.Colors.warning,
+                           title: "Couldn't read the recipe",
+                           subtitle: err)
+            } else {
+                StatusCard(icon: "iphone.gen3",
+                           tint: FB.Colors.textMuted,
+                           title: "Waiting for your phone…",
+                           subtitle: "Send the server recipe from the Flagship app.")
+            }
+        }
+        .padding(.bottom, FB.Spacing.s2)
+    }
+
+    // MARK: - Locked cover (pair your phone)
+
+    /// The locked cover. The live phone session is the gate into the burner:
+    /// scan the QR (or type the code) in the Flagship app, confirm the
+    /// security code, and the burn UI opens. "I have a recipe" is the
+    /// out-of-band escape hatch for a recipe received elsewhere.
+    private var coverView: some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer(minLength: FB.Spacing.s2)
+            Text("Pair your phone to begin")
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+            Text("Open the Flagship app on your phone and scan this code — or type it in. You'll confirm a short security code, then build your server here.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FB.Spacing.s4)
+
+            if let payload = model.pairQrPayload {
+                QRCodeView(payload: payload, size: 200)
+            } else {
+                ProgressView().frame(width: 200, height: 200)
+            }
+
+            if let code = model.pairCodeDisplay {
+                VStack(spacing: FB.Spacing.s1) {
+                    Text("Or enter this code")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                    Text(code)
+                        .font(.system(.title2, design: .monospaced, weight: .semibold))
+                        .foregroundStyle(FB.Colors.ink)
+                        .textSelection(.enabled)
+                }
+            }
+
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.6)
+                Text(model.pairStatus)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+
+            if let reason = model.lastSessionEndReason {
+                Text(reason)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.warning)
+                    .multilineTextAlignment(.center)
+            }
+
+            Spacer(minLength: FB.Spacing.s2)
+
+            Button {
+                model.enterRecipeFileMode()
+            } label: {
+                Text("I have a recipe")
+                    .font(FB.Font.caption())
+            }
+            .buttonStyle(.link)
+            .help("Already have a recipe file from someone else? Load it directly (basic burn only).")
+            .padding(.bottom, FB.Spacing.s2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - SAS confirm
+
+    /// Shown once a phone joins: display the 6-digit security code for the
+    /// user to compare with their phone. The phone's tap-to-confirm flips us
+    /// into the session (the burner doesn't have its own confirm button —
+    /// the human comparison happens against the phone).
+    private var pairingConfirmView: some View {
+        VStack(spacing: FB.Spacing.s4) {
+            Spacer()
+            Image(systemName: "lock.shield")
+                .font(.system(size: 40))
+                .foregroundStyle(FB.Colors.primary)
+            Text("Confirm the security code")
+                .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
+            Text("Check that this code matches the one shown in the Flagship app, then confirm on your phone.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, FB.Spacing.s5)
+
+            Text(BurnerPairing.formatMatchCode(model.pairMatchCode ?? "------"))
+                .font(.system(size: 40, design: .monospaced).weight(.bold))
+                .foregroundStyle(FB.Colors.ink)
+                .padding(.vertical, FB.Spacing.s3)
+                .padding(.horizontal, FB.Spacing.s5)
+                .background(RoundedRectangle(cornerRadius: FB.Radius.md).fill(FB.Colors.surfaceSunken))
+
+            HStack(spacing: FB.Spacing.s2) {
+                ProgressView().scaleEffect(0.6)
+                Text("Waiting for you to confirm on your phone…")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Simple (default, server-named Debian base) vs Advanced (bring your own
