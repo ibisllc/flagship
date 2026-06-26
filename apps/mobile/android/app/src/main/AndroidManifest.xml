@@ -87,6 +87,19 @@
             android:name=".push.DeadManReminderReceiver"
             android:exported="false" />
 
+        <!-- Share a minted recipe file from the create-server delivery chooser
+             (Save / share). Authority "<applicationId>.fileprovider"; paths in
+             res/xml/file_paths.xml (cache/recipes only). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Google Fonts provider declaration -->
         <meta-data
             android:name="preloaded_fonts"

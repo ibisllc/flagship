@@ -353,6 +353,18 @@ fun HomeTab() {
         }
         composable("create-server") {
             CreateServerScreen(
+                onDeliveredVisible = { serverDomain, serial, name, description ->
+                    // The recipe is out (burner-pair delivered) but the pairing
+                    // screen stays open for consent prompts — surface the pending
+                    // pod on Home now WITHOUT navigating away. Mirrors iOS
+                    // CreateServerStubScreen.onDeliveredVisible.
+                    app.upsertPendingPod(
+                        name = name,
+                        description = description,
+                        fqdn = serverDomain,
+                        serial = serial,
+                    )
+                },
                 onDelivered = { serverDomain, serial, name, description ->
                     // QR-relay delivered. Surface the pod on Home RIGHT NOW
                     // (pending, keyed on the fqdn, carrying this device's
