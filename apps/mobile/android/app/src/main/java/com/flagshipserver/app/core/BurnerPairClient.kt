@@ -23,7 +23,11 @@ sealed interface BurnerInbound {
     data object PeerPresent : BurnerInbound
     data object PeerJoined : BurnerInbound
     data class BurnerHello(val burnerPkB64: String) : BurnerInbound
-    data class ConsentRequest(val setting: String, val warning: String) : BurnerInbound // Phase 4
+    // Phase 4 — the burner asks the phone to approve a security-sensitive
+    // setting (e.g. Debug mode). Carries the box's serverDomain so the phone
+    // can sign the owner-IRK debug-access grant the box verifies. Mirrors the
+    // iOS BurnerInbound.consentRequest(setting, serverDomain, warning).
+    data class ConsentRequest(val setting: String, val serverDomain: String, val warning: String) : BurnerInbound
     data object PeerGone : BurnerInbound
     data object Expired : BurnerInbound
     data class RelayError(val message: String) : BurnerInbound
@@ -123,6 +127,7 @@ class LiveBurnerPairClient(
                     "burner-hello" -> frame["burnerPk"]?.jsonPrimitive?.content?.let { BurnerInbound.BurnerHello(it) }
                     "consent-request" -> BurnerInbound.ConsentRequest(
                         frame["setting"]?.jsonPrimitive?.content ?: "",
+                        frame["serverDomain"]?.jsonPrimitive?.content ?: "",
                         frame["warning"]?.jsonPrimitive?.content ?: "",
                     )
                     else -> null

@@ -5,6 +5,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Drives a phone↔burner pairing session and delivers a freshly-minted
@@ -21,10 +24,23 @@ import kotlinx.coroutines.flow.StateFlow
 class BurnerPairController(
     private val client: BurnerPairClient,
     private val scope: CoroutineScope,
+    /**
+     * Phase 4 consent — sign an owner-IRK debug-access grant behind biometric.
+     * Returns the signature hex, or null if the user cancelled/denied the
+     * biometric. Injected so the controller stays unit-testable; the screen
+     * wires it to `Keystore.deriveIRK` + `DebugAccess.sign`. Default no-op
+     * (returns null ⇒ a consent-request can only be denied). Placed BEFORE
+     * `mint` so the existing trailing-lambda call sites still bind to `mint`.
+     */
+    private val signConsentGrant: suspend (DebugAccess.Grant) -> String? = { null },
     /** Produces the on-wire recipe JSON + its server domain + serial. */
     private val mint: suspend () -> MintedRecipe,
 ) {
     data class MintedRecipe(val json: String, val serverDomain: String, val serial: String)
+
+    /** A pending burner consent the screen surfaces as a security-warning
+     *  dialog. Mirrors the iOS BurnerPairViewModel.PendingConsent. */
+    data class PendingConsent(val setting: String, val serverDomain: String, val warning: String)
 
     sealed interface Phase {
         data object Scan : Phase
@@ -41,6 +57,9 @@ class BurnerPairController(
 
     var lastDeliveredSerial: String? = null
         private set
+
+    private val _pendingConsent = MutableStateFlow<PendingConsent?>(null)
+    val pendingConsent: StateFlow<PendingConsent?> = _pendingConsent
 
     private var session: QrSession? = null
     private var burnerPub: ByteArray? = null
@@ -72,7 +91,8 @@ class BurnerPairController(
                 if (burnerPub == null) burnerPub = Base64URL.decode(ev.burnerPkB64)
                 deriveAndHello()
             }
-            is BurnerInbound.ConsentRequest -> { /* Phase 4 */ }
+            is BurnerInbound.ConsentRequest ->
+                _pendingConsent.value = PendingConsent(ev.setting, ev.serverDomain, ev.warning)
             is BurnerInbound.PeerGone -> fail("The computer's burner app disconnected.")
             is BurnerInbound.Expired -> fail("The pairing session timed out.")
             is BurnerInbound.RelayError -> fail(ev.message)
@@ -107,10 +127,45 @@ class BurnerPairController(
         }
     }
 
+    /**
+     * Approve the pending consent: biometric → sign the owner-IRK debug-access
+     * grant → send it back over the session for the burner to embed. A
+     * cancelled/failed biometric (signConsentGrant returns null) falls through
+     * to a deny so the burner isn't left hanging. Mirrors the iOS
+     * BurnerPairViewModel.approveConsent.
+     */
+    suspend fun approveConsent() {
+        val pending = _pendingConsent.value ?: return
+        val grant = DebugAccess.Grant(pending.serverDomain, "", System.currentTimeMillis())
+        val sigHex = try { signConsentGrant(grant) } catch (_: Throwable) { null }
+        if (sigHex == null) { denyConsent(); return }
+        val envelope = DebugAccess.envelopeJson(grant, sigHex)
+        client.send(BurnerOutbound.Raw(consentResultJson(pending.setting, envelope)))
+        _pendingConsent.value = null
+    }
+
+    /** Deny the pending consent: tell the burner it was declined (no grant). */
+    suspend fun denyConsent() {
+        val pending = _pendingConsent.value ?: return
+        client.send(BurnerOutbound.Raw(consentResultJson(pending.setting, null)))
+        _pendingConsent.value = null
+    }
+
+    /** `{"kind":"consent-result","setting":...[,"grant":<envelope>]}` — the
+     *  grant (when present) is the parsed DebugAccess envelope object, not a
+     *  string. Mirrors the iOS consent-result frame. */
+    private fun consentResultJson(setting: String, grantEnvelope: String?): String =
+        buildJsonObject {
+            put("kind", "consent-result")
+            put("setting", setting)
+            if (grantEnvelope != null) put("grant", Json.parseToJsonElement(grantEnvelope))
+        }.toString()
+
     fun cancel() {
         consumeJob?.cancel()
         consumeJob = null
         client.close()
+        _pendingConsent.value = null
         _phase.value = Phase.Scan
     }
 

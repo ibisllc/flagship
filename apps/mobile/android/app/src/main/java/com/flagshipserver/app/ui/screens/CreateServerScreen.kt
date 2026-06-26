@@ -19,6 +19,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -38,6 +44,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +64,10 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.BurnerPairController
+import com.flagshipserver.app.core.DebugAccess
+import com.flagshipserver.app.core.LiveBurnerPairClient
+import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.CreateServerDraftStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
@@ -92,12 +104,20 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
-private enum class Phase { Design, Scan, Match }
+// Design → DeliveryChooser fans into the delivery methods: Pair (burner app),
+// Burn (on-device USB-OTG), or the website-QR relay (Scan→Match, the demo path).
+// Save/Copy mint inline and route straight to onDelivered.
+private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn }
 
 @Composable
 fun CreateServerScreen(
     onDelivered: (serverDomain: String, serial: String, name: String, description: String) -> Unit,
     onCancel: () -> Unit,
+    // Fired the moment a recipe is out (share/copy/burner-pair delivered) so the
+    // host can surface the pending pod on Home WITHOUT navigating away — used by
+    // the burner-pair flow, which keeps its screen open to answer consent
+    // prompts. Mirrors iOS CreateServerStubScreen.onDeliveredVisible.
+    onDeliveredVisible: (serverDomain: String, serial: String, name: String, description: String) -> Unit = { _, _, _, _ -> },
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
@@ -105,6 +125,10 @@ fun CreateServerScreen(
     val mailbox = LocalSecretMailboxClient.current
     val sessionStore = LocalSessionStore.current
     val toasts = LocalToastCenter.current
+    val dev = LocalDeveloperSettings.current
+    // Mock mode (Developer toggle OFF) has no real burner — surface a demo
+    // affordance to reach the website-QR relay path. Absent dev ⇒ live (prod).
+    val useLive = dev?.useLiveClient?.collectAsState()?.value ?: true
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     // Draft-only metadata store (backup policy) — device-local, NOT signed
@@ -148,6 +172,86 @@ fun CreateServerScreen(
     // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
     // the wire (applied later via an owner-signed set-backup-policy order).
     var backupPolicy by remember { mutableStateOf(draftStore.backupPolicy()) }
+    // Burner-pairing controller (built when the user picks "Pair with the
+    // burner app") + on-device-burn recipe (minted before showing the burn UI).
+    var pairController by remember { mutableStateOf<BurnerPairController?>(null) }
+    var burnRecipeJson by remember { mutableStateOf<String?>(null) }
+    var burnMinted by remember { mutableStateOf<MintedBundle?>(null) }
+
+    // Mint the recipe + pre-publish the auth-code/RCK on .com (the box needs them
+    // to register when it phones home, regardless of delivery channel), reusing
+    // the shared minter so the recipe is byte-identical across delivery methods.
+    suspend fun mintAndRegister(): MintedBundle {
+        val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
+        val minted = mintRecipeBundle(
+            username = username,
+            serverName = name,
+            recipeTtlMs = recipeTtlMs,
+            // Only "approve" rides the wire; "auto" stays absent (legacy bytes).
+            bootUnlockMode = bootUnlockMode.takeIf { it == ServerSettingsStore.Mode.APPROVE }?.wire,
+            // Only "none" rides the wire; "luks" (default) stays absent.
+            diskEncryption = if (encryptDisk) null else "none",
+            embedSecrets = embedSecrets,
+            swkDepositStore = swkDepositStore,
+            cgkDepositStore = cgkDepositStore,
+            pairingDepositStore = pairingDepositStore,
+            sessionStore = sessionStore,
+        )
+        registerControlPlane(
+            flagshipServer = flagshipServer,
+            bundle = minted.bundle,
+            authCodeUserSig = minted.bundle.blob.authCodeUserSignature,
+        )
+        return minted
+    }
+
+    // Per-server bookkeeping every delivery path runs once the recipe is out:
+    // remember the boot-unlock choice + clear the draft-only metadata. Mirrors
+    // iOS recordDeliveredBookkeeping + the QR path's Match step.
+    fun recordDelivered(serverDomain: String) {
+        ServerSettingsStore.from(context).setMode(serverDomain, bootUnlockMode)
+        draftStore.reset()
+    }
+
+    // Pair + Burn are full-screen flows with their OWN scroll containers, so they
+    // render OUTSIDE the design/chooser scroll Column (nesting same-direction
+    // scrollables would crash). iOS presents the pair sheet the same way.
+    if (phase == Phase.Pair) {
+        val pc = pairController
+        if (pc != null) {
+            BurnerPairScreen(
+                controller = pc,
+                onDeliveredVisible = { domain, serial ->
+                    onDeliveredVisible(domain, serial, name, description)
+                },
+                onClose = { domain, serial -> onDelivered(domain, serial, name, description) },
+                onCancel = {
+                    pc.cancel()
+                    pairController = null
+                    phase = Phase.DeliveryChooser
+                },
+            )
+        } else {
+            LaunchedEffect(Unit) { phase = Phase.DeliveryChooser }
+        }
+        return
+    }
+    if (phase == Phase.Burn) {
+        val json = burnRecipeJson
+        if (json != null) {
+            BurnerOnDeviceScreen(
+                recipeJson = json,
+                onDone = {
+                    val minted = burnMinted
+                    if (minted != null) onDelivered(minted.serverDomain, minted.serial, name, description)
+                    else phase = Phase.DeliveryChooser
+                },
+            )
+        } else {
+            LaunchedEffect(Unit) { phase = Phase.DeliveryChooser }
+        }
+        return
+    }
 
     val scroll = rememberScrollState()
     Column(
@@ -195,10 +299,92 @@ fun CreateServerScreen(
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
                     error = null
-                    phase = Phase.Scan
+                    phase = Phase.DeliveryChooser
                 },
                 onCancel = onCancel,
             )
+            Phase.DeliveryChooser -> DeliveryChooserPhase(
+                busy = working,
+                showDemo = !useLive,
+                onPair = {
+                    // The burner pairing is a LIVE relay session always (mock
+                    // mode has no real burner — it uses the demo QR below).
+                    val controller = BurnerPairController(
+                        client = LiveBurnerPairClient(),
+                        scope = scope,
+                        mint = {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            BurnerPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
+                        },
+                        signConsentGrant = { grant ->
+                            val irk = Keystore.deriveIRK("Approve debug access for ${grant.serverDomain}")
+                            DebugAccess.sign(grant, irk)
+                        },
+                    )
+                    pairController = controller
+                    phase = Phase.Pair
+                },
+                onShare = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            shareRecipeFile(context, name, json)
+                            recordDelivered(minted.serverDomain)
+                            onDelivered(minted.serverDomain, minted.serial, name, description)
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onCopy = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            copyRecipeToClipboard(context, json)
+                            toasts.success("Recipe copied.")
+                            recordDelivered(minted.serverDomain)
+                            onDelivered(minted.serverDomain, minted.serial, name, description)
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onBurn = {
+                    if (working) return@DeliveryChooserPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val minted = mintAndRegister()
+                            burnRecipeJson = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                            burnMinted = minted
+                            recordDelivered(minted.serverDomain)
+                            phase = Phase.Burn
+                        } catch (t: Throwable) {
+                            error = NetworkErrorHumanizer.humanize(t)
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                onDemo = {
+                    error = null
+                    phase = Phase.Scan
+                },
+                error = error,
+                onCancel = onCancel,
+            )
+            Phase.Pair, Phase.Burn -> Unit // handled by an early return above
             Phase.Scan -> ScanPhase(
                 qrText = qrText,
                 onQrText = { qrText = it },
@@ -680,6 +866,127 @@ private fun MatchPhase(
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
 }
 
+// Delivery-method chooser shown after the design step. Mirrors iOS
+// CreateServerStubScreen.deliveryChooserPage: pair-with-burner / save-share /
+// copy / burn-on-device, plus a mock-only demo affordance.
+@Composable
+private fun DeliveryChooserPhase(
+    busy: Boolean,
+    showDemo: Boolean,
+    onPair: () -> Unit,
+    onShare: () -> Unit,
+    onCopy: () -> Unit,
+    onBurn: () -> Unit,
+    onDemo: () -> Unit,
+    error: String?,
+    onCancel: () -> Unit,
+) {
+    Text(
+        "Your recipe is ready. Pick how to get it to the Flagship burner that writes your USB stick.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    )
+    Spacer(Modifier.height(FS.space.s4))
+    DeliveryCard(
+        title = "Pair with the burner app",
+        body = "Scan the burner's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the burner is open in front of you.",
+        enabled = !busy,
+        testTag = "cs-delivery-pair",
+        onClick = onPair,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Save / share recipe file",
+        body = "Save the recipe as a file or send it. Whoever builds the box opens it in the burner. No secrets in the file.",
+        enabled = !busy,
+        testTag = "cs-delivery-share",
+        onClick = onShare,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Copy recipe to clipboard",
+        body = "Copy the recipe text, then paste it into the burner's \"I have a recipe\" box.",
+        enabled = !busy,
+        testTag = "cs-delivery-copy",
+        onClick = onCopy,
+    )
+    Spacer(Modifier.height(FS.space.s3))
+    DeliveryCard(
+        title = "Burn to USB on this device",
+        body = "Connect a USB drive with an OTG adapter and write the bootable installer right here — no computer needed.",
+        enabled = !busy,
+        testTag = "cs-delivery-burn",
+        onClick = onBurn,
+    )
+    if (showDemo) {
+        Spacer(Modifier.height(FS.space.s3))
+        // MOCK mode only: reach the website-QR relay path (Scan→Match) so the
+        // create flow stays exercisable without a real burner/desktop.
+        FSGhostButton(
+            label = "Use a demo QR (mock)",
+            onClick = onDemo,
+            block = true,
+            modifier = Modifier.testTag("cs-demo-qr-button"),
+        )
+    }
+    if (busy) {
+        Spacer(Modifier.height(FS.space.s4))
+        Text("Working…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+    }
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+    }
+    Spacer(Modifier.height(FS.space.s4))
+    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+@Composable
+private fun DeliveryCard(
+    title: String,
+    body: String,
+    enabled: Boolean,
+    testTag: String,
+    onClick: () -> Unit,
+) {
+    FSCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag(testTag),
+    ) {
+        Column {
+            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(FS.space.s1))
+            Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+        }
+    }
+}
+
+// Write the recipe JSON to a cache file + offer the system share sheet. The
+// FileProvider authority is "<applicationId>.fileprovider" (AndroidManifest +
+// res/xml/file_paths.xml). Mirrors InviteIssueScreen.shareViaSystemSheet.
+private fun shareRecipeFile(ctx: Context, serverName: String, json: String) {
+    val dir = File(ctx.cacheDir, "recipes").apply { mkdirs() }
+    val slug = SlugUtil.slugify(serverName).ifEmpty { "server" }
+    val file = File(dir, "$slug.flagship-recipe.json")
+    file.writeText(json)
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "application/json"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val chooser = Intent.createChooser(send, "Share recipe")
+    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    ctx.startActivity(chooser)
+}
+
+private fun copyRecipeToClipboard(ctx: Context, json: String) {
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText("Flagship recipe", json))
+}
+
 // ── Plumbing ──────────────────────────────────────────────────────
 
 private data class PendingDelivery(
@@ -727,6 +1034,63 @@ private suspend fun prepareDelivery(
     val session = QrSession.fresh()
     val matchCode = session.pair(parsed.browserPublicKey)
 
+    val minted = mintRecipeBundle(
+        username = username,
+        serverName = serverName,
+        recipeTtlMs = recipeTtlMs,
+        bootUnlockMode = bootUnlockMode,
+        diskEncryption = diskEncryption,
+        embedSecrets = embedSecrets,
+        swkDepositStore = swkDepositStore,
+        cgkDepositStore = cgkDepositStore,
+        pairingDepositStore = pairingDepositStore,
+        sessionStore = sessionStore,
+    )
+
+    return PendingDelivery(
+        sid = parsed.sid,
+        phonePubKeyB64u = Base64URL.encode(session.phonePubKey),
+        matchCode = matchCode,
+        session = session,
+        bundle = minted.bundle,
+        irkPubHex = minted.irkPubHex,
+    )
+}
+
+/** The signed install-blob bundle + the bits a caller needs to surface a
+ *  pending pod, independent of the delivery channel (QR relay, burner pairing,
+ *  share file, clipboard, on-device burn). */
+internal data class MintedBundle(
+    val bundle: InstallBlobBundle,
+    val serverDomain: String,
+    val serial: String,
+    val irkPubHex: String,
+)
+
+/**
+ * The DELIVERY-AGNOSTIC half of minting: issue the IRK-signed AuthCode, build +
+ * sign the InstallBlob, run create-time pairing, and record the deposit-store
+ * bookkeeping — WITHOUT any QR-session seal/deliver. Extracted from
+ * [prepareDelivery] (which keeps the QR seal on top) so the burner-pair /
+ * save-share / copy / burn-on-device delivery paths reuse the EXACT same mint
+ * (a byte-identical recipe). Side effects + ordering are preserved verbatim.
+ *
+ * NOTE: this does NOT pre-publish the auth-code/RCK on .com — that is
+ * [registerControlPlane], which each delivery path calls separately (the QR
+ * path in its deliver step; the new paths right after minting).
+ */
+internal suspend fun mintRecipeBundle(
+    username: String,
+    serverName: String,
+    recipeTtlMs: Long = DEFAULT_RECIPE_TTL_MS,
+    bootUnlockMode: String? = null,
+    diskEncryption: String? = null,
+    embedSecrets: Boolean = false,
+    swkDepositStore: PendingSwkDepositStore? = null,
+    cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
+    pairingDepositStore: PendingPairingDepositStore? = null,
+    sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
+): MintedBundle {
     val slug = SlugUtil.slugify(serverName)
     val serverDomain = Endpoints.serverFqdn(server = slug, user = username)
     val serial = SerialGen.random()
@@ -852,12 +1216,10 @@ private suspend fun prepareDelivery(
         swkHex = embeddedSwkHex,
     )
 
-    return PendingDelivery(
-        sid = parsed.sid,
-        phonePubKeyB64u = Base64URL.encode(session.phonePubKey),
-        matchCode = matchCode,
-        session = session,
+    return MintedBundle(
         bundle = bundle,
+        serverDomain = serverDomain,
+        serial = serial,
         irkPubHex = irkPubHex,
     )
 }
