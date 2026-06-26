@@ -147,6 +147,27 @@ deliberate Advanced opt-in, **never default**, and stays bound to the existing
 "Bucket C" backdoor-disablement discipline (the release grep-gate
 `scripts/release-guard.sh` already guards the dev-only constants).
 
+**Box-side enforcement (consent-as-crypto).** Debug access is no longer an
+unconditional burner bake — it is enabled at boot ONLY when the recipe carries an
+owner-IRK-signed grant the box itself verifies:
+
+- The phone signs a `flagship/debug-access/v1` `DebugAccessGrant`
+  (`{serverDomain, sshAuthorizedKey, issuedAt}`; `packages/protocol/debugAccess.ts`)
+  behind Face ID when the user enables Advanced → Debug mode.
+- The burner embeds it as an **UNSIGNED top-level recipe sibling `debugGrant`** —
+  a JSON STRING of `{"grant":{"serverDomain":"…","sshAuthorizedKey":"…","issuedAt":N},"signatureHex":"…"}`
+  (exactly like `swkHex` / `pairingOrder`; NOT part of the signed install-blob
+  canonical bytes, so existing recipe signatures are untouched).
+- The daemon's `debugAccessGate` (`packages/server-daemon/src/debugAccessGate.ts`,
+  wired in `wireOwnerHandlers`) verifies the signature under the config-pinned
+  owner IRK AND that the grant names THIS box, then enables the `debug` user +
+  installs the SSH key. **No valid grant ⇒ a production image, no debug user.**
+  Idempotent via a local marker; never throws on an absent/forged/wrong-box grant.
+
+⇒ The burner **MUST stop baking the `debug` console user into the preseed**; the
+box-side gate is now the sole path that enables it (Bucket C item 2 — the
+unconditional bake — is replaced by this owner-authorized gate).
+
 ## Warning placement principle
 
 Warn at **consequential, new, irreversible decisions** — handing over keys,

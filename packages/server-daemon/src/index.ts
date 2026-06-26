@@ -119,6 +119,11 @@ import {
 } from "./decommissionConsumer.js";
 import { buildRehomePoller, readRehomeMarker } from "./transferRehomeConsumer.js";
 import {
+  runDebugAccessGate,
+  fileDebugMarkerStore,
+  realDebugCommandRunner,
+} from "./debugAccessGate.js";
+import {
   buildSwkDepositPoller,
   fileSwkMarkerStore,
 } from "./swkDepositConsumer.js";
@@ -2067,6 +2072,26 @@ async function wireOwnerHandlers(deps: {
     process.once("SIGTERM", () => selfDeletePoller.stop());
     process.once("SIGINT", () => selfDeletePoller.stop());
     console.log("[daemon] self-delete content-wipe poller armed");
+  }
+  // Owner-authorized debug access (docs/recipe-delivery-and-remote-install.md):
+  // a one-shot gate that enables the `debug` console user + installs its SSH key
+  // ONLY if the recipe carries an owner-IRK-signed `debugGrant` that verifies
+  // under the config-pinned owner IRK AND names THIS box. No valid grant ⇒ no
+  // debug user (the burner no longer bakes one). Idempotent via a local marker;
+  // never throws. Fire-and-forget — never blocks the owner-API bring-up.
+  {
+    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+    void runDebugAccessGate({
+      serverDomain: env.serverFqdn,
+      ownerIrkPub: cfg.irkPublicKey,
+      markerStore: fileDebugMarkerStore(`${dataDir}/debug-access-done.json`),
+      runner: realDebugCommandRunner,
+      onLog: (m) => console.log(m),
+    })
+      .then((out) => {
+        if (out.enabled) console.log("[daemon] debug access ENABLED by owner grant");
+      })
+      .catch(() => {});
   }
   // Graceful-decommission (docs/server-replacement-graceful-decommission.md
   // §10 + §9): poll this box's OWN eviction order on the heartbeat cadence. When
