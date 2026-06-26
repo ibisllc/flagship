@@ -651,6 +651,33 @@ export async function checkQrPipeUpgrade(
   return { limited: false };
 }
 
+/**
+ * Per-IP gate on /burner-pipe upgrades — same DO-spawn concern as the QR
+ * relay (each accepted upgrade materialises a Durable Object). Reuses the
+ * `RATE_LIMITER_QR_PIPE` binding with a DISTINCT key prefix so the two
+ * budgets are independent without provisioning a second namespace. Fails
+ * open when the binding is absent (dev / tests), matching the module's
+ * posture for missing bindings.
+ */
+export async function checkBurnerPipeUpgrade(
+  env: RateLimitEnv,
+  ip: string | null,
+): Promise<RateLimitedResult | AllowedResult> {
+  if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
+  if (!ip) return { limited: false };
+  const key = `burner-pipe-upgrade|ip|${ip}`;
+  const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
+  if (!outcome.success) {
+    return {
+      limited: true,
+      endpoint: "burner-pipe-upgrade",
+      axis: "ip",
+      retryAfterSec: 60,
+    };
+  }
+  return { limited: false };
+}
+
 /** Read the client IP from CF-Connecting-IP, falling back to X-Forwarded-For first hop. */
 export function clientIp(request: Request): string | null {
   const cfip = request.headers.get("cf-connecting-ip");

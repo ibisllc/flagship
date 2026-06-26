@@ -25,6 +25,7 @@ import {
 } from "./qrPipeMetrics.js";
 import {
   checkQrPipeUpgrade,
+  checkBurnerPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -198,6 +199,12 @@ export interface RouteEnv {
    * lightweight stub; production wiring is in wrangler.toml.
    */
   BUILD_RELAY?: BuildRelayNamespaceLike;
+  /**
+   * Burner-pairing Durable Object namespace — the phone↔desktop-burner
+   * live session (sibling of BUILD_RELAY). Tests pass a stub; production
+   * wiring is in wrangler.toml.
+   */
+  BURNER_RELAY?: BuildRelayNamespaceLike;
 }
 
 export interface BuildRelayNamespaceLike {
@@ -247,6 +254,8 @@ const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
 const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
 /** v2: WebSocket pipe for the QR relay. /qr-pipe/<sid>?role=browser|phone */
 const QR_PIPE_WS_PREFIX = "/qr-pipe/";
+/** Phone↔desktop-burner live session. /burner-pipe/<sid>?role=burner|phone */
+const BURNER_PIPE_WS_PREFIX = "/burner-pipe/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -473,6 +482,12 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // (a base64url random ~22 chars) resolves to a stable DO.
   if (url.pathname.startsWith(QR_PIPE_WS_PREFIX)) {
     return forwardQrPipeUpgrade(request, env, url);
+  }
+
+  // Phone↔desktop-burner live session WS upgrade.
+  // /burner-pipe/<sid>?role=burner|phone → the DO addressed by idFromName(sid).
+  if (url.pathname.startsWith(BURNER_PIPE_WS_PREFIX)) {
+    return forwardBurnerPipeUpgrade(request, env, url);
   }
 
   // P3.6 — /og?title=...&subtitle=...
@@ -824,6 +839,38 @@ async function forwardQrPipeUpgrade(
   await recordUpgrade(env.DB);
   const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
+  return stub.fetch(request);
+}
+
+/**
+ * Phone↔desktop-burner live session: forward a /burner-pipe/<sid>?role=…
+ * upgrade to the BurnerRelaySession DO addressed by idFromName(sid). Same
+ * shape as the QR-relay forwarder (length-bounded URL-safe sid, per-IP
+ * upgrade gate, spawn metric); the DO arbitrates roles + presence.
+ */
+async function forwardBurnerPipeUpgrade(
+  request: Request,
+  env: RouteEnv,
+  url: URL,
+): Promise<Response> {
+  if (!env.BURNER_RELAY) {
+    return jsonResponse({ error: "burner-pipe not configured" }, 503);
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return jsonResponse({ error: "websocket upgrade required" }, 426);
+  }
+  const sid = url.pathname.slice(BURNER_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
+    return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
+  }
+  const rl = await checkBurnerPipeUpgrade(env, clientIp(request));
+  if (rl.limited) {
+    await recordRateLimited(env.DB);
+    return rateLimitedResponse(rl);
+  }
+  await recordUpgrade(env.DB);
+  const id = env.BURNER_RELAY.idFromName(sid);
+  const stub = env.BURNER_RELAY.get(id);
   return stub.fetch(request);
 }
 

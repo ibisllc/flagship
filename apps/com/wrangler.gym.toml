@@ -108,9 +108,17 @@ migrations_dir = "../../packages/storage/migrations"
 name = "BUILD_RELAY"
 class_name = "BuildRelaySession"
 
+[[durable_objects.bindings]]
+name = "BURNER_RELAY"
+class_name = "BurnerRelaySession"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BuildRelaySession"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["BurnerRelaySession"]
 
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
