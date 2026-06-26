@@ -131,7 +131,59 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-24**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-26**.
+
+### 2026-06-26 — phone PAIRS WITH the burner (inverted QR) + delivery chooser + consent-as-crypto + Android OTG burner
+
+**The desktop burner is now paired FROM the phone** (was: phone scans the
+website's QR). The burner opens **locked**, showing a QR + an 8-char code; the
+phone scans/types it, both confirm a **SAS**, and the live socket *is* the gate —
+a dropped session re-locks the burner. The phone then mints + delivers the recipe
+over the session. Spec: `docs/recipe-delivery-and-remote-install.md` (Path B).
+Built across the main loop + 3 worktree workers; **deployed** (`.com` Worker
+`1cd2f8e5`); all surfaces green.
+
+- **Relay (`apps/com`):** new `BurnerRelaySession` DO + `/burner-pipe/<sid>?role=
+  burner|phone` (long-lived, bidirectional, presence `peer-gone`→re-lock,
+  keepalive idle-TTL, dumb pipe). Per-IP upgrade gate (reuses `RATE_LIMITER_QR_PIPE`).
+  v2 DO migration. **LIVE** (426 on a non-WS probe). 20 DO tests + a pinned
+  cross-platform X25519/HKDF/SAS + code→sid vector (`burnerPairingVector.test.ts`).
+- **Burner (`apps/burner-mac`):** state machine locked→pairing(SAS)→session→re-lock;
+  `BurnerPairing`/`BurnerPairingEngine`/`BurnerSessionClient`; QR via CoreImage.
+  **"I have a recipe"** = out-of-band file/paste path (Simple-only, no Advanced).
+- **Delivery chooser (iOS + Android), replacing "scan the site":** after the
+  design step — **Pair with the burner app · Save/share recipe file · Copy recipe
+  to clipboard · Burn to USB on this device (Android only)**. All reuse ONE minter
+  (`mintInstallBlob` / extracted `mintRecipeBundle`) so the recipe is byte-identical.
+  Shared `BurnerPairing` + `BurnerPairClient` (long-lived transport) on both; iOS
+  `BurnerPairViewModel`+`BurnerPairScreen`, Android `BurnerPairController`+`BurnerPairScreen`.
+- **Consent-as-crypto (#4, owner rule — the Face-ID gate EMITS the enabling
+  material, not a boolean):** the burner's Advanced **Debug** toggle sends a
+  `consent-request` over the session; the phone shows a security warning + Face ID
+  and signs an owner-IRK **`flagship/debug-access/v1`** grant; the burner embeds it
+  as the recipe's unsigned `debugGrant` sibling (and **no longer bakes the debug
+  user into the preseed**); the **box-side daemon gate** (`debugAccessGate.ts`)
+  verifies the grant vs the config-pinned owner IRK before enabling the debug
+  console user/SSH — no valid grant ⇒ production image. Protocol envelope +
+  pinned vector on TS/Swift/Kotlin (CryptoKit Ed25519 is non-deterministic, so the
+  contract is canonical-bytes + key parity, not a pinned sig hex).
+- **#5 embed-secrets:** satisfied by existing machinery — the phone-side `embedSecrets`
+  Advanced toggle embeds `swkHex`/`pairingOrder`, AEAD-sealed over the ephemeral
+  session key (torn down after) — meeting the doc's "sealed to ephemeral + wiped".
+- **#9 Android in-device USB-OTG burner:** no-root USB Mass-Storage/SCSI writer
+  (`burner/usb/*` — CBW/CSW + CDB encoders + BOT state machine, 33 unit tests),
+  base-ISO download+verify, Compose UI. **Decision:** full on-device ISO9660/
+  El-Torito remaster without xorriso is infeasible in one pass → a documented
+  `VerbatimInjector` seam; the recommended path is a small server-side
+  pre-remastered base + a preseed-on-FAT volume (`apps/mobile/android/OTG-BURNER-NOTES.md`).
+
+Gates: `tsc -b` clean · full `vitest` **6697** (relay 20, vector 2, box-side gate 9) ·
+burner-mac `swift test` **129** · iOS unit suite **1268** · Android `:app:testDebugUnitTest`
+**BUILD SUCCESSFUL** (burner-pair, consent, debug-access, OTG). **Deployed:** `.com`
+Worker (relay DO + v2 DO migration), live. **REMAINING (owner, NOT CI-validatable):**
+rebuild + re-sign the Mac burner; rebuild iOS + Android apps; a **reburn** to validate
+the box-side debug-access gate live; a **physical OTG drive** to validate the Android
+raw write; and the OTG remaster server-side follow-up before the on-device burn boots.
 
 ### 2026-06-24 — direct lead-read: clients read live per-service leadership straight from a box
 
