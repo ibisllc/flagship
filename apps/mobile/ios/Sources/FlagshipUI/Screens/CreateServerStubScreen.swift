@@ -1,5 +1,7 @@
 import SwiftUI
+import UIKit
 import Flagship
+import FlagshipAPI
 import FlagshipCore
 
 /// Phone-side v2 create-server flow.
@@ -22,6 +24,13 @@ public struct CreateServerStubScreen: View {
     /// status with the just-minted serial — the page used to show a
     /// hardcoded "Status: pending" that never moved.
     @State private var deliveredTimeline: ProvisionTimelineViewModel?
+    // Delivery-chooser state.
+    @State private var pairVM: BurnerPairViewModel?
+    @State private var showPair = false
+    @State private var shareURL: URL?
+    @State private var showShare = false
+    @State private var deliveryBusy = false
+    @State private var copiedToast = false
     /// Fires the moment the delivered page APPEARS (vs `onDelivered`,
     /// which waits for the "Done" tap) so the host can surface the new
     /// pending pod on the Home list immediately.
@@ -48,6 +57,7 @@ public struct CreateServerStubScreen: View {
                 Spacer().frame(height: FS.space.s8)
                 switch vm.phase {
                 case .design:                designPage(c: c)
+                case .deliveryChooser:       deliveryChooserPage(c: c)
                 case .scanQr:                scanPage(c: c)
                 case .pasteQr:               pastePage(c: c)
                 case .connecting:
@@ -71,6 +81,125 @@ public struct CreateServerStubScreen: View {
             .padding(.horizontal, FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
+        .sheet(isPresented: $showPair) {
+            if let pairVM {
+                NavigationStack {
+                    BurnerPairScreen(
+                        vm: pairVM,
+                        onDelivered: { domain, serial in
+                            showPair = false
+                            vm.lastDeliveredSerial = serial
+                            vm.phase = .delivered(serial: serial, serverDomain: domain)
+                        },
+                        onCancel: { showPair = false }
+                    )
+                    .navigationTitle("Pair with burner")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            if let shareURL { ShareSheet(items: [shareURL]) }
+        }
+    }
+
+    // MARK: - Delivery chooser
+
+    private func deliveryChooserPage(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            phaseHeader("Get it to a burner", subtitle: "Your recipe is ready. Pick how to send it to the Flagship burner that writes your USB stick.", c: c)
+
+            Button { startPair() } label: {
+                deliveryCard(icon: "qrcode.viewfinder", accent: c.primary,
+                             title: "Pair with the burner app",
+                             body: "Scan the burner's QR (or type its code) and the recipe is sent over a secure live link. Easiest if the burner is open in front of you.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            Button { Task { await shareRecipe() } } label: {
+                deliveryCard(icon: "square.and.arrow.up", accent: c.text,
+                             title: "Save / share recipe file",
+                             body: "Save the recipe as a file or send it (AirDrop, Messages, Mail). Whoever builds the box opens it in the burner. No secrets in the file.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            Button { Task { await copyRecipe() } } label: {
+                deliveryCard(icon: "doc.on.clipboard", accent: c.text,
+                             title: copiedToast ? "Copied!" : "Copy recipe to clipboard",
+                             body: "Copy the recipe text, then paste it into the burner's “I have a recipe” box.",
+                             c: c)
+            }
+            .buttonStyle(.plain)
+            .disabled(deliveryBusy)
+
+            // MOCK mode only: drive the whole create flow end-to-end with no
+            // desktop/burner via the legacy demo-QR relay path. Keeps the
+            // mock onboarding smoke test exercising a real mint+deliver.
+            if !dev.useLiveClient {
+                FSGhostButton("Use a demo QR (mock)", block: true) {
+                    Task { await vm.qrDetected(QrRelay.makeDemoQrUrl()) }
+                }
+                .accessibilityIdentifier("cs-demo-qr-button")
+            }
+
+            if deliveryBusy { spinnerCard(c: c) }
+        }
+    }
+
+    private func deliveryCard(icon: String, accent: Color, title: String, body: String, c: FSColors) -> some View {
+        FSCard(padding: FS.space.s6) {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: FS.radius.sm).fill(accent.opacity(0.12))
+                    Image(systemName: icon).foregroundColor(accent).font(.system(size: 22, weight: .semibold))
+                }
+                .frame(width: 44, height: 44)
+                Text(title).font(FS.font.h3()).foregroundColor(c.text)
+                Text(body).font(FS.font.body()).foregroundColor(c.textMuted)
+            }
+        }
+    }
+
+    private func startPair() {
+        let vmPair = BurnerPairViewModel(client: LiveBurnerPairClient(), minter: vm)
+        pairVM = vmPair
+        showPair = true
+    }
+
+    private func shareRecipe() async {
+        guard !deliveryBusy else { return }
+        deliveryBusy = true
+        defer { deliveryBusy = false }
+        do {
+            let minted = try await vm.mintRecipeJSON()
+            let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            let url = dir.appendingPathComponent("\(SlugUtil.slugify(vm.name)).flagship-recipe.json")
+            try minted.json.data(using: .utf8)?.write(to: url, options: [.atomic])
+            shareURL = url
+            showShare = true
+            // The recipe is out — surface the pending pod via the delivered page.
+            vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
+        } catch {
+            vm.phase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func copyRecipe() async {
+        guard !deliveryBusy else { return }
+        deliveryBusy = true
+        defer { deliveryBusy = false }
+        do {
+            let minted = try await vm.mintRecipeJSON()
+            UIPasteboard.general.string = minted.json
+            copiedToast = true
+            vm.phase = .delivered(serial: minted.serial, serverDomain: minted.serverDomain)
+        } catch {
+            vm.phase = .failed(error.localizedDescription)
+        }
     }
 
     // MARK: - Phase 1: Design
@@ -139,7 +268,7 @@ public struct CreateServerStubScreen: View {
                 .accessibilityIdentifier("cs-next-button")
             } else {
                 FSPrimaryButton("Continue", enabled: vm.canAdvanceFromDesign, block: true, large: true) {
-                    vm.continueToScan()
+                    vm.proceedToDelivery()
                 }
                 .accessibilityIdentifier("cs-continue-button")
             }

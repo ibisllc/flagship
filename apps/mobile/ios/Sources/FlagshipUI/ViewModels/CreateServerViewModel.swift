@@ -29,6 +29,10 @@ import FlagshipCore
 public final class CreateServerViewModel {
     public enum Phase: Sendable {
         case design
+        /// After design: how do you want to get the recipe to a burner?
+        /// (Pair with the burner app · Save/Share the recipe file · Copy ·
+        /// Burn on this device [Android]). Replaces the old "scan the site".
+        case deliveryChooser
         case scanQr
         case pasteQr
         case connecting
@@ -266,6 +270,34 @@ public final class CreateServerViewModel {
         }
     }
 
+    /// After the design step, go to the delivery-method chooser instead of
+    /// the old "scan the website QR" path.
+    public func proceedToDelivery() {
+        guard canAdvanceFromDesign else { return }
+        phase = .deliveryChooser
+    }
+
+    /// Mint the recipe and return its on-wire JSON for the out-of-band
+    /// delivery methods (Save/Share file, Copy to clipboard). Performs the
+    /// same post-mint bookkeeping the live paths do.
+    public func mintRecipeJSON() async throws -> (json: String, serverDomain: String, serial: String) {
+        let blob = try await mintInstallBlob()
+        lastDeliveredSerial = blob.blob.authCode.serial
+        let data = try JSONEncoder().encode(blob.onWire())
+        let json = String(data: data, encoding: .utf8) ?? ""
+        recordDeliveredBookkeeping(serverDomain: blob.blob.serverDomain)
+        return (json, blob.blob.serverDomain, blob.blob.authCode.serial)
+    }
+
+    /// Persist the boot-unlock + disk-encryption choices for this server and
+    /// clear the draft — shared by every delivery method (website, pair,
+    /// share, copy, burn-on-device).
+    func recordDeliveredBookkeeping(serverDomain: String) {
+        bootUnlock.setMode(bootUnlockMode, for: serverDomain)
+        diskEncryption.setLuks(encryptDisk, for: serverDomain)
+        draftStore.reset()
+    }
+
     public func cancel() async {
         await relay.close()
         phase = .design
@@ -282,7 +314,12 @@ public final class CreateServerViewModel {
     }
     private var pendingBundle: PendingBundle?
 
-    private func mintInstallBlob() async throws -> SignedInstallBlob {
+    /// Internal (not private) so the burner-pairing flow can reuse the EXACT
+    /// minting path (auth-code issue, RCK register, create-time pairing, the
+    /// deposit-store bookkeeping) rather than duplicating it — the burner peer
+    /// receives a byte-identical `SignedInstallBlob`, just over a different
+    /// transport. Configure the design fields, then call this.
+    func mintInstallBlob() async throws -> SignedInstallBlob {
         // Phase 2 — the username claim moved to OpenAccountViewModel
         // (the open-account step). By the time we mint a server the
         // account already exists: the UMK was generated and the
