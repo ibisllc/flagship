@@ -30,6 +30,8 @@ import {
   type IsoFamily,
 } from "./index.js";
 
+import { runPair } from "./pair.js";
+
 const args = process.argv.slice(2);
 const subcommand = args[0];
 
@@ -54,6 +56,8 @@ async function main(): Promise<void> {
       return cmdWriteImage(args.slice(1));
     case "distros":
       return cmdDistros();
+    case "pair":
+      return cmdPair(args.slice(1));
     case undefined:
     case "--help":
     case "-h":
@@ -305,6 +309,16 @@ function extractFlagValue(argv: string[], flag: string): string | undefined {
   return undefined;
 }
 
+async function cmdPair(rest: string[]): Promise<void> {
+  const host = extractFlagValue(rest, "--host");
+  const out = extractFlagValue(rest, "--out");
+  await runPair({
+    ...(host ? { host } : {}),
+    ...(out ? { out } : {}),
+    insecure: rest.includes("--insecure"),
+  });
+}
+
 function cmdDistros(): void {
   for (const d of PINNED_DISTROS) {
     const tag = d.recommended ? "  [recommended]" : "";
@@ -335,6 +349,9 @@ usage:
   flagship-burn write-image <image.iso>                    raw-write an already-prepared image
                                                            [--device /dev/diskN | auto] [--yes]
                                                            (needs sudo; pairs with prepare)
+  flagship-burn pair                                       pair with your phone (shows a QR + code),
+                                                           receive + verify the recipe over the live relay
+                                                           [--out <recipe.json>] [--host <control-host>]
   flagship-burn distros                                    list supported distros
 
 Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:

@@ -22,4 +22,5 @@ export * from "./cgkDelivery.js";
 export * from "./cloudGossip.js";
 export * from "./pairingOrder.js";
 export * from "./debugAccess.js";
+export * from "./burnerPairing.js";
 export { ed } from "./edSync.js";

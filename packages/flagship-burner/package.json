@@ -20,7 +20,13 @@
     "test": "vitest run --dir tests"
   },
   "dependencies": {
-    "@flagship/protocol": "*"
+    "@flagship/protocol": "*",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/ws": "^8.18.0"
   },
   "license": "BUSL-1.1"
 }
