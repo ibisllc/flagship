@@ -131,7 +131,40 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-26**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-27**.
+
+### 2026-06-27 — burner pairing: Linux/Chromebook CLI debug-consent parity + FAT preseed primitive
+
+Closed the code-completable gaps left by the 2026-06-26 pairing work (below).
+
+- **CLI burner debug-consent (`flagship-burn pair --debug`) — DONE** (`8142ff4b`).
+  The Linux/Chromebook CLI now mirrors the macOS burner's Advanced debug toggle:
+  after the recipe is delivered it sends a `consent-request` over the live
+  session; the phone shows the warning + Face ID and signs the
+  `flagship/debug-access/v1` grant; the burner **verifies it locally against the
+  recipe's owner IRK** (`authCode.userPubKey`) and embeds it as the recipe's
+  unsigned `debugGrant` sibling the box-side gate consumes. Deny/timeout/
+  phone-drop ⇒ no grant ⇒ a production image. `pair.ts` transport made injectable
+  + **6 unit tests** (full handshake → verified recipe; `--debug` grant-embed;
+  declined consent; deliver-before-pairing; relay-expiry; phone-drop-after-deliver).
+  Linux bundle rebuilt (carries `--debug`) + delivered to the owner.
+- **Android on-device burn — FAT preseed primitive DONE** (`557383e1`).
+  `FatVolume.buildPreseedVolume(text)` is a pure-Kotlin FAT16 builder (no native
+  deps) that lays an already-generated `preseed.cfg` onto a `FLAGSHIP`-labeled
+  volume — the shape-certain on-device half of the OTG remaster (every placement
+  mechanism drops the preseed onto exactly this volume). It does NOT generate the
+  preseed (the signed bootstrap text stays in the shared TS `buildDebianPreseed`).
+  `FatVolumeTest` (6) round-trips the format via an independent reader; burner
+  unit tests now **39**. The `VerbatimInjector` stays the default — a bootable
+  on-device stick still needs **owner/infra/hardware** (NOT pure code):
+  (1) a server-served pre-remastered base whose cmdline references the FLAGSHIP
+  preseed label; (2) an Android preseed-text source from the shared generator
+  (a server endpoint) with blob-signature verification; (3) FAT placement + a
+  physical OTG drive to validate the boot. Documented in the `IsoInjector` TODO +
+  `OTG-BURNER-NOTES.md` §5.
+
+Gates: `tsc -b` clean · flagship-burner vitest **199** (pair 6) · Android
+`:app:testDebugUnitTest` burner **39** (FatVolume 6). Pushed.
 
 ### 2026-06-26 — phone PAIRS WITH the burner (inverted QR) + delivery chooser + consent-as-crypto + Android OTG burner
 
