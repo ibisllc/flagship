@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc -b",
     "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/flagship-burn.mjs --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
+    "bundle:engine": "esbuild src/preseedEngine.ts --bundle --platform=neutral --format=iife --target=es2017 --outfile=engine/preseed-engine.js --legal-comments=none",
     "test": "vitest run --dir tests"
   },
   "dependencies": {

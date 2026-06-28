@@ -22,6 +22,11 @@
  */
 import { verifyInstallBlob, type InstallBlob } from "@flagship/protocol";
 import { readFile } from "node:fs/promises";
+import { hexToBytes, parseInstallBlob } from "./installBlobParse.js";
+
+// Re-exported for back-compat: parseInstallBlob now lives in the pure
+// (Node-free) installBlobParse module so the engine bundle can import it.
+export { parseInstallBlob } from "./installBlobParse.js";
 
 export interface LoadedBlob {
   blob: InstallBlob;
@@ -45,6 +50,16 @@ export interface LoadedBlob {
    * {@link UserDataOptions.swkHex}; undefined for recipes that don't carry it.
    */
   swkHex?: string;
+  /**
+   * Owner-authorized debug-access grant — the JSON string `{grant,signatureHex}`
+   * the phone signs behind Face ID when the user approves the burner's "Debug
+   * mode" toggle (the `flagship/debug-access/v1` envelope). NOT part of the
+   * signed InstallBlob — a top-level recipe sibling (like {@link pairingOrder} /
+   * {@link swkHex}). Threaded into install-blob.json via
+   * {@link UserDataOptions.debugGrant}; the box-side gate verifies it under the
+   * owner IRK before enabling the debug user/SSH. Undefined for production recipes.
+   */
+  debugGrant?: string;
   /** Where the blob came from — useful for the auto-shred step. */
   source: { kind: "file"; path: string } | { kind: "stdin" };
 }
@@ -129,6 +144,17 @@ export function loadBlobFromString(
     typeof rawSwk === "string" && /^[0-9a-f]{64}$/i.test(rawSwk)
       ? rawSwk.toLowerCase()
       : undefined;
+  // Owner-authorized debug-access grant: an OPTIONAL top-level recipe sibling
+  // (`{grant,signatureHex}`), added by the burner's --debug consent flow. UNSIGNED
+  // — recipe metadata, never part of the verified InstallBlob. Tolerate a JSON
+  // STRING or an inlined object; normalize to the canonical string.
+  const rawDebugGrant = (parsed as Record<string, unknown>).debugGrant;
+  const debugGrant =
+    typeof rawDebugGrant === "string" && rawDebugGrant.length > 0
+      ? rawDebugGrant
+      : rawDebugGrant && typeof rawDebugGrant === "object"
+        ? JSON.stringify(rawDebugGrant)
+        : undefined;
   // Accept both the flattened recipe and the issued envelope that .com / the
   // website hand out: { blob: {...}, blobSignature: "..." }.
   let obj = parsed as Record<string, unknown>;
@@ -170,59 +196,5 @@ export function loadBlobFromString(
       "bad-signature",
     );
   }
-  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, source };
-}
-
-export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
-  const authCode = o.authCode as Record<string, unknown> | undefined;
-  if (!authCode) return null;
-  const phonePub = hexToBytes(o.phoneDelegatedPubKey as string);
-  const authUserSig = hexToBytes(o.authCodeUserSignature as string);
-  const rckPub = hexToBytes(o.rckPubKey as string);
-  const userPub = hexToBytes(authCode.userPubKey as string);
-  const delegated = hexToBytes(authCode.delegatedPubKey as string);
-  if (!phonePub || !authUserSig || !rckPub || !userPub || !delegated) return null;
-  if (o.version !== 2) return null;
-  return {
-    version: 2,
-    serverDomain: String(o.serverDomain),
-    username: String(o.username),
-    serverName: String(o.serverName),
-    phoneDelegatedPubKey: phonePub,
-    registrationUrl: String(o.registrationUrl),
-    authCode: {
-      version: 1,
-      serial: String(authCode.serial),
-      username: String(authCode.username ?? o.username),
-      serverName: String(authCode.serverName ?? o.serverName),
-      serverDomain: String(authCode.serverDomain ?? o.serverDomain),
-      delegatedPubKey: delegated,
-      userPubKey: userPub,
-      issuedAt: Number(authCode.issuedAt),
-      expiresAt: Number(authCode.expiresAt),
-    },
-    authCodeUserSignature: authUserSig,
-    installerGitRef: String(o.installerGitRef ?? ""),
-    rckPubKey: rckPub,
-    // Carry the signed optional fields so the reconstructed canonical bytes
-    // match the phone's signature. Dropping them here would fail verify for
-    // any "approve" / no-disk-encryption server.
-    ...(o.bootUnlockMode === "approve" || o.bootUnlockMode === "auto"
-      ? { bootUnlockMode: o.bootUnlockMode as "approve" | "auto" }
-      : {}),
-    ...(o.diskEncryption === "luks" || o.diskEncryption === "none"
-      ? { diskEncryption: o.diskEncryption as "luks" | "none" }
-      : {}),
-  };
-}
-
-function hexToBytes(hex: unknown): Uint8Array | null {
-  if (typeof hex !== "string") return null;
-  if (hex.length % 2 !== 0) return null;
-  if (!/^[0-9a-fA-F]*$/.test(hex)) return null;
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
+  return { blob, blobSignatureHex: sigHex, pairingOrder, swkHex, debugGrant, source };
 }

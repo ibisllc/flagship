@@ -134,6 +134,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     blobSignatureHex: loaded.blobSignatureHex,
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
@@ -189,6 +190,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     blobSignatureHex: loaded.blobSignatureHex,
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),

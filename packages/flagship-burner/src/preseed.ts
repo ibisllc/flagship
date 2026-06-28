@@ -40,6 +40,7 @@ import {
   BURN_PASSPHRASE,
   type UserDataOptions,
 } from "./userdata.js";
+import { utf8ToBase64 } from "./base64.js";
 
 /**
  * The single canonical provisioning vocabulary (mirror of the control-plane
@@ -509,10 +510,6 @@ d-i netcfg/wireless_wpa string ${preseedEscape(password)}
  */
 function preseedEscape(s: string): string {
   return s.replace(/[\r\n]+/g, " ");
-}
-
-function utf8ToBase64(s: string): string {
-  return Buffer.from(s, "utf-8").toString("base64");
 }
 
 /**

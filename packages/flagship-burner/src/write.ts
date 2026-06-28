@@ -144,6 +144,12 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     encryptRoot: opts.encryptRoot !== false,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    // Carry the UNSIGNED recipe siblings into install-blob.json — the direct
+    // `write` path dropped these (the GUI's prepare path threads them). Absent
+    // ⇒ byte-identical.
+    pairingOrder: loaded.pairingOrder,
+    swkHex: loaded.swkHex,
+    debugGrant: loaded.debugGrant,
   };
   const yaml = buildAutoinstallUserData(genOpts);
   const preseedCfg = buildDebianPreseed(genOpts);
