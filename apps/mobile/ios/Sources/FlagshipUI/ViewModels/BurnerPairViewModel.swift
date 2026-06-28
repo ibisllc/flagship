@@ -146,7 +146,7 @@ public final class BurnerPairViewModel {
         // 600ms gate before Confirm is tappable (mirrors create-server).
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 600_000_000)
-            await self?.openGate()
+            self?.openGate()
         }
     }
 
