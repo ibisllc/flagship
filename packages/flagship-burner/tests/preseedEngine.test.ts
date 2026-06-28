@@ -186,6 +186,17 @@ describe("preseed engine bundle", () => {
     expect(engine.buildPreseed(recipe, "{}")).toBe(viaCli);
   });
 
+  it("reproduces every committed golden vector (the cross-engine contract)", () => {
+    const fixture = JSON.parse(
+      readFileSync(join(here, "..", "engine", "golden", "preseed-vectors.json"), "utf8"),
+    ) as { vectors: Array<{ name: string; recipeJson: string; burnOptsJson: string; expectedPreseed: string; expectedUserData: string }> };
+    expect(fixture.vectors.length).toBeGreaterThanOrEqual(6);
+    for (const v of fixture.vectors) {
+      expect(engine.buildPreseed(v.recipeJson, v.burnOptsJson), `preseed ${v.name}`).toBe(v.expectedPreseed);
+      expect(engine.buildUserData(v.recipeJson, v.burnOptsJson), `user-data ${v.name}`).toBe(v.expectedUserData);
+    }
+  });
+
   it("the debug-access grant reaches install-blob.json (consent is load-bearing)", () => {
     const grant = JSON.stringify({ grant: { serverDomain: "home.harry.flagship.services", sshAuthorizedKey: "ssh-ed25519 AAAA", issuedAt: 1700000000000 }, signatureHex: "ab".repeat(64) });
     const preseed = engine.buildPreseed(buildSignedRecipe({ debugGrant: grant }), "{}");
