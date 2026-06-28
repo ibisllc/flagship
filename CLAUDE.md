@@ -131,7 +131,59 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
-> trackers are frozen in `docs/archive/`. Last updated **2026-06-27**.
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-28**.
+
+### 2026-06-28 — ONE preseed generator: run the canonical TS on every burner (JSC + Rhino), delete the 2,200-line Swift twin
+
+**The preseed/user-data generator is now a single implementation**, run unchanged
+on Node (Linux/Windows CLI), **JavaScriptCore** (macOS/iOS) and **Rhino** (Android)
+— ending the cross-language drift risk of maintaining the same security-critical,
+signed-bootstrap path in TS *and* a 2,200-line Swift twin (and almost a third in
+Kotlin). Decision: when the choice is "port to Kotlin to match Swift" vs "run the
+TS everywhere," consistency = the latter — one audited source, zero divergence by
+construction. Built in 3 stages (main loop did Stage 1; two parallel worktree
+workers did Android + Mac); all pushed.
+
+- **Stage 1 — engine bundle + golden contract** (`d1052385`, `4923b03e`, `3080fb6d`):
+  pure-ECMAScript `utf8ToBase64` replaces the only Node dep (`Buffer`) in
+  `preseed.ts`/`userdata.ts` (byte-identical → sha-pinned bootstrap + existing burns
+  unchanged); `installBlobParse.ts` extracts the PURE blob parser out of the
+  fs-importing `loadBlob.ts`; `preseedEngine.ts` is the ONE entry
+  (`buildPreseedFromRecipe`/`buildUserDataFromRecipe(recipeJson, burnOptsJson)`,
+  parse+generate, NO verify — each burner verifies natively first, keeping the
+  bundle crypto-free). esbuild→**Babel es5** (`engine.babel.json`) → committed
+  `engine/preseed-engine.js` (zero Node builtins) the native burners ship.
+  `engine/golden/preseed-vectors.json` (6 vectors) is the cross-engine contract. The
+  Node test evaluates the COMMITTED bundle in a bare Node-free `vm` and asserts
+  byte-identical to the in-process generator + reproduces every golden vector (also
+  a staleness gate). **Bonus fix:** `debugGrant` now threads end-to-end
+  (`UserDataOptions`→`installBlobToJson`→`loadBlob`→CLI→engine) — it was silently
+  dropped on every non-Swift path (the `pair --debug` consent never reached the box),
+  and the direct `write` path also dropped `swkHex`/`pairingOrder`.
+- **Stage 3 — macOS via JSC** (`16f965cc`): `PreseedEngine.swift` (JSContext runs the
+  bundle, an SPM resource); `UserData.swift` **2,200 → 81 lines** (façade delegating
+  to the engine; legacy `bootUnlockMode`/`debugMode` params vestigial — recipe-driven
+  now); `Remaster.swift` (ISO surgery, not the generator) untouched. `swift test`
+  **82/0** incl. JSC==Node across all 6 golden vectors + a drift guard.
+- **Stage 2 — Android via Rhino** (`284c5449`): `PreseedEngine.kt` (Rhino 1.9.1,
+  interpreted mode — mandatory on ART) runs the bundle (shipped as an asset);
+  `PreseedFatInjector.kt` chains it into the existing `FatVolume` builder.
+  `:app:testDebugUnitTest` green incl. Rhino==Node across all 6 vectors + a drift
+  guard. `VerbatimInjector` stays the default — the USB *placement* of the FAT volume
+  next to the base image is still gated on the owner-side pre-remastered base ISO +
+  hardware (`OTG-BURNER-NOTES.md` §5).
+- **The golden gate earned its keep:** it caught a real **Rhino block-scoping bug**
+  (reads a `for`-loop var as its initial value, corrupting base64) before any
+  hardware — fixed by the es5 lowering. Because Rhino (JVM) and JSC (macOS) both run
+  in CI, "Android diverges from Mac/Linux" is now a unit-test failure, not a
+  production surprise.
+
+Gates: `tsc -b` clean · flagship-burner vitest **228** (base64 13, engine 16
+incl. golden) · burner-mac `swift test` **82** (JSC golden) · Android
+`:app:testDebugUnitTest` green (Rhino golden + FAT injector). **REMAINING (owner):**
+a **reburn** to re-validate the JSC/Rhino-generated image boots — CI proves the bytes
+are byte-identical to the old Swift/TS path, but not the physical boot; and the
+Android on-device USB *placement* + base-ISO artifact (unchanged from §5).
 
 ### 2026-06-27 — burner pairing: Linux/Chromebook CLI debug-consent parity + FAT preseed primitive
 
