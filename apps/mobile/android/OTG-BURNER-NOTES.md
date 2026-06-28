@@ -135,6 +135,14 @@ All under `app/src/main/java/com/flagshipserver/app/burner/`:
   the recipe JSON (so the UI + the future injector have what they need).
   (`RecipeParseTest`)
 - **`iso/IsoInjector.kt`** — the remaster seam + `VerbatimInjector`.
+- **`iso/FatVolume.kt`** — pure-Kotlin **FAT16 volume builder** (no native deps):
+  `buildPreseedVolume(text)` lays an already-generated `preseed.cfg` onto a
+  `FLAGSHIP`-labeled volume — the shape-certain on-device half of §3(b) (every
+  placement mechanism drops the preseed onto exactly this volume). It does NOT
+  generate the preseed (the signed bootstrap text stays in the shared TS
+  generator) — it only writes bytes into a filesystem image. (`FatVolumeTest` —
+  6 tests: BPB validity, FAT16 cluster-count range, root-dir label+file entries,
+  single- and multi-cluster file round-trip via an independent reader.)
 - **`BurnerOnDeviceViewModel.kt`** — orchestrates detect → permission → download
   → verify → inject → write, exposing a `StateFlow<BurnState>`.
 - **`ui/screens/BurnerOnDeviceScreen.kt`** — the Compose UI: drive picker,
@@ -150,14 +158,30 @@ attach filter would just offer the app for every plugged-in mass-storage device.
 
 ## 5. Exactly what still needs doing (and what needs a physical OTG drive)
 
-**To make the burned stick auto-provision (turn the seam on):** pick the §3(b)
-mechanism and implement `IsoInjector.inject` accordingly. The lowest-risk choice
-is the small server change to serve a Flagship base image whose cmdline already
-references a fixed preseed label, then have the injector write a tiny FAT volume
-holding `preseed.cfg`. The preseed/bootstrap text MUST come from the **shared
-generator** (`packages/flagship-burner` `buildDebianPreseed`), not a Kotlin
-re-implementation — porting that signed, security-critical path is a separate,
-carefully-validated task. Until then the injector is verbatim.
+**To make the burned stick auto-provision (turn the seam on):** the §3(b)
+mechanism is chosen, and its shape-certain on-device half — writing the
+`FLAGSHIP` FAT volume that holds `preseed.cfg` — is now **built + unit-tested**
+(`FatVolume.buildPreseedVolume`, §4). What remains is the part that is NOT pure
+on-device code:
+
+1. **The base-image artifact (owner build pipeline).** Serve, via
+   `/api/iso-manifest`, a pre-remastered Flagship base whose bootloader cmdline
+   already references the fixed preseed label (e.g.
+   `preseed/file=/run/flagship/preseed.cfg`, or `auto url=…`). This needs
+   `xorriso` on a build host + hosting the bytes — it cannot be produced
+   on-device.
+2. **The preseed-text source for Android.** The signed preseed/bootstrap text
+   MUST come from the **shared generator** (`packages/flagship-burner`
+   `buildDebianPreseed`), not a Kotlin re-implementation. Because that generator
+   is TypeScript, Android should fetch it (e.g. a small server endpoint that
+   returns `buildDebianPreseed(recipe)`) and then **verify the returned preseed
+   embeds the exact phone-delivered blob signature** before laying it onto the
+   FAT volume — so a hostile server can't swap in a different box's recipe (the
+   phone's signature stays the trust root, matching the desktop burner).
+3. **Placement + hardware.** Put the FAT volume next to the base image per the
+   base-ISO contract (appended partition / pre-allocated region) and validate the
+   boot on a **physical OTG drive**; then `IsoInjector.inject` swaps
+   `VerbatimInjector` for the real path.
 
 **Needs a physical OTG drive to validate (cannot be unit-tested):**
 1. `UsbHost` enumeration + permission + endpoint open against a real stick.

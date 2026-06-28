@@ -44,12 +44,19 @@ class VerbatimInjector(
     private val log: (String) -> Unit = {},
 ) : IsoInjector {
     override fun inject(baseIso: File, recipe: ParsedRecipe, recipeJson: String): InjectedImage {
-        // TODO(otg-burner): embed `recipeJson` as preseed.cfg per OTG-BURNER-NOTES.md
-        //  §3(b) — requires either a server-served pre-remastered base whose
-        //  bootloader cmdline references a fixed preseed label (recommended), or a
-        //  pure-Kotlin ISO9660 rewriter. The preseed/bootstrap text MUST come from
-        //  the shared generator (packages/flagship-burner buildDebianPreseed), not
-        //  a Kotlin re-implementation of the signed bootstrap path.
+        // TODO(otg-burner): embed the recipe as preseed.cfg per OTG-BURNER-NOTES.md
+        //  §3(b). The FAT-volume primitive is DONE + tested —
+        //  `FatVolume.buildPreseedVolume(text)` lays an already-generated preseed.cfg
+        //  onto a FLAGSHIP-labeled FAT16 volume. What remains (owner/infra/hardware,
+        //  not pure code here):
+        //   1. a server-served pre-remastered base whose bootloader cmdline already
+        //      references the FLAGSHIP preseed label (the build-pipeline artifact);
+        //   2. the preseed TEXT for Android — it MUST come from the shared generator
+        //      (packages/flagship-burner buildDebianPreseed), e.g. via a small server
+        //      endpoint, NOT a Kotlin re-implementation of the signed bootstrap path;
+        //   3. placing the FAT volume next to the base image (appended partition /
+        //      pre-allocated region per the base-ISO contract) + a physical OTG drive
+        //      to validate the boot. Until all three land this stays verbatim.
         log(
             "VerbatimInjector: writing base ISO UNCHANGED for ${recipe.serverDomain} " +
                 "(serial=${recipe.serial}). Recipe is NOT yet embedded — the stick will boot " +
