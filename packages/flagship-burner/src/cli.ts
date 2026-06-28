@@ -316,6 +316,7 @@ async function cmdPair(rest: string[]): Promise<void> {
     ...(host ? { host } : {}),
     ...(out ? { out } : {}),
     insecure: rest.includes("--insecure"),
+    debug: rest.includes("--debug"),
   });
 }
 
@@ -351,7 +352,10 @@ usage:
                                                            (needs sudo; pairs with prepare)
   flagship-burn pair                                       pair with your phone (shows a QR + code),
                                                            receive + verify the recipe over the live relay
-                                                           [--out <recipe.json>] [--host <control-host>]
+                                                           [--out <recipe.json>] [--host <control-host>] [--debug]
+                                                           (--debug = Advanced: request an owner-signed debug-access
+                                                            grant; you approve it on your phone with Face ID, and the
+                                                            box enables a debug console user only after verifying it)
   flagship-burn distros                                    list supported distros
 
 Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
