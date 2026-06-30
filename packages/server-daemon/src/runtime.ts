@@ -622,7 +622,7 @@ export function defaultApexPage(serverFqdn: string): string {
   <p class="reveal">If you're the owner, you can choose what appears here from the <strong>Flagship app</strong>.</p>
   <div class="reveal">
     <hr>
-    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. flagship.services relays ciphertext it cannot read.</p>
+    <p class="colophon"><svg class="lock" aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> TLS terminates on this server. Flagship relays ciphertext it cannot read.</p>
     <div class="wordmark">Get yours at <span class="gy">flagshipserver.com</span></div>
   </div>
 </main>
