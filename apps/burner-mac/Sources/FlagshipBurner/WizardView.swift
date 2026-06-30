@@ -130,19 +130,21 @@ struct WizardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack(spacing: FB.Spacing.s2) {
-                Button(role: .destructive) {
+            HStack(spacing: FB.Spacing.s3) {
+                Spacer(minLength: 0)
+                if let exp = model.sessionExpiresAt {
+                    SessionCountdown(deadline: exp)
+                }
+                Button {
                     model.disconnectFromPhone()
                 } label: {
                     Label("Disconnect from phone", systemImage: "xmark.circle")
                         .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.danger)
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.plain)
+                .pointerCursor()
                 .disabled(model.isRunning)
-                Spacer(minLength: FB.Spacing.s2)
-                if let exp = model.sessionExpiresAt {
-                    SessionCountdown(deadline: exp)
-                }
             }
         }
     }
