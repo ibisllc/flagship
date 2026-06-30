@@ -149,6 +149,32 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-06-30 — burner pairing survives a phone disconnect (+ status/sliver fixes).**
+The phone↔burner pairing treated the live socket as the gate, so a ~30s phone
+display auto-lock dropped the socket → relay fired `peer-gone` → the burner
+instantly relocked + wiped (Advanced became unreachable; a re-scan hit "slot
+taken"). Now a **resilient ~1h session**: the relay **evicts a stale same-role
+socket on reconnect** (marked `superseded` so its late close can't fire a phantom
+`peer-gone`) and broadcasts `expiresAt`; the burner **holds** the prepared burn on
+a phone drop (`reconnecting` state) and **auto-resumes** when the same phone
+returns (same ephemeral key, no second SAS — a different key can't seize a held
+session); the phone **persists the session to encrypted storage** (iOS Keychain /
+Android EncryptedSharedPreferences) and **reconnects on unlock/relaunch**, landing
+back on the exact spot. Both sides get a **"Disconnect from … (phone/burner)"**
+button + an **"Auto-locks in mm:ss"** countdown; explicit disconnect / expiry does
+a full wipe + fresh QR. Confirmed Bug: toggling Advanced is inert — the lock
+screen was the instant relock. Also: a server **awaiting a burn** no longer shows
+a spinning **"Deploying"** sliver op (mobile suppresses for pending; webapp gates
+on phase + relabels "preparing"); the **webapp ops/trust sliver** now reserves
+layout space (push-down) instead of `position:fixed` overlay (iOS/Android already
+push down). Gates: relay 21 · burner-mac swift 87 · iOS 1271 · Android
+`:app:testDebugUnitTest` + `assembleDebug` green · webapp vitest 1605 · `tsc -b`
+clean. Relay + Mac burner committed (`449fa227`); phone + UI (`f185e7d6`). **Mac
+burner rebuilt + reinstalled.** REMAINING (owner): **deploy the `.com` Worker**
+(`npx wrangler deploy` — needs CF auth; backward-compatible, no migration) for the
+relay eviction + countdown to go live; **rebuild the iOS + Android apps** for the
+phone-side resume.
+
 **2026-06-28 — ONE preseed generator (Swift twin deleted).** The preseed/user-data
 generator is now a single TS implementation run on Node (Linux/Windows CLI),
 JavaScriptCore (macOS/iOS), and Rhino (Android), ending cross-language drift. ECMA
