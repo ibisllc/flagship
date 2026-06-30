@@ -175,6 +175,17 @@ A multi-part day driven by live hand-testing.
   writes an `/etc/issue.d` banner showing the **live LAN IP (`\4`) + creds**. All
   local ⇒ works **even when the public tunnel is down**; production (no-grant)
   untouched; the `chpasswd` line is the constant the GA release-guard targets.
+- **Production console locked down** (`95a460bb`). Debug is now ENTIRELY the
+  runtime grant-gate, so the inline bootstrap debug machinery was dead code:
+  removed the "DEBUG BUILD — console login debug/flagship" `/etc/issue` banner,
+  the inline `debug:flagship` useradd, `stripDebugFeatures`, and `debugMode`
+  (production bootstrap byte-identical — sha-pin unchanged). Also **locked the
+  `flagship` admin user's baked break-glass password to `*`** (Debian preseed +
+  Ubuntu autoinstall) — a debug-OFF box now has **NO interactive login by any
+  path** (root disabled, no `debug` user, `flagship` SSH-key-only with no key in
+  prod). The only console access is the owner-grant debug toggle ⇒ a box created
+  WITHOUT debug can't be shelled into without a reburn (intended; the break-glass
+  was a committed universal-password liability).
 - **Daemon self-heal** (`45789406`). hali came fully up, **fell off ~21 min in**
   (tunnel + heartbeat died), sat dead for an hour while powered on, and only a
   **reboot** restored it. Root cause: tunnel auto-reconnect was already on `main`
