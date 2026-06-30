@@ -113,7 +113,6 @@ export function buildDebianPreseed(opts: UserDataOptions): string {
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
     debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
-    debugMode: opts.debugMode,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
 
@@ -215,13 +214,20 @@ d-i mirror/http/directory string /debian
 d-i mirror/http/proxy string
 
 ### Account setup. Root login disabled; one admin user (matches Ubuntu's
-### autoinstall identity). The crypt(3) hash is the SAME baked hash the Ubuntu
-### path ships (the box is phone-gated; this account is a break-glass console).
+### autoinstall identity). Its password is LOCKED — "*" is the conventional
+### /etc/shadow "no valid password, login disabled" marker (d-i writes the crypt
+### field verbatim and no hashed input can ever match it). There is NO committed
+### crypt hash on the image, so the flagship account exists (for its sudo
+### membership + the dev SSH stub) but CANNOT be logged into by password; with
+### root login off and no authorized_keys installed in production, the box has no
+### interactive console/SSH login by any path. The sanctioned debug path is
+### 100% runtime + owner-grant-gated (the daemon's debugAccessGate provisions its
+### OWN 'debug' user on a verified owner-IRK grant) and is unaffected by this lock.
 d-i passwd/root-login boolean false
 d-i passwd/make-user boolean true
 d-i passwd/user-fullname string Flagship
 d-i passwd/username string flagship
-d-i passwd/user-password-crypted password $6$saltsaltsaltsaltsalt$Fz2j0/yjeyqQsRGfQ2DGRrXyMz9.6CljgPwQ3UlqOPLqo4kVZk.zhztOQS9rdshOMu7w5WL9.bjvKR7vCs71y0
+d-i passwd/user-password-crypted password *
 d-i user-setup/allow-password-weak boolean true
 d-i user-setup/encrypt-home boolean false
 

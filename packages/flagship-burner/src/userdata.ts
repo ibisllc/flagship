@@ -80,13 +80,6 @@ export interface UserDataOptions {
    */
   debugSshAuthorizedKey?: string;
   /**
-   * DEBUG build toggle (the burner's "Debug mode" checkbox, default OFF). When
-   * true the image keeps the known-password `debug` sudo console account + the
-   * "DEBUG BUILD" /etc/issue banner. Default/false ⇒ a PRODUCTION image with
-   * neither. This is the ONLY way to get those debug features.
-   */
-  debugMode?: boolean;
-  /**
    * The dedicated boot worker the box's boot-stage talks to for its LUKS
    * unlock (lease GET / approval request POST / response poll), baked to
    * /boot/flagship-boot-host so the initramfs unlock hook reads it on every
@@ -239,7 +232,6 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
-    debugMode: opts.debugMode,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
@@ -296,7 +288,15 @@ autoinstall:
 ${networkBlock}${earlyCommandsBlock}  identity:
     hostname: flagship-pod
     username: flagship
-    password: "$6$saltsaltsaltsaltsalt$Fz2j0/yjeyqQsRGfQ2DGRrXyMz9.6CljgPwQ3UlqOPLqo4kVZk.zhztOQS9rdshOMu7w5WL9.bjvKR7vCs71y0"
+    # LOCKED password (no committed crypt). "*" is the conventional /etc/shadow
+    # "no valid password — login disabled" marker (no hashed input can match it),
+    # so the flagship admin account exists (for its sudo membership + the dev SSH
+    # stub) but CANNOT be logged into by password. Production installs no
+    # authorized_keys for it either ⇒ no interactive login by any path. The
+    # sanctioned debug path is 100% runtime + owner-grant-gated (the daemon's
+    # debugAccessGate creates + passwords its OWN 'debug' user on a verified
+    # owner-IRK grant); it is unaffected by this lock.
+    password: "*"
   ssh:
     install-server: true
     allow-pw: false
@@ -534,47 +534,6 @@ export interface BootstrapTemplateArgs {
   wifiPassword?: string;
   /** DEBUG-ONLY: replace the bootstrap with a minimal sshd+key remote-access stub. */
   debugSshAuthorizedKey?: string;
-  /**
-   * When true the burned image is a DEBUG build: it keeps the known-password
-   * `debug` sudo console account + the "DEBUG BUILD" /etc/issue banner. Default
-   * FALSE ⇒ a PRODUCTION image with neither (the `debug:flagship` backdoor is
-   * stripped). This flag is the ONLY way to get those debug features — see
-   * `stripDebugFeatures`, which also fails loud if the markers ever survive a
-   * strip so a refactor can't silently re-ship the backdoor.
-   */
-  debugMode?: boolean;
-}
-
-/** The /etc/issue "DEBUG BUILD" banner block (appended after the brand banner). */
-const DEBUG_BANNER_BLOCK =
-  "cat >> /etc/issue <<'FLAGSHIP_ISSUE'\n\n" +
-  "  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).\n" +
-  "  !! CHANGE OR REMOVE this user before production.\n\n" +
-  "FLAGSHIP_ISSUE\n";
-
-/**
- * Strip every DEBUG-only feature from an assembled bootstrap, leaving a
- * production image: removes the "DEBUG BUILD" /etc/issue banner and the
- * known-password `debug` sudo account (comment + useradd + chpasswd). The
- * account block carries non-ASCII box-drawing/em-dash chars in its comment, so
- * it's matched by a regex anchored on stable ASCII rather than a literal. FAILS
- * LOUD if either backdoor marker survives — a moved block must never silently
- * ship the `debug:flagship` account.
- */
-export function stripDebugFeatures(script: string): string {
-  const stripped = script
-    .replace(DEBUG_BANNER_BLOCK, "")
-    .replace(
-      /# .{0,4}DEBUG-ONLY console login[\s\S]*?echo 'debug:flagship' \| chpasswd 2>\/dev\/null \|\| true\n\n/,
-      "",
-    );
-  if (stripped.includes("debug:flagship") || stripped.includes("DEBUG BUILD")) {
-    throw new Error(
-      "stripDebugFeatures: a debug marker survived the strip — the debug block " +
-        "moved; refusing to ship a production image that still carries the backdoor",
-    );
-  }
-  return stripped;
 }
 
 /**
@@ -584,25 +543,17 @@ export function stripDebugFeatures(script: string): string {
  * same script (no drift between the two installers' downstream setup).
  */
 export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
-  // The sshd remote-access stub is its own debug mechanism (dev-only, never
-  // CLI/GUI) and is unaffected by debugMode.
+  // The sshd remote-access stub is its own dev-only debug mechanism (never
+  // CLI/GUI), separate from the runtime owner-grant-gated debug-access path.
   if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
-  const script = args.encryptRoot
+  // PRODUCTION ONLY: the bootstrap no longer bakes any console-login account or
+  // banner. Debug access is 100% runtime + owner-grant-gated (the daemon's
+  // debugAccessGate creates + passwords its own `debug` user only on a verified
+  // owner-IRK `flagship/debug-access/v1` grant), so there is no inline backdoor
+  // to keep or strip — and the `flagship` admin ships with a LOCKED password.
+  return args.encryptRoot
     ? buildBootstrapScriptEncrypted(args)
     : buildBootstrapScriptPlain(args);
-  // Production by default: strip the debug account + banner unless this is an
-  // explicit debug build. This is the ONLY switch that keeps them.
-  if (args.debugMode) {
-    // DEBUG build: keep the debug account/banner AND drop the /boot marker that
-    // re-enables boot-stage's console "manual" passphrase fallback for bring-up.
-    // A production burn never gets it, so the unlock has no offline bypass.
-    return (
-      script +
-      "\n# DEBUG-ONLY: enable boot-stage's console 'manual' unlock fallback.\n" +
-      ": > /boot/flagship-debug-mode 2>/dev/null || true\n"
-    );
-  }
-  return stripDebugFeatures(script);
 }
 
 /**
@@ -722,12 +673,6 @@ cat > /etc/issue <<'FLAGSHIP_ISSUE'
   This is a Flagship server - your personal cloud. You hold the keys.
 FLAGSHIP_ISSUE
 printf '  Get yours at \\033[96mflagshipserver.com\\033[0m\\n' >> /etc/issue
-cat >> /etc/issue <<'FLAGSHIP_ISSUE'
-
-  !! DEBUG BUILD - console login 'debug' / password 'flagship' (sudo).
-  !! CHANGE OR REMOVE this user before production.
-
-FLAGSHIP_ISSUE
 # MOTD (post-login) names this specific box. Unquoted heredoc ⇒ vars expand.
 cat > /etc/motd <<FLAGSHIP_MOTD
 
@@ -736,15 +681,6 @@ cat > /etc/motd <<FLAGSHIP_MOTD
   flagship.services is a blind pipe; it never sees your data.
 
 FLAGSHIP_MOTD
-
-# ── DEBUG-ONLY console login. The 'flagship' user is SSH-key-only (no usable
-#    password by design), which makes on-box debugging (read /boot/flagship-wifi.log,
-#    journalctl, etc.) impossible at the console. 'debug' is a sudo user with a
-#    KNOWN password so the owner can log in during bring-up. SECURITY: this is a
-#    backdoor — the /etc/issue banner warns loudly; REMOVE before production
-#    (tracked in CLAUDE.md open work).
-useradd -m -s /bin/bash -G sudo debug 2>/dev/null || true
-echo 'debug:flagship' | chpasswd 2>/dev/null || true
 
 # Provisioning-status → .com so the phone renders a live install timeline.
 # Best-effort: a failed report NEVER fails the install. (The Alpine live

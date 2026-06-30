@@ -28,6 +28,7 @@ import {
   wifiSetupScript,
   DEFAULT_BOOT_HOST,
 } from "../src/userdata.js";
+import { buildDebianPreseed } from "../src/preseed.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -1135,7 +1136,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     );
   });
 
-  it("defaults to a PRODUCTION image — no debug account or banner — and debugMode keeps them", () => {
+  it("the bootstrap is ALWAYS a PRODUCTION image — no inline console-login backdoor", () => {
     const base = {
       ref: "main",
       repoUrl: "https://github.com/ibisllc/flagship.git",
@@ -1143,19 +1144,43 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootUnlockMode: "auto" as const,
       bootHost: DEFAULT_BOOT_HOST,
     };
-    const prod = buildBootstrapScript(base);
-    // Default (no debugMode) ⇒ the backdoor + banner are stripped.
-    expect(prod).not.toContain("debug:flagship");
-    expect(prod).not.toContain("DEBUG BUILD");
-    expect(prod).not.toContain("useradd -m -s /bin/bash -G sudo debug");
-    // The brand banner + prod content stay intact.
-    expect(prod).toContain("Get yours at");
-    expect(prod).toContain("cat > /etc/motd");
+    // The bootstrap NEVER bakes a console-login account or "DEBUG BUILD" banner.
+    // Debug access is 100% runtime + owner-grant-gated (the daemon's
+    // debugAccessGate, NOT in this package). Assert across both families.
+    for (const family of ["ubuntu", "debian"] as const) {
+      const prod = buildBootstrapScript({ ...base, family });
+      expect(prod).not.toContain("debug:flagship");
+      expect(prod).not.toContain("DEBUG BUILD");
+      expect(prod).not.toContain("console login 'debug'");
+      expect(prod).not.toMatch(/useradd[^\n]*\bdebug\b/);
+      // The brand banner + prod content stay intact.
+      expect(prod).toContain("Get yours at");
+      expect(prod).toContain("cat > /etc/motd");
+    }
+  });
 
-    // debugMode:true ⇒ the debug account + banner are present.
-    const dbg = buildBootstrapScript({ ...base, debugMode: true });
-    expect(dbg).toContain("echo 'debug:flagship' | chpasswd");
-    expect(dbg).toContain("!! DEBUG BUILD - console login 'debug'");
+  it("PRODUCTION installer configs cannot be logged into on the command line", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const opts = { blob, blobSignatureHex };
+    // Ubuntu autoinstall: flagship password is LOCKED ("*"), no committed crypt,
+    // SSH password auth is off, and no inline debug account/banner.
+    const yaml = buildAutoinstallUserData(opts);
+    expect(yaml).toContain('password: "*"');
+    expect(yaml).not.toMatch(/\$6\$/); // no committed crypt hash anywhere
+    expect(yaml).toContain("allow-pw: false");
+    expect(yaml).not.toContain("debug:flagship");
+    expect(yaml).not.toContain("DEBUG BUILD");
+    expect(yaml).not.toMatch(/useradd[^\n]*\bdebug\b/);
+
+    // Debian preseed: root login disabled + flagship password LOCKED ("*"),
+    // no committed crypt, no inline debug account/banner.
+    const preseed = buildDebianPreseed(opts);
+    expect(preseed).toContain("d-i passwd/root-login boolean false");
+    expect(preseed).toContain("d-i passwd/user-password-crypted password *");
+    expect(preseed).not.toMatch(/\$6\$/);
+    expect(preseed).not.toContain("debug:flagship");
+    expect(preseed).not.toContain("DEBUG BUILD");
+    expect(preseed).not.toMatch(/useradd[^\n]*\bdebug\b/);
   });
 
   it("the console banner (/etc/issue + motd) is PURE ASCII", () => {
