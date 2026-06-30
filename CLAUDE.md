@@ -149,31 +149,54 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
-**2026-06-30 — burner pairing survives a phone disconnect (+ status/sliver fixes).**
-The phone↔burner pairing treated the live socket as the gate, so a ~30s phone
-display auto-lock dropped the socket → relay fired `peer-gone` → the burner
-instantly relocked + wiped (Advanced became unreachable; a re-scan hit "slot
-taken"). Now a **resilient ~1h session**: the relay **evicts a stale same-role
-socket on reconnect** (marked `superseded` so its late close can't fire a phantom
-`peer-gone`) and broadcasts `expiresAt`; the burner **holds** the prepared burn on
-a phone drop (`reconnecting` state) and **auto-resumes** when the same phone
-returns (same ephemeral key, no second SAS — a different key can't seize a held
-session); the phone **persists the session to encrypted storage** (iOS Keychain /
-Android EncryptedSharedPreferences) and **reconnects on unlock/relaunch**, landing
-back on the exact spot. Both sides get a **"Disconnect from … (phone/burner)"**
-button + an **"Auto-locks in mm:ss"** countdown; explicit disconnect / expiry does
-a full wipe + fresh QR. Confirmed Bug: toggling Advanced is inert — the lock
-screen was the instant relock. Also: a server **awaiting a burn** no longer shows
-a spinning **"Deploying"** sliver op (mobile suppresses for pending; webapp gates
-on phase + relabels "preparing"); the **webapp ops/trust sliver** now reserves
-layout space (push-down) instead of `position:fixed` overlay (iOS/Android already
-push down). Gates: relay 21 · burner-mac swift 87 · iOS 1271 · Android
-`:app:testDebugUnitTest` + `assembleDebug` green · webapp vitest 1605 · `tsc -b`
-clean. Relay + Mac burner committed (`449fa227`); phone + UI (`f185e7d6`). **Mac
-burner rebuilt + reinstalled.** REMAINING (owner): **deploy the `.com` Worker**
-(`npx wrangler deploy` — needs CF auth; backward-compatible, no migration) for the
-relay eviction + countdown to go live; **rebuild the iOS + Android apps** for the
-phone-side resume.
+**2026-06-30 — burner pairing → ONE-SHOT deposit; debug box LAN-SSH-able; daemon self-heal; status/sliver fixes.**
+A multi-part day driven by live hand-testing.
+- **Pairing model = one-shot recipe deposit (final design).** First pass made the
+  long session *resilient* (relay evicts a stale same-role socket → reconnect; ~1h
+  TTL; burner holds + auto-resumes; phone persists + resumes on unlock; countdown;
+  `Disconnect` buttons) — committed `449fa227`/`f185e7d6` and the **relay was
+  deployed** (`.com` `8bbe7955`). Then we **simplified further** (owner call): the
+  two security choices — **debug-friendly** and **embed-secrets** — are now **phone
+  Advanced toggles baked into the recipe at mint** (behind the existing mint Face
+  ID), so the burner has nothing to ask the phone. The link collapsed to a one-shot
+  deposit (scan → SAS → mint → deliver → "Sent ✓ — you can put your phone away");
+  removed the debug-consent round-trip + the resume/countdown/persisted-session
+  machinery. The burner **keeps the delivered recipe** until the laptop-user hits
+  the red **Disconnect from phone** button (or quits) — no auto-lock. The phone
+  signs an owner-IRK `flagship/debug-access/v1` grant (`sshAuthorizedKey:""`, no box
+  STK) + embeds it as the unsigned `debugGrant` sibling. (The relay's eviction/1h
+  TTL/`expiresAt` stay deployed but are now vestigial under one-shot — a harmless
+  deposit pipe.) Commits `2d697679` (burner), `27516794` (iOS/Android/webapp). Mac
+  burner **rebuilt + reinstalled**.
+- **Debug box → actually LAN-SSH-able** (`53affe15`). The grant gate created a
+  `debug` sudoer with **no password and no key** ⇒ SSH impossible. Now, ONLY on a
+  verified owner grant, the gate also sets the known **`debug:flagship`** password,
+  ensures sshd is enabled + accepts password auth (a `sshd_config.d` drop-in), and
+  writes an `/etc/issue.d` banner showing the **live LAN IP (`\4`) + creds**. All
+  local ⇒ works **even when the public tunnel is down**; production (no-grant)
+  untouched; the `chpasswd` line is the constant the GA release-guard targets.
+- **Daemon self-heal** (`45789406`). hali came fully up, **fell off ~21 min in**
+  (tunnel + heartbeat died), sat dead for an hour while powered on, and only a
+  **reboot** restored it. Root cause: tunnel auto-reconnect was already on `main`
+  (`f1516d8f` `superviseTunnelClient`) but the *heartbeat* was a bare `setInterval`
+  with an unguarded gossip read + no fetch timeout (the daemon has no
+  uncaughtException handler) → "one beat then silence". Now a self-rescheduling
+  **can't-die loop** + 30s `AbortSignal.timeout`, tunnel-independent (resumes the
+  instant the network returns). Incidental: vibe-code `failureReason` surfaced
+  (`344772b9`, revertable).
+- **Status/sliver fixes** (`f185e7d6`): a server **awaiting a burn** no longer shows
+  a spinning **"Deploying"** sliver op (mobile suppresses for pending; webapp gates
+  on phase + relabels "preparing"); the **webapp** ops/trust sliver now reserves
+  layout space (push-down) instead of a `position:fixed` overlay (iOS/Android were
+  already correct).
+
+Gates: burner-mac swift 84 · iOS 1270 · Android `:app:testDebugUnitTest` +
+`assembleDebug` green · webapp vitest 1611 · server-daemon vitest 1671 · relay 21 ·
+`tsc -b` clean. **Deployed:** `.com` Worker `8bbe7955` (relay). **REMAINING
+(owner):** **reburn** to validate the debug-access LAN-SSH gate + the daemon
+heartbeat self-heal live (both box-side; existing boxes like hali keep the old
+daemon until reburned); **rebuild iOS + Android**; the webapp Advanced toggles ride
+the next `.com` deploy.
 
 **2026-06-28 — ONE preseed generator (Swift twin deleted).** The preseed/user-data
 generator is now a single TS implementation run on Node (Linux/Windows CLI),
