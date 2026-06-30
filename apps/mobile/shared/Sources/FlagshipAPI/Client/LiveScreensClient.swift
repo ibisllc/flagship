@@ -219,16 +219,27 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
         AsyncStream { continuation in
             let task = Task { [self] in
+                var sawTerminal = false
+                // Surface a synthetic error when the stream ends WITHOUT a
+                // terminal frame from the daemon. Connect / decode / transport
+                // failures previously finished silently, leaving the Building
+                // screen stuck on "…" with no error card ever shown.
+                func finish(incomplete reason: String?) {
+                    if let reason, !sawTerminal {
+                        continuation.yield(.error(message: reason))
+                    }
+                    continuation.finish()
+                }
                 guard let base = await store.podBaseUrl,
                       let token = await store.sessionToken,
                       var comps = URLComponents(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/vibe-code/\(sessionId)/stream")
                 else {
-                    continuation.finish()
+                    finish(incomplete: "Couldn't reach the server to load this build.")
                     return
                 }
                 comps.scheme = comps.scheme?.hasSuffix("s") == true ? "wss" : "ws"
                 guard let url = comps.url else {
-                    continuation.finish()
+                    finish(incomplete: "Couldn't reach the server to load this build.")
                     return
                 }
                 var req = URLRequest(url: url)
@@ -246,15 +257,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
                         }
                         if let frame = try? JSONDecoder().decode(VibeCodeFrame.self, from: data) {
                             continuation.yield(frame)
-                            if case .done = frame { break }
-                            if case .error = frame { break }
+                            if case .done = frame { sawTerminal = true; break }
+                            if case .error = frame { sawTerminal = true; break }
                         }
                     } catch {
                         break
                     }
                 }
                 ws.cancel(with: .normalClosure, reason: nil)
-                continuation.finish()
+                // A user-initiated cancel (screen popped) is not an error; a
+                // drop before any terminal frame is.
+                finish(incomplete: Task.isCancelled ? nil : "Lost connection to the server before the build finished.")
             }
             continuation.onTermination = { _ in task.cancel() }
         }
