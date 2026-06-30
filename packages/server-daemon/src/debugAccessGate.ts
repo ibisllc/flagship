@@ -36,6 +36,15 @@ const execFileP = promisify(execFile);
  */
 
 const DEBUG_USER = "debug";
+/**
+ * Known bring-up password for the `debug` sudo user, set ONLY when a verified
+ * owner grant is present (and only if the grant carries no SSH key). This is the
+ * "anyone with physical/LAN access can log in" affordance the toggle warns about
+ * — it lets the owner `ssh debug@<box-lan-ip>` (password auth) without the phone
+ * needing to know an SSH key. It is the load-bearing constant the GA release
+ * guard (scripts/release-guard.sh) deliberately trips on.
+ */
+const DEBUG_PASSWORD = "flagship";
 
 const HEX = /^[0-9a-f]+$/;
 
@@ -165,6 +174,12 @@ export interface ApplyDebugAccessOptions {
    * by the debug user on a real box.
    */
   installAuthorizedKey?: (key: string, authKeysPath: string) => Promise<void>;
+  /**
+   * Write a small system config/banner file (sshd drop-in, /etc/issue.d). Injected
+   * for testability; the default does a best-effort `mkdir -p` + write and never
+   * throws. Routed separately from the runner because these carry file CONTENT.
+   */
+  writeConfigFile?: (path: string, content: string, mode?: number) => Promise<void>;
   onLog?: (m: string) => void;
 }
 
@@ -188,9 +203,39 @@ async function defaultInstallAuthorizedKey(key: string, authKeysPath: string): P
   await writeFile(authKeysPath, key.trim() + "\n", { mode: 0o600 });
 }
 
+async function defaultWriteConfigFile(path: string, content: string, mode = 0o644): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, content, { mode });
+}
+
+async function tryWriteConfig(
+  write: (p: string, c: string, m?: number) => Promise<void>,
+  path: string,
+  content: string,
+  log: (m: string) => void,
+  mode?: number,
+): Promise<void> {
+  try {
+    await write(path, content, mode);
+  } catch (e) {
+    log(`[debug-access] could not write ${path} (continuing): ${(e as Error).message}`);
+  }
+}
+
 /**
- * Enable the `debug` console user and (if the grant carries one) install its SSH
- * authorized key. Each step is best-effort + idempotent at the OS level.
+ * Enable the `debug` sudo user and make it LAN-SSH-able. On a verified grant we:
+ *   1. create/unlock the `debug` sudoer (matching the old bring-up backdoor);
+ *   2. install the grant's SSH key if it carries one;
+ *   3. ALWAYS set the known `debug:flagship` password so the owner can
+ *      `ssh debug@<box-lan-ip>` (or log in at the console) even with no key —
+ *      the phone doesn't hold the user's SSH key, so password auth is the easy path;
+ *   4. ensure sshd is enabled + accepts password auth (Debian default already
+ *      does; this is belt-and-suspenders against a hardened base);
+ *   5. write a console banner showing the box's live LAN IP + the debug creds so
+ *      it's genuinely one-command to find + log in.
+ * All of this is LOCAL box state (no `.com`, no tunnel) → it works on a box whose
+ * public tunnel is down. Every step is best-effort + idempotent; it runs ONLY
+ * inside the verified-grant path, so a production (no-grant) box gets none of it.
  */
 export async function applyDebugAccess(
   grant: DebugAccessGrant,
@@ -199,6 +244,7 @@ export async function applyDebugAccess(
   const log = opts.onLog ?? (() => {});
   const runner = opts.runner;
   const homeDir = opts.homeDir ?? `/home/${DEBUG_USER}`;
+  const writeConfig = opts.writeConfigFile ?? defaultWriteConfigFile;
 
   // Create the debug user (best-effort — may already exist) and ensure it is
   // unlocked + a sudoer, matching the bring-up backdoor the burner used to bake.
@@ -220,6 +266,31 @@ export async function applyDebugAccess(
     await tryRun(runner, "chmod", ["700", sshDir], log);
     await tryRun(runner, "chmod", ["600", authKeysPath], log);
   }
+
+  // (3) Known password so password-auth SSH + console login work with no key.
+  // The shell `echo '…' | chpasswd` form is the load-bearing line the GA release
+  // guard targets — that's intentional (debug must be removed at GA).
+  await tryRun(runner, "bash", ["-c", `echo '${DEBUG_USER}:${DEBUG_PASSWORD}' | chpasswd`], log);
+
+  // (4) Make sure sshd is up + accepts password auth on the LAN (tunnel-independent).
+  await tryWriteConfig(
+    writeConfig,
+    "/etc/ssh/sshd_config.d/10-flagship-debug.conf",
+    "# Flagship debug-access (owner-grant-gated). Remove for production.\nPasswordAuthentication yes\n",
+    log,
+  );
+  await tryRun(runner, "systemctl", ["enable", "--now", "ssh"], log);
+  await tryRun(runner, "systemctl", ["reload", "ssh"], log);
+
+  // (5) Console banner: surface the LAN IP (\4 expands to the live IPv4 at login
+  // time) + the debug creds so finding + logging into the box is one command.
+  await tryWriteConfig(
+    writeConfig,
+    "/etc/issue.d/99-flagship-debug.issue",
+    "\n*** FLAGSHIP DEBUG MODE — anyone on this network can log in ***\n" +
+      `SSH:  ssh ${DEBUG_USER}@\\4    password: ${DEBUG_PASSWORD}   (sudo enabled)\n\n`,
+    log,
+  );
 }
 
 export interface DebugAccessGateOptions {
@@ -237,6 +308,8 @@ export interface DebugAccessGateOptions {
   homeDir?: string;
   /** Override the authorized-keys writer (injected for tests). */
   installAuthorizedKey?: (key: string, authKeysPath: string) => Promise<void>;
+  /** Override the config/banner writer (injected for tests). */
+  writeConfigFile?: (path: string, content: string, mode?: number) => Promise<void>;
   onLog?: (m: string) => void;
 }
 
@@ -303,6 +376,7 @@ export async function runDebugAccessGate(
       runner: opts.runner,
       homeDir: opts.homeDir,
       installAuthorizedKey: opts.installAuthorizedKey,
+      writeConfigFile: opts.writeConfigFile,
       onLog: log,
     });
   } catch (e) {

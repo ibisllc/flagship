@@ -53,6 +53,20 @@ function recordingRunner(): DebugCommandRunner & { calls: Array<[string, string[
   };
 }
 
+/** Records the config/banner files the gate writes, so tests never touch /etc. */
+function recordingWriter(): {
+  write: (p: string, c: string, m?: number) => Promise<void>;
+  files: Array<[string, string]>;
+} {
+  const files: Array<[string, string]> = [];
+  return {
+    files,
+    async write(p, c) {
+      files.push([p, c]);
+    },
+  };
+}
+
 function memMarker(): DebugMarkerStore & { marked: boolean } {
   const state = { marked: false };
   return {
@@ -107,6 +121,7 @@ describe("runDebugAccessGate", () => {
 
     const runner = recordingRunner();
     const marker = memMarker();
+    const writer = recordingWriter();
     let installedKey: string | null = null;
 
     const out = await runDebugAccessGate({
@@ -118,6 +133,7 @@ describe("runDebugAccessGate", () => {
       installAuthorizedKey: async (key) => {
         installedKey = key;
       },
+      writeConfigFile: writer.write,
     });
 
     expect(out).toEqual({ enabled: true });
@@ -126,6 +142,20 @@ describe("runDebugAccessGate", () => {
     expect(runner.calls.some(([c, a]) => c === "useradd" && a.includes("debug"))).toBe(true);
     // The SSH key was installed (trimmed).
     expect(installedKey).toBe(SSH_KEY);
+    // A known password is set (the load-bearing GA-guard line) so password SSH works.
+    expect(
+      runner.calls.some(
+        ([c, a]) => c === "bash" && a.join(" ").includes("debug:flagship") && a.join(" ").includes("chpasswd"),
+      ),
+    ).toBe(true);
+    // sshd is ensured enabled + a password-auth drop-in is written.
+    expect(runner.calls.some(([c, a]) => c === "systemctl" && a.includes("ssh"))).toBe(true);
+    expect(writer.files.some(([p]) => p.includes("sshd_config.d"))).toBe(true);
+    // A console banner with the live LAN IP (\4) + creds is written.
+    const banner = writer.files.find(([p]) => p.includes("issue.d"));
+    expect(banner).toBeTruthy();
+    expect(banner![1]).toContain("\\4");
+    expect(banner![1]).toContain("flagship");
   });
 
   it("(a') valid grant with an empty SSH key → enables the user, no key install", async () => {
@@ -134,6 +164,7 @@ describe("runDebugAccessGate", () => {
     await writeBlob({ debugGrant: grantSibling(grant, owner) });
 
     const runner = recordingRunner();
+    const writer = recordingWriter();
     let installCalled = false;
 
     const out = await runDebugAccessGate({
@@ -144,6 +175,7 @@ describe("runDebugAccessGate", () => {
       installAuthorizedKey: async () => {
         installCalled = true;
       },
+      writeConfigFile: writer.write,
     });
 
     expect(out).toEqual({ enabled: true });
@@ -151,6 +183,11 @@ describe("runDebugAccessGate", () => {
     expect(installCalled).toBe(false);
     // No chown/chmod of the .ssh dir either (no key path).
     expect(runner.calls.some(([c]) => c === "chmod")).toBe(false);
+    // BUT a known password IS still set (the easy LAN-SSH path with no key) + banner.
+    expect(
+      runner.calls.some(([c, a]) => c === "bash" && a.join(" ").includes("debug:flagship")),
+    ).toBe(true);
+    expect(writer.files.some(([p]) => p.includes("issue.d"))).toBe(true);
   });
 
   it("(b) absent grant (no sibling) → no-op", async () => {
@@ -271,6 +308,7 @@ describe("runDebugAccessGate", () => {
       markerStore: marker,
       runner: runner1,
       installAuthorizedKey: async () => {},
+      writeConfigFile: async () => {},
     });
     expect(first).toEqual({ enabled: true });
     expect(marker.marked).toBe(true);
@@ -303,6 +341,7 @@ describe("runDebugAccessGate", () => {
       ownerIrkPub: owner.publicKey,
       markerStore: memMarker(),
       runner: recordingRunner(),
+      writeConfigFile: async () => {},
     });
     expect(out).toEqual({ enabled: true });
   });
