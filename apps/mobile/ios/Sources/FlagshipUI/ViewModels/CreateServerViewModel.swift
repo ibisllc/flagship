@@ -100,7 +100,7 @@ public final class CreateServerViewModel {
     /// to the secret-free default.
     public var advancedMode: Bool = false {
         didSet {
-            if !advancedMode { embedSecrets = false }
+            if !advancedMode { embedSecrets = false; debugFriendly = false }
         }
     }
     /// Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
@@ -111,6 +111,16 @@ public final class CreateServerViewModel {
     /// installs by people who understand the trade-off (the recipe then carries
     /// a secret).
     public var embedSecrets: Bool = false
+    /// ADVANCED — make this a debug-friendly server. Default OFF: a production
+    /// box (no console login). ON (only reachable under Advanced mode) bakes an
+    /// owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
+    /// UNSIGNED `debugGrant` sibling (mirroring `swkHex`/`pairingOrder`); the
+    /// box-side gate (`debugAccessGate.ts`) verifies it under the config-pinned
+    /// owner IRK + this box's FQDN before enabling the debug console user. The
+    /// grant carries an EMPTY `sshAuthorizedKey` (console-only) and is signed at
+    /// MINT time behind the SAME create biometric — no extra Face ID, no
+    /// over-the-session consent round-trip. Snaps back OFF when Advanced is off.
+    public var debugFriendly: Bool = false
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -471,12 +481,37 @@ public final class CreateServerViewModel {
         // independent of the embed-secrets choice.
         cgkDepositStore.markPending(for: serverDomain)
 
+        // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
+        // grant into the recipe as the UNSIGNED `debugGrant` sibling. Signed here
+        // behind the SAME create biometric (the IRK is already in hand) — no
+        // extra Face ID, no over-the-session consent round-trip. The box-side
+        // gate verifies it under the config-pinned owner IRK + this box's FQDN.
+        let debugGrantSibling = debugFriendly
+            ? Self.debugGrantEnvelope(serverDomain: serverDomain, irk: irk)
+            : nil
+
         return SignedInstallBlob(
             blob: blob,
             signatureHex: HexUtil.encode(blobSig),
             pairingOrder: embeddedPairingOrder,
-            swkHex: embeddedSwkHex
+            swkHex: embeddedSwkHex,
+            debugGrant: debugGrantSibling
         )
+    }
+
+    /// Build the recipe's `debugGrant` sibling: an owner-IRK-signed
+    /// `flagship/debug-access/v1` grant (console-only — empty `sshAuthorizedKey`)
+    /// serialized to the EXACT `{grant:{serverDomain,sshAuthorizedKey,issuedAt},
+    /// signatureHex}` JSON the box-side gate consumes (`debugAccessGate.ts`).
+    /// No box STK in the canonical bytes, so it's signable at mint.
+    static func debugGrantEnvelope(
+        serverDomain: String,
+        irk: Curve25519.Signing.PrivateKey,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+    ) -> String {
+        let grant = DebugAccess.Grant(serverDomain: serverDomain, sshAuthorizedKey: "", issuedAt: now)
+        let sig = (try? DebugAccess.sign(grant, irk: irk)) ?? ""
+        return DebugAccess.envelopeJSON(grant, signatureHex: sig)
     }
 }
 
@@ -495,12 +530,19 @@ public struct SignedInstallBlob: Sendable {
     /// persists it at first boot to turn on the service/build platform. nil only
     /// for legacy/mock paths that don't provision it.
     public let swkHex: String?
+    /// Debug-friendly server (Advanced): the owner-IRK-signed debug-access grant
+    /// envelope (`{grant,signatureHex}` JSON). An UNSIGNED recipe sibling (never
+    /// in the signed blob's canonical bytes); the box-side gate verifies it under
+    /// the config-pinned owner IRK + this box's FQDN before enabling the debug
+    /// console user. nil for the production default (no debug grant).
+    public let debugGrant: String?
 
-    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil) {
+    public init(blob: InstallBlob, signatureHex: String, pairingOrder: String? = nil, swkHex: String? = nil, debugGrant: String? = nil) {
         self.blob = blob
         self.signatureHex = signatureHex
         self.pairingOrder = pairingOrder
         self.swkHex = swkHex
+        self.debugGrant = debugGrant
     }
 
     public struct OnWire: Codable, Sendable {
@@ -514,6 +556,11 @@ public struct SignedInstallBlob: Sendable {
         /// preserves it into the on-disk install-blob.json. Omitted from JSON
         /// when nil so a recipe without it is byte-identical to before.
         public let swkHex: String?
+        /// Top-level recipe sibling carrying the owner-IRK-signed debug-access
+        /// grant envelope; the burner preserves it into the on-disk
+        /// install-blob.json as the `debugGrant` sibling. Omitted from JSON when
+        /// nil so a non-debug recipe is byte-identical to before.
+        public let debugGrant: String?
     }
     public struct OnWireBlob: Codable, Sendable {
         public let version: Int
@@ -578,7 +625,8 @@ public struct SignedInstallBlob: Sendable {
             // Synthesized Codable uses encodeIfPresent for optionals ⇒ omitted
             // when nil, so a non-pairing recipe serializes byte-identically.
             pairingOrder: pairingOrder,
-            swkHex: swkHex
+            swkHex: swkHex,
+            debugGrant: debugGrant
         )
     }
 }

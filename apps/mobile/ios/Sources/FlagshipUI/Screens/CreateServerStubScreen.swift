@@ -87,8 +87,8 @@ public struct CreateServerStubScreen: View {
                     BurnerPairScreen(
                         vm: pairVM,
                         onDelivered: { domain, _ in
-                            // Surface the pending pod NOW, but keep the sheet open
-                            // so the phone can answer the burner's consent prompts.
+                            // Surface the pending pod the moment the recipe is sent.
+                            // One-shot: the phone has no further role after delivery.
                             onDeliveredVisible(domain, vm.name, vm.description)
                         },
                         onClose: {
@@ -444,9 +444,20 @@ public struct CreateServerStubScreen: View {
                 .tint(c.primary)
                 .accessibilityIdentifier("cs-embed-secrets-toggle")
                 .padding(.leading, FS.space.s3)
-                Text(vm.embedSecrets
-                     ? "The recipe carries the box's app key. The box installs fully offline — no later step on your phone — but the recipe now holds a secret. Keep it safe."
-                     : "Off (recommended): the recipe holds no app key. Your phone delivers it securely once the box comes online.")
+                Text("This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.")
+                    .font(.caption)
+                    .foregroundColor(c.textMuted)
+                    .padding(.leading, FS.space.s3)
+
+                Toggle(isOn: $vm.debugFriendly) {
+                    Text("Debug-friendly server")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("cs-debug-friendly-toggle")
+                .padding(.leading, FS.space.s3)
+                Text("Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.")
                     .font(.caption)
                     .foregroundColor(c.textMuted)
                     .padding(.leading, FS.space.s3)

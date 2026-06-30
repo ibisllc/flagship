@@ -163,6 +163,14 @@ fun CreateServerScreen(
     // the recipe is secret-free of the SWK and the phone DEPOSITS it once the box
     // registers (docs/recipe-delivery-and-remote-install.md).
     var embedSecrets by remember { mutableStateOf(false) }
+    // ADVANCED — make this a debug-friendly server. Default OFF (a production box
+    // with no console login). ON (only reachable under Advanced mode) bakes an
+    // owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
+    // UNSIGNED `debugGrant` sibling; the box-side gate verifies it under the
+    // config-pinned owner IRK + this box's FQDN before enabling the debug console
+    // user. Signed at MINT behind the SAME create biometric. Snaps back when
+    // Advanced mode is turned off.
+    var debugFriendly by remember { mutableStateOf(false) }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
@@ -192,6 +200,7 @@ fun CreateServerScreen(
             // Only "none" rides the wire; "luks" (default) stays absent.
             diskEncryption = if (encryptDisk) null else "none",
             embedSecrets = embedSecrets,
+            debugFriendly = debugFriendly,
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
@@ -286,10 +295,12 @@ fun CreateServerScreen(
                 advancedMode = advancedMode,
                 onAdvancedMode = {
                     advancedMode = it
-                    if (!it) embedSecrets = false
+                    if (!it) { embedSecrets = false; debugFriendly = false }
                 },
                 embedSecrets = embedSecrets,
                 onEmbedSecrets = { embedSecrets = it },
+                debugFriendly = debugFriendly,
+                onDebugFriendly = { debugFriendly = it },
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -312,18 +323,15 @@ fun CreateServerScreen(
                     val controller = BurnerPairController(
                         client = LiveBurnerPairClient(),
                         scope = scope,
-                        // Persist the session so it survives the phone briefly
-                        // locking → the app being suspended (RESUME on return /
-                        // cold launch reconnects the SAME sid + ephemeral keys).
-                        store = com.flagshipserver.app.core.EncryptedBurnerPairingStore.from(context),
+                        // ONE-SHOT: mint the recipe (with the Advanced toggles —
+                        // embed-secrets, debug-friendly — baked in behind the
+                        // SAME create biometric) + deliver it. No resume, no
+                        // debug-consent round-trip (the debug grant rides the
+                        // recipe). Byte-identical recipe to share/copy/burn.
                         mint = {
                             val minted = mintAndRegister()
                             val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
                             BurnerPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
-                        },
-                        signConsentGrant = { grant ->
-                            val irk = Keystore.deriveIRK("Approve debug access for ${grant.serverDomain}")
-                            DebugAccess.sign(grant, irk)
                         },
                     )
                     pairController = controller
@@ -418,6 +426,7 @@ fun CreateServerScreen(
                                 // (default) keeps the recipe secret-free and the
                                 // phone deposits the SWK after registration.
                                 embedSecrets = embedSecrets,
+                                debugFriendly = debugFriendly,
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
                                 cgkDepositStore = cgkDepositStore,
@@ -522,6 +531,8 @@ private fun DesignPhase(
     onAdvancedMode: (Boolean) -> Unit,
     embedSecrets: Boolean,
     onEmbedSecrets: (Boolean) -> Unit,
+    debugFriendly: Boolean,
+    onDebugFriendly: (Boolean) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -562,6 +573,8 @@ private fun DesignPhase(
                 onAdvancedMode = onAdvancedMode,
                 embedSecrets = embedSecrets,
                 onEmbedSecrets = onEmbedSecrets,
+                debugFriendly = debugFriendly,
+                onDebugFriendly = onDebugFriendly,
             )
             Spacer(Modifier.height(FS.space.s4))
             BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
@@ -692,6 +705,8 @@ private fun AdvancedModePicker(
     onAdvancedMode: (Boolean) -> Unit,
     embedSecrets: Boolean,
     onEmbedSecrets: (Boolean) -> Unit,
+    debugFriendly: Boolean,
+    onDebugFriendly: (Boolean) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -728,10 +743,26 @@ private fun AdvancedModePicker(
             )
         }
         Text(
-            if (embedSecrets)
-                "The recipe carries the box's app key. The box installs fully offline — no later step on your phone — but the recipe now holds a secret. Keep it safe."
-            else
-                "Off (recommended): the recipe holds no app key. Your phone delivers it securely once the box comes online.",
+            "This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Debug-friendly server",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = debugFriendly,
+                onCheckedChange = onDebugFriendly,
+                modifier = Modifier.testTag("cs-debug-friendly-toggle"),
+            )
+        }
+        Text(
+            "Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp),
         )
@@ -1021,6 +1052,9 @@ private suspend fun prepareDelivery(
     // recipe and NO deposit is owed; when false (the DEFAULT) the recipe is
     // secret-free of the SWK and a deposit is recorded as owed.
     embedSecrets: Boolean = false,
+    // Debug-friendly server (Advanced): when true, bake an owner-IRK-signed
+    // debug-access grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    debugFriendly: Boolean = false,
     swkDepositStore: PendingSwkDepositStore? = null,
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe; it is owed on EVERY created server (independent of embed-secrets) and
@@ -1045,6 +1079,7 @@ private suspend fun prepareDelivery(
         bootUnlockMode = bootUnlockMode,
         diskEncryption = diskEncryption,
         embedSecrets = embedSecrets,
+        debugFriendly = debugFriendly,
         swkDepositStore = swkDepositStore,
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
@@ -1090,6 +1125,9 @@ internal suspend fun mintRecipeBundle(
     bootUnlockMode: String? = null,
     diskEncryption: String? = null,
     embedSecrets: Boolean = false,
+    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
+    // grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    debugFriendly: Boolean = false,
     swkDepositStore: PendingSwkDepositStore? = null,
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
@@ -1194,6 +1232,14 @@ internal suspend fun mintRecipeBundle(
     // independent of the embed-secrets choice.
     cgkDepositStore?.markPending(serverDomain)
 
+    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
+    // grant into the recipe as the UNSIGNED `debugGrant` sibling. Signed here
+    // behind the SAME create biometric (the IRK is already in hand) — no extra
+    // Face ID, no over-the-session consent round-trip. The box-side gate
+    // (debugAccessGate.ts) verifies it under the config-pinned owner IRK + this
+    // box's FQDN. nil for the production default (no debug grant).
+    val debugGrantSibling = if (debugFriendly) debugGrantEnvelope(serverDomain, irk, now) else null
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -1218,6 +1264,7 @@ internal suspend fun mintRecipeBundle(
         blobSignature = blobSigHex,
         pairingOrder = embeddedPairingOrder,
         swkHex = embeddedSwkHex,
+        debugGrant = debugGrantSibling,
     )
 
     return MintedBundle(
@@ -1226,6 +1273,25 @@ internal suspend fun mintRecipeBundle(
         serial = serial,
         irkPubHex = irkPubHex,
     )
+}
+
+/**
+ * Build the recipe's `debugGrant` sibling: an owner-IRK-signed
+ * `flagship/debug-access/v1` grant (console-only — empty `sshAuthorizedKey`)
+ * serialized to the EXACT `{grant:{serverDomain,sshAuthorizedKey,issuedAt},
+ * signatureHex}` JSON the box-side gate consumes (`debugAccessGate.ts`). No box
+ * STK in the canonical bytes, so it's signable at mint. Mirror of iOS
+ * CreateServerViewModel.debugGrantEnvelope. `internal` so a unit test can pin
+ * the byte-identical canonical + verify under the owner IRK.
+ */
+internal fun debugGrantEnvelope(
+    serverDomain: String,
+    irk: Ed25519Sign,
+    now: Long = System.currentTimeMillis(),
+): String {
+    val grant = DebugAccess.Grant(serverDomain = serverDomain, sshAuthorizedKey = "", issuedAt = now)
+    val sig = try { DebugAccess.sign(grant, irk) } catch (_: Throwable) { "" }
+    return DebugAccess.envelopeJson(grant, sig)
 }
 
 /**

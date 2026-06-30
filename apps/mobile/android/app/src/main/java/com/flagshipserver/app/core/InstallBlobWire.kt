@@ -28,6 +28,14 @@ data class InstallBlobBundle(
     // no UMK). Omitted from JSON when null (encodeDefaults=false), so a recipe
     // without it is byte-identical. Derived via ServerKeys.deriveSwk (DOTS).
     val swkHex: String? = null,
+    // Debug-friendly server (Advanced): the owner-IRK-signed debug-access grant
+    // envelope (`{grant,signatureHex}` JSON). An UNSIGNED recipe sibling
+    // (top-level, NOT inside `blob` / never in the signed canonical bytes); the
+    // box-side gate (debugAccessGate.ts) verifies it under the config-pinned
+    // owner IRK + this box's FQDN before enabling the debug console user. null
+    // for the production default; omitted from JSON when null (encodeDefaults=
+    // false) so a non-debug recipe is byte-identical.
+    val debugGrant: String? = null,
 )
 
 @Serializable

@@ -1,16 +1,19 @@
 // Pair-with-the-desktop-Burner screen. Reached from the create-server delivery
 // chooser once the server is designed. The user scans the QR the burner shows
 // (or types its short code), confirms the 6-digit SAS, and the recipe is minted
-// + delivered over the live `/burner-pipe` session. The session stays OPEN after
-// delivery so the burner's consent prompts (e.g. enabling Debug mode) can arrive;
-// a "Done" tap closes it.
+// + delivered over the live `/burner-pipe` session.
+//
+// ONE-SHOT: delivery is a single deposit. Once the recipe is sent the screen
+// shows "Sent ✓ — you can put your phone away" and the phone has no further
+// role; the burner keeps the recipe and the laptop user disconnects on the
+// burner side. The display is kept awake only while this screen is foreground
+// (so the OS auto-lock doesn't suspend the app mid-deposit).
 //
 // Kotlin mirror of apps/mobile/ios/Sources/FlagshipUI/Screens/BurnerPairScreen.swift,
 // driven by core/BurnerPairController.
 
 package com.flagshipserver.app.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,11 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,14 +36,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.flagshipserver.app.core.BurnerPairController
 import com.flagshipserver.app.core.BurnerPairing
 import com.flagshipserver.app.core.QrRelay
@@ -63,12 +59,7 @@ fun BurnerPairScreen(
 ) {
     val scope = rememberCoroutineScope()
     val phase by controller.phase.collectAsState()
-    val pendingConsent by controller.pendingConsent.collectAsState()
-    val burnerStepped by controller.burnerStepped.collectAsState()
-    val countdownText by controller.countdownText.collectAsState()
-    val leaveRequest by controller.leaveRequest.collectAsState()
     var typedCode by remember { mutableStateOf("") }
-    var leaveNote by remember { mutableStateOf<String?>(null) }
 
     // Fire the visible-delivery callback exactly once when delivery lands (keyed
     // on the delivered domain so it doesn't re-fire on recomposition).
@@ -79,39 +70,12 @@ fun BurnerPairScreen(
         }
     }
 
-    // Keep the display awake while pairing so the OS auto-lock doesn't suspend
-    // the app (and kill the socket) mid-burn-prep. Reset on exit.
+    // Keep the display awake while the screen is foreground so the OS auto-lock
+    // doesn't suspend the app (and kill the socket) mid-deposit. Reset on exit.
     val view = LocalView.current
     DisposableEffect(Unit) {
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
-    }
-
-    // Returning to the foreground (e.g. after the phone briefly locked + the app
-    // was suspended): reconnect the dropped session reusing the same ephemeral
-    // keys + sid. The persisted record makes this survive process death too.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch { controller.reconnectIfNeeded() }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // The session ended (explicit disconnect / burner ended it / expired) →
-    // leave the screen, with a brief note for the non-user-initiated ones.
-    LaunchedEffect(leaveRequest) {
-        when (leaveRequest) {
-            BurnerPairController.LeaveReason.UserDisconnected -> onCancel()
-            BurnerPairController.LeaveReason.SessionEnded ->
-                leaveNote = "The computer's burner app ended the session."
-            BurnerPairController.LeaveReason.Expired ->
-                leaveNote = "The pairing session timed out."
-            null -> {}
-        }
     }
 
     val scroll = rememberScrollState()
@@ -143,7 +107,7 @@ fun BurnerPairScreen(
                 onCancel = { controller.cancel(); onCancel() },
             )
             is BurnerPairController.Phase.Delivering -> StepHeaderSpinner(
-                title = "Delivering",
+                title = "Sending",
                 subtitle = "Minting your recipe and sending it to the burner…",
             )
             is BurnerPairController.Phase.Delivered -> DeliveredStep(
@@ -156,45 +120,7 @@ fun BurnerPairScreen(
                 onCancel = { controller.cancel(); onCancel() },
             )
         }
-        // Session footer (Disconnect + countdown) — shown whenever a live
-        // session is open.
-        if (controller.hasActiveSession) {
-            SessionFooter(
-                burnerStepped = burnerStepped,
-                countdownText = countdownText,
-                onDisconnect = { scope.launch { controller.disconnect() } },
-            )
-        }
         Spacer(Modifier.height(FS.space.s12))
-    }
-
-    leaveNote?.let { note ->
-        AlertDialog(
-            onDismissRequest = { leaveNote = null; onCancel() },
-            title = { Text("Pairing ended") },
-            text = { Text(note) },
-            confirmButton = {
-                TextButton(onClick = { leaveNote = null; onCancel() }) { Text("OK") }
-            },
-        )
-    }
-
-    pendingConsent?.let { consent ->
-        AlertDialog(
-            onDismissRequest = { scope.launch { controller.denyConsent() } },
-            title = { Text("Security warning") },
-            text = { Text(consent.warning) },
-            confirmButton = {
-                TextButton(onClick = { scope.launch { controller.approveConsent() } }) {
-                    Text("Approve with biometrics")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { scope.launch { controller.denyConsent() } }) {
-                    Text("Don't allow")
-                }
-            },
-        )
     }
 }
 
@@ -266,8 +192,8 @@ private fun MatchStep(matchCode: String, onConfirm: () -> Unit, onCancel: () -> 
 @Composable
 private fun DeliveredStep(domain: String, onDone: () -> Unit) {
     Header(
-        "Recipe sent",
-        "Your computer's burner has the recipe. Keep this screen open while you pick the USB drive and any Advanced options on the computer — approve any security prompts here.",
+        "Sent ✓ — you can put your phone away",
+        "Your computer's burner has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.",
     )
     Spacer(Modifier.height(FS.space.s4))
     FSCard {
@@ -275,48 +201,6 @@ private fun DeliveredStep(domain: String, onDone: () -> Unit) {
     }
     Spacer(Modifier.height(FS.space.s6))
     FSPrimaryButton(label = "Done", onClick = onDone, block = true)
-}
-
-/** The explicit "Disconnect from burner" control + the lifetime countdown
- *  beside it, shown whenever a live session is open. Verbatim copy parity with
- *  the iOS BurnerPairScreen session footer. */
-@Composable
-private fun SessionFooter(
-    burnerStepped: Boolean,
-    countdownText: String?,
-    onDisconnect: () -> Unit,
-) {
-    Spacer(Modifier.height(FS.space.s4))
-    HorizontalDivider(color = FS.colors.border)
-    Spacer(Modifier.height(FS.space.s2))
-    if (burnerStepped) {
-        Text(
-            "The computer's burner stepped away — reconnecting…",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-    }
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FSGhostButton(
-            label = "Disconnect from burner",
-            onClick = onDisconnect,
-            modifier = Modifier.testTag("bp-disconnect-button"),
-        )
-        Spacer(Modifier.weight(1f))
-        if (countdownText != null) {
-            Text(
-                countdownText,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-                modifier = Modifier.testTag("bp-countdown-label"),
-            )
-        }
-    }
 }
 
 @Composable

@@ -375,7 +375,13 @@ function readInputs() {
   // Default OFF ⇒ the recipe is secret-free of the SWK + the webapp deposits it
   // after the box registers. ON (advanced/offline) ⇒ embed `swkHex` in the recipe.
   const embedSecrets = readEmbedSecrets();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets };
+  // Debug-friendly server: an Advanced-only opt-in. When ON the minter signs an
+  // owner-IRK `flagship/debug-access/v1` grant and embeds it as the recipe's
+  // unsigned `debugGrant` sibling; the box-side gate verifies it under the
+  // config-pinned owner IRK before enabling the console `debug` user. Default OFF
+  // ⇒ no grant ⇒ a production image.
+  const debugFriendly = readDebugFriendly();
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly };
 }
 
 // Read the embed-secrets choice. Only honored when Advanced mode is on; the
@@ -386,6 +392,39 @@ export function readEmbedSecrets() {
   const embed = $("cs-embed-secrets");
   if (!adv || !adv.checked || !embed) return false;
   return !!embed.checked;
+}
+
+// Read the debug-friendly choice. Gated behind Advanced mode exactly like
+// embed-secrets — absent control or Advanced off ⇒ false (production default).
+// Exported for the unit test.
+export function readDebugFriendly() {
+  const adv = $("cs-advanced");
+  const dbg = $("cs-debug-friendly");
+  if (!adv || !adv.checked || !dbg) return false;
+  return !!dbg.checked;
+}
+
+// Build the recipe's unsigned `debugGrant` sibling: an owner-IRK-signed
+// `flagship/debug-access/v1` grant the box-side gate (server-daemon
+// debugAccessGate.ts) verifies before enabling the console debug user. The
+// signable scope is `serverDomain|sshAuthorizedKey|issuedAt` (sshAuthorizedKey
+// "", issuedAt = now) — no box STK, so it's signable at mint time since the
+// webapp already knows the box's FQDN. Returns the carrier JSON STRING
+// `{grant,signatureHex}`, the SAME shape the iOS/Android minter + the box gate
+// consume. `signWithIrk`/`umk` are injectable for the unit test (mirrors
+// buildSwkDeliveryCarrier).
+export async function buildDebugGrant({
+  serverDomain,
+  issuedAt = Date.now(),
+  signWithIrk: signFn = signWithIrk,
+  umk,
+}) {
+  const grant = { serverDomain, sshAuthorizedKey: "", issuedAt };
+  const canonical = new TextEncoder().encode(
+    ["flagship/debug-access/v1", grant.serverDomain, grant.sshAuthorizedKey, String(grant.issuedAt)].join("|"),
+  );
+  const sig = await signFn(umk, canonical);
+  return JSON.stringify({ grant, signatureHex: bytesToHex(sig) });
 }
 
 // Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
@@ -459,6 +498,11 @@ function enableRecipeDownload(blobBundle) {
   // recipe so the burner writes it to the box's install-blob.json (the daemon
   // persists it at first boot). Absent ⇒ recipe is byte-identical.
   if (blobBundle.swkHex) recipe.swkHex = blobBundle.swkHex;
+  // Debug-friendly server: carry the unsigned `debugGrant` carrier (a JSON
+  // string `{grant,signatureHex}`) into the downloaded recipe so the burner
+  // writes it to install-blob.json and the box-side gate can verify it. Absent
+  // (the production default) ⇒ recipe is byte-identical + carries no grant.
+  if (blobBundle.debugGrant) recipe.debugGrant = blobBundle.debugGrant;
   btn.onclick = () => {
     const json = JSON.stringify(recipe, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -738,6 +782,18 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     markSwkDepositPending(blob.serverDomain);
     if (pairingOrderJson) markPairingDepositPending(blob.serverDomain, pairingOrderJson);
   }
+  // Debug-friendly server (Advanced opt-in): sign + embed the owner-IRK
+  // debug-access grant as the recipe's unsigned `debugGrant` sibling. Absent
+  // (the production default) ⇒ the recipe carries no grant ⇒ the box stays a
+  // production image. The grant is consent-as-crypto: the box only enables the
+  // console debug user if this verifies under its config-pinned owner IRK.
+  if (inputs.debugFriendly) {
+    bundle.debugGrant = await buildDebugGrant({
+      serverDomain: blob.serverDomain,
+      signWithIrk,
+      umk: session.umk,
+    });
+  }
   return bundle;
 }
 
@@ -879,6 +935,8 @@ function syncAdvancedVisibility() {
     opts.classList.add("hidden");
     const embed = $("cs-embed-secrets");
     if (embed) embed.checked = false;
+    const dbg = $("cs-debug-friendly");
+    if (dbg) dbg.checked = false;
   }
 }
 

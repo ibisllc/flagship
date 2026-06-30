@@ -2,10 +2,11 @@ import Foundation
 import CryptoKit
 
 /// Owner-authorized debug-access grant (Swift mirror of
-/// packages/protocol/src/debugAccess.ts). The phone signs this behind
-/// Face ID when the user approves the burner's "Debug mode" toggle over
-/// the live pairing session; the burner embeds it; the box verifies it
-/// against the owner IRK before enabling the debug console user / SSH.
+/// packages/protocol/src/debugAccess.ts). The phone signs this behind the
+/// create biometric when the user turns on "Debug-friendly server" (Advanced
+/// mode) and bakes it into the recipe as the UNSIGNED `debugGrant` sibling; the
+/// box verifies it against the owner IRK before enabling the debug console
+/// user / SSH.
 ///
 /// Canonical bytes (byte-identical to TS + Kotlin, pinned vector):
 ///   flagship/debug-access/v1|<serverDomain>|<sshAuthorizedKey>|<issuedAt>
@@ -37,9 +38,9 @@ public enum DebugAccess {
         return pub.isValidSignature(sig, for: canonicalBytes(g))
     }
 
-    /// The on-wire `consent-result` payload the phone sends to the burner:
-    /// `{grant:{...}, signatureHex}` (JSON). The burner stores it verbatim
-    /// and embeds it as the recipe's `debugGrant` sibling.
+    /// The recipe's `debugGrant` sibling: `{grant:{...}, signatureHex}` (JSON).
+    /// Baked into the recipe at mint time and consumed verbatim by the box-side
+    /// gate (`debugAccessGate.ts`).
     public static func envelopeJSON(_ g: Grant, signatureHex: String) -> String {
         let body: [String: Any] = [
             "grant": ["serverDomain": g.serverDomain,

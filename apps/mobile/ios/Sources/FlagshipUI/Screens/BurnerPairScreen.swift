@@ -8,16 +8,14 @@ import FlagshipCore
 /// 6-digit security code, and the recipe is minted + delivered over the
 /// live session.
 ///
-/// The session SURVIVES the phone briefly locking: the screen keeps the
-/// display awake while it's open, and reconnects (reusing the same keys) when
-/// the app returns to the foreground. A dropped socket no longer ends the flow
-/// — only an explicit "Disconnect from burner", the burner ending the session,
-/// or the lifetime running out wipes + leaves.
+/// ONE-SHOT: delivery is a single deposit. Once the recipe is sent the screen
+/// shows "Sent ✓ — you can put your phone away" and the phone has no further
+/// role; the burner keeps the recipe and the laptop user disconnects on the
+/// burner side. The display is kept awake only while this screen is foreground
+/// (so the OS auto-lock doesn't suspend the app mid-deposit).
 public struct BurnerPairScreen: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.scenePhase) private var scenePhase
     @Bindable var vm: BurnerPairViewModel
-    @State private var leaveNote: String?
     var onDelivered: (_ serverDomain: String, _ serial: String) -> Void
     var onClose: () -> Void
     var onCancel: () -> Void
@@ -48,65 +46,27 @@ public struct BurnerPairScreen: View {
                 case .matching(let code, let gate):
                     matchPage(code: code, gateOpen: gate, c: c)
                 case .delivering:
-                    header("Delivering", "Minting your recipe and sending it to the burner…", c: c)
+                    header("Sending", "Minting your recipe and sending it to the burner…", c: c)
                     spinner(c: c)
                 case .delivered(let domain):
                     deliveredPage(domain: domain, c: c)
                 case .failed(let msg):
                     failurePage(msg, c: c)
                 }
-                if vm.hasActiveSession {
-                    sessionFooter(c: c)
-                }
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        // Keep the display awake while pairing so the OS auto-lock doesn't
-        // suspend the app (and kill the socket) mid-burn-prep. Reset on exit.
+        // Keep the display awake while the screen is foreground so the OS
+        // auto-lock doesn't suspend the app (and kill the socket) mid-deposit.
+        // Reset on exit.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        // Returning to the foreground (e.g. after the phone briefly locked +
-        // the app was suspended): reconnect the dropped session reusing the
-        // same ephemeral keys + sid.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await vm.reconnectIfNeeded() } }
-        }
-        // The session ended (explicit disconnect / burner ended it / expired)
-        // → leave the screen, with a brief note for the non-user-initiated ones.
-        .onChange(of: vm.leaveRequest) { _, reason in
-            guard let reason else { return }
-            switch reason {
-            case .userDisconnected:
-                onCancel()
-            case .sessionEnded:
-                leaveNote = "The computer's burner app ended the session."
-            case .expired:
-                leaveNote = "The pairing session timed out."
-            }
-        }
-        .alert("Pairing ended", isPresented: Binding(
-            get: { leaveNote != nil },
-            set: { if !$0 { leaveNote = nil; onCancel() } }
-        )) {
-            Button("OK") { leaveNote = nil; onCancel() }
-        } message: {
-            Text(leaveNote ?? "")
-        }
         .onChange(of: deliveredKey) { _, _ in
             if case .delivered(let domain) = vm.phase {
                 onDelivered(domain, vm.lastDeliveredSerial ?? "")
             }
-        }
-        .alert("Security warning", isPresented: Binding(
-            get: { vm.pendingConsent != nil },
-            set: { if !$0 { Task { await vm.denyConsent() } } }
-        )) {
-            Button("Approve with Face ID") { Task { await vm.approveConsent() } }
-            Button("Don't allow", role: .cancel) { Task { await vm.denyConsent() } }
-        } message: {
-            Text(vm.pendingConsent?.warning ?? "")
         }
     }
 
@@ -198,11 +158,11 @@ public struct BurnerPairScreen: View {
 
     private func deliveredPage(domain: String, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            header("Recipe sent", "Your computer's burner has the recipe. Keep this screen open while you pick the USB drive and any Advanced options on the computer — approve any security prompts here.", c: c)
+            header("Sent ✓ — you can put your phone away", "Your computer's burner has the recipe. Pick the USB drive and any Advanced options on the computer; nothing more is needed from your phone.", c: c)
             FSCard {
                 Label(domain, systemImage: "checkmark.seal.fill")
                     .font(FS.font.h4())
-                    .foregroundColor(c.text)
+                    .foregroundColor(c.success)
             }
             FSPrimaryButton("Done", block: true, large: true) {
                 onClose()
@@ -216,36 +176,6 @@ public struct BurnerPairScreen: View {
             FSPrimaryButton("Try again", block: true, large: true) { vm.switchToScan() }
             FSGhostButton("Cancel", block: true) { Task { await vm.cancel(); onCancel() } }
         }
-    }
-
-    // MARK: - Session footer (Disconnect + countdown)
-
-    /// Shown whenever a live session is open: the explicit "Disconnect from
-    /// burner" control + the lifetime countdown beside it.
-    private func sessionFooter(c: FSColors) -> some View {
-        VStack(spacing: FS.space.s2) {
-            Divider().background(c.border)
-            if vm.burnerStepped {
-                Text("The computer's burner stepped away — reconnecting…")
-                    .font(FS.font.caption())
-                    .foregroundColor(c.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack {
-                FSGhostButton("Disconnect from burner") {
-                    Task { await vm.disconnect() }
-                }
-                .accessibilityIdentifier("bp-disconnect-button")
-                Spacer()
-                if let countdown = vm.countdownText {
-                    Text(countdown)
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(c.textMuted)
-                        .accessibilityIdentifier("bp-countdown-label")
-                }
-            }
-        }
-        .padding(.top, FS.space.s4)
     }
 
     // MARK: - Bits

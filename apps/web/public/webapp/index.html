@@ -766,7 +766,11 @@
             <label class="inline-check mt-2">
               <input type="checkbox" id="cs-embed-secrets" /> Embed secrets for offline install
             </label>
-            <p id="cs-embed-secrets-hint" class="faint-sm">Off (recommended): the recipe holds no app key — the webapp delivers it securely once the box comes online. On embeds the box's app key in the recipe so it installs fully offline (e.g. an air-gapped or USB-only box), but the recipe then carries a secret — keep it safe.</p>
+            <p id="cs-embed-secrets-hint" class="faint-sm">This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.</p>
+            <label class="inline-check mt-2">
+              <input type="checkbox" id="cs-debug-friendly" /> Debug-friendly server
+            </label>
+            <p id="cs-debug-friendly-hint" class="faint-sm">Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.</p>
           </div>
 
           <div class="row-2 mt-2">

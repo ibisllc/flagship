@@ -10,19 +10,11 @@ import Foundation
 
 /// Decoded inbound events the phone cares about.
 public enum BurnerInbound: Sendable, Equatable {
-    /// The relay admitted us. `expiresAtMs` is the session deadline (ms since
-    /// epoch, ~1h) — drives the resume freshness check + the countdown.
-    case accepted(expiresAtMs: Int64)
     case peerPresent           // the burner was already connected when we joined
     case peerJoined            // the burner joined after us
     case burnerHello(burnerPkB64: String)
     case consentRequest(setting: String, serverDomain: String, warning: String)
-    /// The burner disconnected from ITS side and wants its half wiped — leave.
-    case sessionEnded
-    /// ADVISORY — the burner stepped away / holds the session (NOT a wipe). The
-    /// phone keeps the session alive and waits for the burner to rejoin.
     case peerGone
-    /// The session reached its lifetime — wipe + leave.
     case expired
     case relayError(String)
     case pong
@@ -33,8 +25,6 @@ public enum BurnerOutbound: Sendable {
     case phoneHello(phonePkB64: String)
     case confirmPairing
     case deliver(ciphertextB64: String, nonceB64: String)
-    /// The user explicitly disconnected — tell the burner to wipe its half.
-    case sessionEnded
     case raw(json: String)     // consent-result etc.
 }
 
@@ -63,8 +53,6 @@ extension BurnerOutbound {
             return Self.obj(["kind": "confirm-pairing"])
         case .deliver(let ct, let nonce):
             return Self.obj(["kind": "deliver", "ciphertext": ct, "nonce": nonce])
-        case .sessionEnded:
-            return Self.obj(["kind": "session-ended"])
         case .raw(let json):
             return json
         }
@@ -160,13 +148,7 @@ public final class LiveBurnerPairClient: BurnerPairClient, @unchecked Sendable {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let kind = obj["kind"] as? String else { return nil }
         switch kind {
-        case "accepted":
-            // expiresAt is ms-since-epoch; tolerate number or numeric string.
-            let exp: Int64
-            if let n = obj["expiresAt"] as? NSNumber { exp = n.int64Value }
-            else if let s = obj["expiresAt"] as? String, let n = Int64(s) { exp = n }
-            else { exp = 0 }
-            return .accepted(expiresAtMs: exp)
+        case "accepted": return nil
         case "peer-present": return .peerPresent
         case "peer-joined": return .peerJoined
         case "peer-gone": return .peerGone
@@ -180,8 +162,6 @@ public final class LiveBurnerPairClient: BurnerPairClient, @unchecked Sendable {
             case "burner-hello":
                 guard let pk = frame["burnerPk"] as? String else { return nil }
                 return .burnerHello(burnerPkB64: pk)
-            case "session-ended":
-                return .sessionEnded
             case "consent-request":
                 let setting = (frame["setting"] as? String) ?? ""
                 let serverDomain = (frame["serverDomain"] as? String) ?? ""
@@ -202,9 +182,6 @@ public final class LiveBurnerPairClient: BurnerPairClient, @unchecked Sendable {
 /// frames are captured in `sent`.
 public final class MockBurnerPairClient: BurnerPairClient, @unchecked Sendable {
     public private(set) var connectedSid: String?
-    /// Number of times `connect` was called — a resume re-opens the SAME sid,
-    /// so a successful reconnect bumps this to ≥2.
-    public private(set) var connectCount = 0
     public private(set) var sent: [BurnerOutbound] = []
     public private(set) var didClose = false
     private var continuation: AsyncStream<BurnerInbound>.Continuation?
@@ -213,7 +190,6 @@ public final class MockBurnerPairClient: BurnerPairClient, @unchecked Sendable {
 
     public func connect(sid: String) async throws -> AsyncStream<BurnerInbound> {
         connectedSid = sid
-        connectCount += 1
         return AsyncStream { cont in self.continuation = cont }
     }
 

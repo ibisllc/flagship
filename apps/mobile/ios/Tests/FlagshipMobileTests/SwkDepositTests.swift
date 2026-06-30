@@ -30,6 +30,77 @@ final class CreateServerAdvancedToggleTests: XCTestCase {
         vm.advancedMode = false
         XCTAssertFalse(vm.embedSecrets, "embed-secrets snaps back to secret-free when Advanced is off")
     }
+
+    func test_debugFriendlyOffByDefault() {
+        let vm = makeVM()
+        XCTAssertFalse(vm.debugFriendly, "production (non-debug) server is the default")
+    }
+
+    func test_turningAdvancedOff_resetsDebugFriendly() {
+        let vm = makeVM()
+        vm.advancedMode = true
+        vm.debugFriendly = true
+        vm.advancedMode = false
+        XCTAssertFalse(vm.debugFriendly, "debug-friendly snaps back off when Advanced is off")
+    }
+
+    /// The minter bakes a VERIFIABLE owner-IRK debug-access grant in the EXACT
+    /// `{grant:{serverDomain,sshAuthorizedKey,issuedAt},signatureHex}` JSON the
+    /// box-side gate (debugAccessGate.ts) consumes.
+    func test_debugGrantEnvelope_isVerifiableAndMatchesBoxGateShape() throws {
+        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32))
+        let serverDomain = "home.harry.flagship.services"
+        let now: Int64 = 1_750_000_000_000
+        let envelope = CreateServerViewModel.debugGrantEnvelope(serverDomain: serverDomain, irk: irk, now: now)
+
+        let obj = try JSONSerialization.jsonObject(with: Data(envelope.utf8)) as! [String: Any]
+        let grant = obj["grant"] as! [String: Any]
+        XCTAssertEqual(grant["serverDomain"] as? String, serverDomain)
+        XCTAssertEqual(grant["sshAuthorizedKey"] as? String, "", "console-only grant carries an empty SSH key")
+        XCTAssertEqual((grant["issuedAt"] as? NSNumber)?.int64Value, now)
+        let sigHex = obj["signatureHex"] as! String
+
+        // The signature verifies under the owner IRK over the canonical bytes —
+        // exactly the box-side check.
+        let g = DebugAccess.Grant(serverDomain: serverDomain, sshAuthorizedKey: "", issuedAt: now)
+        XCTAssertTrue(DebugAccess.verify(g, signatureHex: sigHex, irkPub: irk.publicKey.rawRepresentation))
+    }
+}
+
+/// The recipe's `debugGrant` sibling is on the wire when present + omitted when
+/// absent (mirroring swkHex/pairingOrder), so a non-debug recipe is
+/// byte-identical to before.
+final class SignedInstallBlobDebugGrantTests: XCTestCase {
+    private func signed(debugGrant: String?) -> SignedInstallBlob {
+        let auth = AuthCode(
+            serial: "01ABCD", username: "harry", serverName: "home",
+            serverDomain: "home.harry.flagship.services",
+            delegatedPubKey: Data(repeating: 0x11, count: 32),
+            userPubKey: Data(repeating: 0x22, count: 32),
+            issuedAt: 1_000, expiresAt: 2_000
+        )
+        let blob = InstallBlob(
+            serverDomain: "home.harry.flagship.services", username: "harry", serverName: "home",
+            phoneDelegatedPubKey: Data(repeating: 0x33, count: 32),
+            authCode: auth, authCodeUserSignature: Data(repeating: 0x44, count: 64),
+            rckPubKey: Data(repeating: 0x55, count: 32)
+        )
+        return SignedInstallBlob(blob: blob, signatureHex: "ab", debugGrant: debugGrant)
+    }
+
+    private func json(_ s: SignedInstallBlob) throws -> String {
+        String(data: try JSONEncoder().encode(s.onWire()), encoding: .utf8)!
+    }
+
+    func test_debugGrantOnWireWhenPresent() throws {
+        let j = try json(signed(debugGrant: "{\"grant\":{},\"signatureHex\":\"ab\"}"))
+        XCTAssertTrue(j.contains("debugGrant"))
+    }
+
+    func test_debugGrantOmittedWhenAbsent() throws {
+        let j = try json(signed(debugGrant: nil))
+        XCTAssertFalse(j.contains("debugGrant"))
+    }
 }
 
 /// The PendingSwkDepositStore three-state lifecycle.
