@@ -726,6 +726,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         transcript: [...session.conversation()],
         files: session.files(),
         deployedUrl: session.meta.url,
+        errorReason: session.meta.failureReason,
       };
       return jok(out);
     }

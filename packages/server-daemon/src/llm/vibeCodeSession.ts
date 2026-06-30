@@ -141,6 +141,13 @@ export interface VibeCodeSessionMeta {
     | "cancelled";
   serviceId?: string;
   url?: string;
+  /**
+   * The reason the session failed, captured at `fail()` time. Persisted on
+   * meta so a client that re-attaches AFTER the failure (its live WS dropped,
+   * the user reopened the Building screen) gets the actual cause instead of a
+   * generic "session failed" — the original error event is long gone by then.
+   */
+  failureReason?: string;
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -552,6 +559,7 @@ export class VibeCodeSession extends EventEmitter {
 
   fail(message: string, recoverable = false): void {
     this.meta.status = "failed";
+    this.meta.failureReason = message;
     this.emit("event", { kind: "error", message, recoverable } as VibeCodeEvent);
   }
 
