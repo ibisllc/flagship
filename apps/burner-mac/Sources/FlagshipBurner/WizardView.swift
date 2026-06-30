@@ -92,6 +92,7 @@ struct WizardView: View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
             // Advanced (BYO ISO + Debug) only exists inside a live session.
             if model.advancedAllowed {
+                sessionHeader
                 modePicker
             } else {
                 recipeFileHeader
@@ -113,6 +114,37 @@ struct WizardView: View {
             bakeRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Live-session header: a "Disconnect from phone" control (wipes the burn
+    /// + retires the QR — usable even without the phone in hand), the auto-lock
+    /// countdown, and a "reconnecting" banner while the phone is briefly away.
+    private var sessionHeader: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            if model.isReconnecting {
+                HStack(spacing: FB.Spacing.s2) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Phone disconnected — waiting for it to reconnect. Your burn is kept ready.")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: FB.Spacing.s2) {
+                Button(role: .destructive) {
+                    model.disconnectFromPhone()
+                } label: {
+                    Label("Disconnect from phone", systemImage: "xmark.circle")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .disabled(model.isRunning)
+                Spacer(minLength: FB.Spacing.s2)
+                if let exp = model.sessionExpiresAt {
+                    SessionCountdown(deadline: exp)
+                }
+            }
+        }
     }
 
     /// Header for the out-of-band recipe path: a back link to the pairing
@@ -1112,6 +1144,23 @@ private struct PointerOnHover: ViewModifier {
 
 extension View {
     func pointerCursor() -> some View { modifier(PointerOnHover()) }
+}
+
+// MARK: - Session auto-lock countdown
+
+/// Ticks once a second toward the relay-supplied session deadline ("Auto-locks
+/// in 12:34"). At zero the relay sends `expired` and the burner wipes + relocks.
+private struct SessionCountdown: View {
+    let deadline: Date
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let remaining = max(0, Int(deadline.timeIntervalSince(ctx.date)))
+            Text("Auto-locks in \(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .monospacedDigit()
+        }
+    }
 }
 
 // MARK: - File picker

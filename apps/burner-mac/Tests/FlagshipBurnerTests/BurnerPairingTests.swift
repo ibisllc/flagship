@@ -140,17 +140,70 @@ final class BurnerPairingTests: XCTestCase {
         XCTAssertEqual(actions, [.recipe(plaintext)])
     }
 
-    func test_engineEndsOnPeerGone() {
+    /// Drive the engine to `.paired` (the precondition for the hold/resume
+    /// behaviour below).
+    private func pairedEngine() -> BurnerPairingEngine {
         let e = engine()
+        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
+        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "confirm-pairing"]])
+        return e
+    }
+
+    func test_enginePeerGoneBeforePairingStaysWaiting() {
+        // From the initial waiting state, a peer-gone is a no-op (the QR stays
+        // live for the phone to come back) — NOT an end/wipe.
+        let e = engine()
+        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])
+        XCTAssertEqual(e.stage, .waitingForPhone)
+    }
+
+    func test_engineHoldsOnPeerGoneAfterPaired() {
+        let e = pairedEngine()
         let actions = e.onRelayFrame(["kind": "peer-gone"])
-        guard actions.count == 1, case .stage(.ended) = actions[0] else {
-            return XCTFail("expected ended stage, got \(actions)")
-        }
+        XCTAssertEqual(actions, [.stage(.reconnecting)])
+        XCTAssertEqual(e.stage, .reconnecting)
+        // A second peer-gone while already holding is a no-op.
+        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])
+    }
+
+    func test_engineResumesOnSamePhoneReconnect() {
+        let e = pairedEngine()
+        _ = e.onRelayFrame(["kind": "peer-gone"])            // → reconnecting
+        // The phone rejoins; we re-offer our pubkey, then it re-says hello.
+        _ = e.onRelayFrame(["kind": "peer-joined"])
+        let resumed = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
+        XCTAssertEqual(resumed, [.stage(.paired)])           // no fresh SAS
+        XCTAssertEqual(e.stage, .paired)
+    }
+
+    func test_engineIgnoresDifferentPhoneDuringReconnect() {
+        let e = pairedEngine()
+        _ = e.onRelayFrame(["kind": "peer-gone"])            // → reconnecting
+        // A DIFFERENT phone (burner pubkey stands in as another valid key)
+        // must not be able to seize a held session.
+        let actions = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": burnerPubB64u]])
+        XCTAssertFalse(actions.contains(.stage(.paired)))
+        XCTAssertEqual(e.stage, .reconnecting)
     }
 
     func test_engineEndsOnExpired() {
         let e = engine()
         let actions = e.onRelayFrame(["kind": "expired"])
+        guard actions.count == 1, case .stage(.ended) = actions[0] else {
+            return XCTFail("expected ended stage, got \(actions)")
+        }
+    }
+
+    func test_engineCapturesExpiresAtFromAccepted() {
+        let e = engine()
+        XCTAssertNil(e.expiresAtMs)
+        _ = e.onRelayFrame(["kind": "accepted", "role": "burner", "expiresAt": 1_900_000_000_000.0])
+        XCTAssertEqual(e.expiresAtMs, 1_900_000_000_000.0)
+    }
+
+    func test_engineWipesViaSessionEndedFromPhone() {
+        let e = pairedEngine()
+        let actions = e.onRelayFrame(["kind": "peer", "frame": ["kind": "session-ended"]])
         guard actions.count == 1, case .stage(.ended) = actions[0] else {
             return XCTFail("expected ended stage, got \(actions)")
         }

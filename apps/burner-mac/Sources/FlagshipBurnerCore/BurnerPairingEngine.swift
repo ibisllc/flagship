@@ -22,6 +22,11 @@ public final class BurnerPairingEngine {
         case waitingForPhone
         case awaitingConfirm(matchCode: String)
         case paired
+        /// The phone stepped away (its screen slept / app backgrounded) after
+        /// pairing. We HOLD the prepared burn and wait for the same phone to
+        /// reconnect within the session lifetime — NOT a wipe. Resumes to
+        /// `.paired` when a phone-hello with the same pubkey returns.
+        case reconnecting
         case ended(reason: String)
     }
 
@@ -55,6 +60,13 @@ public final class BurnerPairingEngine {
     public private(set) var stage: Stage = .waitingForPhone
     private var aeadKey: SymmetricKey?
     public private(set) var matchCode: String?
+    /// The paired phone's raw X25519 public key, captured on the first
+    /// phone-hello. A reconnect that presents the SAME key resumes the session
+    /// without a fresh SAS; a different key is ignored while we hold.
+    private var phonePk: Data?
+    /// Session deadline (ms since epoch) from the relay's `accepted` frame —
+    /// the auto-lock countdown both sides display.
+    public private(set) var expiresAtMs: Double?
 
     public init(privateKey: Curve25519.KeyAgreement.PrivateKey = Curve25519.KeyAgreement.PrivateKey(),
                 codeBytes: Data? = nil) {
@@ -78,18 +90,38 @@ public final class BurnerPairingEngine {
         guard let kind = obj["kind"] as? String else { return [] }
         switch kind {
         case "accepted":
+            if let ms = (obj["expiresAt"] as? Double) ?? (obj["expiresAt"] as? NSNumber)?.doubleValue {
+                expiresAtMs = ms
+            }
             return []
         case "peer-present", "peer-joined":
             // The phone is here — hand it our pubkey so it can derive the SAS.
+            // (Also fires on a RESUME: the phone reconnected and we re-offer
+            // our pubkey so it can re-derive the same channel.)
             return [.send(.burnerHello(burnerPubKeyB64: publicKeyB64))]
         case "peer-missing":
             return []
         case "pong":
             return []
         case "peer-gone":
-            return end("The phone disconnected.")
+            // Advisory, not a wipe. If we were paired, HOLD the burn and wait
+            // for the phone to come back. If we hadn't paired yet, just keep
+            // the same QR live and wait for a phone again.
+            switch stage {
+            case .paired, .reconnecting:
+                if case .reconnecting = stage { return [] }
+                stage = .reconnecting
+                return [.stage(.reconnecting)]
+            default:
+                aeadKey = nil
+                matchCode = nil
+                phonePk = nil
+                if case .waitingForPhone = stage { return [] }
+                stage = .waitingForPhone
+                return [.stage(.waitingForPhone)]
+            }
         case "expired":
-            return end("The pairing session timed out.")
+            return end("This pairing session reached its time limit.")
         case "error":
             let reason = (obj["reason"] as? String) ?? "relay error"
             return end(reason)
@@ -106,14 +138,33 @@ public final class BurnerPairingEngine {
         switch kind {
         case "phone-hello":
             guard let phonePkB64 = frame["phonePk"] as? String,
-                  let phonePk = Base64URLBurner.decode(phonePkB64) else {
+                  let incomingPk = Base64URLBurner.decode(phonePkB64) else {
                 return [.log("Ignoring malformed phone-hello.")]
+            }
+            // RESUME: the same phone returning while we're holding the session.
+            // Re-derive the (deterministic) channel and go straight back to
+            // paired — no second SAS confirmation for keys already confirmed.
+            if case .reconnecting = stage {
+                guard let prev = phonePk, prev == incomingPk else {
+                    return [.log("A different phone connected while waiting to reconnect — ignoring.")]
+                }
+                do {
+                    let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
+                                                               phonePublicKey: incomingPk)
+                    aeadKey = mat.aeadKey
+                    matchCode = mat.matchCode
+                    stage = .paired
+                    return [.stage(.paired)]
+                } catch {
+                    return [.log("Couldn't resume the session: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")]
+                }
             }
             do {
                 let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
-                                                           phonePublicKey: phonePk)
+                                                           phonePublicKey: incomingPk)
                 aeadKey = mat.aeadKey
                 matchCode = mat.matchCode
+                phonePk = incomingPk
                 stage = .awaitingConfirm(matchCode: mat.matchCode)
                 return [.stage(stage)]
             } catch {
@@ -146,6 +197,9 @@ public final class BurnerPairingEngine {
                 return [.consentGranted(setting: setting, grantJSON: grantStr)]
             }
             return [.consentDenied(setting: setting)]
+        case "session-ended":
+            // The phone's user tapped "Disconnect from burner" — wipe + relock.
+            return end("The phone disconnected this session.")
         default:
             return []
         }

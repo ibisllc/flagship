@@ -65,6 +65,13 @@ final class WizardModel: ObservableObject {
     @Published var pairMatchCode: String? = nil
     /// Why the last session ended (shown briefly on the cover after a drop).
     @Published var lastSessionEndReason: String? = nil
+    /// True while the phone has stepped away after pairing and we're holding
+    /// the prepared burn, waiting for it to reconnect. The session UI stays
+    /// up (you can still finish the burn); a banner explains the wait.
+    @Published var isReconnecting: Bool = false
+    /// Session auto-lock deadline (from the relay). Drives the countdown shown
+    /// next to the "Disconnect from phone" button.
+    @Published var sessionExpiresAt: Date? = nil
 
     /// Advanced features (BYO ISO, debug, embed-secrets, save-ISO) are only
     /// available inside a live phone session — the out-of-band recipe path
@@ -95,9 +102,14 @@ final class WizardModel: ObservableObject {
         pairMatchCode = nil
         pairStatus = "Waiting for your phone…"
         burnerStage = .locked
+        isReconnecting = false
+        sessionExpiresAt = nil
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
         client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
+        client.onExpiresAt = { [weak self] ms in
+            Task { @MainActor in self?.sessionExpiresAt = Date(timeIntervalSince1970: ms / 1000) }
+        }
         client.onConsentGranted = { [weak self] setting, grantJSON in
             Task { @MainActor in self?.applyConsentGranted(setting: setting, grantJSON: grantJSON) }
         }
@@ -146,16 +158,27 @@ final class WizardModel: ObservableObject {
     private func applyEngineStage(_ stage: BurnerPairingEngine.Stage) {
         switch stage {
         case .waitingForPhone:
+            // Phone left before pairing — keep the SAME QR live and wait again.
+            isReconnecting = false
+            pairMatchCode = nil
+            pairStatus = "Waiting for your phone…"
             burnerStage = .locked
         case .awaitingConfirm(let code):
+            isReconnecting = false
             pairMatchCode = code
             pairStatus = "Phone connected — confirm the code matches."
             burnerStage = .pairing
         case .paired:
+            isReconnecting = false
             pairStatus = "Paired."
             burnerStage = .session
+        case .reconnecting:
+            // Phone stepped away after pairing. HOLD the burn — don't wipe.
+            // Keep the session UI up so the burn can still be finished.
+            isReconnecting = true
+            pairStatus = "Phone disconnected — waiting for it to reconnect…"
         case .ended(let reason):
-            relock(reason)
+            wipeAndRelock(reason, notifyPhone: false)
         }
     }
 
@@ -177,19 +200,40 @@ final class WizardModel: ObservableObject {
         Task { await runVerify() }
     }
 
-    /// Tear the session down and return to the locked cover with a fresh QR.
-    /// Triggered when the socket/ping-pong breaks (the core requirement: a
-    /// dropped session re-locks the burner).
-    func relock(_ reason: String?) {
+    /// The burner-side "Disconnect from phone" button: wipe everything we were
+    /// working on and return to a fresh locked cover. Use it to clear the
+    /// desktop before walking away even without the phone in hand. Tells the
+    /// phone (best-effort) so it wipes its half too.
+    func disconnectFromPhone() {
+        wipeAndRelock("You disconnected this burner.", notifyPhone: true)
+    }
+
+    /// Complete wipe of the in-progress burn + session, then return to the
+    /// locked cover with a FRESH QR (so the old code is retired). Triggered on
+    /// an explicit disconnect, the session time-limit, or a phone-initiated
+    /// end. A transient phone drop does NOT come here — that's `.reconnecting`.
+    func wipeAndRelock(_ reason: String?, notifyPhone: Bool) {
         // Don't yank a burn that's mid-write out from under the user.
         guard !isRunning else { return }
+        if notifyPhone { sessionClient?.sendSessionEnded() }
         lastSessionEndReason = reason
+        // Sensitive session/recipe material.
         recipe = nil
         verified = nil
         recipeError = nil
         pairMatchCode = nil
         debugGrantJSON = nil
         debugConsentPending = false
+        // Reset Advanced selections so a fresh pairing starts clean.
+        mode = .simple
+        debugMode = false
+        useSystemISO = false
+        iso = nil
+        // Drop any staged recipe temp file from the live-session path.
+        if let staging = pastedRecipeStaging {
+            try? FileManager.default.removeItem(at: staging)
+            pastedRecipeStaging = nil
+        }
         beginPairing()
     }
 

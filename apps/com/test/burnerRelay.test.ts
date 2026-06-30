@@ -210,6 +210,10 @@ describe("burner relay — join + presence", () => {
     const burner = await upgrade(obj, "burner");
     const accepted = await burner.waitFor((m) => m.kind === "accepted");
     expect(accepted.role).toBe("burner");
+    // The session deadline rides the accepted frame so both sides can show
+    // a matching auto-lock countdown.
+    expect(typeof accepted.expiresAt).toBe("number");
+    expect(accepted.expiresAt).toBeGreaterThan(Date.now());
   });
 
   it("tells both sides about presence when the phone joins after the burner", async () => {
@@ -226,14 +230,35 @@ describe("burner relay — join + presence", () => {
     expect(joined.kind).toBe("peer-joined");
   });
 
-  it("rejects a second socket for a role that's already taken", async () => {
+  it("evicts a stale socket and lets the same role reconnect (resume)", async () => {
     const { obj } = makeBound();
-    await upgrade(obj, "burner");
+    const first = await upgrade(obj, "burner");
+    await first.waitFor((m) => m.kind === "accepted");
+    // A reconnect for the same role: the stale socket is evicted and the
+    // newcomer is accepted (last-writer-wins), NOT told "slot taken".
     const second = await upgrade(obj, "burner");
-    const err = await second.waitFor((m) => m.kind === "error");
-    expect(err.reason).toMatch(/burner slot taken/);
+    const accepted = await second.waitFor((m) => m.kind === "accepted");
+    expect(accepted.role).toBe("burner");
     await new Promise((r) => setTimeout(r, 10));
-    expect(second.closed).toBe(true);
+    expect(first.closed).toBe(true);
+    expect(second.closed).toBe(false);
+  });
+
+  it("a phone reconnect does NOT fire a spurious peer-gone at the burner", async () => {
+    const { obj } = makeBound();
+    const burner = await upgrade(obj, "burner");
+    await burner.waitFor((m) => m.kind === "accepted");
+    const phone1 = await upgrade(obj, "phone");
+    await phone1.waitFor((m) => m.kind === "peer-present");
+    await burner.waitFor((m) => m.kind === "peer-joined");
+
+    // Phone reconnects (its old socket is still draining) — the burner must
+    // be told the peer (re)joined, and must NOT be told peer-gone.
+    const phone2 = await upgrade(obj, "phone");
+    await phone2.waitFor((m) => m.kind === "accepted");
+    await burner.waitFor((m) => m.kind === "peer-joined");
+    await burner.expectNone((m) => m.kind === "peer-gone");
+    expect(phone1.closed).toBe(true);
   });
 });
 

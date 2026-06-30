@@ -9,13 +9,20 @@
  *    code; the phone joins; they confirm a SAS; then they exchange many
  *    frames over the life of a burn (recipe delivery, consent requests,
  *    consent results, secret injection).
- *  - PRESENCE is load-bearing: the live socket *is* the gate that keeps
- *    the burner unlocked. When one peer drops, the survivor is told
- *    `{kind:"peer-gone"}` so it can re-lock immediately.
+ *  - RESILIENT, NOT presence-fragile. A peer that briefly drops (the
+ *    phone's screen sleeps / its app backgrounds; a desktop network blip)
+ *    can RECONNECT to the same `sid` and RESUME — the session survives for
+ *    its full lifetime (ABSOLUTE_TTL_MS, ~1h). The survivor is told
+ *    `{kind:"peer-gone"}` when a peer drops, but that is an advisory "the
+ *    other side stepped away", NOT "wipe now": the burner holds its prepared
+ *    burn and waits for the phone to return. A reconnect for a role whose
+ *    slot is still draining EVICTS the stale socket (last-writer-wins) so
+ *    the returning peer is never told "slot taken".
  *  - KEEPALIVE: clients send `{kind:"ping"}`; the relay replies
  *    `{kind:"pong"}` and re-arms an idle alarm. A session with no
- *    traffic for IDLE_TTL_MS expires on its own; an absolute cap bounds
- *    even an actively-pinged session.
+ *    traffic for IDLE_TTL_MS expires on its own; the absolute cap is the
+ *    ~1h auto-lock backstop, after which the relay sends `{kind:"expired"}`
+ *    and both sides wipe.
  *
  * Like the QR relay, the DO is a DUMB PIPE: it never sees keys or
  * plaintext. App frames are forwarded VERBATIM (wrapped in
@@ -28,14 +35,14 @@
  *
  *   wss://<host>/burner-pipe/<sid>?role=burner
  *   wss://<host>/burner-pipe/<sid>?role=phone
- *     ← { kind: "accepted", role }                  // joined
+ *     ← { kind: "accepted", role, expiresAt }        // joined; expiresAt = session deadline (ms epoch)
  *     ← { kind: "peer-present" }                     // the other side was already here
- *     ← { kind: "peer-joined" }                      // the other side just joined
+ *     ← { kind: "peer-joined" }                      // the other side just joined (incl. a reconnect/resume)
  *     ← { kind: "peer", frame: <object> }            // forwarded peer app frame
  *     ← { kind: "peer-missing" }                     // you sent a frame with no peer connected
- *     ← { kind: "peer-gone" }                        // the other side dropped → re-lock
+ *     ← { kind: "peer-gone" }                        // the other side stepped away (advisory; hold + await resume)
  *     ← { kind: "pong" }                             // keepalive reply
- *     ← { kind: "expired" }                          // idle/absolute TTL fired
+ *     ← { kind: "expired" }                          // session lifetime / auto-lock reached → wipe
  *     ← { kind: "error", reason }
  *     → { kind: "ping" }                             // keepalive
  *     → <any other JSON object>                      // forwarded to the peer as {kind:"peer",frame}
@@ -45,10 +52,20 @@
  * DO can be evicted between frames. See buildRelay.ts for the rationale.
  */
 
-/** Session dies this long after the last frame (keepalive re-arms it). */
-const IDLE_TTL_MS = 90 * 1000;
-/** Hard ceiling even for an actively-pinged session (zombie backstop). */
-const ABSOLUTE_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * Session dies this long after the last frame (keepalive re-arms it). The
+ * burner pings every ~20s, so a session stays alive as long as the burner
+ * is connected even while the phone is briefly away; this only reaps a
+ * session both peers have abandoned.
+ */
+const IDLE_TTL_MS = 2 * 60 * 1000;
+/**
+ * The session lifetime / auto-lock window. After this, even an actively
+ * pinged session is expired: the relay sends `{kind:"expired"}` and both
+ * the phone and the burner wipe + relock. Long enough to write a USB and
+ * step away; short enough that an abandoned session self-destructs.
+ */
+const ABSOLUTE_TTL_MS = 60 * 60 * 1000;
 /** Cap on a single inbound frame's raw size. Recipes + sealed secrets fit. */
 const MAX_FRAME_BYTES = 64 * 1024;
 
@@ -77,6 +94,13 @@ export interface BurnerRelayDurableObjectState {
 
 interface SocketAttachment {
   role: BurnerRole;
+  /**
+   * Set on a socket we are about to evict because a fresh connection for
+   * the same role arrived (a reconnect/resume). Its delayed close handler
+   * checks this and stays silent — so evicting a stale socket never fires a
+   * spurious `peer-gone` at the survivor.
+   */
+  superseded?: boolean;
 }
 
 interface AttachableSocket extends WebSocket {
@@ -220,7 +244,12 @@ export class BurnerRelaySession implements DurableObject {
     await this.loaded;
     const att = readAttachment(ws);
     if (att?.role !== ROLE_BURNER && att?.role !== ROLE_PHONE) return;
-    // Tell the survivor (if any) so it can re-lock immediately.
+    // This socket was evicted by a reconnect for the same role — the live
+    // socket is already the new one. Stay silent: no peer-gone, no teardown.
+    if (att.superseded) return;
+    // Advise the survivor that this peer stepped away. It is NOT a wipe
+    // signal: the burner holds its prepared burn and waits for the phone to
+    // reconnect within the session lifetime.
     const peer = this.getPeer(att.role);
     if (peer) this.send(peer, { kind: "peer-gone" });
     this.tearDownIfEmpty();
@@ -252,17 +281,23 @@ export class BurnerRelaySession implements DurableObject {
   }
 
   private attach(ws: WebSocket, role: BurnerRole): void {
-    if (this.getSocket(role)) {
-      // Slot already held — accept just long enough to report + close.
-      this.state.acceptWebSocket(ws, [role]);
-      writeAttachment(ws, { role });
-      this.send(ws, { kind: "error", reason: `${role} slot taken` });
-      queueMicrotask(() => this.closeQuiet(ws));
-      return;
+    // Last-writer-wins per role. An existing socket for this role is almost
+    // always STALE — the phone's screen slept / its app backgrounded and the
+    // old socket is still draining. Evict it so the returning peer RESUMES
+    // the same session instead of being told "slot taken". Mark it
+    // `superseded` first so its delayed close stays silent (no peer-gone).
+    const existing = this.getSocket(role);
+    if (existing) {
+      writeAttachment(existing, { role, superseded: true });
+      this.closeQuiet(existing);
     }
     this.state.acceptWebSocket(ws, [role]);
     writeAttachment(ws, { role });
-    this.send(ws, { kind: "accepted", role });
+    this.send(ws, {
+      kind: "accepted",
+      role,
+      expiresAt: this.createdAt + ABSOLUTE_TTL_MS,
+    });
 
     // Presence handshake: tell each side about the other.
     const peer = this.getPeer(role);
