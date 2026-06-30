@@ -24,6 +24,11 @@ class QrSession private constructor(
     private val phonePrivKey: ByteArray,
     val phonePubKey: ByteArray,
 ) {
+    /** The ephemeral X25519 PRIVATE key, raw — persisted by the burner-pairing
+     *  store so a resumed session reuses the SAME keypair (the burner keys off
+     *  the identical phone-hello pubkey and skips a second SAS). */
+    val phonePrivateKey: ByteArray get() = phonePrivKey
+
     private var kEnc: ByteArray? = null
     var matchCode: String? = null
         private set
@@ -96,6 +101,13 @@ class QrSession private constructor(
         /** Generate a fresh phone-side X25519 keypair. */
         fun fresh(): QrSession {
             val priv = X25519.generatePrivateKey()
+            val pub = X25519.publicFromPrivate(priv)
+            return QrSession(priv, pub)
+        }
+
+        /** Reconstruct a session from a persisted ephemeral private key — used
+         *  on RESUME so the reconnected phone-hello carries the ORIGINAL pubkey. */
+        fun fromPrivate(priv: ByteArray): QrSession {
             val pub = X25519.publicFromPrivate(priv)
             return QrSession(priv, pub)
         }

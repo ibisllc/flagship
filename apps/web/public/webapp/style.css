@@ -135,6 +135,18 @@ body {
     env(safe-area-inset-right)
     env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+  /* Reserve REAL space for the fixed top slivers (teal ops bar + red trust
+     bar) on the root app container, not just the sticky header. The whole app
+     viewport shrinks by the bar heights, so EVERY view's content — and any
+     non-header chrome above the fold — shifts down and nothing is ever covered
+     (the header-only offset left modal/overlay/view content under the bars).
+     Mirrors the iOS/Android push-down. `box-sizing:border-box` (global reset)
+     means this padding lives inside the 100dvh min-height — no spurious scroll.
+     The transition animates the shrink in lockstep with the bars' slide. */
+  padding-top: calc(
+    env(safe-area-inset-top) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px)
+  );
+  transition: padding-top 220ms cubic-bezier(0.22, 1, 0.36, 1);
   background:
     radial-gradient(circle at 80% -10%, var(--accent-soft), transparent 38%),
     radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 50%),
@@ -287,8 +299,13 @@ body {
 header {
   position: sticky;
   /* Tuck below the operations sliver + the trust sliver when shown (each var
-     is 0 when its bar is collapsed). */
-  top: calc(var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px));
+     is 0 when its bar is collapsed). The safe-area inset matches the bars'
+     own padding-top so the header pins exactly flush beneath them while
+     scrolling on notched devices (the body padding already reserves the
+     initial space). */
+  top: calc(
+    env(safe-area-inset-top, 0px) + var(--ops-bar-h, 0px) + var(--trust-bar-h, 0px)
+  );
   z-index: 10;
   padding: 18px 22px 14px;
   background: color-mix(in srgb, var(--canvas) 78%, transparent);

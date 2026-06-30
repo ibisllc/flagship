@@ -1,6 +1,7 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
+import com.google.crypto.tink.subtle.X25519
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -47,12 +48,139 @@ class BurnerPairControllerTest {
         c.cancel()
     }
 
-    @Test fun peerGoneFails() = runTest {
+    @Test fun peerGoneIsAdvisory_doesNotEndSession() = runTest {
+        // Contract: peer-gone is ADVISORY (the burner holds + auto-resumes) — it
+        // must NOT wipe/fail the phone's session. Mirror of iOS
+        // test_peerGoneIsAdvisory_doesNotEndSession.
         val client = MockBurnerPairClient()
         val c = controller(this, client)
-        c.begin("AEBA-GBAF")
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
         c.onInbound(BurnerInbound.PeerGone)
-        assertTrue(c.phase.value is BurnerPairController.Phase.Failed)
+        assertFalse("peer-gone must not fail the session", c.phase.value is BurnerPairController.Phase.Failed)
+        assertTrue(c.burnerStepped.value)
+        assertNull(c.leaveRequest.value)
+        c.cancel()
+    }
+
+    // ── accepted / countdown / persistence ─────────────────────────
+
+    @Test fun acceptedSetsDeadline_persists_andShowsCountdown() = runTest {
+        val store = InMemoryBurnerPairingStore()
+        val client = MockBurnerPairClient()
+        val c = BurnerPairController(client, this, store = store) {
+            BurnerPairController.MintedRecipe("R", "home.harry.flagship.services", "S")
+        }
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        val deadline = System.currentTimeMillis() + 65_000
+        c.onInbound(BurnerInbound.Accepted(deadline))
+
+        assertEquals(deadline, c.expiresAtMs.value)
+        assertNotNull(c.countdownText.value)
+        assertTrue(c.countdownText.value?.startsWith("Auto-locks in ") ?: false)
+        // Session is now persisted for resume.
+        assertNotNull(store.load())
+        assertEquals("KW3_KaK0uN8rcrQCLmsOJXXfhr9EEpib", store.load()?.sid)
+        c.cancel()
+    }
+
+    // ── disconnect / session-ended ─────────────────────────────────
+
+    @Test fun disconnect_sendsSessionEnded_wipesStore_andLeaves() = runTest {
+        val store = InMemoryBurnerPairingStore()
+        val client = MockBurnerPairClient()
+        val c = BurnerPairController(client, this, store = store) {
+            BurnerPairController.MintedRecipe("R", "home.harry.flagship.services", "S")
+        }
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        c.onInbound(BurnerInbound.Accepted(System.currentTimeMillis() + 60_000))
+        assertNotNull(store.load())
+
+        c.disconnect()
+        assertTrue(client.sentJson.any { it.contains("\"session-ended\"") })
+        assertNull("disconnect must wipe the persisted session", store.load())
+        assertEquals(BurnerPairController.LeaveReason.UserDisconnected, c.leaveRequest.value)
+    }
+
+    @Test fun incomingSessionEnded_wipesAndLeaves() = runTest {
+        val store = InMemoryBurnerPairingStore()
+        val client = MockBurnerPairClient()
+        val c = BurnerPairController(client, this, store = store) {
+            BurnerPairController.MintedRecipe("R", "home.harry.flagship.services", "S")
+        }
+        c.begin("flagship://burner?c=AEBAGBAF&k=$burnerPk")
+        c.onInbound(BurnerInbound.Accepted(System.currentTimeMillis() + 60_000))
+
+        c.onInbound(BurnerInbound.SessionEnded)
+        assertEquals(BurnerPairController.LeaveReason.SessionEnded, c.leaveRequest.value)
+        assertNull("an incoming session-ended must wipe the persisted session", store.load())
+    }
+
+    // ── Resume reuses the SAME keys + sid (no second SAS) ───────────
+
+    @Test fun resumeFromStore_reconnectsSameSid_reusesEphemeralKey_andSkipsSAS() = runTest {
+        // A previously-confirmed + delivered session persisted to the store.
+        val phoneSk = X25519.generatePrivateKey()
+        val burnerSk = X25519.generatePrivateKey()
+        val burnerPub = X25519.publicFromPrivate(burnerSk)
+        val rec = PersistedBurnerPairing(
+            sid = "resumed-sid-123",
+            phoneSkB64 = Base64URL.encode(phoneSk),
+            burnerPkB64 = Base64URL.encode(burnerPub),
+            confirmed = true,
+            recipeDelivered = true,
+            serverDomain = "home.tester.flagship.services",
+            recipeWire = null,
+            serial = "serial-xyz",
+            expiresAtMs = System.currentTimeMillis() + 600_000,
+        )
+        val store = InMemoryBurnerPairingStore(rec)
+        val client = MockBurnerPairClient()
+        val c = BurnerPairController(client, this, store = store)
+
+        val ok = c.resumeFromStore()
+
+        assertTrue(ok)
+        // Reconnected to the SAME relay session id.
+        assertEquals("resumed-sid-123", client.connectedSid)
+        assertTrue(client.connectCount >= 1)
+        // A confirmed+delivered session lands straight on the delivered screen
+        // (no SAS re-confirmation).
+        assertEquals(
+            BurnerPairController.Phase.Delivered("home.tester.flagship.services"),
+            c.phase.value,
+        )
+        assertEquals("serial-xyz", c.lastDeliveredSerial)
+        // The reused ephemeral PUBLIC key (derived from the stored private key)
+        // is what the resumed phone-hello carries — that's how the burner
+        // recognises the same peer + skips a second SAS.
+        val expectedPk = Base64URL.encode(X25519.publicFromPrivate(phoneSk))
+        assertTrue(
+            "resume must re-send phone-hello with the ORIGINAL ephemeral pubkey",
+            client.sentJson.any { it.contains("\"phone-hello\"") && it.contains(expectedPk) },
+        )
+        // No confirm-pairing on resume (the SAS was already confirmed).
+        assertFalse(client.sentJson.any { it.contains("\"confirm-pairing\"") })
+        c.cancel()
+    }
+
+    @Test fun resumeFromStore_expiredSession_isClearedAndNotResumed() = runTest {
+        val phoneSk = X25519.generatePrivateKey()
+        val rec = PersistedBurnerPairing(
+            sid = "old",
+            phoneSkB64 = Base64URL.encode(phoneSk),
+            burnerPkB64 = null,
+            confirmed = true,
+            recipeDelivered = true,
+            serverDomain = "x",
+            recipeWire = null,
+            serial = null,
+            expiresAtMs = System.currentTimeMillis() - 1_000, // already past
+        )
+        val store = InMemoryBurnerPairingStore(rec)
+        val c = BurnerPairController(MockBurnerPairClient(), this, store = store)
+        val ok = c.resumeFromStore()
+        assertFalse(ok)
+        assertNull("an expired persisted session must be cleared", store.load())
     }
 
     @Test fun qrPathDerivesThenConfirmDelivers() = runTest {

@@ -270,7 +270,7 @@ function formatDays(ms) {
   return `${d}d`;
 }
 
-/** The short server label for the operations-sliver "deploying server <name>"
+/** The short server label for the operations-sliver "preparing <name>"
  *  line — the first DNS segment of `<server>.<user>.flagship.services` (the
  *  home cards still show the full fqdn). Falls back to the raw value. */
 function serverShortName(serverIdOrFqdn) {
@@ -1045,6 +1045,10 @@ export async function renderHome() {
           podId: String(s.serverId ?? ""),
           name: serverShortName(s.serverId),
           status: "pending",
+          // A REGISTERED-but-not-yet-live server has already booted +
+          // registered, so it is genuinely provisioning — flag it started so
+          // it surfaces a "preparing <name>" sliver op.
+          started: true,
         });
       }
     }
@@ -1062,6 +1066,11 @@ export async function renderHome() {
         podId: String(order.fqdn ?? ""),
         name: String(order.serverName || serverShortName(order.fqdn)),
         status: "pending",
+        // Only a pending ORDER whose box has actually started booting/installing
+        // (a real ladder phase, posted by the install beacons) gets a spinning
+        // sliver op. An order merely AWAITING A BURN has no phase yet → no op
+        // (the card's "pending" pill is the right, non-spinning signal).
+        phase: order.phase ?? null,
       });
     }
     homeServerEntries = entries;

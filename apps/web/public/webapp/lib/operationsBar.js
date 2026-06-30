@@ -1,8 +1,8 @@
 // The global "operations" sliver — the DOM half of the active-operations
 // feature. A teal strip pinned at the very top that the whole shell slides
 // DOWN to reveal (modelled on WhatsApp's active-call bar). It shows the most
-// recently started running operation ("deploying server Home", "building blog
-// on Home") with a spinner; clicking it routes to that operation's own view.
+// recently started running operation ("preparing Home", "building blog on
+// Home") with a spinner; clicking it routes to that operation's own view.
 //
 // Renders nothing (zero height, no push) when there are no operations or the
 // app is locked — the latter so operation names (the user's own data) never

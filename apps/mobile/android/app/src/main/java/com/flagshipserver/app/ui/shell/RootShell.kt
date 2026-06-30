@@ -23,17 +23,25 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.flagshipserver.app.core.BurnerPairController
+import com.flagshipserver.app.core.EncryptedBurnerPairingStore
+import com.flagshipserver.app.core.LiveBurnerPairClient
+import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.RootDestination
+import com.flagshipserver.app.ui.screens.BurnerPairScreen
 import com.flagshipserver.app.ui.shell.tabs.ActivityTab
 import com.flagshipserver.app.ui.shell.tabs.ServicesTab
 import com.flagshipserver.app.ui.shell.tabs.HomeTab
@@ -89,10 +97,48 @@ fun RootShell(
         // both layers can see it; the tab clears via deepLinker.consume().
     }
 
-    if (widthSizeClass == WindowWidthSizeClass.EXPANDED) {
-        ExpandedShell(selected) { selected = it }
-    } else {
-        CompactShell(selected) { selected = it }
+    // Cold-launch resume of an in-flight burner pairing → back to the screen.
+    // At most once per composition, if a persisted unexpired pairing session
+    // exists, reconnect (reusing its keys + sid) and present the pairing screen.
+    // Live-client only — a mock/demo session never persists, so nothing to
+    // resume there. Mirror of iOS RootShell.tryResumeBurnerPairing.
+    val context = LocalContext.current
+    val dev = LocalDeveloperSettings.current
+    val useLive = dev?.useLiveClient?.collectAsState()?.value ?: true
+    val resumeScope = rememberCoroutineScope()
+    var resumedPair by remember { mutableStateOf<BurnerPairController?>(null) }
+    var attemptedResume by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(useLive) {
+        if (attemptedResume || !useLive) return@LaunchedEffect
+        attemptedResume = true
+        val store = EncryptedBurnerPairingStore.from(context)
+        if (store.load() == null) return@LaunchedEffect
+        val controller = BurnerPairController(
+            client = LiveBurnerPairClient(),
+            scope = resumeScope,
+            store = store,
+        )
+        if (controller.resumeFromStore()) resumedPair = controller
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (widthSizeClass == WindowWidthSizeClass.EXPANDED) {
+            ExpandedShell(selected) { selected = it }
+        } else {
+            CompactShell(selected) { selected = it }
+        }
+        // The resumed pairing screen is layered ABOVE the shell (full-screen
+        // cover equivalent) until the user closes/disconnects it.
+        resumedPair?.let { controller ->
+            Surface(color = FS.colors.bg, modifier = Modifier.fillMaxSize()) {
+                BurnerPairScreen(
+                    controller = controller,
+                    onDeliveredVisible = { _, _ -> },
+                    onClose = { _, _ -> resumedPair = null },
+                    onCancel = { resumedPair = null },
+                )
+            }
+        }
     }
 }
 

@@ -18,8 +18,17 @@ public struct RootShell: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(AppState.self) private var app
     @Environment(PrivacySettings.self) private var privacy
+    @Environment(DeveloperSettings.self) private var dev
 
     @State private var selected: RootDestination
+    /// Cold-launch resume of an in-flight phone↔burner pairing: if a persisted,
+    /// unexpired session exists we reconnect (reusing its keys) and re-present
+    /// the pairing screen so the user lands back on the exact spot. Attempted
+    /// AT MOST ONCE per process launch (so the warm path's own scene-phase
+    /// reconnect — see BurnerPairScreen — is never double-presented).
+    @State private var resumedPairVM: BurnerPairViewModel?
+    @State private var showResumedPair = false
+    @State private var attemptedBurnerResume = false
     /// #92 — a friend redeem invite is presented as a full-screen cover
     /// (account-agnostic, independent of the tab nav stacks).
     @State private var pendingRedeem: RedeemTarget?
@@ -162,6 +171,27 @@ public struct RootShell: View {
                 }
             }
         }
+        // Cold-launch resume of an in-flight burner pairing → back to the screen.
+        .fullScreenCover(isPresented: $showResumedPair) {
+            if let vm = resumedPairVM {
+                NavigationStack {
+                    BurnerPairScreen(
+                        vm: vm,
+                        onDelivered: { _, _ in },
+                        onClose: { dismissResumedPair() },
+                        onCancel: { dismissResumedPair() }
+                    )
+                    .navigationTitle("Pair with burner")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Close") { dismissResumedPair() }
+                        }
+                    }
+                }
+            }
+        }
+        .task { await tryResumeBurnerPairing() }
         // B12 — re-lock when the app moves to background. The .inactive
         // intermediate state happens during transitions (notification
         // pull-down, control center) — we DON'T relock on .inactive
@@ -177,12 +207,36 @@ public struct RootShell: View {
         // linker; replay it once the friend unlocks (they sign with their AID).
         .onChange(of: app.isUnlocked) { _, unlocked in
             if unlocked, let link = linker.pending { route(link) }
+            // A biometric-required cold launch lands locked, so the first
+            // resume attempt happens once the user unlocks.
+            if unlocked { Task { await tryResumeBurnerPairing() } }
         }
         // Appearance override (Settings → Appearance). `auto` ⇒ nil ⇒ follow the
         // system; light/dark force the scheme app-wide. Every view that reads
         // `@Environment(\.colorScheme)` + `FSColors.scheme(scheme)` then resolves
         // to the chosen palette.
         .preferredColorScheme(privacy.themeMode.preferredColorScheme)
+    }
+
+    /// Cold-launch resume: at most once per process, if a persisted unexpired
+    /// pairing session exists, reconnect (reusing its keys + sid) and present
+    /// the pairing screen. Live-client only — a mock/demo session never persists
+    /// to the Keychain store, so there's nothing to resume there.
+    private func tryResumeBurnerPairing() async {
+        guard !attemptedBurnerResume, app.isUnlocked, dev.useLiveClient else { return }
+        attemptedBurnerResume = true
+        let store = KeychainBurnerPairingStore()
+        guard store.load() != nil else { return }
+        let vm = BurnerPairViewModel(client: LiveBurnerPairClient(), store: store)
+        if await vm.resumeFromStore() {
+            resumedPairVM = vm
+            showResumedPair = true
+        }
+    }
+
+    private func dismissResumedPair() {
+        showResumedPair = false
+        resumedPairVM = nil
     }
 
     /// Route a freshly-arrived deep link. The friend-redeem invite is consumed

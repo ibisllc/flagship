@@ -312,6 +312,10 @@ fun CreateServerScreen(
                     val controller = BurnerPairController(
                         client = LiveBurnerPairClient(),
                         scope = scope,
+                        // Persist the session so it survives the phone briefly
+                        // locking → the app being suspended (RESUME on return /
+                        // cold launch reconnects the SAME sid + ephemeral keys).
+                        store = com.flagshipserver.app.core.EncryptedBurnerPairingStore.from(context),
                         mint = {
                             val minted = mintAndRegister()
                             val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
