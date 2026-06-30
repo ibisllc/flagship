@@ -140,50 +140,15 @@ final class BurnerPairingTests: XCTestCase {
         XCTAssertEqual(actions, [.recipe(plaintext)])
     }
 
-    /// Drive the engine to `.paired` (the precondition for the hold/resume
-    /// behaviour below).
-    private func pairedEngine() -> BurnerPairingEngine {
+    func test_enginePeerGoneEnds() {
+        // A phone drop ends the engine (the model decides whether to keep a
+        // delivered recipe — see SessionEndPolicy below).
         let e = engine()
-        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
-        _ = e.onRelayFrame(["kind": "peer", "frame": ["kind": "confirm-pairing"]])
-        return e
-    }
-
-    func test_enginePeerGoneBeforePairingStaysWaiting() {
-        // From the initial waiting state, a peer-gone is a no-op (the QR stays
-        // live for the phone to come back) — NOT an end/wipe.
-        let e = engine()
-        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])
-        XCTAssertEqual(e.stage, .waitingForPhone)
-    }
-
-    func test_engineHoldsOnPeerGoneAfterPaired() {
-        let e = pairedEngine()
         let actions = e.onRelayFrame(["kind": "peer-gone"])
-        XCTAssertEqual(actions, [.stage(.reconnecting)])
-        XCTAssertEqual(e.stage, .reconnecting)
-        // A second peer-gone while already holding is a no-op.
-        XCTAssertEqual(e.onRelayFrame(["kind": "peer-gone"]), [])
-    }
-
-    func test_engineResumesOnSamePhoneReconnect() {
-        let e = pairedEngine()
-        _ = e.onRelayFrame(["kind": "peer-gone"])            // → reconnecting
-        // The phone rejoins; we re-offer our pubkey, then it re-says hello.
-        _ = e.onRelayFrame(["kind": "peer-joined"])
-        let resumed = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": phonePubB64u]])
-        XCTAssertEqual(resumed, [.stage(.paired)])           // no fresh SAS
-        XCTAssertEqual(e.stage, .paired)
-    }
-
-    func test_engineIgnoresDifferentPhoneDuringReconnect() {
-        let e = pairedEngine()
-        _ = e.onRelayFrame(["kind": "peer-gone"])            // → reconnecting
-        // A DIFFERENT phone (burner pubkey stands in as another valid key)
-        // must not be able to seize a held session.
-        let actions = e.onRelayFrame(["kind": "peer", "frame": ["kind": "phone-hello", "phonePk": burnerPubB64u]])
-        XCTAssertFalse(actions.contains(.stage(.paired)))
-        XCTAssertEqual(e.stage, .reconnecting)
+        guard actions.count == 1, case .stage(.ended) = actions[0] else {
+            return XCTFail("expected ended stage, got \(actions)")
+        }
+        XCTAssertEqual(e.stage, .ended(reason: "The phone disconnected."))
     }
 
     func test_engineEndsOnExpired() {
@@ -194,19 +159,18 @@ final class BurnerPairingTests: XCTestCase {
         }
     }
 
-    func test_engineCapturesExpiresAtFromAccepted() {
-        let e = engine()
-        XCTAssertNil(e.expiresAtMs)
-        _ = e.onRelayFrame(["kind": "accepted", "role": "burner", "expiresAt": 1_900_000_000_000.0])
-        XCTAssertEqual(e.expiresAtMs, 1_900_000_000_000.0)
+    // MARK: - Session-end policy (model behaviour via the shared seam)
+
+    /// A DELIVERED recipe survives an `.ended` (e.g. peer-gone): the one-shot
+    /// deposit is complete and the phone may leave, so the burn UI is kept.
+    func test_deliveredRecipeSurvivesSessionEnd() {
+        XCTAssertEqual(SessionEndPolicy.onSessionEnded(recipeDelivered: true), .keepDeliveredRecipe)
     }
 
-    func test_engineWipesViaSessionEndedFromPhone() {
-        let e = pairedEngine()
-        let actions = e.onRelayFrame(["kind": "peer", "frame": ["kind": "session-ended"]])
-        guard actions.count == 1, case .stage(.ended) = actions[0] else {
-            return XCTFail("expected ended stage, got \(actions)")
-        }
+    /// An `.ended` with NO recipe yet (phone left before delivering) relocks to
+    /// a fresh QR.
+    func test_sessionEndWithoutRecipeRelocks() {
+        XCTAssertEqual(SessionEndPolicy.onSessionEnded(recipeDelivered: false), .relock)
     }
 
     func test_engineExposesStableSessionIdAndQr() {

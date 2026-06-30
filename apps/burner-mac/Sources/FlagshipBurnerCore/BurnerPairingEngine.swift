@@ -7,6 +7,12 @@ import CryptoKit
 /// engine decides the stage transitions and the frames to send back. This
 /// split keeps the crypto + protocol logic unit-testable with no network.
 ///
+/// The link is a ONE-SHOT recipe deposit: the phone scans the QR, both sides
+/// confirm a SAS, and the phone delivers the FULL recipe (with its own Advanced
+/// toggles already baked in). After delivery the phone has no further role —
+/// the burner keeps the recipe + burn UI; the engine ending (a phone drop) does
+/// not wipe a delivered recipe (that decision lives in the model).
+///
 /// Relay frame shapes are defined by apps/com/src/burnerRelay.ts:
 ///   ← {kind:"accepted"|"peer-present"|"peer-joined"|"peer-gone"
 ///       |"peer-missing"|"pong"|"expired"|"error", …}
@@ -15,38 +21,24 @@ import CryptoKit
 ///   {kind:"phone-hello", phonePk}
 ///   {kind:"confirm-pairing"}
 ///   {kind:"deliver", ciphertext, nonce}
-///   {kind:"consent-result", …}        (Phase 4)
 public final class BurnerPairingEngine {
 
     public enum Stage: Equatable {
         case waitingForPhone
         case awaitingConfirm(matchCode: String)
         case paired
-        /// The phone stepped away (its screen slept / app backgrounded) after
-        /// pairing. We HOLD the prepared burn and wait for the same phone to
-        /// reconnect within the session lifetime — NOT a wipe. Resumes to
-        /// `.paired` when a phone-hello with the same pubkey returns.
-        case reconnecting
         case ended(reason: String)
     }
 
     public enum Outbound: Equatable {
         /// Forwarded to the phone so a typed-code phone learns our pubkey.
         case burnerHello(burnerPubKeyB64: String)
-        /// Pre-serialized JSON for higher-level frames (e.g. consent-request).
-        case raw(json: String)
     }
 
     public enum Action: Equatable {
         case send(Outbound)
         case stage(Stage)
         case recipe(Data)
-        /// The phone approved a security-sensitive setting and returned the
-        /// signed grant envelope (debug-access) to embed. `grantJSON` is the
-        /// `{grant, signatureHex}` blob the box-side gate consumes verbatim.
-        case consentGranted(setting: String, grantJSON: String)
-        /// The phone declined / failed a consent request.
-        case consentDenied(setting: String)
         case log(String)
     }
 
@@ -60,13 +52,6 @@ public final class BurnerPairingEngine {
     public private(set) var stage: Stage = .waitingForPhone
     private var aeadKey: SymmetricKey?
     public private(set) var matchCode: String?
-    /// The paired phone's raw X25519 public key, captured on the first
-    /// phone-hello. A reconnect that presents the SAME key resumes the session
-    /// without a fresh SAS; a different key is ignored while we hold.
-    private var phonePk: Data?
-    /// Session deadline (ms since epoch) from the relay's `accepted` frame —
-    /// the auto-lock countdown both sides display.
-    public private(set) var expiresAtMs: Double?
 
     public init(privateKey: Curve25519.KeyAgreement.PrivateKey = Curve25519.KeyAgreement.PrivateKey(),
                 codeBytes: Data? = nil) {
@@ -90,36 +75,16 @@ public final class BurnerPairingEngine {
         guard let kind = obj["kind"] as? String else { return [] }
         switch kind {
         case "accepted":
-            if let ms = (obj["expiresAt"] as? Double) ?? (obj["expiresAt"] as? NSNumber)?.doubleValue {
-                expiresAtMs = ms
-            }
             return []
         case "peer-present", "peer-joined":
             // The phone is here — hand it our pubkey so it can derive the SAS.
-            // (Also fires on a RESUME: the phone reconnected and we re-offer
-            // our pubkey so it can re-derive the same channel.)
             return [.send(.burnerHello(burnerPubKeyB64: publicKeyB64))]
         case "peer-missing":
             return []
         case "pong":
             return []
         case "peer-gone":
-            // Advisory, not a wipe. If we were paired, HOLD the burn and wait
-            // for the phone to come back. If we hadn't paired yet, just keep
-            // the same QR live and wait for a phone again.
-            switch stage {
-            case .paired, .reconnecting:
-                if case .reconnecting = stage { return [] }
-                stage = .reconnecting
-                return [.stage(.reconnecting)]
-            default:
-                aeadKey = nil
-                matchCode = nil
-                phonePk = nil
-                if case .waitingForPhone = stage { return [] }
-                stage = .waitingForPhone
-                return [.stage(.waitingForPhone)]
-            }
+            return end("The phone disconnected.")
         case "expired":
             return end("This pairing session reached its time limit.")
         case "error":
@@ -141,30 +106,11 @@ public final class BurnerPairingEngine {
                   let incomingPk = Base64URLBurner.decode(phonePkB64) else {
                 return [.log("Ignoring malformed phone-hello.")]
             }
-            // RESUME: the same phone returning while we're holding the session.
-            // Re-derive the (deterministic) channel and go straight back to
-            // paired — no second SAS confirmation for keys already confirmed.
-            if case .reconnecting = stage {
-                guard let prev = phonePk, prev == incomingPk else {
-                    return [.log("A different phone connected while waiting to reconnect — ignoring.")]
-                }
-                do {
-                    let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
-                                                               phonePublicKey: incomingPk)
-                    aeadKey = mat.aeadKey
-                    matchCode = mat.matchCode
-                    stage = .paired
-                    return [.stage(.paired)]
-                } catch {
-                    return [.log("Couldn't resume the session: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")]
-                }
-            }
             do {
                 let mat = try BurnerPairing.deriveMaterial(burnerPrivateKey: privateKey,
                                                            phonePublicKey: incomingPk)
                 aeadKey = mat.aeadKey
                 matchCode = mat.matchCode
-                phonePk = incomingPk
                 stage = .awaitingConfirm(matchCode: mat.matchCode)
                 return [.stage(stage)]
             } catch {
@@ -185,36 +131,9 @@ public final class BurnerPairingEngine {
             } catch {
                 return [.log((error as? LocalizedError)?.errorDescription ?? "Couldn't read the recipe.")]
             }
-        case "consent-result":
-            guard let setting = frame["setting"] as? String else { return [] }
-            // Approved with a signed grant envelope, or declined.
-            if let grant = frame["grant"] as? [String: Any],
-               let grantData = try? JSONSerialization.data(withJSONObject: grant),
-               let grantJSON = String(data: grantData, encoding: .utf8) {
-                return [.consentGranted(setting: setting, grantJSON: grantJSON)]
-            }
-            if let grantStr = frame["grant"] as? String, !grantStr.isEmpty {
-                return [.consentGranted(setting: setting, grantJSON: grantStr)]
-            }
-            return [.consentDenied(setting: setting)]
-        case "session-ended":
-            // The phone's user tapped "Disconnect from burner" — wipe + relock.
-            return end("The phone disconnected this session.")
         default:
             return []
         }
-    }
-
-    /// Build a consent-request to send to the phone (e.g. when the user
-    /// toggles a security-sensitive Advanced setting). The phone shows a
-    /// security warning, requires Face ID, and replies with a signed grant.
-    public func consentRequest(setting: String, serverDomain: String, warning: String) -> Outbound {
-        .raw(json: BurnerPairingEngine.jsonObject([
-            "kind": "consent-request",
-            "setting": setting,
-            "serverDomain": serverDomain,
-            "warning": warning,
-        ]))
     }
 
     private func end(_ reason: String) -> [Action] {
@@ -228,8 +147,6 @@ public final class BurnerPairingEngine {
         switch out {
         case .burnerHello(let pk):
             return jsonObject(["kind": "burner-hello", "burnerPk": pk])
-        case .raw(let json):
-            return json
         }
     }
 
@@ -237,5 +154,22 @@ public final class BurnerPairingEngine {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let s = String(data: data, encoding: .utf8) else { return "{}" }
         return s
+    }
+}
+
+/// Pure, testable policy for what the model does when the live phone session
+/// ends (peer-gone / expired / error). A delivered recipe means the one-shot
+/// deposit completed — the phone is expected to leave — so we KEEP it and stay
+/// in the burn UI. With no recipe yet, the phone left before delivering, so we
+/// relock to a fresh QR.
+///
+/// This lives in the core (engine) module so the model's behaviour can be
+/// unit-tested via the shared seam — the `WizardModel` itself is in the exe
+/// target the test target can't import.
+public enum SessionEndPolicy {
+    public enum Outcome: Equatable { case keepDeliveredRecipe, relock }
+
+    public static func onSessionEnded(recipeDelivered: Bool) -> Outcome {
+        recipeDelivered ? .keepDeliveredRecipe : .relock
     }
 }

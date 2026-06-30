@@ -116,36 +116,23 @@ struct WizardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Live-session header: a "Disconnect from phone" control (wipes the burn
-    /// + retires the QR — usable even without the phone in hand), the auto-lock
-    /// countdown, and a "reconnecting" banner while the phone is briefly away.
+    /// Live-session header: a "Disconnect from phone" control that wipes the
+    /// burn + retires the QR (usable even without the phone in hand). The
+    /// deposit is one-shot — once the recipe is delivered the phone may leave
+    /// and the burn continues; this is the laptop-user's explicit "I'm done".
     private var sessionHeader: some View {
-        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
-            if model.isReconnecting {
-                HStack(spacing: FB.Spacing.s2) {
-                    ProgressView().scaleEffect(0.6)
-                    Text("Phone disconnected — waiting for it to reconnect. Your burn is kept ready.")
-                        .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        HStack(spacing: FB.Spacing.s3) {
+            Spacer(minLength: 0)
+            Button {
+                model.disconnectFromPhone()
+            } label: {
+                Label("Disconnect from phone", systemImage: "xmark.circle")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.danger)
             }
-            HStack(spacing: FB.Spacing.s3) {
-                Spacer(minLength: 0)
-                if let exp = model.sessionExpiresAt {
-                    SessionCountdown(deadline: exp)
-                }
-                Button {
-                    model.disconnectFromPhone()
-                } label: {
-                    Label("Disconnect from phone", systemImage: "xmark.circle")
-                        .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.danger)
-                }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .disabled(model.isRunning)
-            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .disabled(model.isRunning)
         }
     }
 
@@ -297,21 +284,11 @@ struct WizardView: View {
 
     /// Simple (default, server-named Debian base) vs Advanced (bring your own
     /// ISO). Disabled while a burn is running so the inputs can't change mid-run.
+    /// Security choices (debug console, embed-secrets) live on the PHONE at mint
+    /// time and are baked into the delivered recipe — the burner just burns it.
     private var modePicker: some View {
         HStack(spacing: FB.Spacing.s3) {
             ModePill(selection: $model.mode)
-            // Debug is an Advanced-only concern — hidden in Simple. Turning it
-            // on asks the PHONE to approve (Face ID → a signed grant); the box
-            // only enables debug access from that grant. Consent-as-crypto.
-            if model.mode == .advanced {
-                Spacer(minLength: FB.Spacing.s2)
-                FBCheck(
-                    isOn: Binding(get: { model.debugArmed },
-                                  set: { model.setDebugRequested($0) }),
-                    label: model.debugConsentPending ? "Debug — confirm on phone…" : "Debug mode",
-                    tint: FB.Colors.primary)
-                    .help("Asks your phone to approve debug access (Face ID). The box enables the debug console login only with that signed approval — there's no way to enable it from the burner alone.")
-            }
         }
         .disabled(model.isRunning)
         .opacity(model.isRunning ? 0.5 : 1)
@@ -1146,23 +1123,6 @@ private struct PointerOnHover: ViewModifier {
 
 extension View {
     func pointerCursor() -> some View { modifier(PointerOnHover()) }
-}
-
-// MARK: - Session auto-lock countdown
-
-/// Ticks once a second toward the relay-supplied session deadline ("Auto-locks
-/// in 12:34"). At zero the relay sends `expired` and the burner wipes + relocks.
-private struct SessionCountdown: View {
-    let deadline: Date
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            let remaining = max(0, Int(deadline.timeIntervalSince(ctx.date)))
-            Text("Auto-locks in \(remaining / 60):\(String(format: "%02d", remaining % 60))")
-                .font(FB.Font.caption())
-                .foregroundStyle(FB.Colors.textMuted)
-                .monospacedDigit()
-        }
-    }
 }
 
 // MARK: - File picker

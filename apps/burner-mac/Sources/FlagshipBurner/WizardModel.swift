@@ -65,17 +65,9 @@ final class WizardModel: ObservableObject {
     @Published var pairMatchCode: String? = nil
     /// Why the last session ended (shown briefly on the cover after a drop).
     @Published var lastSessionEndReason: String? = nil
-    /// True while the phone has stepped away after pairing and we're holding
-    /// the prepared burn, waiting for it to reconnect. The session UI stays
-    /// up (you can still finish the burn); a banner explains the wait.
-    @Published var isReconnecting: Bool = false
-    /// Session auto-lock deadline (from the relay). Drives the countdown shown
-    /// next to the "Disconnect from phone" button.
-    @Published var sessionExpiresAt: Date? = nil
 
-    /// Advanced features (BYO ISO, debug, embed-secrets, save-ISO) are only
-    /// available inside a live phone session — the out-of-band recipe path
-    /// is deliberately Simple-only.
+    /// Advanced features (BYO ISO, save-ISO) are only available inside a live
+    /// phone session — the out-of-band recipe path is deliberately Simple-only.
     var advancedAllowed: Bool { burnerStage == .session }
 
     private var sessionClient: BurnerSessionClient? = nil
@@ -102,83 +94,38 @@ final class WizardModel: ObservableObject {
         pairMatchCode = nil
         pairStatus = "Waiting for your phone…"
         burnerStage = .locked
-        isReconnecting = false
-        sessionExpiresAt = nil
         client.onStage = { [weak self] stage in Task { @MainActor in self?.applyEngineStage(stage) } }
         client.onRecipe = { [weak self] data in Task { @MainActor in self?.handleSessionRecipe(data) } }
         client.onLog = { [weak self] msg in Task { @MainActor in self?.appendLog(stream: .stderr, text: msg) } }
-        client.onExpiresAt = { [weak self] ms in
-            Task { @MainActor in self?.sessionExpiresAt = Date(timeIntervalSince1970: ms / 1000) }
-        }
-        client.onConsentGranted = { [weak self] setting, grantJSON in
-            Task { @MainActor in self?.applyConsentGranted(setting: setting, grantJSON: grantJSON) }
-        }
-        client.onConsentDenied = { [weak self] setting in
-            Task { @MainActor in self?.applyConsentDenied(setting: setting) }
-        }
         client.connect()
-    }
-
-    // MARK: - Advanced consent (debug)
-
-    /// The signed debug-access grant the phone returned (embedded at flash).
-    @Published var debugGrantJSON: String? = nil
-    /// True while we're waiting for the phone to approve the Debug toggle.
-    @Published var debugConsentPending: Bool = false
-
-    /// Whether debug is armed (a valid grant is in hand to embed).
-    var debugArmed: Bool { debugGrantJSON != nil }
-
-    /// User flipped the Advanced "Debug mode" toggle. ON ⇒ ask the phone to
-    /// approve (it shows a security warning + Face ID and returns a signed
-    /// grant). OFF ⇒ drop the grant. Only meaningful in a live session.
-    func setDebugRequested(_ on: Bool) {
-        guard burnerStage == .session else { return }
-        if !on { debugGrantJSON = nil; debugConsentPending = false; return }
-        guard let domain = verified?.serverDomain else { return }
-        debugConsentPending = true
-        sessionClient?.requestConsent(
-            setting: "debug",
-            serverDomain: domain,
-            warning: "Turning on debug lets someone log into this server's console. Only approve this for a box you're actively debugging.")
-    }
-
-    private func applyConsentGranted(setting: String, grantJSON: String) {
-        guard setting == "debug" else { return }
-        debugGrantJSON = grantJSON
-        debugConsentPending = false
-    }
-
-    private func applyConsentDenied(setting: String) {
-        guard setting == "debug" else { return }
-        debugGrantJSON = nil
-        debugConsentPending = false
     }
 
     private func applyEngineStage(_ stage: BurnerPairingEngine.Stage) {
         switch stage {
         case .waitingForPhone:
             // Phone left before pairing — keep the SAME QR live and wait again.
-            isReconnecting = false
             pairMatchCode = nil
             pairStatus = "Waiting for your phone…"
             burnerStage = .locked
         case .awaitingConfirm(let code):
-            isReconnecting = false
             pairMatchCode = code
             pairStatus = "Phone connected — confirm the code matches."
             burnerStage = .pairing
         case .paired:
-            isReconnecting = false
             pairStatus = "Paired."
             burnerStage = .session
-        case .reconnecting:
-            // Phone stepped away after pairing. HOLD the burn — don't wipe.
-            // Keep the session UI up so the burn can still be finished.
-            isReconnecting = true
-            pairStatus = "Phone disconnected — waiting for it to reconnect…"
         case .ended(let reason):
-            wipeAndRelock(reason, notifyPhone: false)
+            // One-shot deposit: a DELIVERED recipe survives a phone disconnect.
+            // The phone's job is done after delivery and it may lock/leave — keep
+            // the recipe + burn UI. Only an undelivered session relocks.
+            switch SessionEndPolicy.onSessionEnded(recipeDelivered: recipe != nil) {
+            case .keepDeliveredRecipe:
+                // Drop the now-dead socket but hold everything we're burning.
+                sessionClient?.close()
+                sessionClient = nil
+            case .relock:
+                wipeAndRelock(reason)
+            }
         }
     }
 
@@ -201,32 +148,29 @@ final class WizardModel: ObservableObject {
     }
 
     /// The burner-side "Disconnect from phone" button: wipe everything we were
-    /// working on and return to a fresh locked cover. Use it to clear the
-    /// desktop before walking away even without the phone in hand. Tells the
-    /// phone (best-effort) so it wipes its half too.
+    /// working on (including a delivered recipe) and return to a fresh locked
+    /// cover. The laptop-user's explicit "I'm done" — clears the desktop and
+    /// retires the QR. The phone has no further role, so nothing to notify.
     func disconnectFromPhone() {
-        wipeAndRelock("You disconnected this burner.", notifyPhone: true)
+        wipeAndRelock("You disconnected this burner.")
     }
 
     /// Complete wipe of the in-progress burn + session, then return to the
-    /// locked cover with a FRESH QR (so the old code is retired). Triggered on
-    /// an explicit disconnect, the session time-limit, or a phone-initiated
-    /// end. A transient phone drop does NOT come here — that's `.reconnecting`.
-    func wipeAndRelock(_ reason: String?, notifyPhone: Bool) {
+    /// locked cover with a FRESH QR (so the old code is retired). Triggered by
+    /// the explicit Disconnect button, or by a session that ended BEFORE a
+    /// recipe was delivered (a delivered recipe is kept instead — see
+    /// `applyEngineStage(.ended)`).
+    func wipeAndRelock(_ reason: String?) {
         // Don't yank a burn that's mid-write out from under the user.
         guard !isRunning else { return }
-        if notifyPhone { sessionClient?.sendSessionEnded() }
         lastSessionEndReason = reason
         // Sensitive session/recipe material.
         recipe = nil
         verified = nil
         recipeError = nil
         pairMatchCode = nil
-        debugGrantJSON = nil
-        debugConsentPending = false
         // Reset Advanced selections so a fresh pairing starts clean.
         mode = .simple
-        debugMode = false
         useSystemISO = false
         iso = nil
         // Drop any staged recipe temp file from the live-session path.
@@ -242,7 +186,6 @@ final class WizardModel: ObservableObject {
         sessionClient?.close()
         sessionClient = nil
         mode = .simple
-        debugMode = false
         useSystemISO = false
         burnerStage = .recipeFile
     }
@@ -258,16 +201,6 @@ final class WizardModel: ObservableObject {
     /// recipe (default). Advanced = remaster a stock Ubuntu/Debian ISO the user
     /// supplies. Both end in the same remaster+flash path.
     @Published var mode: BurnerMode = .simple
-
-    /// DEBUG build toggle (default OFF). On ⇒ the burned image keeps the
-    /// `debug`/`flagship` sudo console account + the "DEBUG BUILD" banner. Off ⇒
-    /// a production image with neither. The ONLY way to get those debug features.
-    @Published var debugMode: Bool = false
-
-    /// Debug is an ADVANCED-only feature (the checkbox is hidden in Simple), so
-    /// the flag only ever takes effect in Advanced — a Simple burn is always a
-    /// production image even if the flag was left on from an earlier Advanced run.
-    var effectiveDebugMode: Bool { debugMode && mode == .advanced }
 
     /// Advanced-mode only: use the server-named base ISO (fetched/cached) like
     /// Simple does, instead of bringing your own ISO file. Default OFF.
@@ -426,18 +359,12 @@ final class WizardModel: ObservableObject {
     /// picks the right one for the detected ISO family; building both is cheap
     /// (pure string work) and keeps the privilege-split flow simple.
     private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
-        var data = try Data(contentsOf: recipe)
-        // Debug access is consent-as-crypto: when the phone approved the Debug
-        // toggle it returned a signed grant. Embed it as the recipe's UNSIGNED
-        // `debugGrant` sibling (mirrors swkHex/pairingOrder); the box-side gate
-        // verifies it against the owner IRK and enables the debug user from it.
-        // We do NOT bake the debug user into the preseed (debugMode: false) —
-        // the daemon is the single, owner-authorized enabler.
-        if let grant = debugGrantJSON,
-           var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            obj["debugGrant"] = grant
-            if let merged = try? JSONSerialization.data(withJSONObject: obj) { data = merged }
-        }
+        // The phone delivers the FULL recipe with its Advanced choices already
+        // baked in — including the unsigned `debugGrant` sibling (consent-as-
+        // crypto, verified box-side against the owner IRK). The burner passes the
+        // recipe bytes through UNCHANGED; the preseed engine forwards whatever is
+        // in `data` (debugGrant included). The burner makes no security choices.
+        let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
         // Disk encryption follows the phone-signed recipe: an explicit "none"
         // (the Wi-Fi-only fallback) leaves the root unencrypted; otherwise the
@@ -449,15 +376,13 @@ final class WizardModel: ObservableObject {
                                                 encryptRoot: encryptRoot,
                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                debugMode: false)
+                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         let preseed = try UserData.debianPreseed(recipeJSON: data,
                                                  installerGitRef: parsed.installerGitRef,
                                                  encryptRoot: encryptRoot,
                                                  bootUnlockMode: parsed.effectiveBootUnlockMode,
                                                  wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
-                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword,
-                                                 debugMode: false)
+                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
         return (yaml, preseed)
     }
 
