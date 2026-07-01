@@ -540,6 +540,25 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     });
   }
 
+  // `/transfer?o=<b64url>` — the transfer-a-box take-over universal link.
+  // When the native app is installed iOS/Android intercept this URL at the OS
+  // level (AASA `/transfer` component + Android App-Links `/transfer` path) and
+  // open the in-app acquirer claim flow — the request never reaches the Worker.
+  // When the app is NOT installed the browser lands here; we 308-redirect to the
+  // webapp's own origin, preserving the `?o=` offer payload. The webapp boots,
+  // `dispatchInitialView()` reads `?o=` (lib/deepLink.js → serverTransfer.js) and
+  // opens the claim view. Placed with the other webapp redirects — BEFORE the
+  // coming-soon gate — so the fallback works for a real acquirer with no preview
+  // cookie. The webapp is on a different associated domain (web.flagshipserver.com
+  // is not in the app's applinks), so the redirect target won't re-trigger a
+  // universal-link bounce.
+  if (url.pathname === "/transfer" || url.pathname === "/transfer/") {
+    return new Response(null, {
+      status: 308,
+      headers: { location: `${WEBAPP_ORIGIN}/transfer${url.search}` },
+    });
+  }
+
   // The standalone "how to assemble your server" explainer was folded into
   // /docs (the #certificate / #recommended-linux / #booting-process anchors
   // live there now). Both `/how-to` and `/how-to.html` 302 to /docs. We

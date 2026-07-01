@@ -969,6 +969,68 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
   });
 });
 
+describe("/transfer — take-over universal-link browser fallback", () => {
+  // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
+  // universal link / App-Link and never hits the Worker. When it's NOT installed
+  // the browser lands here; the Worker 308-redirects to the webapp's own origin,
+  // preserving ?o= so the PWA boots into the claim view. Placed before the
+  // coming-soon gate → works with no preview cookie (a real acquirer's case).
+
+  it("308-redirects /transfer?o=… to the webapp origin, preserving the offer payload", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=eyJhIjoxfQ"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=eyJhIjoxfQ",
+    );
+  });
+
+  it("redirects the trailing-slash variant too", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer/?o=abc"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=abc",
+    );
+  });
+
+  it("fires WITHOUT the preview cookie (ungated — before the coming-soon gate)", async () => {
+    // A real acquirer opening the link has no preview cookie; the fallback
+    // must still reach the webapp, not the coming-soon page.
+    const r = await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/transfer?o=xyz",
+    );
+  });
+
+  it("does not hit the proxy fall-through (no upstream fetch)", async () => {
+    await route(
+      new Request("https://flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("/transfer on the web. host serves the webapp index.html (client route → SPA boots)", async () => {
+    // The redirect target: an extensionless client route on the webapp host
+    // hands back the webapp shell so dispatchInitialView() can read ?o=.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/transfer?o=xyz"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+});
+
 describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("answers OPTIONS preflight from web. with the right ACL headers", async () => {
     const r = await route(

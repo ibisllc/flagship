@@ -43,12 +43,25 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:pathPrefix="/app/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/join" />
+                <!-- Transfer-a-box take-over offer. /transfer?o=<b64url> opens the
+                     acquirer claim flow in-app; when the app isn't installed the
+                     control apex redirects the browser to the webapp claim view. -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="join" />
+            </intent-filter>
+            <!-- flagship://transfer?o=<b64url> — the custom-scheme twin of the
+                 /transfer take-over universal link (no App-Links verification
+                 needed; the in-app fallback for pasted / non-https offers). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="transfer" />
             </intent-filter>
             <!-- #92 — service-access invite "open in app" hand-off
                  (flagship://invite?server=<host>&k=<secret>). The box's
