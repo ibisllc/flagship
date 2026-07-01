@@ -121,6 +121,16 @@ data class PairingBundle(
     val admit: DeviceAdmit,
     /** Ed25519 signature over the admit, lowercased hex (64 bytes). */
     val admitSig: String,
+    /** Slice D (docs/device-admin-tier-spec.md §4.2, D-4) — the ADMIN MASTER
+     *  ROOT seed (32 bytes, lowercased hex) when the admin chose to PROMOTE the
+     *  joining device to admin in this synchronous SAS ceremony; null otherwise
+     *  (the default). Sealed the SAME way the UMK is — it rides inside this
+     *  bundle, which the admin AEAD-seals under the QR-relay kEnc, so `.com` /
+     *  the relay never see it. Promote is offered ONLY here (high-assurance,
+     *  admin-initiated, SAS-confirmed), never on an async approve-a-request
+     *  join. The incoming device unwraps it → [Keystore.importAdminRoot] ⇒ it
+     *  becomes a bare-root admin. */
+    val wrappedAdminRoot: String? = null,
 ) {
     fun toJsonBytes(): ByteArray = JSON.encodeToString(serializer(), this).toByteArray(Charsets.UTF_8)
 

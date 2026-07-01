@@ -225,6 +225,15 @@ interface FlagshipServerClient {
     suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse
     /** POST /api/users/:u/watch-delegates/revoke */
     suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest)
+
+    /** Slice D (docs/device-admin-tier-spec.md §5) — submit an admin master-root
+     *  rotation proof. The OLD admin root signed `{old → new}`; `.com` records
+     *  the new `admin_root_pub_hex` (advisory) + relays the signed proof to each
+     *  box, which re-pins ONLY after verifying it against its pinned old root
+     *  (never `.com`'s word). Rotation EXCLUDES other admin devices holding the
+     *  old bare root (the revoke semantic).
+     *    POST /api/users/:username/admin-root-rotation */
+    suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest)
 }
 
 /** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
@@ -502,6 +511,24 @@ data class RePairInitiateResponse(
     val completesAt: Long,
     val graceMs: Long,
 )
+
+/** Slice D (§5) — POST /api/users/:username/admin-root-rotation body. Mirrors
+ *  the TS/iOS/webapp contract: the rotation payload + the OLD-root signature
+ *  over its canonical bytes (`AdminRootRotationClaim`). The pubkeys are
+ *  lowercased hex; `signatureHex` is the 64-byte Ed25519 sig, lowercased hex. */
+@Serializable
+data class AdminRootRotationRequest(
+    val rotation: Rotation,
+    val signatureHex: String,
+) {
+    @Serializable
+    data class Rotation(
+        val username: String,
+        val oldAdminRootPub: String,
+        val newAdminRootPub: String,
+        val issuedAt: Long,
+    )
+}
 
 @Serializable
 data class RePairCompleteResponse(
@@ -1914,6 +1941,29 @@ class MockFlagshipServerClient(
         watchDelegatesByUser[u]?.removeAll { it.grantId == body.request.grantId }
     }
 
+    /** Slice D (§5) — record the rotated admin root against the mock account so
+     *  a subsequent getUsernameRecord could reflect it. Verifies the carried
+     *  proof against the old root byte-for-byte so a test can't pass a bogus
+     *  signature. */
+    val rotatedAdminRootByUser = mutableMapOf<String, String>()
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        tick()
+        val r = com.flagshipserver.app.core.AdminRootRotation(
+            username = req.rotation.username,
+            oldAdminRootPub = req.rotation.oldAdminRootPub,
+            newAdminRootPub = req.rotation.newAdminRootPub,
+            issuedAt = req.rotation.issuedAt,
+        )
+        val sig = com.flagshipserver.app.core.HexUtil.decode(req.signatureHex)
+            ?: throw IllegalArgumentException("bad signature hex")
+        val oldPub = com.flagshipserver.app.core.HexUtil.decode(req.rotation.oldAdminRootPub)
+            ?: throw IllegalArgumentException("bad old admin root pub hex")
+        if (!com.flagshipserver.app.core.AdminRootRotationClaim.verify(r, sig, oldPub)) {
+            throw IllegalArgumentException("admin-root-rotation proof does not verify")
+        }
+        rotatedAdminRootByUser[username.lowercase()] = req.rotation.newAdminRootPub.lowercase()
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -2361,6 +2411,15 @@ class LiveFlagshipServerClient(
             url = "$base/api/users/$encoded/watch-delegates/revoke",
             body = body,
             serializer = WatchDelegateRevokeRequest.serializer(),
+        )
+    }
+
+    override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        transport.postJson(
+            url = "$base/api/users/$encoded/admin-root-rotation",
+            body = req,
+            serializer = AdminRootRotationRequest.serializer(),
         )
     }
 }

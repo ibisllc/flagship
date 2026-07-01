@@ -165,6 +165,19 @@ class JoinDeviceViewModel(
             Keystore.setActiveProfile(cloudName)
             Keystore.installUmk(umkSeed)
 
+            // 3b. Slice D (D-4) — if the admin PROMOTED this device (sealed the
+            //     admin master root into the bundle), unwrap + store it
+            //     device-local so this device becomes a bare-root admin. Mirrors
+            //     the UMK-in-bundle path above; the seal is the AEAD around the
+            //     whole bundle, so a valid decrypt here IS the proof the admin
+            //     authorized it. Absent (the default) ⇒ a plain non-admin join.
+            bundle.wrappedAdminRoot?.let { rootHex ->
+                val rootSeed = HexUtil.decode(rootHex)
+                    ?: throw IllegalStateException("admin root seed is not valid hex")
+                require(rootSeed.size == 32) { "admin root seed must be 32 bytes" }
+                Keystore.importAdminRoot(rootSeed)
+            }
+
             // 4. Register push for the new profile, then POST the admit to
             //    .com. The Worker verifies the admit under the account IRK
             //    and admits us QUARANTINED. The register signature is

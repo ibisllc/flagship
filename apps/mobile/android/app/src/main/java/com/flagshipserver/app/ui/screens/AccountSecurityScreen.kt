@@ -50,12 +50,15 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AccountSecurityPhase
 import com.flagshipserver.app.viewmodels.AccountSecurityViewModel
+import com.flagshipserver.app.viewmodels.RotateAdminRootPhase
+import com.flagshipserver.app.viewmodels.RotateAdminRootViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -166,6 +169,12 @@ fun AccountSecurityScreen(nav: NavController) {
                 modifier = Modifier.semantics { contentDescription = "account-security-failed-msg" },
             )
         }
+
+        // Slice D (§5) — "Rotate admin key". Shown ONLY on a device that holds
+        // the admin master root (greyed/absent otherwise).
+        if (Keystore.hasAdminRoot()) {
+            AdminRootRotateCard(server = server, username = app.currentUser.value ?: "")
+        }
     }
 
     if (showEnableSheet) {
@@ -212,6 +221,109 @@ fun AccountSecurityScreen(nav: NavController) {
                     disableCode = ""
                     showDisableDialog = false
                 }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/** Slice D (§5) — the owner-facing "Rotate admin key" control. Mints a fresh
+ *  admin master root, signs the old→new proof, submits it, and re-pins the new
+ *  root locally. Type-to-confirm gate + a hard warning that rotation cuts off
+ *  every OTHER admin device that held only the old bare root. */
+@Composable
+private fun AdminRootRotateCard(
+    server: com.flagshipserver.app.api.FlagshipServerClient,
+    username: String,
+) {
+    val vm: RotateAdminRootViewModel = viewModel(
+        key = "rotate-admin-root",
+        factory = viewModelFactory {
+            initializer { RotateAdminRootViewModel(server = server, username = username) }
+        },
+    )
+    val phase = vm.phase.collectAsState().value
+    val scope = rememberCoroutineScope()
+    var showConfirm by remember { mutableStateOf(false) }
+    var confirmText by remember { mutableStateOf("") }
+
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Admin key",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.semantics { contentDescription = "admin-root-rotate-title" },
+            )
+            Text(
+                "Rotating your admin key mints a new one and cuts off every OTHER " +
+                    "admin device that held the old key. Use this if an admin device " +
+                    "was lost or you want to revoke another admin. Your other data and " +
+                    "devices stay signed in.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            when (phase) {
+                is RotateAdminRootPhase.Rotating -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                ) {
+                    CircularProgressIndicator()
+                    Text("Rotating…", color = FS.colors.textMuted)
+                }
+                is RotateAdminRootPhase.Done -> Text(
+                    "Admin key rotated. Your boxes adopt the new key on their next check-in.",
+                    color = FS.colors.success,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.semantics { contentDescription = "admin-root-rotate-done" },
+                )
+                is RotateAdminRootPhase.Failed -> Text(
+                    phase.message,
+                    color = FS.colors.danger,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.semantics { contentDescription = "admin-root-rotate-failed" },
+                )
+                RotateAdminRootPhase.Idle -> Unit
+            }
+            FSDangerButton(
+                label = "Rotate admin key",
+                onClick = { showConfirm = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "admin-root-rotate-btn" },
+            )
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false; confirmText = "" },
+            title = { Text("Rotate admin key?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text(
+                        "This cuts off every other admin device that held the old key. " +
+                            "It can't be undone. Type ROTATE to confirm.",
+                    )
+                    OutlinedTextField(
+                        value = confirmText,
+                        onValueChange = { confirmText = it },
+                        label = { Text("Type ROTATE") },
+                        modifier = Modifier.semantics { contentDescription = "admin-root-rotate-confirm-field" },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = confirmText.trim().equals("ROTATE", ignoreCase = true),
+                    onClick = {
+                        showConfirm = false
+                        confirmText = ""
+                        scope.launch { vm.rotate() }
+                    },
+                ) { Text("Rotate", color = FS.colors.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false; confirmText = "" }) { Text("Cancel") }
             },
         )
     }

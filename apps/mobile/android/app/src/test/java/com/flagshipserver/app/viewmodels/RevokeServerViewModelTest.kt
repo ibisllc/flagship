@@ -6,6 +6,7 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.AccountSelfDeleteBundleRequest
+import com.flagshipserver.app.api.AdminRootRotationRequest
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
 import com.flagshipserver.app.api.AppRenameResponse
@@ -208,6 +209,7 @@ class RevokeServerViewModelTest {
         override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse = throw error
         override suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse = throw error
         override suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) { throw error }
+        override suspend fun rotateAdminRoot(username: String, req: AdminRootRotationRequest) { throw error }
         override suspend fun resolveAccount(username: String): AccountResolution = throw error
     }
 }
