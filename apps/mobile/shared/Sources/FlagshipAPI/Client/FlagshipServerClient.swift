@@ -1316,8 +1316,16 @@ public struct UsernameClaimRequest: Codable, Equatable, Sendable {
     }
     public let request: Inner
     public let signature: String        // hex, IRK over canonical bytes
-    public init(request: Inner, signature: String) {
+    /// Slice D (docs/device-admin-tier-spec.md §1.2) — the account's pinned
+    /// ADMIN MASTER ROOT pubkey (hex). A TOP-LEVEL sibling of `request` +
+    /// `signature` (NOT inside `request`, NOT covered by the IRK claim
+    /// signature) — the Worker records it next to the IRK, exactly like
+    /// `aidPub`. Optional + additive: a malformed/absent value is ignored, never
+    /// rejected, so pre-D clients + the claim canonical bytes are unchanged.
+    public let adminRootPub: String?
+    public init(request: Inner, signature: String, adminRootPub: String? = nil) {
         self.request = request; self.signature = signature
+        self.adminRootPub = adminRootPub
     }
 }
 
@@ -1341,15 +1349,23 @@ public struct AuthCodeWire: Codable, Equatable, Sendable {
     public let userPubKey: String        // hex (the IRK's public key)
     public let issuedAt: Int64
     public let expiresAt: Int64
+    /// Slice D (docs/device-admin-tier-spec.md §1.3, D-1) — the account's pinned
+    /// ADMIN MASTER ROOT pubkey (hex). Rides INSIDE the AuthCode so it is
+    /// signature-covered by `authCodeUserSignature` and `.com`'s register gate;
+    /// the box reads it at first boot into `ServerConfig.adminRootPub`. Optional
+    /// + backward-compatible (absent ⇒ AuthCode canonical bytes are byte-identical
+    /// to pre-D; present ⇒ appended `ar=<hex>` — see `AuthCode.canonicalBytes`).
+    public let adminRootPubKey: String?
     public init(
         version: Int, serial: String, username: String, serverName: String,
         serverDomain: String, delegatedPubKey: String, userPubKey: String,
-        issuedAt: Int64, expiresAt: Int64
+        issuedAt: Int64, expiresAt: Int64, adminRootPubKey: String? = nil
     ) {
         self.version = version; self.serial = serial; self.username = username
         self.serverName = serverName; self.serverDomain = serverDomain
         self.delegatedPubKey = delegatedPubKey; self.userPubKey = userPubKey
         self.issuedAt = issuedAt; self.expiresAt = expiresAt
+        self.adminRootPubKey = adminRootPubKey
     }
 }
 
@@ -1756,6 +1772,14 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
         /// Not in the signed canonical bytes — it's opaque ciphertext, so
         /// tampering breaks account-key recovery, never forges it.
         public let wrappedAcmeAccountKey: String?
+        /// Slice D (docs/device-admin-tier-spec.md §5.3, D-3) — the escrow-wrapped
+        /// ADMIN MASTER ROOT seed (base64 of nonce‖ct‖tag), shipped INSIDE
+        /// `request`. Wrapped under the SAME PRF secret as the UMK/ACME escrow
+        /// (distinct HKDF salt, see `AdminRootEscrow`) so credential recovery can
+        /// later re-establish the root. Optional: absent for pre-D accounts /
+        /// devices with no admin root. Not in the signed canonical bytes —
+        /// opaque ciphertext, so tampering breaks recovery, never forges it.
+        public let wrappedAdminRoot: String?
         /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
         /// `fetchToken`. The Worker stores it and later compares it to
         /// `SHA-256(presented fetchToken)` to gate the wrapped-UMK fetch.
@@ -1774,6 +1798,7 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
             wrappedUmk: String,
             issuedAt: Int64,
             wrappedAcmeAccountKey: String? = nil,
+            wrappedAdminRoot: String? = nil,
             fetchTokenHash: String? = nil,
             prfSaltHash: String? = nil
         ) {
@@ -1782,6 +1807,7 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
             self.wrappedUmk = wrappedUmk
             self.issuedAt = issuedAt
             self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+            self.wrappedAdminRoot = wrappedAdminRoot
             self.fetchTokenHash = fetchTokenHash
             self.prfSaltHash = prfSaltHash
         }
@@ -1814,14 +1840,20 @@ public struct RecoveryEnvelope: Codable, Equatable, Sendable {
     /// recovering device unwraps this with the same PRF secret and imports
     /// it via `Keystore.importAcmeAccountKey`.
     public let wrappedAcmeAccountKey: String?
+    /// Slice D (D-3) — the escrow-wrapped admin master root the Worker releases
+    /// on fetch. Absent for accounts with no escrowed admin root. The deferred
+    /// recovery-rotation path unwraps it with the same PRF secret.
+    public let wrappedAdminRoot: String?
     public init(
         credentialId: String,
         wrappedUmk: String,
-        wrappedAcmeAccountKey: String? = nil
+        wrappedAcmeAccountKey: String? = nil,
+        wrappedAdminRoot: String? = nil
     ) {
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.wrappedAdminRoot = wrappedAdminRoot
     }
 }
 
@@ -1852,6 +1884,9 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmk: String
     public let wrappedAcmeAccountKey: String?
+    /// Slice D (D-3) — the escrow-wrapped admin master root (base64), released on
+    /// the gated fetch. Absent for accounts with no escrowed admin root.
+    public let wrappedAdminRoot: String?
     public let prfSaltHash: String?
     public let updatedAt: Int64?
     /// Recovery Phase B — the account's CURRENTLY registered IRK pubkey (hex).
@@ -1866,6 +1901,7 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         credentialId: String,
         wrappedUmk: String,
         wrappedAcmeAccountKey: String? = nil,
+        wrappedAdminRoot: String? = nil,
         prfSaltHash: String? = nil,
         updatedAt: Int64? = nil,
         registeredIrkPubHex: String? = nil
@@ -1874,6 +1910,7 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         self.credentialId = credentialId
         self.wrappedUmk = wrappedUmk
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.wrappedAdminRoot = wrappedAdminRoot
         self.prfSaltHash = prfSaltHash
         self.updatedAt = updatedAt
         self.registeredIrkPubHex = registeredIrkPubHex
@@ -1914,6 +1951,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         var credentialId: String
         var wrappedUmk: String
         var wrappedAcmeAccountKey: String?
+        var wrappedAdminRoot: String?  // Slice D (D-3) escrow-wrapped admin root
         var fetchTokenHash: String?   // SHA-256 hex of the fetchToken
         var prfSaltHash: String?      // SHA-256 hex of the prfSalt
         var updatedAt: Int64
@@ -2130,16 +2168,22 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
         try await tick()
         let updated = recoveryStore[req.request.credentialId] != nil
+        // Mirror the Worker: preserve an existing escrowed admin root on a
+        // UMK-only re-upload (same as the ACME key).
+        let u = req.request.username.lowercased()
+        let existing = recoveryRowsByUser[u]
+        let adminRoot = (req.request.wrappedAdminRoot?.isEmpty == false)
+            ? req.request.wrappedAdminRoot
+            : existing?.wrappedAdminRoot
         recoveryStore[req.request.credentialId] = RecoveryEnvelope(
             credentialId: req.request.credentialId,
             wrappedUmk: req.request.wrappedUmk,
-            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey
+            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey,
+            wrappedAdminRoot: adminRoot
         )
         // Mirror the Worker's username-keyed row + Task #74 gate hashes so
         // the gated fetch round-trips. Preserve an existing escrowed ACME
         // key on a UMK-only re-upload, matching handleUploadWebauthnRecovery.
-        let u = req.request.username.lowercased()
-        let existing = recoveryRowsByUser[u]
         let acme = (req.request.wrappedAcmeAccountKey?.isEmpty == false)
             ? req.request.wrappedAcmeAccountKey
             : existing?.wrappedAcmeAccountKey
@@ -2147,6 +2191,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             credentialId: req.request.credentialId,
             wrappedUmk: req.request.wrappedUmk,
             wrappedAcmeAccountKey: acme,
+            wrappedAdminRoot: adminRoot,
             fetchTokenHash: req.request.fetchTokenHash?.lowercased() ?? existing?.fetchTokenHash,
             prfSaltHash: req.request.prfSaltHash?.lowercased() ?? existing?.prfSaltHash,
             updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
@@ -2182,6 +2227,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             credentialId: row.credentialId,
             wrappedUmk: row.wrappedUmk,
             wrappedAcmeAccountKey: row.wrappedAcmeAccountKey,
+            wrappedAdminRoot: row.wrappedAdminRoot,
             prfSaltHash: tamperedPrfSaltHashOnFetch ?? row.prfSaltHash,
             updatedAt: row.updatedAt,
             // Recovery Phase B — mirror the Worker, which returns the currently

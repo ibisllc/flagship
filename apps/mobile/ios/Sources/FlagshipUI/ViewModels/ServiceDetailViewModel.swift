@@ -233,13 +233,14 @@ public final class ServiceDetailViewModel {
 
     private func bindCustomDomain(_ fqdn: String) async {
         guard let server, let user = username(), !user.isEmpty else { return }
-        // IRK-sign the canonical attach bytes (mirrors renameApp). The
-        // Keystore.deriveIRK call triggers the Face ID prompt that is
-        // the second-factor confirmation; the .com verifier checks this
-        // signature against the account IRK before recording the order.
+        // Slice D — set-custom-domain is a SENSITIVE order. Sign with the admin
+        // master root when this device holds one (else the legacy owner IRK); the
+        // Face ID prompt is the second-factor confirmation, and `.com`'s
+        // authority gate verifies this signature against the admin root (or IRK,
+        // pre-D) before recording the order. Canonical bytes are unchanged.
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(reason: "Attach a custom domain")
+            irk = try await Keystore.sensitiveOrderSigningKey(reason: "Attach a custom domain")
         } catch {
             customDomainPrompt = CustomDomainPrompt(
                 title: "Couldn't request custom domain",

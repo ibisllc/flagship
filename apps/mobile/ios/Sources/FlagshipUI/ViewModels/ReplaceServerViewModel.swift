@@ -147,10 +147,16 @@ public final class ReplaceServerViewModel {
 
         let body: DecommissionDepositBody
         do {
+            // Slice D — the decommission ORDER is SENSITIVE ⇒ sign with the admin
+            // master root when this device holds one; the mailbox auth stays IRK.
+            let orderKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Replace \(serverFqdn)")
+                : nil
             body = try ReplaceServerFlow.buildDeposit(
                 serverFqdn: serverFqdn,
                 username: username,
                 irk: key,
+                orderKey: orderKey,
                 retiredStkPubHex: retiredStkPubHex,
                 finalBackup: finalBackup,
                 disposition: disposition,

@@ -637,22 +637,29 @@ func cancelPendingServer(
         return true
     }
     do {
-        let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
+        // Slice D — release-server-name is a SENSITIVE order: sign with the admin
+        // master root when this device holds one, else the legacy owner IRK.
+        let orderKey = try await Keystore.sensitiveOrderSigningKey(reason: "Cancel server \(pod.name)")
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         // 1. Release the name (the real free-the-name mechanism).
         let releaseBytes = ReleaseServerName.canonicalBytes(
             username: username, serverDomain: pod.fqdn, issuedAt: now
         )
-        let releaseSig = try irk.signature(for: releaseBytes)
+        let releaseSig = try orderKey.signature(for: releaseBytes)
         try await server.releaseServerName(.init(
             request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
             signature: HexUtil.encode(releaseSig)
         ))
         // 2. Belt-and-braces auth-code revoke (the release already revoked
-        // active codes server-side; 403/404 is treated as success).
+        // active codes server-side; 403/404 is treated as success). This is a
+        // NON-sensitive owner-IRK op, so it must be IRK-signed: reuse orderKey
+        // when it IS the IRK (no admin root), else derive the IRK.
         if let serial = pod.pendingAuthCodeSerial {
+            let revokeKey = Keystore.hasAdminRoot
+                ? ((try? await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")) ?? orderKey)
+                : orderKey
             let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
-            let revokeSig = try irk.signature(for: revokeBytes)
+            let revokeSig = try revokeKey.signature(for: revokeBytes)
             try? await server.revokeAuthCode(.init(
                 request: .init(serial: serial, username: username, issuedAt: now),
                 signature: HexUtil.encode(revokeSig)

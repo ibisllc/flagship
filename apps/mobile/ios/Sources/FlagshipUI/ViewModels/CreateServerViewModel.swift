@@ -362,6 +362,12 @@ public final class CreateServerViewModel {
         // Recipe TTL — single phone-set knob. Defaults to 6h
         // (`defaultRecipeTtlMs`); user can dial it on the design page.
         let acExpiresAt = acIssuedAt + Self.clampedRecipeTtlMs(recipeTtlMs)
+        // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so
+        // a fresh box learns its authority anchor at first boot. Biometric-free
+        // (the pub is device-local but not secret); still IRK-signature-covered
+        // via the AuthCode signature below. Absent on pre-D accounts (canonical
+        // bytes stay byte-identical).
+        let adminRootHex = Keystore.adminRootPubHex()
         let authCode = AuthCode(
             serial: SerialGen.random(),
             username: username,
@@ -370,7 +376,8 @@ public final class CreateServerViewModel {
             delegatedPubKey: delegated.publicKey.rawRepresentation,
             userPubKey: irk.publicKey.rawRepresentation,
             issuedAt: acIssuedAt,
-            expiresAt: acExpiresAt
+            expiresAt: acExpiresAt,
+            adminRootPubKey: adminRootHex.flatMap { HexUtil.decode($0) }
         )
         let acSig = try irk.signature(for: authCode.canonicalBytes())
         try await server.issueAuthCode(.init(
@@ -383,7 +390,8 @@ public final class CreateServerViewModel {
                 delegatedPubKey: HexUtil.encode(authCode.delegatedPubKey),
                 userPubKey: HexUtil.encode(authCode.userPubKey),
                 issuedAt: authCode.issuedAt,
-                expiresAt: authCode.expiresAt
+                expiresAt: authCode.expiresAt,
+                adminRootPubKey: authCode.adminRootPubKey.map { HexUtil.encode($0) }
             ),
             signature: HexUtil.encode(acSig)
         ))
@@ -593,6 +601,11 @@ public struct SignedInstallBlob: Sendable {
         public let userPubKey: String
         public let issuedAt: Int64
         public let expiresAt: Int64
+        /// Slice D (D-1) — the pinned admin master root pubkey (hex); the burner
+        /// preserves it into the on-disk install-blob so the daemon loads it into
+        /// `ServerConfig.adminRootPub`. Omitted from JSON when nil (a pre-D recipe
+        /// serializes byte-identically).
+        public let adminRootPubKey: String?
     }
 
     public func onWire() -> OnWire {
@@ -613,7 +626,8 @@ public struct SignedInstallBlob: Sendable {
                     delegatedPubKey: HexUtil.encode(blob.authCode.delegatedPubKey),
                     userPubKey: HexUtil.encode(blob.authCode.userPubKey),
                     issuedAt: blob.authCode.issuedAt,
-                    expiresAt: blob.authCode.expiresAt
+                    expiresAt: blob.authCode.expiresAt,
+                    adminRootPubKey: blob.authCode.adminRootPubKey.map { HexUtil.encode($0) }
                 ),
                 authCodeUserSignature: HexUtil.encode(blob.authCodeUserSignature),
                 installerGitRef: blob.installerGitRef,

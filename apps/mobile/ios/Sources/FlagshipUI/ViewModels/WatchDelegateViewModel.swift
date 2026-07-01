@@ -59,7 +59,10 @@ public final class WatchDelegateViewModel {
     ) {
         self.server = server
         self.username = username
-        self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        // Slice D — watch delegate MINT + REVOKE are SENSITIVE orders: sign with
+        // the admin master root when this device holds one, else the legacy IRK.
+        // (The delegate signing key itself stays per-device via delegateKeyProvider.)
+        self.signer = signer ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
         self.delegateKeyProvider = delegateKeyProvider ?? { try Keystore.loadOrCreateWatchDelegateKey() }
         self.loadGrantId = loadGrantId ?? { Keystore.watchDelegateGrantId() }
         self.saveGrantId = saveGrantId ?? { id in

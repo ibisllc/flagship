@@ -30,6 +30,7 @@ public enum SetLeaderDeposit {
         serverDomain: String,
         preferredStkPubHex: String,
         irk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey? = nil,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
         mailboxNonce: Data = SecretRequestCoordinator.randomNonce(),
         depositNonce: Data = SecretRequestCoordinator.randomNonce(),
@@ -49,7 +50,12 @@ public enum SetLeaderDeposit {
             issuedAt: now,
             nonce: HexUtil.encode(voteNonce)
         )
-        let voteSig = try vote.sign(with: irk)
+        // Slice D — the set-leader VOTE is a SENSITIVE order: sign it with the
+        // admin master root (`orderKey`) when supplied, else the IRK (legacy /
+        // no admin root). The mailbox AUTH envelope below STAYS IRK-signed — it
+        // is the account-owner deposit credential (`phoneIrkPub` MUST equal the
+        // registered IRK), NOT the sensitive authority.
+        let voteSig = try vote.sign(with: orderKey ?? irk)
 
         let claim = DeviceEndpointClaim(
             username: username,

@@ -72,11 +72,17 @@ public final class SetPreferredServerViewModel {
         phase = .signing
         do {
             let irk = try await signer("Set \(serverDomain) as your preferred server")
+            // Slice D — the vote is SENSITIVE ⇒ sign it with the admin master
+            // root when this device holds one; the mailbox auth stays IRK.
+            let orderKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Set \(serverDomain) as your preferred server")
+                : nil
             let body = try SetLeaderDeposit.buildDeposit(
                 username: username,
                 serverDomain: serverDomain,
                 preferredStkPubHex: preferredStkPubHex,
                 irk: irk,
+                orderKey: orderKey,
                 now: now()
             )
             phase = .posting

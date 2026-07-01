@@ -37,6 +37,7 @@ public enum ReplaceServerFlow {
         serverFqdn: String,
         username: String,
         irk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey? = nil,
         retiredStkPubHex: String,
         finalBackup: Bool,
         disposition: Disposition,
@@ -56,7 +57,10 @@ public enum ReplaceServerFlow {
             nonce: nonceHex,
             issuedAt: issuedAt
         )
-        let sig = try order.sign(with: irk)
+        // Slice D — the decommission ORDER is SENSITIVE: sign with the admin
+        // master root (`orderKey`) when supplied, else the IRK. The mailbox AUTH
+        // below stays IRK-signed (the owner deposit credential).
+        let sig = try order.sign(with: orderKey ?? irk)
         let auth = try ServerTransferFlow.buildMailboxAuth(
             username: username, irk: irk, issuedAt: issuedAt, nonce: authNonce
         )

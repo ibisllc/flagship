@@ -81,8 +81,14 @@ public final class TransferGiverViewModel {
         }
         irk = key
         do {
+            // Slice D — the transfer OFFER is SENSITIVE ⇒ sign with the giver's
+            // admin master root when present; the mailbox auth stays IRK, and the
+            // stored `irk` above (used for the later disk-key re-seal) is unchanged.
+            let orderKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Transfer \(serverDomain) to another account")
+                : nil
             let (body, qr) = try ServerTransferFlow.buildOffer(
-                serverDomain: serverDomain, username: username, irk: key,
+                serverDomain: serverDomain, username: username, irk: key, orderKey: orderKey,
                 issuedAt: now(), nonce: randomNonce(), authNonce: randomNonce()
             )
             phase = .posting

@@ -64,8 +64,10 @@ public final class AccountDeletionViewModel {
     ) {
         self.server = server
         self.username = username
+        // Slice D — account + servers self-delete are SENSITIVE orders: sign with
+        // the admin master root when this device holds one, else the legacy IRK.
         self.signer = signer ?? { reason in
-            try await Keystore.deriveIRK(reason: reason)
+            try await Keystore.sensitiveOrderSigningKey(reason: reason)
         }
         self.wipe = wipe ?? { Keystore.wipeAllProfiles() }
         self.onWiped = onWiped

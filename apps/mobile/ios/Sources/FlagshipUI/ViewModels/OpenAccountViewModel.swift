@@ -127,15 +127,35 @@ public final class OpenAccountViewModel {
             // recovery — we never silently fork a real identity.) A real
             // biometric cancel (.biometricFailed) rethrows untouched so we don't
             // destroy a usable key just because the user dismissed Face ID.
+            // Slice D — the FIRST device also mints the ADMIN MASTER ROOT (a
+            // fresh random Ed25519, NOT UMK-derived) alongside the UMK/IRK, in the
+            // SAME single-Face-ID ceremony (`openAccountRoots`), and publishes its
+            // pubkey to `.com` in the claim. Holding the root ⇒ this device is
+            // admin by default. The retry path (a UMK already exists from a prior
+            // partial run) reuses it + backfills an admin root if one is missing.
             let irk: Curve25519.Signing.PrivateKey
+            var adminRootPubHex: String?
             if !Keystore.hasWrappedUMK {
-                irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+                let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                irk = roots.irk
+                adminRootPubHex = roots.adminRootPubHex
             } else {
                 do {
                     irk = try await Keystore.deriveIRK(reason: "Open account \(username)")
                 } catch Keystore.KeystoreError.unwrapFailed {
                     Keystore.wipe()
-                    irk = try await Keystore.generateUMKAndDeriveIRK(reason: "Open your Flagship account")
+                    let roots = try await Keystore.openAccountRoots(reason: "Open your Flagship account")
+                    irk = roots.irk
+                    adminRootPubHex = roots.adminRootPubHex
+                }
+                // Backfill: a partial prior run may have made the UMK but not the
+                // admin root. Publish the existing root, or mint one now.
+                if adminRootPubHex == nil {
+                    if let existing = Keystore.adminRootPubHex() {
+                        adminRootPubHex = existing
+                    } else {
+                        adminRootPubHex = try? await Keystore.generateAdminRoot()
+                    }
                 }
             }
             let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
@@ -147,7 +167,8 @@ public final class OpenAccountViewModel {
             let claimSig = try irk.signature(for: claimBytes)
             try await server.claimUsername(.init(
                 request: .init(username: username, irkPub: irkPubHex, issuedAt: now),
-                signature: HexUtil.encode(claimSig)
+                signature: HexUtil.encode(claimSig),
+                adminRootPub: adminRootPubHex
             ))
 
             phase = .opened(deviceName: effectiveDeviceName)

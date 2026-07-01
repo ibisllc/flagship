@@ -196,8 +196,16 @@ public final class ServiceAccessViewModel {
                 inviteId: inviteId, authorAID: aidPub, serviceRef: serviceRef,
                 secretHash: secretHash, encryptedBundle: encryptedBundle, issuedAt: ts,
                 maxRedemptions: maxN, expiresAt: expiresAt)
-            // v2: AID-signed (box-as-authority verifies against the stable owner key).
-            let sig = try ServiceInvite.sign(bytes, with: keys.aid)
+            // Slice D (D-2) — service-invite CREATE is SENSITIVE (admin-gated).
+            // Sign with the admin master root when this device holds one; else
+            // AID (the legacy dual-accept path `.com`/box still honor when no
+            // admin root is pinned). The `authorAID` field stays the AID (the
+            // recorded inviter identity + the link's author key) — only the
+            // signing key changes; canonical bytes are unchanged.
+            let createSignKey: Curve25519.Signing.PrivateKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Create an invite for \(serviceRef)")
+                : keys.aid
+            let sig = try ServiceInvite.sign(bytes, with: createSignKey)
             var request: [String: Any] = [
                 "inviteId": inviteId,
                 "authorAID": HexUtil.encode(aidPub),
@@ -253,7 +261,12 @@ public final class ServiceAccessViewModel {
             let aidKey = try await authorAidKeys("Remove this person from \(serviceRef)").aid
             let ts = now()
             let bytes = try ServiceInvite.canonicalRevoke(inviteId: inviteId, issuedAt: ts)
-            let sig = try ServiceInvite.sign(bytes, with: aidKey)
+            // Slice D (D-2) — service-invite REVOKE is SENSITIVE (admin-gated):
+            // admin master root when present, else the legacy AID.
+            let revokeSignKey: Curve25519.Signing.PrivateKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Remove this person from \(serviceRef)")
+                : aidKey
+            let sig = try ServiceInvite.sign(bytes, with: revokeSignKey)
             let request: [String: Any] = ["inviteId": inviteId, "issuedAt": ts]
             try await client.revokeInvite(controlBase: controlBase, username: username, inviteId: inviteId, request: request, signatureHex: HexUtil.encode(sig))
         } catch {

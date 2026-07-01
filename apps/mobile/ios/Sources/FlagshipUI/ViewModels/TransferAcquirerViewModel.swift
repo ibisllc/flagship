@@ -117,8 +117,14 @@ public final class TransferAcquirerViewModel {
             return
         }
         do {
+            // Slice D — the transfer CLAIM is SENSITIVE ⇒ sign with the acquirer's
+            // admin master root when present (`.com` gates against it); the
+            // `acquirerIrkPub` identity field stays the registered IRK (`key`).
+            let orderKey = Keystore.hasAdminRoot
+                ? try await Keystore.adminRootKey(reason: "Take over \(parsed.serverDomain)")
+                : nil
             let body = try ServerTransferFlow.buildClaim(
-                offer: parsed, acquirerUsername: username, acquirerIrk: key, issuedAt: now()
+                offer: parsed, acquirerUsername: username, acquirerIrk: key, orderKey: orderKey, issuedAt: now()
             )
             phase = .posting
             let result = try await client.postClaim(serverDomain: parsed.serverDomain, body: body)

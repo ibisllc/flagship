@@ -115,6 +115,26 @@ public final class RecoveryViewModel {
                 // Non-fatal: continue without the escrowed account key.
             }
 
+            // Slice D (D-3) — also escrow the ADMIN MASTER ROOT under the SAME PRF
+            // secret (distinct wrap salt) so credential recovery can later
+            // re-establish it (the root is NOT UMK-derived, so a UMK backup can't
+            // reconstruct it). Best-effort like the ACME escrow: a device with no
+            // admin root, or a wrap failure, simply omits the field — it must
+            // NEVER fail recovery setup. (The recovery-rotation SIGNING that
+            // consumes this is a later phase; here we only include it.)
+            var wrappedAdminRoot: String? = nil
+            if Keystore.hasAdminRoot {
+                do {
+                    let adminKey = try await Keystore.adminRootKey(reason: "Back up your admin key")
+                    wrappedAdminRoot = try AdminRootEscrow.wrapForEscrow(
+                        seed: adminKey.rawRepresentation,
+                        prfSecret: prfSecret
+                    )
+                } catch {
+                    // Non-fatal: continue without the escrowed admin root.
+                }
+            }
+
             // Sign the UploadRecoveryRecord under the account IRK. The
             // signature covers the HASH of the ciphertext + the credentialId
             // + username + issuedAt — exactly what the Worker re-derives and
@@ -138,6 +158,7 @@ public final class RecoveryViewModel {
                     wrappedUmk: wrappedUmk,
                     issuedAt: issuedAt,
                     wrappedAcmeAccountKey: wrappedAcme,
+                    wrappedAdminRoot: wrappedAdminRoot,
                     fetchTokenHash: RecoveryDerivation.sha256Hex(secrets.fetchToken),
                     prfSaltHash: RecoveryDerivation.sha256Hex(secrets.prfSalt)
                 ),

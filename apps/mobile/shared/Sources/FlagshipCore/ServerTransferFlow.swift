@@ -107,6 +107,7 @@ public enum ServerTransferFlow {
         serverDomain: String,
         username: String,
         irk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey? = nil,
         issuedAt: Int64,
         ttlMs: Int64 = 15 * 60_000,
         nonce: Data,
@@ -117,7 +118,15 @@ public enum ServerTransferFlow {
         let order = ServerTransferOfferOrder(
             serverDomain: serverDomain, transferNonce: nonceHex, issuedAt: issuedAt, expiresAt: expiresAt
         )
-        let offerSig = try order.sign(with: irk)
+        // Slice D — the transfer OFFER is a SENSITIVE order: sign with the giver's
+        // admin master root (`orderKey`) when supplied, else the IRK. The QR's
+        // `giverIrkPub` MUST be the key the offer was signed with (the acquirer's
+        // local `verifyOffer` checks `offerSignature` under it), so it tracks the
+        // signing key. `.com` gates the offer against the giver's admin root and
+        // records the giver identity from the registered account, independent of
+        // this QR field. The mailbox AUTH stays IRK-signed.
+        let signKey = orderKey ?? irk
+        let offerSig = try order.sign(with: signKey)
         let offerSigHex = HexUtil.encode(offerSig)
         let auth = try buildMailboxAuth(username: username, irk: irk, issuedAt: issuedAt, nonce: authNonce)
         let body = TransferOfferBody(
@@ -129,7 +138,7 @@ public enum ServerTransferFlow {
         let qr = OfferQR(
             serverDomain: serverDomain,
             transferNonce: nonceHex,
-            giverIrkPub: HexUtil.encode(irk.publicKey.rawRepresentation),
+            giverIrkPub: HexUtil.encode(signKey.publicKey.rawRepresentation),
             issuedAt: issuedAt,
             expiresAt: expiresAt,
             offerSignature: offerSigHex
@@ -216,9 +225,16 @@ public enum ServerTransferFlow {
         offer: OfferQR,
         acquirerUsername: String,
         acquirerIrk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey? = nil,
         issuedAt: Int64
     ) throws -> TransferClaimBody {
         if offer.expiresAt <= issuedAt { throw TransferError.expired }
+        // The claim's `acquirerIrkPubHex` field STAYS the acquirer's registered
+        // IRK — `.com` requires `claim.acquirerIrkPub == acquirer.irkPubHex`
+        // (identity), independent of the signature. Slice D signs the SENSITIVE
+        // claim order with the acquirer's admin master root (`orderKey`) when
+        // supplied (else the IRK); `.com` gates the signature against the
+        // acquirer's admin root. Canonical bytes (incl. the IRK field) unchanged.
         let acquirerIrkHex = HexUtil.encode(acquirerIrk.publicKey.rawRepresentation)
         let lowered = acquirerUsername.lowercased()
         let order = ServerTransferClaimOrder(
@@ -228,7 +244,7 @@ public enum ServerTransferFlow {
             acquirerIrkPubHex: acquirerIrkHex,
             issuedAt: issuedAt
         )
-        let sig = try order.sign(with: acquirerIrk)
+        let sig = try order.sign(with: orderKey ?? acquirerIrk)
         return TransferClaimBody(
             claim: TransferClaimWire(
                 serverDomain: offer.serverDomain,
