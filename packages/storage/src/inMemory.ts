@@ -34,6 +34,8 @@ import type {
   ServerTransferStorage,
   ServerEvictionRecord,
   ServerEvictionStorage,
+  AdminRootRotationRecord,
+  AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -150,6 +152,23 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (!r) return false;
     if (r.irkPubHex.toLowerCase() !== expectedOldIrkPubHex.toLowerCase()) return false;
     this.byName.set(norm, { ...r, irkPubHex: newIrkPubHex, claimedAt: at });
+    return true;
+  }
+  async swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    // No admin root pinned ⇒ nothing to rotate (a fresh proof can only chain
+    // FROM an existing anchor).
+    if (!r.adminRootPubHex) return false;
+    if (r.adminRootPubHex.toLowerCase() !== expectedOldAdminRootPubHex.toLowerCase()) {
+      return false;
+    }
+    this.byName.set(norm, { ...r, adminRootPubHex: newAdminRootPubHex.toLowerCase() });
     return true;
   }
   async setDemo(username: string, isDemo: boolean) {
@@ -1170,6 +1189,33 @@ export class InMemoryServerEvictionStorage implements ServerEvictionStorage {
   }
 }
 
+export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorage {
+  // Per-account ordered chain. Slice D §5 (recovery admin-root rotation).
+  private byUser = new Map<string, AdminRootRotationRecord[]>();
+
+  async append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number> {
+    const u = rec.username.toLowerCase();
+    const chain = this.byUser.get(u) ?? [];
+    const seq = (chain[chain.length - 1]?.seq ?? 0) + 1;
+    chain.push({
+      username: u,
+      seq,
+      oldAdminRootPubHex: rec.oldAdminRootPubHex.toLowerCase(),
+      newAdminRootPubHex: rec.newAdminRootPubHex.toLowerCase(),
+      issuedAt: rec.issuedAt,
+      signatureHex: rec.signatureHex.toLowerCase(),
+    });
+    this.byUser.set(u, chain);
+    return seq;
+  }
+
+  async list(username: string): Promise<AdminRootRotationRecord[]> {
+    const chain = this.byUser.get(username.toLowerCase()) ?? [];
+    // Ordered by seq asc; return copies so callers can't mutate our rows.
+    return chain.map((r) => ({ ...r })).sort((a, b) => a.seq - b.seq);
+  }
+}
+
 export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
   // Composite key: `${serverDomain} ${leaseId}`.
   private rows = new Map<string, BoxSealedLeaseRecord>();
@@ -1625,6 +1671,7 @@ export class InMemoryStorage implements Storage {
   secretMailbox = new InMemorySecretMailboxStorage();
   serverTransfers = new InMemoryServerTransferStorage();
   serverEvictions = new InMemoryServerEvictionStorage();
+  adminRootRotations = new InMemoryAdminRootRotationStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();

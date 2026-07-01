@@ -133,6 +133,11 @@ import {
   fileCgkMarkerStore,
 } from "./cgkDepositConsumer.js";
 import {
+  buildAdminRootRotationPoller,
+  fileAdminRootPinStore,
+  resolvePinnedAdminRoot,
+} from "./adminRootRotationConsumer.js";
+import {
   buildSetLeaderConsumer,
   buildReadSelfVote,
   fileSetLeaderVoteStore,
@@ -403,6 +408,26 @@ async function main(): Promise<void> {
 
   // ---- Discover the tunnel hub (so we can move infra without redeploying daemons) ----
   const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+
+  // ---- Admin master-root re-pin resolution (Slice D §5) ----
+  // The box boots pinning the recipe's admin root (cfg.adminRootPub, the SEED);
+  // recovery rotation persists any verified re-pin to admin-root-pin.json. Apply
+  // the persisted pin NOW — before any sensitive-order handler is wired — so the
+  // Phase-1 `authorizeSensitiveOrder` gate reads the rotated authority root.
+  // Never trust `.com`'s reported root: only a proof that chained to the pinned
+  // anchor could have written this file (the rotation consumer verifies it).
+  const adminRootPinPath = `${dataDir}/admin-root-pin.json`;
+  if (cfg?.adminRootPub) {
+    const seedHex = bytesToHexLocal(cfg.adminRootPub);
+    const pinned = await resolvePinnedAdminRoot(seedHex, fileAdminRootPinStore(adminRootPinPath));
+    if (pinned && pinned !== seedHex) {
+      cfg = { ...cfg, adminRootPub: hexToBytes(pinned) };
+      console.log(
+        `[daemon] admin root re-pinned from box-local state: ${seedHex.slice(0, 12)} → ${pinned.slice(0, 12)}`,
+      );
+    }
+  }
+
   const endpoints = await resolveServicesEndpoints({
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     cachePath: defaultEndpointsCachePath(dataDir),
@@ -547,6 +572,30 @@ async function main(): Promise<void> {
     process.once("SIGTERM", () => cgkPoller.stop());
     process.once("SIGINT", () => cgkPoller.stop());
     console.log("[daemon] no CGK yet — cgk-deposit consumer armed (secret-free recipe)");
+  }
+
+  // ---- Admin master-root rotation consumer (Slice D §5) ----
+  // Armed ONLY when the box has a pinned admin root (a reburned box) + a control
+  // plane. Fetches the account's rotation chain and re-pins ONLY on a proof that
+  // chains from the box's CURRENTLY-pinned root (never `.com`'s word), persisting
+  // the re-pin to admin-root-pin.json + restarting so the sensitive-order gate
+  // re-binds. A legacy box with no admin root is a strict no-op.
+  if (cfg?.adminRootPub && env.controlPlaneBaseUrl) {
+    const adminRotationPoller = buildAdminRootRotationPoller({
+      username: cfg.userId,
+      seedAdminRootHex: bytesToHexLocal(cfg.adminRootPub),
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+      pinStore: fileAdminRootPinStore(adminRootPinPath),
+      restart: () => {
+        console.log("[daemon] admin root rotated — restarting to re-bind the authority anchor");
+        process.exit(0);
+      },
+      onLog: (m) => console.log(m),
+    });
+    adminRotationPoller.start();
+    process.once("SIGTERM", () => adminRotationPoller.stop());
+    process.once("SIGINT", () => adminRotationPoller.stop());
+    console.log("[daemon] admin-root-rotation consumer armed (recovery re-pin, verify-then-pin)");
   }
 
   // ---- Paired-session store (phone-paired browser bearer tokens) ----

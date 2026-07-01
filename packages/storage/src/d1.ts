@@ -12,6 +12,8 @@ import type {
   ServerTransferStorage,
   ServerEvictionRecord,
   ServerEvictionStorage,
+  AdminRootRotationRecord,
+  AdminRootRotationStorage,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
   PendingRePairRecord,
@@ -306,6 +308,26 @@ export class D1UsernameStorage implements UsernameStorage {
         "WHERE username = ? AND lower(irk_pub_hex) = lower(?)",
       )
       .bind(newIrkPubHex, at, username.toLowerCase(), expectedOldIrkPubHex)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ) {
+    // Conditional CAS: swap ONLY when the row's current admin_root_pub_hex
+    // matches `expectedOldAdminRootPubHex` (case-insensitive) AND is non-NULL
+    // (a fresh proof can only chain FROM an existing anchor). meta.changes
+    // reports whether the swap happened.
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET admin_root_pub_hex = ? " +
+        "WHERE username = ? AND admin_root_pub_hex IS NOT NULL " +
+        "AND lower(admin_root_pub_hex) = lower(?)",
+      )
+      .bind(newAdminRootPubHex.toLowerCase(), username.toLowerCase(), expectedOldAdminRootPubHex)
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
@@ -2081,6 +2103,66 @@ export class D1ServerEvictionStorage implements ServerEvictionStorage {
   }
 }
 
+interface AdminRootRotationRow {
+  username: string;
+  seq: number;
+  old_admin_root_pub_hex: string;
+  new_admin_root_pub_hex: string;
+  issued_at: number;
+  signature_hex: string;
+}
+
+function rowToAdminRootRotation(r: AdminRootRotationRow): AdminRootRotationRecord {
+  return {
+    username: r.username,
+    seq: r.seq,
+    oldAdminRootPubHex: r.old_admin_root_pub_hex,
+    newAdminRootPubHex: r.new_admin_root_pub_hex,
+    issuedAt: r.issued_at,
+    signatureHex: r.signature_hex,
+  };
+}
+
+export class D1AdminRootRotationStorage implements AdminRootRotationStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number> {
+    const username = rec.username.toLowerCase();
+    // Next seq = current max + 1 (or 1). One writer per account at a time in
+    // practice (a rotation is a rare recovery event), so a read-then-insert is
+    // safe; the (username, seq) PK would surface any genuine collision.
+    const maxRow = await this.db
+      .prepare("SELECT MAX(seq) AS max_seq FROM admin_root_rotations WHERE username = ?1")
+      .bind(username)
+      .first<{ max_seq: number | null }>();
+    const seq = (maxRow?.max_seq ?? 0) + 1;
+    await this.db
+      .prepare(
+        `INSERT INTO admin_root_rotations
+           (username, seq, old_admin_root_pub_hex, new_admin_root_pub_hex, issued_at, signature_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+      )
+      .bind(
+        username,
+        seq,
+        rec.oldAdminRootPubHex.toLowerCase(),
+        rec.newAdminRootPubHex.toLowerCase(),
+        rec.issuedAt,
+        rec.signatureHex.toLowerCase(),
+      )
+      .run();
+    return seq;
+  }
+
+  async list(username: string): Promise<AdminRootRotationRecord[]> {
+    const res = await this.db
+      .prepare("SELECT * FROM admin_root_rotations WHERE username = ?1 ORDER BY seq ASC")
+      .bind(username.toLowerCase())
+      .all<AdminRootRotationRow>();
+    return (res.results ?? []).map(rowToAdminRootRotation);
+  }
+}
+
 interface BoxSealedLeaseRow {
   server_domain: string;
   lease_id: string;
@@ -3396,6 +3478,7 @@ export class D1Storage implements Storage {
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
   serverEvictions: ServerEvictionStorage;
+  adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
@@ -3438,6 +3521,7 @@ export class D1Storage implements Storage {
     this.secretMailbox = new D1SecretMailboxStorage(db);
     this.serverTransfers = new D1ServerTransferStorage(db);
     this.serverEvictions = new D1ServerEvictionStorage(db);
+    this.adminRootRotations = new D1AdminRootRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);

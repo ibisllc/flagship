@@ -162,6 +162,8 @@ import {
   handleMintDeviceGrant,
   handleListDeviceGrants,
   handleRevokeDeviceGrant,
+  handleApplyAdminRootRotation,
+  handleListAdminRootRotations,
   handleMintWatchDelegate,
   handleListWatchDelegates,
   handleRevokeWatchDelegate,
@@ -661,6 +663,9 @@ const ROUTE_RE = {
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
+  // Slice D §5 — admin master-root recovery rotation.
+  ADMIN_ROOT_ROTATION_APPLY: /^\/api\/users\/([^/]+)\/admin-root-rotation$/,
+  ADMIN_ROOT_ROTATIONS_LIST: /^\/api\/users\/([^/]+)\/admin-root-rotations$/,
   // Watch delegate keys (Phase 2c) — opt-in quick-approve from the Watch.
   WATCH_DELEGATES_LIST: /^\/api\/users\/([^/]+)\/watch-delegates$/,
   WATCH_DELEGATES_REVOKE: /^\/api\/users\/([^/]+)\/watch-delegates\/revoke$/,
@@ -2032,6 +2037,33 @@ export async function tryControlPlane(
         {
           storage: storage.deviceCapabilityGrants,
           usernames: storage.usernames,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Slice D §5 — admin master-root recovery rotation. The apply endpoint
+  // verifies the OLD-root-signed proof against the account's STORED admin root
+  // (never `.com`'s own prior word), swaps it, and appends to the served lane a
+  // box replays. The list is the ordered chain.
+  if (method === "POST" && (m = path.match(ROUTE_RE.ADMIN_ROOT_ROTATION_APPLY))) {
+    return finish(
+      await handleApplyAdminRootRotation(
+        {
+          usernames: storage.usernames,
+          rotations: storage.adminRootRotations,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ADMIN_ROOT_ROTATIONS_LIST))) {
+    return finish(
+      await handleListAdminRootRotations(
+        {
+          usernames: storage.usernames,
+          rotations: storage.adminRootRotations,
         },
         decodeURIComponent(m[1]!),
       ),

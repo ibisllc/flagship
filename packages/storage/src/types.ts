@@ -212,6 +212,22 @@ export interface UsernameStorage {
     at: number,
   ): Promise<boolean>;
   /**
+   * Slice D — recovery admin-root rotation (docs/device-admin-tier-spec.md §5).
+   * Atomically compare-and-set the account's pinned ADMIN MASTER ROOT
+   * (`admin_root_pub_hex`): swaps to `newAdminRootPubHex` ONLY when the current
+   * value equals `expectedOldAdminRootPubHex` (case-insensitive). Returns false
+   * when the username doesn't exist, has no admin root pinned, or the expected
+   * old value doesn't match the stored one (concurrent-rotation / stale-proof
+   * defense). The apply handler pairs this with an append to the served rotation
+   * lane. Distinct from `swapIrkPub` (the UMK-derived MEMBERSHIP root) — this
+   * moves only the AUTHORITY anchor.
+   */
+  swapAdminRootPub(
+    username: string,
+    expectedOldAdminRootPubHex: string,
+    newAdminRootPubHex: string,
+  ): Promise<boolean>;
+  /**
    * Flip the demo flag on an existing claim (task #84). Returns false
    * if the username doesn't exist. The claim flow never calls this;
    * only the operator-gated provision/decommission tooling does. The
@@ -1170,6 +1186,38 @@ export interface ServerEvictionStorage {
   gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs; returns count
 }
 
+/**
+ * Slice D — one signed admin-master-root rotation proof
+ * (docs/device-admin-tier-spec.md §5). The account's admin authority root
+ * rotated `oldAdminRootPubHex → newAdminRootPubHex`; `signatureHex` is the
+ * `flagship/admin-root-rotation/v1` Ed25519 signature by the OLD root over the
+ * canonical bytes. Appended to a per-account served lane on a valid apply so a
+ * box that was offline across several rotations can REPLAY the chain
+ * (old→…→new), verifying each hop against its pinned anchor — never trusting
+ * `.com`'s reported current root. `seq` is the 1-based position in that ordered
+ * chain.
+ */
+export interface AdminRootRotationRecord {
+  username: string;              // account, lowercased
+  seq: number;                   // 1-based chain position (append order)
+  oldAdminRootPubHex: string;    // the root replaced, hex lowercased
+  newAdminRootPubHex: string;    // the root adopted, hex lowercased
+  issuedAt: number;              // ms since epoch, from the signed proof
+  signatureHex: string;          // OLD-root Ed25519 sig over canonical bytes, hex lowercased
+}
+
+export interface AdminRootRotationStorage {
+  /**
+   * Append a rotation proof to the account's chain, assigning the next `seq`
+   * (max existing + 1, or 1 for the first). Returns the assigned seq. The
+   * caller is responsible for having verified the proof + swapped
+   * `admin_root_pub_hex` first (the apply handler does both).
+   */
+  append(rec: Omit<AdminRootRotationRecord, "seq">): Promise<number>;
+  /** The full ordered chain for an account (seq asc). Empty if none. */
+  list(username: string): Promise<AdminRootRotationRecord[]>;
+}
+
 export interface DaemonStatusRecord {
   serverDomain: string;
   certSha256: string | null;
@@ -1369,6 +1417,7 @@ export interface Storage {
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
   serverEvictions: ServerEvictionStorage;
+  adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
