@@ -39,12 +39,15 @@ approve-a-request join (story 3). Default OFF everywhere.
 
 ---
 
-Status: **Phases 0–2 BUILT + merged** (spine, enforcement, clients — gated/clean-slate,
-so a strict no-op until a box is reburned with an admin root). **Remaining:** Phase 3
-(assurance-gated promote-a-device UI; recovery-rotation proof signing + the box-side
-rotation consumer; the `orders.ts`/`rePairWatcher` follow-ups) and the owner-side rollout
-(wipe → reburn with admin roots pinned → deploy `.com` + apply migrations 0064/0065). This
-is the dedicated spec pass the
+Status: **Phases 0–3 BUILT + merged** (spine, enforcement, clients, and promote /
+recovery-rotation — all gated/clean-slate, so a strict no-op until a box is reburned with
+an admin root). **Remaining:** (a) re-escrow of the *new* admin root after a rotation
+under the WebAuthn-PRF credential — currently a documented seam on all three clients (the
+rotate itself works; post-rotation recovery restores the *old* root until this lands);
+(b) the inert `orders.ts` dead-PSK path; and (c) the owner-side rollout — wipe → reburn
+with admin roots pinned → deploy `.com` (also activates the `/transfer` universal-link
+hosting) + apply migrations **0064 / 0065 / 0066** before the Worker deploy. This is the
+dedicated spec pass the
 `docs/device-admin-entitlements.md` review (§"⚠️ Review outcome (2026-06-30)")
 demanded before any D code lands. It honors the owner-set "D decisions
 (2026-07-01)" exactly:
