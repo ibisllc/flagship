@@ -1,8 +1,53 @@
 # Device admin entitlements + "add a server" simplification
 
-Status: **locked design** (2026-06-30). Slices A–C are cleared to build; Slice D
-(the admin tier) is spec-first and mostly *wires existing pieces*. This file is
-the source of truth for this work; update it as slices land.
+Status: Slices A–C are **cleared to build**; Slice D (the admin tier) is
+**UNSOUND as written — do not build until redesigned** (see "Review outcome"
+below). This file is the source of truth for this work; update it as slices land.
+
+## ⚠️ Review outcome (2026-06-30)
+
+A multi-agent adversarial review found the Slice-D design **not safe to commit
+to as written**. The three blockers:
+
+1. **Box-side enforcement is unwired.** ~15 daemon consumers in
+   `packages/server-daemon/src` (`selfDeleteConsumer.ts`, `decommissionConsumer.ts`,
+   `deadManHttp.ts`, `frontPage.ts`, membership, the deposit consumers) verify
+   every destructive order against **one config-pinned owner IRK that *is*
+   `deriveIRK(UMK)`** — with zero `DeviceCapabilityGrant`/admin awareness. The
+   doc pointed only at `.com`'s `requireDeviceScope` fast path; tightening it
+   does nothing for box-side wipe/decommission/power/front-page.
+2. **`users.irk_pub_hex` *is* the UMK-derived key** (`keys.ts`, info
+   `flagship.irk.v1`), so "admin = a master IRK not derived from the UMK" is
+   self-contradictory: reuse it → still UMK-derivable → any non-admin recomputes
+   it (split void); or rotate to a fresh random key → **breaks every deployed
+   box's pinned owner IRK and the LUKS disk seal** → a fleet-wide root rotation +
+   disk re-seal + reburn + golden-vector regeneration. Not "mostly wiring." The
+   `per-user-cert-worklist:61` "sealed, not UMK-derived" quote was about the
+   **ACME account key**, not the IRK — a miscite.
+3. **Anti-theft / recovery / fork-detection break against reality.** Recovery
+   adopts `.com`'s reported `newIrkPub` with no signature proof
+   (`rePairWatcher.ts`) — `.com` must never be a trust anchor — and lags a ~5-min
+   poll; the 14-day quarantine only limits *newly-admitted* devices, so a stolen
+   *active* admin keeps full flat revoke power; and fork detection compares the
+   account root (reconstituted identically from a UMK backup), so it never fires.
+   Residual UMK-derived keys (SWK/CGK/BAK) also hand a non-admin service-platform
+   key custody, undercutting the clean membership-vs-authority line.
+
+**Corrected direction for D (when we build it):** keep `IRK = HKDF(UMK)`; express
+admin as the already-shipped **`admin` `DeviceScope`** + custody of the sealed
+**ACME account key** (not a new master-IRK envelope); make **box-side** sensitive-op
+verification (a shared `requireMasterIrk`/scope predicate across daemon + `.com`)
+the enforcement surface, guarded by a CI grep-gate; relay a **cryptographic
+rotation proof** the box verifies (old-root-signs-new-root) instead of trusting
+`.com`; and own an explicit migration (root rotation *as* an IRK rotation over the
+transfer re-home rail, per-box ack + grace, LUKS re-seal, vector regeneration).
+This is a real workstream, not a wiring change — it needs its own spec pass before
+code. **Slices A/B/C below do not depend on D** and ride the shipped shared IRK.
+
+**Build-ordering hazard (A vs C):** on **Android and webapp** the add-server
+chooser is the *only* entry to the transfer-claim (acquirer) path, so **Slice A
+removal there must land *after* Slice C** provides a standalone deep-link/camera
+claim entry. (iOS is safe — its acquirer was never wired, so A orphaned nothing.)
 
 ## Why
 
@@ -70,11 +115,16 @@ device to admin, set-front-page, set-leader, revoke — require a **master-IRK
 signature**. The box/`.com` must stop treating a bare UMK-derived signature as
 owner authority for these ops; only the sealed master IRK counts. Non-sensitive
 actions (browse, use apps, pair-for-use, build) remain available to all members
-via their device grant. `requireDeviceScope()`
-(`deviceCapabilityGrants.ts:345`) is the enforcement point; the current
-"signer == IRK → allow" fast path (`:358`) is what must be tightened so that the
-IRK it trusts is the *admin-only* master IRK, not a UMK-derived one every device
-holds.
+via their device grant. **Correction (per review):** the enforcement surface is
+**box-side**, not just `.com`. `.com`'s `requireDeviceScope()`
+(`deviceCapabilityGrants.ts:345`) is one point, but the destructive ops execute in
+the daemon (`selfDeleteConsumer`, `decommissionConsumer`, `deadManHttp`,
+`frontPage`, membership, the deposit consumers), each pinning a single owner IRK
+with no grant awareness. D must introduce **one shared `requireMasterIrk`/scope
+predicate** both runtimes call, mark sensitive `DeviceScope`s so the grant branch
+hard-denies them, and add a CI grep-gate that fails if a sensitive handler verifies
+against anything but that predicate. The "`signer == IRK → allow`" fast path
+(`:358`) isn't "loose" — its defect is that the trusted root is UMK-derived.
 
 ## Anti-theft, revocation, recovery — mostly already shipped
 
@@ -135,7 +185,7 @@ The defenses the personal-cloud already ships map directly onto this model:
 |---|---|---|
 | **A. Kill the chooser** | "Add a server" flows straight into create; remove the pair/take-over cards + the `AddServerChooserScreen`. | No |
 | **B. Auto-pair** | A device self-provisions its per-box BFF session token for every pod it can see (one biometric, background). Remove the manual "Pair this device" requirement. Pairing-for-use is not sensitive, so it's admin-independent. | No |
-| **C. Take-over via camera / deep link + tiered confirm** | Encode the (IRK-signed) transfer offer as a **universal-link QR** — `base64url(JSON)` in the URL **fragment**, so the signature is preserved byte-for-byte and `.com` never sees it. The native Camera app opens it → routes through `DeepLink`/`ProcessUrlScreen` → a **severe** confirmation sheet (danger color + type-to-confirm + biometric) → the existing `TransferAcquirerViewModel` (unchanged backend). | No |
+| **C. Take-over via camera / deep link + tiered confirm** | Encode the (IRK-signed) transfer offer as a **universal-link QR** — `base64url(JSON)` in a **query param** (`o=`), NOT the `#fragment` (Android/webapp strip it); the offer is a signed non-secret, so `.com` seeing it is acceptable. The native Camera opens it → routes through `DeepLink`/`ProcessUrlScreen` → a **severe** confirmation sheet (danger color + type-to-confirm + biometric) → the existing `TransferAcquirerViewModel`. **The acquirer MUST verify the offer signature vs `giverIrkPub` + expiry BEFORE the claim biometric** — a deep-linked/scanned offer is attacker-supplied. Backend unchanged. | No |
 | **D. Admin/entitlement tier** | Separate the master IRK from the UMK; adopt v2 per-device grants + an `admin` scope; gate sensitive ops on the master IRK; **reuse** the shipped quarantine, re-pair grace, fork detection, and credential recovery. No-expiry, flat authority. | — |
 
 A, B, C do not depend on D. D layers admin-gating onto the sensitive ops
