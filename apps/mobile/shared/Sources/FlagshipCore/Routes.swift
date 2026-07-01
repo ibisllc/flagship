@@ -6,14 +6,10 @@ import FlagshipAPI
 /// type-safe deep-linking and zero stringly-typed navigation.
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
-    /// "Add a server" — the provision-vs-pair CHOOSER (AddServerChooserScreen),
-    /// at parity with the webapp + Android. Provision pushes `.provisionServer`;
-    /// pairing an existing box is the deferred multi-device path (you pair an
-    /// existing server by opening it from Home), surfaced as guidance.
-    case addServer
-    /// The actual "provision a new box" flow (CreateServer), reached from the
-    /// chooser's Provision card. Split out from `.addServer` so the chooser owns
-    /// the fork.
+    /// "Add a server" — provisions a new box. Goes straight into the CreateServer
+    /// flow: there's no chooser. Pairing is automatic (every control device sees
+    /// every server), and taking over a transferred box is a link/QR ingestion
+    /// (handled via the universal process-link path), not a menu option.
     case provisionServer
     case installProgress(serial: String, name: String, description: String)
 }
@@ -196,7 +192,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 /// "I already have an account" (Welcome → Recovery via WebAuthn-PRF →
 /// PostRecoveryChoice). Both leave the user on the paired RootShell.
 /// Provisioning a server is no longer part of onboarding — it's the
-/// in-shell "Add a server" flow (HomeRoute.addServer).
+/// in-shell "Add a server" flow (HomeRoute.provisionServer).
 public enum OnboardingRoute: Hashable, Sendable {
     case chooseUsername
     /// Open account — the Phase-2 step that decouples account identity
@@ -204,7 +200,7 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// POSTs a standalone `claimUsername`, and names this first device.
     /// On success the user lands on Home with ZERO servers; the
     /// create-server flow becomes a reusable "Add a server" from there
-    /// (HomeRoute.addServer), so onboarding no longer carries a
+    /// (HomeRoute.provisionServer), so onboarding no longer carries a
     /// server-mint route.
     case openAccount(username: String)
     /// Skippable "Secure your account" step. Shown right after a

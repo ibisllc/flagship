@@ -116,15 +116,7 @@ final class GymEveryMergeTests: XCTestCase {
         gymShot(app, "home-ready")
         addServer.tap()
 
-        // The chooser now sits between add-server and the form (provision vs pair).
-        let provision = app.buttons["chooser-provision"]
-        XCTAssertTrue(
-            provision.waitForExistence(timeout: 15),
-            "Add-server should open the provision-vs-pair chooser."
-        )
-        gymShot(app, "add-server-chooser")
-        provision.tap()
-
+        // Add-server goes straight into the create flow — no chooser.
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(
             name.waitForExistence(timeout: 15),

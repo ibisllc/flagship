@@ -62,9 +62,8 @@ public struct HomeTab: View {
             }
             _ = linker.consume()
         case .createServer:
-            // A `createServer` deep-link is an explicit "provision" intent, so it
-            // skips the chooser and goes straight to the create flow. The Home
-            // "add server" button opens the chooser (.addServer); this does not.
+            // A `createServer` deep-link and the Home "add server" button both go
+            // straight to the create flow — there's no chooser.
             if !path.contains(.provisionServer) {
                 path.append(.provisionServer)
             }
@@ -102,7 +101,7 @@ public struct HomeTab: View {
                         // The IRK biometric fires when signing the release.
                         pendingDeleteDeadPod = pod
                     },
-                    onAddServer: { path.append(.addServer) },
+                    onAddServer: { path.append(.provisionServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
                     onVibeCode: {
                         // Building a service needs a server to build + run
@@ -276,22 +275,6 @@ public struct HomeTab: View {
             } else {
                 ServerDetailContainer(podId: podId, onDeleted: { path.removeAll() })
             }
-        case .addServer:
-            // Provision-vs-pair chooser — parity with the webapp + Android. The
-            // AddServerChooserScreen existed but was never wired (a dead screen);
-            // `.addServer` now shows it and forks: Provision → the create flow;
-            // pairing an existing box is the deferred multi-device path (a device
-            // pairs an existing server by opening it from Home), so onPair gives
-            // that guidance instead of Android's silent no-op.
-            AddServerChooserScreen(
-                mode: .inApp,
-                onProvision: { path.append(.provisionServer) },
-                onPair: {
-                    toasts.info(
-                        "Servers you already own show up on Home — open one to pair this device. Choose “Provision a new box” to set up brand-new hardware."
-                    )
-                }
-            )
         case .provisionServer:
             CreateServerContainer(
                 onDeliveredVisible: { serverDomain, serial, name, description in
