@@ -39,7 +39,12 @@ approve-a-request join (story 3). Default OFF everywhere.
 
 ---
 
-Status: **spec only, not yet built.** This is the dedicated spec pass the
+Status: **Phases 0–2 BUILT + merged** (spine, enforcement, clients — gated/clean-slate,
+so a strict no-op until a box is reburned with an admin root). **Remaining:** Phase 3
+(assurance-gated promote-a-device UI; recovery-rotation proof signing + the box-side
+rotation consumer; the `orders.ts`/`rePairWatcher` follow-ups) and the owner-side rollout
+(wipe → reburn with admin roots pinned → deploy `.com` + apply migrations 0064/0065). This
+is the dedicated spec pass the
 `docs/device-admin-entitlements.md` review (§"⚠️ Review outcome (2026-06-30)")
 demanded before any D code lands. It honors the owner-set "D decisions
 (2026-07-01)" exactly:
