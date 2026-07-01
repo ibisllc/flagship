@@ -1085,6 +1085,57 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // secretMailbox update lane (server-update) — same consume-once + dedup + GC
+  // + lane-isolation semantics as the other deposit lanes.
+  // ────────────────────────────────────────────────────────────────────
+  describe("secretMailbox (update lane)", () => {
+    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      requestNonceHex: nonce,
+      stkPubHex: "ab".repeat(32),
+      sealedHex: sealed,
+      issuedAt: 1,
+      expiresAt,
+    });
+
+    it("update deposit → consume-once → second consume undefined; dedup; lane isolation; expired never served", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.secretMailbox.putUpdateDeposit(mk("aa".repeat(16), "updateblob"));
+        const dup = await s.secretMailbox.putUpdateDeposit(mk("aa".repeat(16), "again"));
+        const first = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 10);
+        const second = await s.secretMailbox.consumeUpdateDeposit("home.alice.flagship.services", 11);
+        // A cgk consume must NOT see the update row.
+        await s.secretMailbox.putUpdateDeposit(mk("bb".repeat(16), "update2"));
+        const cross = await s.secretMailbox.consumeCgkDeposit("home.alice.flagship.services", 12);
+        // Expired rows are never served.
+        await s.secretMailbox.putUpdateDeposit({
+          ...mk("cc".repeat(16), "stale", 5),
+          serverDomain: "old.alice.flagship.services",
+        });
+        const expired = await s.secretMailbox.consumeUpdateDeposit("old.alice.flagship.services", 100);
+        return {
+          putOk: put.ok,
+          dupOk: dup.ok,
+          firstSealed: first?.sealedHex,
+          secondDefined: second !== undefined,
+          crossDefined: cross !== undefined,
+          expiredDefined: expired !== undefined,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        putOk: true,
+        dupOk: false,
+        firstSealed: "updateblob",
+        secondDefined: false,
+        crossDefined: false,
+        expiredDefined: false,
+      });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // serverTransfers — the transfer-a-box broker lane. One offer per box
   // (re-issue replaces); claim is a one-time CAS; getOffer GCs an unclaimed
   // expired offer but keeps a claimed one.
