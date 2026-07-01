@@ -49,6 +49,31 @@ chooser is the *only* entry to the transfer-claim (acquirer) path, so **Slice A
 removal there must land *after* Slice C** provides a standalone deep-link/camera
 claim entry. (iOS is safe — its acquirer was never wired, so A orphaned nothing.)
 
+## D decisions (2026-07-01) — owner-set
+
+The owner resolved the four D forks. These make D buildable (they dissolve the
+migration blocker) but D is still **deferred to its own dedicated spec pass**
+after A/B/C:
+
+1. **Clean-slate, not a migration.** We are pre-release and **may wipe all
+   servers/accounts and start fresh**. So D is **not** a retroactive fleet
+   rotation — instead, fresh burns bake in an **admin root that is NOT derived
+   from the UMK** from day one. No dual-accept grace, no per-box ack, no LUKS
+   re-seal-in-place: a wipe + reburn establishes the real boundary cleanly. This
+   removes the review's single biggest blocker.
+2. **Non-admin = full user minus admin ops.** Non-admins use every app/service
+   (SWK/CGK stay UMK-derived — accepted); only **administrative/destructive** ops
+   are gated: transfer-give, wipe, decommission, replace, promote-a-device,
+   set-front-page, set-leader, revoke. The boundary is about *authority*, not
+   data access.
+3. **Flat revocation; recovery is the remedy.** No seniority/quorum. A stolen
+   *active* admin is stopped only by credential recovery — which D must fix to
+   relay a **cryptographic rotation proof** the box verifies (old-root-signs-new-
+   root), not `.com`'s reported key.
+4. **Timing:** build D **after A/B/C** land, as its own spec'd box-side +
+   enforcement workstream (one shared `requireMasterIrk`/scope predicate across
+   the daemon + `.com`, guarded by a CI grep-gate).
+
 ## Why
 
 The iOS "Add a server" screen offered three cards — *Provision a new box*,
