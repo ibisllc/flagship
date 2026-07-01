@@ -34,6 +34,12 @@ class SetPreferredServerViewModel(
     private val signer: suspend (String) -> Ed25519Sign = { reason -> Keystore.deriveIRK(reason) },
     /** The owner IRK pub hex (for the mailbox auth). Injectable for tests. */
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
+    /** Slice D — resolves the ADMIN MASTER ROOT to sign the SENSITIVE set-leader
+     *  VOTE, or null when this device holds no admin root (legacy ⇒ vote stays
+     *  IRK-signed). Silent within the biometric-freshness window opened by
+     *  [signer]. The mailbox AUTH envelope stays IRK-signed. */
+    private val orderSigner: suspend (String) -> Ed25519Sign? =
+        { reason -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(reason) else null },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     sealed interface Phase {
@@ -62,12 +68,14 @@ class SetPreferredServerViewModel(
         return try {
             val irk = signer("Set $serverDomain as your preferred server")
             val pub = irkPubHex()
+            val orderKey = orderSigner("Set $serverDomain as your preferred server")
             val body = SetLeaderDeposit.buildDeposit(
                 username = username,
                 serverDomain = serverDomain,
                 preferredStkPubHex = preferredStkPubHex,
                 irk = irk,
                 irkPubHex = pub,
+                orderKey = orderKey,
                 now = now(),
             )
             _phase.value = Phase.Posting

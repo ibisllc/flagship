@@ -35,7 +35,7 @@ class TransferViewModelTest {
         val client = MockServerTransferClient()
         val vm = TransferGiverViewModel(
             serverDomain = host, username = "alice", client = client, mailbox = MockSecretMailboxClient(),
-            signer = signer(giver), irkPubHex = pub(giver), irkSeed = { giver.privateKey }, now = { 1700 },
+            signer = signer(giver), irkPubHex = pub(giver), orderSigner = { null }, irkSeed = { giver.privateKey }, now = { 1700 },
         )
         vm.start()
         assertEquals(TransferGiverPhase.AwaitingClaim, vm.phase.value)
@@ -69,7 +69,7 @@ class TransferViewModelTest {
         }
         val vm = TransferGiverViewModel(
             serverDomain = host, username = "alice", client = client, mailbox = mailbox,
-            signer = signer(giver), irkPubHex = pub(giver), irkSeed = { giver.privateKey }, now = { 1700 },
+            signer = signer(giver), irkPubHex = pub(giver), orderSigner = { null }, irkSeed = { giver.privateKey }, now = { 1700 },
         )
         vm.start()
         val done = vm.pollOnce()
@@ -91,7 +91,8 @@ class TransferViewModelTest {
         val qrText = ServerTransferFlow.encodeQR(built.qr)
         val client = MockServerTransferClient()
         val vm = TransferAcquirerViewModel(
-            username = "Bob", client = client, signer = signer(acquirer), irkPubHex = pub(acquirer), now = { 1800 },
+            username = "Bob", client = client, signer = signer(acquirer), irkPubHex = pub(acquirer),
+            orderSigner = { null }, now = { 1800 },
         )
         assertTrue(vm.ingest(qrText))
         vm.confirm()

@@ -38,6 +38,10 @@ object ReplaceServerFlow {
         username: String,
         irk: Ed25519Sign,
         irkPubHex: String,
+        // Slice D — the decommission ORDER is SENSITIVE: sign with the admin
+        // master root (`orderKey`) when supplied, else the IRK. The mailbox AUTH
+        // below stays IRK-signed (the owner deposit credential).
+        orderKey: Ed25519Sign? = null,
         retiredStkPubHex: String,
         finalBackup: Boolean,
         disposition: Disposition,
@@ -48,7 +52,7 @@ object ReplaceServerFlow {
     ): DecommissionDepositBody {
         val nonceHex = HexUtil.encode(nonce)
         val epoch = backupEpoch ?: issuedAt
-        val sig = irk.sign(
+        val sig = (orderKey ?: irk).sign(
             ServerDecommissionOrder.canonicalBytes(
                 podCanonical = serverFqdn,
                 retiredStkPubHex = retiredStkPubHex,

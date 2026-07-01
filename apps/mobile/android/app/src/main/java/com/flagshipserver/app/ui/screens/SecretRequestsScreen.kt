@@ -47,6 +47,7 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.SecretPurpose
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -73,7 +74,15 @@ fun SecretRequestsScreen(nav: NavController) {
 
     val coordinator = remember(username, mailbox) {
         username?.let {
-            SecretRequestCoordinator(mailbox = mailbox, username = it, irk = KeystoreIrkAccess())
+            // Slice D — the entitlement/lease orders minted in the ceremony sign
+            // with the admin master root when this device holds one (transport
+            // envelopes stay IRK).
+            SecretRequestCoordinator(
+                mailbox = mailbox,
+                username = it,
+                irk = KeystoreIrkAccess(),
+                adminSigner = { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+            )
         }
     }
 

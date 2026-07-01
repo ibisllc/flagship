@@ -31,6 +31,12 @@ class TransferAcquirerViewModel(
     private val client: ServerTransferClient,
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
+    /** Slice D — resolves the acquirer's ADMIN MASTER ROOT to sign the SENSITIVE
+     *  CLAIM order, or null (legacy ⇒ IRK). The claim's `acquirerIrkPub` identity
+     *  field stays the registered IRK; `.com` gates the signature on the admin
+     *  root. */
+    private val orderSigner: suspend (reason: String) -> Ed25519Sign? =
+        { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val _phase = MutableStateFlow<TransferAcquirerPhase>(TransferAcquirerPhase.Idle)
@@ -93,15 +99,17 @@ class TransferAcquirerViewModel(
         _phase.value = TransferAcquirerPhase.Signing
         val key: Ed25519Sign
         val pub: String
+        val orderKey: Ed25519Sign?
         try {
             key = signer("Take over ${parsed.serverDomain}")
             pub = irkPubHex()
+            orderKey = orderSigner("Take over ${parsed.serverDomain}")
         } catch (e: Throwable) {
             _phase.value = TransferAcquirerPhase.Failed("Couldn't access your account key: ${e.message}")
             return
         }
         try {
-            val body = ServerTransferFlow.buildClaim(parsed, username, key, pub, now())
+            val body = ServerTransferFlow.buildClaim(parsed, username, key, pub, now(), orderKey)
             _phase.value = TransferAcquirerPhase.Posting
             val result = client.postClaim(parsed.serverDomain, body)
             _phase.value = TransferAcquirerPhase.Claimed(result.newServerDomain)

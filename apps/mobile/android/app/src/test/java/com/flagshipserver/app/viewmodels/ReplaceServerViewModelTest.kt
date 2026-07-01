@@ -54,7 +54,10 @@ class ReplaceServerViewModelTest {
         onRetired: () -> Unit = {},
     ) = ReplaceServerViewModel(
         serverFqdn = server, username = username, mailbox = mailbox, screens = screens,
-        onRetired = onRetired, signer = signer, irkPubHex = pub, now = { 1700 },
+        // Legacy (no admin root) — the decommission order stays IRK-signed. The
+        // admin-root path is pinned at the builder level in
+        // AdminRootEntangledSigningTest.
+        onRetired = onRetired, signer = signer, irkPubHex = pub, orderSigner = { null }, now = { 1700 },
     )
 
     // ── Pre-flight backup gate ────────────────────────────────────────────────

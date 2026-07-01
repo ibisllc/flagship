@@ -50,13 +50,24 @@ object ServerTransferFlow {
         irk: Ed25519Sign,
         irkPubHex: String,
         issuedAt: Long,
+        // Slice D — the transfer OFFER is a SENSITIVE order: sign with the giver's
+        // admin master root (`orderKey` + its `orderKeyPubHex`) when supplied, else
+        // the IRK. The QR's `giverIrkPub` MUST be the key the offer was signed with
+        // (the acquirer's local `verifyOfferSignature` checks `offerSignature`
+        // under it), so it TRACKS the signing key. `.com` gates the offer against
+        // the giver's admin root and records the giver identity from the registered
+        // account, independent of this QR field. The mailbox AUTH stays IRK-signed.
+        orderKey: Ed25519Sign? = null,
+        orderKeyPubHex: String? = null,
         ttlMs: Long = 15 * 60_000,
         nonce: ByteArray = random32(),
         authNonce: ByteArray = random32(),
     ): BuiltOffer {
         val nonceHex = HexUtil.encode(nonce)
         val expiresAt = issuedAt + ttlMs
-        val offerSig = irk.sign(
+        val signKey = orderKey ?: irk
+        val signPubHex = (if (orderKey != null) orderKeyPubHex else null) ?: irkPubHex
+        val offerSig = signKey.sign(
             ServerTransferOfferOrder.canonicalBytes(serverDomain, nonceHex, issuedAt, expiresAt)
         )
         val offerSigHex = HexUtil.encode(offerSig)
@@ -70,7 +81,7 @@ object ServerTransferFlow {
         val qr = OfferQR(
             serverDomain = serverDomain,
             transferNonce = nonceHex,
-            giverIrkPub = irkPubHex.lowercase(),
+            giverIrkPub = signPubHex.lowercase(),
             issuedAt = issuedAt,
             expiresAt = expiresAt,
             offerSignature = offerSigHex,
@@ -159,10 +170,17 @@ object ServerTransferFlow {
         acquirerIrk: Ed25519Sign,
         acquirerIrkPubHex: String,
         issuedAt: Long,
+        // Slice D — the claim's `acquirerIrkPub` field STAYS the acquirer's
+        // registered IRK (`.com` requires `claim.acquirerIrkPub == acquirer
+        // .irkPubHex` — identity, independent of the signature). The SENSITIVE
+        // claim ORDER signs with the acquirer's admin master root (`orderKey`)
+        // when supplied (else the IRK); `.com` gates the signature against the
+        // acquirer's admin root. Canonical bytes (incl. the IRK field) unchanged.
+        orderKey: Ed25519Sign? = null,
     ): TransferClaimBody {
         if (offer.expiresAt <= issuedAt) throw TransferException("expired")
         val lowered = acquirerUsername.lowercase()
-        val sig = acquirerIrk.sign(
+        val sig = (orderKey ?: acquirerIrk).sign(
             ServerTransferClaimOrder.canonicalBytes(
                 offer.serverDomain, offer.transferNonce, lowered, acquirerIrkPubHex, issuedAt
             )

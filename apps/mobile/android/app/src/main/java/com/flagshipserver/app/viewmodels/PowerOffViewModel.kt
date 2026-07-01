@@ -37,10 +37,12 @@ sealed interface PowerOffPhase {
 
 class PowerOffViewModel(
     private val serverDomain: String,
-    /** Biometric-gated owner-IRK signer. Default uses the real Keystore IRK;
-     *  the caller passes the reason string for the prompt. Mirrors
-     *  DeadManViewModel / RevokeServerViewModel. */
-    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    /** Biometric-gated signer. Slice D — power-off is a SENSITIVE order
+     *  (deadManHttp.ts / the box gates it on the admin master root): sign with the
+     *  admin root when this device holds one, else the owner IRK (legacy). Only
+     *  the signing KEY changes; the canonical bytes are byte-identical and the box
+     *  resolves the signer by trial. Mirrors DeadManViewModel / RevokeServerViewModel. */
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val client: LockPowerClient = LockPowerClient(),
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {

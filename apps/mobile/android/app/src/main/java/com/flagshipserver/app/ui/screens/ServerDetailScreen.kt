@@ -349,6 +349,15 @@ private fun BootUnlockApprovalCard(
                             mailbox = mailbox,
                             username = user,
                             irk = KeystoreIrkAccess(),
+                            // Slice D — the boot-approval ceremony mints the
+                            // RootEntitlement (owner decision: ADMIN-ROOT — a
+                            // reburned admin-pinned box rejects an IRK-signed one)
+                            // + the box-sealed auto-unlock lease; both sign with
+                            // the admin master root when held. Transport envelopes
+                            // stay IRK.
+                            adminSigner = { r ->
+                                if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null
+                            },
                         ),
                     )
                 }
@@ -584,7 +593,9 @@ private fun FrontPageCard(serverDomain: String) {
     val vm = remember(serverDomain) {
         FrontPageViewModel(
             serverDomain = serverDomain,
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — set-front-page is SENSITIVE: sign with the admin master
+            // root when this device holds one (else the owner IRK).
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -797,9 +808,10 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
     val vm = remember(serverDomain) {
         PowerOffViewModel(
             serverDomain = serverDomain,
-            // deriveIRK runs the biometric gate, then signs with the owner IRK
-            // — the SAME key the daemon's /api/power pins. Never silent.
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — power-off is SENSITIVE: the biometric gate signs with the
+            // admin master root when this device holds one (else the owner IRK,
+            // the key the daemon's /api/power pins on a legacy box). Never silent.
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -982,8 +994,10 @@ private fun DeadManCard(serverDomain: String) {
         DeadManViewModel(
             serverDomain = serverDomain,
             username = { username },
-            // deriveIRK runs the biometric gate — never a silent renew.
-            signer = { reason -> Keystore.deriveIRK(reason) },
+            // Slice D — dead-man policy/affirm is SENSITIVE: sign with the admin
+            // master root when this device holds one (else the owner IRK). The
+            // biometric gate is never silent.
+            signer = { reason -> Keystore.adminSigningKey(reason) },
         )
     }
     val phase by vm.phase.collectAsState()

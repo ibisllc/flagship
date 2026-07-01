@@ -44,6 +44,14 @@ class TransferGiverViewModel(
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     /** The IRK pub hex (after the biometric). */
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
+    /** Slice D — resolves the ADMIN MASTER ROOT to sign the SENSITIVE transfer
+     *  OFFER, or null (legacy ⇒ IRK). The mailbox AUTH + the disk-key re-seal
+     *  (which needs the giver IRK) stay IRK; only the offer signature switches. */
+    private val orderSigner: suspend (reason: String) -> Ed25519Sign? =
+        { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+    /** Admin-root pub hex — the QR `giverIrkPub` must TRACK the offer's signing
+     *  key so the acquirer's local verify passes. Null ⇒ no admin root. */
+    private val orderKeyPubHex: suspend () -> String? = { Keystore.adminRootPubHex() },
     /** The IRK seed (after deriveIRK) — needed to unseal the box's disk key. */
     private val irkSeed: () -> ByteArray = { Keystore.requireIrkSeedForVersion(Keystore.currentIrkVersion()) },
     private val now: () -> Long = { System.currentTimeMillis() },
@@ -72,9 +80,15 @@ class TransferGiverViewModel(
         }
         irk = key
         pubHex = pub
+        // The offer ORDER signs with the admin master root when held; the QR's
+        // giverIrkPub tracks it. The stored `irk`/`pubHex` above (used for the
+        // later disk-key re-seal + poll auth) stay the membership IRK.
+        val orderKey = orderSigner("Transfer $serverDomain to another account")
+        val orderPub = if (orderKey != null) orderKeyPubHex() else null
         try {
             val built = ServerTransferFlow.buildOffer(
-                serverDomain = serverDomain, username = username, irk = key, irkPubHex = pub, issuedAt = now(),
+                serverDomain = serverDomain, username = username, irk = key, irkPubHex = pub,
+                issuedAt = now(), orderKey = orderKey, orderKeyPubHex = orderPub,
             )
             _phase.value = TransferGiverPhase.Posting
             client.postOffer(serverDomain, built.body)

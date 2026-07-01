@@ -47,6 +47,10 @@ class ReplaceServerViewModel(
     private val onRetired: () -> Unit,
     private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
+    /** Slice D — resolves the ADMIN MASTER ROOT to sign the SENSITIVE
+     *  decommission ORDER, or null (legacy ⇒ IRK). The mailbox AUTH stays IRK. */
+    private val orderSigner: suspend (reason: String) -> Ed25519Sign? =
+        { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val _phase = MutableStateFlow<ReplaceServerPhase>(ReplaceServerPhase.CheckingBackup)
@@ -113,9 +117,11 @@ class ReplaceServerViewModel(
         _phase.value = ReplaceServerPhase.Signing
         val key: Ed25519Sign
         val pub: String
+        val orderKey: Ed25519Sign?
         try {
             key = signer("Replace $serverFqdn")
             pub = irkPubHex()
+            orderKey = orderSigner("Replace $serverFqdn")
         } catch (e: Throwable) {
             _phase.value = ReplaceServerPhase.Failed("Couldn't access your account key: ${e.message}")
             return
@@ -131,6 +137,7 @@ class ReplaceServerViewModel(
                 username = username,
                 irk = key,
                 irkPubHex = pub,
+                orderKey = orderKey,
                 retiredStkPubHex = retiredStkPubHex,
                 finalBackup = finalBackup,
                 disposition = disposition,

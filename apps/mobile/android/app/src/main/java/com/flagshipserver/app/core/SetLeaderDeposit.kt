@@ -43,6 +43,14 @@ object SetLeaderDeposit {
         mailboxNonceHex: String = randomHex(32),
         depositNonceHex: String = randomHex(32),
         voteNonceHex: String = randomHex(32),
+        // Slice D — the set-leader VOTE is a SENSITIVE order: sign it with the
+        // admin master root (`orderKey`) when supplied, else the IRK (legacy /
+        // no admin root). The mailbox AUTH envelope below STAYS IRK-signed — it
+        // is the account-owner deposit credential (`phoneIrkPub` MUST equal the
+        // registered IRK), NOT the sensitive authority. Canonical bytes are
+        // byte-identical either way — only the signing key changes. (Placed last
+        // so existing positional callers are unaffected.)
+        orderKey: Ed25519Sign? = null,
     ): SetLeaderDepositBody {
         val pref = preferredStkPubHex.lowercase()
         // Either the 32-byte hex pub or the "none" sentinel.
@@ -52,7 +60,7 @@ object SetLeaderDeposit {
         }
 
         val canonical = CloudGossip.setLeaderCanonicalBytes(username, pref, now, voteNonceHex)
-        val voteSig = irk.sign(canonical)
+        val voteSig = (orderKey ?: irk).sign(canonical)
 
         val expiresAt = now + 120_000
         val authSig = DeviceEndpointClaim.sign(
