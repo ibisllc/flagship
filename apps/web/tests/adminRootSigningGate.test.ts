@@ -27,6 +27,7 @@ const loadAdminRoot = () => load("lib/adminRoot.js");
 
 const te = (s: string) => new TextEncoder().encode(s);
 
+const ROOT_ENTITLEMENT = "flagship/root-entitlement/v1|alice|abcd|foo.bar.flagship.services|1700000000000";
 const DECOMMISSION = "flagship/server-decommission/v1|foo.bar.flagship.services|00|1|keep|0|abc|1700000000000";
 const RELEASE = "flagship/release-server-name/v1|alice|foo.bar|1700000000000";
 const INVITE_CREATE = "flagship/service-invite/create/v1|iid|aidhex|svc|hash|bundle|1700000000000";
@@ -67,7 +68,7 @@ describe("makeSensitiveSigner — the signing gate", () => {
     const legacy = (u: Uint8Array, b: Uint8Array) => ks.signWithIrk(u, b);
 
     const sign = makeSensitiveSigner(adminSeed, legacy);
-    for (const tag of [DECOMMISSION, RELEASE, INVITE_CREATE]) {
+    for (const tag of [ROOT_ENTITLEMENT, DECOMMISSION, RELEASE, INVITE_CREATE]) {
       const bytes = te(tag);
       const sig = await sign(umk, bytes);
       // ADMIN root signed it — verifies under the admin pub, NOT the IRK.
@@ -161,6 +162,8 @@ describe("makeSensitiveSigner — the signing gate", () => {
     expect(canonicalTag(te(DECOMMISSION))).toBe("flagship/server-decommission/v1");
     expect(canonicalTag(te(MAILBOX_AUTH))).toBe("flagship/device-endpoint-claim/v1");
     expect(SENSITIVE_TAGS.has("flagship/server-decommission/v1")).toBe(true);
+    // The deferred piece: RootEntitlement is now an admin-root order.
+    expect(SENSITIVE_TAGS.has("flagship/root-entitlement/v1")).toBe(true);
     expect(SENSITIVE_TAGS.has("flagship/device-endpoint-claim/v1")).toBe(false);
   });
 });

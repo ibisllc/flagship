@@ -39,6 +39,7 @@ import { getSession } from "./state.js";
  */
 export const SENSITIVE_TAGS = new Set([
   // Box-side (adminAuthorityLocal)
+  "flagship/root-entitlement/v1", //       authorize a box to serve (boot approval)
   "flagship/server-decommission/v1", //    replace / decommission
   "flagship/order/set-front-page/v1", //   apex front page
   "flagship/set-leader/v1", //             preferred-server vote

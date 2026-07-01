@@ -408,9 +408,13 @@ async function respondUnlock(req, deps = {}) {
   // layer). Best-effort — a failure never fails the unlock; the box can still
   // request the entitlement via the inbox fallback.
   try {
+    // Slice D: route the folded-in RootEntitlement deposit through the gated
+    // signer so its carrier signs under the admin master root when present. The
+    // gate is tag-routed, so the co-signed IRK mailbox-auth still falls back to
+    // `sign` (the membership IRK the deposit lane needs).
     await depositEntitlement(
       { serverDomain: req.serverDomain, stkPubHex: req.directoryStkPubHex },
-      { fetch: f, comBase, signWithIrk: sign, now: () => now },
+      { fetch: f, comBase, signWithIrk: sensitiveSigner(sign), now: () => now },
     );
   } catch (e) {
     console.warn(
@@ -422,8 +426,9 @@ async function respondUnlock(req, deps = {}) {
 }
 
 /**
- * The `entitlement` responder: mint an owner-IRK RootEntitlement carrier for
- * the box's STK and POST it as the reply to the box's entitlement request.
+ * The `entitlement` responder: mint an admin-root-signed (owner-IRK on a
+ * pre-wipe box) RootEntitlement carrier for the box's STK and POST it as the
+ * reply to the box's entitlement request.
  * Same transport as unlock — only the sealed bytes differ (the PUBLIC carrier,
  * not a secret). Mirror of confirmAndRespond's `.entitlement` branch. This is
  * the inbox FALLBACK for boxes that never got a deposit (unencrypted boxes, or
@@ -437,7 +442,10 @@ async function respondEntitlement(req, deps = {}) {
   const username = session.username;
   if (!username) throw new Error("sign in first");
   if (!session.umk) throw new Error("unlock the webapp first");
-  const sign = deps.signWithIrk || defaultSignWithIrk;
+  // Slice D: the RootEntitlement carrier signs under the admin master root when
+  // present (else the legacy owner IRK) — the tag-routed gate. The boot-auth
+  // header on postBootResponse stays IRK (its tag is not sensitive).
+  const sign = deps.signWithIrk || sensitiveSigner();
   const now = (deps.now || Date.now)();
 
   const carrierHex = await buildEntitlementCarrier({
@@ -507,9 +515,9 @@ export async function approveUnlock(req, deps = {}) {
 }
 
 /**
- * Mint an owner-IRK-signed RootEntitlement for THIS box's STK and DEPOSIT it on
- * `.com`, so the box claims it on first boot with no separate "authorize to
- * serve" approval. The carrier is the PUBLIC EntitlementBundle JSON (what the
+ * Mint an admin-root-signed (owner-IRK on a pre-wipe box) RootEntitlement for
+ * THIS box's STK and DEPOSIT it on `.com`, so the box claims it on first boot
+ * with no separate "authorize to serve" approval. The carrier is the PUBLIC EntitlementBundle JSON (what the
  * box presents at the hub HELLO), not a secret — so the deposit is content-blind
  * to `.com` and a public consume-once read by the box is harmless.
  *
@@ -523,7 +531,14 @@ export async function depositEntitlement(args, deps = {}) {
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || COM_BASE;
-  const sign = deps.signWithIrk || defaultSignWithIrk;
+  // Slice D: the RootEntitlement is an ADMIN-ROOT order (only admins bring a box
+  // online) — a reburned admin-pinned box REJECTS an IRK-signed RootEntitlement
+  // at HELLO (server-daemon entitlementRelay → authorizeSensitiveOrder). The
+  // gated signer routes the `flagship/root-entitlement/v1` carrier to the admin
+  // master root (when present) while the co-signed IRK mailbox-auth
+  // (`device-endpoint-claim`) stays the membership IRK the deposit lane requires.
+  // Legacy (pre-wipe) accounts sign both with the IRK.
+  const sign = deps.signWithIrk || sensitiveSigner();
   const now = (deps.now || Date.now)();
 
   const stkPubHex = String(args.stkPubHex).toLowerCase();
@@ -854,10 +869,16 @@ export async function depositSetLeader(args, deps = {}) {
 }
 
 /**
- * The PUBLIC entitlement carrier hex: an owner-IRK-signed RootEntitlement
- * serialized as the daemon's on-disk EntitlementBundle JSON (UTF-8 → hex).
- * Canonical bytes + JSON field shape MUST match packages/protocol
- * `canonicalRootEntitlement` + server-daemon `serializeEntitlementBundle`.
+ * The PUBLIC entitlement carrier hex: a RootEntitlement serialized as the
+ * daemon's on-disk EntitlementBundle JSON (UTF-8 → hex). Canonical bytes + JSON
+ * field shape MUST match packages/protocol `canonicalRootEntitlement` +
+ * server-daemon `serializeEntitlementBundle`.
+ *
+ * Slice D: the `signWithIrk` the callers pass is the tag-routed sensitive signer,
+ * so a `flagship/root-entitlement/v1` carrier is signed by the ADMIN MASTER ROOT
+ * when the account has one (a reburned admin-pinned box rejects an IRK-signed
+ * RootEntitlement at HELLO), falling back to the owner IRK on a pre-wipe box. The
+ * signing KEY changes; the canonical bytes are byte-identical.
  */
 async function buildEntitlementCarrier({ username, podPubKeyHex, podCanonical, issuedAt, signWithIrk, umk }) {
   const canonical = te(
