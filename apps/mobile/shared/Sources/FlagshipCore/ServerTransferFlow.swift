@@ -40,6 +40,63 @@ public enum ServerTransferFlow {
         case notATransferQR
         case malformedQR
         case expired
+        /// The offer's `offerSignature` does not verify under `giverIrkPub` over
+        /// the `ServerTransferOfferOrder` canonical bytes. A deep-linked/scanned
+        /// offer is attacker-supplied — this is the forgery gate.
+        case badSignature
+    }
+
+    // MARK: - Universal-link / custom-scheme QR encoding (Slice C)
+
+    /// The path the transfer universal link + custom scheme both use.
+    public static let transferLinkPath = "/transfer"
+    /// The query param carrying the base64url(offerJSON).
+    public static let transferLinkParam = "o"
+
+    /// Encode an offer as the `o=` param: `base64url(UTF8(offerJSON))`, NO padding
+    /// (`-_` alphabet, `=` stripped). `offerJSON` is `encodeQR` (sortedKeys), so
+    /// the payload is byte-identical to what the in-app scanner parses.
+    public static func encodeOfferParam(_ qr: OfferQR) throws -> String {
+        let json = try encodeQR(qr)
+        return base64URLNoPadding(Data(json.utf8))
+    }
+
+    /// Decode an `o=` param back to the offer JSON string. Returns nil on a
+    /// malformed base64url / non-UTF8 payload.
+    public static func decodeOfferParam(_ b64url: String) -> String? {
+        guard let data = decodeBase64URLNoPadding(b64url),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
+    }
+
+    /// The UNIVERSAL LINK the giver renders as a QR so the native Camera can open
+    /// it: `https://flagshipserver.com/transfer?o=<b64url>`. Uses the configured
+    /// control host (prod = `flagshipserver.com`).
+    public static func transferUniversalLink(_ qr: OfferQR, controlHost: String = Endpoints.controlHost) throws -> String {
+        "https://\(controlHost)\(transferLinkPath)?\(transferLinkParam)=\(try encodeOfferParam(qr))"
+    }
+
+    /// The custom-scheme twin: `flagship://transfer?o=<b64url>`.
+    public static func transferCustomSchemeLink(_ qr: OfferQR) throws -> String {
+        "flagship://transfer?\(transferLinkParam)=\(try encodeOfferParam(qr))"
+    }
+
+    /// Base64url-no-padding encoder (RFC 4648 §5) — matches the webapp/Android
+    /// encoders + the existing `CompanionTicketURL` idiom.
+    static func base64URLNoPadding(_ data: Data) -> String {
+        var s = data.base64EncodedString()
+        s = s.replacingOccurrences(of: "+", with: "-")
+        s = s.replacingOccurrences(of: "/", with: "_")
+        while s.hasSuffix("=") { s.removeLast() }
+        return s
+    }
+
+    static func decodeBase64URLNoPadding(_ s: String) -> Data? {
+        var t = s
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while t.count % 4 != 0 { t.append("=") }
+        return Data(base64Encoded: t)
     }
 
     // MARK: - GIVER: build the offer body + the QR
@@ -81,8 +138,11 @@ public enum ServerTransferFlow {
     }
 
     /// Cheap shape check for the camera validator (full parse happens on scan).
+    /// Accepts BOTH the raw offer JSON (carries the `flagship-transfer-offer`
+    /// kind) AND the universal-link / custom-scheme QR (`…/transfer?o=`).
     public static func looksLikeTransferQR(_ text: String) -> Bool {
         text.contains("flagship-transfer-offer")
+            || text.contains("\(transferLinkPath)?\(transferLinkParam)=")
     }
 
     public static func encodeQR(_ qr: OfferQR) throws -> String {
@@ -104,6 +164,51 @@ public enum ServerTransferFlow {
             throw TransferError.malformedQR
         }
         return qr
+    }
+
+    /// Tolerant parse for a scanned string that may be EITHER the raw offer JSON
+    /// OR a `flagship://transfer?o=` / `https://<controlHost>/transfer?o=` link.
+    /// The in-app scanner uses this so it keeps working whether the giver renders
+    /// the JSON (older client) or the universal link (Slice C).
+    public static func parseScanned(_ text: String) throws -> OfferQR {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let json = offerJSONFromLink(trimmed) {
+            return try parseQR(json)
+        }
+        return try parseQR(trimmed)
+    }
+
+    /// Pull the offer JSON out of a transfer link (universal or custom scheme),
+    /// or nil if the string isn't a `…/transfer?o=…` link.
+    public static func offerJSONFromLink(_ text: String) -> String? {
+        guard let url = URL(string: text),
+              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              comps.path == transferLinkPath || url.host == "transfer",
+              let o = comps.queryItems?.first(where: { $0.name == transferLinkParam })?.value
+        else { return nil }
+        return decodeOfferParam(o)
+    }
+
+    /// SECURITY GATE (Slice C) — Ed25519-verify `offer.offerSignature` under
+    /// `offer.giverIrkPub` over the `ServerTransferOfferOrder` canonical bytes AND
+    /// require `expiresAt > now`. A deep-linked/scanned offer is attacker-supplied,
+    /// so the acquirer MUST pass this before building any claim. Throws
+    /// `.malformedQR` (bad pubkey), `.badSignature`, or `.expired`.
+    public static func verifyOffer(_ offer: OfferQR, now: Int64) throws {
+        guard let pubData = HexUtil.decode(offer.giverIrkPub), pubData.count == 32,
+              let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: pubData)
+        else { throw TransferError.malformedQR }
+        guard let sig = HexUtil.decode(offer.offerSignature) else { throw TransferError.badSignature }
+        let order = ServerTransferOfferOrder(
+            serverDomain: offer.serverDomain,
+            transferNonce: offer.transferNonce,
+            issuedAt: offer.issuedAt,
+            expiresAt: offer.expiresAt
+        )
+        guard pub.isValidSignature(sig, for: order.canonicalBytes()) else {
+            throw TransferError.badSignature
+        }
+        guard offer.expiresAt > now else { throw TransferError.expired }
     }
 
     /// Sign a `ServerTransferClaim` for a parsed offer, returning the claim body.

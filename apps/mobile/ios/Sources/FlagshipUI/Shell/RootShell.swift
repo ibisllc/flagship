@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -18,8 +19,14 @@ public struct RootShell: View {
     @Environment(DeepLinker.self) private var linker
     @Environment(AppState.self) private var app
     @Environment(PrivacySettings.self) private var privacy
+    // Slice B — auto-pair needs the box-pinned orders client + the per-pod token
+    // store to self-provision a session token for every visible pod on unlock.
+    @Environment(\.lockPowerClient) private var lockPower
+    @Environment(\.sessionStore) private var sessionStore
 
     @State private var selected: RootDestination
+    /// Slice B — the auto-pair batch coordinator (built lazily, once).
+    @State private var autoPair: AutoPairCoordinator?
     /// #92 — a friend redeem invite is presented as a full-screen cover
     /// (account-agnostic, independent of the tab nav stacks).
     @State private var pendingRedeem: RedeemTarget?
@@ -175,14 +182,45 @@ public struct RootShell: View {
         }
         // #92 — a redeem invite that arrived while locked is held in the
         // linker; replay it once the friend unlocks (they sign with their AID).
+        // Slice B — also kick an auto-pair pass on unlock (one biometric covers
+        // every not-yet-paired pod); re-arm it when the app re-locks.
         .onChange(of: app.isUnlocked) { _, unlocked in
-            if unlocked, let link = linker.pending { route(link) }
+            if unlocked {
+                if let link = linker.pending { route(link) }
+                runAutoPair()
+            } else {
+                autoPair?.resetForNewUnlock()
+            }
         }
+        // Slice B — the pod list loads asynchronously (after unlock on a cold
+        // launch), so re-run the pass when it first populates / changes. The
+        // coordinator's guards make this cheap + biometric-free once all pods are
+        // paired.
+        .onChange(of: app.pods.map { $0.fqdn }) { _, _ in
+            runAutoPair()
+        }
+        .task { runAutoPair() }
         // Appearance override (Settings → Appearance). `auto` ⇒ nil ⇒ follow the
         // system; light/dark force the scheme app-wide. Every view that reads
         // `@Environment(\.colorScheme)` + `FSColors.scheme(scheme)` then resolves
         // to the chosen palette.
         .preferredColorScheme(privacy.themeMode.preferredColorScheme)
+    }
+
+    /// Slice B — fire one auto-pair pass over the currently-visible pods. Guarded
+    /// so it only runs while unlocked + paired; the coordinator itself skips
+    /// already-tokened pods and derives the IRK (one biometric) only when there's
+    /// at least one unpaired pod. Safe to call repeatedly.
+    private func runAutoPair() {
+        guard app.isUnlocked, app.isPaired, !(app.currentUser ?? "").isEmpty else { return }
+        let coord = autoPair ?? AutoPairCoordinator(
+            client: lockPower,
+            store: sessionStore,
+            label: UIDevice.current.name
+        )
+        autoPair = coord
+        let pods = app.pods
+        Task { await coord.pairVisiblePods(pods) }
     }
 
     /// Route a freshly-arrived deep link. The friend-redeem invite is consumed
@@ -214,6 +252,15 @@ public struct RootShell: View {
             pendingKnock = KnockTarget(serverDomain: serverDomain, svc: svc, serviceRef: serviceRef, pageId: pageId)
             return
         }
+        if case .transferOffer = link {
+            // Slice C — take over a transferred box. Hold behind the lock like
+            // invite/knock (the claim rides the acquirer-IRK biometric); once
+            // unlocked, switch to Home WITHOUT consuming — HomeTab reads the same
+            // pending link and pushes the TransferAcquirer route into its stack.
+            guard app.isUnlocked else { return }
+            selected = .home
+            return
+        }
         selected = tab(for: link)
     }
 
@@ -226,6 +273,7 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode: return .apps
         case .recoverySetup, .joinAccount:            return .settings
+        case .transferOffer:                          return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }

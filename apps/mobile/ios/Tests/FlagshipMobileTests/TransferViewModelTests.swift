@@ -35,8 +35,10 @@ final class TransferViewModelTests: XCTestCase {
         )
         let sig = HexUtil.decode(body.offerSignature)!
         XCTAssertTrue(giver.publicKey.isValidSignature(sig, for: order.canonicalBytes()))
-        // The QR parses back to a transfer offer.
-        let qr = try! ServerTransferFlow.parseQR(vm.qrText!)
+        // The QR is rendered as the universal link (Slice C); parseScanned
+        // decodes the `o=` param back to a transfer offer.
+        XCTAssertTrue(vm.qrText!.contains("/transfer?o="))
+        let qr = try! ServerTransferFlow.parseScanned(vm.qrText!)
         XCTAssertEqual(qr.serverDomain, host)
     }
 
@@ -107,5 +109,48 @@ final class TransferViewModelTests: XCTestCase {
         let vm = TransferAcquirerViewModel(client: MockServerTransferClient(), username: "bob", signer: { _ in self.key(1) })
         XCTAssertFalse(vm.ingest("garbage"))
         if case .failed = vm.phase {} else { XCTFail("expected .failed") }
+    }
+
+    /// Slice C security gate — a well-formed but FORGED offer (signed by an
+    /// attacker, not the advertised giverIrkPub) must be refused on ingest, with
+    /// no `.scanned` confirm ever surfaced and no claim built.
+    func testAcquirerRefusesForgedOffer() async {
+        let giver = key(11)
+        let attacker = key(99)
+        let issuedAt: Int64 = 1, expiresAt: Int64 = 9_999_999_999_999
+        let order = ServerTransferOfferOrder(
+            serverDomain: host, transferNonce: String(repeating: "ab", count: 32),
+            issuedAt: issuedAt, expiresAt: expiresAt
+        )
+        let forgedSig = try! order.sign(with: attacker)
+        let forged = ServerTransferFlow.OfferQR(
+            serverDomain: host, transferNonce: String(repeating: "ab", count: 32),
+            giverIrkPub: HexUtil.encode(giver.publicKey.rawRepresentation),
+            issuedAt: issuedAt, expiresAt: expiresAt,
+            offerSignature: HexUtil.encode(forgedSig)
+        )
+        let client = MockServerTransferClient()
+        let vm = TransferAcquirerViewModel(client: client, username: "bob", signer: { _ in attacker }, now: { 1800 })
+
+        XCTAssertFalse(vm.ingest(try! ServerTransferFlow.encodeQR(forged)))
+        if case .failed = vm.phase {} else { XCTFail("expected .failed on forged offer") }
+        XCTAssertNil(vm.offer)
+
+        // Even if confirm() is somehow reached, it re-verifies and never posts.
+        await vm.confirm()
+        XCTAssertEqual(client.claims.count, 0)
+    }
+
+    /// An expired offer is refused on ingest too.
+    func testAcquirerRefusesExpiredOffer() {
+        let giver = key(11)
+        let (_, qr) = try! ServerTransferFlow.buildOffer(
+            serverDomain: host, username: "alice", irk: giver,
+            issuedAt: 1_000, ttlMs: 5_000, nonce: Data(repeating: 0xab, count: 32),
+            authNonce: Data(repeating: 0x01, count: 32)
+        )
+        let vm = TransferAcquirerViewModel(client: MockServerTransferClient(), username: "bob", signer: { _ in giver }, now: { 1_000_000 })
+        XCTAssertFalse(vm.ingest(try! ServerTransferFlow.encodeQR(qr)))
+        if case .failed = vm.phase {} else { XCTFail("expected .failed on expired offer") }
     }
 }

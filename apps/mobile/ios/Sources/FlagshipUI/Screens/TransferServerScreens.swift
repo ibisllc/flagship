@@ -174,13 +174,31 @@ public struct TransferAcquirerScreen: View {
         }
     }
 
+    private var claiming: Bool {
+        if case .signing = vm.phase { return true }
+        if case .posting = vm.phase { return true }
+        return false
+    }
+
     @ViewBuilder private func confirm(_ c: FSColors, _ domain: String) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s3) {
+        // Take-over is IRREVERSIBLE (ownership change + disk re-seal) ⇒ a SEVERE
+        // tiered confirm: danger color + type-the-FQDN + the claim biometric
+        // (fired inside vm.confirm()). What you see (domain) is what you sign —
+        // the same verified offer bytes drive both the display and the claim.
+        VStack(alignment: .leading, spacing: FS.space.s4) {
             Text("Take over this box?").font(FS.font.h2()).foregroundColor(c.text)
-            Text("You'll become the owner of \(domain) and all its contents. The current owner loses control of it.")
-                .font(FS.font.body()).foregroundColor(c.textMuted)
-            FSPrimaryButton("Take ownership", block: true) { Task { await vm.confirm() } }
-                .accessibilityIdentifier("transfer-claim")
+            TieredConfirmationSheet(
+                severity: .severe,
+                title: "You will become the owner of \(domain)",
+                message: "You'll own \(domain) and everything on it. The current owner loses control of it. This cannot be undone.",
+                confirmPhrase: domain,
+                confirmFieldLabel: "Type the box's address to confirm:",
+                actionTitle: "Take ownership",
+                busy: claiming
+            ) {
+                Task { await vm.confirm() }
+            }
+            .accessibilityIdentifier("transfer-claim")
         }
     }
 }

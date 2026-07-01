@@ -68,6 +68,16 @@ public struct HomeTab: View {
                 path.append(.provisionServer)
             }
             _ = linker.consume()
+        case .transferOffer(let offerJSON):
+            // Slice C — a scanned / deep-linked (IRK-signed) transfer offer.
+            // Push the take-over route with the offer pre-ingested; the screen
+            // verifies the signature + expiry and gates the claim on a severe
+            // type-to-confirm + biometric.
+            let route = HomeRoute.transferAcquirer(offerText: offerJSON)
+            if path.last != route {
+                path.append(route)
+            }
+            _ = linker.consume()
         default:
             break
         }
@@ -318,6 +328,8 @@ public struct HomeTab: View {
             ) {
                 path.removeAll()
             }
+        case .transferAcquirer(let offerText):
+            TransferAcquirerContainer(offerText: offerText)
         }
     }
 
@@ -475,6 +487,39 @@ public struct HomeTab: View {
                 // watcher / cancel paths don't run with an empty capability.
                 pendingAuthCodeSerial: rec.authCodeSerial.isEmpty ? nil : rec.authCodeSerial
             ))
+        }
+    }
+}
+
+/// Slice C — mounts `TransferAcquirerScreen` with a transfer offer PRE-INGESTED
+/// (from a scanned/deep-linked `flagship://transfer?o=` or universal link). The
+/// VM verifies the giver-IRK signature + expiry on ingest; an invalid/expired
+/// offer lands on the screen's `.failed` state (no confirm ever shown). The
+/// claim itself rides a severe type-to-confirm + biometric inside the screen.
+struct TransferAcquirerContainer: View {
+    let offerText: String
+    @Environment(\.serverTransferClient) private var transfer
+    @Environment(AppState.self) private var app
+    @State private var vm: TransferAcquirerViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                TransferAcquirerScreen(vm: vm)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                let model = TransferAcquirerViewModel(
+                    client: transfer,
+                    username: app.currentUser ?? ""
+                )
+                model.ingest(offerText)
+                vm = model
+            }
         }
     }
 }

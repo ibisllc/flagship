@@ -87,7 +87,10 @@ public final class TransferGiverViewModel {
             )
             phase = .posting
             _ = try await client.postOffer(serverDomain: serverDomain, body: body)
-            qrText = try ServerTransferFlow.encodeQR(qr)
+            // Render the QR as the UNIVERSAL LINK (Slice C) so the acquirer's
+            // NATIVE camera opens it straight into the take-over flow; the in-app
+            // scanner still accepts it (parseScanned decodes the `o=` param).
+            qrText = try ServerTransferFlow.transferUniversalLink(qr)
             phase = .awaitingClaim
         } catch let e as ScreensClientError {
             phase = .failed(e.errorDescription ?? "That didn't work. Try again in a moment.")

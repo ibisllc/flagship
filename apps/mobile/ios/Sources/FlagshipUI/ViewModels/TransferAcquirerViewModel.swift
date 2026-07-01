@@ -58,25 +58,54 @@ public final class TransferAcquirerViewModel {
         phase = .idle
     }
 
-    /// Validate a scanned/pasted QR string. Returns true when it parses (the UI
-    /// then shows the confirm). A non-transfer QR is reported via `.failed`.
+    /// Validate a scanned/pasted/deep-linked offer string. Accepts EITHER the raw
+    /// offer JSON OR a `flagship://transfer?o=` / `https://…/transfer?o=` link.
+    /// Returns true only when it parses AND the giver-IRK signature + expiry
+    /// verify — a deep-linked/scanned offer is attacker-supplied, so we NEVER
+    /// surface a confirm on an unverified offer. Failure is reported via `.failed`.
     @discardableResult
     public func ingest(_ qrText: String) -> Bool {
+        let parsed: ServerTransferFlow.OfferQR
         do {
-            let parsed = try ServerTransferFlow.parseQR(qrText)
-            offer = parsed
-            phase = .scanned(serverDomain: parsed.serverDomain)
-            return true
+            parsed = try ServerTransferFlow.parseScanned(qrText)
         } catch {
+            offer = nil
             phase = .failed("That isn't a Flagship transfer code.")
             return false
         }
+        // SECURITY (Slice C) — verify BEFORE surfacing the confirm / building a claim.
+        do {
+            try ServerTransferFlow.verifyOffer(parsed, now: now())
+        } catch ServerTransferFlow.TransferError.expired {
+            offer = nil
+            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            return false
+        } catch {
+            offer = nil
+            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
+            return false
+        }
+        offer = parsed
+        phase = .scanned(serverDomain: parsed.serverDomain)
+        return true
     }
 
     /// Sign + POST the claim (biometric). Advances to `.claimed` on success.
     public func confirm() async {
         guard let parsed = offer else {
             phase = .failed("Scan a transfer code first.")
+            return
+        }
+        // Re-verify the signature + expiry RIGHT before the claim biometric — the
+        // offer must never have been mutated between ingest and confirm, and the
+        // TTL may have lapsed while the user typed the confirmation.
+        do {
+            try ServerTransferFlow.verifyOffer(parsed, now: now())
+        } catch ServerTransferFlow.TransferError.expired {
+            phase = .failed("This transfer code has expired. Ask the owner for a new one.")
+            return
+        } catch {
+            phase = .failed("This transfer code couldn't be verified. Ask the current owner for a fresh one.")
             return
         }
         phase = .signing

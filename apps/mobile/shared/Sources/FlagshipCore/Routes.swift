@@ -12,6 +12,13 @@ public enum HomeRoute: Hashable, Sendable {
     /// (handled via the universal process-link path), not a menu option.
     case provisionServer
     case installProgress(serial: String, name: String, description: String)
+    /// Slice C — take over a transferred box, reached from a scanned/deep-linked
+    /// (IRK-signed) transfer offer. Carries the offer JSON (`offerText`) so the
+    /// `TransferAcquirerViewModel` mounts with it pre-ingested + verified. The
+    /// screen shows a SEVERE confirmation (type-to-confirm + biometric) before
+    /// the claim. Distinct from a top-level menu entry — take-over is always a
+    /// link/QR ingestion, never a browsed action.
+    case transferAcquirer(offerText: String)
 }
 
 public enum AppsRoute: Hashable, Sendable {

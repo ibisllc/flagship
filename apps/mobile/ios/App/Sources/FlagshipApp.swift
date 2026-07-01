@@ -439,6 +439,15 @@ struct FlagshipApp: App {
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
                 }
+                // Universal links (AASA) — the native Camera opening a
+                // `https://flagshipserver.com/{join,transfer,…}` link arrives as a
+                // web-browsing user activity, NOT via onOpenURL. Route it through
+                // the same DeepLink parser (Slice C take-over relies on this).
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL, let link = DeepLink.parse(url) {
+                        linker.enqueue(link)
+                    }
+                }
         }
     }
 }

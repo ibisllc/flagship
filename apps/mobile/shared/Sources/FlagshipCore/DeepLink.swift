@@ -82,6 +82,18 @@ public enum DeepLink: Equatable, Sendable {
     ///     raw "Get link" string into the same handler.
     case knockAuthorize(serverDomain: String, svc: String, serviceRef: String, pageId: String)
 
+    /// Slice C — take over a transferred box. Carries the giver's IRK-signed
+    /// transfer OFFER as its JSON (the same bytes the in-app scanner parses).
+    /// Reachable two ways, both carrying the offer in the `o=` QUERY param (NOT
+    /// the `#fragment`, which Android/webapp strip) as `base64url(offerJSON)`:
+    ///   - the UNIVERSAL LINK the giver shows,
+    ///     `https://flagshipserver.com/transfer?o=<b64url>`, opened by the native
+    ///     Camera/AASA, and
+    ///   - the `flagship://transfer?o=<b64url>` custom-scheme twin.
+    /// The offer is a signed NON-secret, so `.com` seeing it is acceptable; the
+    /// acquirer still MUST verify the offer signature + expiry before any claim.
+    case transferOffer(offerJSON: String)
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
@@ -102,6 +114,24 @@ public enum DeepLink: Equatable, Sendable {
             if let sid = params["sid"], !sid.isEmpty,
                let pk = params["pk"], !pk.isEmpty {
                 return .joinAccount(sid: sid, pk: pk)
+            }
+            return nil
+        }
+        // Universal link: Slice C transfer take-over —
+        // `https://flagshipserver.com/transfer?o=<b64url>`. The offer JSON rides
+        // the `o=` QUERY param (base64url, no padding) so Android/webapp don't
+        // strip it the way a #fragment would. The native camera opens this.
+        if url.scheme == "https",
+           (url.host == Endpoints.controlHost || url.host == "www.\(Endpoints.controlHost)"),
+           url.path == ServerTransferFlow.transferLinkPath {
+            let params = (URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems ?? [])
+                .reduce(into: [String: String]()) { acc, item in
+                    if let v = item.value { acc[item.name] = v }
+                }
+            if let o = params[ServerTransferFlow.transferLinkParam],
+               let json = ServerTransferFlow.decodeOfferParam(o) {
+                return .transferOffer(offerJSON: json)
             }
             return nil
         }
@@ -181,6 +211,14 @@ public enum DeepLink: Equatable, Sendable {
             if let sid = params["sid"], !sid.isEmpty,
                let pk = params["pk"], !pk.isEmpty {
                 return .joinAccount(sid: sid, pk: pk)
+            }
+            return nil
+        case "transfer":
+            // Slice C — custom-scheme twin of the transfer take-over link:
+            // flagship://transfer?o=<b64url(offerJSON)>.
+            if let o = params[ServerTransferFlow.transferLinkParam],
+               let json = ServerTransferFlow.decodeOfferParam(o) {
+                return .transferOffer(offerJSON: json)
             }
             return nil
         case "access":
