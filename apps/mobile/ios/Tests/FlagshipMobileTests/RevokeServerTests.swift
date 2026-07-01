@@ -214,6 +214,7 @@ final class RevokeServerTests: XCTestCase {
         func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? { throw error }
         func listOutstandingOrders(_ req: OutstandingOrdersRequest) async throws -> OutstandingOrdersResponse { throw error }
         func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse { throw error }
+        func postAdminRootRotation(username: String, body: AdminRootRotationRequest) async throws -> AdminRootRotationResponse { throw error }
     }
 
     @MainActor

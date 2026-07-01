@@ -57,6 +57,11 @@ public final class JoinAccountViewModel {
     /// `phase == .joined` to call `app.addProfile(_, setActive: true)`.
     public private(set) var admittedProfile: AdmittedProfile?
 
+    /// Slice D §4.2 — true iff the bundle carried a `wrappedAdminRoot` that we
+    /// successfully sealed device-local ⇒ this device joined AS an admin. The
+    /// host can surface "you're an admin of <account>" copy off this.
+    public private(set) var becameAdmin: Bool = false
+
     public struct AdmittedProfile: Equatable, Sendable {
         public let cloudName: String
         public let deviceLabel: String
@@ -68,6 +73,11 @@ public final class JoinAccountViewModel {
     /// Seam: install the recovered UMK into the active (new) profile slot.
     /// Defaults to `Keystore.installUMK`; tests inject a spy.
     private let installUMK: @MainActor (SymmetricKey, String) async throws -> Void
+    /// Seam: seal an admin master-root seed device-local. Slice D §4.2 — when
+    /// the admin promoted this device at add-time, the bundle carries
+    /// `wrappedAdminRoot`; sealing it here makes THIS device a bare-master-root
+    /// admin. Defaults to `Keystore.importAdminRoot`; tests inject a spy.
+    private let importAdminRoot: @MainActor (Data) async throws -> Void
     /// Seam: the device label for the new device (defaults to a generic
     /// "iPhone"; production wires UIDevice.current.name).
     private let deviceLabel: String
@@ -80,12 +90,16 @@ public final class JoinAccountViewModel {
         deviceLabel: String = "iPhone",
         installUMK: @escaping @MainActor (SymmetricKey, String) async throws -> Void = { seed, reason in
             try await Keystore.installUMK(seed, reason: reason)
+        },
+        importAdminRoot: @escaping @MainActor (Data) async throws -> Void = { seed in
+            _ = try await Keystore.importAdminRoot(seed: seed, reason: "Set up your admin key on this device")
         }
     ) {
         self.relay = relay
         self.server = server
         self.deviceLabel = deviceLabel
         self.installUMK = installUMK
+        self.importAdminRoot = importAdminRoot
     }
 
     /// Mint a fresh device key, send our pubkey to the admin, show the
@@ -218,6 +232,25 @@ public final class JoinAccountViewModel {
         } catch {
             phase = .failed("Couldn't install the account key. \(HumanError.humanize(error))")
             return
+        }
+
+        // 4b — D-4 promote-at-add: if the admin sealed the master root into
+        // the bundle (`wrappedAdminRoot`), unseal it device-local so THIS
+        // device becomes a bare-master-root admin — the SAME way the UMK above
+        // was carried + installed. The active profile is already this account
+        // (set before the UMK install), so the root lands in the right slot.
+        // Best-effort: the join itself already succeeded (UMK installed), so a
+        // seal failure must NOT unwind it — the device simply joins non-admin
+        // and can be promoted again later.
+        if let wrappedAdminRootHex = bundle.wrappedAdminRoot,
+           let adminSeed = HexUtil.decode(wrappedAdminRootHex),
+           adminSeed.count == 32 {
+            do {
+                try await importAdminRoot(adminSeed)
+                becameAdmin = true
+            } catch {
+                // Non-fatal — see above.
+            }
         }
 
         // 5 — Register push + POST /devices/admit. The incoming device

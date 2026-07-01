@@ -492,6 +492,44 @@ public struct Keystore {
         }
     }
 
+    /// Seal an EXISTING admin master root seed (32 raw Ed25519 bytes) into the
+    /// active profile's device-local slots. Slice D §4.2 (promote via sealed
+    /// root) + §5.2 (recovery re-establishes the escrowed root) + the rotate
+    /// action (re-seal the freshly-minted root). Twin of `generateAdminRoot`,
+    /// but instead of minting a random key it wraps the PROVIDED seed — the
+    /// promote-a-device bundle and the WebAuthn-PRF escrow both deliver the
+    /// SAME root byte-for-byte, so an admitted / recovered / rotated device
+    /// becomes a bare-master-root admin. Device-local (NO `kSecAttrSynchronizable`)
+    /// so authority never rides iCloud sync (residual-risk #6). One biometric
+    /// (its own SE ECDH). Overwrites any existing admin-root slots.
+    @discardableResult
+    public static func importAdminRoot(
+        seed: Data,
+        reason: String = "Set up your admin key on this device"
+    ) async throws -> String {
+        // Round-trips through CryptoKit so a malformed seed throws here rather
+        // than silently persisting an unusable authority root.
+        let adminKey = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+        let ephemeral = P256.KeyAgreement.PrivateKey()
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeral.publicKey)
+        do {
+            let adminWrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
+            let sealed = try AES.GCM.seal(adminKey.rawRepresentation, using: adminWrapKey)
+            guard let combined = sealed.combined else {
+                throw KeystoreError.wrapFailed("admin-root: no combined representation")
+            }
+            try keychainWrite(account: account(KCKey.adminRootWrapped), data: combined, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootEphemeralPub), data: ephemeral.publicKey.x963Representation, sync: .deviceLocal)
+            try keychainWrite(account: account(KCKey.adminRootPub), data: adminKey.publicKey.rawRepresentation, sync: .deviceLocal)
+            return HexUtil.encode(adminKey.publicKey.rawRepresentation)
+        } catch let e as KeystoreError {
+            throw e
+        } catch {
+            throw KeystoreError.wrapFailed(String(describing: error))
+        }
+    }
+
     /// The admin master root's Ed25519 signing key, biometric-gated (like
     /// `deriveIRK`): unseal the device-local seed under the Secure-Enclave
     /// wrapping key. Signs sensitive/destructive orders (§8.3). Throws

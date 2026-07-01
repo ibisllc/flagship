@@ -14,6 +14,8 @@ public struct AccountSecurityScreen: View {
     @State private var showDisableSheet = false
     @State private var disableCode: String = ""
     @State private var watchVM: WatchDelegateViewModel?
+    @State private var rotateVM: RotateAdminRootViewModel?
+    @State private var showRotateConfirm = false
     @Bindable var viewModel: AccountSecurityViewModel
 
     public init(viewModel: AccountSecurityViewModel) {
@@ -37,6 +39,10 @@ public struct AccountSecurityScreen: View {
                     watchSection(c: c, vm: watchVM)
                 }
 
+                if let rotateVM, rotateVM.canRotate {
+                    rotateAdminSection(c: c, vm: rotateVM)
+                }
+
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
@@ -44,8 +50,20 @@ public struct AccountSecurityScreen: View {
         .background(c.bg.ignoresSafeArea())
         .task {
             if watchVM == nil { watchVM = viewModel.makeWatchDelegateViewModel() }
+            if rotateVM == nil { rotateVM = viewModel.makeRotateAdminRootViewModel() }
             await viewModel.load()
             await watchVM?.load()
+        }
+        .alert(
+            "Rotate your admin key?",
+            isPresented: $showRotateConfirm
+        ) {
+            Button("Rotate admin key", role: .destructive) {
+                Task { await rotateVM?.rotate() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Use this only if a device may be lost or stolen. It replaces your admin key everywhere and REMOVES admin from every other device — they'll need to recover to regain it. This can't be undone.")
         }
         .sheet(isPresented: $showEnableSheet) {
             AccountSecurityEnableSheet(viewModel: viewModel) {
@@ -175,6 +193,54 @@ public struct AccountSecurityScreen: View {
                         .foregroundColor(c.danger)
                         .accessibilityIdentifier("watch-delegate-failed-msg")
                 }
+            }
+        }
+    }
+
+    /// Slice D §5 — "Rotate admin key" (a device-may-be-compromised remedy).
+    /// Shown ONLY on a device that holds the admin master root. Rotating mints
+    /// a fresh root, signs an `old → new` proof under the old root, publishes
+    /// it, and re-seals the new root here — which revokes admin from every
+    /// OTHER device (they hold the old root).
+    @ViewBuilder
+    private func rotateAdminSection(c: FSColors, vm: RotateAdminRootViewModel) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "key.horizontal.fill").foregroundColor(c.danger)
+                    Text("Rotate admin key")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(c.text)
+                }
+                Text("If a device might be lost or stolen, rotate your admin key. It becomes the only admin key; every other device loses admin until it recovers.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+
+                switch vm.phase {
+                case .rotating:
+                    HStack(spacing: FS.space.s2) {
+                        ProgressView()
+                        Text("Rotating…").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                case .rotated:
+                    Text("Admin key rotated. Other devices must recover to regain admin.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.success)
+                        .accessibilityIdentifier("rotate-admin-done-msg")
+                case .failed(let msg):
+                    Text(msg)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.danger)
+                        .accessibilityIdentifier("rotate-admin-failed-msg")
+                default:
+                    EmptyView()
+                }
+
+                FSDangerButton("Rotate admin key", block: true) {
+                    showRotateConfirm = true
+                }
+                .accessibilityIdentifier("rotate-admin-btn")
+                .disabled(vm.phase == .rotating)
             }
         }
     }

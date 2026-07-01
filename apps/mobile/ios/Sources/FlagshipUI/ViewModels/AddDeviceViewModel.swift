@@ -56,6 +56,22 @@ public final class AddDeviceViewModel {
 
     public private(set) var phase: Phase = .failed("Not started")
 
+    /// D-4 — the assurance-gated "Also make this device an admin" toggle.
+    /// Default OFF. Bound by `AddDeviceScreen`, and offered ONLY here (the
+    /// synchronous, admin-initiated, SAS-confirmed ceremony — join stories
+    /// 1–2). It is NEVER surfaced on the async approve-a-request path
+    /// (`JoinAccountViewModel` incoming / secret-request approvals — story 3),
+    /// which has no `AddDeviceViewModel` and thus no toggle at all: the gate
+    /// is STRUCTURAL. When ON (and this device holds the master root), the
+    /// bundle carries `wrappedAdminRoot` so the new device becomes an admin.
+    public var promoteNewDeviceToAdmin: Bool = false
+
+    /// True iff THIS device currently holds the admin master root — only such
+    /// a device can seal the root to another (§8.2). The screen hides / greys
+    /// the promote toggle when false, and `confirmMatch` refuses to attach
+    /// `wrappedAdminRoot` without it regardless of the toggle.
+    public let canPromoteToAdmin: Bool
+
     private let account: String
     private let relay: any PairingRelayClient
     /// Seam so tests can supply the account IRK without piercing the
@@ -66,6 +82,11 @@ public final class AddDeviceViewModel {
     /// without piercing the Secure Enclave. Defaults to reading the
     /// active profile's UMK from the Keystore.
     private let currentUMKHex: @MainActor (String) async throws -> String
+    /// Seam so tests can supply the ADMIN MASTER ROOT private seed (lowercased
+    /// hex) without piercing the Secure Enclave. Called ONLY when promote is
+    /// ON + `canPromoteToAdmin`. Defaults to unsealing the active profile's
+    /// admin root (`Keystore.adminRootKey`) and hex-encoding its raw seed.
+    private let adminRootSeedHex: @MainActor (String) async throws -> String
 
     private var ephemeralSk: Curve25519.KeyAgreement.PrivateKey?
     private var aeadKey: SymmetricKey?
@@ -82,12 +103,19 @@ public final class AddDeviceViewModel {
         currentUMKHex: @escaping @MainActor (String) async throws -> String = { reason in
             let umk = try await Keystore.currentUMK(reason: reason)
             return HexUtil.encode(umk.withUnsafeBytes { Data($0) })
+        },
+        canPromoteToAdmin: Bool = Keystore.hasAdminRoot,
+        adminRootSeedHex: @escaping @MainActor (String) async throws -> String = { reason in
+            let key = try await Keystore.adminRootKey(reason: reason)
+            return HexUtil.encode(key.rawRepresentation)
         }
     ) {
         self.account = account
         self.relay = relay
         self.deriveIRK = deriveIRK
         self.currentUMKHex = currentUMKHex
+        self.canPromoteToAdmin = canPromoteToAdmin
+        self.adminRootSeedHex = adminRootSeedHex
     }
 
     /// Mint the session + show the QR, then await the incoming device.
@@ -161,6 +189,16 @@ public final class AddDeviceViewModel {
             let admitSig = try admit.sign(with: irk)
             let umkHex = try await currentUMKHex("Share your account key with the new device")
 
+            // D-4 promote-at-add: seal the admin master root INTO the bundle
+            // (carried like `umkSeedHex`, wrapped by the outer AEAD seal) ONLY
+            // when the admin flipped the toggle AND this device actually holds
+            // the master root. Absent otherwise ⇒ the new device joins as a
+            // non-admin peer.
+            var wrappedAdminRoot: String? = nil
+            if promoteNewDeviceToAdmin && canPromoteToAdmin {
+                wrappedAdminRoot = try await adminRootSeedHex("Make the new device an admin")
+            }
+
             let bundle = PairingBundle(
                 umkSeedHex: umkHex,
                 admit: .init(
@@ -169,7 +207,8 @@ public final class AddDeviceViewModel {
                     issuedAt: issuedAt
                 ),
                 admitSig: HexUtil.encode(admitSig),
-                irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation)
+                irkPubHex: HexUtil.encode(irk.publicKey.rawRepresentation),
+                wrappedAdminRoot: wrappedAdminRoot
             )
             let payload = try bundle.encoded()
             let sealed = try QrRelay.seal(payload: payload, with: aeadKey)

@@ -260,6 +260,58 @@ public protocol FlagshipServerClient: Sendable {
     /// "not the last device" / "stale request" / "invalid … signature" is the
     /// failure the UI surfaces via the humanized-error path.
     func selfDeleteAccount(_ req: AccountSelfDeleteBundleRequest) async throws -> AccountSelfDeleteResponse
+
+    /// Slice D §5 — publish an admin master-root rotation proof to
+    /// `POST /api/users/:username/admin-root-rotation`. The OLD admin root
+    /// signs an `AdminRootRotation{ old → new }` (the spine's canonical bytes);
+    /// `.com` records the new `admin_root_pub_hex` (advisory) and relays the
+    /// SIGNED proof to each box, which verifies it against its pinned OLD root
+    /// before re-pinning — `.com` can never forge one. Rotation is also the
+    /// revoke-an-admin remedy: OTHER admin devices still hold the OLD root, so
+    /// after boxes re-pin their orders stop verifying.
+    func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse
+}
+
+/// Slice D §5 — the `POST /api/users/:username/admin-root-rotation` body:
+/// `{ rotation: { username, oldAdminRootPub, newAdminRootPub, issuedAt },
+/// signatureHex }`. `signatureHex` is the OLD admin root's Ed25519 signature
+/// over the spine canonical bytes (`AdminRootRotation.canonicalBytes`).
+public struct AdminRootRotationRequest: Codable, Equatable, Sendable {
+    public struct Rotation: Codable, Equatable, Sendable {
+        public let username: String
+        /// The box's currently-pinned admin root, lowercased hex.
+        public let oldAdminRootPub: String
+        /// The freshly-minted admin master root, lowercased hex.
+        public let newAdminRootPub: String
+        public let issuedAt: Int64
+        public init(username: String, oldAdminRootPub: String, newAdminRootPub: String, issuedAt: Int64) {
+            self.username = username
+            self.oldAdminRootPub = oldAdminRootPub
+            self.newAdminRootPub = newAdminRootPub
+            self.issuedAt = issuedAt
+        }
+    }
+    public let rotation: Rotation
+    public let signatureHex: String
+    public init(rotation: Rotation, signatureHex: String) {
+        self.rotation = rotation
+        self.signatureHex = signatureHex
+    }
+}
+
+/// Response for `POST /api/users/:username/admin-root-rotation`. Lenient:
+/// `.com` may return `{ ok, newAdminRootPubHex }` — both optional so a bare
+/// 200 still decodes.
+public struct AdminRootRotationResponse: Codable, Equatable, Sendable {
+    public let ok: Bool?
+    public let newAdminRootPubHex: String?
+    public init(ok: Bool? = nil, newAdminRootPubHex: String? = nil) {
+        self.ok = ok
+        self.newAdminRootPubHex = newAdminRootPubHex
+    }
 }
 
 /// The atomic deletion bundle body for `POST /api/account/self-delete`. Mirrors
@@ -1970,6 +2022,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
     public private(set) var selfDeleteBundles: [AccountSelfDeleteBundleRequest] = [] // recorded deletion-ceremony bundles
+    public private(set) var adminRootRotations: [AdminRootRotationRequest] = [] // Slice D — recorded rotation proofs
     /// When set, `selfDeleteAccount` throws this instead of recording — lets a
     /// test exercise the 403 "not the last device" failure branch.
     public var selfDeleteError: Error? = nil
@@ -2924,6 +2977,22 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             contentWipeRequested: req.serversSelfDelete != nil
         )
     }
+
+    public func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse {
+        try await tick()
+        adminRootRotations.append(body)
+        // Mirror the Worker: record the new admin root as the account's current
+        // one so a follow-on read reflects the rotation.
+        let u = username.lowercased()
+        if claimedUsernames[u] != nil {
+            // (claimedUsernames stores the IRK; the admin root has its own home
+            // in a real backend — for the mock we simply acknowledge.)
+        }
+        return AdminRootRotationResponse(ok: true, newAdminRootPubHex: body.rotation.newAdminRootPub)
+    }
 }
 
 // MARK: - Live
@@ -3487,5 +3556,14 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // §5 bundling invariant means a standalone servers order is never sent.
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/account/self-delete", body: body)
+    }
+
+    public func postAdminRootRotation(
+        username: String,
+        body: AdminRootRotationRequest
+    ) async throws -> AdminRootRotationResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let encoded = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/users/\(u)/admin-root-rotation", body: encoded)
     }
 }
