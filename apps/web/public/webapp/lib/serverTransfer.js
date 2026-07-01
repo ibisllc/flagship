@@ -24,6 +24,7 @@ import { controlApex } from "./apex.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { sealForBrowserKey } from "./buildDraft.js";
 import { openSealedWithIrk } from "./leases.js";
+import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keystore.js";
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
@@ -235,6 +236,193 @@ export function parseTransferOfferQR(input) {
     expiresAt: obj.expiresAt,
     offerSignature: obj.offerSignature,
   };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Universal-link QR — encode (giver) + parse (acquirer / DeepLink).
+ *
+ * The offer is a SIGNED NON-SECRET (docs/device-admin-entitlements.md
+ * Slice C), so it rides in the QUERY param `o=` — NOT a `#fragment`
+ * (Android/webapp strip fragments) — as `base64url(UTF8(offerJSON))` with
+ * NO padding. A phone's native Camera opens the `https://` form straight
+ * into the app; the same link doubles as the in-browser fallback (the
+ * DeepLink router parses it → the acquirer claim view). Mirrors
+ * crossDevicePairing.buildJoinLink's query-carried payload.
+ * ───────────────────────────────────────────────────────────────────── */
+
+/** The DeepLink path a transfer offer lands on. */
+export const TRANSFER_LINK_PATH = "/transfer";
+
+/** base64url (no padding) of a UTF-8 string. `-_` alphabet, `=` stripped. */
+export function utf8ToBase64Url(str) {
+  const bytes = new TextEncoder().encode(String(str));
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Inverse of {@link utf8ToBase64Url}. Tolerates missing padding. */
+export function base64UrlToUtf8(b64url) {
+  const b64 = String(b64url).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "="));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/** Encode a transfer OFFER (the QR object from {@link createTransferOffer},
+ *  or its JSON string) as the `o=` query payload. */
+export function encodeTransferOffer(offer) {
+  return utf8ToBase64Url(typeof offer === "string" ? offer : JSON.stringify(offer));
+}
+
+/** Build the universal link a phone Camera opens — `<baseUrl>/transfer?o=…`.
+ *  Pass `scheme: "flagship"` for the custom-scheme twin
+ *  `flagship://transfer?o=…`. `baseUrl` defaults to the control apex
+ *  (`https://flagshipserver.com` in prod), so the QR is byte-identical to
+ *  the iOS/Android twins.
+ *  @param {object|string} offer   the QR object or its JSON string
+ *  @param {{ baseUrl?: string, scheme?: "https"|"flagship" }} [opts]
+ *  @returns {string}
+ */
+export function buildTransferLink(offer, opts = {}) {
+  const o = encodeTransferOffer(offer);
+  if (opts.scheme === "flagship") return `flagship://transfer?o=${o}`;
+  const base = String(opts.baseUrl || controlApex()).replace(/\/+$/, "");
+  return `${base}/transfer?o=${o}`;
+}
+
+/** The `flagship://transfer?o=…` custom-scheme twin. */
+export function buildTransferDeepLink(offer) {
+  return buildTransferLink(offer, { scheme: "flagship" });
+}
+
+/** Pull the `o=` payload out of a raw string: a full `https://…/transfer?o=`
+ *  URL, the `flagship://transfer?o=` deep-link, or a bare `o=…` /
+ *  `?o=…` query. Returns the base64url payload or null. */
+function extractOfferParam(raw) {
+  const text = (raw || "").trim();
+  if (!text) return null;
+  try {
+    if (text.includes("?")) {
+      const normalized = text.startsWith("flagship://")
+        ? text.replace("flagship://", "https://_/")
+        : text;
+      const u = new URL(normalized, controlApex());
+      // Only treat it as a transfer link when the path is /transfer (a stray
+      // ?o= on some other view must not hijack it).
+      if (!/\/transfer\/?$/.test(u.pathname) && !text.startsWith("flagship://transfer")) {
+        return null;
+      }
+      return u.searchParams.get("o");
+    }
+    const sp = new URLSearchParams(text.replace(/^\?/, ""));
+    return sp.get("o");
+  } catch {
+    return null;
+  }
+}
+
+/** Parse a `/transfer?o=…` link (https, `flagship://`, or a bare `o=` query)
+ *  into the parsed offer (same shape as {@link parseTransferOfferQR}), or
+ *  null when the input isn't a transfer link / is malformed. The DeepLink
+ *  router uses null to fall through to the normal boot.
+ *  @param {string} raw
+ *  @returns {object|null}
+ */
+export function parseTransferLink(raw) {
+  const param = extractOfferParam(raw);
+  if (!param) return null;
+  let json;
+  try {
+    json = base64UrlToUtf8(param);
+  } catch {
+    return null;
+  }
+  try {
+    return parseTransferOfferQR(json);
+  } catch {
+    return null;
+  }
+}
+
+/** Read a transfer offer out of `window.location` at boot — the DeepLink
+ *  hook. Returns the parsed offer when this load IS a `/transfer?o=`
+ *  deep-link, else null. Tolerates a test env with no `window`.
+ *  @param {{ pathname?: string, search?: string }} [loc]
+ *  @returns {object|null}
+ */
+export function transferLinkFromLocation(loc) {
+  const l = loc ?? (typeof window !== "undefined" ? window.location : null);
+  if (!l) return null;
+  const path = l.pathname ?? "";
+  if (!/\/transfer\/?$/.test(path)) return null;
+  const search = l.search ?? "";
+  if (!search) return null;
+  // Rebuild a path+query the link parser recognises (a bare `?o=…` has no
+  // path for the parser's /transfer gate to match).
+  return parseTransferLink(`${TRANSFER_LINK_PATH}${search.startsWith("?") ? "" : "?"}${search}`);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Offer VERIFICATION (Slice C security gate).
+ *
+ * A deep-linked / camera-scanned offer is ATTACKER-SUPPLIED. Before we ever
+ * sign + POST an acquirer claim we MUST:
+ *   1. Ed25519-verify `offerSignature` over the canonical offer bytes vs
+ *      the offer's own `giverIrkPub`; AND
+ *   2. reject an expired offer (`expiresAt <= now`).
+ * The canonical bytes are byte-identical to createTransferOffer's
+ * (canonicalOfferBytes) so what the acquirer verifies is what the giver
+ * signed. This does NOT establish that giverIrkPub is a giver you trust —
+ * it establishes the offer is internally consistent + fresh; the human
+ * severe-confirm (type the domain) is the trust decision.
+ * ───────────────────────────────────────────────────────────────────── */
+
+/** Verify a parsed transfer offer: signature vs `giverIrkPub` + not expired.
+ *  Never throws — resolves `{ ok: true }` or `{ ok: false, reason }`.
+ *  `verify`/`hexToBytes`/`now` are injectable for tests; the defaults use
+ *  the browser WebCrypto Ed25519 verifier.
+ *  @param {object} offer   a parseTransferOfferQR / parseTransferLink result
+ *  @param {{ verify?: Function, hexToBytes?: Function, now?: () => number }} [deps]
+ *  @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
+ */
+export async function verifyTransferOffer(offer, deps = {}) {
+  if (!offer || typeof offer !== "object") {
+    return { ok: false, reason: "That doesn't look like a transfer code." };
+  }
+  const { serverDomain, transferNonce, giverIrkPub, issuedAt, expiresAt, offerSignature } = offer;
+  if (
+    typeof serverDomain !== "string" ||
+    typeof transferNonce !== "string" ||
+    typeof giverIrkPub !== "string" ||
+    typeof offerSignature !== "string"
+  ) {
+    return { ok: false, reason: "This transfer code is missing required fields." };
+  }
+  if (!/^[0-9a-f]{64}$/i.test(giverIrkPub)) {
+    return { ok: false, reason: "This transfer code has a malformed owner key." };
+  }
+  const now = (deps.now || Date.now)();
+  if (typeof expiresAt === "number" && expiresAt <= now) {
+    return { ok: false, reason: "This transfer code has expired. Ask the current owner for a new one." };
+  }
+  const hexToBytes = deps.hexToBytes || keystoreHexToBytes;
+  const verify = deps.verify || verifyWithEd25519Pub;
+  let ok = false;
+  try {
+    ok = await verify(
+      hexToBytes(giverIrkPub),
+      hexToBytes(offerSignature),
+      canonicalOfferBytes({ serverDomain, transferNonce, issuedAt, expiresAt }),
+    );
+  } catch {
+    ok = false;
+  }
+  if (!ok) {
+    return { ok: false, reason: "This transfer code's signature didn't verify — it may be corrupted or tampered with." };
+  }
+  return { ok: true };
 }
 
 /**

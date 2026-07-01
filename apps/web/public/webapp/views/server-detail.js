@@ -37,7 +37,7 @@ import {
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
-import { createTransferOffer } from "../lib/serverTransfer.js";
+import { createTransferOffer, buildTransferLink } from "../lib/serverTransfer.js";
 import {
   resolveReplacementContext,
   preflightGate,
@@ -869,9 +869,10 @@ async function openTransferDialog(body) {
       <button class="danger" data-transfer-go disabled>Create transfer code</button>
     </div>
     <div class="mt-3 hidden" data-transfer-result>
-      <p class="note">Share this code with the other person — it expires soon.
-      They paste it into <em>Add a server → Pair an existing box</em>. After they
-      claim it you'll be asked to finish handing over the disk key.</p>
+      <p class="note">Share this link with the other person — it expires soon.
+      They can open it with their phone's camera, or paste it into
+      <em>Take over a box</em>. After they claim it you'll be asked to finish
+      handing over the disk key.</p>
       <textarea class="full-width" rows="4" readonly data-transfer-qr></textarea>
     </div>
   `;
@@ -907,7 +908,9 @@ async function openTransferDialog(body) {
           irkPubHex: bytesToHex(session.irk.publicKey),
           signWithIrk,
         });
-        qrEl.value = out.qrText;
+        // Render the universal-link form (a phone Camera opens it straight
+        // into the app; it doubles as the paste-able acquirer code).
+        qrEl.value = buildTransferLink(out.qr);
         resultEl.classList.remove("hidden");
         goBtn.classList.add("hidden");
         confirmEl.disabled = true;

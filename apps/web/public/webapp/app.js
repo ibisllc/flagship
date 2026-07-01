@@ -25,6 +25,7 @@ import {
 import { getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { liveSync } from "./lib/liveSync.js";
+import { autoPairFromSnapshot } from "./lib/autoPair.js";
 import { refreshServerTrust, serverTrust } from "./lib/serverTrust.js";
 import {
   initTrustSliver,
@@ -59,7 +60,6 @@ import { initHomeView, enterHome } from "./views/home.js";
 import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
-import { initAddServerChooserView } from "./views/add-server-chooser.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
 import { initServicesListView, enterServicesList } from "./views/services-list.js";
 import { initServiceDetailView } from "./views/service-detail.js";
@@ -123,7 +123,6 @@ const SUB_VIEW_TABS = {
   "view-home": "home",
   "view-server-detail": "home",
   "view-pod-pair": "home",
-  "view-add-server-chooser": "home",
   "view-pair": "home",
   "view-create-server": "home",
   "view-services-list": "apps",
@@ -470,7 +469,6 @@ async function boot() {
   initPairView();
   initSettingsView();
   initPodPairView();
-  initAddServerChooserView();
   initServerDetailView();
   initServicesListView();
   initServiceDetailView();
@@ -596,6 +594,14 @@ async function boot() {
   // (the loop also self-recovers within the fallback cadence regardless).
   liveSync.start();
   document.addEventListener("visibilitychange", () => liveSync.start());
+
+  // ── Auto-pair (Slice B) ──
+  // Pairing a control device with a box you already own is not sensitive, so
+  // it should be automatic: on every /pods snapshot, self-provision a per-box
+  // BFF session token for each LIVE pod that lacks one (the browser already
+  // holds the IRK). Idempotent + race-safe; a locked session no-ops. Manual
+  // paste (pod-pair) stays as the fallback for a brand-new pod URL not in /pods.
+  liveSync.subscribe((snap) => { void autoPairFromSnapshot(snap); });
 
   // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
   // hide them; unlocking back into the app reveals any running operations / a

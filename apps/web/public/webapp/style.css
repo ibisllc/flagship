@@ -510,6 +510,23 @@ button.danger, .btn.danger {
   color: var(--accent-on);
 }
 
+/* A quiet inline text-link button (e.g. the "Take over a box" affordance) —
+   no fill/border so it reads as a secondary link, not a primary action. */
+button.linklike, .btn.linklike {
+  display: inline-block;
+  width: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.linklike:hover, .btn.linklike:hover {
+  text-decoration: underline;
+}
+
 /* ── Pill / status ──────────────────────────────────────────────── */
 .pill {
   display: inline-flex;

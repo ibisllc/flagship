@@ -490,20 +490,31 @@ function renderEmptyServersList(root, { reason, username } = {}) {
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
+      ${accountOpen ? '<button class="linklike mt-2" id="empty-take-over">Someone handing you a box? Take over →</button>' : ""}
       <a class="pill mt-2" href="https://flagshipserver.com/" target="_blank" rel="noopener">
         Open flagshipserver.com →
       </a>
     </div>
   `;
+  $("empty-take-over")?.addEventListener("click", async () => {
+    const { enterTransferClaim } = await import("./transfer-claim.js");
+    enterTransferClaim().catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("transfer claim failed", e);
+        toast(e?.message ?? String(e), "err");
+      }
+    });
+  });
   $("empty-create-server")?.addEventListener("click", async () => {
-    // The account is already open, so this is "Add a server" — a
-    // separate, repeatable resource. Offer the same fork the native apps
-    // do: provision a brand-new box vs. pair an existing one. When the
-    // account isn't open yet, fall back to the wizard's create-server
-    // step (which opens the account first).
+    // The account is already open, so this is "Add a server" — a separate,
+    // repeatable resource. "Add a server" now means PROVISION directly
+    // (Slice A: the three-way chooser is gone — pairing is automatic via
+    // auto-pair, and take-over is the /transfer deep-link + camera claim).
+    // When the account isn't open yet, fall back to the wizard's
+    // create-server step (which opens the account first).
     if (accountOpen) {
-      const { enterAddServerChooser } = await import("./add-server-chooser.js");
-      enterAddServerChooser();
+      const { enterCreateServer } = await import("./create-server.js");
+      await enterCreateServer();
       return;
     }
     // No account yet — route through the wizard's OPEN-ACCOUNT step
@@ -780,6 +791,7 @@ function renderServerCards() {
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
       <button class="secondary mt-2" id="home-add-server">+ Add a server</button>
+      <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
     </div>
     <div data-server-cards>${cardsHtml}</div>
   `;
@@ -793,12 +805,23 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add a server" — open the provision-vs-pair chooser (the native
-  // apps' add-server fork). Reachable here once at least one server
-  // exists; the zero-state CTA opens the same chooser.
+  // "+ Add a server" — provision a brand-new box directly (Slice A: no more
+  // chooser). Pairing is automatic (auto-pair); take-over is the separate
+  // "Take over" link + the /transfer deep-link + camera claim.
   list.querySelector("#home-add-server")?.addEventListener("click", async () => {
-    const { enterAddServerChooser } = await import("./add-server-chooser.js");
-    enterAddServerChooser();
+    const { enterCreateServer } = await import("./create-server.js");
+    await enterCreateServer();
+  });
+  // "Take over a box" — the standalone acquirer claim (paste / scan a
+  // transfer link). The same view a `/transfer?o=` deep link routes into.
+  list.querySelector("#home-take-over")?.addEventListener("click", async () => {
+    const { enterTransferClaim } = await import("./transfer-claim.js");
+    enterTransferClaim().catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("transfer claim failed", e);
+        toast(e?.message ?? String(e), "err");
+      }
+    });
   });
   // Filter chips — narrow the visible set, no re-fetch.
   list.querySelectorAll("[data-chip]").forEach((btn) => {
