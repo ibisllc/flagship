@@ -37,6 +37,16 @@ export interface UsernameClaimBody {
    * malformed value is ignored, never rejected — it can't block a claim.
    */
   aidPub?: string;
+  /**
+   * Slice D (docs/device-admin-tier-spec.md §1.2) — the account's pinned ADMIN
+   * MASTER ROOT pubkey (hex). A fresh RANDOM Ed25519 keypair the FIRST device
+   * mints at account creation (NOT UMK-derived), recorded next to the IRK so
+   * `.com` can later serve unforgeable admin authority decisions. OPTIONAL +
+   * additive (like `aidPub`): NOT part of the IRK-signed claim canonical bytes,
+   * and a malformed value is ignored, never rejected. Phase 2 clients start
+   * sending it; Phase 0 keeps it optional so existing flows compile + pass.
+   */
+  adminRootPub?: string;
 }
 
 export async function handleUsernameClaim(
@@ -99,11 +109,20 @@ export async function handleUsernameClaim(
       ? body.aidPub.toLowerCase()
       : undefined;
 
+  // Slice D — record the pinned admin master root alongside the IRK when the
+  // client supplies a well-formed one. Ignored if absent/malformed (never
+  // blocks a claim), mirroring the AID.
+  const adminRootPubHex =
+    typeof body.adminRootPub === "string" && HEX64.test(body.adminRootPub)
+      ? body.adminRootPub.toLowerCase()
+      : undefined;
+
   const out = await deps.storage.put({
     username: v.label,
     irkPubHex: bytesToHex(irkPub),
     claimedAt: now,
     ...(aidPubHex ? { aidPubHex } : {}),
+    ...(adminRootPubHex ? { adminRootPubHex } : {}),
   });
   if (!out.ok) return conflict(out.reason);
   // Claimed — retire the offer so the roster stays small + a name can't be
@@ -130,5 +149,8 @@ export async function handleUsernameLookup(
     claimedAt: rec.claimedAt,
     accountType: rec.accountType ?? "single",
     totpEnrolledAt: rec.totpEnrolledAt ?? null,
+    // Slice D — serve the pinned admin master root (or null when the account
+    // has none yet). Clients + boxes pin/verify authority against this.
+    adminRootPub: rec.adminRootPubHex ?? null,
   });
 }

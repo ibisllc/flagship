@@ -359,6 +359,34 @@ describe("requireDeviceScope", () => {
     expect(r).toEqual({ ok: true });
   });
 
+  // Slice D fence (docs/device-admin-tier-spec.md §3.2): the membership-IRK
+  // fast path must NEVER satisfy a SENSITIVE scope. A sensitive scope is
+  // satisfiable ONLY through requireMasterAdmin (the admin master root).
+  it("FENCES the user-IRK fast path off from the sensitive `admin` scope", async () => {
+    const h = await mkHarness();
+    const r = await requireDeviceScope(
+      h.deps,
+      hex(h.userIrk.publicKey),
+      USER,
+      "admin",
+    );
+    expect(r).toEqual({
+      ok: false,
+      reason: "sensitive scope requires master-admin authority",
+    });
+  });
+
+  it("still allows the user-IRK fast path for a NON-sensitive scope", async () => {
+    const h = await mkHarness();
+    const r = await requireDeviceScope(
+      h.deps,
+      hex(h.userIrk.publicKey),
+      USER,
+      "revoke-others",
+    );
+    expect(r).toEqual({ ok: true });
+  });
+
   it("rejects when username is not registered", async () => {
     const h = await mkHarness();
     const r = await requireDeviceScope(

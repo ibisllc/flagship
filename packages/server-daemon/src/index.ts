@@ -217,7 +217,8 @@ async function configFromInstallBlob(): Promise<ServerConfig | null> {
       username?: unknown;
       phoneDelegatedPubKey?: unknown;
       ownerAidPubHex?: unknown;
-      authCode?: { userPubKey?: unknown };
+      adminRootPubHex?: unknown;
+      authCode?: { userPubKey?: unknown; adminRootPubKey?: unknown };
     };
     const serverId = b.serverDomain;
     const userId = b.username;
@@ -228,12 +229,22 @@ async function configFromInstallBlob(): Promise<ServerConfig | null> {
       return null;
     }
     const ownerAid = b.ownerAidPubHex;
+    // Slice D — the pinned admin master root. Per decision D-1 it rides INSIDE
+    // the signed AuthCode (`authCode.adminRootPubKey`); we also accept a
+    // top-level `adminRootPubHex` sibling for the cloud-init/demo path (mirrors
+    // how `ownerAidPubHex` is written). Prefer the signature-covered AuthCode
+    // field. Hex-serialized on disk (like `authCode.userPubKey`).
+    const adminRoot =
+      isHex32(b.authCode?.adminRootPubKey)
+        ? (b.authCode?.adminRootPubKey as string)
+        : b.adminRootPubHex;
     return {
       serverId,
       userId,
       bakPublicKey: hexToBytes(bak),
       irkPublicKey: hexToBytes(irk),
       ...(isHex32(ownerAid) ? { ownerAidPub: hexToBytes(ownerAid) } : {}),
+      ...(isHex32(adminRoot) ? { adminRootPub: hexToBytes(adminRoot) } : {}),
     };
   } catch {
     return null;

@@ -65,6 +65,7 @@ interface FakeRow {
   expires_at: number;
   signature_hex: string;
   revoked_at: number | null;
+  signer_root: string;
 }
 
 function makeD1(): D1Database {
@@ -139,6 +140,7 @@ function makeD1(): D1Database {
             expiresAt,
             signatureHex,
             revokedAt,
+            signerRoot,
           ] = bound as [
             string,
             string,
@@ -149,6 +151,7 @@ function makeD1(): D1Database {
             number,
             string,
             number | null,
+            string | undefined,
           ];
           // Enforce the unique partial index at insert time.
           if (revokedAt === null) {
@@ -181,6 +184,9 @@ function makeD1(): D1Database {
             expires_at: expiresAt,
             signature_hex: signatureHex,
             revoked_at: revokedAt,
+            // Models the `signer_root TEXT NOT NULL DEFAULT 'membership'`
+            // column (migration 0064): DEFAULT applies when the bind is absent.
+            signer_root: signerRoot ?? "membership",
           });
           return { success: true, meta: { changes: 1 } };
         }
@@ -275,6 +281,16 @@ for (const a of adapters) {
       expect(got?.expiresAt).toBe(r.expiresAt);
       expect(got?.signatureHex).toBe("bb".repeat(64));
       expect(got?.revokedAt).toBeNull();
+    });
+
+    it("Slice D — signer_root defaults to 'membership' and round-trips 'admin-root'", async () => {
+      const s = a.make();
+      await s.put(rec({ grantId: "g-mem" }));
+      expect((await s.get("g-mem"))?.signerRoot).toBe("membership");
+      await s.put(
+        rec({ grantId: "g-admin", deviceLabel: "ipad", signerRoot: "admin-root" }),
+      );
+      expect((await s.get("g-admin"))?.signerRoot).toBe("admin-root");
     });
 
     it("get on an unknown grantId returns undefined", async () => {

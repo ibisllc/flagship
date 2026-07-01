@@ -26,6 +26,7 @@
 
 import {
   DEVICE_SCOPES,
+  isSensitiveScope,
   verifyDeviceCapabilityGrant,
   verifyRevokeDeviceCapabilityGrant,
   type DeviceCapabilityGrant,
@@ -356,6 +357,19 @@ export async function requireDeviceScope(
   // Legacy single-IRK fast path. The phone signs every operation
   // directly with the user's IRK until a per-device grant is in play.
   if (equalHex(signerPubHex, userRec.irkPubHex)) {
+    // Slice D fence (docs/device-admin-tier-spec.md §3.2): the membership IRK
+    // is UMK-derived and recomputable by EVERY device, so it must NEVER
+    // satisfy a SENSITIVE/authority scope via this fast path. A sensitive
+    // scope is satisfiable ONLY through `requireMasterAdmin` (the admin master
+    // root, or an admin-root-signed `admin` grant). Non-sensitive scopes keep
+    // the existing fast-path behavior — the fast path is not loosened, it is
+    // fenced off from sensitive scopes.
+    if (isSensitiveScope(scope)) {
+      return {
+        ok: false,
+        reason: "sensitive scope requires master-admin authority",
+      };
+    }
     return { ok: true };
   }
 

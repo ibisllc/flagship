@@ -131,6 +131,9 @@ export class InMemoryUsernameStorage implements UsernameStorage {
       // 0058 — last_active survives a benign re-put (only the explicit
       // touchLastActive path advances it).
       lastActive: rec.lastActive ?? existing?.lastActive,
+      // Slice D (0064) — the pinned admin master root survives a benign
+      // re-put, mirroring the AID (a recovery-flow re-claim must not drop it).
+      adminRootPubHex: rec.adminRootPubHex ?? existing?.adminRootPubHex,
     });
     return { ok: true as const };
   }
@@ -193,6 +196,10 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     // v2.1 — wipe policy is independent of TOTP state. Preserve it.
     if (r.recoveryWipePolicy !== undefined) {
       next.recoveryWipePolicy = r.recoveryWipePolicy;
+    }
+    // Slice D — the admin authority anchor is independent of TOTP. Preserve it.
+    if (r.adminRootPubHex !== undefined) {
+      next.adminRootPubHex = r.adminRootPubHex;
     }
     this.byName.set(norm, next);
     return true;
@@ -1537,7 +1544,12 @@ export class InMemoryDeviceCapabilityGrantStorage
         }
       }
     }
-    this.byId.set(rec.grantId, this.clone(rec));
+    // Slice D — normalize signer_root to the column DEFAULT ('membership')
+    // on absence, so reads match the D1 adapter (which COALESCEs on SELECT).
+    this.byId.set(rec.grantId, this.clone({
+      ...rec,
+      signerRoot: rec.signerRoot ?? "membership",
+    }));
     return { ok: true as const };
   }
   async get(grantId: string) {

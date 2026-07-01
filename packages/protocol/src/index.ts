@@ -23,4 +23,5 @@ export * from "./cloudGossip.js";
 export * from "./pairingOrder.js";
 export * from "./debugAccess.js";
 export * from "./burnerPairing.js";
+export * from "./adminAuthority.js";
 export { ed } from "./edSync.js";

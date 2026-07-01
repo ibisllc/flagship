@@ -132,6 +132,24 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1).toEqual({ set: "cd".repeat(32), after: "cd".repeat(32) });
     });
 
+    it("Slice D — adminRootPubHex round-trips + survives a benign re-claim", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.usernames.put({
+          username: "dana",
+          irkPubHex: "ab",
+          claimedAt: 1,
+          adminRootPubHex: "ef".repeat(32),
+        });
+        const set = await s.usernames.get("dana");
+        // re-put WITHOUT adminRootPubHex must not drop the pinned admin root
+        await s.usernames.put({ username: "dana", irkPubHex: "ab", claimedAt: 9 });
+        const after = await s.usernames.get("dana");
+        return { set: set?.adminRootPubHex, after: after?.adminRootPubHex };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ set: "ef".repeat(32), after: "ef".repeat(32) });
+    });
+
     it("swapIrkPub CAS: matches old → true; stale old → false", async () => {
       const r = await bothAdapters(async (s) => {
         await s.usernames.put({ username: "dave", irkPubHex: "aa", claimedAt: 1 });

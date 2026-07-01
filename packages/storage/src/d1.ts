@@ -147,6 +147,9 @@ interface UsernameRow {
   // account-deletion / name-reclaim (migration 0058). Coarse "last seen"
   // epoch-ms; nullable so a pre-migration SELECT decodes safely.
   last_active?: number | null;
+  // Slice D — pinned admin master-root pubkey (migration 0064). Nullable;
+  // absent ⇒ the account has no admin authority anchor (deny sensitive ops).
+  admin_root_pub_hex?: string | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -201,6 +204,9 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
     ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
     ...(r.aid_pub_hex != null ? { aidPubHex: r.aid_pub_hex } : {}),
     ...(r.last_active != null ? { lastActive: r.last_active } : {}),
+    ...(r.admin_root_pub_hex != null
+      ? { adminRootPubHex: r.admin_root_pub_hex }
+      : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -251,11 +257,11 @@ export class D1UsernameStorage implements UsernameStorage {
     await this.db
       .prepare(
         "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy, aid_pub_hex, last_active, admin_root_pub_hex) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           // ON CONFLICT updates only claimed_at — like is_demo / the v1.2
-          // cascade fields, aid_pub_hex survives a benign re-claim (a fresh
-          // value is set via the explicit setAidPub path, not the put path).
+          // cascade fields, aid_pub_hex + admin_root_pub_hex survive a benign
+          // re-claim (a fresh value is set via the claim path, not a re-put).
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
       .bind(
@@ -270,6 +276,7 @@ export class D1UsernameStorage implements UsernameStorage {
         rec.recoveryWipePolicy ?? "graceful",
         rec.aidPubHex ?? null,
         rec.lastActive ?? null,
+        rec.adminRootPubHex ?? null,
       )
       .run();
     return { ok: true as const };
@@ -3228,6 +3235,10 @@ interface DeviceCapabilityGrantRow {
   expires_at: number;
   signature_hex: string;
   revoked_at: number | null;
+  // Slice D (migration 0064). 'membership' | 'admin-root'. Nullable so a
+  // SELECT against a DB that hasn't applied 0064 decodes safely; the helper
+  // narrows to 'membership' on absence (matching the column DEFAULT).
+  signer_root?: string | null;
 }
 function rowToDeviceCapabilityGrant(
   r: DeviceCapabilityGrantRow,
@@ -3242,6 +3253,7 @@ function rowToDeviceCapabilityGrant(
     expiresAt: r.expires_at,
     signatureHex: r.signature_hex,
     revokedAt: r.revoked_at,
+    signerRoot: r.signer_root === "admin-root" ? "admin-root" : "membership",
   };
 }
 
@@ -3261,8 +3273,9 @@ export class D1DeviceCapabilityGrantStorage
         .prepare(
           `INSERT INTO device_capability_grants
             (grant_id, username, device_label, device_pub_hex,
-             scopes_json, issued_at, expires_at, signature_hex, revoked_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+             scopes_json, issued_at, expires_at, signature_hex, revoked_at,
+             signer_root)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
         )
         .bind(
           rec.grantId,
@@ -3274,6 +3287,7 @@ export class D1DeviceCapabilityGrantStorage
           rec.expiresAt,
           rec.signatureHex,
           rec.revokedAt,
+          rec.signerRoot ?? "membership",
         )
         .run();
       return { ok: true as const };

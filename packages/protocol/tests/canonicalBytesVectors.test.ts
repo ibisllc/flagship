@@ -24,6 +24,7 @@ import {
   deriveSWK,
   deriveSTK,
   verifyAccountRecovery,
+  verifyAdminRootRotation,
   verifyAuthCode,
   verifyDaemonStatusReport,
   verifyDeviceCapabilityGrant,
@@ -55,7 +56,15 @@ const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-byt
 
 interface Vector {
   name: string;
-  signedBy: "irk" | "bak" | "stk" | "old-irk" | "rck" | "identity" | "none";
+  signedBy:
+    | "irk"
+    | "bak"
+    | "stk"
+    | "old-irk"
+    | "rck"
+    | "identity"
+    | "admin-root"
+    | "none";
   input: Record<string, unknown>;
   clients: string[];
   signatureHex: string;
@@ -72,6 +81,8 @@ interface File {
     stkPubHex: string;
     rckPubHex: string;
     identityPubHex: string;
+    adminRootPubHex: string;
+    newAdminRootPubHex: string;
     version: number;
   };
   vectors: Vector[];
@@ -98,6 +109,7 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
   const stkPub = hexToBytes(file.metadata.stkPubHex);
   const rckPub = hexToBytes(file.metadata.rckPubHex);
   const identityPub = hexToBytes(file.metadata.identityPubHex);
+  const adminRootPub = hexToBytes(file.metadata.adminRootPubHex);
 
   const pubFor = (signedBy: Vector["signedBy"]): Uint8Array => {
     switch (signedBy) {
@@ -113,6 +125,8 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
         return rckPub;
       case "identity":
         return identityPub;
+      case "admin-root":
+        return adminRootPub;
       case "none":
         return new Uint8Array(0);
     }
@@ -445,6 +459,17 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           },
           sig,
           oldIrkPub,
+        );
+      case "admin-root-rotation":
+        return verifyAdminRootRotation(
+          {
+            username: i.username as string,
+            oldAdminRootPub: fromHex("oldAdminRootPub"),
+            newAdminRootPub: fromHex("newAdminRootPub"),
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          adminRootPub,
         );
       case "daemon-status":
       case "daemon-status-liveness":

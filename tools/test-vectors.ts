@@ -35,6 +35,7 @@ import {
   deriveSWK,
   ed,
   signAccountRecovery,
+  signAdminRootRotation,
   signAuthCode,
   signDaemonStatusReport,
   signDeviceCapabilityGrant,
@@ -59,6 +60,7 @@ import {
   signTunnelHello,
   signWatchDelegateKey,
   type AccountRecovery,
+  type AdminRootRotation,
   type AuthCode,
   type DaemonStatusReport,
   type DeviceCapabilityGrant,
@@ -114,6 +116,14 @@ const oldIrk = deriveIRK({ seed: OLD_UMK_SEED });
 // UMK-derived); a fixed seed keeps the SetRoutingTarget vector reproducible.
 const rck = seedKeypair(0x33);
 
+// Slice D — the ADMIN MASTER ROOT is a fresh RANDOM keypair minted at account
+// creation, explicitly NOT UMK-derived (that's the whole point of the two-root
+// split). Fixed seeds here keep the admin-root-rotation vector reproducible:
+// `adminRoot` is the OLD root (signs the rotation proof), `newAdminRoot` is the
+// freshly-minted root it rotates to.
+const adminRoot = seedKeypair(0x77);
+const newAdminRoot = seedKeypair(0x88);
+
 // A fixed server-identity keypair (ServerRegister is signed by the box's
 // identity key, not the owner IRK).
 const identity = seedKeypair(0x55);
@@ -127,7 +137,15 @@ const NO_WEBAPP: Client[] = ["ts", "swift", "kotlin"];
 interface Vector {
   name: string;
   /** `"none"` for canonical-bytes-only fixtures (no signature). */
-  signedBy: "irk" | "bak" | "stk" | "old-irk" | "rck" | "identity" | "none";
+  signedBy:
+    | "irk"
+    | "bak"
+    | "stk"
+    | "old-irk"
+    | "rck"
+    | "identity"
+    | "admin-root"
+    | "none";
   input: unknown;
   /** Clients expected to assert this vector. */
   clients: Client[];
@@ -744,6 +762,32 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- AdminRootRotation (OLD admin master root) — Slice D recovery rotation
+  // proof. The old admin root signs `{old → new}`; the box re-pins iff the
+  // proof verifies against its pinned old root (NOT `.com`'s word). ----
+  const adminRotation: AdminRootRotation = {
+    username: "harry",
+    oldAdminRootPub: adminRoot.publicKey,
+    newAdminRootPub: newAdminRoot.publicKey,
+    issuedAt: ISSUED_AT,
+  };
+  const adminRotationInput = {
+    username: adminRotation.username,
+    oldAdminRootPub: hex(adminRotation.oldAdminRootPub),
+    newAdminRootPub: hex(adminRotation.newAdminRootPub),
+    issuedAt: adminRotation.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "admin-root-rotation",
+      "admin-root",
+      adminRotationInput,
+      signAdminRootRotation(adminRotation, adminRoot),
+      payloadByName("admin-root-rotation", adminRotationInput),
+      NO_WEBAPP,
+    ),
+  );
+
   return vectors;
 }
 
@@ -765,6 +809,8 @@ export function buildFile(): { json: string } {
       stkPubHex: hex(stk.publicKey),
       rckPubHex: hex(rck.publicKey),
       identityPubHex: hex(identity.publicKey),
+      adminRootPubHex: hex(adminRoot.publicKey),
+      newAdminRootPubHex: hex(newAdminRoot.publicKey),
       version: 2,
       generatedAt: ISSUED_AT,
       note:
@@ -791,6 +837,7 @@ function selfCheck(vectors: Vector[]): void {
     "old-irk": oldIrk,
     rck,
     identity,
+    "admin-root": adminRoot,
   };
   for (const v of vectors) {
     const got = hex(payloadByName(v.name, v.input as Record<string, unknown>));
@@ -963,6 +1010,16 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
       return enc(["flagship/re-pair-initiate/v1", i.username, i.newIrkPub, i.oldIrkPub, i.issuedAt].join("|"));
     case "re-pair-object":
       return enc(["flagship/re-pair-object/v1", i.username, i.newIrkPub, i.issuedAt].join("|"));
+    case "admin-root-rotation":
+      return enc(
+        [
+          "flagship/admin-root-rotation/v1",
+          i.username,
+          i.oldAdminRootPub,
+          i.newAdminRootPub,
+          i.issuedAt,
+        ].join("|"),
+      );
     case "daemon-status":
     case "daemon-status-liveness": {
       const apps = [...(i.appsServed as string[])].sort().join(",");

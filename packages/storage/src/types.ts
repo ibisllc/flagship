@@ -105,6 +105,17 @@ export interface UsernameRecord {
    * back to `claimedAt`.
    */
   lastActive?: number;
+  /**
+   * Slice D — device admin tier (migration 0064). The account's pinned ADMIN
+   * MASTER ROOT pubkey (hex). Distinct from `irkPubHex` (the UMK-derived
+   * MEMBERSHIP root): the admin root is a fresh RANDOM Ed25519 keypair minted
+   * at account creation, held only by admin devices, NOT UMK-derived — the
+   * AUTHORITY root that gates every sensitive/destructive op. Recorded next to
+   * `irkPubHex` at claim when the client supplies it. Absent on pre-0064 rows
+   * (and on any account that hasn't sent one yet); readers treat undefined as
+   * "no admin root" and deny sensitive ops. See docs/device-admin-tier-spec.md.
+   */
+  adminRootPubHex?: string;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -2084,6 +2095,17 @@ export interface DeviceCapabilityGrantRecord {
   expiresAt: number;
   signatureHex: string;
   revokedAt: number | null;
+  /**
+   * Slice D — grant-signer discriminator (migration 0064, §3.3). Which root
+   * signed this grant: `'membership'` (the DEFAULT — the UMK-derived IRK, as
+   * every pre-D grant) or `'admin-root'` (the admin master root). An
+   * `admin`-scope grant is only load-bearing for a SENSITIVE op when it is
+   * `'admin-root'`-signed; `requireMasterAdmin` rejects a `'membership'`-signed
+   * grant for a sensitive scope so a UMK holder can't forge admin authority.
+   * Optional at the record level: absent (legacy row / pre-migration read) is
+   * treated as `'membership'`.
+   */
+  signerRoot?: "membership" | "admin-root";
 }
 
 /**
