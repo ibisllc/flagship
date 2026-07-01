@@ -40,6 +40,11 @@ registerView("view-add-device");
 // human hasn't compared. Belt-and-suspenders on top of the SAS compare itself.
 export const SAS_CONFIRM_GATE_MS = 600;
 
+// Slice D (D-4) — the hard warning shown beside the (default-OFF) "make this
+// device an admin" toggle. Byte-stable so iOS/Android can mirror the copy.
+export const PROMOTE_ADMIN_WARNING =
+  "This device will be able to wipe, transfer, or decommission your cloud — full admin authority, not just access. Leave this off unless you truly intend to hand over that control.";
+
 let activePairing = null; // { abort: () => void }
 
 function setStatus(kind, text) {
@@ -116,12 +121,21 @@ async function startPairing() {
   });
   activePairing = { abort: () => { relay._confirm(false); relay.close?.(); } };
 
+  // Slice D (D-4): promote-at-add-time is offered ONLY here — the synchronous,
+  // admin-initiated, SAS-confirmed HIGH-assurance ceremony (never an async
+  // approve-a-request join). It is default-OFF and possible only when THIS
+  // device holds the admin root to seal. Read the toggle at seal time.
+  const promoteAdmin =
+    !!session.adminRootSeed && $("add-device-promote-admin")?.checked === true;
+
   try {
     const result = await runAdminAddDevice({
       username: session.username,
       seed: session.umk,
       signWithIrk,
       bytesToHex,
+      promoteAdmin,
+      adminRootSeed: session.adminRootSeed ?? null,
       relay,
       onJoinLink: (link) => { void renderQr(link); },
     });
@@ -129,8 +143,13 @@ async function startPairing() {
       setStatus("idle", "cancelled.");
       return;
     }
-    setStatus("done", "device added — it joins under a 14-day review window.");
-    toast("device added (quarantined for review)", "ok");
+    if (result.promotedAdmin) {
+      setStatus("done", "admin device added — it joins under a 14-day review window.");
+      toast("admin device added (quarantined for review)", "ok");
+    } else {
+      setStatus("done", "device added — it joins under a 14-day review window.");
+      toast("device added (quarantined for review)", "ok");
+    }
   } catch (e) {
     setStatus("error", String(e?.message || e));
   } finally {
@@ -141,10 +160,29 @@ async function startPairing() {
 export function renderAddDevice() {
   const root = $("add-device-content");
   if (!root) return;
+  const session = getSession();
+  // Slice D (D-4): the promote toggle is shown ONLY when this device can seal
+  // the admin root (i.e. it holds one). Default OFF, with a hard warning. On a
+  // non-admin device the section is omitted entirely (nothing to grant).
+  const canPromote = !!session.adminRootSeed;
+  const promoteSection = canPromote
+    ? `
+    <div class="card warning mt-2" data-section="promote-admin">
+      <label class="inline-check">
+        <input type="checkbox" id="add-device-promote-admin"
+               data-add-device-promote-admin />
+        Also make this device an admin
+      </label>
+      <p class="note small err-text" data-section="promote-admin-warning">
+        ⚠️ ${escapeHtml(PROMOTE_ADMIN_WARNING)}
+      </p>
+    </div>`
+    : "";
   root.innerHTML = `
     <div class="card warning" data-section="risk">
       <p class="note"><strong>Heads up.</strong> ${escapeHtml(ADMIN_RISK_WARNING)}</p>
     </div>
+    ${promoteSection}
     <div class="card" data-section="qr">
       <div id="add-device-qr" class="qr-box" aria-label="Pairing QR"></div>
       <p class="note small err-text" data-section="no-screenshot">⚠️ ${escapeHtml(NO_SCREENSHOT_WARNING)}</p>

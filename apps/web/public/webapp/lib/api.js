@@ -20,6 +20,7 @@ import {
   setSessionTokenFor,
   getPodBaseUrlFor,
 } from "./profilesStore.js";
+import { controlApex } from "./apex.js";
 
 // ── Legacy per-profile single-slot API (kept for backward compatibility) ──
 
@@ -67,6 +68,44 @@ export function setSessionTokenForPod(podFqdn, tok) {
  */
 export function podBaseUrl(podFqdn) {
   return getPodBaseUrlFor(podFqdn);
+}
+
+/**
+ * Slice D (§5) — POST an admin master-root rotation proof to `.com`.
+ *
+ * The OLD admin root has signed `flagship/admin-root-rotation/v1` over
+ * `{ username, oldAdminRootPub, newAdminRootPub, issuedAt }`. `.com` records the
+ * new `admin_root_pub_hex` and relays the (unforgeable) proof to each box, which
+ * verifies it against its PINNED old root before re-pinning. `.com` can never
+ * forge such a proof — it holds no admin root — which is exactly what lets a box
+ * adopt a relayed new root. This call targets the `.com` apex (identity plane),
+ * NOT a pod, so it does not use the per-pod session token.
+ *
+ * @param {{
+ *   username: string,
+ *   rotation: { username: string, oldAdminRootPub: string, newAdminRootPub: string, issuedAt: number },
+ *   signatureHex: string,
+ *   fetch?: typeof fetch,
+ *   baseUrl?: string,
+ * }} args
+ * @returns {Promise<object>}
+ */
+export async function postAdminRootRotation(args) {
+  const f = args.fetch || fetch;
+  const base = args.baseUrl || controlApex();
+  const r = await f(
+    `${base}/api/users/${encodeURIComponent(args.username)}/admin-root-rotation`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rotation: args.rotation, signatureHex: args.signatureHex }),
+    },
+  );
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`admin-root rotation failed (${r.status}): ${txt}`.trim());
+  }
+  return r.json().catch(() => ({}));
 }
 
 export class ScreensError extends Error {

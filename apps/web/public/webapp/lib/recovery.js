@@ -31,7 +31,14 @@
 // reachable only from same-origin code — means an apex XSS literally
 // cannot invoke the passkey.
 
-import { bytesToHex, hexToBytes, signWithIrk, loadAdminRootSeed } from "../keystore.js";
+import {
+  bytesToHex,
+  hexToBytes,
+  signWithIrk,
+  loadAdminRootSeed,
+  persistAdminRootSeed,
+  profileIdFromCloudName,
+} from "../keystore.js";
 import { getSession } from "./state.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
 
@@ -106,7 +113,47 @@ export async function recoverFromCloud(username) {
   if (!Array.isArray(result.umk) || result.umk.length !== 32) {
     throw new Error("recover: malformed UMK payload");
   }
-  return new Uint8Array(result.umk);
+  const seed = new Uint8Array(result.umk);
+
+  // Slice D (D-3 restore side): the sub-origin split `umk || adminRootSeed` back
+  // out and returns the admin root as `adminRootSeed` when the escrow carried
+  // one. Store it device-local NOW, under THIS account's profile record, so the
+  // subsequent unlockSession (which loads the admin root from the keystore)
+  // brings the recovered browser up as an ADMIN device (D-4 story 4). Keyed to
+  // profileIdFromCloudName(username) — the SAME profile the recovered UMK lands
+  // under in the takeover/keep-both flows — so the two records stay together.
+  // Best-effort: a legacy escrow (UMK alone) simply has no admin root to store.
+  if (Array.isArray(result.adminRootSeed) && result.adminRootSeed.length === 32) {
+    await persistRecoveredAdminRoot({
+      umkSeed: seed,
+      adminRootSeed: new Uint8Array(result.adminRootSeed),
+      username,
+    });
+  }
+  return seed;
+}
+
+/**
+ * Persist a recovered admin master-root seed device-local, keyed to the
+ * account's own profile record. Extracted (with injectable deps) so the
+ * restore-side store is unit-testable without the sub-origin popup.
+ *
+ * @param {{
+ *   umkSeed: Uint8Array,
+ *   adminRootSeed: Uint8Array,
+ *   username: string,
+ *   persist?: (umkSeed: Uint8Array, adminSeed: Uint8Array, profileId: string) => Promise<void>,
+ *   profileId?: string,
+ * }} args
+ */
+export async function persistRecoveredAdminRoot({
+  umkSeed, adminRootSeed, username, persist = persistAdminRootSeed, profileId,
+}) {
+  if (!(adminRootSeed instanceof Uint8Array) || adminRootSeed.length !== 32) {
+    throw new Error("recovered admin root seed must be 32 bytes");
+  }
+  const pid = profileId ?? profileIdFromCloudName(username);
+  await persist(umkSeed, adminRootSeed, pid);
 }
 
 /**

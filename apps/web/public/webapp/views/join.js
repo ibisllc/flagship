@@ -28,6 +28,7 @@ import {
   deriveIrkFromSeed,
   signWithIrk,
   persistSeedForProfile,
+  persistAdminRootSeed,
   setActiveKeystoreProfile,
   verifyWithEd25519Pub,
 } from "../keystore.js";
@@ -157,6 +158,7 @@ async function startJoin() {
       deviceIrkPubHex: device.pubHex,
       setActiveKeystoreProfile,
       persistSeedForProfile,
+      persistAdminRootSeed,
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),
