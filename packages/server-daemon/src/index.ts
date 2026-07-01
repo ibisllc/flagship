@@ -107,6 +107,7 @@ import {
   loadEntitlementBundle,
 } from "./entitlementBundleStore.js";
 import { claimEntitlementDeposit, fetchEntitlementViaRelay } from "./entitlementRelay.js";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -748,6 +749,9 @@ async function main(): Promise<void> {
         // turns the platform ON where those inputs exist.
         hostUsername: cfg?.userId,
         hostIrkPub: cfg?.irkPublicKey,
+        // Slice D (D-2) — the pinned admin master root; when present, service-
+        // membership invite/mutation are admin-gated (absent ⇒ legacy owner-IRK).
+        ...(cfg?.adminRootPub ? { hostAdminRootPub: cfg.adminRootPub } : {}),
         // The box's own daemon identity keypair — accepted as an ADDITIVE
         // host-authority signer so a box-originated build-modes deploy
         // (which signs installs with this key, since the owner IRK private
@@ -916,6 +920,7 @@ async function main(): Promise<void> {
       serverDomain: env.serverFqdn!,
       user: cfg.userId,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       store: fileSetLeaderVoteStore(`${dataDir}/set-leader.json`),
       onLog: (m) => console.log(m),
@@ -1290,10 +1295,19 @@ async function loadEntitlementsOrExit(deps: {
     if (
       loaded &&
       cfg &&
-      !verifyRootEntitlement(loaded.rootEntitlement, loaded.rootEntitlementSig, cfg.irkPublicKey)
+      !authorizeSensitiveOrder({
+        order: loaded.rootEntitlement,
+        signature: loaded.rootEntitlementSig,
+        verify: verifyRootEntitlement,
+        ownerIrkPub: cfg.irkPublicKey,
+        // Slice D — the entitlement anchor is the admin master root when pinned;
+        // absent ⇒ legacy owner-IRK (a strict no-op on pre-wipe boxes).
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
+      })
     ) {
       console.warn(
-        "[daemon] on-disk entitlement is not signed by the owner IRK (the hub would reject it at HELLO); discarding and requesting one from the phone",
+        "[daemon] on-disk entitlement is not authorized (admin root / owner IRK; the hub would reject it at HELLO); discarding and requesting one from the phone",
       );
       loaded = null;
     }
@@ -1314,6 +1328,8 @@ async function loadEntitlementsOrExit(deps: {
       const deposited = await claimEntitlementDeposit({
         serverDomain: env.serverFqdn,
         ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
         stkPub: identityKeypair.publicKey,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         entitlementBundlePath,
@@ -1331,6 +1347,8 @@ async function loadEntitlementsOrExit(deps: {
           serverDomain: env.serverFqdn,
           identity: identityKeypair,
           ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+          username: cfg.userId,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           entitlementBundlePath,
           onLog: (m) => console.log(m),
@@ -1968,6 +1986,9 @@ async function wireOwnerHandlers(deps: {
   const deadMan = new DeadManController({
     serverId: env.serverFqdn,
     irkPub: cfg.irkPublicKey,
+    // Slice D — gate policy/affirm on the pinned admin root when present.
+    ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+    username: cfg.userId,
     suppressor: autoUnlockSuppressor,
     runner: hostPowerRunner,
   });
@@ -1977,6 +1998,8 @@ async function wireOwnerHandlers(deps: {
     buildPowerHttp({
       serverId: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       suppressor: autoUnlockSuppressor,
       runner: hostPowerRunner,
     }),
@@ -1988,6 +2011,8 @@ async function wireOwnerHandlers(deps: {
     buildFrontPageHttp({
       serverId: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       store: frontPage,
       resolveLabel: (l) => deps.servicePlatformRef.current?.byLabel(l) !== undefined,
     }),
@@ -2073,6 +2098,7 @@ async function wireOwnerHandlers(deps: {
     const selfDeletePoller = buildSelfDeletePoller({
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: fileMarkerStore(`${dataDir}/self-delete-done.json`),
@@ -2121,6 +2147,8 @@ async function wireOwnerHandlers(deps: {
       serverDomain: env.serverFqdn,
       myStkHex,
       ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
       // Final-flush: trigger an immediate BackupLoop pass (the epoch is recorded

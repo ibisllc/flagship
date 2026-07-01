@@ -1,9 +1,11 @@
 import {
   signSecretRequest,
   verifyRootEntitlement,
+  type AdminGrantView,
   type Keypair,
   type SecretRequest,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import {
   parseEntitlementBundle,
@@ -48,6 +50,14 @@ export interface FetchEntitlementViaRelayOptions {
    *  RootEntitlement signature. The relay reply is checked against THIS,
    *  not against anything `.com` asserts. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the RootEntitlement is gated by `requireMasterAdmin`, absent ⇒
+   *  legacy owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /** Where to persist the fetched bundle once verified. */
@@ -128,6 +138,12 @@ export function decodeAndVerifyEntitlementCarrier(args: {
   ownerIrkPub: Uint8Array;
   serverDomain: string;
   stkPub: Uint8Array;
+  /** Slice D — pinned admin master root; present ⇒ authority gate, absent ⇒ legacy owner-IRK. */
+  adminRootPub?: Uint8Array;
+  /** Account name for the delegated-grant check (unused on the bare-root path). */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }): EntitlementBundle {
   const hex = args.sealedHex.toLowerCase();
   if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0) {
@@ -148,16 +164,22 @@ export function decodeAndVerifyEntitlementCarrier(args: {
   // parseEntitlementBundle throws on any structural defect.
   const bundle = parseEntitlementBundle(parsed);
 
-  // The signature MUST verify under the user's IRK — `.com` is not a
-  // trust anchor, so re-verify everything the relay returns.
+  // Slice D — the RootEntitlement is an administrative "authorize this box"
+  // order, so it verifies under the pinned admin master root when present
+  // (falling back to the owner IRK on a pre-wipe box). `.com` is not a trust
+  // anchor, so re-verify everything the relay returns.
   if (
-    !verifyRootEntitlement(
-      bundle.rootEntitlement,
-      bundle.rootEntitlementSig,
-      args.ownerIrkPub,
-    )
+    !authorizeSensitiveOrder({
+      order: bundle.rootEntitlement,
+      signature: bundle.rootEntitlementSig,
+      verify: verifyRootEntitlement,
+      ownerIrkPub: args.ownerIrkPub,
+      adminRootPub: args.adminRootPub,
+      username: args.username ?? "",
+      activeGrants: args.activeGrants,
+    })
   ) {
-    throw new Error("entitlement RootEntitlement signature does not verify under the owner IRK");
+    throw new Error("entitlement RootEntitlement signature is not authorized (admin root / owner IRK)");
   }
 
   // Bind to THIS box: a relay (or anyone) cannot hand us a bundle minted
@@ -295,6 +317,9 @@ export async function fetchEntitlementViaRelay(
           ownerIrkPub: opts.ownerIrkPub,
           serverDomain: opts.serverDomain,
           stkPub: opts.identity.publicKey,
+          ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+          ...(opts.username ? { username: opts.username } : {}),
+          ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
         });
       } catch (e) {
         log(`[entitlement-relay] carrier rejected: ${(e as Error).message}`);
@@ -336,6 +361,14 @@ export interface ClaimEntitlementDepositOptions {
   /** The user's IRK pubkey (baked into the config) — the carrier is verified
    *  against THIS, never against anything `.com` asserts. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the RootEntitlement is gated by `requireMasterAdmin`, absent ⇒
+   *  legacy owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** This box's STK pubkey — the entitlement must bind to it. */
   stkPub: Uint8Array;
   /** `.com` base URL. */
@@ -409,6 +442,9 @@ export async function claimEntitlementDeposit(
         ownerIrkPub: opts.ownerIrkPub,
         serverDomain: opts.serverDomain,
         stkPub: opts.stkPub,
+        ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+        ...(opts.username ? { username: opts.username } : {}),
+        ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
       });
     } catch (e) {
       log(`[entitlement-deposit] carrier rejected: ${(e as Error).message}; falling back to relay`);

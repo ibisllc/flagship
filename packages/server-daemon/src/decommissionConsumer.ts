@@ -1,9 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
   verifyServerDecommission,
+  type AdminGrantView,
   type DiskDisposition,
   type ServerDecommission,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Box-side consumer of the graceful-decommission order
@@ -68,6 +70,12 @@ export function decodeAndVerifyDecommissionOrder(args: {
   orderJson: string;
   orderSignatureHex: string;
   ownerIrkPub: Uint8Array;
+  /** Slice D — pinned admin master root; present ⇒ authority gate, absent ⇒ legacy owner-IRK. */
+  adminRootPub?: Uint8Array;
+  /** Account name for the delegated-grant check (unused on the bare-root path). */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }): ServerDecommission {
   let parsed: unknown;
   try {
@@ -106,8 +114,18 @@ export function decodeAndVerifyDecommissionOrder(args: {
     nonce: p.nonce,
     issuedAt: p.issuedAt,
   };
-  if (!verifyServerDecommission(order, sig, args.ownerIrkPub)) {
-    throw new Error("decommission signature does not verify under the owner IRK");
+  if (
+    !authorizeSensitiveOrder({
+      order,
+      signature: sig,
+      verify: verifyServerDecommission,
+      ownerIrkPub: args.ownerIrkPub,
+      adminRootPub: args.adminRootPub,
+      username: args.username ?? "",
+      activeGrants: args.activeGrants,
+    })
+  ) {
+    throw new Error("decommission signature is not authorized (admin root / owner IRK)");
   }
   return order;
 }
@@ -150,6 +168,14 @@ export interface RunDecommissionOptions {
   myStkHex: string;
   /** The owner IRK pubkey (config-pinned) — the order is verified against THIS. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the order is gated by `requireMasterAdmin`, absent ⇒ legacy
+   *  owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
 
@@ -252,6 +278,9 @@ export async function runDecommissionConsumer(
       orderJson,
       orderSignatureHex,
       ownerIrkPub: opts.ownerIrkPub,
+      ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+      ...(opts.username ? { username: opts.username } : {}),
+      ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
     });
   } catch (e) {
     log(`[decommission] order rejected: ${(e as Error).message}`);

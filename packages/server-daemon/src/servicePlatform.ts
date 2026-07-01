@@ -59,8 +59,10 @@ export interface InstalledService {
 }
 
 export interface ServicePlatformDeps {
-  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
-  host: { username: string; irkPub: Bytes };
+  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner.
+   *  `adminRootPub` (Slice D, D-2): when present, service-collaborator membership
+   *  invite-create + mutation are admin-gated; absent ⇒ legacy owner-IRK. */
+  host: { username: string; irkPub: Bytes; adminRootPub?: Bytes };
   /**
    * The box's OWN daemon identity pubkey — an ADDITIONAL accepted signer for
    * host-authority mutations (install / setEnv / uninstall). The owner IRK
@@ -367,6 +369,8 @@ export class ServicePlatform {
       this.deps.host.username,
       this.deps.host.irkPub,
       this.deps.swk,
+      {},
+      this.deps.host.adminRootPub,
     );
 
     const installed: InstalledService = {

@@ -161,7 +161,7 @@ describe("decodeAndVerifyDecommissionOrder", () => {
     const wrong = makeKey(2);
     const c = carrier(makeOrder(), wrong);
     expect(() => decodeAndVerifyDecommissionOrder({ ...c, ownerIrkPub: irk.publicKey })).toThrow(
-      /does not verify/,
+      /is not authorized/,
     );
   });
 

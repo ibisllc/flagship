@@ -1,7 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { verifyPhoneOrder, type PhoneOrder } from "@flagship/protocol";
+import { verifyPhoneOrder, type AdminGrantView, type PhoneOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Owner-assignable apex ("front page") — the box's root domain 302s to one
@@ -62,6 +63,14 @@ export interface FrontPageHttpOptions {
   /** The box fqdn — both the order's serverId and the apex host to match. */
   serverId: string;
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the set-front-page order is gated by `requireMasterAdmin`, absent
+   *  ⇒ legacy owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   store: FrontPageStore;
   /** Whether a service with this url-label is currently installed. */
   resolveLabel: (label: string) => boolean;
@@ -147,7 +156,17 @@ export function buildFrontPageHttp(opts: FrontPageHttpOptions) {
     } catch {
       return { status: 400, headers: H, body: JSON.stringify({ error: "invalid signature hex" }) };
     }
-    if (!verifyPhoneOrder(order, sig, opts.ownerIrkPub)) {
+    if (
+      !authorizeSensitiveOrder({
+        order,
+        signature: sig,
+        verify: verifyPhoneOrder,
+        ownerIrkPub: opts.ownerIrkPub,
+        adminRootPub: opts.adminRootPub,
+        username: opts.username ?? "",
+        activeGrants: opts.activeGrants,
+      })
+    ) {
       return { status: 403, headers: H, body: JSON.stringify({ error: "invalid signature" }) };
     }
     if (order.label !== "" && !opts.resolveLabel(order.label)) {

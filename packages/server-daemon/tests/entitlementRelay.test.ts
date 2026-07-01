@@ -150,7 +150,7 @@ describe("entitlementRelay — carrier decode + verify", () => {
         serverDomain: DOMAIN,
         stkPub: stk.publicKey,
       }),
-    ).toThrow(/signature does not verify/);
+    ).toThrow(/is not authorized/);
   });
 
   it("rejects a carrier minted for a DIFFERENT STK", () => {

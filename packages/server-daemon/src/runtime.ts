@@ -226,6 +226,9 @@ export interface DaemonRuntimeOptions {
     dataServicesEnvFile?: string;
     hostUsername?: string;
     hostIrkPub?: Bytes;
+    /** Slice D (D-2) — the pinned admin master root (`ServerConfig.adminRootPub`);
+     *  present ⇒ service-membership invite/mutation are admin-gated. */
+    hostAdminRootPub?: Bytes;
     hostIrk?: Keypair | null;
     swk?: Bytes;
     /**
@@ -1056,7 +1059,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       envStore = fileStore;
     }
     servicePlatformRef.current = new ServicePlatform({
-      host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
+      host: {
+        username: apOpts.hostUsername,
+        irkPub: apOpts.hostIrkPub,
+        ...(apOpts.hostAdminRootPub ? { adminRootPub: apOpts.hostAdminRootPub } : {}),
+      },
       // The box's own daemon identity is an additive accepted signer for
       // host-authority mutations, so a BOX-ORIGINATED build-modes deploy
       // (which signs with the daemon identity — the box can't reach the

@@ -3,8 +3,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import {
   verifyServersSelfDelete,
+  type AdminGrantView,
   type ServersSelfDelete,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 const execFileP = promisify(execFile);
 
@@ -56,6 +58,10 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
   sealedHex: string;
   ownerIrkPub: Uint8Array;
   username: string;
+  /** Slice D — pinned admin master root; present ⇒ authority gate, absent ⇒ legacy owner-IRK. */
+  adminRootPub?: Uint8Array;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }): ServersSelfDelete {
   const hex = args.sealedHex.toLowerCase();
   if (!HEX.test(hex) || hex.length % 2 !== 0) {
@@ -103,8 +109,18 @@ export function decodeAndVerifySelfDeleteCarrier(args: {
   } catch {
     throw new Error("self-delete signature is not valid hex");
   }
-  if (!verifyServersSelfDelete(order, sig, args.ownerIrkPub)) {
-    throw new Error("self-delete signature does not verify under the owner IRK");
+  if (
+    !authorizeSensitiveOrder({
+      order,
+      signature: sig,
+      verify: verifyServersSelfDelete,
+      ownerIrkPub: args.ownerIrkPub,
+      adminRootPub: args.adminRootPub,
+      username: args.username,
+      activeGrants: args.activeGrants,
+    })
+  ) {
+    throw new Error("self-delete signature is not authorized (admin root / owner IRK)");
   }
   return order;
 }
@@ -142,6 +158,12 @@ export interface ClaimAndRunSelfDeleteOptions {
   /** The owner IRK pubkey (baked into the config) — the order is verified
    *  against THIS, never against anything `.com` asserts. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the order is gated by `requireMasterAdmin`, absent ⇒ legacy
+   *  owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** This box's owner account (cfg.userId) — the order must name it. */
   username: string;
   /** `.com` base URL. */
@@ -210,6 +232,8 @@ export async function claimAndRunSelfDelete(
       sealedHex,
       ownerIrkPub: opts.ownerIrkPub,
       username: opts.username,
+      ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+      ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
     });
   } catch (e) {
     log(`[self-delete] order rejected: ${(e as Error).message}`);

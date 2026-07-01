@@ -99,7 +99,7 @@ describe("decodeAndVerifySelfDeleteCarrier", () => {
         ownerIrkPub: irk.publicKey,
         username: USERNAME,
       }),
-    ).toThrow(/does not verify/);
+    ).toThrow(/is not authorized/);
   });
 
   it("throws when the order names a different account", () => {

@@ -1,6 +1,12 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
-import { verifySetLeader, SET_LEADER_NONE, type SetLeaderVote } from "@flagship/protocol";
+import {
+  verifySetLeader,
+  SET_LEADER_NONE,
+  type AdminGrantView,
+  type SetLeaderVote,
+} from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Box-side consumer of the owner's preferred-server vote (Phase 6) — the
@@ -52,6 +58,10 @@ export function decodeAndVerifySetLeaderCarrier(args: {
   sealedHex: string;
   ownerIrkPub: Uint8Array;
   user: string;
+  /** Slice D — pinned admin master root; present ⇒ authority gate, absent ⇒ legacy owner-IRK. */
+  adminRootPub?: Uint8Array;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
 }): StoredSetLeaderVote | null {
   try {
     const h = args.sealedHex.toLowerCase();
@@ -94,7 +104,17 @@ export function decodeAndVerifySetLeaderCarrier(args: {
       issuedAt: v.issuedAt,
       nonce: v.nonce,
     };
-    if (!verifySetLeader(vote, hexToBytes(p.signature.toLowerCase()), args.ownerIrkPub)) {
+    if (
+      !authorizeSensitiveOrder({
+        order: vote,
+        signature: hexToBytes(p.signature.toLowerCase()),
+        verify: verifySetLeader,
+        ownerIrkPub: args.ownerIrkPub,
+        adminRootPub: args.adminRootPub,
+        username: args.user,
+        activeGrants: args.activeGrants,
+      })
+    ) {
       return null;
     }
     return {
@@ -175,8 +195,14 @@ export interface ClaimSetLeaderOptions {
   serverDomain: string;
   /** This box's account (UserId) — the vote must bind to it. */
   user: string;
-  /** The config-pinned owner IRK pubkey — the only trust anchor. */
+  /** The config-pinned owner IRK pubkey — the legacy trust anchor. */
   ownerIrkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ the vote is gated by `requireMasterAdmin`, absent ⇒ legacy
+   *  owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /** Persist the verified vote locally + refresh the in-memory snapshot. */
@@ -227,6 +253,8 @@ export async function claimSetLeaderDeposit(
     sealedHex,
     ownerIrkPub: opts.ownerIrkPub,
     user: opts.user,
+    ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+    ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
   });
   if (!vote) {
     log("[set-leader] vote rejected (signature/account mismatch); ignoring");

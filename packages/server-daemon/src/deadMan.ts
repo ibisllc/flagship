@@ -4,9 +4,11 @@ import { dirname } from "node:path";
 import {
   verifyDeadManAffirmation,
   verifySetDeadManPolicy,
+  type AdminGrantView,
   type DeadManAffirmation,
   type SetDeadManPolicy,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 /**
  * Lock & power-off + dead-man heartbeat-lock (docs/lock-and-poweroff.md).
@@ -131,6 +133,14 @@ export interface DeadManControllerOptions {
   serverId: string;
   /** Owner IRK pubkey from daemon config; affirmations + policy verify against it. */
   irkPub: Uint8Array;
+  /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+   *  present ⇒ policy/affirm are gated by `requireMasterAdmin`, absent ⇒ legacy
+   *  owner-IRK verification (a strict no-op on pre-wipe boxes). */
+  adminRootPub?: Uint8Array;
+  /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+  username?: string;
+  /** Slice D — box-local active admin grants (`[]` box-side today). */
+  activeGrants?: readonly AdminGrantView[];
   suppressor: AutoUnlockSuppressor;
   runner: HostPowerRunner;
   /** Where the policy + lease state persist. Default `/var/flagship/deadman.json`. */
@@ -153,6 +163,9 @@ export interface DeadManControllerOptions {
 export class DeadManController {
   private readonly serverId: string;
   private readonly irkPub: Uint8Array;
+  private readonly adminRootPub: Uint8Array | undefined;
+  private readonly username: string;
+  private readonly activeGrants: readonly AdminGrantView[];
   private readonly suppressor: AutoUnlockSuppressor;
   private readonly runner: HostPowerRunner;
   private readonly statePath: string;
@@ -174,6 +187,9 @@ export class DeadManController {
   constructor(opts: DeadManControllerOptions) {
     this.serverId = opts.serverId;
     this.irkPub = opts.irkPub;
+    this.adminRootPub = opts.adminRootPub;
+    this.username = opts.username ?? "";
+    this.activeGrants = opts.activeGrants ?? [];
     this.suppressor = opts.suppressor;
     this.runner = opts.runner;
     this.statePath = opts.statePath ?? "/var/flagship/deadman.json";
@@ -219,7 +235,19 @@ export class DeadManController {
     if (!Number.isFinite(policy.windowMs) || policy.windowMs <= 0) return false;
     if (!Number.isFinite(policy.graceMs) || policy.graceMs < 0) return false;
     if (Math.abs(this.now() - policy.issuedAt) > this.maxAgeMs) return false;
-    if (!verifySetDeadManPolicy(policy, sig, this.irkPub)) return false;
+    if (
+      !authorizeSensitiveOrder({
+        order: policy,
+        signature: sig,
+        verify: verifySetDeadManPolicy,
+        ownerIrkPub: this.irkPub,
+        adminRootPub: this.adminRootPub,
+        username: this.username,
+        activeGrants: this.activeGrants,
+      })
+    ) {
+      return false;
+    }
 
     this.state.policy = {
       enabled: policy.enabled,
@@ -249,7 +277,19 @@ export class DeadManController {
     if (Math.abs(this.now() - affirm.issuedAt) > this.maxAgeMs) return false;
     const nonceHex = bytesToHex(affirm.nonce);
     if (this.state.usedNonces.includes(nonceHex)) return false;
-    if (!verifyDeadManAffirmation(affirm, sig, this.irkPub)) return false;
+    if (
+      !authorizeSensitiveOrder({
+        order: affirm,
+        signature: sig,
+        verify: verifyDeadManAffirmation,
+        ownerIrkPub: this.irkPub,
+        adminRootPub: this.adminRootPub,
+        username: this.username,
+        activeGrants: this.activeGrants,
+      })
+    ) {
+      return false;
+    }
 
     this.state.usedNonces.push(nonceHex);
     if (this.state.usedNonces.length > MAX_REMEMBERED_NONCES) {
