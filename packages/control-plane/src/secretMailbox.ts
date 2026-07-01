@@ -33,6 +33,7 @@ import {
   verifyLeaseRevocation,
   verifySecretRequest,
   verifySetLeader,
+  verifyUpdateOrder,
   SET_LEADER_NONE,
   type AutoUnlockLeaseV2,
   type DeviceEndpointClaim,
@@ -40,6 +41,7 @@ import {
   type SecretPurpose,
   type SecretRequest,
   type SetLeaderVote,
+  type UpdateOrder,
 } from "@flagship/protocol";
 import type {
   BoxSealedLeaseStorage,
@@ -113,6 +115,12 @@ const DEFAULT_CGK_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 // each time it boots / re-asserts. It is deposited once and should outlive long
 // box downtime, so give it a long window too. (`"none"` clears via a fresh vote.)
 const DEFAULT_SET_LEADER_DEPOSIT_TTL = 90 * 24 * 60 * 60_000; // 90 days
+// The admin-authorized update order is deposited by the phone and CLAIMED by the
+// box on its next heartbeat — seconds-to-minutes when online, but a box may have
+// been offline (the hali case), so give the order a generous claim window like the
+// other post-boot deposits. A stale order is refused box-side anyway (the daemon
+// checks `fromCommit` == current + the single-use nonce).
+const DEFAULT_UPDATE_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 const DEFAULT_PUSH_DEDUP_MS = 60_000;
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes hex
 
@@ -1282,6 +1290,191 @@ export async function handleConsumeSetLeaderDeposit(
       stkPub: row.stkPubHex,
       // PUBLIC owner-IRK-signed set-leader vote carrier — the box re-verifies it
       // under the owner IRK before riding it on its gossip frame.
+      sealed: row.sealedHex,
+      issuedAt: row.issuedAt,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 6c-quinquies. POST /api/server/:domain/update  (phone, IRK mailbox-auth +
+//               ADMIN-authority signature verify — the sensitive-op gate)
+//               GET  /api/server/:domain/update  (box, public consume-once)
+//
+// Admin-authorized in-place server-update order delivery
+// (docs/server-update-mechanism.md). The AUTHORIZATION half of the 2-of-2 gate:
+// an admin device signs an `UpdateOrder` naming THIS box + the target commit; the
+// phone deposits it here; the box claims it on its heartbeat, re-verifies it under
+// the pinned admin master root, AND separately confirms the target commit is
+// maintainer-ENDORSED (the daemon's ReleaseGate) before applying. So there is no
+// maintainer envelope in this lane — endorsement is the authenticity half.
+//
+// Applying an update is MAXIMALLY sensitive, so — unlike the sealed swk/cgk
+// deposits (owner-IRK mailbox-auth only) — the deposit POST is authorized through
+// the Slice-D admin gate (`authorizeSensitiveComOp`): with an admin master root
+// pinned, ONLY the admin root / an admin-root-signed `admin` grant can authorize;
+// the bare membership IRK cannot. The order is PUBLIC (like set-leader), verified
+// at deposit AND re-verified box-side, so the consume GET is a public consume-once
+// read (mirrors the other deposits).
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostUpdateDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const auth = await authPhoneMailbox(deps, body);
+  if (!auth.ok) return auth.response;
+
+  const now = deps.now ?? (() => Date.now());
+  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_UPDATE_DEPOSIT_TTL;
+
+  const b = body as {
+    deposit?: { serverDomain?: unknown; requestNonceHex?: unknown };
+    order?: {
+      serverDomain?: unknown;
+      targetCommit?: unknown;
+      fromCommit?: unknown;
+      nonce?: unknown;
+      issuedAt?: unknown;
+    };
+    signature?: unknown;
+  };
+  const dep = b?.deposit ?? {};
+  const o = b?.order ?? {};
+  if (
+    typeof dep.serverDomain !== "string" ||
+    typeof dep.requestNonceHex !== "string" ||
+    typeof o.serverDomain !== "string" ||
+    typeof o.targetCommit !== "string" ||
+    typeof o.fromCommit !== "string" ||
+    typeof o.nonce !== "string" ||
+    typeof o.issuedAt !== "number" ||
+    typeof b?.signature !== "string"
+  ) {
+    return malformed("malformed body");
+  }
+  if (dep.serverDomain !== host) {
+    return forbidden("serverDomain / host mismatch");
+  }
+  if (o.serverDomain !== host) {
+    return forbidden("order serverDomain / host mismatch");
+  }
+  if (!HEX_NONCE.test(dep.requestNonceHex.toLowerCase())) {
+    return malformed("requestNonceHex must be 32 bytes hex");
+  }
+  // targetCommit/fromCommit are git SHAs or tags (case-sensitive) — bound their
+  // length; separator/control chars are caught by the canonical guard at verify.
+  if (
+    o.targetCommit.length === 0 || o.targetCommit.length > 256 ||
+    o.fromCommit.length === 0 || o.fromCommit.length > 256 ||
+    o.nonce.length === 0 || o.nonce.length > 256
+  ) {
+    return malformed("commit / nonce fields must be non-empty within bounds");
+  }
+  if (!HEX_SIG.test(b.signature.toLowerCase())) {
+    return malformed("signature must be 64 bytes hex");
+  }
+  if (Math.abs(now() - o.issuedAt) > (deps.maxAgeMs ?? DEFAULT_MAX_AGE)) {
+    return forbidden("stale request");
+  }
+
+  // The box must be registered + owned by the authed account.
+  const reg = await deps.servers.get(host);
+  if (!reg) return forbidden("server not registered");
+  if (reg.revokedAt) return forbidden("server is revoked");
+  if (reg.username.toLowerCase() !== auth.username) {
+    return forbidden("server belongs to a different account");
+  }
+
+  const userRec = await deps.usernames.get(auth.username);
+  if (!userRec) return notFound("unknown user");
+
+  const order: UpdateOrder = {
+    serverDomain: o.serverDomain,
+    targetCommit: o.targetCommit,
+    fromCommit: o.fromCommit,
+    nonce: o.nonce,
+    issuedAt: o.issuedAt,
+  };
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(b.signature);
+  } catch {
+    return malformed("invalid hex");
+  }
+
+  // SENSITIVE — applying an update is master-admin authority. With an admin master
+  // root pinned, the bare membership IRK CANNOT authorize (Slice-D §7); with no
+  // admin root pinned it falls back to legacy owner-IRK auth (pre-D behavior). The
+  // order signature is verified against the SAME key the gate authorizes.
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: auth.username,
+      userRec,
+      verifyWith: (pub) => verifyUpdateOrder(order, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
+    return forbidden("update order requires master-admin authority");
+  }
+
+  // The carrier is the UTF-8 JSON `{order, signature}` hex-encoded, so the single-
+  // hex deposit lane transports the PUBLIC admin-signed order unchanged. The box
+  // re-verifies it under its pinned admin authority on consume.
+  const carrierHex = bytesToHexLocal(
+    new TextEncoder().encode(
+      JSON.stringify({
+        order: {
+          serverDomain: order.serverDomain,
+          targetCommit: order.targetCommit,
+          fromCommit: order.fromCommit,
+          nonce: order.nonce,
+          issuedAt: order.issuedAt,
+        },
+        signature: b.signature.toLowerCase(),
+      }),
+    ),
+  );
+
+  const put = await deps.secretMailbox.putUpdateDeposit({
+    serverDomain: host,
+    username: reg.username,
+    requestNonceHex: dep.requestNonceHex.toLowerCase(),
+    // stkPubHex is a non-load-bearing shape field in this lane (the order carrier
+    // is the payload); store the registered STK for shape-compat with the lane.
+    stkPubHex: reg.identityPubKeyHex.toLowerCase(),
+    sealedHex: carrierHex,
+    issuedAt: order.issuedAt,
+    expiresAt: now() + ttlMs,
+  });
+  if (!put.ok) {
+    return conflict(put.reason);
+  }
+  return { status: 200, body: { ok: true, expiresAt: now() + ttlMs } };
+}
+
+export async function handleConsumeUpdateDeposit(
+  deps: SecretMailboxDeps,
+  host: string,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const reg = await deps.servers.get(host);
+  if (!reg) return notFound("unknown server");
+  if (reg.revokedAt) return forbidden("server is revoked");
+
+  const row = await deps.secretMailbox.consumeUpdateDeposit(host, now());
+  if (!row) return notFound("no update order ready");
+  return {
+    status: 200,
+    body: {
+      serverDomain: row.serverDomain,
+      requestNonceHex: row.requestNonceHex,
+      stkPub: row.stkPubHex,
+      // PUBLIC admin-signed update-order carrier — the box re-verifies it under
+      // the pinned admin master root (and confirms maintainer endorsement of the
+      // commit) before applying.
       sealed: row.sealedHex,
       issuedAt: row.issuedAt,
     },
