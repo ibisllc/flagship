@@ -42,6 +42,7 @@ import type {
   WebauthnRecoveryStorage,
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import type { DnsDeleteClient } from "./cloudflareDns.js";
 import { HEX128, hexToBytes } from "./hex.js";
 import { validateUserLabel } from "./labels.js";
@@ -306,10 +307,8 @@ export async function handleAccountDeletionBundle(
   const userRec = await deps.usernames.get(username);
   if (!userRec) return notFound("username not registered");
 
-  let irkPub: Uint8Array;
   let acctSig: Uint8Array;
   try {
-    irkPub = hexToBytes(userRec.irkPubHex);
     acctSig = hexToBytes(acct.signature);
   } catch {
     return malformed("invalid hex");
@@ -319,7 +318,19 @@ export async function handleAccountDeletionBundle(
     username,
     issuedAt: acct.request.issuedAt,
   };
-  if (!verifyAccountSelfDelete(acctOrder, acctSig, irkPub)) {
+  // Slice D §2 row 25 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned). The bundle's optional servers-self-delete below
+  // must be signed by the SAME authority.
+  const acctAuthz = await authorizeSensitiveComOp(
+    { grants: deps.deviceCapabilityGrants, now: deps.now },
+    {
+      username,
+      userRec,
+      verifyWith: (pub) => verifyAccountSelfDelete(acctOrder, acctSig, hexToBytes(pub)),
+      now,
+    },
+  );
+  if (!acctAuthz.ok) {
     return forbidden("invalid accountSelfDelete signature");
   }
 
@@ -363,7 +374,18 @@ export async function handleAccountDeletionBundle(
       username,
       issuedAt: sd.request.issuedAt,
     };
-    if (!verifyServersSelfDelete(candidate, sdSig, irkPub)) {
+    // Slice D §2 row 26 — SENSITIVE: same master-admin authority as the account
+    // order (legacy owner-IRK when no admin root is pinned).
+    const sdAuthz = await authorizeSensitiveComOp(
+      { grants: deps.deviceCapabilityGrants, now: deps.now },
+      {
+        username,
+        userRec,
+        verifyWith: (pub) => verifyServersSelfDelete(candidate, sdSig, hexToBytes(pub)),
+        now,
+      },
+    );
+    if (!sdAuthz.ok) {
       return forbidden("invalid serversSelfDelete signature");
     }
     serversOrder = candidate;

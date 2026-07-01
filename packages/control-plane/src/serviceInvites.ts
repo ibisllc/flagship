@@ -36,6 +36,7 @@ import {
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 import type {
+  DeviceCapabilityGrantStorage,
   ServerStorage,
   ServiceInviteApprovalMode,
   ServiceInviteStorage,
@@ -43,6 +44,7 @@ import type {
   UsernameRecord,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { validateUserLabel } from "./labels.js";
 import {
   conflict,
@@ -67,6 +69,14 @@ export interface ServiceInviteDeps {
    * owner-signed only (the box poller won't authenticate).
    */
   servers?: ServerStorage;
+  /**
+   * Slice D — D-2 OVERRIDE: service-collaborator membership mutation (invite
+   * CREATE + REVOKE) is now SENSITIVE (admin-only). Device-grant store for the
+   * master-admin authority gate. Optional: absent ⇒ only the bare admin root
+   * satisfies the open gate. (Reading membership + redeeming an invite stay
+   * non-sensitive — those paths are unchanged.)
+   */
+  grants?: DeviceCapabilityGrantStorage;
   now?: () => number;
   /** Replay window for the signed create / revoke / list envelopes. Default 5 min. */
   freshnessMs?: number;
@@ -197,9 +207,20 @@ export async function handleCreateServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
-  // DUAL-ACCEPT: the create envelope must verify against the account's
-  // registered AID OR IRK. Only THIS account's key can create invites under it.
-  if (!verifyAccountSigned(userRec, (pub) => verifyCreateServiceInvite(create, sig, pub))) {
+  // Slice D — D-2: membership CREATE is SENSITIVE. Gate on master-admin
+  // authority; the legacy (no-admin-root) path keeps the DUAL-ACCEPT AID-OR-IRK
+  // verify unchanged (only THIS account's key can create invites under it).
+  const createAuthz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: userV.label,
+      userRec,
+      verifyWith: (pub) => verifyCreateServiceInvite(create, sig, hexToBytes(pub)),
+      alsoAcceptAid: true,
+      now,
+    },
+  );
+  if (!createAuthz.ok) {
     return forbidden("invalid signature");
   }
 
@@ -404,7 +425,19 @@ export async function handleRevokeServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
-  if (!verifyAccountSigned(userRec, (pub) => verifyRevokeServiceInvite(revoke, sig, pub))) {
+  // Slice D — D-2: membership REVOKE is SENSITIVE. Gate on master-admin
+  // authority; the legacy (no-admin-root) path keeps the DUAL-ACCEPT verify.
+  const revokeAuthz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: userV.label,
+      userRec,
+      verifyWith: (pub) => verifyRevokeServiceInvite(revoke, sig, hexToBytes(pub)),
+      alsoAcceptAid: true,
+      now,
+    },
+  );
+  if (!revokeAuthz.ok) {
     return forbidden("invalid signature");
   }
 

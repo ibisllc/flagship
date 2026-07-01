@@ -977,6 +977,7 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           servers: storage.servers,
           luksKeys: storage.luksKeys,
+          grants: storage.deviceCapabilityGrants,
           apex: env.SERVICES_APEX,
         },
         await readJson(request),
@@ -1190,7 +1191,11 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITE_REVOKE))) {
     return finish(
       await handleRevokeServiceInvite(
-        { invites: storage.serviceInvites, usernames: storage.usernames },
+        {
+          invites: storage.serviceInvites,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -1199,7 +1204,11 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
     return finish(
       await handleCreateServiceInvite(
-        { invites: storage.serviceInvites, usernames: storage.usernames },
+        {
+          invites: storage.serviceInvites,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -1370,6 +1379,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          grants: storage.deviceCapabilityGrants,
         },
         host,
         await readJson(request),
@@ -1386,6 +1396,7 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          grants: storage.deviceCapabilityGrants,
         },
         host,
         leaseId,
@@ -1416,6 +1427,7 @@ export async function tryControlPlane(
         usernames: storage.usernames,
         secretMailbox: storage.secretMailbox,
         boxSealedLeases: storage.boxSealedLeases,
+        grants: storage.deviceCapabilityGrants,
         ...(forwarder
           ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
           : {}),
@@ -1587,6 +1599,7 @@ export async function tryControlPlane(
       usernames: storage.usernames,
       serverEvictions: storage.serverEvictions,
       mailbox: buildSecretMailboxDeps(),
+      grants: storage.deviceCapabilityGrants,
     });
     if (method === "POST" && (m = path.match(ROUTE_RE.DECOMMISSION_EPOCH_COMPLETE))) {
       return finishPlain(
@@ -1705,6 +1718,7 @@ export async function tryControlPlane(
         routing: storage.routing,
         serverTransfers: storage.serverTransfers,
         auditEvents: storage.auditEvents,
+        grants: storage.deviceCapabilityGrants,
         ...(xferDnsClient && env.SERVICES_PASSTHROUGH_IPV4
           ? {
               dns: {
@@ -2031,6 +2045,7 @@ export async function tryControlPlane(
         {
           storage: storage.watchDelegates,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -2042,6 +2057,7 @@ export async function tryControlPlane(
         {
           storage: storage.watchDelegates,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),
@@ -2333,6 +2349,7 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           customDomainOrders: storage.customDomainOrders,
+          grants: storage.deviceCapabilityGrants,
           // Replace-time DELETE(old fqdn): only wired when the control
           // channel is configured (same gate as the verifier cron).
           ...(env.SERVICES_BASE_URL && env.SERVICES_CONTROL_SECRET
@@ -2671,6 +2688,7 @@ export async function tryControlPlane(
         {
           storage: storage.entitlementRevocations,
           usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),

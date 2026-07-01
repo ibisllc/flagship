@@ -109,6 +109,14 @@ interface RegisterBody {
       userPubKey?: string;
       issuedAt?: number;
       expiresAt?: number;
+      /**
+       * Slice D (docs/device-admin-tier-spec.md §D-1) — the account's pinned
+       * ADMIN MASTER ROOT pubkey (hex). Part of the AuthCode's SIGNED canonical
+       * bytes, so it MUST be reconstructed here or a client-signed AuthCode that
+       * carries it fails signature re-verification. Optional + backward-
+       * compatible: absent ⇒ byte-identical bytes (legacy AuthCodes verify).
+       */
+      adminRootPubKey?: string;
     };
     authCodeUserSignature?: string;
     serverIdentityPubKey?: string;
@@ -155,7 +163,9 @@ export async function handleServerRegister(
     typeof ac.userPubKey !== "string" ||
     !HEX64.test(ac.userPubKey) ||
     typeof ac.issuedAt !== "number" ||
-    typeof ac.expiresAt !== "number"
+    typeof ac.expiresAt !== "number" ||
+    (ac.adminRootPubKey !== undefined &&
+      (typeof ac.adminRootPubKey !== "string" || !HEX64.test(ac.adminRootPubKey)))
   ) {
     return malformed("malformed authCode");
   }
@@ -170,6 +180,10 @@ export async function handleServerRegister(
     userPubKey: hexToBytes(ac.userPubKey),
     issuedAt: ac.issuedAt,
     expiresAt: ac.expiresAt,
+    // Slice D — reconstruct the signed admin master root so the AuthCode's
+    // canonical bytes (and thus the signature re-verification below) match what
+    // the phone signed. Absent ⇒ byte-identical to a legacy AuthCode.
+    ...(ac.adminRootPubKey ? { adminRootPubKey: hexToBytes(ac.adminRootPubKey) } : {}),
   };
   const userSig = hexToBytes(r.authCodeUserSignature);
   if (!verifyAuthCode(authCode, userSig, authCode.userPubKey)) {

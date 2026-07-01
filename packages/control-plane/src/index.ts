@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./hex.js";
+export * from "./adminAuthorityGate.js";
 export * from "./labels.js";
 export * from "./usernameClaim.js";
 export * from "./randomUsername.js";

@@ -19,10 +19,12 @@ import {
   type EntitlementRevocationList,
 } from "@flagship/protocol";
 import type {
+  DeviceCapabilityGrantStorage,
   EntitlementRevocationStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import {
   conflict,
   forbidden,
@@ -35,6 +37,9 @@ import {
 export interface EntitlementRevocationsDeps {
   storage: EntitlementRevocationStorage;
   usernames: UsernameStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 row
+   *  34). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   /** Replay window for issuedAt (default 30d — phones can be offline). */
   maxAgeMs?: number;
   now?: () => number;
@@ -77,14 +82,22 @@ export async function handlePostEntitlementRevocations(
     issuedAt: r.issuedAt,
   };
   let sig: Uint8Array;
-  let irkPub: Uint8Array;
   try {
     sig = hexToBytes(body.signature);
-    irkPub = hexToBytes(userRec.irkPubHex);
   } catch {
     return malformed("invalid hex");
   }
-  if (!verifyEntitlementRevocationList(list, sig, irkPub)) {
+  // Slice D §2 row 34 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: r.username.toLowerCase(),
+      userRec,
+      verifyWith: (pub) => verifyEntitlementRevocationList(list, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid IRK signature");
   }
   const now = (deps.now ?? (() => Date.now()))();

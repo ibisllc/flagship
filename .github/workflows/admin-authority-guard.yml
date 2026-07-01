@@ -1,0 +1,70 @@
+name: Admin-authority guard (Slice D)
+
+# Slice D §3.4 (docs/device-admin-tier-spec.md): every SENSITIVE `.com` op must
+# authorize the order through the master-admin gate (authorizeSensitiveComOp /
+# requireMasterAdmin), never by verifying against a raw owner-IRK. This gate is
+# the correctness invariant that stops a new/regressed sensitive handler from
+# silently re-introducing a raw owner-IRK verify and bypassing the authority
+# split.
+#
+# ENFORCEMENT (mirrors the release guard's shape):
+#   - A tag push (`release-*` / `v*`) or a manual dispatch with `enforce=true`
+#     runs the gate with ADMIN_AUTHORITY_ENFORCE=1 → a violation FAILS the job.
+#   - Any other event (a normal PR) is ADVISORY: it reports violations but does
+#     NOT fail, so a PR is never blocked while box-side handlers are still being
+#     migrated to the gate.
+#
+# The guard logic + its self-test live at scripts/admin-authority-guard.sh and
+# scripts/admin-authority-guard.test.ts (the unit test runs in the main CI suite).
+
+on:
+  push:
+    tags:
+      - "release-*"
+      - "v*"
+  pull_request:
+    paths:
+      - "scripts/admin-authority-guard.sh"
+      - "scripts/admin-authority-guard.test.ts"
+      - ".github/workflows/admin-authority-guard.yml"
+      - "packages/control-plane/src/**"
+  workflow_dispatch:
+    inputs:
+      enforce:
+        description: "Enforce (fail if a sensitive .com op skips the master-admin gate)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  admin-authority-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decide enforcement mode
+        id: mode
+        run: |
+          enforce=0
+          case "${{ github.ref }}" in
+            refs/tags/release-*|refs/tags/v*) enforce=1 ;;
+          esac
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ github.event.inputs.enforce }}" = "true" ]; then
+            enforce=1
+          fi
+          echo "enforce=$enforce" >> "$GITHUB_OUTPUT"
+          if [ "$enforce" = "1" ]; then
+            echo "Enforcing (a sensitive .com op that skips the gate FAILS this job)."
+          else
+            echo "Advisory run (PR / non-release): reports violations but does not fail."
+          fi
+
+      - name: Run the admin-authority guard
+        env:
+          ADMIN_AUTHORITY_ENFORCE: ${{ steps.mode.outputs.enforce }}
+        run: bash scripts/admin-authority-guard.sh

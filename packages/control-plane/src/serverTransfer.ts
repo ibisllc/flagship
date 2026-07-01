@@ -47,12 +47,14 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceCapabilityGrantStorage,
   RoutingStorage,
   ServerStorage,
   ServerTransferStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import type { DnsUpsertClient } from "./serverRegister.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import {
   conflict, forbidden, gone, malformed, notFound, ok,
@@ -65,6 +67,10 @@ export interface ServerTransferDeps {
   routing: RoutingStorage;
   serverTransfers: ServerTransferStorage;
   auditEvents?: AuditEventStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 rows
+   *  28 [giver] + 29 [acquirer's admin root]). Optional: absent ⇒ only the bare
+   *  admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   /** Per-box DNS publisher for the acquirer's new FQDN (same shape as
    *  registration). Absent ⇒ the migration completes without re-publishing
    *  DNS (best-effort, mirroring registration's dnsError path). */
@@ -239,14 +245,22 @@ export async function handlePostTransferOffer(
     expiresAt: o.expiresAt,
   };
   let sigBytes: Uint8Array;
-  let irkBytes: Uint8Array;
   try {
     sigBytes = hexToBytes(b.offerSignature);
-    irkBytes = hexToBytes(owner.irkPubHex);
   } catch {
     return malformed("invalid hex");
   }
-  if (!verifyServerTransferOffer(offer, sigBytes, irkBytes)) {
+  // Slice D §2 row 28 — SENSITIVE: the giver's master-admin authority (legacy
+  // owner-IRK when no admin root is pinned).
+  const offerAuthz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: reg.username.toLowerCase(),
+      userRec: owner,
+      verifyWith: (pub) => verifyServerTransferOffer(offer, sigBytes, hexToBytes(pub)),
+    },
+  );
+  if (!offerAuthz.ok) {
     return forbidden("invalid offer signature");
   }
 
@@ -373,7 +387,19 @@ export async function handlePostTransferClaim(
   } catch {
     return malformed("invalid hex");
   }
-  if (!verifyServerTransferClaim(claim, claimSig, hexToBytes(acquirer.irkPubHex))) {
+  // Slice D §2 row 29 — SENSITIVE: the ACQUIRER's master-admin authority (a box
+  // re-homes only under the acquirer's admin root; legacy acquirer-IRK when no
+  // admin root is pinned). The `acquirerIrkPub` re-home target is bound to the
+  // acquirer's registered membership IRK above — that binding is unchanged.
+  const claimAuthz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: acquirerNorm,
+      userRec: acquirer,
+      verifyWith: (pub) => verifyServerTransferClaim(claim, claimSig, hexToBytes(pub)),
+    },
+  );
+  if (!claimAuthz.ok) {
     return forbidden("invalid claim signature");
   }
 

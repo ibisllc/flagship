@@ -28,11 +28,13 @@
 
 import { verifyServerDecommission, type ServerDecommission } from "@flagship/protocol";
 import type {
+  DeviceCapabilityGrantStorage,
   ServerEvictionStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { authPhoneMailbox, type SecretMailboxDeps } from "./secretMailbox.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
@@ -40,6 +42,9 @@ export interface ServerDecommissionDeps {
   servers: ServerStorage;
   usernames: UsernameStorage;
   serverEvictions: ServerEvictionStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 row
+   *  27). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   /** The mailbox-auth deps (servers/usernames/secretMailbox/boxSealedLeases) used
    *  to authenticate the depositor as the domain's registered owner — reused as-is
    *  from the secret-mailbox surface. */
@@ -113,10 +118,8 @@ export async function handlePostDecommission(
   if (!userRec) return notFound("unknown user");
 
   let sig: Uint8Array;
-  let irkPub: Uint8Array;
   try {
     sig = hexToBytes(b.signature);
-    irkPub = hexToBytes(userRec.irkPubHex);
   } catch {
     return malformed("invalid hex");
   }
@@ -130,7 +133,17 @@ export async function handlePostDecommission(
     nonce: o.nonce,
     issuedAt: o.issuedAt,
   };
-  if (!verifyServerDecommission(order, sig, irkPub)) {
+  // Slice D §2 row 27 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: reg.username.toLowerCase(),
+      userRec,
+      verifyWith: (pub) => verifyServerDecommission(order, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

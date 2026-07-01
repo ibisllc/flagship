@@ -165,6 +165,7 @@ interface AuthCodeRow {
   recorded_at: number;
   used_at: number | null;
   revoked_at: number | null;
+  admin_root_pub_key_hex: string | null;
 }
 interface ServerRow {
   server_domain: string;
@@ -224,6 +225,9 @@ function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
     recordedAt: r.recorded_at,
     usedAt: r.used_at ?? undefined,
     revokedAt: r.revoked_at ?? undefined,
+    ...(r.admin_root_pub_key_hex != null
+      ? { adminRootPubKeyHex: r.admin_root_pub_key_hex }
+      : {}),
   };
 }
 function rowToServer(r: ServerRow): ServerRecord {
@@ -453,8 +457,8 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
           `INSERT INTO auth_codes (
             serial, username, server_name, server_domain,
             delegated_pubkey_hex, user_pubkey_hex, user_signature_hex,
-            issued_at, expires_at, status, recorded_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            issued_at, expires_at, status, recorded_at, admin_root_pub_key_hex
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           rec.serial,
@@ -468,6 +472,7 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
           rec.expiresAt,
           rec.status,
           rec.recordedAt,
+          rec.adminRootPubKeyHex ?? null,
         )
         .run();
       return { ok: true as const };

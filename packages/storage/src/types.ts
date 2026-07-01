@@ -134,6 +134,18 @@ export interface AuthCodeRecord {
   recordedAt: number;
   usedAt?: number;
   revokedAt?: number;
+  /**
+   * Slice D (docs/device-admin-tier-spec.md §D-1 / spine deviation #5) — the
+   * account's pinned ADMIN MASTER ROOT pubkey (hex) that the phone folded into
+   * the signed `AuthCode` (`AuthCode.adminRootPubKey`, signature-covered). Persist
+   * it so `/api/server/register` can reconstruct the EXACT signed AuthCode (incl.
+   * the admin anchor) for signature re-verification, and so the box receives the
+   * anchor it pins as `ServerConfig.adminRootPub`. Optional + backward-compatible:
+   * a pre-0065 row / an AuthCode minted WITHOUT it decodes as undefined, and the
+   * canonical bytes are byte-identical when it is absent (old signatures verify).
+   * Migration 0065.
+   */
+  adminRootPubKeyHex?: string;
 }
 
 export interface ServerRecord {

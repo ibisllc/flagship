@@ -43,12 +43,14 @@ import {
 } from "@flagship/protocol";
 import type {
   BoxSealedLeaseStorage,
+  DeviceCapabilityGrantStorage,
   SecretMailboxPurpose,
   SecretMailboxStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
 export interface SecretMailboxDeps {
@@ -56,6 +58,10 @@ export interface SecretMailboxDeps {
   usernames: UsernameStorage;
   secretMailbox: SecretMailboxStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (the
+   *  set-leader vote deposit, §2 row 9). Optional: absent ⇒ only the bare admin
+   *  root satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   /**
    * Push fan-out for the "your box is finishing setup — open the app"
    * notification. Same closure shape the legacy /consume path uses
@@ -1209,7 +1215,17 @@ export async function handlePostSetLeaderDeposit(
   } catch {
     return malformed("invalid hex");
   }
-  if (!verifySetLeader(vote, sig, hexToBytes(userRec.irkPubHex))) {
+  // Slice D §2 row 9 — SENSITIVE: the set-leader (preferred-server) vote is
+  // master-admin authority (legacy owner-IRK when no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: auth.username,
+      userRec,
+      verifyWith: (pub) => verifySetLeader(vote, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid set-leader signature");
   }
 

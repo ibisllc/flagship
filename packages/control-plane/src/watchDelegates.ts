@@ -40,11 +40,13 @@ import {
   type DelegateScope,
 } from "@flagship/protocol";
 import type {
+  DeviceCapabilityGrantStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import {
   conflict,
   forbidden,
@@ -57,6 +59,10 @@ import {
 export interface WatchDelegatesDeps {
   storage: WatchDelegateStorage;
   usernames: UsernameStorage;
+  /** Slice D — device-grant store for the master-admin authority gate (§2 rows
+   *  32 [mint] + 33 [revoke]). Optional: absent ⇒ only the bare admin root
+   *  satisfies the open gate. */
+  grants?: DeviceCapabilityGrantStorage;
   now?: () => number;
 }
 
@@ -153,11 +159,9 @@ export async function handleMintWatchDelegate(
   if (!userRec) return notFound("username not registered");
 
   let delegatePub: Uint8Array;
-  let irkPub: Uint8Array;
   let sig: Uint8Array;
   try {
     delegatePub = hexToBytes(g.delegatePubKey);
-    irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
     return malformed("invalid hex");
@@ -172,12 +176,18 @@ export async function handleMintWatchDelegate(
     expiresAt: g.expiresAt,
   };
 
-  // The protocol verify rejects malformed envelopes (separator / control char
-  // in a field, out-of-range expiry, non-32-byte pubkey) by throwing inside
-  // the canonical-bytes pass, which `verifyWatchDelegateKey` folds to `false`.
-  // We surface a single 403 either way — the caller never gets to distinguish
-  // "bad signature" from "bad envelope".
-  if (!verifyWatchDelegateKey(grant, sig, irkPub)) {
+  // Slice D §2 row 32 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned). A malformed envelope folds to the same 403 (the
+  // caller never distinguishes "bad signature" from "bad envelope").
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: usernameNorm,
+      userRec,
+      verifyWith: (pub) => verifyWatchDelegateKey(grant, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 
@@ -307,10 +317,8 @@ export async function handleRevokeWatchDelegate(
     return malformed("username does not match grant");
   }
 
-  let irkPub: Uint8Array;
   let sig: Uint8Array;
   try {
-    irkPub = hexToBytes(userRec.irkPubHex);
     sig = hexToBytes(body.signature);
   } catch {
     return malformed("invalid hex");
@@ -321,7 +329,17 @@ export async function handleRevokeWatchDelegate(
     username: usernameNorm,
     issuedAt: r.issuedAt,
   };
-  if (!verifyRevokeWatchDelegate(envelope, sig, irkPub)) {
+  // Slice D §2 row 33 — SENSITIVE: master-admin authority (legacy owner-IRK when
+  // no admin root is pinned).
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: usernameNorm,
+      userRec,
+      verifyWith: (pub) => verifyRevokeWatchDelegate(envelope, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 
