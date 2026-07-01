@@ -76,7 +76,12 @@ class ServiceAccessViewModel(
     private val username: String,
     private val client: ServiceAccessClient = ServiceAccessClient(),
     /** Owner-IRK signer (set-mode + the box allow-remove — box config-pinned IRK). */
-    private val irkSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    // Slice D (D-2) — changing WHO may access a service (set-mode + allow-remove)
+    // is SENSITIVE membership mutation (membership.ts / serviceInvites.ts gate it
+    // on the admin master root): sign with the admin root when held, else the
+    // owner IRK (legacy). Canonical bytes unchanged. (The AID-signed create/
+    // revoke path below is a separate identity and stays on the AID.)
+    private val irkSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     /** Stable-AID signer (create + revoke + the owner-signed .com list — v2). */
     private val aidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
     /** Stable AID pub (hex) — the author identity recorded in invites. */

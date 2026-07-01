@@ -136,8 +136,12 @@ fun AccountDeletionScreen(nav: NavController) {
                     error = null
                     scope.launch {
                         try {
-                            // Biometric rides the IRK derivation.
-                            val irk = Keystore.deriveIRK(reason = "Delete your account")
+                            // Slice D — account/servers self-delete are SENSITIVE
+                            // (accountDeletion.ts gates both on the admin master
+                            // root): sign with the admin root when this device
+                            // holds one, else the owner IRK (legacy). Canonical
+                            // bytes unchanged. Biometric rides the derivation.
+                            val irk = Keystore.adminSigningKey(reason = "Delete your account")
                             val issuedAt = System.currentTimeMillis()
                             val u = username.lowercase()
                             val accountSig = HexUtil.encode(

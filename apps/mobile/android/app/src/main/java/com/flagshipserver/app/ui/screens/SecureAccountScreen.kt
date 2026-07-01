@@ -184,6 +184,8 @@ fun SecureAccountScreen(
                         passphraseConfirm = passphraseConfirm,
                         acmeScalar = acmeScalar,
                         now = System.currentTimeMillis(),
+                        // Slice D (D-3) — escrow the admin master root.
+                        adminRootSeed = Keystore.adminRootSeed(),
                     )
                 }
                 blockStore.save(

@@ -27,6 +27,7 @@ package com.flagshipserver.app.keystore
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.core.AcmeAccountKey
+import com.flagshipserver.app.core.AdminRootEscrow
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.RecoveryUpload
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -73,6 +74,9 @@ object CloudRecoveryEnrollment {
         passphraseConfirm: String,
         acmeScalar: ByteArray?,
         now: Long,
+        /** Slice D (D-3) — the admin master root seed to escrow alongside the
+         *  UMK, or null on a legacy account with no admin root. */
+        adminRootSeed: ByteArray? = null,
     ): EnrollResult {
         if (passphrase.length < MIN_PASSPHRASE) {
             throw ValidationError("Passphrase must be at least $MIN_PASSPHRASE characters.")
@@ -96,6 +100,16 @@ object CloudRecoveryEnrollment {
             }
         }
 
+        // Slice D (D-3) — escrow the admin master root under the same PRF secret
+        // (own HKDF salt). Non-fatal: a failure never blocks the UMK escrow.
+        val wrappedAdminRoot: String? = adminRootSeed?.let { seed ->
+            try {
+                AdminRootEscrow.wrapForEscrow(seed, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
         val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
         val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
         val signature = RecoveryUpload.sign(
@@ -113,6 +127,7 @@ object CloudRecoveryEnrollment {
                     wrappedUmk = wrappedUmk,
                     issuedAt = now,
                     wrappedAcmeAccountKey = wrappedAcme,
+                    wrappedAdminRoot = wrappedAdminRoot,
                     // Task #74 — the passphrase-gate hashes.
                     fetchTokenHash = RecoveryDerivation.sha256Hex(secrets.fetchToken),
                     prfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt),
@@ -128,6 +143,10 @@ object CloudRecoveryEnrollment {
     data class RestoreResult(
         val umkSeed: ByteArray,
         val acmeScalar: ByteArray?,
+        /** Slice D (D-3) — the recovered admin master root seed, or null when
+         *  the account never escrowed one. The caller re-establishes admin via
+         *  Keystore.importAdminRoot. */
+        val adminRootSeed: ByteArray? = null,
     )
 
     /**
@@ -185,6 +204,16 @@ object CloudRecoveryEnrollment {
                 null
             }
         }
-        return RestoreResult(umkSeed = umkSeed, acmeScalar = acmeScalar)
+        // Slice D (D-3) — recover the escrowed admin master root under the same
+        // PRF secret if present. Non-fatal (a surviving admin device can
+        // re-establish); the caller imports it via Keystore.importAdminRoot.
+        val adminRootSeed: ByteArray? = fetched.wrappedAdminRoot?.let { wrapped ->
+            try {
+                AdminRootEscrow.unwrapFromEscrow(wrapped, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        return RestoreResult(umkSeed = umkSeed, acmeScalar = acmeScalar, adminRootSeed = adminRootSeed)
     }
 }

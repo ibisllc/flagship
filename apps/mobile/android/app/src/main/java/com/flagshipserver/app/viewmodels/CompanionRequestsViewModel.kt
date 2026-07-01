@@ -40,7 +40,11 @@ class CompanionRequestsViewModel(
     private val server: FlagshipServerClient,
     private val username: () -> String?,
     /** Pluggable for tests. Default uses the real Keystore-backed IRK. */
-    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    // Slice D — approving a companion's release/revoke-server request signs a
+    // SENSITIVE order (serverRevoke.ts gates it on the admin master root). This
+    // runs on the owner's (admin) device: sign with the admin root when held,
+    // else the owner IRK (legacy). Canonical bytes unchanged.
+    private val signer: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {

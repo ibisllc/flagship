@@ -73,4 +73,8 @@ data class WireAuthCode(
     val userPubKey: String,              // hex (IRK pub)
     val issuedAt: Long,
     val expiresAt: Long,
+    // Slice D (D-1) — the admin master root pubkey (hex), signature-covered by
+    // authCodeUserSignature. The burner reads it into the box install-blob so
+    // the box pins ServerConfig.adminRootPub. Null on a legacy recipe.
+    val adminRootPubKey: String? = null,
 )

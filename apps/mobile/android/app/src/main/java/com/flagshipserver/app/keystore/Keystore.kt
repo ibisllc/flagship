@@ -438,6 +438,98 @@ object Keystore {
             .apply()
     }
 
+    // ---- Admin master root (Slice D device-admin tier) -----------------
+    //
+    // The AUTHORITY root (docs/device-admin-tier-spec.md §1). A FRESH RANDOM
+    // Ed25519 keypair minted at ACCOUNT CREATION on the first device — NOT
+    // UMK-derived, so a UMK backup / any membership device can't recompute it
+    // (that is the whole membership-vs-authority split). Held ONLY by admin
+    // devices, sealed device-local in EncryptedSharedPreferences and NEVER
+    // synced — the same device-local custody as the watch-delegate + ACME keys
+    // (contrast the iCloud-synced membership account key on iOS; on Android
+    // EncryptedSharedPreferences is inherently device-local). The first device
+    // holds the root ⇒ it is a bare-master-root admin by default.
+    //
+    // Signs SENSITIVE/destructive orders (§2) via [adminSigningKey]. Escrowed
+    // under the recovery credential (D-3, CloudRecoveryEnrollment) so credential
+    // recovery can later re-establish it. Read of the SIGNING key is biometric-
+    // gated (like deriveIRK) — signing a destructive order is never silent; the
+    // pub read + raw-seed read (for the escrow upload) are NOT gated, mirroring
+    // acmeAccountKeyScalar / the push key.
+
+    private fun adminRootSeedKey() = pkey("admin.root.seed")
+
+    /** Mint + persist a fresh random admin master root for the active profile
+     *  (first-device-at-account-creation). Idempotent: an existing root is
+     *  never clobbered. Returns the admin-root PUBLIC key hex. */
+    fun generateAdminRoot(): String {
+        val p = requirePrefs()
+        val key = adminRootSeedKey()
+        p.getString(key, null)?.let { hex ->
+            HexUtil.decode(hex)?.let { return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(it).publicKey) }
+        }
+        val seed = ByteArray(32).also(rng::nextBytes)
+        p.edit().putString(key, HexUtil.encode(seed)).apply()
+        return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+    }
+
+    /** True when this device holds the admin master root (⇒ this device is a
+     *  bare-root master admin). The signing gate [adminSigningKey] reads this
+     *  to choose admin-root vs the legacy owner-IRK fallback. */
+    fun hasAdminRoot(): Boolean =
+        requirePrefs().getString(adminRootSeedKey(), null) != null
+
+    /** The admin-root PUBLIC key hex if held on this device, else null (no
+     *  mint). Published to `.com` at account creation + pinned into the recipe
+     *  AuthCode so fresh boxes anchor it. */
+    fun adminRootPubHex(): String? {
+        val seedHex = requirePrefs().getString(adminRootSeedKey(), null) ?: return null
+        val seed = HexUtil.decode(seedHex) ?: return null
+        return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+    }
+
+    /** Biometric-gated admin-root SIGNER (like deriveIRK). Errors when absent —
+     *  callers gate on [hasAdminRoot] first (or use [adminSigningKey]). */
+    suspend fun adminRootKey(reason: String = "Authorize a sensitive change"): Ed25519Sign {
+        BiometricAuthority.current()?.ensureFresh(
+            title = "Authorize Flagship",
+            subtitle = reason,
+        )
+        val seedHex = requirePrefs().getString(adminRootSeedKey(), null)
+            ?: error("no admin root on this device")
+        val seed = HexUtil.decode(seedHex) ?: error("corrupt admin root seed")
+        return Ed25519Sign(seed)
+    }
+
+    /** Raw read of the 32-byte admin-root seed (no mint, no biometric) — for
+     *  the recovery-credential escrow upload (D-3). Null when absent, so a
+     *  missing root never forces one into existence. */
+    fun adminRootSeed(): ByteArray? {
+        val hex = requirePrefs().getString(adminRootSeedKey(), null) ?: return null
+        return HexUtil.decode(hex)
+    }
+
+    /** Install a recovered admin-root seed into the active profile — credential
+     *  recovery re-establishing admin from the escrowed root. */
+    fun importAdminRoot(seed: ByteArray) {
+        require(seed.size == 32) { "admin root seed must be 32 bytes" }
+        requirePrefs().edit().putString(adminRootSeedKey(), HexUtil.encode(seed)).apply()
+    }
+
+    /**
+     * The Slice D signing GATE (§8.3, task step 4): resolve the key to sign a
+     * SENSITIVE order with. If THIS account holds an admin master root on THIS
+     * device, sign with it; ELSE fall back to the owner IRK (legacy, pre-wipe
+     * accounts that never minted a root). Only the signing KEY changes — the
+     * order's canonical bytes are byte-identical, and the box/.com resolve the
+     * signer by trial (`adminAuthorityLocal` / `adminAuthorityGate`), so a
+     * bare-root admin's order verifies against the pinned admin root while a
+     * legacy account's still verifies against the IRK. Biometric-gated either
+     * way (one prompt, within the freshness window).
+     */
+    suspend fun adminSigningKey(reason: String = "Authorize a sensitive change"): Ed25519Sign =
+        if (hasAdminRoot()) adminRootKey(reason) else deriveIRK(reason)
+
     // ---- ACME account key (#28, per-user-cert) -------------------------
     //
     // The ECDSA P-256 (ES256) account key that authorizes minting this
@@ -523,6 +615,10 @@ object Keystore {
         editor.remove(watchDelegateSeedKey())
         editor.remove(watchDelegateGrantIdKey())
         editor.remove(acmeAccountKeyScalarKey())
+        // Slice D — drop the admin master root so a removed device retains NO
+        // administrative authority (the security invariant: authority is
+        // device-local + revoked with the device).
+        editor.remove(adminRootSeedKey())
         // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
         // entry the rotation primitive might have written FOR THE ACTIVE
         // PROFILE. Other profiles' caches survive.
@@ -554,7 +650,7 @@ object Keystore {
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
-            KEY_ACME_ACCOUNT_SCALAR,
+            KEY_ACME_ACCOUNT_SCALAR, "admin.root.seed",
         )
         for (key in p.all.keys) {
             if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }

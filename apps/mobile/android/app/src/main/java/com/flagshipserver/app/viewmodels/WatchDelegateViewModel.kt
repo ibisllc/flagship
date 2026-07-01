@@ -38,7 +38,10 @@ class WatchDelegateViewModel(
     private val server: FlagshipServerClient,
     private val username: () -> String?,
     /** Pluggable for tests; default uses the Keystore-backed IRK (biometric). */
-    private val signer: suspend (String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    // Slice D — minting/revoking a watch delegate grant is SENSITIVE
+    // (watchDelegates.ts gates it on the admin master root): sign with the admin
+    // root when held, else the owner IRK (legacy). Canonical bytes unchanged.
+    private val signer: suspend (String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     /** Ensures the device delegate key exists + returns its pubkey hex. */
     private val provisionDelegatePubHex: () -> String = {
         Keystore.loadOrCreateWatchDelegateKey()

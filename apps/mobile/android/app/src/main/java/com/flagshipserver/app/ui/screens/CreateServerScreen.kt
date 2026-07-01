@@ -1149,6 +1149,11 @@ internal suspend fun mintRecipeBundle(
     val rck = Ed25519Sign.KeyPair.newKeyPair()
     val rckPubHex = HexUtil.encode(rck.publicKey)
 
+    // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so a
+    // fresh box anchors it (signature-covered by the IRK below). Null on a legacy
+    // account with no admin root ⇒ byte-identical pre-D canonical bytes.
+    val adminRootPubBytes = Keystore.adminRootPubHex()?.let { HexUtil.decode(it) }
+
     val authCodeBytesObj = AuthCodeBytes(
         version = 1,
         serial = serial,
@@ -1159,6 +1164,7 @@ internal suspend fun mintRecipeBundle(
         userPubKey = irkPubBytes,
         issuedAt = now,
         expiresAt = expiresAt,
+        adminRootPubKey = adminRootPubBytes,
     )
     val authCodeUserSig = irk.sign(authCodeBytesObj.canonicalBytes())
     val authCodeUserSigHex = HexUtil.encode(authCodeUserSig)
@@ -1255,6 +1261,7 @@ internal suspend fun mintRecipeBundle(
                 userPubKey = irkPubHex,
                 issuedAt = now,
                 expiresAt = expiresAt,
+                adminRootPubKey = adminRootPubBytes?.let { HexUtil.encode(it) },
             ),
             authCodeUserSignature = authCodeUserSigHex,
             rckPubKey = rckPubHex,
@@ -1350,6 +1357,7 @@ internal suspend fun registerControlPlane(
                 userPubKey = bundle.blob.authCode.userPubKey,
                 issuedAt = bundle.blob.authCode.issuedAt,
                 expiresAt = bundle.blob.authCode.expiresAt,
+                adminRootPubKey = bundle.blob.authCode.adminRootPubKey,
             ),
             signature = authCodeUserSig,
         ),

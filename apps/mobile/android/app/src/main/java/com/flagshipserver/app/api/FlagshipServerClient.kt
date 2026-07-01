@@ -675,6 +675,12 @@ private data class TrustedDevicesWireBody(val devices: List<TrustedDevice>)
 data class UsernameClaimRequest(
     val request: Inner,
     val signature: String,           // hex, IRK over canonical bytes
+    /** Slice D — the account's ADMIN MASTER ROOT pubkey (hex), a top-level
+     *  sibling `.com` stores at `usernames.admin_root_pub_hex` (usernameClaim.ts).
+     *  NOT signature-covered (the claim sig is over username|irkPub|issuedAt);
+     *  the admin root's authority is anchored on the box via the signed AuthCode.
+     *  Omitted (null) on a legacy claim ⇒ `.com` stores no admin root. */
+    val adminRootPub: String? = null,
 ) {
     @Serializable
     data class Inner(
@@ -724,6 +730,13 @@ data class AuthCodeWire(
     val userPubKey: String,          // hex
     val issuedAt: Long,
     val expiresAt: Long,
+    /** Slice D (D-1) — the account's ADMIN MASTER ROOT pubkey (hex). Rides
+     *  INSIDE the AuthCode so it is signature-covered by `authCodeUserSignature`
+     *  and `.com`'s registration gate (a compromised network can't swap the
+     *  admin anchor). The box pins it at first boot into
+     *  `ServerConfig.adminRootPub`. Backward-compatible: null ⇒ the canonical
+     *  bytes are byte-identical to a pre-D AuthCode (no `ar=` segment). */
+    val adminRootPubKey: String? = null,
 )
 
 @Serializable
@@ -986,6 +999,12 @@ data class RecoveryEnvelopeRequest(
         // ciphertext only — never in the signed canonical, so tampering
         // breaks recovery of the account key but can never forge it.
         val wrappedAcmeAccountKey: String? = null,
+        // Slice D (D-3) — the ADMIN MASTER ROOT escrowed alongside the UMK.
+        // Single self-contained base64 blob (nonce‖ct‖tag) from
+        // AdminRootEscrow.wrapForEscrow, read verbatim by the Worker. Optional +
+        // ciphertext-only (never in the signed canonical), so tampering can
+        // break admin recovery but never forge the root.
+        val wrappedAdminRoot: String? = null,
         // Task #74 — passphrase-gate hashes. Both are lowercase SHA-256 hex
         // of the Argon2id-derived fetchToken / prfSalt (see
         // RecoveryDerivation). Optional on the wire (NOT in the signed
@@ -1012,6 +1031,8 @@ data class RecoveryEnvelope(
     // Decoded by the recovery-restore path (LoginViewModel) and imported via
     // Keystore.importAcmeAccountKeyScalar.
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — present when the account escrowed its admin master root.
+    val wrappedAdminRoot: String? = null,
 )
 
 /** `POST /api/recovery/by-username/<u>/fetch` — the body the passphrase-
@@ -1035,6 +1056,9 @@ data class GatedRecoveryEnvelope(
     val credentialId: String,
     val wrappedUmk: String,
     val wrappedAcmeAccountKey: String? = null,
+    // Slice D (D-3) — the escrowed admin master root, unwrapped on restore and
+    // re-established via Keystore.importAdminRoot.
+    val wrappedAdminRoot: String? = null,
     val prfSaltHash: String? = null,
     val updatedAt: Long? = null,
 )

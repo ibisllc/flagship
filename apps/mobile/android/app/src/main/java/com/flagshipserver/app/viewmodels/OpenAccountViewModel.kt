@@ -99,6 +99,13 @@ class OpenAccountViewModel(
             ensureHardwareUmk()
             Keystore.loadOrCreateUmkSeed()
 
+            // 1b. Slice D — mint this account's ADMIN MASTER ROOT on the FIRST
+            //    device, immediately after the UMK. A fresh random Ed25519
+            //    keypair (NOT UMK-derived), sealed device-local; this device
+            //    holds it ⇒ it is admin by default. Its pubkey is published to
+            //    `.com` in the claim below + pinned into every recipe AuthCode.
+            val adminRootPubHex = Keystore.generateAdminRoot()
+
             // 2. Derive the IRK + standalone claim. Compute the public
             //    half from the just-derived versioned seed (the canonical
             //    source under the active IRK version).
@@ -126,6 +133,11 @@ class OpenAccountViewModel(
                         issuedAt = issuedAt,
                     ),
                     signature = claimSig,
+                    // Slice D — publish the admin master root so `.com` pins it
+                    // at `usernames.admin_root_pub_hex` (a top-level sibling, not
+                    // signature-covered; the box anchors authority via the
+                    // signed AuthCode).
+                    adminRootPub = adminRootPubHex,
                 ),
             )
 
