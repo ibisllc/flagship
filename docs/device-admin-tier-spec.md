@@ -1,5 +1,44 @@
 # Slice D — device admin / entitlement tier (implementation spec)
 
+## Locked decisions (owner, 2026-07-01) — these OVERRIDE any conflicting default below
+
+The four open questions this spec flagged are now resolved:
+
+- **D-1 — admin-root delivery:** the account's `admin_root_pub_hex` rides **inside
+  the signed `AuthCode`** (signature-covered + registration-gated, like
+  `ownerAidPubHex`), NOT loose on the `InstallBlob`. ✅ as the spec drafted.
+- **D-2 — service-collaborator membership is SENSITIVE (admin-only).** OVERRIDE:
+  the spec drafted `membership.ts` invite/mutation as a non-sensitive full-user
+  capability; the owner ruled it **admin-gated**. Move those rows (server-daemon
+  `membership.ts:72,140` and the matching `.com` grant-issuance rows) into the
+  SENSITIVE set behind `requireMasterAdmin`. Only *reading* membership stays
+  non-sensitive. (Non-admins can still USE a service; they just can't change who
+  else may access it.)
+- **D-3 — escrow the admin root under the WebAuthn-PRF recovery credential.** ✅
+  Credential recovery can mint a new admin root and sign the `admin-root-rotation/v1`
+  proof, so losing every admin device is still recoverable. Implication recorded:
+  whoever holds the recovery credential effectively holds admin.
+- **D-4 — promote-at-add-time is ASSURANCE-GATED.** "Also make this device an
+  admin" is offered ONLY on high-assurance joins, never low-assurance ones, and
+  is **default-OFF** with a hard warning ("this device will be able to wipe /
+  transfer / decommission your cloud") wherever shown.
+
+### D-4 — the join user-stories, classified by assurance
+
+| # | User story | Path | Assurance | Offer promote-at-add? |
+|---|---|---|---|---|
+| 1 | Owner adds their OWN 2nd device | Phase 3b cross-device QR: admin mints QR → new device scans → SAS match → `DeviceAdmit` (`AddDeviceViewModel`) | **HIGH** (admin-initiated, synchronous, SAS-confirmed) | **Yes** (default-off + warning) |
+| 2 | Owner adds another PERSON present with them | same QR+SAS ceremony, different human's device | **HIGH channel**, but grants a *different person* admin | **Yes** (default-off + stronger warning) |
+| 3 | Remote / async "request to join" the owner approves later | any approval path with no synchronous SAS ("someone tried to log into our cloud and we approve") | **LOW** | **No** — device starts non-admin; promotion is a separate explicit action |
+| 4 | Owner recovers onto a new device | WebAuthn-PRF credential recovery; admin root is escrowed under the credential (D-3) | **HIGH** (credential-proven) | device re-establishes admin from the escrowed root |
+
+**Discriminator to implement:** the promote-at-add toggle appears ONLY in the
+synchronous admin-initiated SAS ceremony (`AddDeviceViewModel`, stories 1–2) and
+the credential-recovery path (story 4); it is never offered on an async
+approve-a-request join (story 3). Default OFF everywhere.
+
+---
+
 Status: **spec only, not yet built.** This is the dedicated spec pass the
 `docs/device-admin-entitlements.md` review (§"⚠️ Review outcome (2026-06-30)")
 demanded before any D code lands. It honors the owner-set "D decisions
