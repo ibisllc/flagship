@@ -36,6 +36,7 @@ import {
   hexToBytes,
 } from "../keystore.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
+import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
 
 const COM_BASE = controlApex();
@@ -798,7 +799,11 @@ export async function depositSetLeader(args, deps = {}) {
   if (!session.umk) throw new Error("unlock the webapp first");
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || COM_BASE;
-  const sign = deps.signWithIrk || defaultSignWithIrk;
+  // Slice D: the set-leader VOTE is a SENSITIVE order — the gated signer routes
+  // it to the admin master root (when present) while the co-signed IRK
+  // mailbox-auth (`device-endpoint-claim`) stays the membership IRK the deposit
+  // lane requires. Legacy accounts sign both with the IRK.
+  const sign = deps.signWithIrk || sensitiveSigner();
   const now = (deps.now || Date.now)();
 
   const preferredStkPubHex = String(args.preferredStkPubHex).toLowerCase();

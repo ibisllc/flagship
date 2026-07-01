@@ -1,4 +1,5 @@
 import { bytesToHex, signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
 import {
   chipRow,
@@ -1185,7 +1186,8 @@ async function deleteDeadServer(serverDomain, btn) {
       username,
       serverDomain,
       umk: session.umk,
-      signWithIrk,
+      // Slice D: release-server-name is a SENSITIVE order (admin root when present).
+      signWithIrk: sensitiveSigner(),
     });
     if (out && out.pending) {
       // P14 Phase 2 — companion profile (no local UMK): the release is queued

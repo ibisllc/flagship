@@ -23,6 +23,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import { bytesToHex, signWithIrk, deriveSwkFromSeed } from "../keystore.js";
+import { ensureAdminRoot, sensitiveSigner } from "../lib/adminRoot.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import {
@@ -270,7 +271,8 @@ async function cancelServer(id) {
   const serverDomain = serverDomainOf(d.serverName, username);
   try {
     const out = await releaseServerName(
-      { username, serverDomain, umk: session.umk, signWithIrk },
+      // Slice D: release-server-name is a SENSITIVE order (admin root when present).
+      { username, serverDomain, umk: session.umk, signWithIrk: sensitiveSigner() },
     );
     if (out && out.pending) {
       // Companion path — open the polling sheet until the owner resolves.
@@ -615,6 +617,19 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
 
+  // Slice D (docs/device-admin-tier-spec.md §1.3 / §8.1) — ensure this device
+  // holds the account's admin master root (idempotent; mints one only if
+  // absent, e.g. a legacy direct-entry create that skipped open-account). Its
+  // pubkey is published with the claim AND pinned INSIDE the recipe AuthCode so
+  // the fresh box pins it. Best-effort: a mint failure leaves adminRootPubHex
+  // null → a legacy no-admin-root recipe (byte-identical to pre-D).
+  let adminRootPubHex = null;
+  try {
+    adminRootPubHex = await ensureAdminRoot(session);
+  } catch {
+    adminRootPubHex = null;
+  }
+
   // 1. Claim username (idempotent) — Phase 2: SKIPPED when the account
   // was already opened (the standalone claim ran at open-account time).
   // Account identity is decoupled from server provisioning: a server is
@@ -634,6 +649,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       body: JSON.stringify({
         request: { username, irkPub: irkPubHex, issuedAt: claimIssuedAt },
         signature: bytesToHex(claimSig),
+        ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
       }),
     });
     if (!claimResp.ok && claimResp.status !== 409) {
@@ -655,11 +671,19 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     issuedAt: acIssuedAt,
     expiresAt: acExpiresAt,
   };
-  const acMsg = canonical([
+  // Slice D — pin the admin master root INSIDE the AuthCode (decision D-1). It
+  // is appended as a signature-covered `ar=<hex>` field, byte-identical to
+  // @flagship/protocol canonicalAuthCode: an AuthCode WITHOUT it canonicalises
+  // exactly as before, so legacy (no-admin-root) recipes are unchanged. The IRK
+  // still signs the AuthCode (membership); the admin root only RIDES it, so a
+  // compromised network/.com cannot swap the box's admin anchor in transit.
+  const acParts = [
     TAG_AUTH_CODE, code.version, code.serial, code.username, code.serverName,
     code.serverDomain, bytesToHex(code.delegatedPubKey), bytesToHex(code.userPubKey),
     code.issuedAt, code.expiresAt,
-  ]);
+  ];
+  if (adminRootPubHex) acParts.push(`ar=${adminRootPubHex}`);
+  const acMsg = canonical(acParts);
   const acSig = await signWithIrk(session.umk, acMsg);
   // Absolute control-plane URL — a relative POST hits the webapp origin
   // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the claim call above
@@ -674,6 +698,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
         delegatedPubKey: bytesToHex(code.delegatedPubKey),
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+        ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
       },
       signature: bytesToHex(acSig),
     }),
@@ -738,6 +763,11 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       delegatedPubKey: bytesToHex(code.delegatedPubKey),
       userPubKey: bytesToHex(code.userPubKey),
       issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+      // Slice D — carry the pinned admin root in the downloaded recipe so the
+      // burner writes it to the box's install-blob (box pins it as
+      // ServerConfig.adminRootPub). Present iff the account has an admin root;
+      // covered by authCodeUserSignature via the `ar=` canonical field above.
+      ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
     },
     authCodeUserSignature: bytesToHex(acSig),
     installerGitRef: blob.installerGitRef,

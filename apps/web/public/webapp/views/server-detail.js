@@ -36,6 +36,7 @@ import {
   JOURNAL_DEFAULT_LINES,
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
 import { createTransferOffer, buildTransferLink } from "../lib/serverTransfer.js";
 import {
@@ -475,7 +476,8 @@ function wireFrontPage(body) {
         baseUrl,
         label,
         umk: session.umk,
-        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+        // Slice D: set-front-page is a SENSITIVE order (admin root when present).
+        signWithIrk: sensitiveSigner(),
       });
       current = label;
       toast(label ? `Front page set to ${label}` : "Front page reset to default", "ok");
@@ -608,7 +610,8 @@ async function runPowerAction(body, mode, btn, allButtons, status) {
         baseUrl,
         mode,
         umk: session.umk,
-        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+        // Slice D: power-off/restart is a SENSITIVE order (admin root when present).
+        signWithIrk: sensitiveSigner(),
       });
       if (status) {
         status.classList.remove("hidden");
@@ -747,7 +750,8 @@ async function applyDeadManPolicy(body, { enabled, preset, lockoutMode }) {
     graceMs: preset.graceMs,
     lockoutMode,
     umk: session.umk,
-    signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+    // Slice D: set-dead-man-policy is a SENSITIVE order (admin root when present).
+    signWithIrk: sensitiveSigner(),
   });
 }
 
@@ -817,7 +821,8 @@ function wireDeadMan(body) {
       const r = await affirmDeadMan({
         baseUrl,
         umk: session.umk,
-        signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+        // Slice D: dead-man affirmation is a SENSITIVE order (admin root when present).
+        signWithIrk: sensitiveSigner(),
       });
       setDeadManEnabledUi(true, r.leaseExpiry);
       toast("Affirmed — lease renewed", "ok");
@@ -906,7 +911,10 @@ async function openTransferDialog(body) {
           username: session.username,
           umk: session.umk,
           irkPubHex: bytesToHex(session.irk.publicKey),
-          signWithIrk,
+          // Slice D: the transfer OFFER order is signed with the admin root
+          // (when present); the co-signed mailbox-auth stays the IRK — the
+          // gated signer tag-routes both. Legacy accounts sign with the IRK.
+          signWithIrk: sensitiveSigner(),
         });
         // Render the universal-link form (a phone Camera opens it straight
         // into the app; it doubles as the paste-able acquirer code).
@@ -1067,7 +1075,9 @@ async function openReplaceDialog(body) {
           backupEnrolled: ctx.backupEnrolled,
           umk: session.umk,
           irkPubHex: bytesToHex(session.irk.publicKey),
-          signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+          // Slice D: the decommission order is signed with the admin root (when
+          // present); the co-signed mailbox-auth stays the IRK (tag-routed).
+          signWithIrk: sensitiveSigner(),
         });
         bodyEl.classList.add("hidden");
         resultEl.classList.remove("hidden");

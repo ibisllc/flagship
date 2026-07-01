@@ -625,6 +625,130 @@ export async function generateEphemeralPub() {
   return raw.slice(1, 33);
 }
 
+/* ---------- Slice D: admin master root (device-admin tier) ---------- */
+//
+// The ADMIN MASTER ROOT (docs/device-admin-tier-spec.md §1) is a FRESH RANDOM
+// Ed25519 keypair minted at account creation on the first device — it is NOT
+// UMK-derived, so a device that merely holds the UMK cannot recompute the
+// authority key. It signs the sensitive/destructive orders (§2) the box/`.com`
+// verify against the pinned `admin_root_pub_hex`; the membership IRK keeps
+// signing pairing/deposits (non-sensitive).
+//
+// Custody in the webapp: the 32-byte admin-root SEED (== the Ed25519 seed) is
+// stored device-local in the SAME `flagship-webapp`/`keystore` IndexedDB store
+// as the wrapped UMK, but wrapped at rest under a UMK-DERIVED AES-GCM KEK. That
+// keeps the ciphertext unreadable at rest while being unlockable whenever the
+// session is unlocked (no separate passphrase to thread). The authority split
+// holds because the ciphertext is DEVICE-LOCAL: a different device that recovers
+// only the UMK does NOT get the admin root — it must come through the recovery
+// escrow (recovery.js). This is the webapp analogue of the iOS Keychain /
+// Android EncryptedSharedPreferences device-local seal.
+
+const ADMIN_ROOT_RECORD_KEY = "adminRootSeed";
+const ADMIN_ROOT_WRAP_INFO = "flagship.admin-root-wrap.v1";
+
+/** Map a profileId to its admin-root IndexedDB record key (mirrors
+ *  {@link wrappedUmkRecordKey}: DEFAULT reuses the flat key, named profiles get
+ *  a keyed row so a second cloud never clobbers the first's admin root). */
+export function adminRootRecordKey(profileId = activeProfileId()) {
+  return profileId === DEFAULT_PROFILE_ID
+    ? ADMIN_ROOT_RECORD_KEY
+    : `${ADMIN_ROOT_RECORD_KEY}.${profileId}`;
+}
+
+/** The AES-GCM at-rest wrap key for the admin-root seed — HKDF over the UMK seed
+ *  under a fixed info (distinct from every membership derivation). Only used to
+ *  encrypt/decrypt the device-local seed at rest; it is NOT the admin root. */
+async function adminRootWrapKey(umkSeed) {
+  const raw = await hkdf32(umkSeed, ADMIN_ROOT_WRAP_INFO);
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+/** True iff this device holds an admin-root record for the profile. */
+export async function hasAdminRoot(profileId = activeProfileId()) {
+  return !!(await dbGet(adminRootRecordKey(profileId)));
+}
+
+/** Wrap + persist a 32-byte admin-root seed device-local for the profile. */
+export async function persistAdminRootSeed(umkSeed, adminSeed, profileId = activeProfileId()) {
+  if (!(adminSeed instanceof Uint8Array) || adminSeed.length !== 32) {
+    throw new Error("admin root seed must be a 32-byte Uint8Array");
+  }
+  const kek = await adminRootWrapKey(umkSeed);
+  const nonce = randomBytes(AES_NONCE_BYTES);
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, adminSeed),
+  );
+  await dbPut(adminRootRecordKey(profileId), {
+    version: 1,
+    nonce: bytesToHex(nonce),
+    ciphertext: bytesToHex(ct),
+  });
+}
+
+/** Generate a FRESH RANDOM admin master root for the profile (account-creation,
+ *  first device) and persist it device-local. Returns the 32-byte seed. */
+export async function generateAdminRoot(umkSeed, profileId = activeProfileId()) {
+  const adminSeed = randomBytes(32);
+  await persistAdminRootSeed(umkSeed, adminSeed, profileId);
+  return adminSeed;
+}
+
+/** Load + unwrap this device's admin-root seed for the profile, or null when
+ *  absent (a pre-Slice-D / legacy account, or a device that never held it). */
+export async function loadAdminRootSeed(umkSeed, profileId = activeProfileId()) {
+  const blob = await dbGet(adminRootRecordKey(profileId));
+  if (!blob) return null;
+  const kek = await adminRootWrapKey(umkSeed);
+  const nonce = hexToBytes(blob.nonce);
+  const ct = hexToBytes(blob.ciphertext);
+  const pt = new Uint8Array(
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kek, ct),
+  );
+  return pt;
+}
+
+/** Derive the admin master-root Ed25519 keypair from its raw 32-byte seed. The
+ *  seed IS the Ed25519 seed (a fresh random keypair — no HKDF, unlike the IRK).
+ *  Returns `{ privateKey: CryptoKey(sign), publicKey: Uint8Array(32) }`. This is
+ *  the `adminRootKey()` helper (docs/device-admin-tier-spec.md §8.1). */
+export async function deriveAdminRootFromSeed(adminSeed) {
+  if (!(adminSeed instanceof Uint8Array) || adminSeed.length !== 32) {
+    throw new Error("admin root seed must be a 32-byte Uint8Array");
+  }
+  const pkcs8 = pkcs8FromSeed(adminSeed);
+  const privateKey = await crypto.subtle.importKey(
+    "pkcs8",
+    pkcs8,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+  const publicKey = await jwkPubFromSeed(adminSeed);
+  return { privateKey, publicKey };
+}
+
+/** The admin master-root public key as lowercase hex — the value published to
+ *  `.com` (username claim) + pinned in the recipe AuthCode (`adminRootPubKey`). */
+export async function adminRootPubHex(adminSeed) {
+  const kp = await deriveAdminRootFromSeed(adminSeed);
+  return bytesToHex(kp.publicKey);
+}
+
+/** Sign canonical-bytes with the admin master root. Same output shape as
+ *  {@link signWithIrk}; the ONLY difference is the signing KEY (canonical bytes
+ *  are byte-identical — a sensitive order signs the same bytes, just under the
+ *  admin root instead of the membership IRK). */
+export async function signWithAdminRoot(adminSeed, canonicalBytes) {
+  const kp = await deriveAdminRootFromSeed(adminSeed);
+  return new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, canonicalBytes),
+  );
+}
+
 /* ---------- public surface ---------- */
 
 export async function hasWrappedUmk(profileId = activeProfileId()) {

@@ -31,7 +31,7 @@
 // reachable only from same-origin code — means an apex XSS literally
 // cannot invoke the passkey.
 
-import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
+import { bytesToHex, hexToBytes, signWithIrk, loadAdminRootSeed } from "../keystore.js";
 import { getSession } from "./state.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
 
@@ -50,10 +50,27 @@ export async function setupCloudRecovery(username) {
   if (!session.umk) throw new Error("unlock first");
   if (!username) throw new Error("username required");
 
+  // Slice D (D-3): escrow the admin master root UNDER the recovery credential
+  // too, so credential recovery can later re-establish it (the admin root is NOT
+  // UMK-derived — a UMK backup alone can't reconstruct it). We hand the
+  // sub-origin the admin-root seed alongside the UMK; it wraps `umk||adminRoot`
+  // under the same PRF key. Best-effort: an account with no admin root (legacy)
+  // escrows the UMK alone, byte-identical to before.
+  let adminRootSeed = null;
+  try {
+    adminRootSeed = session.adminRootSeed ?? (await loadAdminRootSeed(session.umk));
+  } catch {
+    adminRootSeed = null;
+  }
+
   // Drive the sub-origin popup. It will receive the UMK seed +
-  // username, prompt the user for a passphrase (Task #74), and
-  // postMessage back the wrap result.
-  const result = await runSubOriginFlow("enroll", { umk: session.umk, username });
+  // username (+ admin root, when present), prompt the user for a passphrase
+  // (Task #74), and postMessage back the wrap result.
+  const result = await runSubOriginFlow("enroll", {
+    umk: session.umk,
+    username,
+    ...(adminRootSeed ? { adminRootSeed } : {}),
+  });
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? "no result"}`);
   }
@@ -229,6 +246,10 @@ async function runSubOriginFlow(mode, payload) {
             type: "flagship-recovery-enroll-payload",
             umk: Array.from(payload.umk),
             username: payload.username,
+            // Slice D (D-3): the admin master root, escrowed alongside the UMK.
+            ...(payload.adminRootSeed
+              ? { adminRootSeed: Array.from(payload.adminRootSeed) }
+              : {}),
           }, RECOVERY_ORIGIN);
         }
         return;

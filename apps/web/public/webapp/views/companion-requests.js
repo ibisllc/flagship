@@ -40,6 +40,7 @@ import { releaseServerName } from "../lib/releaseServer.js";
 import { revokeServer } from "../lib/revokeServer.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 
 registerView("view-companion-requests");
 
@@ -220,7 +221,11 @@ export async function runApprove(row, deps = {}) {
   const revoke = deps.revokeServer || revokeServer;
   const resolve = deps.resolvePending || resolvePending;
   const session = (deps.getSession || getSession)();
-  const sign = deps.signWithIrk || ((umk, bytes) => signWithIrk(umk, bytes));
+  // Slice D: the owner approving a queued companion request signs the SENSITIVE
+  // order (release-server-name) with the admin master root when present; the
+  // gated signer tag-routes so the non-sensitive revoke-server (flagship/revoke/v1)
+  // still signs with the owner IRK. Legacy accounts sign everything with the IRK.
+  const sign = deps.signWithIrk || sensitiveSigner();
   if (!session?.umk || typeof sign !== "function") {
     setRowError(row.requestId, "unlock the webapp first");
     return { ok: false, error: "locked" };

@@ -7,6 +7,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -534,7 +535,9 @@ async function bindCustomDomain(fqdn) {
   );
   let sig;
   try {
-    sig = await signWithIrk(session.umk, canonical);
+    // Slice D: attach-custom-domain is a SENSITIVE order — admin master root
+    // when this account has one, else the owner IRK (legacy).
+    sig = await sensitiveSigner()(session.umk, canonical);
   } catch (e) {
     toast(`Couldn't sign: ${e.message ?? e}`, "err");
     return;

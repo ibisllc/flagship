@@ -21,6 +21,7 @@
 import { show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import {
   parseTransferLink,
   parseTransferOfferQR,
@@ -165,7 +166,10 @@ export async function enterTransferClaim(prefillOffer) {
             acquirerUsername: session.username,
             umk: session.umk,
             acquirerIrkPubHex: bytesToHex(session.irk.publicKey),
-            signWithIrk,
+            // Slice D: the transfer CLAIM order is signed with the ACQUIRER's
+            // admin root (when present); the co-signed mailbox-auth stays the
+            // IRK (tag-routed). Legacy accounts sign with the IRK.
+            signWithIrk: sensitiveSigner(),
           });
           toast(`Took over ${escapeHtml(out.body.newServerDomain || domain)}`, "ok");
           cleanup();

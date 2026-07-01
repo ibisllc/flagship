@@ -37,6 +37,7 @@ import {
   signWithIrk,
   signWithAccountId,
 } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import {
   createInvite,
   listInvites,
@@ -340,7 +341,10 @@ async function onAddPerson(serviceRef) {
       ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       umk: session.umk,
-      signWithAccountId,
+      // Slice D (D-2): creating a service-collaborator invite is a SENSITIVE
+      // (admin-only) op. Sign with the admin master root when present; else the
+      // account AID (legacy — `.com` dual-accepts AID-or-IRK on the closed gate).
+      signWithAccountId: sensitiveSigner(signWithAccountId),
     });
     // No local create cache: the author's box fetches the signed create from
     // .com at manual-finalize, so an invite can be finalized from ANY device.
@@ -522,7 +526,9 @@ export async function runRemovePerson(
     username: session.username,
     inviteId,
     umk: session.umk,
-    signWithAccountId,
+    // Slice D (D-2): revoking a service-collaborator invite is a SENSITIVE
+    // (admin-only) op — admin master root when present, else the account AID.
+    signWithAccountId: sensitiveSigner(signWithAccountId),
   });
   // The AIDs to prune on the box: the whole group set, else the single bound AID.
   const aids = isGroup && Array.isArray(boundAIDs) ? boundAIDs : boundAID ? [boundAID] : [];

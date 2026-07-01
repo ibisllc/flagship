@@ -15,6 +15,7 @@
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession, lockSession } from "../lib/state.js";
 import { signWithIrk, resetDevice } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
 import { remove as profileRemove } from "../lib/profilesStore.js";
 import { stopRenewals } from "./home.js";
 import { toast } from "../lib/toast.js";
@@ -51,7 +52,9 @@ async function runDelete() {
       username: ceremonyUsername,
       includeServers,
       umk: session.umk,
-      signWithIrk,
+      // Slice D: account-self-delete + servers-self-delete are SENSITIVE orders
+      // — signed with the admin master root when present, else the owner IRK.
+      signWithIrk: sensitiveSigner(),
       resetDevice,
       lockSession,
       profileRemove,

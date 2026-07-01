@@ -13,8 +13,9 @@
 // The webapp is a peer device (per feedback_webapp_is_peer_not_remote)
 // — it signs locally with its IRK, never forwards to the phone.
 
-import { bytesToHex, hexToBytes, hkdf32, signWithIrk } from "../keystore.js";
+import { bytesToHex, hexToBytes, hkdf32 } from "../keystore.js";
 import { getSession } from "./state.js";
+import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
 
 // Webapp lives on web.flagshipserver.com; .com endpoints live on the
@@ -115,7 +116,9 @@ export async function revokeLease(serverFqdn, leaseId) {
   if (!session.umk) throw new Error("unlock first");
   const issuedAt = Date.now();
   const canonical = canonicalRevoke({ serverId: serverFqdn, leaseId, issuedAt });
-  const sig = await signWithIrk(session.umk, canonical);
+  // Slice D: revoke-auto-unlock-lease is a SENSITIVE order — signed with the
+  // admin master root when this account has one, else the owner IRK (legacy).
+  const sig = await sensitiveSigner()(session.umk, canonical);
   const r = await fetch(
     `${APEX}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/lease/${encodeURIComponent(leaseId)}`,
     {
@@ -165,7 +168,9 @@ async function depositLease(serverFqdn, { multiUse, ttlMs }) {
     multiUse,
     issuedAt,
   });
-  const sig = await signWithIrk(session.umk, canonical);
+  // Slice D: auto-unlock-lease deposit is a SENSITIVE order — admin master root
+  // when present, else the owner IRK (legacy). Canonical bytes are unchanged.
+  const sig = await sensitiveSigner()(session.umk, canonical);
 
   // 4. POST. .com verifies the signature against the user's IRK pub.
   const r = await fetch(

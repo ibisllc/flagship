@@ -81,6 +81,7 @@ const PARENT_ORIGIN = "https://web.flagshipserver.com";
 const state = {
   mode: null, // "enroll" | "recover" | null
   enrollUmk: null, // Uint8Array, only present in enroll mode
+  enrollAdminRootSeed: null, // Slice D (D-3): admin root, escrowed with the UMK
   enrollUsername: null,
   parentOrigin: null, // pinned to event.origin of the first valid HELLO
 };
@@ -146,6 +147,11 @@ window.addEventListener("message", (ev) => {
       return;
     }
     state.enrollUmk = m.umk instanceof Uint8Array ? new Uint8Array(m.umk) : new Uint8Array(m.umk);
+    // Slice D (D-3): OPTIONAL admin master root, escrowed alongside the UMK.
+    state.enrollAdminRootSeed =
+      Array.isArray(m.adminRootSeed) || m.adminRootSeed instanceof Uint8Array
+        ? new Uint8Array(m.adminRootSeed)
+        : null;
     state.enrollUsername = typeof m.username === "string" ? m.username : null;
     if (!state.enrollUsername) {
       postToParent({ type: "flagship-recovery-error", reason: "username missing" });
@@ -188,7 +194,14 @@ $("enroll-go")?.addEventListener("click", async () => {
 
     setStatus("enroll-status", "Creating passkey on this device…", null);
     const { credentialIdHex, prfBytes } = await createPasskey(username, prfSalt);
-    const wrappedB64 = await wrapUmkWithPrf(state.enrollUmk, prfBytes);
+    // Slice D (D-3): escrow the admin root by wrapping `umk || adminRootSeed`
+    // (64 bytes) under the PRF key. Without an admin root we wrap the UMK alone
+    // (32 bytes) — byte-identical to the pre-D escrow. `.com` stores opaque
+    // ciphertext, so the length change is transparent to it.
+    const secretMaterial = state.enrollAdminRootSeed
+      ? concatBytes(state.enrollUmk, state.enrollAdminRootSeed)
+      : state.enrollUmk;
+    const wrappedB64 = await wrapUmkWithPrf(secretMaterial, prfBytes);
 
     const fetchTokenHashHex = await sha256Hex(fetchToken);
     const prfSaltHashHex = await sha256Hex(prfSalt);
@@ -249,11 +262,18 @@ $("recover-go")?.addEventListener("click", async () => {
     const prfBytes = await getPrfWithGet(credentialId, prfSalt);
     if (!prfBytes) throw new Error("WebAuthn PRF not supported by this authenticator");
 
-    const umk = await unwrapUmkWithPrf(wrapped, prfBytes);
+    const material = await unwrapUmkWithPrf(wrapped, prfBytes);
+    // Slice D (D-3): a post-D escrow is `umk(32) || adminRootSeed(32)`; a legacy
+    // escrow is the 32-byte UMK alone. Split so the UMK stays exactly 32 bytes
+    // (the parent's invariant) and the admin root rides as an additive field the
+    // recovery-rotation consumer (deferred) picks up.
+    const umk = material.slice(0, 32);
+    const adminRootSeed = material.length >= 64 ? material.slice(32, 64) : null;
     postToParent({
       type: "flagship-recovery-recover-result",
       username,
       umk: Array.from(umk), // serialize for structured-clone safety
+      ...(adminRootSeed ? { adminRootSeed: Array.from(adminRootSeed) } : {}),
     });
     setStatus("recover-status", "Done — return to the webapp to finish.", "ok");
   } catch (e) {
@@ -471,6 +491,12 @@ function randBytes(n) {
   const b = new Uint8Array(n);
   crypto.getRandomValues(b);
   return b;
+}
+function concatBytes(a, b) {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
 }
 function bytesToHex(b) {
   let s = "";
