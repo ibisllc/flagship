@@ -79,6 +79,16 @@ sealed interface DeepLink {
         val pageId: String,
     ) : DeepLink
 
+    /** Transfer-a-box take-over (docs/device-admin-entitlements.md Slice C). The
+     *  giver's box-detail page renders the IRK-signed transfer offer as a QR /
+     *  universal link: `https://flagshipserver.com/transfer?o=<b64url>` (or the
+     *  `flagship://transfer?o=…` twin) where `<b64url>` = base64url(UTF8(offerJSON)).
+     *  The offer is a SIGNED non-secret, so it rides a QUERY param (Android/webapp
+     *  strip the `#fragment`). [offerJson] is the decoded offer JSON; the acquirer
+     *  VM re-parses it and MUST Ed25519-verify the signature + expiry BEFORE the
+     *  claim biometric (it's attacker-supplied). Keep in sync with iOS + webapp. */
+    data class TransferOffer(val offerJson: String) : DeepLink
+
     companion object {
         /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
         /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
@@ -96,6 +106,14 @@ sealed interface DeepLink {
                     val invite = InviteLink.inviteIdFromFragment(uri.fragment)
                     return if (secret != null) RedeemInvite(host, secret, author, invite) else null
                 }
+                // Transfer take-over universal link served from the control apex:
+                // `https://flagshipserver.com/transfer?o=<b64url>`.
+                if (host == Endpoints.controlHost &&
+                    (uri.path == "/transfer" || uri.path == "/transfer/")
+                ) {
+                    val json = uri.getQueryParameter("o")?.let { ServerTransferFlow.decodeOfferParam(it) }
+                    return if (json != null) TransferOffer(json) else null
+                }
                 return null
             }
             if (uri.scheme != "flagship") return null
@@ -108,6 +126,12 @@ sealed interface DeepLink {
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
+                "transfer" -> {
+                    // flagship://transfer?o=<b64url> — the custom-scheme twin of
+                    // the /transfer universal link (Slice C take-over).
+                    val json = params["o"]?.let { ServerTransferFlow.decodeOfferParam(it) }
+                    if (json != null) TransferOffer(json) else null
+                }
                 "invite" -> {
                     // flagship://invite?server=<host>&k=<64hex>&a=<authorAID>&i=<inviteId>
                     // — the "open in app" hand-off from the box's /invite page (a

@@ -45,17 +45,42 @@ class TransferAcquirerViewModel(
         _phase.value = TransferAcquirerPhase.Idle
     }
 
-    /** Validate a scanned/pasted QR string. Returns true when it parses. */
+    /** Validate a scanned/pasted transfer code. Accepts the URL form
+     *  (`…/transfer?o=<b64url>`, `flagship://transfer?o=…`) OR a bare offer JSON.
+     *
+     *  SECURITY (Slice C): a scanned / deep-linked offer is attacker-supplied, so
+     *  before we ever advance to a claimable state we Ed25519-VERIFY the offer
+     *  signature against the embedded `giverIrkPub` over the canonical bytes AND
+     *  reject an expired offer. An unverified / expired offer never becomes
+     *  claimable (`confirm()` refuses when `offer` is null). Returns true only
+     *  when the offer parses AND verifies AND is unexpired. */
     fun ingest(qrText: String): Boolean {
-        return try {
-            val parsed = ServerTransferFlow.parseQR(qrText)
-            offer = parsed
-            _phase.value = TransferAcquirerPhase.Scanned(parsed.serverDomain)
-            true
+        val json = ServerTransferFlow.offerJsonFrom(qrText)
+        if (json == null) {
+            _phase.value = TransferAcquirerPhase.Failed("That isn't a Flagship transfer code.")
+            return false
+        }
+        val parsed = try {
+            ServerTransferFlow.parseQR(json)
         } catch (_: Throwable) {
             _phase.value = TransferAcquirerPhase.Failed("That isn't a Flagship transfer code.")
-            false
+            return false
         }
+        if (!ServerTransferFlow.verifyOfferSignature(parsed)) {
+            _phase.value = TransferAcquirerPhase.Failed(
+                "This transfer code didn't verify — its signature doesn't match the owner. Ask them for a fresh one.",
+            )
+            return false
+        }
+        if (parsed.expiresAt <= now()) {
+            _phase.value = TransferAcquirerPhase.Failed(
+                "This transfer code has expired. Ask the owner for a new one.",
+            )
+            return false
+        }
+        offer = parsed
+        _phase.value = TransferAcquirerPhase.Scanned(parsed.serverDomain)
+        return true
     }
 
     /** Sign + POST the claim (biometric). Advances to Claimed on success. */

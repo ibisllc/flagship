@@ -13,6 +13,7 @@ import com.flagshipserver.app.api.TransferDiskKeyBody
 import com.flagshipserver.app.api.TransferOfferBody
 import com.flagshipserver.app.api.TransferOfferWire
 import com.google.crypto.tink.subtle.Ed25519Sign
+import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.SecureRandom
@@ -78,6 +79,62 @@ object ServerTransferFlow {
     }
 
     fun encodeQR(qr: OfferQR): String = json.encodeToString(OfferQR.serializer(), qr)
+
+    // ── GIVER: the universal-link QR the acquirer scans ───────────────────────
+    //
+    // The offer JSON is a SIGNED non-secret, so it rides a base64url `o=` QUERY
+    // param on the control-plane `/transfer` universal link (NOT a `#fragment` —
+    // Android + the webapp strip fragments). Byte-identical across iOS/webapp so
+    // any surface can scan any other's QR. The custom-scheme twin is the same
+    // param on `flagship://transfer`.
+
+    /** base64url(UTF8(offerJSON)), no padding — the `o=` param value. */
+    fun encodeOfferParam(qr: OfferQR): String =
+        Base64URL.encode(encodeQR(qr).toByteArray(Charsets.UTF_8))
+
+    /** The https universal link the giver renders as a QR:
+     *  `https://flagshipserver.com/transfer?o=<b64url>`. Uses the configured
+     *  control apex (prod = flagshipserver.com; a gym build overrides it). */
+    fun offerUrl(qr: OfferQR): String =
+        "${Endpoints.controlBaseUrl}/transfer?o=${encodeOfferParam(qr)}"
+
+    /** The custom-scheme twin: `flagship://transfer?o=<b64url>`. */
+    fun offerCustomSchemeUrl(qr: OfferQR): String =
+        "flagship://transfer?o=${encodeOfferParam(qr)}"
+
+    /** Decode an `o=` param back to the offer JSON string, or null. */
+    fun decodeOfferParam(param: String): String? =
+        Base64URL.decode(param)?.let { runCatching { String(it, Charsets.UTF_8) }.getOrNull() }
+
+    /** Pull the offer JSON out of a scanned/pasted string, accepting BOTH the
+     *  URL forms (`…/transfer?o=<b64url>`, `flagship://transfer?o=…`) and a bare
+     *  offer JSON. Pure string parse (no android.net.Uri) so it stays
+     *  JVM-testable. Returns null when neither form is present. */
+    fun offerJsonFrom(text: String): String? {
+        val t = text.trim()
+        Regex("[?&]o=([^&#]+)").find(t)?.let { return decodeOfferParam(it.groupValues[1]) }
+        if (t.startsWith("{")) return t
+        return null
+    }
+
+    /** Ed25519-verify the offer signature over the canonical bytes against
+     *  `giverIrkPub`. A deep-linked / scanned offer is attacker-supplied, so the
+     *  acquirer MUST verify this (+ expiry) BEFORE the claim biometric. Returns
+     *  false on any malformed hex / bad signature (never throws). */
+    fun verifyOfferSignature(qr: OfferQR): Boolean {
+        val pub = HexUtil.decode(qr.giverIrkPub) ?: return false
+        if (pub.size != 32) return false
+        val sig = HexUtil.decode(qr.offerSignature) ?: return false
+        return runCatching {
+            Ed25519Verify(pub).verify(
+                sig,
+                ServerTransferOfferOrder.canonicalBytes(
+                    qr.serverDomain, qr.transferNonce, qr.issuedAt, qr.expiresAt,
+                ),
+            )
+            true
+        }.getOrDefault(false)
+    }
 
     // ── ACQUIRER: parse + build the claim body ────────────────────────────────
 

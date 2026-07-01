@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.DeepLink
+import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
@@ -180,6 +181,10 @@ private fun formatTs(ms: Long): String =
 fun ProcessUrlScreen(nav: NavController) {
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    // Slice C — a pasted transfer take-over link routes through the shared
+    // deep-link canal (RootShell steers it to Home → the acquirer flow), the
+    // same path the universal link / QR uses.
+    val deepLinker = LocalDeepLinker.current
 
     val scroll = rememberScrollState()
     Column(
@@ -196,7 +201,8 @@ fun ProcessUrlScreen(nav: NavController) {
             modifier = Modifier.testTag("process-url-title"),
         )
         Text(
-            "Paste the \"Get link\" string from a restricted site's page to authorize it from here.",
+            "Paste a Flagship link — a restricted site's \"Get link\" string, or a " +
+                "\"take over this box\" transfer link someone shared with you.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
         )
@@ -204,27 +210,32 @@ fun ProcessUrlScreen(nav: NavController) {
             value = text,
             onValueChange = { text = it; error = null },
             label = "Link",
-            placeholder = "flagship://access?server=…",
+            placeholder = "flagship://…",
             fieldTag = "process-url-input",
         )
         error?.let {
             Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp), modifier = Modifier.testTag("process-url-error"))
         }
         FSPrimaryButton(
-            label = "Authorize",
+            label = "Open",
             block = true,
             large = true,
             enabled = text.isNotBlank(),
             onClick = {
-                val link = parseAccessLink(text.trim())
-                if (link == null) {
-                    error = "That doesn't look like a Flagship access link."
-                } else {
-                    val srv = java.net.URLEncoder.encode(link.serverId, "UTF-8")
-                    val svc = java.net.URLEncoder.encode(link.svc, "UTF-8")
-                    val ref = java.net.URLEncoder.encode(link.serviceRef, "UTF-8")
-                    val pg = java.net.URLEncoder.encode(link.pageId, "UTF-8")
-                    nav.navigate("knock-authorize/$srv/$ref/$pg?svc=$svc")
+                when (val link = runCatching { DeepLink.parse(Uri.parse(text.trim())) }.getOrNull()) {
+                    is DeepLink.AuthorizeKnock -> {
+                        val srv = java.net.URLEncoder.encode(link.serverId, "UTF-8")
+                        val svc = java.net.URLEncoder.encode(link.svc, "UTF-8")
+                        val ref = java.net.URLEncoder.encode(link.serviceRef, "UTF-8")
+                        val pg = java.net.URLEncoder.encode(link.pageId, "UTF-8")
+                        nav.navigate("knock-authorize/$srv/$ref/$pg?svc=$svc")
+                    }
+                    is DeepLink.TransferOffer -> {
+                        // Hand off to the shell's deep-link router (→ Home → the
+                        // acquirer flow, which verifies the offer before claiming).
+                        deepLinker.enqueue(link)
+                    }
+                    else -> error = "That doesn't look like a Flagship link."
                 }
             },
             modifier = Modifier.testTag("process-url-submit"),

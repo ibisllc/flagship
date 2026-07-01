@@ -9,7 +9,16 @@ package com.flagshipserver.app.core
 
 sealed interface HomeRoute {
     data class ServerDetail(val podId: String) : HomeRoute
+    /** "Add a server" — provisions a NEW box. Goes straight into the
+     *  create-server flow: there is no chooser (Slice A). Pairing is automatic
+     *  (Slice B), and taking over a transferred box is a link/QR ingestion
+     *  (Slice C via [TransferOffer]), not a menu option. */
     data object AddServer : HomeRoute
+    /** Take over a transferred box — the acquirer flow, opened with the giver's
+     *  signed offer JSON pre-ingested (from a `/transfer?o=…` deep link or the
+     *  "Process a link" paste). The VM verifies the signature + expiry before the
+     *  claim biometric. */
+    data class TransferOffer(val offerText: String) : HomeRoute
     data class InstallProgress(
         val serial: String,
         val name: String,

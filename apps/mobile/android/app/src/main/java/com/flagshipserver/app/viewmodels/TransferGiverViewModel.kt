@@ -78,7 +78,11 @@ class TransferGiverViewModel(
             )
             _phase.value = TransferGiverPhase.Posting
             client.postOffer(serverDomain, built.body)
-            qrText = ServerTransferFlow.encodeQR(built.qr)
+            // The QR is the universal-link form (`…/transfer?o=<b64url>`), NOT the
+            // raw JSON — so any surface's camera / a browser open routes it
+            // through the deep-link → acquirer path (Slice C). The acquirer VM
+            // accepts both forms.
+            qrText = ServerTransferFlow.offerUrl(built.qr)
             _phase.value = TransferGiverPhase.AwaitingClaim
         } catch (e: Throwable) {
             _phase.value = TransferGiverPhase.Failed("Couldn't reach the broker: ${e.message}")

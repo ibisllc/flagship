@@ -32,10 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.qrImageBitmap
+import com.flagshipserver.app.ui.components.ConfirmTier
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.TieredConfirm
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.TransferAcquirerPhase
 import com.flagshipserver.app.viewmodels.TransferAcquirerViewModel
@@ -115,13 +116,27 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
     }
 }
 
-/** ACQUIRER: "Take over a transferred box" — scan the giver's QR, confirm to claim. */
+/** ACQUIRER: "Take over a transferred box" — scan the giver's QR (or open a
+ *  pre-ingested `/transfer?o=…` deep link), then a SEVERE tiered confirm
+ *  (type-the-domain + biometric) to claim.
+ *
+ *  [preIngestedOffer] — when non-null (a deep-linked / pasted offer), the offer
+ *  is ingested (verified: signature + expiry) on first composition and the
+ *  camera is skipped; on a verification failure the Failed state renders with a
+ *  "Scan again" fallback. */
 @Composable
-fun TransferAcquirerScreen(vm: TransferAcquirerViewModel) {
+fun TransferAcquirerScreen(vm: TransferAcquirerViewModel, preIngestedOffer: String? = null) {
     val phase by vm.phase.collectAsState()
     val scope = rememberCoroutineScopeForTransfer()
     var scanning by remember { mutableStateOf(true) }
     val scroll = rememberScrollState()
+
+    LaunchedEffect(preIngestedOffer) {
+        if (!preIngestedOffer.isNullOrEmpty()) {
+            scanning = false
+            vm.ingest(preIngestedOffer)
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll).padding(FS.space.s6),
@@ -136,9 +151,21 @@ fun TransferAcquirerScreen(vm: TransferAcquirerViewModel) {
                 }
             }
             is TransferAcquirerPhase.Scanned -> {
-                Text("Take over this box?", color = FS.colors.text, style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Medium))
-                Text("You'll become the owner of ${p.serverDomain} and all its contents. The current owner loses control of it.", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-                FSPrimaryButton(label = "Take ownership", onClick = { scope.launch { vm.confirm() } }, block = true)
+                // SEVERE tiered confirm — taking over someone else's box is
+                // irreversible, so it demands type-the-domain + biometric. The
+                // domain shown is the VERIFIED offer's serverDomain (same bytes
+                // the claim signs): what you see is what you sign.
+                TieredConfirm(
+                    tier = ConfirmTier.SEVERE,
+                    title = "Take over this box?",
+                    body = "You'll become the owner of ${p.serverDomain} and all its contents. " +
+                        "The current owner loses control of it. This can't be undone.",
+                    confirmWord = p.serverDomain,
+                    confirmLabel = "Take ownership",
+                    onConfirm = { scope.launch { vm.confirm() } },
+                    fieldTag = "takeover-confirm-field",
+                    buttonTag = "takeover-confirm-button",
+                )
             }
             is TransferAcquirerPhase.Signing, is TransferAcquirerPhase.Posting -> {
                 CircularProgressIndicator()

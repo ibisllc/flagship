@@ -72,6 +72,9 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.BuildJournal -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
+            // Slice C — a `/transfer?o=…` take-over link opens the acquirer flow
+            // on the Home tab (adding/receiving a server is a Home concern).
+            is com.flagshipserver.app.core.DeepLink.TransferOffer -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.RecoverySetup -> RootDestination.SETTINGS
             // Phase 3b — a JoinDevice deeplink while ALREADY paired means
             // adding a SECOND profile to this phone. Route to Settings,

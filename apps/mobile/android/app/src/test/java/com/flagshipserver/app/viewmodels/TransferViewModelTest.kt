@@ -46,8 +46,9 @@ class TransferViewModelTest {
             HexUtil.decode(body.offerSignature)!!,
             ServerTransferOfferOrder.canonicalBytes(host, body.offer.transferNonce, body.offer.issuedAt, body.offer.expiresAt),
         )
-        // QR parses back.
-        val qr = ServerTransferFlow.parseQR(vm.qrText!!)
+        // The QR is now the universal-link form; it decodes + parses back.
+        assertTrue(vm.qrText!!.contains("/transfer?o="))
+        val qr = ServerTransferFlow.parseQR(ServerTransferFlow.offerJsonFrom(vm.qrText!!)!!)
         assertEquals(host, qr.serverDomain)
     }
 
@@ -109,5 +110,52 @@ class TransferViewModelTest {
         val vm = TransferAcquirerViewModel(username = "bob", client = MockServerTransferClient())
         assertFalse(vm.ingest("garbage"))
         assertTrue(vm.phase.value is TransferAcquirerPhase.Failed)
+    }
+
+    // ── Slice C: the acquirer VERIFIES the offer before it can claim ─────────
+
+    private fun validOffer(ttlMs: Long = 9_999_999_999_999L) = ServerTransferFlow.buildOffer(
+        serverDomain = host, username = "alice", irk = Ed25519Sign(giver.privateKey),
+        irkPubHex = HexUtil.encode(giver.publicKey), issuedAt = 1, ttlMs = ttlMs,
+        nonce = ByteArray(32) { 0xab.toByte() }, authNonce = ByteArray(32) { 1 },
+    )
+
+    @Test
+    fun acquirerRejectsTamperedOffer() {
+        // A valid offer whose serverDomain was swapped AFTER signing: the
+        // signature no longer verifies over the canonical bytes.
+        val tampered = validOffer().qr.copy(serverDomain = "evil.mallory.flagship.services")
+        val vm = TransferAcquirerViewModel(username = "bob", client = MockServerTransferClient(), now = { 1800 })
+        assertFalse(vm.ingest(ServerTransferFlow.encodeQR(tampered)))
+        val p = vm.phase.value as TransferAcquirerPhase.Failed
+        assertTrue(p.message.contains("verify"))
+    }
+
+    @Test
+    fun acquirerRejectsExpiredOffer() {
+        // Signature is valid, but expiresAt (101) is in the past relative to now.
+        val expired = validOffer(ttlMs = 100)
+        val vm = TransferAcquirerViewModel(username = "bob", client = MockServerTransferClient(), now = { 1800 })
+        assertFalse(vm.ingest(ServerTransferFlow.encodeQR(expired.qr)))
+        val p = vm.phase.value as TransferAcquirerPhase.Failed
+        assertTrue(p.message.lowercase().contains("expired"))
+    }
+
+    @Test
+    fun acquirerAcceptsUrlFormOffer() {
+        // The giver's QR is the universal-link form; the acquirer ingests it.
+        val url = ServerTransferFlow.offerUrl(validOffer().qr)
+        val vm = TransferAcquirerViewModel(username = "bob", client = MockServerTransferClient(), now = { 1800 })
+        assertTrue(vm.ingest(url))
+        assertEquals(TransferAcquirerPhase.Scanned(host), vm.phase.value)
+    }
+
+    @Test
+    fun acquirerNeverClaimsWithoutIngest() = runTest {
+        val client = MockServerTransferClient()
+        val vm = TransferAcquirerViewModel(username = "bob", client = client, now = { 1800 })
+        vm.confirm()
+        assertTrue(vm.phase.value is TransferAcquirerPhase.Failed)
+        assertEquals(0, client.claims.size)
     }
 }

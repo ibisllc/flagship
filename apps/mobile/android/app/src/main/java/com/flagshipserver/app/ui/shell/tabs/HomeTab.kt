@@ -35,16 +35,19 @@ import com.flagshipserver.app.core.PendingSwkDepositStore
 import com.flagshipserver.app.core.PendingPairingDepositStore
 import com.flagshipserver.app.core.SwkDepositCoordinator
 import com.flagshipserver.app.core.decommissionServer
+import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.RecoveryBannerStore
-import com.flagshipserver.app.ui.screens.AddServerChooserScreen
-import com.flagshipserver.app.ui.screens.AddServerMode
 import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
 import com.flagshipserver.app.ui.screens.ServerDetailScreen
 import com.flagshipserver.app.ui.screens.CreateServerScreen
 import com.flagshipserver.app.ui.screens.InstallProgressScreen
+import com.flagshipserver.app.ui.screens.TransferAcquirerScreen
 import com.flagshipserver.app.viewmodels.HomeViewModel
+import com.flagshipserver.app.viewmodels.TransferAcquirerViewModel
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.net.URLDecoder
@@ -226,6 +229,14 @@ fun HomeTab() {
                 deepLinker.consume()
                 nav.navigate("create-server")
             }
+            is DeepLink.TransferOffer -> {
+                // Slice C — a `/transfer?o=…` take-over link. Open the acquirer
+                // flow with the giver's offer JSON pre-ingested (the VM verifies
+                // the signature + expiry before the claim biometric).
+                deepLinker.consume()
+                val enc = URLEncoder.encode(link.offerJson, "UTF-8")
+                nav.navigate("transfer-acquirer?offer=$enc")
+            }
             else -> { /* not for this tab */ }
         }
     }
@@ -254,7 +265,11 @@ fun HomeTab() {
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                onAddServer = { nav.navigate("add-server-chooser") },
+                // Slice A — "Add a server" goes STRAIGHT to provisioning a new
+                // box (no chooser). Pairing an existing box is automatic
+                // (Slice B); taking over a transferred box is a link/QR
+                // ingestion (Slice C, via the deep link / "Process a link").
+                onAddServer = { nav.navigate("create-server") },
                 onSetLeader = { app.setLeader(it.podId) },
                 onDeleteServer = { pod ->
                     // Decommission a pending or registered-but-dead server via
@@ -336,20 +351,19 @@ fun HomeTab() {
                 )
             }
         }
-        composable("add-server-chooser") {
-            AddServerChooserScreen(
-                mode = AddServerMode.IN_APP,
-                onProvision = { nav.navigate("create-server") },
-                // Pairing an existing box is done by opening it from Home, not
-                // from this chooser — surface the same guidance toast iOS shows
-                // (HomeTab.swift) instead of a silent no-op.
-                onPair = {
-                    toasts.info(
-                        "Servers you already own show up on Home — open one to pair this device. Choose “Provision a new box” to set up brand-new hardware.",
-                    )
-                },
-                onCancel = { nav.popBackStack() },
-            )
+        composable(
+            "transfer-acquirer?offer={offer}",
+            arguments = listOf(navArgument("offer") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            // Slice C — take over a transferred box. Mounted with the giver's
+            // signed offer JSON pre-ingested (from a `/transfer?o=…` deep link or
+            // the "Process a link" paste); the VM Ed25519-verifies the offer
+            // signature + expiry before the claim biometric.
+            val offer = entry.arguments?.getString("offer")?.let { URLDecoder.decode(it, "UTF-8") }
+            val transferClient = LocalServerTransferClient.current
+            val user = app.currentUser.collectAsState().value ?: ""
+            val acquirerVm = remember(user) { TransferAcquirerViewModel(username = user, client = transferClient) }
+            TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer)
         }
         composable("create-server") {
             CreateServerScreen(

@@ -473,6 +473,23 @@ private fun AppRoot(
         operations.syncDeployOperations(if (isPaired) pods else emptyList())
     }
 
+    // Slice B — AUTO-PAIR. On unlock (with pods loaded), silently provision this
+    // device's per-box BFF session token for every ONLINE pod that lacks one,
+    // behind ONE biometric (the coordinator derives the owner IRK once + reuses
+    // it, and no-ops without a prompt when nothing is pending). A per-pod failure
+    // retries on the next unlock. Removes the manual "Pair this device" step;
+    // pairing-for-use is not sensitive, so it's admin-independent.
+    val sessionStore = LocalSessionStore.current
+    LaunchedEffect(isPaired, isUnlocked, pods) {
+        if (!isPaired || !isUnlocked) return@LaunchedEffect
+        val onlinePods = pods.filter {
+            it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE && it.fqdn.isNotEmpty()
+        }
+        if (onlinePods.isEmpty()) return@LaunchedEffect
+        com.flagshipserver.app.viewmodels.PodAutoPairCoordinator(store = sessionStore)
+            .pairAll(onlinePods) { reason -> Keystore.deriveIRK(reason) }
+    }
+
     Box(Modifier.fillMaxSize()) {
         if (isPaired) {
             // The teal sliver sits ABOVE the shell in a Column so revealing it
