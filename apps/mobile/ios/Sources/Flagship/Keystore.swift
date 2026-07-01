@@ -557,6 +557,71 @@ public struct Keystore {
         return (irk, bak)
     }
 
+    /// Slice D boot-approval fast path — `deriveApprovalKeys` PLUS the admin
+    /// master root, all under ONE biometric. The first-boot approval both
+    /// releases the disk key (IRK/BAK) AND mints the RootEntitlement that
+    /// authorizes the box to serve (admin-root-signed on a reburned admin-pinned
+    /// box), so the ceremony needs both keys. Both the UMK and the admin-root
+    /// seed seal under the SAME Secure-Enclave wrapping key (distinct HKDF
+    /// infos), so a SINGLE `LAContext`/wrapper authenticates both ECDH unwraps —
+    /// the admin root costs no second Face ID. `adminRoot` is nil when this
+    /// device holds none (legacy / pre-wipe) ⇒ the caller signs the entitlement
+    /// under the IRK. The IRK/BAK are byte-identical to `deriveApprovalKeys`.
+    public static func deriveApprovalKeysWithAdminRoot(
+        serverId: String,
+        reason: String
+    ) async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?) {
+        guard
+            let wrappedUmk = keychainRead(account: account(KCKey.wrappedUmk)),
+            let umkEphRaw = keychainRead(account: account(KCKey.ephemeralPub))
+        else {
+            throw KeystoreError.keyNotFound
+        }
+        let umkEph: P256.KeyAgreement.PublicKey
+        do {
+            umkEph = try P256.KeyAgreement.PublicKey(x963Representation: umkEphRaw)
+        } catch {
+            throw KeystoreError.unwrapFailed("bad ephemeral pubkey: \(error)")
+        }
+
+        // ONE wrapper / LAContext ⇒ ONE biometric covers every ECDH below.
+        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+
+        // UMK → IRK + BAK (byte-identical to deriveApprovalKeys).
+        let umkEcdh = try wrapper.ecdh(ephemeralPublic: umkEph)
+        let umkKey = hkdf(from: umkEcdh, info: "flagship/umk-wrap/v1")
+        let umk: SymmetricKey
+        do {
+            let plaintext = try AES.GCM.open(try AES.GCM.SealedBox(combined: wrappedUmk), using: umkKey)
+            umk = SymmetricKey(data: plaintext)
+        } catch {
+            throw KeystoreError.unwrapFailed(String(describing: error))
+        }
+        let irkSeed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        let bakSeed = derive(umk: umk, info: "flagship/bak/v1|\(serverId)")
+        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
+        let bak = try Curve25519.Signing.PrivateKey(rawRepresentation: bakSeed.withUnsafeBytes { Data($0) })
+
+        // Admin master root (Slice D) — SAME wrapper, so no second prompt.
+        // Absent slots ⇒ nil (legacy / pre-wipe): the caller signs under the IRK.
+        var adminRoot: Curve25519.Signing.PrivateKey? = nil
+        if
+            let wrappedAdmin = keychainRead(account: account(KCKey.adminRootWrapped)),
+            let adminEphRaw = keychainRead(account: account(KCKey.adminRootEphemeralPub)),
+            let adminEph = try? P256.KeyAgreement.PublicKey(x963Representation: adminEphRaw)
+        {
+            let adminEcdh = try wrapper.ecdh(ephemeralPublic: adminEph)
+            let adminKey = hkdf(from: adminEcdh, info: adminRootWrapInfo)
+            do {
+                let seed = try AES.GCM.open(try AES.GCM.SealedBox(combined: wrappedAdmin), using: adminKey)
+                adminRoot = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
+            } catch {
+                throw KeystoreError.unwrapFailed("admin-root: \(error)")
+            }
+        }
+        return (irk, bak, adminRoot)
+    }
+
     /// Current IRK HKDF version. Defaults to 1 if the slot is absent
     /// — covers legacy installs that pre-date the rotation primitive.
     public static func currentIrkVersion() -> Int {

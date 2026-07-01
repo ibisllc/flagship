@@ -745,6 +745,11 @@ struct BootUnlockApprovalCard: View {
             username: username,
             irkProvider: { try await keys.irk() },
             unsealSeedProvider: { _ in try await keys.unsealSeeds() },
+            // Slice D — the RootEntitlement this approval mints signs under the
+            // admin master root when present (an admin-pinned box requires it),
+            // resolved from the SAME memoized cache as the IRK so the whole
+            // ceremony stays a single Face ID. nil ⇒ legacy ⇒ IRK-signed.
+            orderKeyProvider: { try await keys.adminRoot() },
             watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )
     }
@@ -757,11 +762,14 @@ struct BootUnlockApprovalCard: View {
 /// header, lease) then resolves from this cache without re-prompting.
 private actor ApprovalKeyCache {
     private let serverDomain: String
-    private var cached: (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey)?
+    private var cached: (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?)?
     init(serverDomain: String) { self.serverDomain = serverDomain }
-    private func keys() async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey) {
+    private func keys() async throws -> (irk: Curve25519.Signing.PrivateKey, bak: Curve25519.Signing.PrivateKey, adminRoot: Curve25519.Signing.PrivateKey?) {
         if let cached { return cached }
-        let k = try await Keystore.deriveApprovalKeys(
+        // Slice D — derive the IRK + BAK + admin master root in ONE biometric
+        // (all seal under the same SE wrapping key), so the entitlement mint's
+        // admin-root signature adds no second Face ID to the approve ceremony.
+        let k = try await Keystore.deriveApprovalKeysWithAdminRoot(
             serverId: serverDomain,
             reason: "Approve your box's boot unlock"
         )
@@ -769,6 +777,9 @@ private actor ApprovalKeyCache {
         return k
     }
     func irk() async throws -> Curve25519.Signing.PrivateKey { try await keys().irk }
+    /// The admin master root when this device holds one, else nil (⇒ the
+    /// coordinator signs the RootEntitlement under the IRK). Same memoized pass.
+    func adminRoot() async throws -> Curve25519.Signing.PrivateKey? { try await keys().adminRoot }
     func unsealSeeds() async throws -> [Data] {
         let k = try await keys()
         return [k.bak.rawRepresentation, k.irk.rawRepresentation]

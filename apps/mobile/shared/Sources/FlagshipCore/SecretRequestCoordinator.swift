@@ -17,9 +17,10 @@ import FlagshipAPI
 ///        - unlock-key:  GET the phone-sealed LUKS key, unseal it with the
 ///                       phone's existing Ed25519 key material, re-seal it
 ///                       for the box's STK (nonce/purpose-bound), POST it.
-///        - entitlement: IRK-sign a root-only `RootEntitlement`, serialize
-///                       it as the daemon's EntitlementBundle carrier, hex,
-///                       POST it.
+///        - entitlement: sign a root-only `RootEntitlement` under the ADMIN
+///                       master root (Slice D; owner-IRK when no admin root is
+///                       held), serialize it as the daemon's EntitlementBundle
+///                       carrier, hex, POST it.
 ///
 /// The crypto lives in the `Flagship` target; this coordinator only
 /// orchestrates + decides. All freshness windows mirror the Worker's
@@ -68,6 +69,21 @@ public final class SecretRequestCoordinator {
     /// Resolves the user IRK private key (biometric-gated). Injectable so
     /// tests don't touch the Keychain / Secure Enclave.
     private let irkProvider: () async throws -> Curve25519.Signing.PrivateKey
+    /// Slice D — resolves the ADMIN MASTER ROOT signing key when this device
+    /// holds one, else nil. The RootEntitlement this coordinator mints is an
+    /// administrative "authorize this box to serve" order: a reburned
+    /// admin-pinned box REJECTS an IRK-signed RootEntitlement at HELLO
+    /// (`entitlementRelay` gates it under `requireMasterAdmin`), so on an
+    /// admin-root account it MUST be signed under the admin root. nil ⇒ legacy /
+    /// pre-wipe (no admin root pinned) ⇒ fall back to the owner IRK, which those
+    /// boxes still accept. Injectable; defaults to "no admin root" so every
+    /// existing call site + test signs under the IRK, byte-for-byte unchanged.
+    /// In the memoized boot ceremony this resolves from the SAME
+    /// single-biometric key cache as `irkProvider`, so authorizing a box costs
+    /// no extra Face ID. Only the entitlement mint uses it — the box-sealed
+    /// auto-unlock lease + every boot/mailbox AUTH envelope stay IRK (the boot
+    /// worker gates the lease on the owner IRK, not the admin root).
+    private let orderKeyProvider: () async throws -> Curve25519.Signing.PrivateKey?
     /// Resolves the phone's candidate Ed25519 unseal SEEDS for a given
     /// serverDomain, in priority order (the per-server BAK first, then the
     /// IRK). Whichever key the installer sealed the LUKS blob against, the
@@ -79,8 +95,8 @@ public final class SecretRequestCoordinator {
     /// the delegate key (role="delegate") instead of the IRK — so no fresh
     /// biometric prompt fires for the header. nil ⇒ today's IRK path.
     /// Injectable; defaults to "no delegate" so every existing call site is
-    /// unchanged. (Auto-lease deposit + entitlement still use the IRK — the
-    /// delegate is scoped to the boot-approval response alone.)
+    /// unchanged. (Auto-lease deposit uses the IRK and the entitlement mint the
+    /// admin root — the delegate is scoped to the boot-approval response alone.)
     private let watchDelegateKeyProvider: () -> Curve25519.Signing.PrivateKey?
     private let now: () -> Int64
     private let nonceGen: () -> Data
@@ -90,6 +106,7 @@ public final class SecretRequestCoordinator {
         username: String,
         irkProvider: @escaping () async throws -> Curve25519.Signing.PrivateKey,
         unsealSeedProvider: @escaping (String) async throws -> [Data],
+        orderKeyProvider: @escaping () async throws -> Curve25519.Signing.PrivateKey? = { nil },
         watchDelegateKeyProvider: @escaping () -> Curve25519.Signing.PrivateKey? = { nil },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() }
@@ -98,6 +115,7 @@ public final class SecretRequestCoordinator {
         self.username = username
         self.irkProvider = irkProvider
         self.unsealSeedProvider = unsealSeedProvider
+        self.orderKeyProvider = orderKeyProvider
         self.watchDelegateKeyProvider = watchDelegateKeyProvider
         self.now = now
         self.nonceGen = nonceGen
@@ -182,9 +200,11 @@ public final class SecretRequestCoordinator {
         // A watch delegate signs the boot-response header for a plain UNLOCK
         // approval (no auto-lease). That path needs the IRK for NOTHING, so we
         // never call irkProvider() and no biometric prompt fires — the whole
-        // point of the feature. Entitlement + auto-lease deposit always use the
-        // IRK (the delegate is scoped to the boot-approval response alone), so
-        // we resolve the IRK lazily, only when a branch below actually needs it.
+        // point of the feature. The auto-lease deposit uses the IRK and the
+        // entitlement mint the admin master root (Slice D) — but every
+        // entitlement path still needs the IRK for its mailbox/boot AUTH
+        // envelope, and the delegate is scoped to the boot-approval response
+        // alone, so we resolve the IRK lazily only when a branch needs it.
         let delegateKey: Curve25519.Signing.PrivateKey? =
             (purpose == .unlockKey && !depositAutoLease) ? watchDelegateKeyProvider() : nil
         let irk: Curve25519.Signing.PrivateKey? =
@@ -204,7 +224,14 @@ public final class SecretRequestCoordinator {
             sealedHex = reply.sealedHex
             unlockKey = reply.luksKey
         case .entitlement:
-            sealedHex = try buildEntitlementReply(request: request, irk: try requireIrk())
+            // Slice D — the RootEntitlement is an admin "authorize this box"
+            // order: sign it under the admin master root when present (else the
+            // IRK). Resolving the order key here reuses the memoized ceremony
+            // key cache, so no extra biometric fires beyond the one that opened
+            // the IRK above. The boot-response AUTH envelope below stays IRK.
+            sealedHex = try buildEntitlementReply(
+                request: request, irk: try requireIrk(), orderKey: try await orderKeyProvider()
+            )
         }
 
         let body = SecretResponseBody(
@@ -246,7 +273,14 @@ public final class SecretRequestCoordinator {
         // (consent to boot ⇒ consent to serve). Best-effort — a failure never
         // fails the unlock; the box can still fetch one via the relay.
         if purpose == .unlockKey, let irk {
-            try? await depositEntitlement(request: request, irk: irk)
+            // Slice D — the folded-in entitlement is signed under the admin
+            // master root when present (an admin-pinned box rejects an
+            // IRK-signed one), else the IRK. Best-effort: the order key is
+            // resolved from the same memoized ceremony cache (no extra
+            // biometric), and a failure just skips the pre-deposit — the box
+            // still gets one via an explicit entitlement request.
+            let orderKey = try? await orderKeyProvider()
+            try? await depositEntitlement(request: request, irk: irk, orderKey: orderKey)
         }
 
         // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
@@ -258,15 +292,17 @@ public final class SecretRequestCoordinator {
         return nil
     }
 
-    /// Mint an owner-IRK-signed RootEntitlement for this box's STK and DEPOSIT it
-    /// on `.com` so the box claims it on first boot without a separate "authorize
-    /// to serve" tap. The carrier is the PUBLIC entitlement (what the box presents
-    /// at the hub HELLO), not a secret. Reuses the relay responder's mint.
+    /// Mint an admin-root-signed (owner-IRK when no admin root) RootEntitlement
+    /// for this box's STK and DEPOSIT it on `.com` so the box claims it on first
+    /// boot without a separate "authorize to serve" tap. The carrier is the
+    /// PUBLIC entitlement (what the box presents at the hub HELLO), not a secret.
+    /// Reuses the relay responder's mint.
     private func depositEntitlement(
         request: SecretRequest,
-        irk: Curve25519.Signing.PrivateKey
+        irk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey?
     ) async throws {
-        let carrierHex = try buildEntitlementReply(request: request, irk: irk)
+        let carrierHex = try buildEntitlementReply(request: request, irk: irk, orderKey: orderKey)
         let auth = try buildMailboxAuth(irk: irk)
         let body = PairingDepositBody(
             auth: auth.auth,
@@ -310,8 +346,10 @@ public final class SecretRequestCoordinator {
     /// Request Inbox's serve-authorization lane (docs/box-request-inbox.md). The
     /// box's pending `entitlement` request is detected by the pod's cheap
     /// `awaitingEntitlement` flag (no biometric); this fetches + re-verifies the
-    /// live request and responds (mint the owner-IRK RootEntitlement carrier),
-    /// all under ONE biometric. No lease (entitlement carries no secret). Throws
+    /// live request and responds (mint the admin-root RootEntitlement carrier,
+    /// owner-IRK when no admin root), all under ONE biometric — the admin root
+    /// resolves from the same memoized ceremony key cache as the IRK, so no
+    /// second Face ID. No lease (entitlement carries no secret). Throws
     /// `.noPendingRequest` if the box gave up between the refresh and the tap.
     @discardableResult
     public func approvePendingEntitlement(serverDomain: String) async throws -> String? {
@@ -429,12 +467,19 @@ public final class SecretRequestCoordinator {
 
     // MARK: - entitlement
 
-    /// IRK-sign a root-only RootEntitlement binding (username, podPubKey =
+    /// Sign a root-only RootEntitlement binding (username, podPubKey =
     /// box STK, podCanonical = serverDomain) and serialize it as the
     /// daemon's EntitlementBundle on-disk carrier, hex-encoded.
+    ///
+    /// Slice D — the RootEntitlement is an ADMIN "authorize this box to serve"
+    /// order, so it signs under the admin master root (`orderKey`) when this
+    /// device holds one, else the owner IRK (legacy / pre-wipe boxes still
+    /// accept the IRK; a reburned admin-pinned box requires the admin root).
+    /// Canonical bytes are IDENTICAL either way — only the signing key changes.
     private func buildEntitlementReply(
         request: SecretRequest,
-        irk: Curve25519.Signing.PrivateKey
+        irk: Curve25519.Signing.PrivateKey,
+        orderKey: Curve25519.Signing.PrivateKey?
     ) throws -> String {
         let cert = RootEntitlement(
             username: username,
@@ -442,7 +487,7 @@ public final class SecretRequestCoordinator {
             podCanonical: request.serverDomain,
             issuedAt: now()
         )
-        let sig = try cert.sign(with: irk)
+        let sig = try cert.sign(with: orderKey ?? irk)
         let carrier = EntitlementBundleCarrier.serialize(rootEntitlement: cert, rootEntitlementSig: sig)
         return HexUtil.encode(carrier)
     }

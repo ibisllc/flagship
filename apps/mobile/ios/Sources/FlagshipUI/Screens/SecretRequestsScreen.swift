@@ -94,6 +94,16 @@ struct SecretRequestsContainer: View {
                 }
                 return seeds
             },
+            // Slice D — the RootEntitlement this approval mints signs under the
+            // admin master root when this device holds one (a reburned
+            // admin-pinned box rejects an IRK-signed one), else the owner IRK.
+            // This screen's providers aren't memoized, so the admin root is its
+            // own Face ID — acceptable, and only on admin-root accounts.
+            orderKeyProvider: {
+                Keystore.hasAdminRoot
+                    ? try await Keystore.adminRootKey(reason: "Authorize your box to serve")
+                    : nil
+            },
             // When the user opted into "Quick approve from Apple Watch", a
             // plain unlock approval signs the boot-response with this delegate
             // key (role="delegate") instead of the IRK — no biometric prompt.

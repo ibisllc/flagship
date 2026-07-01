@@ -406,6 +406,117 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         XCTAssertTrue(RootEntitlement.verify(cert, signature: sig, irkPub: phoneIrk().publicKey))
     }
 
+    // MARK: - Slice D: RootEntitlement signs under the admin master root
+
+    /// The admin master root fixture (distinct from the IRK), supplied via the
+    /// coordinator's `orderKeyProvider`.
+    private func adminRoot() -> Curve25519.Signing.PrivateKey {
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x2c, count: 32))
+    }
+
+    @MainActor
+    private func makeCoordinatorWithAdminRoot(_ mailbox: MockMailbox) -> SecretRequestCoordinator {
+        SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: { self.phoneIrk() },
+            unsealSeedProvider: { _ in [self.unsealSeed] },
+            orderKeyProvider: { self.adminRoot() },
+            now: { 999 },
+            nonceGen: { Data(repeating: 0xaa, count: 32) }
+        )
+    }
+
+    /// When an admin master root is held, the entitlement-request reply's
+    /// RootEntitlement verifies under the ADMIN ROOT — and NOT under the IRK
+    /// (a reburned admin-pinned box requires exactly this). Canonical bytes are
+    /// identical to the IRK path; only the signing key differs.
+    @MainActor
+    func testEntitlementReplySignsUnderAdminRootWhenPresent() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x44, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .entitlement, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let coord = makeCoordinatorWithAdminRoot(mailbox)
+        let verified = try await coord.fetchVerifiedRequests()
+        try await coord.confirmAndRespond(verified[0])
+
+        let reply = try XCTUnwrap(mailbox.lastPostedResponse)
+        XCTAssertEqual(reply.purpose, "entitlement")
+        let carrierBytes = try XCTUnwrap(HexUtil.decode(reply.sealed))
+        let obj = try JSONSerialization.jsonObject(with: carrierBytes) as! [String: Any]
+        let cert = RootEntitlement(
+            username: "alice",
+            podPubKey: boxStk().publicKey.rawRepresentation,
+            podCanonical: "home.alice.flagship.services",
+            issuedAt: 999
+        )
+        let sig = try XCTUnwrap(HexUtil.decode(obj["rootEntitlementSig"] as! String))
+        // Verifies under the admin root…
+        XCTAssertTrue(RootEntitlement.verify(cert, signature: sig, irkPub: adminRoot().publicKey),
+                      "entitlement must be signed under the admin master root when present")
+        // …and NOT under the IRK (the box would reject an IRK-signed one).
+        XCTAssertFalse(RootEntitlement.verify(cert, signature: sig, irkPub: phoneIrk().publicKey),
+                       "an admin-root account must NOT fall back to IRK-signing the entitlement")
+    }
+
+    /// The entitlement folded into an unlock approval ALSO signs under the admin
+    /// root when present (so a one-approval onboard works on an admin-pinned box).
+    @MainActor
+    func testFoldedEntitlementDepositSignsUnderAdminRootWhenPresent() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x33, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let luksKey = Data("real-luks-disk-key-0123456789abc".utf8)
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: unsealPub))
+
+        let coord = makeCoordinatorWithAdminRoot(mailbox)
+        let verified = try await coord.fetchVerifiedRequests()
+        _ = try await coord.confirmAndRespond(verified[0])
+
+        let dep = try XCTUnwrap(mailbox.entitlementDeposits.first)
+        let carrier = try XCTUnwrap(HexUtil.decode(dep.body.deposit.sealed))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: carrier) as? [String: Any])
+        let cert = RootEntitlement(
+            username: "alice",
+            podPubKey: boxStk().publicKey.rawRepresentation,
+            podCanonical: "home.alice.flagship.services",
+            issuedAt: 999
+        )
+        let sig = try XCTUnwrap(HexUtil.decode(try XCTUnwrap(json["rootEntitlementSig"] as? String)))
+        XCTAssertTrue(RootEntitlement.verify(cert, signature: sig, irkPub: adminRoot().publicKey))
+        XCTAssertFalse(RootEntitlement.verify(cert, signature: sig, irkPub: phoneIrk().publicKey))
+
+        // The box-sealed AUTO-UNLOCK LEASE stays IRK-signed even on an
+        // admin-root account (the boot worker gates the lease on the owner IRK,
+        // not the admin root), so switching the entitlement never touched it.
+        let leaseId = try await coord.confirmAndRespond(verified[0], depositAutoLease: true)
+        XCTAssertNotNil(leaseId)
+        let ldep = try XCTUnwrap(mailbox.deposited.first)
+        let lease = AutoUnlockLeaseV2(
+            serverDomain: ldep.lease.serverDomain,
+            stkPub: try XCTUnwrap(HexUtil.decode(ldep.lease.stkPub)),
+            leaseId: ldep.lease.leaseId,
+            sealedKey: try XCTUnwrap(HexUtil.decode(ldep.lease.sealedKey)),
+            issuedAt: ldep.lease.issuedAt,
+            expiresAt: ldep.lease.expiresAt,
+            maxUses: ldep.lease.maxUses
+        )
+        let lsig = try XCTUnwrap(HexUtil.decode(ldep.signatureHex))
+        XCTAssertTrue(phoneIrk().publicKey.isValidSignature(lsig, for: try lease.canonicalBytes()),
+                      "the auto-unlock lease must stay IRK-signed")
+    }
+
     // MARK: - auto-mode box-sealed lease deposit + revoke
 
     @MainActor
