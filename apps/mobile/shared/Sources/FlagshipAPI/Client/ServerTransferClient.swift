@@ -9,6 +9,7 @@ import Foundation
 ///   POST /api/server/:domain/transfer/claim-poll     giver, IRK mailbox-auth → acquirer IRK
 ///   POST /api/server/:domain/transfer/disk-key       giver, IRK mailbox-auth + sealed disk key
 ///   POST /api/server/:domain/transfer/disk-key-claim  acquirer, IRK mailbox-auth → sealed disk key
+///   POST /api/server/:domain/transfer/admin-handoff   giver, admin-root-signed hand-off proof (§9.8)
 ///
 /// The wire types are PURE (no crypto): the VM builds the IRK-signed offer/claim
 /// + the mailbox-auth via `FlagshipCore` and hands the finished bytes here. Field
@@ -32,6 +33,12 @@ public protocol ServerTransferClient: Sendable {
     /// ACQUIRER: pick up the giver's re-sealed disk key (IRK mailbox-auth).
     /// Returns nil while the giver hasn't re-sealed yet (404).
     func claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope) async throws -> TransferDiskKey?
+
+    /// GIVER: deposit the admin-root hand-off proof (spec §9.8) — signed by the
+    /// giver's admin master root so the box can verify against its pinned
+    /// anchor before re-pinning to the acquirer's root. Domain in the path is
+    /// the box's OLD canonical.
+    func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws
 }
 
 // MARK: - Wire types
@@ -72,10 +79,14 @@ public struct TransferClaimWire: Codable, Equatable, Sendable {
     public let transferNonce: String
     public let acquirerUsername: String
     public let acquirerIrkPub: String   // hex
+    /// §9.8 — the acquirer's admin master root pub, hex; "" ⇒ no admin root.
+    /// Inside the v2 signed canonical, so `.com` can't substitute an anchor.
+    public let acquirerAdminRootPub: String
     public let issuedAt: Int64
-    public init(serverDomain: String, transferNonce: String, acquirerUsername: String, acquirerIrkPub: String, issuedAt: Int64) {
+    public init(serverDomain: String, transferNonce: String, acquirerUsername: String, acquirerIrkPub: String, acquirerAdminRootPub: String = "", issuedAt: Int64) {
         self.serverDomain = serverDomain; self.transferNonce = transferNonce
         self.acquirerUsername = acquirerUsername; self.acquirerIrkPub = acquirerIrkPub
+        self.acquirerAdminRootPub = acquirerAdminRootPub
         self.issuedAt = issuedAt
     }
 }
@@ -104,9 +115,13 @@ public struct TransferClaimPoll: Decodable, Equatable, Sendable {
     public let newServerDomain: String?
     public let acquirerUsername: String?
     public let acquirerIrkPub: String?
-    public init(newServerDomain: String?, acquirerUsername: String?, acquirerIrkPub: String?) {
+    /// §9.8 — the admin root pub the acquirer committed to in its claim; ""
+    /// when the acquirer has none, nil from a pre-§9.8 broker.
+    public let acquirerAdminRootPub: String?
+    public init(newServerDomain: String?, acquirerUsername: String?, acquirerIrkPub: String?, acquirerAdminRootPub: String? = nil) {
         self.newServerDomain = newServerDomain; self.acquirerUsername = acquirerUsername
         self.acquirerIrkPub = acquirerIrkPub
+        self.acquirerAdminRootPub = acquirerAdminRootPub
     }
 }
 
@@ -123,6 +138,34 @@ public struct TransferDiskKeyBody: Encodable, Equatable, Sendable {
 public struct TransferDiskKey: Decodable, Equatable, Sendable {
     public let sealedDiskKey: String   // hex
     public init(sealedDiskKey: String) { self.sealedDiskKey = sealedDiskKey }
+}
+
+/// The `flagship/admin-root-transfer/v1` hand-off object (matches the Worker
+/// `handoff` key). `serverDomain` = the box's OLD canonical.
+public struct TransferAdminHandoffWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let giverUsername: String
+    public let acquirerUsername: String
+    public let oldAdminRootPub: String   // hex — the box's pinned anchor
+    public let newAdminRootPub: String   // hex; "" ⇒ unpin (acquirer has none)
+    public let transferNonce: String
+    public let issuedAt: Int64
+    public init(serverDomain: String, giverUsername: String, acquirerUsername: String, oldAdminRootPub: String, newAdminRootPub: String, transferNonce: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain; self.giverUsername = giverUsername
+        self.acquirerUsername = acquirerUsername; self.oldAdminRootPub = oldAdminRootPub
+        self.newAdminRootPub = newAdminRootPub; self.transferNonce = transferNonce
+        self.issuedAt = issuedAt
+    }
+}
+
+/// `{ handoff, signatureHex }` — `signatureHex` is the GIVER admin root's
+/// Ed25519 signature over the hand-off canonical bytes.
+public struct TransferAdminHandoffBody: Encodable, Equatable, Sendable {
+    public let handoff: TransferAdminHandoffWire
+    public let signatureHex: String
+    public init(handoff: TransferAdminHandoffWire, signatureHex: String) {
+        self.handoff = handoff; self.signatureHex = signatureHex
+    }
 }
 
 // MARK: - Live
@@ -156,6 +199,10 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
 
     public func claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope) async throws -> TransferDiskKey? {
         try await postReturningOptional(serverDomain, "transfer/disk-key-claim", body: try JSONEncoder().encode(auth))
+    }
+
+    public func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws {
+        _ = try await rawPost(serverDomain, "transfer/admin-handoff", body: try JSONEncoder().encode(body))
     }
 
     private func urlFor(_ serverDomain: String, _ suffix: String) throws -> URL {
@@ -199,8 +246,11 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
     public private(set) var offers: [(serverDomain: String, body: TransferOfferBody)] = []
     public private(set) var claims: [(serverDomain: String, body: TransferClaimBody)] = []
     public private(set) var diskKeyDeposits: [(serverDomain: String, body: TransferDiskKeyBody)] = []
+    public private(set) var adminHandoffs: [(serverDomain: String, body: TransferAdminHandoffBody)] = []
     /// Scripted poll result (nil ⇒ "not yet claimed").
     public var scriptedPoll: TransferClaimPoll?
+    /// Scripted admin-handoff deposit failure.
+    public var adminHandoffError: Error?
     /// Scripted acquirer disk-key (nil ⇒ "not yet deposited").
     public var scriptedDiskKey: TransferDiskKey?
     public var claimResult: TransferClaimResult?
@@ -227,5 +277,9 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
     }
     public func claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope) async throws -> TransferDiskKey? {
         scriptedDiskKey
+    }
+    public func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws {
+        if let e = adminHandoffError { throw e }
+        adminHandoffs.append((serverDomain, body))
     }
 }

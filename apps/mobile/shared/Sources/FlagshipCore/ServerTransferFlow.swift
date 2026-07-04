@@ -226,6 +226,7 @@ public enum ServerTransferFlow {
         acquirerUsername: String,
         acquirerIrk: Curve25519.Signing.PrivateKey,
         orderKey: Curve25519.Signing.PrivateKey? = nil,
+        acquirerAdminRootPubHex: String = "",
         issuedAt: Int64
     ) throws -> TransferClaimBody {
         if offer.expiresAt <= issuedAt { throw TransferError.expired }
@@ -234,7 +235,10 @@ public enum ServerTransferFlow {
         // (identity), independent of the signature. Slice D signs the SENSITIVE
         // claim order with the acquirer's admin master root (`orderKey`) when
         // supplied (else the IRK); `.com` gates the signature against the
-        // acquirer's admin root. Canonical bytes (incl. the IRK field) unchanged.
+        // acquirer's admin root. §9.8: the v2 canonical additionally commits to
+        // `acquirerAdminRootPubHex` ("" when the account has none) — the anchor
+        // the box re-pins on re-home rides INSIDE the acquirer's signature, so
+        // `.com` can't substitute it.
         let acquirerIrkHex = HexUtil.encode(acquirerIrk.publicKey.rawRepresentation)
         let lowered = acquirerUsername.lowercased()
         let order = ServerTransferClaimOrder(
@@ -242,6 +246,7 @@ public enum ServerTransferFlow {
             transferNonce: offer.transferNonce,
             acquirerUsername: lowered,
             acquirerIrkPubHex: acquirerIrkHex,
+            acquirerAdminRootPubHex: acquirerAdminRootPubHex,
             issuedAt: issuedAt
         )
         let sig = try order.sign(with: orderKey ?? acquirerIrk)
@@ -251,6 +256,7 @@ public enum ServerTransferFlow {
                 transferNonce: offer.transferNonce,
                 acquirerUsername: lowered,
                 acquirerIrkPub: acquirerIrkHex,
+                acquirerAdminRootPub: acquirerAdminRootPubHex,
                 issuedAt: issuedAt
             ),
             claimSignature: HexUtil.encode(sig)
@@ -286,6 +292,47 @@ public enum ServerTransferFlow {
     public static func openDiskKey(sealedHex: String, acquirerIrk: Curve25519.Signing.PrivateKey) throws -> Data {
         guard let blob = HexUtil.decode(sealedHex) else { throw TransferError.malformedQR }
         return try SecretSeal.openWithEd25519Seed(blob: blob, recipientEd25519Seed: acquirerIrk.rawRepresentation)
+    }
+
+    // MARK: - GIVER: admin-root hand-off (spec §9.8)
+
+    /// Build + sign the `flagship/admin-root-transfer/v1` hand-off proof with
+    /// the GIVER's admin master root (the box's pinned anchor). The box
+    /// verifies the signature against its pin before re-pinning to
+    /// `acquirerAdminRootPubHex` — "" means unpin (acquirer has no admin root).
+    /// `serverDomain` is the box's OLD canonical.
+    public static func buildAdminHandoff(
+        serverDomain: String,
+        giverUsername: String,
+        acquirerUsername: String,
+        acquirerAdminRootPubHex: String,
+        giverAdminRoot: Curve25519.Signing.PrivateKey,
+        transferNonce: String,
+        issuedAt: Int64
+    ) throws -> TransferAdminHandoffBody {
+        let oldPubHex = HexUtil.encode(giverAdminRoot.publicKey.rawRepresentation)
+        let handoff = AdminRootTransfer(
+            serverDomain: serverDomain,
+            giverUsername: giverUsername,
+            acquirerUsername: acquirerUsername,
+            oldAdminRootPubHex: oldPubHex,
+            newAdminRootPubHex: acquirerAdminRootPubHex,
+            transferNonce: transferNonce,
+            issuedAt: issuedAt
+        )
+        let sig = try handoff.sign(withGiverAdminRoot: giverAdminRoot)
+        return TransferAdminHandoffBody(
+            handoff: TransferAdminHandoffWire(
+                serverDomain: serverDomain,
+                giverUsername: giverUsername,
+                acquirerUsername: acquirerUsername,
+                oldAdminRootPub: oldPubHex,
+                newAdminRootPub: acquirerAdminRootPubHex,
+                transferNonce: transferNonce,
+                issuedAt: issuedAt
+            ),
+            signatureHex: HexUtil.encode(sig)
+        )
     }
 
     /// GIVER: open the box's install-time disk key (sealed FOR the giver IRK)
