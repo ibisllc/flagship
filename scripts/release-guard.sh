@@ -87,15 +87,22 @@ scan() {
 scan "burn-time LUKS passphrase" \
   '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-burn-time-luks-rekey-me-immediately"'
 
-# Backdoor 2 — the `debug:flagship` console account, as the shell line that bakes
-# it in. The strip regexes in userdata.ts/UserData.swift mention `debug:flagship`
-# but NOT as a bare `echo '...' | chpasswd` statement, so they don't match.
-scan "debug console user (chpasswd)" \
-  "echo '?debug:flagship'?[[:space:]]*\\|[[:space:]]*chpasswd"
+# Backdoor 2 — the `debug:flagship` console account. Since the 2026-06-30
+# console lockdown the inline bootstrap machinery is gone; the account is baked
+# ONLY by the owner-grant debug gate (server-daemon debugAccessGate.ts), whose
+# known-password constant + templated `echo '…' | chpasswd` line are the
+# load-bearing definitions this guard targets. The legacy literal forms stay in
+# the patterns so a regression to the old inline bake is also caught.
+scan "debug console user (password constant)" \
+  'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"'
 
-# Backdoor 2 (companion) — the `useradd ... debug` line for the same account.
+scan "debug console user (chpasswd)" \
+  "echo '?(debug|\\\$\\{DEBUG_USER\\}):(flagship|\\\$\\{DEBUG_PASSWORD\\})'?[[:space:]]*\\|[[:space:]]*chpasswd"
+
+# Backdoor 2 (companion) — the `useradd … debug` line for the same account
+# (shell form or the gate's argv form ending in DEBUG_USER).
 scan "debug console user (useradd)" \
-  'useradd[[:space:]].*[[:space:]]debug([[:space:]]|$)'
+  'useradd([[:space:]].*[[:space:]]debug([[:space:]]|$)|.*DEBUG_USER)'
 
 count="${#findings[@]}"
 

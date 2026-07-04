@@ -50,16 +50,20 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
   });
 
   it("flags exactly the load-bearing definitions, not the strip machinery or tests", () => {
-    // The output lists each finding as a file:line. The stripDebugFeatures regex
-    // references (which mention `debug:flagship`) and the *.test.* assertions must
-    // NOT appear — only the real BURN_PASSPHRASE assignment + the useradd/chpasswd
-    // shell lines. Assert none of the tolerated files leak into the findings.
+    // The output lists each finding as a file:line. Descriptive mentions of the
+    // `debug:flagship` marker and the *.test.* assertions must NOT appear — only
+    // the real BURN_PASSPHRASE assignment plus, since the 2026-06-30 console
+    // lockdown, the debug-access gate's known-password constant and its
+    // useradd/chpasswd lines (the Bucket-C item-2 target moved there when the
+    // inline bootstrap bake was removed). Assert none of the tolerated files
+    // leak into the findings.
     const r = run({ RELEASE: "" });
     expect(r.stderr).not.toMatch(/\.test\.ts:/);
     expect(r.stderr).not.toMatch(/preseed\.test/);
     expect(r.stderr).not.toMatch(/EngineTests\.swift/);
-    // The flagged lines are the assignment + the chpasswd/useradd lines.
+    // The flagged lines are the assignment + the gate's password/chpasswd lines.
     expect(r.stderr).toMatch(/userdata\.ts:\d+:export const BURN_PASSPHRASE/);
+    expect(r.stderr).toMatch(/debugAccessGate\.ts:\d+/);
     expect(r.stderr).toMatch(/chpasswd/);
   });
 });
