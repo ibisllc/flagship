@@ -364,6 +364,22 @@ export interface DaemonRuntime {
    */
   addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
   /**
+   * Append a gate that fronts the PER-APP reverse proxy (the SNI-routed
+   * `<urlLabel>.<serverFqdn>` path). Gates are tried in registration order;
+   * the first non-null response is returned INSTEAD of proxying to the
+   * app's container.
+   *
+   * This is a separate chain from `addHandler` on purpose: the app path
+   * must NOT fall through the daemon's whole `/api/*` surface (an app owns
+   * its own URL space), but service-access enforcement (restricted-mode
+   * knock page / 403) and the knock-status poll (the knock page polls
+   * same-origin on the SERVICE subdomain) have to run there. Without this
+   * chain the enforcement only fronted the daemon's own surface and a
+   * `restricted` service still served on a real box (caught by the live
+   * gating e2e).
+   */
+  addAppGate(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
+  /**
    * Append a WebSocket upgrade handler. Handlers are tried in
    * registration order until one returns true (accepted + detached
    * the socket); if none accept, the inbound request falls back to
@@ -673,6 +689,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const extras: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [
     ...(opts.additionalHandlers ?? []),
   ];
+  // Gates fronting the per-app proxy path (service-access enforcement +
+  // knock endpoints). See DaemonRuntime.addAppGate.
+  const appGates: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
   // Same idea for WebSocket upgrade handlers — `addUpgradeHandler`
   // pushes here, the onUpgrade closure consults this list before
   // falling through to the built-in sibling-handshake path.
@@ -718,12 +737,15 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       ? servicePlatformRef.current.byLabel(leftmost)
       : undefined;
     if (app) {
-      handleHttpConnection(socket, async (req) => {
-        return handleAppRequest(app, req, {
-          injectorKey: identityKeypairForInjection,
-          updateServer: opts.updateServer,
-        });
-      });
+      handleHttpConnection(
+        socket,
+        buildGatedAppHandler(appGates, (req) =>
+          handleAppRequest(app, req, {
+            injectorKey: identityKeypairForInjection,
+            updateServer: opts.updateServer,
+          }),
+        ),
+      );
       return;
     }
     // SNI doesn't match an installed app. If the SNI is the pod's
@@ -1240,11 +1262,38 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     addHandler(h) {
       extras.push(h);
     },
+    addAppGate(h) {
+      appGates.push(h);
+    },
     addUpgradeHandler(h) {
       extraUpgrades.push(h);
     },
     revokeCurrentCert: (reason = 1) => revokeCurrentCert({ issuer, certManager, reason }),
     certStore: store,
+  };
+}
+
+/**
+ * Compose the per-app request handler: try each registered app gate in
+ * order (service-access enforcement, knock endpoints); the first non-null
+ * response wins, otherwise proxy to the app. The `gates` array is captured
+ * by reference so gates registered after startup (index.ts wires them once
+ * the access stores exist) apply to subsequent requests.
+ *
+ * Exported for tests: the live bug this closes (restricted mode not
+ * enforced on a real box) was exactly this composition missing from the
+ * SNI-routed app path.
+ */
+export function buildGatedAppHandler(
+  gates: ReadonlyArray<(req: HttpRequest) => Promise<HttpResponse | null>>,
+  proxyToApp: (req: HttpRequest) => Promise<HttpResponse>,
+): (req: HttpRequest) => Promise<HttpResponse> {
+  return async (req) => {
+    for (const g of gates) {
+      const r = await g(req);
+      if (r) return r;
+    }
+    return proxyToApp(req);
   };
 }
 

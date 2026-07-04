@@ -2643,22 +2643,29 @@ async function wireOwnerHandlers(deps: {
   // this guard. A request to `<urlLabel>.<serverFqdn>` resolves to its
   // installed `<creator>-<slug>`; OPEN services + unknown labels fall through.
   // On a DENY, a top-level browser navigation gets the QR-login knock page.
-  runtime.addHandler(
-    buildAccessEnforcementHandler(
-      access,
-      (req) => {
-        const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
-        const suffix = `.${env.serverFqdn.toLowerCase()}`;
-        if (!host.endsWith(suffix) || host.length === suffix.length) return null;
-        const label = host.slice(0, host.length - suffix.length);
-        // Only the leftmost single label is a service label (no nested dots).
-        if (label.includes(".")) return null;
-        const svc = deps.servicePlatformRef.current?.byLabel(label);
-        return svc ? svc.serviceId : null;
-      },
-      accessWeb.maybeServeKnock,
-    ),
+  const accessEnforcement = buildAccessEnforcementHandler(
+    access,
+    (req) => {
+      const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
+      const suffix = `.${env.serverFqdn.toLowerCase()}`;
+      if (!host.endsWith(suffix) || host.length === suffix.length) return null;
+      const label = host.slice(0, host.length - suffix.length);
+      // Only the leftmost single label is a service label (no nested dots).
+      if (label.includes(".")) return null;
+      const svc = deps.servicePlatformRef.current?.byLabel(label);
+      return svc ? svc.serviceId : null;
+    },
+    accessWeb.maybeServeKnock,
   );
+  runtime.addHandler(accessEnforcement);
+  // The SNI-routed per-app proxy path does NOT run the daemon handler chain
+  // (an app owns its URL space), so the enforcement must ALSO front it as an
+  // app gate — otherwise a restricted service still serves on a real box
+  // (live-gating-e2e catch). The knock endpoints go first (ungated by
+  // design): the knock page polls `/__flagship/knock/<pageId>/status`
+  // same-origin on the SERVICE subdomain.
+  runtime.addAppGate(accessWeb.handle);
+  runtime.addAppGate(accessEnforcement);
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());
   console.log(
