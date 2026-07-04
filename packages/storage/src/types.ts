@@ -1968,6 +1968,9 @@ export interface MarketplaceStorage {
    * listing never ships scan_grade=NULL indefinitely.
    */
   listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]>;
+  /** All of a creator's non-removed listings, newest first (the developer
+   *  console's per-listing rollup: install counts + price + grade). */
+  listByCreator(creator: string): Promise<MarketplaceListingRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

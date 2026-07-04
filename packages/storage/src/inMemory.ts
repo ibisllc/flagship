@@ -588,6 +588,13 @@ export class InMemoryMarketplaceStorage implements MarketplaceStorage {
       )
       .map((l) => ({ ...l }));
   }
+  async listByCreator(creator: string): Promise<MarketplaceListingRecord[]> {
+    const c = creator.toLowerCase();
+    return [...this.listings.values()]
+      .filter((l) => l.creator.toLowerCase() === c && l.status !== "removed")
+      .sort((a, b) => b.listedAt - a.listedAt)
+      .map((l) => ({ ...l }));
+  }
 }
 
 export class InMemoryAppSalesStorage implements AppSalesStorage {

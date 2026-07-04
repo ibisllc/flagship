@@ -2884,6 +2884,18 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
       .all<RawMarketplaceRow>();
     return (result.results ?? []).map(rowToRecord);
   }
+
+  async listByCreator(creator: string): Promise<MarketplaceListingRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM marketplace_listings
+           WHERE creator = ? AND status != 'removed'
+         ORDER BY listed_at DESC`,
+      )
+      .bind(creator.toLowerCase())
+      .all<RawMarketplaceRow>();
+    return (result.results ?? []).map(rowToRecord);
+  }
 }
 
 interface RawMarketplaceRow {

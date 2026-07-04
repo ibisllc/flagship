@@ -174,6 +174,7 @@ import {
   handleAdminSetAppPrice,
   handleCreatorSetAppPrice,
   handleAdminGrantPurchase,
+  handleDeveloperSales,
   parseCutBps,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
@@ -724,6 +725,7 @@ const ROUTE_RE = {
   MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
   MARKETPLACE_SCAN_RESULT: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/scan$/,
   MARKETPLACE_SET_PRICE: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/price$/,
+  DEVELOPER_SALES: /^\/api\/developer\/sales\/([^/]+)$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -3127,6 +3129,26 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
         await readJson(request),
+      ),
+    );
+  }
+
+  // GET /api/developer/sales/:creator (CREATOR-signed, #15) — the developer
+  // console payout report (ledger + rollups). Gated by a creator signature in
+  // the query (?issuedAt=&sig=), not the admin secret.
+  if (method === "GET" && (m = path.match(ROUTE_RE.DEVELOPER_SALES))) {
+    return finishPlain(
+      await handleDeveloperSales(
+        {
+          sales: new D1AppSalesStorage(env.DB),
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+          cutBps: parseCutBps(env.MARKETPLACE_CUT_BPS),
+        },
+        decodeURIComponent(m[1]!),
+        url.searchParams.get("issuedAt"),
+        url.searchParams.get("sig"),
       ),
     );
   }
