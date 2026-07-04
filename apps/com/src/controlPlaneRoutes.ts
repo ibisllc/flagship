@@ -50,6 +50,10 @@ import {
   handleListBoxSealedLeases,
   handlePostPairingDeposit,
   handleConsumePairingDeposit,
+  handlePbRequestPeers,
+  handlePeerStkLookup,
+  handlePutBackupManifest,
+  handleGetBackupManifest,
   handlePostEntitlementDeposit,
   handleConsumeEntitlementDeposit,
   handlePostSwkDeposit,
@@ -537,6 +541,17 @@ const ROUTE_RE = {
   //   GET   the box fetches its own order (PUBLIC consume-once; re-verifies box-side)
   UPDATE_DEPOSIT: /^\/api\/server\/([^/]+)\/update$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
+  // Peer-backup (server-migration Layer 0). request-peers is the STK-signed
+  // matchmaker (same-account pods, v0); stk is the exact-match directory
+  // lookup a receiving peer resolves a shard-caller's STK with; the
+  // backup-manifest path is method-discriminated:
+  //   PUT  box deposits its SWK-sealed shard-placement manifest (STK-signed,
+  //        monotonic generation — latest-wins)
+  //   GET  public non-consuming read (ciphertext only; a fresh replacement
+  //        box re-derives the SWK and opens it)
+  PB_REQUEST_PEERS: /^\/api\/peer-backup\/request-peers$/,
+  PB_STK_LOOKUP: /^\/api\/peer-backup\/stk\/([^/]+)$/,
+  BACKUP_MANIFEST: /^\/api\/server\/([^/]+)\/backup-manifest$/,
   // Graceful server-replacement decommission (docs/server-replacement-graceful-
   // decommission.md). The bare `decommission` path is method-discriminated:
   //   POST  owner deposits the IRK-signed ServerDecommission order (mailbox-auth)
@@ -1513,6 +1528,37 @@ export async function tryControlPlane(
           decodeURIComponent(m[1]!),
           decodeURIComponent(m[2]!),
           await readJson(request),
+        ),
+      );
+    }
+    // Peer-backup matchmaker + manifest lane (server-migration Layer 0).
+    if (method === "POST" && path.match(ROUTE_RE.PB_REQUEST_PEERS)) {
+      return finishPlain(
+        await handlePbRequestPeers(
+          { servers: storage.servers, daemonStatus: storage.daemonStatus },
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.PB_STK_LOOKUP))) {
+      return finishPlain(
+        await handlePeerStkLookup({ servers: storage.servers }, decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "PUT" && (m = path.match(ROUTE_RE.BACKUP_MANIFEST))) {
+      return finishPlain(
+        await handlePutBackupManifest(
+          { servers: storage.servers, peerBackupManifests: storage.peerBackupManifests },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.BACKUP_MANIFEST))) {
+      return finishPlain(
+        await handleGetBackupManifest(
+          { peerBackupManifests: storage.peerBackupManifests },
+          decodeURIComponent(m[1]!),
         ),
       );
     }
