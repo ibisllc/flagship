@@ -103,8 +103,10 @@ class GymFeatureMirrorTest : GymBase() {
     private fun anyPodSwitcherItem(): Boolean =
         composeRule.onAllNodes(
             androidx.compose.ui.test.SemanticsMatcher("testTag startsWith pod-switcher-item-") { node ->
-                node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
-                    ?.startsWith("pod-switcher-item-") == true
+                val tag = node.config.getOrElseNullable(
+                    androidx.compose.ui.semantics.SemanticsProperties.TestTag,
+                ) { null }
+                tag?.startsWith("pod-switcher-item-") == true
             },
             useUnmergedTree = true,
         ).fetchSemanticsNodes().isNotEmpty()
