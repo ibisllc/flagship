@@ -207,25 +207,53 @@ class AdminPromoteAndRotateTest {
         assertFalse(AdminRootRotationClaim.verify(rotation, sig, new.publicKey))
     }
 
-    @Test fun rotateViewModel_signsOldToNew_posts_reStores_reEscrows() = runTest {
-        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+    /** Common rotate-VM builder: an OLD in-memory root + injectable
+     *  recovery seams (the crypto seams are identical across the tests). */
+    private fun rotateVm(
+        server: MockFlagshipServerClient,
+        newSeed: ByteArray,
+        onStore: (ByteArray) -> Unit = {},
+        recoveryEnrolled: (suspend () -> Boolean)? = null,
+        reEscrow: (suspend (String, ByteArray) -> Unit)? = null,
+    ): Pair<RotateAdminRootViewModel, String> {
         val old = Ed25519Sign.KeyPair.newKeyPair()
-        val newSeed = ByteArray(32) { 0x42 }
         val newPub = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(newSeed).publicKey)
+        val vm = if (recoveryEnrolled != null && reEscrow != null) {
+            RotateAdminRootViewModel(
+                server = server,
+                username = account,
+                mintSeed = { newSeed },
+                now = { 1_735_689_600_000L },
+                hasAdminRoot = { true },
+                loadOldSigner = { Ed25519Sign(old.privateKey) },
+                oldPubHex = { HexUtil.encode(old.publicKey) },
+                storeNewRoot = onStore,
+                recoveryEnrolled = recoveryEnrolled,
+                reEscrow = reEscrow,
+            )
+        } else {
+            // Defaults exercised: recoveryEnrolled falls back to
+            // server.hasCloudRecovery (Mock: cloudRecoveryByUser).
+            RotateAdminRootViewModel(
+                server = server,
+                username = account,
+                mintSeed = { newSeed },
+                now = { 1_735_689_600_000L },
+                hasAdminRoot = { true },
+                loadOldSigner = { Ed25519Sign(old.privateKey) },
+                oldPubHex = { HexUtil.encode(old.publicKey) },
+                storeNewRoot = onStore,
+            )
+        }
+        return vm to newPub
+    }
 
+    @Test fun rotateViewModel_notEnrolled_signsOldToNew_posts_reStores_straightToDone() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
         var stored: ByteArray? = null
-        var escrowed: ByteArray? = null
-        val vm = RotateAdminRootViewModel(
-            server = server,
-            username = account,
-            mintSeed = { newSeed },
-            now = { 1_735_689_600_000L },
-            hasAdminRoot = { true },
-            loadOldSigner = { Ed25519Sign(old.privateKey) },
-            oldPubHex = { HexUtil.encode(old.publicKey) },
-            storeNewRoot = { stored = it },
-            reEscrowNewRoot = { escrowed = it },
-        )
+        // Default recoveryEnrolled seam → Mock hasCloudRecovery (false here).
+        val (vm, newPub) = rotateVm(server, newSeed, onStore = { stored = it })
 
         vm.rotate()
 
@@ -236,7 +264,122 @@ class AdminPromoteAndRotateTest {
         // a recorded new-root is proof the sign old→new bytes were correct.
         assertEquals(newPub, server.rotatedAdminRootByUser[account])
         assertArrayEquals("NEW root re-stored device-local", newSeed, stored)
-        assertArrayEquals("NEW root re-escrowed", newSeed, escrowed)
+    }
+
+    @Test fun rotateViewModel_recoveryEnrolled_parksInDoneNeedsRecoveryUpdate() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
+        var escrowCalls = 0
+        val (vm, newPub) = rotateVm(
+            server, newSeed,
+            recoveryEnrolled = { true },
+            reEscrow = { _, _ -> escrowCalls++ },
+        )
+
+        vm.rotate()
+
+        val phase = vm.phase.first()
+        assertTrue("must park for re-escrow: $phase", phase is RotateAdminRootPhase.DoneNeedsRecoveryUpdate)
+        assertEquals(newPub, (phase as RotateAdminRootPhase.DoneNeedsRecoveryUpdate).newAdminRootPubHex)
+        // The rotation itself is already committed BEFORE the prompt.
+        assertEquals(newPub, server.rotatedAdminRootByUser[account])
+        assertEquals("re-escrow is interactive — never auto-run", 0, escrowCalls)
+    }
+
+    @Test fun rotateViewModel_recoveryEnrolledThrows_treatedAsNotEnrolled() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
+        var escrowCalls = 0
+        val (vm, newPub) = rotateVm(
+            server, newSeed,
+            recoveryEnrolled = { throw RuntimeException("network down") },
+            reEscrow = { _, _ -> escrowCalls++ },
+        )
+
+        vm.rotate()
+
+        // Best-effort: the enrollment probe failing must never fail (or park)
+        // an already-committed rotation.
+        val phase = vm.phase.first()
+        assertTrue("must complete despite the probe error: $phase", phase is RotateAdminRootPhase.Done)
+        assertEquals(newPub, server.rotatedAdminRootByUser[account])
+        assertEquals(0, escrowCalls)
+    }
+
+    @Test fun updateRecoveryBackup_success_runsReEscrow_thenDone() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
+        var escrowedPassphrase: String? = null
+        var escrowedSeed: ByteArray? = null
+        val (vm, newPub) = rotateVm(
+            server, newSeed,
+            recoveryEnrolled = { true },
+            reEscrow = { passphrase, seed ->
+                escrowedPassphrase = passphrase
+                escrowedSeed = seed
+            },
+        )
+        vm.rotate()
+        assertTrue(vm.phase.first() is RotateAdminRootPhase.DoneNeedsRecoveryUpdate)
+
+        vm.updateRecoveryBackup("correct horse battery staple")
+
+        val phase = vm.phase.first()
+        assertTrue("must land in Done: $phase", phase is RotateAdminRootPhase.Done)
+        assertEquals(newPub, (phase as RotateAdminRootPhase.Done).newAdminRootPubHex)
+        assertEquals("correct horse battery staple", escrowedPassphrase)
+        assertArrayEquals("re-escrow gets the NEW seed", newSeed, escrowedSeed)
+    }
+
+    @Test fun updateRecoveryBackup_failure_staysNeedsUpdate_retryWorks_skipDone() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
+        var attempts = 0
+        val (vm, newPub) = rotateVm(
+            server, newSeed,
+            recoveryEnrolled = { true },
+            reEscrow = { _, _ ->
+                attempts++
+                if (attempts == 1) throw RuntimeException("That passphrase didn't match.")
+            },
+        )
+        vm.rotate()
+
+        vm.updateRecoveryBackup("wrong passphrase")
+        var phase = vm.phase.first()
+        assertTrue("failure keeps the prompt: $phase", phase is RotateAdminRootPhase.DoneNeedsRecoveryUpdate)
+        assertEquals(
+            "That passphrase didn't match.",
+            (phase as RotateAdminRootPhase.DoneNeedsRecoveryUpdate).errorMessage,
+        )
+        assertFalse(phase.updating)
+
+        // Retryable: a second attempt (reEscrow now succeeds) lands in Done.
+        vm.updateRecoveryBackup("right passphrase")
+        phase = vm.phase.first()
+        assertTrue("retry must succeed: $phase", phase is RotateAdminRootPhase.Done)
+        assertEquals(newPub, (phase as RotateAdminRootPhase.Done).newAdminRootPubHex)
+        assertEquals(2, attempts)
+    }
+
+    @Test fun skipRecoveryUpdate_landsInDone_withoutReEscrow() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val newSeed = ByteArray(32) { 0x42 }
+        var escrowCalls = 0
+        val (vm, newPub) = rotateVm(
+            server, newSeed,
+            recoveryEnrolled = { true },
+            reEscrow = { _, _ -> escrowCalls++ },
+        )
+        vm.rotate()
+        assertTrue(vm.phase.first() is RotateAdminRootPhase.DoneNeedsRecoveryUpdate)
+
+        vm.skipRecoveryUpdate()
+
+        val phase = vm.phase.first()
+        assertTrue("skip must complete the flow: $phase", phase is RotateAdminRootPhase.Done)
+        assertEquals(newPub, (phase as RotateAdminRootPhase.Done).newAdminRootPubHex)
+        assertEquals(0, escrowCalls)
     }
 
     @Test fun rotateViewModel_refusesOnNonAdminDevice() = runTest {
