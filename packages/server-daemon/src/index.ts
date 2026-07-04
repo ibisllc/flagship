@@ -2295,7 +2295,7 @@ async function wireOwnerHandlers(deps: {
       // Final-flush: trigger an immediate BackupLoop pass (the epoch is recorded
       // by the §9 epoch-complete report the consumer POSTs after this resolves).
       backupFlush: async (_epoch) => {
-        deps.backupLoop?.runOnce([]);
+        await deps.backupLoop?.runOnce([]);
       },
       // Release routing = drop the tunnel + stop serving (runtime.close()).
       releaseRouting: () => runtime.close(),
