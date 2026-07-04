@@ -2645,7 +2645,14 @@ async function wireOwnerHandlers(deps: {
   // On a DENY, a top-level browser navigation gets the QR-login knock page.
   const accessEnforcement = buildAccessEnforcementHandler(
     access,
-    (req) => {
+    (req, appServiceRef) => {
+      // On the SNI-routed per-app proxy path the router already resolved the
+      // service that selected the container — enforce on THAT, never on the
+      // client-supplied Host (a tier-2 leader-routed share URL or a spoofed
+      // `curl --resolve` Host would otherwise skip the gate). v1-sec GAP 1.
+      if (appServiceRef) return appServiceRef;
+      // Daemon's own chain (no SNI-selected app): Host-based lookup, which is
+      // the only signal available there.
       const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
       const suffix = `.${env.serverFqdn.toLowerCase()}`;
       if (!host.endsWith(suffix) || host.length === suffix.length) return null;

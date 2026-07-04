@@ -304,6 +304,20 @@ export interface HttpResponse {
   body: string | Buffer;
 }
 
+/**
+ * A gate fronting the per-app proxy path. It receives the request AND the
+ * serviceId the SNI-router already resolved to select the app container
+ * (`null` on the daemon's own fallback surface). Service-access enforcement
+ * MUST key off `appServiceRef` — the trusted, SNI-selected service — not the
+ * client-supplied `Host`, or a tier-2 leader-routed share URL (whose Host is
+ * `<svc>.<user>.flagship.services`, not under the box wildcard) or a spoofed
+ * `curl --resolve` Host would skip the gate entirely (v1-sec GAP 1).
+ */
+export type AppGate = (
+  req: HttpRequest,
+  appServiceRef: string | null,
+) => Promise<HttpResponse | null>;
+
 export interface DaemonRuntime {
   /** Wait until the daemon is reachable end-to-end (cert installed). */
   ready(): Promise<void>;
@@ -378,7 +392,7 @@ export interface DaemonRuntime {
    * `restricted` service still served on a real box (caught by the live
    * gating e2e).
    */
-  addAppGate(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
+  addAppGate(h: AppGate): void;
   /**
    * Append a WebSocket upgrade handler. Handlers are tried in
    * registration order until one returns true (accepted + detached
@@ -691,7 +705,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   ];
   // Gates fronting the per-app proxy path (service-access enforcement +
   // knock endpoints). See DaemonRuntime.addAppGate.
-  const appGates: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
+  const appGates: Array<AppGate> = [];
   // Same idea for WebSocket upgrade handlers — `addUpgradeHandler`
   // pushes here, the onUpgrade closure consults this list before
   // falling through to the built-in sibling-handshake path.
@@ -739,11 +753,15 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     if (app) {
       handleHttpConnection(
         socket,
-        buildGatedAppHandler(appGates, (req) =>
-          handleAppRequest(app, req, {
-            injectorKey: identityKeypairForInjection,
-            updateServer: opts.updateServer,
-          }),
+        buildGatedAppHandler(
+          appGates,
+          (req) =>
+            handleAppRequest(app, req, {
+              injectorKey: identityKeypairForInjection,
+              updateServer: opts.updateServer,
+            }),
+          // Enforce on the SAME service the SNI selected, never the client Host.
+          app.serviceId,
         ),
       );
       return;
@@ -1285,12 +1303,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
  * SNI-routed app path.
  */
 export function buildGatedAppHandler(
-  gates: ReadonlyArray<(req: HttpRequest) => Promise<HttpResponse | null>>,
+  gates: ReadonlyArray<AppGate>,
   proxyToApp: (req: HttpRequest) => Promise<HttpResponse>,
+  /**
+   * The serviceId the SNI-router resolved to select this app container. Passed
+   * through to every gate so enforcement keys off the trusted, SNI-selected
+   * service — NOT the client `Host` (v1-sec GAP 1). `null` when unknown.
+   */
+  appServiceRef: string | null = null,
 ): (req: HttpRequest) => Promise<HttpResponse> {
   return async (req) => {
     for (const g of gates) {
-      const r = await g(req);
+      const r = await g(req, appServiceRef);
       if (r) return r;
     }
     return proxyToApp(req);
