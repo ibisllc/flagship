@@ -273,14 +273,8 @@ private fun copyToClipboard(ctx: Context, url: String) {
     cm.setPrimaryClip(ClipData.newPlainText("Flagship invite", url))
 }
 
-private fun fmtExpires(ms: Long): String {
-    val fmt = java.text.DateFormat.getDateTimeInstance(
-        java.text.DateFormat.SHORT,
-        java.text.DateFormat.SHORT,
-        java.util.Locale.US,
-    )
-    return fmt.format(java.util.Date(ms))
-}
+private fun fmtExpires(ms: Long): String =
+    com.flagshipserver.app.core.FlagshipDateFormat.format(ms, includeTime = true)
 
 /** Share-URL root for an installed app — the tier-1 canonical URL of THIS
  *  box's instance (`https://<urlLabel>.<server>.<user>.flagship.services`),

@@ -53,8 +53,7 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.PeerBackupViewModel
-import java.text.DateFormat
-import java.util.Date
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Locale
 
 @Composable
@@ -324,8 +323,7 @@ private fun shardPillKind(s: PeerBackupShardSummary): FSPillKind = when {
 
 private fun fmtDate(ms: Long): String {
     if (ms <= 0L) return "—"
-    val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
-    return fmt.format(Date(ms))
+    return FlagshipDateFormat.format(ms, includeTime = true)
 }
 
 private fun fmtBytes(n: Long): String {

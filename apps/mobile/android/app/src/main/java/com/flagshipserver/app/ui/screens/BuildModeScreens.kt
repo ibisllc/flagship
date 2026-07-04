@@ -626,12 +626,7 @@ private fun Badge(text: String) {
 
 private fun fmtTimestamp(ms: Long): String {
     if (ms <= 0) return ""
-    val fmt = java.text.DateFormat.getDateTimeInstance(
-        java.text.DateFormat.SHORT,
-        java.text.DateFormat.SHORT,
-        java.util.Locale.US,
-    )
-    return fmt.format(java.util.Date(ms))
+    return com.flagshipserver.app.core.FlagshipDateFormat.format(ms, includeTime = true)
 }
 
 // ── small shared cards ──────────────────────────────────────────
