@@ -28,7 +28,10 @@ import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keyst
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
-export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v1";
+// v2 — the claim canonical carries the acquirer's admin master root (Slice D
+// §9.8) so a rogue `.com` cannot swap the acquirer's admin anchor on a real
+// claim without breaking the acquirer's signature.
+export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
 export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 
 function defaultBytesToHex(b) {
@@ -63,13 +66,17 @@ export function canonicalOfferBytes({ serverDomain, transferNonce, issuedAt, exp
   );
 }
 
-/** ServerTransferClaim canonical bytes (acquirer IRK). serverDomain, nonce +
- *  acquirerUsername lowercased; acquirerIrkPub is its raw hex. */
+/** ServerTransferClaim canonical bytes (v2). serverDomain, nonce +
+ *  acquirerUsername lowercased; acquirerIrkPub is its raw hex.
+ *  acquirerAdminRootPubHex is the acquirer's admin master root — "" when the
+ *  account has no admin root (legacy). Must match the TS
+ *  canonicalServerTransferClaim byte-for-byte. */
 export function canonicalClaimBytes({
   serverDomain,
   transferNonce,
   acquirerUsername,
   acquirerIrkPubHex,
+  acquirerAdminRootPubHex,
   issuedAt,
 }) {
   return new TextEncoder().encode(
@@ -79,6 +86,7 @@ export function canonicalClaimBytes({
       String(transferNonce).toLowerCase(),
       String(acquirerUsername).toLowerCase(),
       String(acquirerIrkPubHex).toLowerCase(),
+      String(acquirerAdminRootPubHex ?? "").toLowerCase(),
       issuedAt,
     ].join("|"),
   );
@@ -435,6 +443,10 @@ export async function verifyTransferOffer(offer, deps = {}) {
  * @param {string} args.acquirerUsername
  * @param {Uint8Array} args.umk
  * @param {string} args.acquirerIrkPubHex   the acquirer's registered IRK pubkey
+ * @param {string} [args.acquirerAdminRootPubHex]  the acquirer's admin master
+ *        root pubkey (Slice D §9.8) — "" / absent when the account has no
+ *        admin root. Signature-covered (claim v2): the box will only re-pin
+ *        to THIS root, via the giver's admin-root-signed handoff proof.
  * @param {(umk, bytes) => Promise<Uint8Array>} args.signWithIrk
  */
 export async function submitTransferClaim(args, deps = {}) {
@@ -452,6 +464,7 @@ export async function submitTransferClaim(args, deps = {}) {
   const origin = deps.origin || controlApex();
   const issuedAt = (deps.now || Date.now)();
   const lowered = String(acquirerUsername).toLowerCase();
+  const adminRootHex = String(args.acquirerAdminRootPubHex ?? "").toLowerCase();
 
   const claimSig = await signWithIrk(
     umk,
@@ -460,6 +473,7 @@ export async function submitTransferClaim(args, deps = {}) {
       transferNonce: offer.transferNonce,
       acquirerUsername: lowered,
       acquirerIrkPubHex,
+      acquirerAdminRootPubHex: adminRootHex,
       issuedAt,
     }),
   );
@@ -469,6 +483,7 @@ export async function submitTransferClaim(args, deps = {}) {
       transferNonce: offer.transferNonce,
       acquirerUsername: lowered,
       acquirerIrkPub: String(acquirerIrkPubHex).toLowerCase(),
+      acquirerAdminRootPub: adminRootHex,
       issuedAt,
     },
     claimSignature: toHex(claimSig),
@@ -530,6 +545,10 @@ export async function pollTransferClaim(args, deps = {}) {
     acquirerIrkPub: body.acquirerIrkPub,
     acquirerUsername: body.acquirerUsername,
     newServerDomain: body.newServerDomain,
+    // Slice D §9.8 — the acquirer's admin anchor the CLAIM committed to ("" =
+    // none; null on a pre-v2 row). The giver folds it into the admin-root
+    // handoff proof so the box can re-pin.
+    acquirerAdminRootPub: body.acquirerAdminRootPub ?? null,
   };
 }
 

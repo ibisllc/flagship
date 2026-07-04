@@ -150,7 +150,35 @@ describe("transfer-a-box — webapp", () => {
     expect(verifyServerTransferOffer(offer, sig, aliceIrk.publicKey)).toBe(true);
   });
 
-  it("claim canonical bytes verify under @flagship/protocol", async () => {
+  it("claim canonical bytes (v2, with admin root) verify under @flagship/protocol", async () => {
+    const lib = await loadLib();
+    const adminRoot = "1a".repeat(32);
+    const bytes = lib.canonicalClaimBytes({
+      serverDomain: HOST,
+      transferNonce: "cd".repeat(32),
+      acquirerUsername: "bob",
+      acquirerIrkPubHex: hex(bobIrk.publicKey),
+      acquirerAdminRootPubHex: adminRoot,
+      issuedAt: 1800,
+    });
+    const sig = ed.sign(bytes, bobIrk.privateKey);
+    expect(
+      verifyServerTransferClaim(
+        {
+          serverDomain: HOST,
+          transferNonce: "cd".repeat(32),
+          acquirerUsername: "bob",
+          acquirerIrkPub: bobIrk.publicKey,
+          acquirerAdminRootPubHex: adminRoot,
+          issuedAt: 1800,
+        },
+        sig,
+        bobIrk.publicKey,
+      ),
+    ).toBe(true);
+  });
+
+  it('claim canonical bytes default the admin root to "" (legacy account)', async () => {
     const lib = await loadLib();
     const bytes = lib.canonicalClaimBytes({
       serverDomain: HOST,
@@ -167,6 +195,7 @@ describe("transfer-a-box — webapp", () => {
           transferNonce: "cd".repeat(32),
           acquirerUsername: "bob",
           acquirerIrkPub: bobIrk.publicKey,
+          acquirerAdminRootPubHex: "",
           issuedAt: 1800,
         },
         sig,
