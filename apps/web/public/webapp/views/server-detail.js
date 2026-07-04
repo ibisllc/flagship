@@ -1464,10 +1464,12 @@ async function openMigrateDialog(body) {
     }
     if (s.phase === "pre-seeded") {
       actionBtn.textContent = "Hand off to the new box now";
+      actionBtn.disabled = false;
       actionBtn.classList.remove("hidden");
       actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ true);
     } else if (s.phase === "ready") {
       actionBtn.textContent = "Freeze old server and hand off";
+      actionBtn.disabled = false;
       actionBtn.classList.remove("hidden");
       actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ false);
     }
