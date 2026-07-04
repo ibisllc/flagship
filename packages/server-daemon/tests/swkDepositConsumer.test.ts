@@ -13,6 +13,7 @@
  *   - swkHex-present path: the consumer is gated off entirely (proven via the helper).
  */
 
+import { unsealerFor } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
   buildSwkDelivery,
@@ -92,7 +93,7 @@ function harness(overrides?: { fetchImpl?: typeof fetch; markerStore?: SwkClaimM
     opts: (irk: Keypair, boxKey: Keypair) => ({
       serverDomain: DOMAIN,
       ownerIrkPub: irk.publicKey,
-      boxIdentityPriv: boxKey.privateKey,
+      unsealToBox: unsealerFor(boxKey.privateKey),
       controlPlaneBaseUrl: "https://flagshipserver.com",
       persistSwk: async (h: string) => {
         persisted.push(h);
@@ -116,7 +117,7 @@ describe("decodeAndVerifySwkCarrier", () => {
     const out = decodeAndVerifySwkCarrier({
       sealedHex: carrier({ irk, boxKey, swk: SWK }),
       ownerIrkPub: irk.publicKey,
-      boxIdentityPriv: boxKey.privateKey,
+      unsealToBox: unsealerFor(boxKey.privateKey),
       serverDomain: DOMAIN,
     });
     expect(out).toBe(hex(SWK));
@@ -130,7 +131,7 @@ describe("decodeAndVerifySwkCarrier", () => {
       decodeAndVerifySwkCarrier({
         sealedHex: carrier({ irk, boxKey, swk: SWK }),
         ownerIrkPub: wrong.publicKey,
-        boxIdentityPriv: boxKey.privateKey,
+        unsealToBox: unsealerFor(boxKey.privateKey),
         serverDomain: DOMAIN,
       }),
     ).toBeNull();
@@ -144,7 +145,7 @@ describe("decodeAndVerifySwkCarrier", () => {
       decodeAndVerifySwkCarrier({
         sealedHex: carrier({ irk, boxKey, swk: SWK }),
         ownerIrkPub: irk.publicKey,
-        boxIdentityPriv: otherBox.privateKey,
+        unsealToBox: unsealerFor(otherBox.privateKey),
         serverDomain: DOMAIN,
       }),
     ).toBeNull();
@@ -157,7 +158,7 @@ describe("decodeAndVerifySwkCarrier", () => {
       decodeAndVerifySwkCarrier({
         sealedHex: carrier({ irk, boxKey, swk: SWK, domain: "evil.bob.flagship.services" }),
         ownerIrkPub: irk.publicKey,
-        boxIdentityPriv: boxKey.privateKey,
+        unsealToBox: unsealerFor(boxKey.privateKey),
         serverDomain: DOMAIN,
       }),
     ).toBeNull();
@@ -171,7 +172,7 @@ describe("decodeAndVerifySwkCarrier", () => {
         decodeAndVerifySwkCarrier({
           sealedHex: junk,
           ownerIrkPub: irk.publicKey,
-          boxIdentityPriv: boxKey.privateKey,
+          unsealToBox: unsealerFor(boxKey.privateKey),
           serverDomain: DOMAIN,
         }),
       ).toBeNull();
@@ -258,7 +259,7 @@ describe("claimSwkDeposit", () => {
     const out = await claimSwkDeposit({
       serverDomain: DOMAIN,
       ownerIrkPub: irk.publicKey,
-      boxIdentityPriv: boxKey.privateKey,
+      unsealToBox: unsealerFor(boxKey.privateKey),
       controlPlaneBaseUrl: "https://flagshipserver.com",
       persistSwk: async () => {
         throw new Error("disk full");

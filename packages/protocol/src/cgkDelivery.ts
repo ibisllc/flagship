@@ -123,8 +123,12 @@ export function openAndVerifyCgkDelivery(args: {
   signature: Bytes;
   /** The config-pinned owner IRK pubkey — the only trust anchor. */
   ownerIrkPub: Bytes;
-  /** The box's Ed25519 identity SEED (its 32-byte private key). */
-  boxIdentityPriv: Bytes;
+  /** The box's Ed25519 identity SEED (its 32-byte private key). Legacy form;
+   *  prefer `unsealToBox`. */
+  boxIdentityPriv?: Bytes;
+  /** Custodian-backed unseal — used instead of `boxIdentityPriv` when present,
+   *  so the raw seed never surfaces. Exactly one must be supplied. */
+  unsealToBox?: (blob: Bytes) => Bytes;
   /** Expected box FQDN — the delivery must name THIS box. */
   serverDomain: string;
 }): Bytes | null {
@@ -135,7 +139,13 @@ export function openAndVerifyCgkDelivery(args: {
     if (!verifyCgkDelivery(args.delivery, args.signature, args.ownerIrkPub)) {
       return null;
     }
-    const cgk = openSealedFromEd25519Recipient(args.delivery.sealed, args.boxIdentityPriv);
+    const unseal =
+      args.unsealToBox ??
+      (args.boxIdentityPriv
+        ? (blob: Bytes) => openSealedFromEd25519Recipient(blob, args.boxIdentityPriv!)
+        : null);
+    if (!unseal) return null;
+    const cgk = unseal(args.delivery.sealed);
     if (cgk.length !== 32) return null;
     return cgk;
   } catch {

@@ -1,6 +1,6 @@
+import type { SwkOps } from "./keyCustodian.js";
 import {
   deriveServiceMemberStableId,
-  deriveServiceSecret,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
@@ -274,7 +274,7 @@ export class AppMembership {
     public readonly serviceId: string,
     ownerUserId: string,
     ownerIrkPub: Bytes,
-    swk: Bytes,
+    swk: SwkOps,
     opts: MembershipStoreOptions = {},
     /** Slice D (D-2) — the pinned admin master root; when present, invite-create
      *  + membership mutation are admin-gated. Absent ⇒ legacy owner-IRK. */
@@ -287,7 +287,7 @@ export class AppMembership {
     };
     this.invites = new InviteStore(serviceId, ownerIrkPub, storeOpts);
     this.members = new MembershipStore(serviceId, ownerUserId, ownerIrkPub, storeOpts);
-    this.appSecret = deriveServiceSecret(swk, serviceId);
+    this.appSecret = swk.deriveServiceSecret(serviceId);
   }
 
   /** Redeem an invite, atomically marking the nonce used and adding the member. */

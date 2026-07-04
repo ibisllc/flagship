@@ -3,6 +3,7 @@ import { createServer as createTlsServer, type Server as TlsServer, type TLSSock
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
+import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./serviceProxy.js";
@@ -41,8 +42,19 @@ import type { UpdateServer } from "./updateServer.js";
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
   serverFqdn: string;
-  /** 32-byte server identity private key. The pubkey must already be registered. */
+  /**
+   * 32-byte server identity private key. The pubkey must already be registered.
+   * Still consumed for the peer sibling-handshake (`myStk` needs the raw
+   * keypair). Every OTHER identity use goes through `custodian` — the proxy and
+   * tunnel client never see this seed.
+   */
   identityPrivKey: Uint8Array;
+  /**
+   * The box's KeyCustodian (BoxSigner slice). The internet-facing app-proxy
+   * signs injected identity headers and the tunnel client signs its HELLO
+   * through this, so neither closure holds the raw identity `Keypair`.
+   */
+  custodian: BoxSigner;
   /** WebSocket URL of the .services tunnel hub. */
   tunnelHubUrl: string;
   /** Base URL of the .com control plane (for DNS-01 publish/delete). */
@@ -236,7 +248,9 @@ export interface DaemonRuntimeOptions {
      *  present ⇒ service-membership invite/mutation are admin-gated. */
     hostAdminRootPub?: Bytes;
     hostIrk?: Keypair | null;
-    swk?: Bytes;
+    /** The custodian's SwkOps slice (per-app secret derivation + env sealing);
+     *  presence gates the ServicePlatform on. Never the raw SWK. */
+    swk?: SwkOps;
     /**
      * Optional browser-feature wiring. The caller builds + starts
      * BrowserManager / TabRegistry / DomainGate / PhonePipe externally
@@ -757,7 +771,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           appGates,
           (req) =>
             handleAppRequest(app, req, {
-              injectorKey: identityKeypairForInjection,
+              injector: opts.custodian,
               updateServer: opts.updateServer,
             }),
           // Enforce on the SAME service the SNI selected, never the client Host.
@@ -830,17 +844,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
 
   // The same Ed25519 keypair the daemon uses for its server-identity
   // (signing tunnel HELLO, etc.) doubles as the X-Flagship-Signature
-  // injector key — apps that want to verify the signature fetch the
-  // pubkey from `GET /.flagship/runtime-pubkey`. (Future: derive a
-  // separate injection-only key from SWK so the identity-key blast
-  // radius stays minimal.)
-  // (Defined below; built once we have the keypair.)
-  // Identity keypair derived from the priv key.
+  // injector key — but the proxy + tunnel now sign through `opts.custodian`,
+  // NOT this raw keypair. `identity` remains ONLY for the peer sibling-
+  // handshake (`myStk`), which needs the actual keypair; every internet-facing
+  // signer is custodian-backed.
   const identity: Keypair = {
     privateKey: opts.identityPrivKey,
     publicKey: ed.getPublicKey(opts.identityPrivKey),
   };
-  const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
   // PER-BOX addressing (cert model A′): the box claims its apex
@@ -905,7 +916,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // us) gets force-closed and reconnected within ~90s.
   const tunnel: SupervisedTunnelClient = superviseTunnelClient({
     hubUrl: opts.tunnelHubUrl,
-    signingKey: identity,
+    sign: (msg) => opts.custodian.signAsBox(msg),
     getEntitlements: opts.entitlements,
     // Under ENFORCE a locked-down box refuses NEW streams (returns null →
     // the hub gets FRAME_CLOSE_REMOTE) while the WS itself stays up for

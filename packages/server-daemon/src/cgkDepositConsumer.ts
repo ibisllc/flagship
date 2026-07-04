@@ -52,7 +52,8 @@ function bytesToHex(b: Uint8Array): string {
 export function decodeAndVerifyCgkCarrier(args: {
   sealedHex: string;
   ownerIrkPub: Uint8Array;
-  boxIdentityPriv: Uint8Array;
+  /** Custodian-backed unseal (opens a blob sealed to the box identity). */
+  unsealToBox: (blob: Uint8Array) => Uint8Array;
   serverDomain: string;
 }): string | null {
   const parsed = carrierHexToCgkDelivery(args.sealedHex);
@@ -61,7 +62,7 @@ export function decodeAndVerifyCgkCarrier(args: {
     delivery: parsed.delivery,
     signature: parsed.signature,
     ownerIrkPub: args.ownerIrkPub,
-    boxIdentityPriv: args.boxIdentityPriv,
+    unsealToBox: args.unsealToBox,
     serverDomain: args.serverDomain,
   });
   if (!cgk || cgk.length !== 32) return null;
@@ -100,8 +101,8 @@ export interface ClaimCgkDepositOptions {
   serverDomain: string;
   /** The config-pinned owner IRK pubkey — the only trust anchor. */
   ownerIrkPub: Uint8Array;
-  /** The box's Ed25519 identity SEED (its 32-byte private key) — unseals the CGK. */
-  boxIdentityPriv: Uint8Array;
+  /** Custodian-backed unseal — opens the CGK carrier sealed to the box identity. */
+  unsealToBox: (blob: Uint8Array) => Uint8Array;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /**
@@ -166,7 +167,7 @@ export async function claimCgkDeposit(opts: ClaimCgkDepositOptions): Promise<Cgk
   const cgkHex = decodeAndVerifyCgkCarrier({
     sealedHex,
     ownerIrkPub: opts.ownerIrkPub,
-    boxIdentityPriv: opts.boxIdentityPriv,
+    unsealToBox: opts.unsealToBox,
     serverDomain: opts.serverDomain,
   });
   if (!cgkHex) {

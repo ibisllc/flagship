@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { boxSigner, swkOps } from "../helpers/keyCustody.js";
+import type { SwkOps } from "../../src/keyCustodian.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,10 +25,10 @@ function makeKey(): Keypair {
   crypto.getRandomValues(priv);
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
-  return b;
+  return swkOps(b);
 }
 function jsonReply(status: number, body: unknown) {
   return {
@@ -106,7 +108,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -160,7 +162,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -193,7 +195,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -285,7 +287,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd: teeingCmd,
@@ -345,7 +347,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -388,7 +390,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -453,7 +455,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
@@ -531,7 +533,7 @@ describe("buildDeploySession", () => {
       });
       const deploy = buildDeploySession({
         servicePlatform: platform,
-        hostIrk: irk,
+        signer: boxSigner(irk),
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,

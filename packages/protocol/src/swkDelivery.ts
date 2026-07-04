@@ -121,8 +121,13 @@ export function openAndVerifySwkDelivery(args: {
   signature: Bytes;
   /** The config-pinned owner IRK pubkey — the only trust anchor. */
   ownerIrkPub: Bytes;
-  /** The box's Ed25519 identity SEED (its 32-byte private key). */
-  boxIdentityPriv: Bytes;
+  /** The box's Ed25519 identity SEED (its 32-byte private key). Legacy form;
+   *  prefer `unsealToBox` so the seed stays behind a custodian. */
+  boxIdentityPriv?: Bytes;
+  /** Custodian-backed unseal (opens a blob sealed to the box identity). When
+   *  present it is used instead of `boxIdentityPriv`, so the caller never
+   *  surfaces the raw seed. Exactly one of the two must be supplied. */
+  unsealToBox?: (blob: Bytes) => Bytes;
   /** Expected box FQDN — the delivery must name THIS box. */
   serverDomain: string;
 }): Bytes | null {
@@ -133,7 +138,13 @@ export function openAndVerifySwkDelivery(args: {
     if (!verifySwkDelivery(args.delivery, args.signature, args.ownerIrkPub)) {
       return null;
     }
-    const swk = openSealedFromEd25519Recipient(args.delivery.sealed, args.boxIdentityPriv);
+    const unseal =
+      args.unsealToBox ??
+      (args.boxIdentityPriv
+        ? (blob: Bytes) => openSealedFromEd25519Recipient(blob, args.boxIdentityPriv!)
+        : null);
+    if (!unseal) return null;
+    const swk = unseal(args.delivery.sealed);
     if (swk.length !== 32) return null;
     return swk;
   } catch {

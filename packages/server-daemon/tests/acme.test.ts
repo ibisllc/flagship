@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveSWK } from "@flagship/protocol";
+import { swkOps } from "./helpers/keyCustody.js";
 import {
   alpnChallengeDigest,
   deriveTlsKey,
@@ -37,7 +38,7 @@ describe("EncryptedCertStore", () => {
   const dummyKey = "-----BEGIN PRIVATE KEY-----\nSECRETSECRETSECRET\n-----END PRIVATE KEY-----";
 
   it("roundtrips a cert + private key", () => {
-    const store = new EncryptedCertStore(swk, "srv-1");
+    const store = new EncryptedCertStore(swkOps(swk), "srv-1");
     const notAfter = Date.now() + 90 * 24 * 60 * 60 * 1000;
     store.put("harry", dummyCert, dummyKey, ["*.harry.flagship.services"], notAfter);
     const got = store.get("harry");
@@ -48,7 +49,7 @@ describe("EncryptedCertStore", () => {
   });
 
   it("get() with the wrong server's SWK fails to decrypt", () => {
-    const storeA = new EncryptedCertStore(swk, "srv-1");
+    const storeA = new EncryptedCertStore(swkOps(swk), "srv-1");
     storeA.put("harry", dummyCert, dummyKey, [], Date.now() + 1e9);
 
     // Build a "second store" with a different SWK and inject the encrypted blob.
@@ -56,29 +57,29 @@ describe("EncryptedCertStore", () => {
     // when called against ciphertext encrypted under a different key. The simplest
     // way: derive a different TLS key by using a different serverId.
     const otherSwk = deriveSWK(umk, "srv-2");
-    const storeB = new EncryptedCertStore(otherSwk, "srv-2");
+    const storeB = new EncryptedCertStore(swkOps(otherSwk), "srv-2");
     expect(storeB.has("harry")).toBe(false); // independent store
   });
 
   it("needsRenewal returns true for absent certs", () => {
-    const store = new EncryptedCertStore(swk, "srv-1");
+    const store = new EncryptedCertStore(swkOps(swk), "srv-1");
     expect(store.needsRenewal("missing")).toBe(true);
   });
 
   it("needsRenewal returns true when notAfter is within the renewal window", () => {
-    const store = new EncryptedCertStore(swk, "srv-1");
+    const store = new EncryptedCertStore(swkOps(swk), "srv-1");
     store.put("soon", dummyCert, dummyKey, [], Date.now() + 5 * 24 * 60 * 60 * 1000); // 5 days
     expect(store.needsRenewal("soon")).toBe(true);
   });
 
   it("needsRenewal returns false when cert is fresh", () => {
-    const store = new EncryptedCertStore(swk, "srv-1");
+    const store = new EncryptedCertStore(swkOps(swk), "srv-1");
     store.put("fresh", dummyCert, dummyKey, [], Date.now() + 80 * 24 * 60 * 60 * 1000); // 80 days
     expect(store.needsRenewal("fresh")).toBe(false);
   });
 
   it("list returns all stored cert names without exposing key material", () => {
-    const store = new EncryptedCertStore(swk, "srv-1");
+    const store = new EncryptedCertStore(swkOps(swk), "srv-1");
     store.put("a", dummyCert, dummyKey, ["a.harry.flagship.services"], 1);
     store.put("b", dummyCert, dummyKey, ["b.harry.flagship.services"], 2);
     const list = store.list();

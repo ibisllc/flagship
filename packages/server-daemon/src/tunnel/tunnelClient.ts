@@ -23,7 +23,6 @@ import {
   signTunnelHelloV2,
   type ServiceEntitlement,
   type Bytes,
-  type Keypair,
   type RootEntitlement,
   type TunnelHelloV2,
 } from "@flagship/protocol";
@@ -88,8 +87,12 @@ export const defaultWebSocketFactory: WebSocketFactory = Object.assign(
 export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
-  /** Pod's STK keypair (signs the HELLO envelope). */
-  signingKey: Keypair;
+  /**
+   * Signs the HELLO envelope's canonical bytes with the pod's STK. A closure,
+   * not the raw keypair: the internet-facing tunnel client never holds the box
+   * identity seed — it holds only "sign this" (custodian-backed in production).
+   */
+  sign: (msg: Bytes) => Bytes;
   /**
    * Source of fresh entitlement bundles. Called every HELLO so the
    * pod can pick up rotated certs on the fly. The serverId for HELLO
@@ -225,7 +228,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       nonce,
       issuedAt,
     };
-    const signature = signTunnelHelloV2(envelope, opts.signingKey);
+    const signature = signTunnelHelloV2(envelope, opts.sign);
     const payload = JSON.stringify({
       version: 2,
       serverId: bundle.rootEntitlement.podCanonical,
@@ -591,7 +594,7 @@ export function superviseTunnelClient(
     try {
       client = startClient({
         hubUrl: opts.hubUrl,
-        signingKey: opts.signingKey,
+        sign: opts.sign,
         getEntitlements: opts.getEntitlements,
         resolveBackend: opts.resolveBackend,
         onDomainGranted: opts.onDomainGranted,

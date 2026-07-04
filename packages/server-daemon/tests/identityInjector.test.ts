@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { swkOps, boxSigner } from "./helpers/keyCustody.js";
 import {
   deriveIRK,
   deriveSWK,
@@ -21,7 +22,7 @@ const strangerUmk = { seed: new Uint8Array(32).fill(99) };
 const ownerIrk = deriveIRK(ownerUmk);
 const sarahIrk = deriveIRK(sarahUmk);
 const strangerIrk = deriveIRK(strangerUmk);
-const swk = deriveSWK(ownerUmk, "srv-1");
+const swk = swkOps(deriveSWK(ownerUmk, "srv-1"));
 const APP = "habit-tracker";
 
 function makePairedApp(opts: { withSarah: boolean; publicRoutes?: string[] }) {
@@ -50,7 +51,7 @@ function makePairedApp(opts: { withSarah: boolean; publicRoutes?: string[] }) {
     app,
     resolveSession: (tok) => (tok ? sessions.get(tok) ?? null : null),
     publicRoutes: opts.publicRoutes,
-    signer: { privateKey: runtimeKey.privateKey, publicKey: runtimeKey.publicKey },
+    signer: boxSigner(runtimeKey),
   });
   return { injector, runtimePub: runtimeKey.publicKey };
 }

@@ -12,6 +12,7 @@
  * present token), 404, rejection-without-adding (forged sig / wrong-box seal /
  * wrong-box order / junk), and the offline-embed add + rejection.
  */
+import { unsealerFor } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
   ed,
@@ -109,7 +110,7 @@ function opts(irk: Keypair, boxKey: Keypair, over?: {
   return {
     serverFqdn: DOMAIN,
     ownerIrkPub: irk.publicKey,
-    boxIdentityPriv: boxKey.privateKey,
+    unsealToBox: unsealerFor(boxKey.privateKey),
     controlPlaneBaseUrl: "https://flagshipserver.com",
     pairedSessions: over?.pairedSessions ?? inMemSink(),
     markerStore: over?.markerStore ?? inMemMarker(),

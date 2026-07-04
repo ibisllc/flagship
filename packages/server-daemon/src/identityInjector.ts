@@ -1,6 +1,7 @@
 import { ed } from "@flagship/protocol";
 import type { AppMembership } from "./membership.js";
 import type { Bytes } from "@flagship/protocol";
+import type { BoxSigner } from "./keyCustodian.js";
 
 /**
  * Stamps signed identity headers on inbound HTTP requests after authenticating
@@ -30,8 +31,9 @@ export interface IdentityInjectorOptions {
    * anonymous visitors with `X-Flagship-User: anonymous`.
    */
   publicRoutes?: string[];
-  /** Server-runtime keypair used to sign the injected headers. */
-  signer: { privateKey: Bytes; publicKey: Bytes };
+  /** Box-identity signer (custodian slice) for the injected headers. Narrowed
+   *  to `signAsBox` — the injector never holds the raw private key. */
+  signer: Pick<BoxSigner, "signAsBox">;
   /** Header TTL for replay protection. Default 5 min. */
   headerTtlMs?: number;
   now?: () => number;
@@ -117,7 +119,7 @@ export class IdentityInjector {
   private signMember(stableId: string, role: string): Decision {
     const issuedAt = this.now();
     const canonical = canonicalHeaderBytes(stableId, role, issuedAt);
-    const sig = ed.sign(canonical, this.signer.privateKey);
+    const sig = this.signer.signAsBox(canonical);
     return {
       action: "allow",
       headers: {
@@ -132,7 +134,7 @@ export class IdentityInjector {
   private signAnonymous(): Decision {
     const issuedAt = this.now();
     const canonical = canonicalHeaderBytes("anonymous", "anonymous", issuedAt);
-    const sig = ed.sign(canonical, this.signer.privateKey);
+    const sig = this.signer.signAsBox(canonical);
     return {
       action: "allow-anonymous",
       headers: {

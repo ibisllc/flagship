@@ -28,6 +28,7 @@ import {
   type UninstallServiceRequest,
 } from "@flagship/protocol";
 import type { AppEnv } from "./serviceEnvStore.js";
+import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec } from "./serviceRunner.js";
 import { AppMembership } from "./membership.js";
 import {
@@ -75,13 +76,13 @@ export interface ServicePlatformDeps {
    */
   hostIdentityPub?: Bytes;
   /**
-   * Server Working Key — derives per-app secrets for member stable-id
-   * derivation. Per `key_hierarchy.md` this is provisioned by the
-   * phone at first boot. Until that's wired, callers pass an env-
-   * derived placeholder; per-app derivation still works (the values
-   * just rotate when SWK rotates).
+   * SWK-derived operations (the KeyCustodian's `SwkOps` slice) used to derive
+   * per-app secrets for member stable-id derivation. The platform holds only
+   * the operation surface, never the raw SWK. Per `key_hierarchy.md` the SWK
+   * is provisioned by the phone at first boot; per-app derivation rotates when
+   * the SWK rotates.
    */
-  swk: Bytes;
+  swk: SwkOps;
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
   /**

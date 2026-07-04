@@ -9,14 +9,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { deriveSWK } from "@flagship/protocol";
+import { swkOps } from "../helpers/keyCustody.js";
 import {
   FileBuildCredentialStore,
   InMemoryBuildCredentialStore,
   type BuildCredentialStore,
 } from "../../src/llm/buildCredentialStore.js";
 
-const swk = deriveSWK({ seed: new Uint8Array(32).fill(9) }, "srv-cred");
-const otherSwk = deriveSWK({ seed: new Uint8Array(32).fill(1) }, "srv-cred");
+const swk = swkOps(deriveSWK({ seed: new Uint8Array(32).fill(9) }, "srv-cred"));
+const otherSwk = swkOps(deriveSWK({ seed: new Uint8Array(32).fill(1) }, "srv-cred"));
 
 const SECRET = "sk-LIVE-do-not-leak-7a3f";
 

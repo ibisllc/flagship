@@ -2,6 +2,9 @@ import { gcm } from "@noble/ciphers/aes";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import type { Bytes, ServerId } from "@flagship/protocol";
+// Type-only back-import: erased at runtime, so no import cycle with the
+// custodian (which imports the `deriveTlsKey` VALUE from this file).
+import type { SwkOps } from "./keyCustodian.js";
 
 /**
  * TLS subkey: derived from SWK via HKDF; used to encrypt the per-server TLS
@@ -40,8 +43,10 @@ export class EncryptedCertStore {
   private readonly store = new Map<string, StoredCert>();
   private readonly tlsKey: Bytes;
 
-  constructor(swk: Bytes, serverId: ServerId) {
-    this.tlsKey = deriveTlsKey(swk, serverId);
+  constructor(swk: SwkOps, serverId: ServerId) {
+    // The custodian derives the TLS-at-rest subkey from the SWK it holds; the
+    // raw SWK never reaches this store.
+    this.tlsKey = swk.deriveTlsKey(serverId);
   }
 
   put(name: string, certPem: string, privateKeyPem: string, names: string[], notAfter: number): void {

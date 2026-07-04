@@ -62,7 +62,8 @@ function bytesToHex(b: Uint8Array): string {
 export function decodeAndVerifySwkCarrier(args: {
   sealedHex: string;
   ownerIrkPub: Uint8Array;
-  boxIdentityPriv: Uint8Array;
+  /** Custodian-backed unseal (opens a blob sealed to the box identity). */
+  unsealToBox: (blob: Uint8Array) => Uint8Array;
   serverDomain: string;
 }): string | null {
   const parsed = carrierHexToSwkDelivery(args.sealedHex);
@@ -71,7 +72,7 @@ export function decodeAndVerifySwkCarrier(args: {
     delivery: parsed.delivery,
     signature: parsed.signature,
     ownerIrkPub: args.ownerIrkPub,
-    boxIdentityPriv: args.boxIdentityPriv,
+    unsealToBox: args.unsealToBox,
     serverDomain: args.serverDomain,
   });
   if (!swk || swk.length !== 32) return null;
@@ -110,8 +111,8 @@ export interface ClaimSwkDepositOptions {
   serverDomain: string;
   /** The config-pinned owner IRK pubkey — the only trust anchor. */
   ownerIrkPub: Uint8Array;
-  /** The box's Ed25519 identity SEED (its 32-byte private key) — unseals the SWK. */
-  boxIdentityPriv: Uint8Array;
+  /** Custodian-backed unseal — opens the SWK carrier sealed to the box identity. */
+  unsealToBox: (blob: Uint8Array) => Uint8Array;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /**
@@ -177,7 +178,7 @@ export async function claimSwkDeposit(opts: ClaimSwkDepositOptions): Promise<Swk
   const swkHex = decodeAndVerifySwkCarrier({
     sealedHex,
     ownerIrkPub: opts.ownerIrkPub,
-    boxIdentityPriv: opts.boxIdentityPriv,
+    unsealToBox: opts.unsealToBox,
     serverDomain: opts.serverDomain,
   });
   if (!swkHex) {

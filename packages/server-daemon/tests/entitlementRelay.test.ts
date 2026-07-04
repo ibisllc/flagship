@@ -15,6 +15,7 @@
  *     null without throwing.
  */
 
+import { boxSigner } from "./helpers/keyCustody.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -95,7 +96,7 @@ describe("entitlementRelay — SecretRequest", () => {
     const nonce = new Uint8Array(32).fill(0x07);
     const { request, signatureHex } = buildEntitlementSecretRequest({
       serverDomain: DOMAIN,
-      identity: stk,
+      signer: boxSigner(stk),
       nonce,
       issuedAt: 1_700_000_000_000,
     });
@@ -246,7 +247,7 @@ describe("entitlementRelay — full handshake", () => {
     ]);
     const result = await fetchEntitlementViaRelay({
       serverDomain: DOMAIN,
-      identity: stk,
+      signer: boxSigner(stk),
       ownerIrkPub: irk.publicKey,
       controlPlaneBaseUrl: CONTROL,
       entitlementBundlePath: path,
@@ -284,7 +285,7 @@ describe("entitlementRelay — full handshake", () => {
     );
     const result = await fetchEntitlementViaRelay({
       serverDomain: DOMAIN,
-      identity: stk,
+      signer: boxSigner(stk),
       ownerIrkPub: irk.publicKey,
       controlPlaneBaseUrl: CONTROL,
       entitlementBundlePath: path,
@@ -314,7 +315,7 @@ describe("entitlementRelay — full handshake", () => {
     }) as unknown as typeof fetch;
     const result = await fetchEntitlementViaRelay({
       serverDomain: DOMAIN,
-      identity: stk,
+      signer: boxSigner(stk),
       ownerIrkPub: irk.publicKey,
       controlPlaneBaseUrl: CONTROL,
       entitlementBundlePath: path,
@@ -350,7 +351,7 @@ describe("entitlementRelay — full handshake", () => {
     ]);
     const result = await fetchEntitlementViaRelay({
       serverDomain: DOMAIN,
-      identity: stk,
+      signer: boxSigner(stk),
       ownerIrkPub: irk.publicKey,
       controlPlaneBaseUrl: CONTROL,
       entitlementBundlePath: path,
