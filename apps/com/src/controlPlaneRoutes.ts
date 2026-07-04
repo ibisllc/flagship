@@ -71,6 +71,15 @@ import {
   handlePostEpochComplete,
   handlePostAckOld,
   handlePostAckNew,
+  handlePostMigrationStart,
+  handleGetMigration,
+  handleGetMigrationAssignment,
+  handlePostMigrationAttach,
+  handlePostMigrationPreSeeded,
+  handlePostMigrationConfirmReady,
+  handlePostMigrationFreeze,
+  handlePostMigrationTakeOver,
+  handlePostMigrationAbort,
   handlePostTransferOffer,
   handlePostTransferClaim,
   handleGetTransferClaim,
@@ -564,6 +573,19 @@ const ROUTE_RE = {
   DECOMMISSION_ACK_NEW: /^\/api\/server\/([^/]+)\/decommission\/ack-new$/,
   DECOMMISSION: /^\/api\/server\/([^/]+)\/decommission$/,
   EVICTION_CHAIN: /^\/api\/server\/([^/]+)\/eviction-chain$/,
+  // Server-migration orchestration (docs/server-migration.md). The bare
+  // `migration` path is method-discriminated (POST admin-signed initiate /
+  // GET public phase state); the sub-path literals are anchored with `$` and
+  // matched BEFORE the bare path. `migration-assignment` is the NEW box's
+  // discovery read, keyed by ITS OWN registered pod FQDN.
+  MIGRATION_ATTACH: /^\/api\/server\/([^/]+)\/migration\/attach$/,
+  MIGRATION_PRE_SEEDED: /^\/api\/server\/([^/]+)\/migration\/pre-seeded$/,
+  MIGRATION_CONFIRM_READY: /^\/api\/server\/([^/]+)\/migration\/confirm-ready$/,
+  MIGRATION_FREEZE: /^\/api\/server\/([^/]+)\/migration\/freeze$/,
+  MIGRATION_TAKE_OVER: /^\/api\/server\/([^/]+)\/migration\/take-over$/,
+  MIGRATION_ABORT: /^\/api\/server\/([^/]+)\/migration\/abort$/,
+  MIGRATION: /^\/api\/server\/([^/]+)\/migration$/,
+  MIGRATION_ASSIGNMENT: /^\/api\/server\/([^/]+)\/migration-assignment$/,
   // Transfer-a-box broker (docs/account-deletion-and-name-reclaim.md §4). ONE
   // path discriminated by method:
   //   POST .../transfer/offer       giver deposit (IRK mailbox-auth, signed offer)
@@ -1724,6 +1746,93 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.EVICTION_CHAIN))) {
       return finishPlain(
         await handleGetEvictionChain(buildDecommissionDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Server-migration orchestration (docs/server-migration.md). Initiate /
+    // confirm-ready / abort are admin-signed + owner mailbox-authed (SENSITIVE);
+    // attach / pre-seeded / take-over are the new box's STK-signed phase acks;
+    // freeze delegates into the eviction lane after session validation. The
+    // GETs are public — everything served is admin-signed or phase state, and
+    // both boxes re-verify the order under their pinned authority.
+    const buildMigrationDeps = () => ({
+      servers: storage.servers,
+      usernames: storage.usernames,
+      serverMigrations: storage.serverMigrations,
+      serverEvictions: storage.serverEvictions,
+      mailbox: buildSecretMailboxDeps(),
+      grants: storage.deviceCapabilityGrants,
+    });
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_ATTACH))) {
+      return finishPlain(
+        await handlePostMigrationAttach(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_PRE_SEEDED))) {
+      return finishPlain(
+        await handlePostMigrationPreSeeded(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_CONFIRM_READY))) {
+      return finishPlain(
+        await handlePostMigrationConfirmReady(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_FREEZE))) {
+      return finishPlain(
+        await handlePostMigrationFreeze(
+          { ...buildMigrationDeps(), decommission: buildDecommissionDeps() },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_TAKE_OVER))) {
+      return finishPlain(
+        await handlePostMigrationTakeOver(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_ABORT))) {
+      return finishPlain(
+        await handlePostMigrationAbort(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION))) {
+      return finishPlain(
+        await handlePostMigrationStart(
+          buildMigrationDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.MIGRATION))) {
+      return finishPlain(
+        await handleGetMigration(buildMigrationDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.MIGRATION_ASSIGNMENT))) {
+      return finishPlain(
+        await handleGetMigrationAssignment(buildMigrationDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // Box-side re-home read (Layer A) — the box polls its OLD canonical to
