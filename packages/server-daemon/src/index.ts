@@ -2626,6 +2626,10 @@ async function wireOwnerHandlers(deps: {
       markerPath:
         process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`,
       pinnedAdminRootPubHex: cfg.adminRootPub ? bytesToHexLocal(cfg.adminRootPub) : null,
+      // v1-sec GAP 3 — on the legacy (no-admin-root) path the re-home is written
+      // only against a giver-owner-IRK-signed authorization verified under THIS
+      // pinned IRK, never `.com`'s unsigned word.
+      pinnedOwnerIrkPubHex: bytesToHexLocal(cfg.irkPublicKey),
       onLog: (m) => console.log(m),
     });
     rehomePoller.start();

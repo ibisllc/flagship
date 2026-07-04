@@ -625,6 +625,18 @@ export async function handleGetTransferRehome(
     ...(row.acquirerAdminRootPubHex !== null
       ? { acquirerAdminRootPub: row.acquirerAdminRootPubHex }
       : {}),
+    // TODO(v1-sec GAP 3, control-plane follow-up): relay the LEGACY
+    // giver-owner-IRK re-home authorization here as
+    //   rehomeAuth: { issuedAt, signatureHex }
+    // (a `flagship/server-rehome-auth/v1` signature over
+    //  {oldServerDomain, newServerDomain, acquirerIrkPub, issuedAt}). A box with
+    // NO pinned admin root now REFUSES to re-home without it (fail-closed —
+    // never on `.com`'s unsigned word). This needs: a giver-phone deposit
+    // endpoint (mirroring the disk-key/admin-handoff deposits below) that stores
+    // the giver-IRK signature on the offer row, and echoing it in this response.
+    // Until wired, legacy (non-admin-tier) transfers stall at re-home — the
+    // intended safe default for the hardening branch.
+    //
     // The GIVER-admin-root-signed handoff proof, once deposited. A box with a
     // pinned admin root REFUSES to re-home until this verifies against its
     // pinned anchor — `.com` relays the proof but cannot forge it.
