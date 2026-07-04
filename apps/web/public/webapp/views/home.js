@@ -37,22 +37,15 @@ import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 
 registerView("view-home", { tab: "home" });
 
-// #36 — empty-state pennant illustration. Inline SVG so we don't add
-// a network round-trip for a single decorative asset; sized to ~140px
-// tall so it reads as "illustration", not "icon", on mobile.
-const PENNANT_SVG = `
-<svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-pennant">
-  <defs>
-    <linearGradient id="pennant-flag" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="var(--accent)" stop-opacity="0.95" />
-      <stop offset="1" stop-color="var(--accent-press)" stop-opacity="0.85" />
-    </linearGradient>
-  </defs>
-  <line x1="60" y1="20" x2="60" y2="150" stroke="var(--ink-muted)" stroke-width="3" stroke-linecap="round" />
-  <circle cx="60" cy="20" r="4" fill="var(--ink-muted)" />
-  <path d="M60 32 L180 38 L150 64 L180 90 L60 96 Z" fill="url(#pennant-flag)"
-        stroke="var(--accent-press)" stroke-width="1.5" stroke-linejoin="round" />
-  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--border)" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 6" />
+// #36 — empty-state brand mark. The flag-on-mast pennant is RETIRED;
+// the empty state now shows the current brand mark (a rounded square
+// containing a circle) in teal so it reads as "a moment", not a missing
+// asset. Inline SVG to avoid a network round-trip for one decorative glyph.
+const EMPTY_MARK_SVG = `
+<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-mark">
+  <rect x="8" y="8" width="80" height="80" rx="22" fill="var(--accent-soft)"
+        stroke="var(--accent)" stroke-width="2" />
+  <circle cx="48" cy="48" r="20" fill="none" stroke="var(--accent)" stroke-width="4" />
 </svg>
 `;
 
@@ -476,7 +469,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
   const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">
-      ${PENNANT_SVG}
+      ${EMPTY_MARK_SVG}
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>

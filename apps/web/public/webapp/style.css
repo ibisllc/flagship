@@ -1246,21 +1246,20 @@ body.no-tabs .tab-bar { display: none; }
 
 /* ── Empty state (#36) ──────────────────────────────────────────
  *
- * Used when the user has zero servers. Stacks an inline-SVG pennant
- * illustration over the headline + CTA. The illustration is 140px
- * tall on mobile so it reads as "empty space turned into a moment"
- * rather than just a missing-data state.
+ * Used when the user has zero servers. Stacks the brand mark (the
+ * pennant is retired) over the headline + CTA — sized as a calm ~112px
+ * glyph so it reads as "a moment", not a missing-data state.
  */
 .empty-state {
   text-align: center;
   padding: var(--space-6) var(--space-5);
 }
-.empty-pennant {
+.empty-mark {
   display: block;
-  width: 200px;
-  max-width: 80%;
-  height: 140px;
-  margin: 0 auto var(--space-3);
+  width: 112px;
+  max-width: 60%;
+  height: auto;
+  margin: 0 auto var(--space-4);
 }
 .empty-headline {
   font-family: var(--font-display);
