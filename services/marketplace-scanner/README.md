@@ -79,6 +79,41 @@ export FLAGSHIP_R2_BUCKET_URL=https://<r2-write-proxy>  # report uploads
 `npm start -- --dry` walks the queue and computes + signs grades
 **without** uploading or posting.
 
+## Owner secrets (what lights the live pipeline)
+
+None of these ship with values — the owner sets them to turn the pipeline
+on. Until then the surfaces fail safely (the scan-queue 401/503s, the
+scanner refuses to start, `.com` refuses scan posts).
+
+| Secret | Where it lives | What it does |
+|---|---|---|
+| `FLAGSHIP_SCANNER_PRIV_HEX` | scanner host env | Ed25519 **private** key (32-byte hex) the scanner signs each `MarketplaceScanResult` with. The ONE credential that authorizes posting a grade. Keep off `.com`. |
+| `MARKETPLACE_SCANNER_PUBKEY_HEX` | `.com` Worker secret | The matching **public** key. `handleMarketplaceScanResult` verifies every inbound grade against it; a wrong/absent key ⇒ 503 (post refused). Must be the pubkey of the priv above. |
+| `SERVICES_CONTROL_SECRET` | `.com` Worker secret **and** the scanner's `FLAGSHIP_SCAN_QUEUE_BEARER` | The shared bearer that gates `GET /api/internal/marketplace-scan-queue`. The scanner presents it as `Authorization: Bearer …`; `.com` constant-time-compares. **The two MUST be the same string.** |
+| `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_ENDPOINT_URL_S3` + `FLAGSHIP_R2_BUCKET` | scanner host env (bash edge) / `FLAGSHIP_R2_BUCKET_URL` for the Node edge | Cloudflare R2 (S3-compatible) credentials + endpoint + bucket the full JSON report is uploaded to (`<creator>/<slug>/<treeDigest>.json`). A failed upload is non-fatal for the grade (the grade still posts; the report URL 404s until the next scan). |
+
+Optional knobs: `FLAGSHIP_API_BASE` (default `https://flagshipserver.com`),
+`FLAGSHIP_SCAN_STALE_DAYS` (rescan cadence), `--dry` (compute + sign, no
+upload/post). The install-gate threshold
+`MARKETPLACE_INSTALL_BLOCKED_GRADES` is a **`.com`** knob (default `F`),
+not a scanner one — it decides which grades block install.
+
+## Image resolution
+
+The scanner grades the **container the daemon runs**, named by
+`runtime.image` in the listing's manifest (`docs/manifest.md`). The
+scan-queue now carries each listing's `manifest_json`; the drain resolves
+`runtime.image` (`src/imageRef.ts`) and:
+
+- resolvable ⇒ scans `trivy image docker://<ref>` (falling back to a
+  source-tree `trivy fs` of the clone only when the manifest names no
+  image);
+- **unresolvable ⇒ LOG + SKIP** the listing (it stays never-scanned for
+  the next tick) — a repo-only / not-yet-published listing has no image to
+  pull, and blocking the whole drain on it (or minting a spurious F) would
+  starve every other listing. `scripts/scan-marketplace-listing.sh` makes
+  its `$3` image arg optional and applies the same resolve-or-skip via `jq`.
+
 ## Signing key
 
 `FLAGSHIP_SCANNER_PRIV_HEX` is the Ed25519 private key whose pubkey is
