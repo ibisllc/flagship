@@ -26,6 +26,15 @@ export interface ScanTarget {
    * resulting tree hash matches; a mismatch is fail-closed.
    */
   manifestHashHex: string;
+  /**
+   * The listing's public `flagship.app.json` manifest, verbatim (the
+   * `manifestJson` the scan-queue carries). Optional: when present the
+   * drain resolves `runtime.image` from it to decide the container-scan
+   * target and to SKIP a listing with no resolvable image (see
+   * `resolveImageRefFromJson`). Absent ⇒ the runner falls back to the
+   * clone's on-disk `flagship.app.json`.
+   */
+  manifestJson?: string;
 }
 
 /**

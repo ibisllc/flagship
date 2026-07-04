@@ -19,7 +19,12 @@
 # Args:
 #   $1  creator   (e.g. "alice")
 #   $2  slug      (e.g. "habit-tracker")
-#   $3  image     (e.g. "ghcr.io/alice/habit-tracker:1.4.2")
+#   $3  image     OPTIONAL (e.g. "ghcr.io/alice/habit-tracker:1.4.2").
+#                 When omitted, the image ref is RESOLVED from the listing's
+#                 manifest: GET /api/marketplace/<creator>/<slug>, then
+#                 jq '.listing.manifest_json | fromjson | .runtime.image'.
+#                 A listing whose manifest names no runtime.image is LOGGED
+#                 and SKIPPED (exit 0) — nothing to pull, don't fail the run.
 #
 # What it does:
 #   1. docker pull <image>; capture the resolved digest.
@@ -30,9 +35,9 @@
 
 set -euo pipefail
 
-CREATOR="${1:?usage: scan-marketplace-listing.sh <creator> <slug> <image>}"
+CREATOR="${1:?usage: scan-marketplace-listing.sh <creator> <slug> [image]}"
 SLUG="${2:?missing slug}"
-IMAGE="${3:?missing image}"
+IMAGE="${3:-}"
 
 : "${FLAGSHIP_SCANNER_PRIV_HEX:?}"
 : "${FLAGSHIP_R2_BUCKET:?}"
@@ -43,6 +48,25 @@ IMAGE="${3:?missing image}"
 API_BASE="${FLAGSHIP_API_BASE:-https://flagshipserver.com}"
 WORK="$(mktemp -d -t flagship-scan.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
+
+# 0. Resolve the image ref from the listing's manifest when $3 is absent.
+#    The listing carries `manifest_json`; the container the daemon runs is
+#    named by `runtime.image` (docs/manifest.md). No resolvable image ⇒
+#    log + skip (exit 0), matching the queue-drain's log+skip policy.
+if [[ -z "$IMAGE" ]]; then
+  echo "[scan] no image arg — resolving from $CREATOR/$SLUG manifest"
+  LISTING_JSON=$(curl -fsS "$API_BASE/api/marketplace/$CREATOR/$SLUG" || echo "")
+  if [[ -z "$LISTING_JSON" ]]; then
+    echo "[scan] SKIP: could not fetch listing $CREATOR/$SLUG"
+    exit 0
+  fi
+  IMAGE=$(jq -r '(.listing.manifest_json // .manifest_json // "") | select(. != "") | fromjson | .runtime.image // ""' <<<"$LISTING_JSON" 2>/dev/null || echo "")
+  if [[ -z "$IMAGE" || "$IMAGE" == "null" ]]; then
+    echo "[scan] SKIP: manifest for $CREATOR/$SLUG names no runtime.image"
+    exit 0
+  fi
+  echo "[scan] resolved image=$IMAGE"
+fi
 
 echo "[scan] $CREATOR/$SLUG image=$IMAGE"
 

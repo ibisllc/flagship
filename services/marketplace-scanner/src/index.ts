@@ -21,6 +21,7 @@ import {
   HttpReportStore,
   HttpResultPoster,
 } from "./adapters.js";
+import { resolveImageRefFromJson } from "./imageRef.js";
 import { scanTarget } from "./scanner.js";
 import { scannerKeypairFromHex } from "./scanResult.js";
 
@@ -69,7 +70,21 @@ async function main(): Promise<void> {
   const targets = await queue.list();
   console.log(`[scanner] ${targets.length} listing(s) need a scan`);
   let failures = 0;
+  let skipped = 0;
   for (const t of targets) {
+    // Image resolution: a listing whose manifest names no pullable
+    // `runtime.image` has nothing for `trivy image` to grade this round.
+    // LOG + SKIP it (don't fail the queue, don't post an F) — it stays
+    // in the never-scanned set for the next tick. When the queue omits
+    // manifestJson (older .com), fall through to the runner's on-disk
+    // clone manifest instead of skipping.
+    if (t.manifestJson !== undefined && resolveImageRefFromJson(t.manifestJson) === null) {
+      skipped++;
+      console.warn(
+        `[scan] ${t.creator}/${t.slug} → SKIP: manifest names no resolvable runtime.image`,
+      );
+      continue;
+    }
     try {
       const outcome = await scanTarget(deps, t);
       console.log(
@@ -87,6 +102,9 @@ async function main(): Promise<void> {
         `[scan] ${t.creator}/${t.slug} → POST FAILED: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+  if (skipped > 0) {
+    console.log(`[scanner] ${skipped}/${targets.length} listing(s) skipped (no resolvable image)`);
   }
   if (failures > 0) {
     console.error(`[scanner] ${failures}/${targets.length} post(s) failed`);
