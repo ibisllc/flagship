@@ -178,3 +178,44 @@ export function verifySetAppPrice(r: SetAppPriceRequest, sig: Bytes, signerPub: 
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Developer console — signed read of a creator's own sales ledger (#15)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A creator's signed proof-of-ownership for reading their OWN payout
+ * ledger (`GET /api/developer/sales/:creator`). The sales/revenue data is
+ * sensitive, so unlike the public purchases list this read is gated: the
+ * creator signs `creator|issuedAt` with their account IRK (or a
+ * non-revoked server identity of their account), and `.com` verifies it +
+ * freshness-checks `issuedAt` before returning the ledger.
+ */
+export interface DeveloperSalesReadRequest {
+  creator: string;
+  issuedAt: number;
+}
+
+const TAG_DEVELOPER_SALES_READ = "flagship/developer-sales-read/v1";
+
+function canonicalDeveloperSalesRead(r: DeveloperSalesReadRequest): Bytes {
+  return new TextEncoder().encode(
+    [TAG_DEVELOPER_SALES_READ, r.creator, r.issuedAt].join("|"),
+  );
+}
+
+export function signDeveloperSalesRead(r: DeveloperSalesReadRequest, signer: Keypair): Bytes {
+  return ed.sign(canonicalDeveloperSalesRead(r), signer.privateKey);
+}
+
+export function verifyDeveloperSalesRead(
+  r: DeveloperSalesReadRequest,
+  sig: Bytes,
+  signerPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalDeveloperSalesRead(r), signerPub);
+  } catch {
+    return false;
+  }
+}
