@@ -55,6 +55,8 @@ exclude_path() {
     node_modules/*|*/node_modules/*) return 0 ;;
     .claude/worktrees/*|*/.claude/worktrees/*) return 0 ;;  # NESTED worktrees only
     dist/*|*/dist/*) return 0 ;;
+    .build/*|*/.build/*) return 0 ;;                        # SwiftPM outputs
+    */android/*/build/*) return 0 ;;                        # Gradle outputs
     tests/*|*/tests/*) return 0 ;;
     Tests/*|*/Tests/*) return 0 ;;
     *.test.ts) return 0 ;;
