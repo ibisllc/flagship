@@ -59,6 +59,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // Parked at 0090 (main skips 0088–0094 for the feature branches); the prod
   // ledger stores only the 4-digit prefix.
   "0090",
+  // feat/marketplace — app_sales payout ledger (#15 developer payouts).
+  "0091",
   // The capability table behind own-key AI model menus.
   "0095",
   // The owner's server order (who leads, who's next).
