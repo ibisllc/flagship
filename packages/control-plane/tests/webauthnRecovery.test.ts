@@ -50,6 +50,7 @@ async function upload(opts: {
   fetchTokenHashHex?: string;
   prfSaltHashHex?: string;
   wrappedAcmeAccountKeyB64?: string;
+  wrappedAdminRootB64?: string;
 }) {
   const username = opts.username ?? USERNAME;
   const credentialId = opts.credentialId ?? "deadbeef".repeat(4);
@@ -67,6 +68,7 @@ async function upload(opts: {
   if (opts.fetchTokenHashHex) request.fetchTokenHash = opts.fetchTokenHashHex;
   if (opts.prfSaltHashHex) request.prfSaltHash = opts.prfSaltHashHex;
   if (opts.wrappedAcmeAccountKeyB64) request.wrappedAcmeAccountKey = opts.wrappedAcmeAccountKeyB64;
+  if (opts.wrappedAdminRootB64) request.wrappedAdminRoot = opts.wrappedAdminRootB64;
   return handleUploadWebauthnRecovery(
     {
       usernames: opts.storage.usernames,
@@ -463,6 +465,77 @@ describe("webauthn recovery — Argon2id-gated fetch (Task #74)", () => {
       { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() - 10 * 60_000 },
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("webauthn recovery — admin-root escrow (Slice D D-3)", () => {
+  async function gatedFetch(storage: InMemoryStorage, fetchToken: Uint8Array) {
+    return handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+  }
+
+  it("escrows wrappedAdminRoot on upload and releases it on the gated fetch", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(6);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+
+    const res = await gatedFetch(storage, fetchToken);
+    expect(res.status).toBe(200);
+    expect((res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot).toBe("QURNSU4tUk9PVC1DVA==");
+  });
+
+  it("preserves the escrowed admin root across a UMK-only re-upload that omits it", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+    await upload({ storage, irk, wrappedUmk: new Uint8Array([0xcc]) });
+    const after = await storage.webauthnRecovery.get(USERNAME);
+    expect(after?.wrappedAdminRootB64).toBe("QURNSU4tUk9PVC1DVA==");
+  });
+
+  it("REPLACES the escrowed admin root on a re-upload carrying a new value (post-rotation re-escrow)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(7);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "T0xELVJPT1QtQ1Q=" });
+    // Credential recovery rotated the admin root; the recovering device
+    // re-escrows the NEW root under the same credential.
+    await upload({ storage, irk, fetchTokenHashHex, wrappedAdminRootB64: "TkVXLVJPT1QtQ1Q=" });
+
+    const stored = await storage.webauthnRecovery.get(USERNAME);
+    expect(stored?.wrappedAdminRootB64).toBe("TkVXLVJPT1QtQ1Q=");
+    const res = await gatedFetch(storage, fetchToken);
+    expect((res.body as { wrappedAdminRoot?: string }).wrappedAdminRoot).toBe("TkVXLVJPT1QtQ1Q=");
+  });
+
+  it("omits wrappedAdminRoot from the gated fetch for a legacy upload without it", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(8);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex });
+
+    const res = await gatedFetch(storage, fetchToken);
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("wrappedAdminRoot");
+  });
+
+  it("does NOT surface the admin-root ciphertext on the public metadata GET", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk, wrappedAdminRootB64: "QURNSU4tUk9PVC1DVA==" });
+    const res = await handleFetchWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("wrappedAdminRoot");
   });
 });
 
