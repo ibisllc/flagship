@@ -30,8 +30,8 @@ const liveness = new Map();
 
 function statusPill(secretId) {
   const s = liveness.get(secretId);
-  if (!s || s.status === "unknown") return '<span class="pill">unknown</span>';
-  return s.status === "online" ? '<span class="pill ok">online</span>' : '<span class="pill">offline</span>';
+  if (!s || s.status === "unknown") return '<span class="pill">Unknown</span>';
+  return s.status === "online" ? '<span class="pill ok">Online</span>' : '<span class="pill">Offline</span>';
 }
 
 export function renderSecuredSessions() {
@@ -125,7 +125,7 @@ async function stopOne(secretId) {
   }
   removeSecuredSession(secretId);
   liveness.delete(secretId);
-  toast("stopped");
+  toast("Stopped");
   renderSecuredSessions();
 }
 

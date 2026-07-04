@@ -199,7 +199,7 @@ export async function renderPeerBackup() {
               <div class="faint-sm">
                 ${escapeHtml(String(p.shardsHosted ?? 0))} shard${p.shardsHosted === 1 ? "" : "s"}
                 · last seen ${escapeHtml(fmtDate(p.lastSeenMs))}
-                ${p.online ? '<span class="pill ok">online</span>' : '<span class="pill warn">offline</span>'}
+                ${p.online ? '<span class="pill ok">Online</span>' : '<span class="pill warn">Offline</span>'}
               </div>
             </div>
           </div>

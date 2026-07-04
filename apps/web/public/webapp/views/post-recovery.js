@@ -64,8 +64,8 @@ function renderReport(report) {
       <div class="row"><span class="label">apps reattached</span><span class="value">${report.reattachedCount}</span></div>
       <div class="row"><span class="label">apps unchanged</span><span class="value">${report.unchangedCount}</span></div>
       <div class="row"><span class="label">total rows rewritten</span><span class="value">${report.totalRewritten}</span></div>
-      <div class="row"><span class="label">old IRK prefix</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
-      <div class="row"><span class="label">new IRK prefix</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">old account key</span><span class="value text-xs">${escapeHtml(report.oldIrkPrefix ?? "")}…</span></div>
+      <div class="row"><span class="label">new account key</span><span class="value text-xs">${escapeHtml(report.newIrkPrefix ?? "")}…</span></div>
       <div class="row"><span class="label">undo available until</span><span class="value text-xs">${escapeHtml(undoText)}</span></div>
     </div>
     <h3 class="mt-4">Per-app</h3>

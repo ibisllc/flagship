@@ -115,8 +115,8 @@ async function submit() {
   const valueEl = $("service-env-value");
   const name = nameEl.value.trim();
   const value = valueEl.value;
-  if (!name) return toast("name required", "err");
-  if (!value) return toast("value required", "err");
+  if (!name) return toast("Name required", "err");
+  if (!value) return toast("Value required", "err");
   const session = getSession();
   if (!session?.umk) return toast("Sign in first.", "err");
 

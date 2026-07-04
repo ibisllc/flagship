@@ -45,14 +45,14 @@ function canonicalPairingClaim(c) {
 async function confirmPairing(qrText) {
   const session = getSession();
   if (!session.umk) {
-    toast("unlock first", "err");
+    toast("Unlock first", "err");
     return;
   }
   let parsed;
   try {
     parsed = parseQrPayload(qrText);
   } catch (e) {
-    toast(`invalid QR: ${e.message}`, "err");
+    toast(`Invalid QR: ${e.message}`, "err");
     return;
   }
   let username;
@@ -92,19 +92,19 @@ async function confirmPairing(qrText) {
       throw new Error(`status ${r.status}: ${body}`);
     }
     profileSet("sessionId", parsed.sessionId);
-    toast("paired");
+    toast("Paired");
     const { renderHome } = await import("./home.js");
     await renderHome();
     show("view-home");
   } catch (e) {
-    toast(`pair failed: ${e.message}`, "err");
+    toast(`Pair failed: ${e.message}`, "err");
   }
 }
 
 export function startPairing() {
   const session = getSession();
   if (!session.irk) {
-    toast("unlock first", "err");
+    toast("Unlock first", "err");
     return;
   }
   show("view-pair");
@@ -114,7 +114,7 @@ export function startPairing() {
 
 async function handlePastePair() {
   const text = $("pair-paste").value.trim();
-  if (!text) return toast("paste a QR payload first", "err");
+  if (!text) return toast("Paste a QR payload first", "err");
   await confirmPairing(text);
 }
 

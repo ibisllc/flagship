@@ -179,7 +179,7 @@ describe("webapp renderPendingCard", () => {
       serverName: "wiki",
       phase: "installing",
     });
-    expect(html).toContain("pending");
+    expect(html).toContain("Pending");
     expect(html).toContain("wiki");
     expect(html).toContain("demo-progress-bar");
     expect(html).toContain('role="progressbar"');

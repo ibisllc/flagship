@@ -58,7 +58,7 @@ async function revoke(prefix) {
       `/api/screens/paired-sessions/${encodeURIComponent(prefix)}`,
       { method: "DELETE" },
     );
-    toast("revoked");
+    toast("Revoked");
     await renderPairedSessions();
   } catch (e) {
     toast(e.message, "err");

@@ -136,7 +136,7 @@ export async function renderProviders() {
         await setActive(getSession().umk, b.getAttribute("data-id"));
         await renderProviders();
         await renderActiveProviderChip();
-        toast("active provider updated");
+        toast("Active provider updated");
       } catch (e) {
         toast(e.message, "err");
       }
@@ -172,7 +172,7 @@ let promoIssuanceCtx = null;
 
 async function startPromoIssuance() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const username = await ensureUsername().catch((e) => {
     toast(e.message, "err");
     return null;
@@ -180,7 +180,7 @@ async function startPromoIssuance() {
   if (!username) return;
   const phone = $("promo-phone").value.trim();
   if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
-    return toast("phone number must be E.164 (e.g. +15555550100)", "err");
+    return toast("Phone number must be E.164 (e.g. +15555550100)", "err");
   }
   const identityHash = await sha256Bytes(new TextEncoder().encode(phone));
   const issuedAt = Date.now();
@@ -212,7 +212,7 @@ async function startPromoIssuance() {
     promoIssuanceCtx = { ticket: body.ticket, username };
     $("promo-step-phone")?.classList.add("hidden");
     $("promo-step-otp")?.classList.remove("hidden");
-    toast("we sent you a code");
+    toast("We sent you a code");
   } catch (e) {
     console.error("promo issue/start error", e);
     toast(humanError(e), "err");
@@ -264,7 +264,7 @@ async function completePromoIssuance() {
     $("promo-phone").value = "";
     await renderProviders();
     await renderActiveProviderChip();
-    toast("free credits ready — selected as active provider");
+    toast("Free credits ready — selected as active provider");
   } catch (e) {
     console.error("promo issue/complete error", e);
     toast(humanError(e), "err");
@@ -277,14 +277,14 @@ async function handleAddProvider() {
 
 async function handleSaveProvider() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) return toast("Unlock first", "err");
   const provider = $("np-provider").value;
   const label = $("np-label").value.trim();
   const apiKey = $("np-key").value;
   const baseUrl = $("np-base").value.trim();
   const defaultModel = $("np-model").value.trim();
-  if (!label) return toast("label required", "err");
-  if (!apiKey) return toast("api key required", "err");
+  if (!label) return toast("Label required", "err");
+  if (!apiKey) return toast("Api key required", "err");
   try {
     await addProvider(session.umk, {
       provider,
@@ -302,7 +302,7 @@ async function handleSaveProvider() {
   $("np-model").value = "";
   $("add-provider-form").classList.add("hidden");
   await renderProviders();
-  toast("provider saved");
+  toast("Provider saved");
 }
 
 async function refreshPushStatus() {
@@ -340,9 +340,9 @@ async function runEnablePush() {
   try {
     await ensureUsername();
     await subscribeToWebPush();
-    toast("notifications enabled", "ok");
+    toast("Notifications enabled", "ok");
   } catch (e) {
-    toast(`enable failed: ${e.message ?? e}`, "err");
+    toast(`Enable failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -360,9 +360,9 @@ async function runDisablePush() {
   }
   try {
     await unsubscribeFromWebPush();
-    toast("notifications disabled", "ok");
+    toast("Notifications disabled", "ok");
   } catch (e) {
-    toast(`disable failed: ${e.message ?? e}`, "err");
+    toast(`Disable failed: ${e.message ?? e}`, "err");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -414,7 +414,7 @@ async function handleSignOut() {
     setSubtitle,
   });
   if (res?.blocked) return;
-  toast("signed out");
+  toast("Signed out");
 }
 
 /** A recovery-gated session button (Tier-2 sign-out / Tier-3 remove) was

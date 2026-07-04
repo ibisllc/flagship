@@ -147,7 +147,7 @@ async function runCancel() {
         // Don't fail the whole cancel — the auth-code is already revoked,
         // which voids the install. Surface a soft warning so the user
         // knows the name may still be reserved until a retry/release.
-        toast(`name release deferred: ${e.message ?? e}`, "warn");
+        toast(`Name release deferred: ${e.message ?? e}`, "warn");
       }
     }
     // Drop from local order list so home / activity stop showing it.
@@ -156,12 +156,12 @@ async function runCancel() {
       "pendingOrders",
       JSON.stringify(list.filter((o) => o.serial !== currentOrder.serial)),
     );
-    toast(`order cancelled (${escapeHtml(currentOrder.name)})`);
+    toast(`Order cancelled (${escapeHtml(currentOrder.name)})`);
     clearStatusPoll();
     currentOrder = null;
     show("view-home");
   } catch (e) {
-    toast(`cancel failed: ${e.message ?? e}`, "err");
+    toast(`Cancel failed: ${e.message ?? e}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = "Cancel order"; }
   }
 }

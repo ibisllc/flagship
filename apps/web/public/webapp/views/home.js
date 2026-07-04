@@ -156,9 +156,9 @@ export function renderPendingCard(order) {
   const row = listRow({
     leading: { kind: "icon", svg: serverIcon, tone: "warning" },
     title: String(label),
-    subtitle: "installing",
+    subtitle: "Installing",
     detail: String(order.fqdn),
-    trailing: `<span class="pill warn">pending</span>`,
+    trailing: `<span class="pill warn">Pending</span>`,
   });
   return `
     ${row}
@@ -188,7 +188,7 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
-  if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
+  if (server.revoked) return { kind: "revoked", label: `Revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
 
   // Fix A — honor the new /pods `liveness` field when present.
@@ -213,16 +213,16 @@ export function classifyServer(server, pod, opts = {}) {
     // The box has checked in before but is not reachable right now.
     const msAgo = typeof pod.lastSeenMsAgo === "number" ? pod.lastSeenMsAgo : null;
     const ageLabel = msAgo != null ? formatAge(msAgo) : "unknown";
-    return { kind: "offline", label: `offline (last seen ${ageLabel} ago)` };
+    return { kind: "offline", label: `Offline (last seen ${ageLabel} ago)` };
   }
 
   if (liveness === "never") {
     // Box registered but never sent a heartbeat. Check approval / grace states
     // first — they override "never" (same logic as the no-lastReported path).
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "waiting for approval" };
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
-    return { kind: "never-seen", label: "still coming up" };
+    return { kind: "never-seen", label: "Still coming up" };
   }
 
   if (!pod || pod.lastReported == null) {
@@ -235,29 +235,29 @@ export function classifyServer(server, pod, opts = {}) {
     // in is what stops a box stuck on serve-authorization from reading "never
     // came online").
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "waiting for approval" };
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.
     const registeredAt = pod?.registeredAt;
     if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
-      return { kind: "coming-online", label: "coming online…" };
+      return { kind: "coming-online", label: "Coming online…" };
     }
-    return { kind: "never-seen", label: "never seen" };
+    return { kind: "never-seen", label: "Never seen" };
   }
   const ageMs = now - pod.lastReported;
   // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
-  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `offline (${formatAge(ageMs)} ago)` };
+  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `Offline (${formatAge(ageMs)} ago)` };
   // Cert expiry within 30d — surface as warning even when daemon is online.
   if (pod.currentCert?.validUntil) {
     const msToExpiry = pod.currentCert.validUntil - Date.now();
-    if (msToExpiry < 0) return { kind: "cert-expired", label: "cert expired" };
+    if (msToExpiry < 0) return { kind: "cert-expired", label: "Cert expired" };
     if (msToExpiry < 30 * 86400_000) {
-      return { kind: "cert-expiring-soon", label: `cert renews in ${formatDays(msToExpiry)}` };
+      return { kind: "cert-expiring-soon", label: `Cert renews in ${formatDays(msToExpiry)}` };
     }
   }
-  return { kind: "online", label: "online" };
+  return { kind: "online", label: "Online" };
 }
 
 /** The short server label for the operations-sliver "preparing <name>"
@@ -1162,7 +1162,7 @@ async function deleteDeadServer(serverDomain, btn) {
   const session = getSession();
   const username = session.username;
   if (!username) {
-    toast("unlock the webapp first", "warn");
+    toast("Unlock the webapp first", "warn");
     return;
   }
   const ok = confirm(
@@ -1193,12 +1193,12 @@ async function deleteDeadServer(serverDomain, btn) {
         return;
       }
     }
-    toast(`deleted — "${serverDomain}" is free again`);
+    toast(`Deleted — "${serverDomain}" is free again`);
     await renderHome();
   } catch (e) {
     // Keep the card: the name is still reserved, so re-render would just hide
     // a name the user can't reuse. Surface the error + re-enable the button.
-    toast(`delete failed: ${e.message ?? e}`, "err");
+    toast(`Delete failed: ${e.message ?? e}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
   }
 }

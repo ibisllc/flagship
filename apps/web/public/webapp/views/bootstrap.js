@@ -44,14 +44,14 @@ const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior das
 async function handleContinue() {
   const raw = ($("bootstrap-username")?.value || "").trim().toLowerCase();
   if (!USERNAME_RE.test(raw) || raw.includes("--")) {
-    return toast("username: 3–30 lowercase letters/digits with interior single dashes", "err");
+    return toast("Username: 3–30 lowercase letters/digits with interior single dashes", "err");
   }
   hideAccess();
   let resolution;
   try {
     resolution = await resolveAccount(raw);
   } catch (e) {
-    return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
+    return toast(`Couldn't reach the directory: ${e.message ?? e}`, "err");
   }
   switch (classifyResolution(resolution)) {
     case "demo":
@@ -163,7 +163,7 @@ async function createAccount() {
       // No dispatchInitialView — route into the recovery step (a backup is
       // required; the wizard owns that flow, then the app shell).
     });
-    toast(`account created — ${chosen}`, "ok");
+    toast(`Account created — ${chosen}`, "ok");
     try {
       const { enterWizard } = await import("./wizard.js");
       await enterWizard({ step: "secure-account" });
@@ -249,9 +249,9 @@ async function joinDemo(resolution) {
       dispatchInitialView,
       setUsername: (u) => profileSet("username", u),
     });
-    toast(`joined ${resolution.username}`, "ok");
+    toast(`Joined ${resolution.username}`, "ok");
   } catch (e) {
-    toast(`couldn't open the demo: ${e.message ?? e}`, "err");
+    toast(`Couldn't open the demo: ${e.message ?? e}`, "err");
   }
 }
 
@@ -304,12 +304,12 @@ async function recoverRealAccount(resolution) {
       },
     });
     if (result.outcome === "takeover") {
-      toast(`taking over ${username} — you're now the admin device`, "ok");
+      toast(`Taking over ${username} — you're now the admin device`, "ok");
     } else if (result.outcome === "keep-both") {
-      toast(`recovered ${username} — your other devices stay connected`, "ok");
+      toast(`Recovered ${username} — your other devices stay connected`, "ok");
     }
   } catch (e) {
-    toast(`couldn't take over ${username}: ${e.message ?? e}`, "err");
+    toast(`Couldn't take over ${username}: ${e.message ?? e}`, "err");
   }
 }
 

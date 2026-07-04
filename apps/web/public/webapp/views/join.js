@@ -169,7 +169,7 @@ async function startJoin() {
     });
     relay.close?.();
     renderQuarantine(result);
-    toast(`joined ${result.username} — device under review`, "ok");
+    toast(`Joined ${result.username} — device under review`, "ok");
   } catch (e) {
     setStatus("error", `couldn't join: ${String(e?.message || e)}`);
   } finally {

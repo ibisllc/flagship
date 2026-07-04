@@ -212,9 +212,9 @@ async function showQrDialog({ url, expiresAt, label }) {
     dialog.querySelector("#companion-qr-copy")?.addEventListener("click", async () => {
       try {
         await navigator.clipboard?.writeText?.(url);
-        toast("copied");
+        toast("Copied");
       } catch {
-        toast("copy not supported in this browser", "err");
+        toast("Copy not supported in this browser", "err");
       }
     });
     dialog.addEventListener("close", () => resolve(undefined), { once: true });
@@ -233,7 +233,7 @@ async function runRevoke(prefix) {
   if (!ok) return;
   try {
     await companionRevoke(prefix);
-    toast("revoked");
+    toast("Revoked");
     await renderCompanionDock();
   } catch (e) {
     toast(e.message ?? String(e), "err");

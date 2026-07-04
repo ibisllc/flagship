@@ -375,7 +375,7 @@ function wireAutoUnlock(serverFqdn) {
       toast(`Auto-unlock on; lease expires ${formatWhen(r.expiresAt)}`, "ok");
       await refreshLeases(serverFqdn);
     } catch (e) {
-      toast(`enable failed: ${e.message ?? e}`, "err");
+      toast(`Enable failed: ${e.message ?? e}`, "err");
     } finally {
       const b = $("auto-unlock-enable");
       if (b) {

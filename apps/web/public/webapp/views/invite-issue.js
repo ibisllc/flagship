@@ -181,9 +181,9 @@ async function shareIt(link) {
 async function copyIt(link) {
   try {
     await navigator.clipboard.writeText(link);
-    toast("link copied", "ok");
+    toast("Link copied", "ok");
   } catch {
-    toast("copy failed — long-press the field to copy", "err");
+    toast("Copy failed — long-press the field to copy", "err");
   }
 }
 

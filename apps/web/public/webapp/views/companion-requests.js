@@ -280,7 +280,7 @@ export async function runApprove(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`approved ${row.kind}`, "ok");
+  toast(`Approved ${row.kind}`, "ok");
   // Refresh the list — non-fatal if the DOM isn't here (test env).
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
@@ -302,7 +302,7 @@ export async function runDeny(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`denied`, "ok");
+  toast(`Denied`, "ok");
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
   }

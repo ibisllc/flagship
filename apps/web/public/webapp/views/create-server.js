@@ -243,7 +243,7 @@ function renderDraftList(drafts) {
  */
 async function cancelServer(id) {
   const d = await getDraft(id);
-  if (!d) return toast("draft not found", "err");
+  if (!d) return toast("Draft not found", "err");
   const session = getSession();
   // P14 Phase 2 — companion profiles route the cancel through the
   // owner; they don't need an unlocked session to QUEUE the request.
@@ -252,11 +252,11 @@ async function cancelServer(id) {
   const { isCompanionProfile } = await import("../lib/companionGuard.js");
   const asCompanion = isCompanionProfile();
   if (!asCompanion && (!session.umk || !session.irk)) {
-    return toast("unlock the webapp first", "err");
+    return toast("Unlock the webapp first", "err");
   }
   const username = session.username
     || (await ensureUsername().catch(() => null));
-  if (!username) return toast("no account on this device", "err");
+  if (!username) return toast("No account on this device", "err");
 
   const { inlineConfirm } = await import("../lib/modal.js");
   const confirmed = await inlineConfirm({
@@ -284,7 +284,7 @@ async function cancelServer(id) {
       if (result.outcome === "approved") {
         if (d.code) await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
         await deleteDraft(id);
-        toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+        toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
         await refreshDrafts();
         return;
       }
@@ -299,10 +299,10 @@ async function cancelServer(id) {
       await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
     }
     await deleteDraft(id);
-    toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+    toast(`Server "${d.serverName}" cancelled — the name is free again`, "ok");
     await refreshDrafts();
   } catch (e) {
-    toast(`cancel failed: ${e.message ?? e}`, "err");
+    toast(`Cancel failed: ${e.message ?? e}`, "err");
   }
 }
 
@@ -344,12 +344,12 @@ async function refreshDrafts() {
 
 async function resumeDraft(id) {
   const d = await getDraft(id);
-  if (!d) return toast("draft not found", "err");
+  if (!d) return toast("Draft not found", "err");
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
   restoreDiskEncryption(d.diskEncryption);
-  toast(`resumed ${d.serverName}`);
+  toast(`Resumed ${d.serverName}`);
 }
 
 function readInputs() {
@@ -531,7 +531,7 @@ async function handleSaveDraft() {
       status: "draft",
     });
     activeDraftId = saved.id;
-    toast("draft saved");
+    toast("Draft saved");
     await refreshDrafts();
   } catch (e) {
     console.error(e);
@@ -543,7 +543,7 @@ async function handleSaveDraft() {
 async function handleDeliverNow() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    return toast("unlock the webapp first", "err");
+    return toast("Unlock the webapp first", "err");
   }
   let inputs;
   try { inputs = readInputs(); }

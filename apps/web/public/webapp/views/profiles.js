@@ -95,7 +95,7 @@ async function switchTo(cloudName) {
     ensureProfile(cloudName);
     setActiveProfile(cloudName);
     setActiveCloudName(cloudName);
-    toast(`switched to ${cloudName}`);
+    toast(`Switched to ${cloudName}`);
     renderProfiles();
     try { onProfileSwitch(cloudName); } catch { /* swallow */ }
   } catch (e) {

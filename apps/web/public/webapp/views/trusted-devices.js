@@ -426,7 +426,7 @@ async function runReplaceDeviceSheet() {
       account — including this phone — will need to confirm a new pairing
       the next time it opens the app. You won't be locked out, but you'll
       see a one-time biometric prompt on each device.</p>
-      <p>Pods stay running. Apps stay installed.</p>
+      <p>Servers stay running. Apps stay installed.</p>
     `,
     primaryLabel: "Replace",
     primaryClass: "danger",

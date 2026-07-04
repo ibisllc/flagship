@@ -72,7 +72,7 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     };
     const c = classifyServer(BASE_SERVER, pod);
     expect(c.kind).toBe("online");
-    expect(c.label).toBe("online");
+    expect(c.label).toBe("Online");
   });
 
   it('liveness:"unreachable" → offline with "last seen Xh ago" from lastSeenMsAgo', () => {
@@ -83,7 +83,7 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     };
     const c = classifyServer(BASE_SERVER, pod);
     expect(c.kind).toBe("offline");
-    expect(c.label).toContain("offline");
+    expect(c.label).toContain("Offline");
     expect(c.label).toContain("last seen");
     expect(c.label).toContain("3h");
     expect(c.label).toContain("ago");
@@ -100,7 +100,7 @@ describe("Fix A — classifyServer reads the liveness field", () => {
     const pod = { liveness: "never" };
     const c = classifyServer(BASE_SERVER, pod);
     expect(c.kind).toBe("never-seen");
-    expect(c.label).toBe("still coming up");
+    expect(c.label).toBe("Still coming up");
   });
 
   it('liveness:"never" + live unlock request → waiting-for-approval (approval wins)', () => {
@@ -156,14 +156,14 @@ describe("Fix A — classifyServer reads the liveness field", () => {
   it("renderServerCard with liveness:unreachable shows offline copy, no Connecting", () => {
     const pod = { liveness: "unreachable", lastSeenMsAgo: 2 * 3600_000 };
     const html = renderServerCard(BASE_SERVER, pod);
-    expect(html).toContain("offline");
+    expect(html).toContain("Offline");
     expect(html).not.toContain("Connecting");
   });
 
   it("renderServerCard with liveness:never shows still-coming-up copy, no Connecting", () => {
     const pod = { liveness: "never" };
     const html = renderServerCard(BASE_SERVER, pod);
-    expect(html).toContain("still coming up");
+    expect(html).toContain("Still coming up");
     expect(html).not.toContain("Connecting");
   });
 });

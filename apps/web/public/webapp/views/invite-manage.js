@@ -119,7 +119,7 @@ async function renderActive(app, labelByTag) {
             <div>
               <div class="weight-600">${escapeHtml(labelText)}</div>
               <div class="muted-sm">role: ${escapeHtml(a.role ?? "")} · since ${escapeHtml(formatWhen(a.grantedAt ?? 0))}</div>
-              <div class="value text-xs">IRK ${escapeHtml((a.irkPubHex ?? "").slice(0, 12))}…</div>
+              <div class="value text-xs">Account key ${escapeHtml((a.irkPubHex ?? "").slice(0, 12))}…</div>
             </div>
             <button class="danger" data-action="revoke-access" data-name="${escapeHtml(labelText)}" data-irk="${escapeHtml(a.irkPubHex ?? "")}" data-tag="${escapeHtml(a.opaqueTag ?? "")}">Revoke</button>
           </div>

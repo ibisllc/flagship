@@ -114,7 +114,7 @@ async function rotate() {
   try {
     const conn = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/mcp/rotate`, { method: "POST", body: JSON.stringify({ label: "webapp" }) });
     renderConnection(conn);
-    toast("key regenerated — update your IDE", "ok");
+    toast("Key regenerated — update your IDE", "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
   }
@@ -127,7 +127,7 @@ async function deploy() {
   btn.textContent = "deploying…";
   try {
     const r = await screensFetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
-    toast(`deployed → ${r.url}`, "ok");
+    toast(`Deployed → ${r.url}`, "ok");
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
   } finally {
@@ -141,6 +141,6 @@ function copy(text, msg) {
     navigator.clipboard.writeText(text);
     toast(msg, "ok");
   } catch {
-    toast("copy failed — select manually", "err");
+    toast("Copy failed — select manually", "err");
   }
 }

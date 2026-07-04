@@ -151,13 +151,13 @@ async function handleOpenAccount() {
   const username = (input?.value || "").trim().toLowerCase();
   renderTakenState(null); // clear any prior taken-state on a fresh attempt
   if (!isValidUsername(username)) {
-    toast("username must be 3–30 lowercase letters and digits, no hyphens", "err");
+    toast("Username must be 3–30 lowercase letters and digits, no hyphens", "err");
     input?.focus();
     return false;
   }
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("generate a device key first", "err");
+    toast("Generate a device key first", "err");
     return false;
   }
   const btn = document.getElementById("wizard-go-username");
@@ -197,7 +197,7 @@ async function handleOpenAccount() {
       // step itself. The account is open; the app shell comes after the
       // remaining (skippable) wizard steps.
     });
-    toast(`account opened — ${username}`, "ok");
+    toast(`Account opened — ${username}`, "ok");
     return true;
   } catch (e) {
     const msg = String(e.message || e);
@@ -226,7 +226,7 @@ async function handleOpenAccount() {
 async function handleSecureAccount() {
   const session = getSession();
   if (!session.umk || !session.irk) {
-    toast("open your account first", "err");
+    toast("Open your account first", "err");
     return false;
   }
   const username =
@@ -239,7 +239,7 @@ async function handleSecureAccount() {
     if (useCloud) {
       const { setupCloudRecovery } = await import("../lib/recovery.js");
       await setupCloudRecovery(username);
-      toast(`cloud backup on for ${username}`, "ok");
+      toast(`Cloud backup on for ${username}`, "ok");
       return true;
     }
     // File path: run the same `.flagshipkey` export ceremony the
@@ -248,7 +248,7 @@ async function handleSecureAccount() {
     const saved = await runKeyfileExportCeremony();
     return saved === true;
   } catch (e) {
-    toast(`backup failed: ${e?.message ?? e}`, "err");
+    toast(`Backup failed: ${e?.message ?? e}`, "err");
     return false;
   } finally {
     if (btn) btn.disabled = false;
