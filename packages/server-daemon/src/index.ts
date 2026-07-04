@@ -2481,6 +2481,10 @@ async function wireOwnerHandlers(deps: {
     void runDebugAccessGate({
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      // Slice D — hold the root-shell grant to the admin-root boundary when one
+      // is pinned (v1-sec GAP 2); no pin ⇒ legacy owner-IRK path, unchanged.
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       markerStore: fileDebugMarkerStore(`${dataDir}/debug-access-done.json`),
       runner: realDebugCommandRunner,
       onLog: (m) => console.log(m),
