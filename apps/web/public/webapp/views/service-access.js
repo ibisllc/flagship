@@ -489,7 +489,7 @@ function peopleRowHtml(i) {
   }
   const avatar = photo
     ? `<img src="${escapeHtml(photo)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" />`
-    : `<div class="avatar-mono" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-2,#1f2937);">${escapeHtml((name[0] || (isGroup ? "#" : "?")).toUpperCase())}</div>`;
+    : `<div class="avatar-mono" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-elev);">${escapeHtml((name[0] || (isGroup ? "#" : "?")).toUpperCase())}</div>`;
   const removeLabel = isGroup ? "Revoke group" : "Remove";
   return `
     <div class="card">

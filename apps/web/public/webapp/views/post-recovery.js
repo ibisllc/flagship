@@ -50,10 +50,10 @@ function renderReport(report) {
   }
   const statusPill =
     report.status === "complete"
-      ? '<span class="pill" style="background:#1f3a1f;color:#6ee7a8">done</span>'
+      ? '<span class="pill ok">Done</span>'
       : report.status === "failed"
-      ? '<span class="pill" style="background:#3a1f1f;color:#f87171">failed</span>'
-      : '<span class="pill">running…</span>';
+      ? '<span class="pill err">Failed</span>'
+      : '<span class="pill">Running…</span>';
   const undoText = report.undoWindowExpiresAt
     ? new Date(report.undoWindowExpiresAt).toLocaleString()
     : "—";

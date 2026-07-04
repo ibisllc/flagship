@@ -80,10 +80,11 @@
                   ui-sans-serif, system-ui, sans-serif;
   --font-mono:    "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --radius-sm: 8px;
-  --radius:    12px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
+  /* Radii unified to the cross-surface scale {6,10,16} (S4). */
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
 
   --shadow-flat:    0 1px 0 rgba(0,0,0,0.5);
@@ -480,8 +481,8 @@ button.gated, .btn.gated { opacity: 0.45; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.72rem;
   line-height: 1.45;
-  background: var(--ink-soft, #f3f3f5);
-  border-radius: 8px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
   padding: 0.6rem 0.7rem;
 }
 
@@ -581,7 +582,7 @@ input[type="tel"], input[type="url"], input[type="number"], select, textarea {
   background: var(--canvas-tinted);
   color: var(--ink);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 11px 14px;
   font: inherit;
   font-family: var(--font-sans);
@@ -682,7 +683,7 @@ code {
 /* Live frame in browser viewer */
 #bv-frame {
   background: #000 !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-sm) !important;
   border: 1px solid var(--border);
 }
 
@@ -780,7 +781,7 @@ section:not(.hidden) {
   gap: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
-  border-radius: var(--radius-2, 10px);
+  border-radius: var(--radius);
   cursor: pointer;
 }
 .secure-option input[type="radio"] { margin-top: 2px; flex: 0 0 auto; }
@@ -881,7 +882,7 @@ section:not(.hidden) {
   width: 100%;
   max-width: 320px;
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: #000;
   display: block;
   margin: 0 auto;
@@ -1441,7 +1442,7 @@ button[data-device-restricted] {
   margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--ink-muted);
   display: flex;
@@ -1467,7 +1468,7 @@ button[data-device-restricted] {
   align-items: start;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .boot-unlock-option:hover { border-color: var(--border); }
@@ -1881,9 +1882,9 @@ button[data-device-restricted] {
 .build-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; cursor: pointer; }
 .build-tile strong { font-size: 1rem; }
 .build-tile .note { margin: 0; }
-.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 6px; background: var(--surface-2, #1c2530); font-size: 0.72rem; font-family: var(--font-mono); }
+.badge { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: var(--radius-sm); background: var(--surface-elev); font-size: 0.72rem; font-family: var(--font-mono); }
 .build-journal-timeline { list-style: none; padding: 0; margin: 0; }
-.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border, #243); }
+.build-journal-timeline li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .build-journal-timeline li:last-child { border-bottom: none; }
 
 /* Build-from-scratch chat (vibe-code) */
@@ -1909,7 +1910,7 @@ button[data-device-restricted] {
 .vc-msg-user {
   align-self: flex-end;
   background: var(--accent-soft);
-  border-color: rgba(20, 184, 166, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   border-bottom-right-radius: var(--radius-sm);
 }
 .vc-msg-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
