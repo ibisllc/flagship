@@ -60,9 +60,12 @@ export async function setupCloudRecovery(username) {
   // Slice D (D-3): escrow the admin master root UNDER the recovery credential
   // too, so credential recovery can later re-establish it (the admin root is NOT
   // UMK-derived — a UMK backup alone can't reconstruct it). We hand the
-  // sub-origin the admin-root seed alongside the UMK; it wraps `umk||adminRoot`
-  // under the same PRF key. Best-effort: an account with no admin root (legacy)
-  // escrows the UMK alone, byte-identical to before.
+  // sub-origin the admin-root seed alongside the UMK; it wraps each secret as
+  // its OWN mobile-identical blob (UMK under `flagship/recovery-wrap/v1`, admin
+  // root under `flagship/recovery-admin-root-wrap/v1`) and returns a SEPARATE
+  // `wrappedAdminRootB64` we escrow in the `wrappedAdminRoot` column — so an
+  // iOS/Android device can unwrap it verbatim. Best-effort: an account with no
+  // admin root (legacy) escrows the UMK alone.
   let adminRootSeed = null;
   try {
     adminRootSeed = session.adminRootSeed ?? (await loadAdminRootSeed(session.umk));
@@ -81,7 +84,7 @@ export async function setupCloudRecovery(username) {
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? "no result"}`);
   }
-  const { credentialIdHex, wrappedUmkB64, fetchTokenHashHex, prfSaltHashHex } = result;
+  const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, fetchTokenHashHex, prfSaltHashHex } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
     throw new Error("enroll: bad payload from sub-origin");
   }
@@ -94,7 +97,7 @@ export async function setupCloudRecovery(username) {
     throw new Error("enroll: sub-origin omitted the passphrase hashes");
   }
   return await uploadRecord({
-    session, username, credentialIdHex, wrappedUmkB64,
+    session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
     fetchTokenHashHex, prfSaltHashHex,
   });
 }
@@ -326,7 +329,7 @@ async function runSubOriginFlow(mode, payload) {
 }
 
 async function uploadRecord({
-  session, username, credentialIdHex, wrappedUmkB64,
+  session, username, credentialIdHex, wrappedUmkB64, wrappedAdminRootB64,
   fetchTokenHashHex, prfSaltHashHex,
 }) {
   const wrappedBytes = base64ToBytes(wrappedUmkB64);
@@ -357,6 +360,10 @@ async function uploadRecord({
         credentialId: credentialIdHex,
         wrappedUmk: wrappedUmkB64,
         issuedAt,
+        // Slice D (D-3): the admin master root's SEPARATE escrow blob →
+        // `.com`'s wrapped_admin_root_b64 column (control-plane already accepts
+        // + preserves it). Absent for a UMK-only / legacy account.
+        ...(wrappedAdminRootB64 ? { wrappedAdminRoot: wrappedAdminRootB64 } : {}),
         ...(fetchTokenHashHex ? { fetchTokenHash: fetchTokenHashHex } : {}),
         ...(prfSaltHashHex ? { prfSaltHash: prfSaltHashHex } : {}),
       },

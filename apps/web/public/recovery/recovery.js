@@ -39,6 +39,12 @@
 // (offline attack on a leaked wrappedUmk requires ~m*t per guess at
 // the attacker's tier).
 import { argon2id } from "./vendor/noble-hashes/argon2.js";
+import {
+  wrapWithPrf,
+  unwrapWithPrf,
+  HKDF_UMK_SALT,
+  HKDF_ADMIN_ROOT_SALT,
+} from "./recoveryWrap.js";
 
 const APEX = "https://flagshipserver.com";
 const RP_ID = "recovery.flagshipserver.com";
@@ -194,14 +200,17 @@ $("enroll-go")?.addEventListener("click", async () => {
 
     setStatus("enroll-status", "Creating passkey on this device…", null);
     const { credentialIdHex, prfBytes } = await createPasskey(username, prfSalt);
-    // Slice D (D-3): escrow the admin root by wrapping `umk || adminRootSeed`
-    // (64 bytes) under the PRF key. Without an admin root we wrap the UMK alone
-    // (32 bytes) — byte-identical to the pre-D escrow. `.com` stores opaque
-    // ciphertext, so the length change is transparent to it.
-    const secretMaterial = state.enrollAdminRootSeed
-      ? concatBytes(state.enrollUmk, state.enrollAdminRootSeed)
-      : state.enrollUmk;
-    const wrappedB64 = await wrapUmkWithPrf(secretMaterial, prfBytes);
+    // Cross-platform escrow (mobile-identical): each secret is its OWN
+    // self-contained blob, wrapped under an HKDF-SHA256(prf, <domain salt>)
+    // AES-256-GCM key — NEVER the raw PRF bytes, and NEVER a `umk||adminRoot`
+    // concatenation. The UMK rides `wrappedUmk`; the admin master root (Slice D
+    // D-3, when present) rides a SEPARATE `wrappedAdminRoot` blob under its own
+    // salt, so an iOS/Android device can unwrap each with Recovery.unwrap /
+    // AdminRootEscrow.unwrapFromEscrow verbatim.
+    const wrappedB64 = await wrapWithPrf(state.enrollUmk, prfBytes, HKDF_UMK_SALT);
+    const wrappedAdminRootB64 = state.enrollAdminRootSeed
+      ? await wrapWithPrf(state.enrollAdminRootSeed, prfBytes, HKDF_ADMIN_ROOT_SALT)
+      : null;
 
     const fetchTokenHashHex = await sha256Hex(fetchToken);
     const prfSaltHashHex = await sha256Hex(prfSalt);
@@ -210,6 +219,7 @@ $("enroll-go")?.addEventListener("click", async () => {
       type: "flagship-recovery-enroll-result",
       credentialIdHex,
       wrappedUmkB64: wrappedB64,
+      ...(wrappedAdminRootB64 ? { wrappedAdminRootB64 } : {}),
       fetchTokenHashHex,
       prfSaltHashHex,
     });
@@ -243,7 +253,7 @@ $("recover-go")?.addEventListener("click", async () => {
     setStatus("recover-status", "Asking flagshipserver.com for the wrapped key…", null);
     const fetched = await fetchWrappedUmk(username, fetchToken);
     if (!fetched) throw new Error("no cloud recovery for that username");
-    const { credentialIdHex, wrappedUmkB64, prfSaltHash } = fetched;
+    const { credentialIdHex, wrappedUmkB64, wrappedAdminRootB64, prfSaltHash } = fetched;
 
     // Defense-in-depth: verify the server returned the same prfSalt we
     // derived locally (otherwise a tampered .com could feed us a
@@ -258,17 +268,17 @@ $("recover-go")?.addEventListener("click", async () => {
     }
 
     const credentialId = hexToBytes(credentialIdHex);
-    const wrapped = base64ToBytes(wrappedUmkB64);
     const prfBytes = await getPrfWithGet(credentialId, prfSalt);
     if (!prfBytes) throw new Error("WebAuthn PRF not supported by this authenticator");
 
-    const material = await unwrapUmkWithPrf(wrapped, prfBytes);
-    // Slice D (D-3): a post-D escrow is `umk(32) || adminRootSeed(32)`; a legacy
-    // escrow is the 32-byte UMK alone. Split so the UMK stays exactly 32 bytes
-    // (the parent's invariant) and the admin root rides as an additive field the
-    // recovery-rotation consumer (deferred) picks up.
-    const umk = material.slice(0, 32);
-    const adminRootSeed = material.length >= 64 ? material.slice(32, 64) : null;
+    // Cross-platform unwrap: the UMK is its OWN blob (HKDF under the UMK salt);
+    // the admin master root (Slice D D-3) is a SEPARATE `wrappedAdminRoot` blob
+    // under its own salt. Both are mobile-produced-or-webapp-produced
+    // interchangeably. A legacy/UMK-only escrow simply has no admin-root blob.
+    const umk = await unwrapWithPrf(wrappedUmkB64, prfBytes, HKDF_UMK_SALT);
+    const adminRootSeed = wrappedAdminRootB64
+      ? await unwrapWithPrf(wrappedAdminRootB64, prfBytes, HKDF_ADMIN_ROOT_SALT)
+      : null;
     postToParent({
       type: "flagship-recovery-recover-result",
       username,
@@ -394,6 +404,9 @@ async function fetchWrappedUmk(username, fetchToken) {
   return {
     credentialIdHex: b.credentialId ?? credentialIdHex,
     wrappedUmkB64: b.wrappedUmk,
+    // Slice D (D-3): the admin master root rides as a SEPARATE escrow blob
+    // (`.com` releases it alongside the UMK on the gated fetch when present).
+    wrappedAdminRootB64: typeof b.wrappedAdminRoot === "string" ? b.wrappedAdminRoot : null,
     prfSaltHash: b.prfSaltHash,
   };
 }
@@ -460,43 +473,10 @@ async function derivePassphraseSecrets(passphrase, username) {
   return { fetchToken, prfSalt };
 }
 
-async function wrapUmkWithPrf(umkSeed, prfBytes) {
-  const aesKey = await crypto.subtle.importKey(
-    "raw", prfBytes.slice(0, 32),
-    { name: "AES-GCM" }, false, ["encrypt"],
-  );
-  const nonce = randBytes(12);
-  const ct = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, umkSeed),
-  );
-  const out = new Uint8Array(nonce.length + ct.length);
-  out.set(nonce, 0);
-  out.set(ct, nonce.length);
-  return bytesToB64(out);
-}
-
-async function unwrapUmkWithPrf(wrapped, prfBytes) {
-  if (wrapped.length < 12 + 16) throw new Error("wrapped UMK too short");
-  const nonce = wrapped.slice(0, 12);
-  const ct = wrapped.slice(12);
-  const aesKey = await crypto.subtle.importKey(
-    "raw", prfBytes.slice(0, 32),
-    { name: "AES-GCM" }, false, ["decrypt"],
-  );
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, aesKey, ct);
-  return new Uint8Array(pt);
-}
-
 function randBytes(n) {
   const b = new Uint8Array(n);
   crypto.getRandomValues(b);
   return b;
-}
-function concatBytes(a, b) {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
 }
 function bytesToHex(b) {
   let s = "";
@@ -511,17 +491,6 @@ function hexToBytes(hex) {
   for (let i = 0; i < out.length; i++) {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
-  return out;
-}
-function bytesToB64(b) {
-  let s = "";
-  for (const x of b) s += String.fromCharCode(x);
-  return btoa(s);
-}
-function base64ToBytes(s) {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
 async function sha256Hex(b) {
