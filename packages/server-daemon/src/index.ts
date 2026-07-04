@@ -33,6 +33,14 @@ import {
 import { fsRestoreSink, runRestoreOnce } from "./peerBackup/restore.js";
 import { quiesceDataServices, walkDataDir } from "./dataDirWalker.js";
 import {
+  dumpDataVolumes,
+  isDumpSubtree,
+  isRawDataMount,
+  loadDataServicesCreds,
+  realVolumeDumpRunner,
+  reloadDataVolumes,
+} from "./volumeDump.js";
+import {
   buildMigrationPoller,
   fileMigrationMarkerStore,
   pollMigrationAwareHandoffConfirm,
@@ -202,6 +210,43 @@ import {
 } from "./updateHealthGate.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
+
+/**
+ * Volume-aware backup pre-step: write CONSISTENT logical dumps of the data-layer
+ * stores (postgres/minio/redis/forgejo — docker bind mounts under
+ * `<dataRoot>/{postgres,minio,…}`) into the reserved `_dumps/` subtree BEFORE the
+ * walker runs, so the walker ships those consistent dumps instead of descending
+ * into the live mounts and shipping torn PGDATA / mid-write AOF / oversize
+ * packfiles. Best-effort: no data-services env ⇒ no dumps (a box without a data
+ * layer is unaffected). Returns the walk options that skip the raw mounts and
+ * raise the whole-file cap for the (legitimately large) dumps.
+ */
+async function dumpVolumesBeforeWalk(
+  dataRoot: string,
+  onLog: (m: string) => void,
+): Promise<{ exclude: (rel: string) => boolean; raiseCapFor: (rel: string) => boolean }> {
+  const envFile = process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
+  const creds = await loadDataServicesCreds(envFile);
+  if (creds) {
+    try {
+      const report = await dumpDataVolumes({ dataRoot, runner: realVolumeDumpRunner, creds, onLog });
+      if (!report.ok) {
+        onLog(
+          `[volume-dump] ${report.errors.length} store(s) failed to dump; they are omitted (not torn) this pass`,
+        );
+      }
+    } catch (e) {
+      // A wholesale failure (e.g. docker missing) must not stop the file walk —
+      // non-store data under <dataRoot> still gets backed up.
+      onLog(`[volume-dump] dump pass failed (continuing with file walk): ${(e as Error).message}`);
+    }
+  } else {
+    onLog(`[volume-dump] no data-services creds at ${envFile}; skipping store dumps`);
+  }
+  // The raw mounts are excluded whether or not the dump succeeded — a clean miss
+  // beats a torn copy, and any store that DID dump rides via `_dumps/`.
+  return { exclude: isRawDataMount, raiseCapFor: isDumpSubtree };
+}
 
 /**
  * Production daemon entry point. Brings up:
@@ -1101,8 +1146,12 @@ async function main(): Promise<void> {
     const loop = backupLoop;
     const backupTimer = setInterval(() => {
       void (async () => {
-        const files = await walkDataDir(`${dataDir}/data`, {
+        const dataRoot = `${dataDir}/data`;
+        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(`[peer-backup] ${m}`));
+        const files = await walkDataDir(dataRoot, {
           onLog: (m) => console.log(`[peer-backup] ${m}`),
+          exclude: walkOpts.exclude,
+          raiseCapFor: walkOpts.raiseCapFor,
         });
         const report = await loop.runOnce(files);
         if (report.chunksShipped > 0) {
@@ -1168,6 +1217,33 @@ async function main(): Promise<void> {
         return { complete: false, detail: out.reason };
       },
       onTakeOver: async ({ serverDomain }) => {
+        // Symmetric restore step: the shard restore above landed `_dumps/**`
+        // onto disk, but those are LOGICAL dumps — reload them INTO this fresh
+        // box's already-initdb'd data stack (pg_restore / mc mirror / redis
+        // rdb swap / forgejo sqlite+repos) before it takes traffic. Idempotent +
+        // best-effort per store; a store with no dump is simply skipped. No data
+        // layer (no creds) ⇒ nothing to reload.
+        const dataRoot = `${dataDir}/data`;
+        const envFile =
+          process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env";
+        const creds = await loadDataServicesCreds(envFile);
+        if (creds) {
+          try {
+            const rep = await reloadDataVolumes({
+              dataRoot,
+              runner: realVolumeDumpRunner,
+              creds,
+              onLog: (m) => console.log(`[migration] ${m}`),
+            });
+            if (!rep.ok) {
+              console.log(
+                `[migration] volume reload had ${rep.errors.length} store failure(s); re-homing anyway`,
+              );
+            }
+          } catch (e) {
+            console.log(`[migration] volume reload failed (continuing): ${(e as Error).message}`);
+          }
+        }
         // Re-home to the migrated name via the SAME marker+boot path
         // transfer-a-box uses (owner unchanged ⇒ same IRK): next boot
         // re-derives cert SANs for the migrated name, re-mints the A′ cert,
@@ -2544,15 +2620,26 @@ async function wireOwnerHandlers(deps: {
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
-      // Final-flush (the migration/replacement FINAL DELTA): quiesce the data
-      // services (write-freeze, v1 stop-then-full-flush), walk the real data
-      // tree, and run a full BackupLoop pass over it. The epoch is recorded by
-      // the §9 epoch-complete report the consumer POSTs after this resolves.
+      // Final-flush (the migration/replacement FINAL DELTA): DUMP the data
+      // stores (consistent logical dumps, services still LIVE — pg_dumpall /
+      // BGSAVE / mc mirror / sqlite .backup can't run against a stopped
+      // container), THEN quiesce the data services (write-freeze — now a REAL
+      // stop, see quiesceDataServices), THEN walk the real data tree skipping
+      // the raw mounts (only the `_dumps/**` ride). The dumps captured the
+      // consistent state before the freeze; the freeze is the clean final point
+      // for any non-store files under data/. The epoch is recorded by the §9
+      // epoch-complete report the consumer POSTs after this resolves.
       backupFlush: async (_epoch) => {
         if (!deps.backupLoop) return;
+        const dataRoot = `${dataDir}/data`;
+        const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(m));
         await quiesceDataServices((m) => console.log(m));
-        const files = await walkDataDir(`${dataDir}/data`, { onLog: (m) => console.log(m) });
-        console.log(`[decommission] final flush: ${files.length} files from ${dataDir}/data`);
+        const files = await walkDataDir(dataRoot, {
+          onLog: (m) => console.log(m),
+          exclude: walkOpts.exclude,
+          raiseCapFor: walkOpts.raiseCapFor,
+        });
+        console.log(`[decommission] final flush: ${files.length} files from ${dataRoot}`);
         await deps.backupLoop.runOnce(files);
       },
       // Release routing = drop the tunnel + stop serving (runtime.close()).
