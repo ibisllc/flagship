@@ -109,6 +109,8 @@ export async function renderProviders() {
     list.appendChild(cta);
   }
 
+  if (hasPromoEntry) void refreshPromoBalance();
+
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
     const card = document.createElement("div");
@@ -166,6 +168,57 @@ export async function renderProviders() {
     $("promo-step-otp")?.classList.add("hidden");
     $("promo-step-phone")?.classList.remove("hidden");
   });
+}
+
+// Credit-balance display for the free-credits (flagship) provider. Reads
+// the already-built GET /api/llm-promo/status/:user (tier + daily/lifetime
+// usage). Best-effort: a fetch failure just hides the card. When the
+// lifetime cap is spent, surface the "switch to your own key" prompt.
+async function refreshPromoBalance() {
+  const el = $("promo-balance");
+  if (!el) return;
+  let username;
+  try {
+    username = await ensureUsername();
+  } catch {
+    el.classList.add("hidden");
+    return;
+  }
+  let status;
+  try {
+    const r = await fetch(`/api/llm-promo/status/${encodeURIComponent(username)}`);
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    status = await r.json();
+  } catch {
+    el.classList.add("hidden");
+    return;
+  }
+  const daily = status.daily ?? { used: 0, cap: 0 };
+  const lifetime = status.lifetime ?? { used: 0, cap: -1 };
+  const lifetimeSpent = lifetime.cap !== -1 && lifetime.used >= lifetime.cap;
+  const lifetimeText =
+    lifetime.cap === -1
+      ? "unlimited"
+      : `${Math.max(0, lifetime.cap - lifetime.used)} of ${lifetime.cap} left`;
+  el.className = "card mt-2";
+  el.innerHTML = `
+    <div class="row row-top">
+      <div class="weight-600">Free credits</div>
+      <span class="pill">${escapeHtml(status.tier ?? "free")}</span>
+    </div>
+    <div class="note mt-2">
+      Today: ${daily.used ?? 0} of ${daily.cap ?? 0} · Lifetime: ${escapeHtml(lifetimeText)}
+    </div>
+    ${
+      lifetimeSpent
+        ? `<div class="note mt-2 warn">You've used all your free credits. Add your own provider key to keep building.</div>
+           <button id="promo-switch-byok" class="full-width mt-2">Add your own key</button>`
+        : ""
+    }
+  `;
+  if (lifetimeSpent) {
+    $("promo-switch-byok")?.addEventListener("click", () => handleAddProvider());
+  }
 }
 
 let promoIssuanceCtx = null;
@@ -252,11 +305,16 @@ async function completePromoIssuance() {
     }
     const { key } = await r.json();
     await addProvider(session.umk, {
-      provider: "openai",
+      // The in-house inference posture: an OpenAI-compatible RunPod/vLLM
+      // endpoint reached with a scoped .com token. `source: "promo"` is
+      // sealed with the credential so the box pins its SSRF guard to the
+      // blessed host (a leaked token can't be redirected elsewhere).
+      provider: "flagship",
       label: `Flagship promo (${key.keyId})`,
       apiKey: key.apiKey,
       baseUrl: key.baseUrl,
       defaultModel: key.model,
+      source: "promo",
     });
     promoIssuanceCtx = null;
     $("promo-issuance-form")?.classList.add("hidden");
