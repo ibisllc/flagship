@@ -25,6 +25,7 @@ import {
   deriveSTK,
   verifyAccountRecovery,
   verifyAdminRootRotation,
+  verifyAdminRootTransfer,
   verifyAuthCode,
   verifyDaemonStatusReport,
   verifyDeviceCapabilityGrant,
@@ -46,6 +47,7 @@ import {
   verifyRevocation,
   verifyRevokeDeviceCapabilityGrant,
   verifyServerRegister,
+  verifyServerTransferClaim,
   verifySetRoutingTarget,
   verifyTunnelHello,
   verifyWatchDelegateKey,
@@ -466,6 +468,33 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
             username: i.username as string,
             oldAdminRootPub: fromHex("oldAdminRootPub"),
             newAdminRootPub: fromHex("newAdminRootPub"),
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          adminRootPub,
+        );
+      case "server-transfer-claim":
+        return verifyServerTransferClaim(
+          {
+            serverDomain: i.serverDomain as string,
+            transferNonce: i.transferNonce as string,
+            acquirerUsername: i.acquirerUsername as string,
+            acquirerIrkPub: fromHex("acquirerIrkPub"),
+            acquirerAdminRootPubHex: i.acquirerAdminRootPubHex as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "admin-root-transfer":
+        return verifyAdminRootTransfer(
+          {
+            serverDomain: i.serverDomain as string,
+            giverUsername: i.giverUsername as string,
+            acquirerUsername: i.acquirerUsername as string,
+            oldAdminRootPubHex: i.oldAdminRootPubHex as string,
+            newAdminRootPubHex: i.newAdminRootPubHex as string,
+            transferNonce: i.transferNonce as string,
             issuedAt: i.issuedAt as number,
           },
           sig,
