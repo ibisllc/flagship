@@ -16,6 +16,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { inlineConfirm } from "../lib/modal.js";
 import { listLabelsForApp, removeLabel } from "../lib/labelBook.js";
 
 registerView("view-invite-manage");
@@ -65,13 +66,13 @@ async function renderPending(app, labelByTag) {
               <div class="muted-sm">role: ${escapeHtml(inv.role ?? "")} · expires ${escapeHtml(new Date(inv.expiresAt ?? 0).toLocaleString())}</div>
               <div class="value text-xs">tag ${escapeHtml((inv.opaqueTag ?? "").slice(0, 12))}…</div>
             </div>
-            <button class="secondary" data-action="revoke-invite" data-tag="${escapeHtml(inv.opaqueTag ?? "")}" data-id="${escapeHtml(inv.inviteId ?? "")}">Revoke</button>
+            <button class="danger" data-action="revoke-invite" data-name="${escapeHtml(labelText)}" data-tag="${escapeHtml(inv.opaqueTag ?? "")}" data-id="${escapeHtml(inv.inviteId ?? "")}">Revoke</button>
           </div>
         </div>
       `;
     }).join("");
     root.querySelectorAll('[data-action="revoke-invite"]').forEach((b) => {
-      b.addEventListener("click", () => onRevokeInvite(app, b.getAttribute("data-id"), b.getAttribute("data-tag")));
+      b.addEventListener("click", () => onRevokeInvite(app, b.getAttribute("data-id"), b.getAttribute("data-tag"), b.getAttribute("data-name")));
     });
   } catch (e) {
     if (e instanceof ScreensError && (e.status === 404 || e.status === 503)) {
@@ -119,13 +120,13 @@ async function renderActive(app, labelByTag) {
               <div class="muted-sm">role: ${escapeHtml(a.role ?? "")} · since ${escapeHtml(new Date(a.grantedAt ?? 0).toLocaleString())}</div>
               <div class="value text-xs">IRK ${escapeHtml((a.irkPubHex ?? "").slice(0, 12))}…</div>
             </div>
-            <button class="secondary" data-action="revoke-access" data-irk="${escapeHtml(a.irkPubHex ?? "")}" data-tag="${escapeHtml(a.opaqueTag ?? "")}">Revoke</button>
+            <button class="danger" data-action="revoke-access" data-name="${escapeHtml(labelText)}" data-irk="${escapeHtml(a.irkPubHex ?? "")}" data-tag="${escapeHtml(a.opaqueTag ?? "")}">Revoke</button>
           </div>
         </div>
       `;
     }).join("");
     root.querySelectorAll('[data-action="revoke-access"]').forEach((b) => {
-      b.addEventListener("click", () => onRevokeAccess(app, b.getAttribute("data-irk"), b.getAttribute("data-tag")));
+      b.addEventListener("click", () => onRevokeAccess(app, b.getAttribute("data-irk"), b.getAttribute("data-tag"), b.getAttribute("data-name")));
     });
   } catch (e) {
     if (e instanceof ScreensError && (e.status === 404 || e.status === 503)) {
@@ -136,14 +137,22 @@ async function renderActive(app, labelByTag) {
   }
 }
 
-async function onRevokeInvite(app, inviteId, tag) {
+async function onRevokeInvite(app, inviteId, tag, name) {
+  const who = name && name !== "unknown" ? name : "this invite";
+  const ok = await inlineConfirm({
+    title: "Revoke invite?",
+    message: `${who} won't be able to accept this invite. This can't be undone.`,
+    okLabel: "Revoke",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await screensFetch(`/api/screens/app-invite/revoke`, {
       method: "POST",
       body: JSON.stringify({ serviceId: app.serviceId, inviteId, scope: "invite" }),
     });
     if (tag) await removeLabel(app.serviceId, tag);
-    toast("invite revoked", "ok");
+    toast("Invite revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
     console.error(e);
@@ -151,14 +160,22 @@ async function onRevokeInvite(app, inviteId, tag) {
   }
 }
 
-async function onRevokeAccess(app, irkPubHex, tag) {
+async function onRevokeAccess(app, irkPubHex, tag, name) {
+  const who = name && name !== "unknown" ? name : "this person";
+  const ok = await inlineConfirm({
+    title: "Revoke access?",
+    message: `${who} will immediately lose access to this app. This can't be undone.`,
+    okLabel: "Revoke",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await screensFetch(`/api/screens/app-invite/revoke`, {
       method: "POST",
       body: JSON.stringify({ serviceId: app.serviceId, irkPubKey: irkPubHex, scope: "access" }),
     });
     if (tag) await removeLabel(app.serviceId, tag);
-    toast("access revoked", "ok");
+    toast("Access revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
     console.error(e);

@@ -71,6 +71,7 @@ import {
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
+import { inlineConfirm } from "../lib/modal.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-server-detail");
@@ -410,17 +411,24 @@ async function refreshLeases(serverFqdn) {
         ${escapeHtml(l.leaseId.slice(0, 12))}…
         · until ${escapeHtml(fmtDate(l.expiresAt))}
       </span>
-      <button class="secondary btn-xs" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}">Revoke</button>
+      <button class="danger btn-xs" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}">Revoke</button>
     </div>
   `).join("");
   list.querySelectorAll('[data-action="revoke-lease"]').forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-lease-id");
       if (!id) return;
+      const ok = await inlineConfirm({
+        title: "Revoke auto-unlock lease?",
+        message: "This server will need phone approval to unlock on its next boot. This can't be undone.",
+        okLabel: "Revoke",
+        danger: true,
+      });
+      if (!ok) return;
       btn.disabled = true;
       try {
         await revokeLease(serverFqdn, id);
-        toast(`revoked lease ${id.slice(0, 8)}…`, "ok");
+        toast(`Revoked lease ${id.slice(0, 8)}…`, "ok");
         await refreshLeases(serverFqdn);
       } catch (e) {
         console.error("lease revoke failed", e);
