@@ -11,15 +11,58 @@
 // or for a paid app the caller already owns; otherwise 402 with the price so
 // the client can route to checkout.
 
-import type { AppPurchaseStorage, MarketplaceListingRecord, MarketplaceStorage } from "@flagship/storage";
+import type {
+  AppPurchaseStorage,
+  AppSalesStorage,
+  MarketplaceListingRecord,
+  MarketplaceStorage,
+} from "@flagship/storage";
 
 const USERNAME_RE = /^[a-z0-9]{3,30}$/;
 /** $1,000 ceiling — a fat-fingered price can't bill a fortune. */
 export const MAX_APP_PRICE_CENTS = 100_000;
 
+/** Platform revenue cut, in basis points (1% = 100 bps). Default 15%.
+ *  Configurable per-deployment via MARKETPLACE_CUT_BPS. */
+export const DEFAULT_MARKETPLACE_CUT_BPS = 1500;
+
+/** Parse the configurable cut. Out-of-range / garbage ⇒ the default. A cut
+ *  must be 0..10000 bps (0%..100%). */
+export function parseCutBps(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return DEFAULT_MARKETPLACE_CUT_BPS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 10_000) return DEFAULT_MARKETPLACE_CUT_BPS;
+  return Math.floor(n);
+}
+
+/** Split a gross amount into the platform cut + the creator's net. Floors the
+ *  cut (rounding in the creator's favor). */
+export function computeCut(
+  grossCents: number,
+  cutBps: number = DEFAULT_MARKETPLACE_CUT_BPS,
+): { cutCents: number; netCents: number } {
+  const bps =
+    Number.isFinite(cutBps) && cutBps >= 0 && cutBps <= 10_000
+      ? Math.floor(cutBps)
+      : DEFAULT_MARKETPLACE_CUT_BPS;
+  const gross = Math.max(0, Math.floor(grossCents));
+  const cutCents = Math.floor((gross * bps) / 10_000);
+  return { cutCents, netCents: gross - cutCents };
+}
+
+/** Composite marketplace listing id: `<creator>--<slug>`. */
+export function listingId(creator: string, slug: string): string {
+  return `${creator}--${slug}`;
+}
+
 export interface AppPurchaseDeps {
   purchases: AppPurchaseStorage;
   marketplace: MarketplaceStorage;
+  /** Payout ledger (#15). When present, a NEW paid grant (except an admin
+   *  comp — no revenue) also writes an app_sales row. */
+  sales?: AppSalesStorage;
+  /** Platform cut in bps for the sale split. Defaults to DEFAULT_MARKETPLACE_CUT_BPS. */
+  cutBps?: number;
   now?: () => number;
 }
 
@@ -38,6 +81,10 @@ export interface GrantAppPurchaseArgs {
   slug: string;
   source: "stripe" | "admin" | "voucher";
   ref?: string;
+  /** The Stripe event id, when source==="stripe". Used as the app_sales
+   *  idempotency key (and audit provenance) so a webhook redelivery never
+   *  double-writes a sale. */
+  stripeEventId?: string;
 }
 
 export interface GrantAppPurchaseResult {
@@ -46,6 +93,8 @@ export interface GrantAppPurchaseResult {
   slug: string;
   /** true if this granted a NEW entitlement; false if already owned. */
   granted: boolean;
+  /** true if this write also recorded an app_sales payout row. */
+  saleRecorded?: boolean;
 }
 
 /** Grant `username` ownership of `<creator>/<slug>`. Validates the username +
@@ -63,15 +112,44 @@ export async function grantAppPurchase(
   const listing = await deps.marketplace.get(creator, slug);
   if (!listing || listing.status === "removed") throw new Error("listing not found");
 
+  const at = nowMs(deps);
   const granted = await deps.purchases.grant({
     username,
     creator,
     slug,
-    purchasedAt: nowMs(deps),
+    purchasedAt: at,
     source: args.source,
     ...(args.ref ? { ref: args.ref } : {}),
   });
-  return { username, creator, slug, granted };
+
+  // Revenue split (#15): a NEW paid grant that isn't an admin comp (a comp is
+  // free — no revenue, no payout) writes an app_sales row. The ledger write
+  // is itself idempotent on sale_key, so it double-guards a redelivery even if
+  // `granted` were ever true twice. A failed grant, a free app, or a missing
+  // sales store all short-circuit (nothing to pay out).
+  let saleRecorded = false;
+  const grossCents = listing.priceUsdCents ?? 0;
+  if (deps.sales && granted && grossCents > 0 && args.source !== "admin") {
+    const { cutCents, netCents } = computeCut(grossCents, deps.cutBps ?? DEFAULT_MARKETPLACE_CUT_BPS);
+    const saleKey =
+      args.source === "stripe" && args.stripeEventId
+        ? args.stripeEventId
+        : `${args.source}:${creator}:${slug}:${username}`;
+    saleRecorded = await deps.sales.record({
+      saleKey,
+      listingId: listingId(creator, slug),
+      creatorAccount: creator,
+      buyerAccount: username,
+      grossCents,
+      cutCents,
+      netCents,
+      currency: "usd",
+      ...(args.source === "stripe" && args.stripeEventId ? { stripeEventId: args.stripeEventId } : {}),
+      at,
+    });
+  }
+
+  return { username, creator, slug, granted, saleRecorded };
 }
 
 /** May `username` install `<creator>/<slug>`? Free ⇒ always. Paid ⇒ only if
