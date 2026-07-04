@@ -41,6 +41,11 @@ public struct SwkDepositCoordinator {
     /// the Keychain/biometric. The IRK from `deriveIrkAndSwk` is reused for the
     /// CGK deposit's owner signature, so this returns only the CGK material.
     private let deriveCgkHex: (_ reason: String) async throws -> String
+    /// Server-migration seam (docs/server-migration.md invariant 4): which
+    /// serverId the SWK for a pod derives from. Injectable so tests don't hit
+    /// the network; the default consults the persisted migration holds and only
+    /// touches `.com` when one is live.
+    private let resolveMigrationSwk: (_ podDomain: String) async -> MigrationSwkResolution
 
     public init(
         username: String,
@@ -55,7 +60,8 @@ public struct SwkDepositCoordinator {
         deriveCgkHex: @escaping (_ reason: String) async throws -> String = { reason in
             let m = try await Keystore.deriveIRKAndCgk(reason: reason)
             return m.cgkHex
-        }
+        },
+        resolveMigrationSwk: ((_ podDomain: String) async -> MigrationSwkResolution)? = nil
     ) {
         self.username = username
         self.mailbox = mailbox
@@ -64,6 +70,18 @@ public struct SwkDepositCoordinator {
         self.cgkStore = cgkStore
         self.deriveIrkAndSwk = deriveIrkAndSwk
         self.deriveCgkHex = deriveCgkHex
+        self.resolveMigrationSwk = resolveMigrationSwk ?? { podDomain in
+            let holdStore = MigrationHoldStore()
+            let holds = holdStore.holds()
+            guard !holds.isEmpty else { return .normal }
+            let client = LiveServerMigrationClient()
+            return await MigrationSwkResolver.resolve(
+                podDomain: podDomain,
+                holds: holds,
+                fetchSession: { try await client.fetchMigration(serverDomain: $0) },
+                clearHold: { holdStore.clearHold(for: $0) }
+            )
+        }
     }
 
     /// Deposit what's OWED for a box that has registered (carrying
@@ -72,13 +90,33 @@ public struct SwkDepositCoordinator {
     /// Both ride ONE biometric (the IRK derived once) and are sealed to the box
     /// identity. No-op when nothing is owed.
     public func depositIfNeeded(serverDomain: String, identityPubKeyHex: String) async {
-        let swkOwed = store.isPending(for: serverDomain)
+        var swkOwed = store.isPending(for: serverDomain)
         let pairingOrderJson = pairingStore.pendingOrder(for: serverDomain)
         let cgkOwed = cgkStore.isPending(for: serverDomain)
         guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
         guard let boxIdentityPub = HexUtil.decode(identityPubKeyHex), boxIdentityPub.count == 32 else { return }
+
+        // Server-migration (docs/server-migration.md invariant 4): when this pod
+        // is the attached NEW box of a live migration, its SWK MUST derive from
+        // the MIGRATING serverDomain (`ServerKeys.deriveSwk` DOTS — so the old
+        // box's peer-backup shards decrypt); while a live migration hasn't
+        // attached its new box yet, the SWK deposit is DEFERRED (the pending
+        // marker stays; a wrong-name SWK would poison the restore). Pairing/CGK
+        // are unaffected (per-cloud / not serverId-derived).
+        var swkServerId = serverDomain
+        if swkOwed {
+            switch await resolveMigrationSwk(serverDomain) {
+            case .migratingDomain(let migrating):
+                swkServerId = migrating
+            case .deferDeposit:
+                swkOwed = false
+            case .normal:
+                break
+            }
+            guard swkOwed || pairingOrderJson != nil || cgkOwed else { return }
+        }
         do {
-            let (irk, swkHex) = try await deriveIrkAndSwk(serverDomain, "Authorize \(serverDomain) to run apps")
+            let (irk, swkHex) = try await deriveIrkAndSwk(swkServerId, "Authorize \(serverDomain) to run apps")
 
             if swkOwed, let swk = HexUtil.decode(swkHex), swk.count == 32 {
                 let body = try SwkDelivery.buildDeposit(

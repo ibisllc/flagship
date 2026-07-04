@@ -201,6 +201,7 @@ public struct ServerDetailScreen: View {
                         // (the release path) ALONGSIDE the lost/stolen Revoke.
                         DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
                     }
+                    MigrateServerCard(serverDomain: d.serverFqdn)
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit)
                     TransferCard(serverDomain: d.serverFqdn)
@@ -918,6 +919,64 @@ struct TransferCard: View {
                         username: app.currentUser ?? ""
                     ),
                     serverDomain: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+/// Same owner, same address, NEW box: the guided flow provisions a replacement,
+/// pre-seeds it from backup, and hands the name over — the old box is wiped only
+/// after a confirmed take-over. Owner-only; the migration order is admin-signed
+/// behind the biometric inside `MigrationViewModel`. Distinct from Replace
+/// (retire-first, then re-create) — migration keeps the old box serving until
+/// the new one is ready.
+struct MigrateServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.serverMigrationClient) private var migration
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.screensClient) private var screens
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("MIGRATE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSPrimaryButton("Migrate to new hardware", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-migrate-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                MigrateServerScreen(
+                    vm: MigrationViewModel(
+                        migration: migration,
+                        mailbox: mailbox,
+                        screens: screens,
+                        serverFqdn: serverDomain,
+                        username: app.currentUser ?? ""
+                    )
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

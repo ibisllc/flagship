@@ -14,6 +14,7 @@
 import { getSession } from "./state.js";
 import { deriveSwkFromSeed } from "../keystore.js";
 import { depositSwk } from "./bootApproval.js";
+import { migrationSwkServerId } from "./serverMigration.js";
 
 const PREFIX = "flagship.swkDeposit.";
 
@@ -85,10 +86,28 @@ export async function depositSwkIfNeeded(args, deps = {}) {
 
   const doDeriveSwk = deps.deriveSwk || deriveSwkFromSeed;
   const doDeposit = deps.depositSwk || depositSwk;
+
+  // Server-migration (docs/server-migration.md invariant 4): when this pod is
+  // the attached NEW box of a live migration, its SWK MUST derive from the
+  // MIGRATING serverDomain (so the old box's peer-backup shards decrypt), and
+  // while a live migration hasn't attached its new box yet, the deposit is
+  // DEFERRED — depositing an own-name SWK to what turns out to be the
+  // migration's provisional pod would poison the restore.
+  let swkServerId = serverDomain;
+  try {
+    const doResolve = deps.migrationSwkServerId || migrationSwkServerId;
+    const override = await doResolve({ podDomain: serverDomain });
+    if (override?.defer) return; // pending marker stays — next reconcile retries
+    if (override?.serverId) swkServerId = override.serverId;
+  } catch {
+    /* resolution failure ⇒ normal derivation (no migration involvement) */
+  }
+
   try {
     // The box SWK = the SAME deterministic DOTS derivation used at create
-    // (serverId = serverDomain). The box can't derive it (no UMK).
-    const swkHex = await doDeriveSwk(session.umk, serverDomain);
+    // (serverId = serverDomain; the MIGRATING domain for a migration's new
+    // box). The box can't derive it (no UMK).
+    const swkHex = await doDeriveSwk(session.umk, swkServerId);
     await doDeposit({
       serverDomain,
       stkPubHex: String(identityPubKeyHex).toLowerCase(),

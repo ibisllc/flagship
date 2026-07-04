@@ -46,27 +46,27 @@ function buildSignedToggle(over: Partial<BackupToggle> = {}, signer = irk) {
 }
 
 describe("BackupLoop — enabled flag gates work", () => {
-  it("does nothing when disabled (the default at boot)", () => {
+  it("does nothing when disabled (the default at boot)", async () => {
     const loop = new BackupLoop({ swk, k: 10, n: 16 });
-    const r = loop.runOnce([{ path: "x", content: new Uint8Array([1, 2, 3]) }]);
+    const r = await loop.runOnce([{ path: "x", content: new Uint8Array([1, 2, 3]) }]);
     expect(r.filesProcessed).toBe(0);
     expect(loop.status().enabled).toBe(false);
     expect(loop.status().lastBackupAt).toBeNull();
   });
 
-  it("processes work when enabled, and stamps lastBackupAt", () => {
+  it("processes work when enabled, and stamps lastBackupAt", async () => {
     const loop = new BackupLoop({ swk, k: 10, n: 16, initiallyEnabled: true });
-    const r = loop.runOnce([{ path: "x", content: new Uint8Array(1024).fill(7) }], 999);
+    const r = await loop.runOnce([{ path: "x", content: new Uint8Array(1024).fill(7) }], 999);
     expect(r.filesProcessed).toBe(1);
     expect(loop.status().lastBackupAt).toBe(999);
     expect(loop.status().totalChunks).toBe(1);
   });
 
-  it("setEnabled(false) immediately stops new work", () => {
+  it("setEnabled(false) immediately stops new work", async () => {
     const loop = new BackupLoop({ swk, k: 10, n: 16, initiallyEnabled: true });
-    loop.runOnce([{ path: "x", content: new Uint8Array([1]) }]);
+    await loop.runOnce([{ path: "x", content: new Uint8Array([1]) }]);
     loop.setEnabled(false);
-    const r = loop.runOnce([{ path: "y", content: new Uint8Array([2]) }]);
+    const r = await loop.runOnce([{ path: "y", content: new Uint8Array([2]) }]);
     expect(r.filesProcessed).toBe(0);
   });
 

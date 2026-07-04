@@ -1471,6 +1471,133 @@ describe("D1 ↔ InMemory parity", () => {
       expectParity(r);
       expect(r.d1).toEqual({ removed: 0, len: 1 });
     });
+
+    it("deleteEviction removes exactly one row (migration-abort neutralize)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverEvictions.recordEviction(mkEvict("aa".repeat(32), 100));
+        await s.serverEvictions.recordEviction(mkEvict("bb".repeat(32), 200));
+        const deleted = await s.serverEvictions.deleteEviction(pod, "AA".repeat(32));
+        const again = await s.serverEvictions.deleteEviction(pod, "aa".repeat(32));
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { deleted, again, stks: chain.map((e) => e.retiredStkPubHex) };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ deleted: true, again: false, stks: ["bb".repeat(32)] });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
+  // serverMigrations — the server-migration orchestration lane (0081).
+  // One row per migrating FQDN (upsert); listForUser orders by
+  // initiatedAt asc; attach + the mark* stamps advance phase + timestamp.
+  // ────────────────────────────────────────────────────────────────────
+  describe("serverMigrations", () => {
+    const mkSession = (domain: string, initiatedAt = 100) => ({
+      serverDomain: domain,
+      username: "alice",
+      oldStkPubHex: "aa".repeat(32),
+      orderJson: JSON.stringify({ migrate: domain }),
+      orderSignatureHex: "ff".repeat(64),
+      disposition: "wipe-after-handoff",
+      phase: "initiated" as const,
+      initiatedAt,
+      newServerDomain: null,
+      newStkPubHex: null,
+      attachedAt: null,
+      preSeededAt: null,
+      readyAt: null,
+      freezeAt: null,
+      takenOverAt: null,
+      abortedAt: null,
+    });
+
+    it("put → get returns the session (hex/hostnames lowercased); upsert replaces", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverMigrations.putSession({
+          ...mkSession("HOME.Alice.Flagship.Services"),
+          oldStkPubHex: "AA".repeat(32),
+          orderSignatureHex: "FF".repeat(64),
+        });
+        await s.serverMigrations.putSession({
+          ...mkSession("home.alice.flagship.services"),
+          orderJson: JSON.stringify({ v: 2 }),
+        });
+        const got = await s.serverMigrations.getSession("home.alice.flagship.services");
+        const all = await s.serverMigrations.listForUser("ALICE");
+        return { got, count: all.length };
+      });
+      expectParity(r);
+      expect(r.d1.count).toBe(1);
+      expect(r.d1.got?.orderJson).toBe(JSON.stringify({ v: 2 }));
+      expect(r.d1.got?.oldStkPubHex).toBe("aa".repeat(32));
+      expect(r.d1.got?.phase).toBe("initiated");
+    });
+
+    it("listForUser returns sessions ordered by initiatedAt asc, scoped to the account", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverMigrations.putSession(mkSession("b.alice.flagship.services", 300));
+        await s.serverMigrations.putSession(mkSession("a.alice.flagship.services", 100));
+        await s.serverMigrations.putSession({
+          ...mkSession("c.bob.flagship.services", 50),
+          username: "bob",
+        });
+        const list = await s.serverMigrations.listForUser("alice");
+        return list.map((m) => m.serverDomain);
+      });
+      expectParity(r);
+      expect(r.d1).toEqual(["a.alice.flagship.services", "b.alice.flagship.services"]);
+    });
+
+    it("attachNewBox + the mark* stamps advance phase and timestamps; false on a missing row", async () => {
+      const r = await bothAdapters(async (s) => {
+        const pod = "home.alice.flagship.services";
+        await s.serverMigrations.putSession(mkSession(pod));
+        const attached = await s.serverMigrations.attachNewBox(
+          pod,
+          "ATTIC.alice.flagship.services",
+          "BB".repeat(32),
+          10,
+        );
+        const afterAttach = await s.serverMigrations.getSession(pod);
+        await s.serverMigrations.markPreSeeded(pod, 11);
+        await s.serverMigrations.markReady(pod, 12);
+        await s.serverMigrations.markFreeze(pod, 13);
+        await s.serverMigrations.markTakenOver(pod, 14);
+        const final = await s.serverMigrations.getSession(pod);
+        const missing = await s.serverMigrations.markAborted("nope.alice.flagship.services", 15);
+        return {
+          attached,
+          missing,
+          attachPhase: afterAttach?.phase,
+          newDomain: afterAttach?.newServerDomain,
+          newStk: afterAttach?.newStkPubHex,
+          finalPhase: final?.phase,
+          stamps: [final?.preSeededAt, final?.readyAt, final?.freezeAt, final?.takenOverAt],
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        attached: true,
+        missing: false,
+        attachPhase: "provisioned",
+        newDomain: "attic.alice.flagship.services",
+        newStk: "bb".repeat(32),
+        finalPhase: "taken-over",
+        stamps: [11, 12, 13, 14],
+      });
+    });
+
+    it("markAborted is terminal-stamping like the others (abortedAt + phase)", async () => {
+      const r = await bothAdapters(async (s) => {
+        const pod = "home.alice.flagship.services";
+        await s.serverMigrations.putSession(mkSession(pod));
+        const aborted = await s.serverMigrations.markAborted(pod, 42);
+        const got = await s.serverMigrations.getSession(pod);
+        return { aborted, phase: got?.phase, at: got?.abortedAt };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ aborted: true, phase: "aborted", at: 42 });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────
@@ -1741,6 +1868,66 @@ describe("D1 ↔ InMemory parity", () => {
   // Harness self-check: the SQLite DB is the REAL prod schema (every
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────
+  // Peer-backup manifests (0080) — latest-wins upsert by generation
+  // ────────────────────────────────────────────────────────────────────
+  describe("peerBackupManifests", () => {
+    const rec = (over: Partial<import("../src/types.js").PeerBackupManifestRecord> = {}) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      generation: 1,
+      updatedAt: 1000,
+      ciphertextHex: "aa".repeat(64),
+      nonceHex: "bb".repeat(12),
+      ...over,
+    });
+
+    it("put + get round-trips", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.peerBackupManifests.put(rec());
+        const got = await s.peerBackupManifests.get("HOME.alice.flagship.services");
+        return { put, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.put).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(1);
+    });
+
+    it("newer generation overwrites; stale generation is rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "cc".repeat(4) }));
+        const stale = await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "dd".repeat(4) }));
+        const older = await s.peerBackupManifests.put(rec({ generation: 1 }));
+        const newer = await s.peerBackupManifests.put(rec({ generation: 3, ciphertextHex: "ee".repeat(4) }));
+        const got = await s.peerBackupManifests.get(rec().serverDomain);
+        return { stale, older, newer, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.stale).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.older).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.newer).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(3);
+      expect(r.mem.got?.ciphertextHex).toBe("ee".repeat(4));
+    });
+
+    it("get is non-consuming; delete removes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec());
+        const first = await s.peerBackupManifests.get(rec().serverDomain);
+        const second = await s.peerBackupManifests.get(rec().serverDomain);
+        const del = await s.peerBackupManifests.delete(rec().serverDomain);
+        const gone = await s.peerBackupManifests.get(rec().serverDomain);
+        const delAgain = await s.peerBackupManifests.delete(rec().serverDomain);
+        return { first, second, del, gone, delAgain };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.first).toEqual(r.mem.second);
+      expect(r.mem.del).toBe(true);
+      expect(r.mem.gone).toBeUndefined();
+      expect(r.mem.delAgain).toBe(false);
+    });
+  });
+
   describe("migration application", () => {
     it("applies the whole migration ledger cleanly (0026 is a SELECT 1; no-op)", () => {
       const sqlite = createSqliteD1();

@@ -79,13 +79,14 @@ fun HomeTab() {
         // the recipe, so it is always deposited post-registration (on the same
         // biometric pass as the SWK). Idempotent via the store.
         val cgkStore = com.flagshipserver.app.core.PendingCgkDepositStore.from(reconcilerContext)
+        val holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(reconcilerContext)
         PendingServerReconciler(
             app = app,
             mailbox = mailbox,
             onRegistered = { fqdn, identityPubKeyHex ->
                 val user = app.currentUser.value
                 if (!user.isNullOrEmpty()) {
-                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore, cgkStore)
+                    SwkDepositCoordinator.live(user, mailbox, swkStore, pairingStore, cgkStore, holdStore)
                         .depositIfNeeded(fqdn, identityPubKeyHex)
                 }
             },

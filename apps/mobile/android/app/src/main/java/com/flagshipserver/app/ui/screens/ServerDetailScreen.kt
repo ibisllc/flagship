@@ -94,6 +94,7 @@ import com.flagshipserver.app.viewmodels.FrontPageViewModel
 import com.flagshipserver.app.viewmodels.DeadManWindow
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.MigrationViewModel
 import com.flagshipserver.app.viewmodels.JournalPhase
 import com.flagshipserver.app.viewmodels.JournalViewModel
 import com.flagshipserver.app.viewmodels.PowerOffPhase
@@ -218,6 +219,8 @@ fun ServerDetailScreen(
             )
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            MigrateCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
@@ -1455,6 +1458,68 @@ private fun TransferCard(serverDomain: String) {
                     FSGhostButton(label = "Done", onClick = { showSheet = false })
                 }
                 TransferGiverScreen(vm = vm, serverDomain = serverDomain)
+            }
+        }
+    }
+}
+
+// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+// Same owner, same address, NEW box: the guided flow provisions a replacement,
+// pre-seeds it from backup, and hands the name over — the old box is wiped
+// only after a confirmed take-over. Owner-only; the migration order is
+// admin-signed behind the biometric inside MigrationViewModel. Distinct from
+// Replace (retire-first, then re-create) — migration keeps the old box serving
+// until the new one is ready. Mirror of iOS MigrateServerCard.
+@Composable
+private fun MigrateCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val screens = LocalScreensClient.current
+    val context = LocalContext.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+
+    Text(
+        "Migrate",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSPrimaryButton(
+                label = "Migrate to new hardware",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-migrate-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            MigrationViewModel(
+                serverFqdn = serverDomain,
+                username = username ?: "",
+                mailbox = mailbox,
+                screens = screens,
+                holdStore = com.flagshipserver.app.core.MigrationHoldStore.from(context),
+            )
+        }
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                MigrateServerScreen(vm = vm)
             }
         }
     }

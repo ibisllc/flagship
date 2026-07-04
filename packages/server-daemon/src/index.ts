@@ -17,6 +17,30 @@ import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
 import { RepairStatsAccumulator } from "./peerBackup/repairStatsAccumulator.js";
+import { FileShardRegistry } from "./peerBackup/fileShardRegistry.js";
+import { FileShardBytesStore } from "./peerBackup/fileShardStore.js";
+import {
+  FileManifestStore,
+  uploadBackupManifest,
+  type BackupManifest,
+} from "./peerBackup/manifest.js";
+import {
+  buildComStkResolver,
+  buildHttpShardFetcher,
+  buildHttpShardPusher,
+  buildLivePeerProvider,
+} from "./peerBackup/shipper.js";
+import { fsRestoreSink, runRestoreOnce } from "./peerBackup/restore.js";
+import { quiesceDataServices, walkDataDir } from "./dataDirWalker.js";
+import {
+  buildMigrationPoller,
+  fileMigrationMarkerStore,
+  pollMigrationAwareHandoffConfirm,
+} from "./migrationConsumer.js";
+import {
+  buildPbFramesRuntimeHandler,
+  type PbFramesHandlerOptions,
+} from "./peerBackup/httpPeerLink.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
@@ -554,8 +578,14 @@ async function main(): Promise<void> {
         "current recipe to enable build-a-service.",
     );
   }
-  const { backupLoop, repairAccumulator, repairScheduler } =
-    wirePeerBackup({ swkHex });
+  const { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler } =
+    wirePeerBackup({
+      swkHex,
+      serverId: env.serverFqdn ?? null,
+      identityPrivKeyHex: env.identityPrivKeyHex ?? null,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+      dataDir,
+    });
 
   // BFF in-memory ledgers (collaborator invites + companion-dock).
   const { appInviteStore, companionTicketStore, companionWriteRequestStore } =
@@ -977,6 +1007,11 @@ async function main(): Promise<void> {
         snapshot: () => leadsSnapshotRef.current(),
       }),
     );
+    // Peer-backup shard transport (box↔box). Registered on the PUBLIC pipe —
+    // peers dial https://<fqdn>/api/peer-backup/frames; the handler verifies
+    // the caller's STK envelope against the .com directory and owner-scopes
+    // reads. 503s until wirePeerBackup had identity + .com reachability.
+    runtime.addHandler(pbFramesHandler);
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt
     // (cert acquisition is async + retried so a transient ACME failure can't
@@ -1034,6 +1069,117 @@ async function main(): Promise<void> {
     identityKeypair,
     backupLoop,
   });
+
+  // ---- Peer-backup periodic pass ----
+  // Feed the BackupLoop the REAL data tree on a slow cadence (it previously
+  // only ever ran with an empty file list — a ghost run that shipped nothing).
+  // runOnce is a no-op while the owner has backup toggled OFF, and unchanged
+  // restorable chunks are skipped, so an idle pass is cheap.
+  if (backupLoop) {
+    const backupIntervalMs = (() => {
+      const raw = Number(process.env.FLAGSHIP_BACKUP_INTERVAL_MS);
+      return Number.isFinite(raw) && raw >= 60_000 ? raw : 6 * 60 * 60_000;
+    })();
+    const loop = backupLoop;
+    const backupTimer = setInterval(() => {
+      void (async () => {
+        const files = await walkDataDir(`${dataDir}/data`, {
+          onLog: (m) => console.log(`[peer-backup] ${m}`),
+        });
+        const report = await loop.runOnce(files);
+        if (report.chunksShipped > 0) {
+          console.log(
+            `[peer-backup] periodic pass: ${report.filesProcessed} files, ` +
+              `${report.chunksShipped} chunks shipped, ${report.chunksSkipped} unchanged`,
+          );
+        }
+      })().catch((e) =>
+        console.log(`[peer-backup] periodic pass failed: ${(e as Error).message}`),
+      );
+    }, backupIntervalMs);
+    if (typeof backupTimer.unref === "function") backupTimer.unref();
+  }
+
+  // ---- Server-migration consumer (docs/server-migration.md, the NEW box) ----
+  // A freshly-provisioned pod polls `.com` for a migration assignment naming
+  // its account. The admin-signed order is RE-VERIFIED under the config-pinned
+  // authority before anything runs. The restore pass opens the MIGRATING
+  // server's manifest with THIS box's provisioned SWK (the phone derives
+  // deriveSWK(umk, <migrating serverId>) into a migration recipe) and fetches
+  // shards from same-account peers authenticated as THIS pod. On take-over the
+  // box writes the re-home marker for the migrated name and restarts — the
+  // same boot path transfer-a-box uses re-homes FQDN/cert/entitlement.
+  // Armed only in production (cfg) with an SWK; a box with no session just
+  // 404s cheaply on the heartbeat cadence.
+  if (cfg && env.controlPlaneBaseUrl && env.serverFqdn && swkHex) {
+    const migrationSwk = hexToBytes(swkHex.trim());
+    const controlPlaneBaseUrl = env.controlPlaneBaseUrl;
+    const myServerDomain = env.serverFqdn;
+    const migrationPoller = buildMigrationPoller({
+      myServerDomain,
+      myStk: identityKeypair,
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+      controlPlaneBaseUrl,
+      restore: async ({ serverId }) => {
+        const out = await runRestoreOnce({
+          serverId,
+          swk: migrationSwk,
+          mySTK: identityKeypair,
+          controlPlaneBaseUrl,
+          sink: fsRestoreSink(`${dataDir}/data`),
+          // Authenticate shard reads as THIS pod (its directory-bound STK);
+          // peers serve same-account depositors' shards to it.
+          source: buildHttpShardFetcher({
+            myServerId: myServerDomain,
+            mySTK: identityKeypair,
+          }),
+          onLog: (m) => console.log(`[migration] ${m}`),
+        });
+        if (out.status === "complete") return { complete: true };
+        if (out.status === "partial") {
+          return {
+            complete: false,
+            detail: `${out.report.failed.length} of ${out.report.chunksTotal} chunks not yet restorable`,
+          };
+        }
+        if (out.status === "no-manifest") {
+          return { complete: false, detail: "no backup manifest for the migrating server yet" };
+        }
+        return { complete: false, detail: out.reason };
+      },
+      onTakeOver: async ({ serverDomain }) => {
+        // Re-home to the migrated name via the SAME marker+boot path
+        // transfer-a-box uses (owner unchanged ⇒ same IRK): next boot
+        // re-derives cert SANs for the migrated name, re-mints the A′ cert,
+        // and the tunnel claims the name.
+        const markerPath =
+          process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`;
+        await writeFile(
+          markerPath,
+          JSON.stringify({
+            newServerDomain: serverDomain,
+            acquirerUsername: cfg.userId,
+            acquirerIrkPubHex: bytesToHexLocal(cfg.irkPublicKey),
+            oldServerDomain: myServerDomain,
+            claimedAt: Date.now(),
+          }),
+          { mode: 0o600 },
+        );
+        console.log(
+          `[migration] take-over complete — re-homing ${myServerDomain} → ${serverDomain}; restarting`,
+        );
+        process.exit(0);
+      },
+      markerStore: fileMigrationMarkerStore(`${dataDir}/migration-state.json`),
+      onLog: (m) => console.log(m),
+    });
+    migrationPoller.start();
+    process.once("SIGTERM", () => migrationPoller.stop());
+    process.once("SIGINT", () => migrationPoller.stop());
+    console.log("[daemon] server-migration consumer armed");
+  }
 
   // ---- Per-service leadership gossip loop (Phase 5) ----
   // CONTINUOUSLY gossips with account siblings to compute, per service, who
@@ -1150,18 +1296,91 @@ interface PeerBackupBundle {
   backupLoop: BackupLoop | null;
   repairAccumulator: RepairStatsAccumulator;
   repairScheduler: RepairScheduler;
+  /** Public-pipe frames endpoint (box↔box shard transport). Register on the runtime chain. */
+  pbFramesHandler: ReturnType<typeof buildPbFramesRuntimeHandler>;
 }
 
 /**
- * Peer-backup participation: the encrypting BackupLoop (only when an SWK is
- * available) + the B4 repair accumulator/scheduler. The scheduler is started
- * here (idempotent no-op today with daemon=null) exactly as before — the wire
- * site is in place for the upstream RepairDaemon to flip on later.
+ * Peer-backup participation. Two independent halves:
+ *
+ *  HOSTING (their-shards) — needs only an identity + `.com` reachability:
+ *  the public frames endpoint accepts STK-verified peers' shards into the
+ *  flat-file pool + persistent registry. Lit even without an SWK, so a
+ *  box can reciprocate storage before its own platform is provisioned.
+ *
+ *  SHIPPING (my-shards) — needs the SWK (chunks encrypt under it): the
+ *  BackupLoop ships shards via the .com matchmaker + HttpPeerLink and
+ *  maintains the sealed manifest on .com (the fresh-box recovery root).
+ *
+ * Participation stays inert until the owner toggles backup on (the
+ * BackupLoop `enabled` gate); the repair accumulator/scheduler wire-site
+ * is unchanged (daemon=null today — flipped on by the upstream later).
  */
-function wirePeerBackup(deps: { swkHex: string | null }): PeerBackupBundle {
-  const backupLoop = deps.swkHex
-    ? new BackupLoop({ swk: hexToBytes(deps.swkHex.trim()), k: 3, n: 5 })
+function wirePeerBackup(deps: {
+  swkHex: string | null;
+  serverId: string | null;
+  identityPrivKeyHex: string | null;
+  controlPlaneBaseUrl: string | null;
+  dataDir: string;
+}): PeerBackupBundle {
+  const registry = new FileShardRegistry(`${deps.dataDir}/peer-backup/registry.json`);
+  const peerPool = new FileShardBytesStore(`${deps.dataDir}/peer-pool`);
+  const ownShards = new FileShardBytesStore(`${deps.dataDir}/peer-backup/own-shards`);
+  const manifestStore = new FileManifestStore(`${deps.dataDir}/peer-backup/manifest.json`);
+
+  const identity: Keypair | null = deps.identityPrivKeyHex
+    ? (() => {
+        const priv = hexToBytes(deps.identityPrivKeyHex);
+        return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+      })()
     : null;
+  const live = !!(deps.serverId && identity && deps.controlPlaneBaseUrl);
+
+  let backupLoop: BackupLoop | null = null;
+  if (deps.swkHex) {
+    const swk = hexToBytes(deps.swkHex.trim());
+    const shipping =
+      live && deps.serverId && identity && deps.controlPlaneBaseUrl
+        ? {
+            myServerId: deps.serverId,
+            peerProvider: buildLivePeerProvider({
+              controlPlaneBaseUrl: deps.controlPlaneBaseUrl,
+              myServerId: deps.serverId,
+              mySTK: identity,
+              onLog: (m) => console.log(`[peer-backup] ${m}`),
+            }),
+            pusher: buildHttpShardPusher({ myServerId: deps.serverId, mySTK: identity }),
+            registry,
+            ownShards,
+            manifestStore,
+            uploadManifest: (m: BackupManifest) =>
+              uploadBackupManifest(
+                {
+                  controlPlaneBaseUrl: deps.controlPlaneBaseUrl!,
+                  serverId: deps.serverId!,
+                  mySTK: identity,
+                  swk,
+                },
+                m,
+              ),
+            onLog: (m: string) => console.log(`[peer-backup] ${m}`),
+          }
+        : undefined;
+    backupLoop = new BackupLoop({ swk, k: 3, n: 5, ...(shipping ? { shipping } : {}) });
+  }
+
+  const framesOpts: PbFramesHandlerOptions | null =
+    live && deps.serverId && identity && deps.controlPlaneBaseUrl
+      ? {
+          myServerId: deps.serverId,
+          mySTK: identity,
+          store: peerPool,
+          registry,
+          resolveCallerStk: buildComStkResolver({ controlPlaneBaseUrl: deps.controlPlaneBaseUrl }),
+          onShardAccepted: (info) => backupLoop?.recordHostedBytes(info.sizeBytes),
+        }
+      : null;
+  const pbFramesHandler = buildPbFramesRuntimeHandler(() => framesOpts);
 
   const repairAccumulator = new RepairStatsAccumulator();
   const repairTickMs = (() => {
@@ -1180,7 +1399,7 @@ function wirePeerBackup(deps: { swkHex: string | null }): PeerBackupBundle {
   // .start() will arm the interval.
   repairScheduler.start();
 
-  return { backupLoop, repairAccumulator, repairScheduler };
+  return { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler };
 }
 
 interface BffStores {
@@ -2292,10 +2511,16 @@ async function wireOwnerHandlers(deps: {
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
-      // Final-flush: trigger an immediate BackupLoop pass (the epoch is recorded
-      // by the §9 epoch-complete report the consumer POSTs after this resolves).
+      // Final-flush (the migration/replacement FINAL DELTA): quiesce the data
+      // services (write-freeze, v1 stop-then-full-flush), walk the real data
+      // tree, and run a full BackupLoop pass over it. The epoch is recorded by
+      // the §9 epoch-complete report the consumer POSTs after this resolves.
       backupFlush: async (_epoch) => {
-        deps.backupLoop?.runOnce([]);
+        if (!deps.backupLoop) return;
+        await quiesceDataServices((m) => console.log(m));
+        const files = await walkDataDir(`${dataDir}/data`, { onLog: (m) => console.log(m) });
+        console.log(`[decommission] final flush: ${files.length} files from ${dataDir}/data`);
+        await deps.backupLoop.runOnce(files);
       },
       // Release routing = drop the tunnel + stop serving (runtime.close()).
       releaseRouting: () => runtime.close(),
@@ -2306,15 +2531,27 @@ async function wireOwnerHandlers(deps: {
       // then power off (the same primitive the dead-man + manual power-off use).
       lockAndPower: () =>
         executeLockAndPower({ mode: "off", suppressor: autoUnlockSuppressor, runner: hostPowerRunner }),
-      // wipe-after-handoff: bounded poll of `.com`'s eviction-chain for a restored
-      // successor; on timeout the consumer powers off WITHOUT wiping (fail-safe).
+      // wipe-after-handoff: MIGRATION-AWARE bounded confirm. When a migration
+      // session exists for this box, only its `taken-over` phase confirms (and
+      // `aborted` denies immediately — data preserved); with no session it
+      // falls back to the plain replacement-restored eviction-chain heuristic.
+      // On timeout the consumer powers off WITHOUT wiping (fail-safe).
       awaitHandoffConfirm: () =>
-        pollReplacementRestored({
+        pollMigrationAwareHandoffConfirm({
           serverDomain: env.serverFqdn,
           myStkHex,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-          maxAttempts: 24, // ~2h at the default interval — generous for a reburn+restore
+          maxAttempts: 24, // ~2h at the default interval — generous for a restore
           intervalMs: 5 * 60_000,
+          fallback: () =>
+            pollReplacementRestored({
+              serverDomain: env.serverFqdn,
+              myStkHex,
+              controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+              maxAttempts: 24,
+              intervalMs: 5 * 60_000,
+              onLog: (m) => console.log(m),
+            }),
           onLog: (m) => console.log(m),
         }),
       onLog: (m) => console.log(m),

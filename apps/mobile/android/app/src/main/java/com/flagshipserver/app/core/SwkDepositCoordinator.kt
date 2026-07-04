@@ -36,12 +36,20 @@ class SwkDepositCoordinator(
      *  on the SAME biometric pass. */
     private val cgkStore: PendingCgkDepositStore,
     /** Derives (IRK signer, IRK pub hex, box SWK hex) for the given serverId
-     *  under one biometric. Injectable so tests don't hit the Keystore. */
-    private val deriveIrkAndSwk: suspend (serverId: String) -> Triple<Ed25519Sign, String, String>,
+     *  under one biometric ([reason] names the pod even when the migration seam
+     *  swaps the derivation serverId). Injectable so tests don't hit the
+     *  Keystore. */
+    private val deriveIrkAndSwk: suspend (serverId: String, reason: String) -> Triple<Ed25519Sign, String, String>,
     /** Derives the per-cloud CGK hex (no serverId). Injectable so tests don't hit
      *  the Keystore. The IRK from [deriveIrkAndSwk] is reused for the CGK deposit's
      *  owner signature, so this returns only the CGK material. */
     private val deriveCgkHex: suspend () -> String,
+    /** Server-migration seam (docs/server-migration.md invariant 4): which
+     *  serverId the SWK for a pod derives from. Injectable so tests don't hit
+     *  the network; [live] wires the persisted migration holds and only touches
+     *  `.com` when one is live. */
+    private val resolveMigrationSwk: suspend (podDomain: String) -> MigrationSwkResolution =
+        { MigrationSwkResolution.Normal },
 ) {
     /** Deposit what's OWED for a box that has registered (carrying
      *  `identityPubKeyHex`): the SWK (turns on the service platform) AND/OR the
@@ -49,14 +57,32 @@ class SwkDepositCoordinator(
      *  Both ride ONE biometric (the IRK derived once) and are sealed to the box
      *  identity. No-op when nothing is owed. */
     suspend fun depositIfNeeded(serverDomain: String, identityPubKeyHex: String) {
-        val swkOwed = store.isPending(serverDomain)
+        var swkOwed = store.isPending(serverDomain)
         val pairingOrderJson = pairingStore.pendingOrder(serverDomain)
         val cgkOwed = cgkStore.isPending(serverDomain)
         if (!swkOwed && pairingOrderJson == null && !cgkOwed) return
         val boxIdentityPub = HexUtil.decode(identityPubKeyHex) ?: return
         if (boxIdentityPub.size != 32) return
+
+        // Server-migration (docs/server-migration.md invariant 4): when this pod
+        // is the attached NEW box of a live migration, its SWK MUST derive from
+        // the MIGRATING serverDomain (`ServerKeys.deriveSwk` DOTS — so the old
+        // box's peer-backup shards decrypt); while a live migration hasn't
+        // attached its new box yet, the SWK deposit is DEFERRED (the pending
+        // marker stays; a wrong-name SWK would poison the restore). Pairing/CGK
+        // are unaffected (per-cloud / not serverId-derived).
+        var swkServerId = serverDomain
+        if (swkOwed) {
+            when (val r = resolveMigrationSwk(serverDomain)) {
+                is MigrationSwkResolution.MigratingDomain -> swkServerId = r.domain
+                is MigrationSwkResolution.DeferDeposit -> swkOwed = false
+                is MigrationSwkResolution.Normal -> {}
+            }
+            if (!swkOwed && pairingOrderJson == null && !cgkOwed) return
+        }
         try {
-            val (irk, irkPubHex, swkHex) = deriveIrkAndSwk(serverDomain)
+            val (irk, irkPubHex, swkHex) =
+                deriveIrkAndSwk(swkServerId, "Authorize $serverDomain to run apps")
 
             if (swkOwed) {
                 val swk = HexUtil.decode(swkHex)
@@ -122,14 +148,15 @@ class SwkDepositCoordinator(
             store: PendingSwkDepositStore,
             pairingStore: PendingPairingDepositStore,
             cgkStore: PendingCgkDepositStore,
+            holdStore: MigrationHoldStore,
         ): SwkDepositCoordinator = SwkDepositCoordinator(
             username = username,
             mailbox = mailbox,
             store = store,
             pairingStore = pairingStore,
             cgkStore = cgkStore,
-            deriveIrkAndSwk = { serverId ->
-                val irk = Keystore.deriveIRK("Authorize $serverId to run apps")
+            deriveIrkAndSwk = { serverId, reason ->
+                val irk = Keystore.deriveIRK(reason)
                 val irkPubHex = Keystore.irkPubHex()
                 val swkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverId))
                 Triple(irk, irkPubHex, swkHex)
@@ -138,6 +165,21 @@ class SwkDepositCoordinator(
             // The in-hand UMK seed is reused (no extra biometric).
             deriveCgkHex = {
                 HexUtil.encode(CloudGossip.deriveCGK(Keystore.currentUmkSeed()))
+            },
+            // Short-circuit to Normal when no hold is live so the common path
+            // never touches the network.
+            resolveMigrationSwk = { podDomain ->
+                val holds = holdStore.holds()
+                if (holds.isEmpty()) {
+                    MigrationSwkResolution.Normal
+                } else {
+                    MigrationSwkResolver.resolve(
+                        podDomain = podDomain,
+                        holds = holds,
+                        fetchSession = { mailbox.fetchMigration(it) },
+                        clearHold = { holdStore.clearHold(it) },
+                    )
+                }
             },
         )
     }

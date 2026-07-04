@@ -25,4 +25,6 @@ export * from "./debugAccess.js";
 export * from "./serverUpdate.js";
 export * from "./burnerPairing.js";
 export * from "./adminAuthority.js";
+export * from "./peerBackupManifest.js";
+export * from "./serverMigration.js";
 export { ed } from "./edSync.js";

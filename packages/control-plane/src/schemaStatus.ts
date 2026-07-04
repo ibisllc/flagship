@@ -31,6 +31,15 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0049", "0050", "0051", "0052", "0053", "0054", "0055", "0056",
   "0057", "0058", "0059", "0060", "0061", "0062", "0063", "0064",
   "0065", "0066", "0067", "0068",
+  // 0069–0079 are deliberately absent: this branch's feature migrations were
+  // parked in a far block (0080+) while main kept allocating organically from
+  // 0067 upward (it took 0067 and 0068 before the merge). The prod
+  // schema_version ledger stores only the 4-digit prefix, so a shared number
+  // would have made the deploy-time drift gate false-pass; the parked numbers
+  // stay where prod stamped them, and 0069–0079 remain free for main's next
+  // organic allocations.
+  "0080",
+  "0081",
 ];
 
 export interface SchemaStatusDeps {

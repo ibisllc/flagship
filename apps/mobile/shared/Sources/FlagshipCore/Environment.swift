@@ -180,6 +180,22 @@ public extension EnvironmentValues {
     }
 }
 
+/// Server-migration lane client (`.com`): deposits the admin-signed initiate /
+/// confirm-ready / freeze / abort and polls the public phase state
+/// (docs/server-migration.md). Hits `.com` (the migration orchestration lane),
+/// not a box-pinned pipe. Defaults to the in-process Mock so previews/tests
+/// are inert.
+private struct ServerMigrationClientKey: EnvironmentKey {
+    static let defaultValue: any ServerMigrationClient = MockServerMigrationClient()
+}
+
+public extension EnvironmentValues {
+    var serverMigrationClient: any ServerMigrationClient {
+        get { self[ServerMigrationClientKey.self] }
+        set { self[ServerMigrationClientKey.self] = newValue }
+    }
+}
+
 /// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
 /// to a local display name + channel + sent-to memo + notes. NEVER
 /// leaves the device. The default value is the UserDefaults-backed

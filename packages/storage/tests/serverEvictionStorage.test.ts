@@ -111,6 +111,16 @@ describe("InMemoryServerEvictionStorage", () => {
     expect(await s.listEvictions(POD)).toHaveLength(0);
   });
 
+  it("deleteEviction removes one row and reports whether anything was deleted", async () => {
+    const s = new InMemoryServerEvictionStorage();
+    await s.recordEviction(rec({ retiredStkPubHex: "aa".repeat(32) }));
+    await s.recordEviction(rec({ retiredStkPubHex: "bb".repeat(32) }));
+    expect(await s.deleteEviction(POD, "AA".repeat(32))).toBe(true);
+    expect(await s.deleteEviction(POD, "aa".repeat(32))).toBe(false);
+    const chain = await s.listEvictions(POD);
+    expect(chain.map((e) => e.retiredStkPubHex)).toEqual(["bb".repeat(32)]);
+  });
+
   it("gcEvictions keeps un-acked rows and rows still within the TTL", async () => {
     const s = new InMemoryServerEvictionStorage();
     // never acked → kept regardless of age.

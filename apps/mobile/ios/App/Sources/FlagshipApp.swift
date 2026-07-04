@@ -329,6 +329,10 @@ struct FlagshipApp: App {
     // split as the others.
     private let mockServerTransfer = MockServerTransferClient()
     private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
+    // Server-migration lane client — hits `.com` (the migration orchestration
+    // lane), not a box-pinned pipe; live/mock split as transfer.
+    private let mockServerMigration = MockServerMigrationClient()
+    private let liveServerMigration: any ServerMigrationClient = LiveServerMigrationClient()
     // Per-service access gating (#92): box calls ride the SAME box-pinned
     // session (set-mode + redeem are signature-authed daemon endpoints); the
     // invite create/list/revoke calls hit `.com` over the default public-CA
@@ -372,6 +376,9 @@ struct FlagshipApp: App {
     private var activeServerTransfer: any ServerTransferClient {
         dev.useLiveClient ? liveServerTransfer : mockServerTransfer
     }
+    private var activeServerMigration: any ServerMigrationClient {
+        dev.useLiveClient ? liveServerMigration : mockServerMigration
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -395,6 +402,7 @@ struct FlagshipApp: App {
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.serviceAccessClient, activeServiceAccess)
                 .environment(\.serverTransferClient, activeServerTransfer)
+                .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
