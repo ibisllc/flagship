@@ -1741,6 +1741,66 @@ describe("D1 ↔ InMemory parity", () => {
   // Harness self-check: the SQLite DB is the REAL prod schema (every
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────
+  // Peer-backup manifests (0068) — latest-wins upsert by generation
+  // ────────────────────────────────────────────────────────────────────
+  describe("peerBackupManifests", () => {
+    const rec = (over: Partial<import("../src/types.js").PeerBackupManifestRecord> = {}) => ({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      generation: 1,
+      updatedAt: 1000,
+      ciphertextHex: "aa".repeat(64),
+      nonceHex: "bb".repeat(12),
+      ...over,
+    });
+
+    it("put + get round-trips", async () => {
+      const r = await bothAdapters(async (s) => {
+        const put = await s.peerBackupManifests.put(rec());
+        const got = await s.peerBackupManifests.get("HOME.alice.flagship.services");
+        return { put, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.put).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(1);
+    });
+
+    it("newer generation overwrites; stale generation is rejected", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "cc".repeat(4) }));
+        const stale = await s.peerBackupManifests.put(rec({ generation: 2, ciphertextHex: "dd".repeat(4) }));
+        const older = await s.peerBackupManifests.put(rec({ generation: 1 }));
+        const newer = await s.peerBackupManifests.put(rec({ generation: 3, ciphertextHex: "ee".repeat(4) }));
+        const got = await s.peerBackupManifests.get(rec().serverDomain);
+        return { stale, older, newer, got };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.stale).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.older).toEqual({ ok: false, reason: "stale generation" });
+      expect(r.mem.newer).toEqual({ ok: true });
+      expect(r.mem.got?.generation).toBe(3);
+      expect(r.mem.got?.ciphertextHex).toBe("ee".repeat(4));
+    });
+
+    it("get is non-consuming; delete removes", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.peerBackupManifests.put(rec());
+        const first = await s.peerBackupManifests.get(rec().serverDomain);
+        const second = await s.peerBackupManifests.get(rec().serverDomain);
+        const del = await s.peerBackupManifests.delete(rec().serverDomain);
+        const gone = await s.peerBackupManifests.get(rec().serverDomain);
+        const delAgain = await s.peerBackupManifests.delete(rec().serverDomain);
+        return { first, second, del, gone, delAgain };
+      });
+      expect(r.mem).toEqual(r.d1);
+      expect(r.mem.first).toEqual(r.mem.second);
+      expect(r.mem.del).toBe(true);
+      expect(r.mem.gone).toBeUndefined();
+      expect(r.mem.delAgain).toBe(false);
+    });
+  });
+
   describe("migration application", () => {
     it("applies the whole migration ledger cleanly (0026 is a SELECT 1; no-op)", () => {
       const sqlite = createSqliteD1();

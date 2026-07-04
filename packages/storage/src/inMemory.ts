@@ -29,6 +29,8 @@ import type {
   SecretMailboxRecord,
   SecretMailboxPurpose,
   SecretMailboxStorage,
+  PeerBackupManifestRecord,
+  PeerBackupManifestStorage,
   PairingDepositRecord,
   ServerTransferRecord,
   ServerTransferStorage,
@@ -1719,6 +1721,35 @@ export class InMemoryStorage implements Storage {
   trustExceptions = new InMemoryTrustExceptionStorage();
   serviceInvites = new InMemoryServiceInviteStorage();
   namespace = new InMemoryNamespaceStorage();
+  peerBackupManifests = new InMemoryPeerBackupManifestStorage();
+}
+
+/**
+ * In-memory PeerBackupManifestStorage — one row per server, latest-wins
+ * by the box-signed `generation` (a replayed older deposit can never
+ * roll the recovery root back). Reads are non-consuming (recovery root).
+ */
+export class InMemoryPeerBackupManifestStorage implements PeerBackupManifestStorage {
+  private byDomain = new Map<string, PeerBackupManifestRecord>();
+
+  async put(rec: PeerBackupManifestRecord) {
+    const key = rec.serverDomain.toLowerCase();
+    const existing = this.byDomain.get(key);
+    if (existing && rec.generation <= existing.generation) {
+      return { ok: false as const, reason: "stale generation" };
+    }
+    this.byDomain.set(key, { ...rec, serverDomain: key });
+    return { ok: true as const };
+  }
+
+  async get(serverDomain: string) {
+    const r = this.byDomain.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+
+  async delete(serverDomain: string) {
+    return this.byDomain.delete(serverDomain.toLowerCase());
+  }
 }
 
 /**

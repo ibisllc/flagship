@@ -6,6 +6,8 @@ import type {
   AutoUnlockLeaseStorage,
   SecretMailboxRecord,
   SecretMailboxStorage,
+  PeerBackupManifestRecord,
+  PeerBackupManifestStorage,
   SecretMailboxPurpose,
   PairingDepositRecord,
   ServerTransferRecord,
@@ -3567,6 +3569,7 @@ export class D1Storage implements Storage {
   trustExceptions: TrustExceptionStorage;
   serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
+  peerBackupManifests: PeerBackupManifestStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
@@ -3610,6 +3613,7 @@ export class D1Storage implements Storage {
     this.trustExceptions = new D1TrustExceptionStorage(db);
     this.serviceInvites = new D1ServiceInviteStorage(db);
     this.namespace = new D1NamespaceStorage(db);
+    this.peerBackupManifests = new D1PeerBackupManifestStorage(db);
   }
 }
 
@@ -4626,5 +4630,79 @@ export class D1NamespaceStorage implements NamespaceStorage {
       .bind(username.toLowerCase())
       .all<NameClaimRow>();
     return (r.results ?? []).map(rowToNameClaim);
+  }
+}
+
+/**
+ * D1 PeerBackupManifestStorage (migration 0068) — one row per server,
+ * latest-wins by the box-signed `generation`. The upsert's conflict
+ * clause carries `WHERE excluded.generation > generation` so a replayed
+ * older deposit is a 0-change no-op (`meta.changes` drives the stale
+ * signal), atomically — no read-then-write race.
+ */
+export class D1PeerBackupManifestStorage implements PeerBackupManifestStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: PeerBackupManifestRecord) {
+    const r = await this.db
+      .prepare(
+        `INSERT INTO peer_backup_manifests
+           (server_domain, username, generation, updated_at, ciphertext_hex, nonce_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           username = excluded.username,
+           generation = excluded.generation,
+           updated_at = excluded.updated_at,
+           ciphertext_hex = excluded.ciphertext_hex,
+           nonce_hex = excluded.nonce_hex
+         WHERE excluded.generation > peer_backup_manifests.generation`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.username.toLowerCase(),
+        rec.generation,
+        rec.updatedAt,
+        rec.ciphertextHex,
+        rec.nonceHex,
+      )
+      .run();
+    if ((r.meta?.changes ?? 0) === 0) {
+      return { ok: false as const, reason: "stale generation" };
+    }
+    return { ok: true as const };
+  }
+
+  async get(serverDomain: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT server_domain, username, generation, updated_at, ciphertext_hex, nonce_hex
+         FROM peer_backup_manifests WHERE server_domain = ?1`,
+      )
+      .bind(serverDomain.toLowerCase())
+      .first<{
+        server_domain: string;
+        username: string;
+        generation: number;
+        updated_at: number;
+        ciphertext_hex: string;
+        nonce_hex: string;
+      }>();
+    if (!r) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      generation: r.generation,
+      updatedAt: r.updated_at,
+      ciphertextHex: r.ciphertext_hex,
+      nonceHex: r.nonce_hex,
+    };
+  }
+
+  async delete(serverDomain: string) {
+    const r = await this.db
+      .prepare(`DELETE FROM peer_backup_manifests WHERE server_domain = ?1`)
+      .bind(serverDomain.toLowerCase())
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
   }
 }

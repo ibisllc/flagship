@@ -1458,6 +1458,40 @@ export interface UsernameOfferStorage {
   prune(olderThan: number): Promise<number>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Peer-backup manifests (server-migration Layer 0)
+//
+// One row per server — the SWK-sealed shard-placement manifest a fresh
+// replacement box needs before it can restore (docs/server-migration.md
+// invariant 4: the SWK is deterministic, so the new box re-derives it
+// and opens the blob). `.com` holds ciphertext only (content-blind);
+// the deposit was STK-verified at the handler boundary. Latest-wins by
+// `generation` (monotonic, signed by the box) so a replayed older
+// deposit can never roll the recovery root back. Reads are non-
+// consuming: the manifest is a recovery ROOT — a restore that crashes
+// mid-way must be able to fetch it again.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PeerBackupManifestRecord {
+  serverDomain: string;
+  username: string;
+  /** Box-signed monotonic counter — put() rejects generation <= stored. */
+  generation: number;
+  updatedAt: number;
+  /** Sealed manifest bytes, hex. NEVER plaintext (content-blind). */
+  ciphertextHex: string;
+  /** Seal GCM nonce, hex. */
+  nonceHex: string;
+}
+
+export interface PeerBackupManifestStorage {
+  /** Upsert, latest-wins by generation. `{ok:false}` on a stale generation. */
+  put(rec: PeerBackupManifestRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(serverDomain: string): Promise<PeerBackupManifestRecord | undefined>;
+  /** Account teardown / server delete. Returns true iff a row existed. */
+  delete(serverDomain: string): Promise<boolean>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   schemaVersion: SchemaVersionStorage;
@@ -1501,6 +1535,7 @@ export interface Storage {
   trustExceptions: TrustExceptionStorage;
   serviceInvites: ServiceInviteStorage;
   namespace: NamespaceStorage;
+  peerBackupManifests: PeerBackupManifestStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
