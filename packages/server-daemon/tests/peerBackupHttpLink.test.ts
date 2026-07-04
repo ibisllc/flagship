@@ -14,15 +14,19 @@ import { PeerBackupClient } from "../src/peerBackup/transport.js";
 const OWNER = "home.alice.flagship.services";
 const PEER = "attic.alice.flagship.services";
 const STRANGER = "home.eve.flagship.services";
+// A freshly-registered SAME-account pod — the server-migration replacement box.
+const SIBLING = "cellar.alice.flagship.services";
 
 const ownerSTK = deriveSTK(deriveSWK({ seed: new Uint8Array(32).fill(11) }, OWNER));
 const peerSTK = deriveSTK(deriveSWK({ seed: new Uint8Array(32).fill(22) }, PEER));
 const strangerSTK = deriveSTK(deriveSWK({ seed: new Uint8Array(32).fill(33) }, STRANGER));
+const siblingSTK = deriveSTK(deriveSWK({ seed: new Uint8Array(32).fill(44) }, SIBLING));
 
 const DIRECTORY: Record<string, Uint8Array> = {
   [OWNER]: ownerSTK.publicKey,
   [PEER]: peerSTK.publicKey,
   [STRANGER]: strangerSTK.publicKey,
+  [SIBLING]: siblingSTK.publicKey,
 };
 
 /** In-proc HTTP: fetch hands the JSON body straight to the peer's handler. */
@@ -191,6 +195,34 @@ describe("HttpPeerLink against a verbatim PeerBackupServer", () => {
     const ch = eve.challenge({ encChunkId: enc, shardIndex: 0, nonce, offset: 0, length: 64 });
     const timeout = new Promise<"timeout">((res) => setTimeout(() => res("timeout"), 50));
     expect(await Promise.race([ch, timeout])).toBe("timeout"); // server stays silent
+  });
+
+  it("a SAME-account sibling pod CAN read the owner's shard (migration pre-seed read)", async () => {
+    const { opts } = peerHandler();
+    await client(opts).putShard({ encChunkId: enc, shardIndex: 0, bytes: SHARD, peerServerId: PEER });
+    // The replacement pod authenticates as ITSELF (its own directory-bound
+    // STK) — no impersonation — and reads the retiring pod's ciphertext.
+    const sibling = client(opts, { mySTK: siblingSTK, myServerId: SIBLING });
+    const r = await sibling.getShard({ encChunkId: enc, shardIndex: 0 });
+    expect(r.ok).toBe(true);
+    expect(Buffer.from(r.bytes!)).toEqual(Buffer.from(SHARD));
+  });
+
+  it("a non-FQDN caller id never namespace-matches (exact depositor only)", async () => {
+    const { opts } = peerHandler({
+      resolveCallerStk: (sid) => (sid === "boxA" ? ownerSTK.publicKey : DIRECTORY[sid] ?? null),
+    });
+    // Depositor uses a bare dev-style id.
+    await client(opts, { myServerId: "boxA", mySTK: ownerSTK }).putShard({
+      encChunkId: enc,
+      shardIndex: 0,
+      bytes: SHARD,
+      peerServerId: PEER,
+    });
+    // A different (FQDN) caller cannot read it — no account suffix to match.
+    const other = client(opts, { mySTK: siblingSTK, myServerId: SIBLING });
+    const r = await other.getShard({ encChunkId: enc, shardIndex: 0 });
+    expect(r.bytes?.length ?? 0).toBe(0);
   });
 
   it("the owner CAN read back after a restart of the peer (registry re-load path)", async () => {

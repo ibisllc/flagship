@@ -250,8 +250,14 @@ export async function handlePbFramesRequest(
 
   const from = body.from;
   // GET / CHALLENGE carry no inner signature — scope reads to shards
-  // this caller deposited, so a verified-but-foreign box can't pull
-  // another owner's ciphertext out of our pool.
+  // this caller's ACCOUNT deposited, so a verified-but-foreign box can't
+  // pull another owner's ciphertext out of our pool. Account-scoped (not
+  // exact-depositor) so a server-migration replacement pod — a freshly
+  // registered SAME-account box with its own STK — can pre-seed by reading
+  // the shards the retiring pod deposited (docs/server-migration.md phase 3).
+  // Peers/depositors are same-account-only in v0 anyway, and shards are
+  // SWK-sealed ciphertext, so the widest thing this exposes to a sibling pod
+  // is its own account's ciphertext. Deletes stay exact-depositor.
   const scopedStore = ownerScopedStore(opts.store, opts.registry, from);
 
   const out: Frame[] = [];
@@ -298,22 +304,44 @@ export async function handlePbFramesRequest(
 }
 
 /**
- * A read-scoped view of the pool: `get`/`slice` answer only for shards
- * whose their_shards row names `ownerServerId` as the depositor. Writes
- * pass through (PUT is separately STK-verified by PeerBackupServer).
+ * True iff two serverIds are pods of the SAME account namespace — the
+ * `<server>.<user>.…` FQDN encodes the owner, so stripping the leftmost
+ * (server) label must leave an identical `<user>.…` suffix. Non-FQDN ids
+ * (tests / dev) never namespace-match; exact equality still applies.
+ */
+function sameAccountNamespace(a: string, b: string): boolean {
+  const pa = a.toLowerCase().split(".");
+  const pb = b.toLowerCase().split(".");
+  if (pa.length < 3 || pb.length < 3) return false;
+  return pa.slice(1).join(".") === pb.slice(1).join(".");
+}
+
+/**
+ * A read-scoped view of the pool: `get`/`slice` answer only for shards whose
+ * their_shards row names the caller — or a SAME-ACCOUNT sibling of the caller
+ * — as the depositor (the migration pre-seed read; see the call site).
+ * `delete` stays exact-depositor: a sibling may read its account's ciphertext
+ * but never destroy another pod's placements. Writes pass through (PUT is
+ * separately STK-verified by PeerBackupServer).
  */
 function ownerScopedStore(
   store: ShardBytesStore,
   registry: ShardRegistry,
   ownerServerId: string,
 ): ShardBytesStore {
-  const owns = (encChunkId: Bytes, shardIndex: number): boolean =>
-    registry.theirShard(encChunkId, shardIndex)?.ownerServerId === ownerServerId;
+  const depositor = (encChunkId: Bytes, shardIndex: number): string | undefined =>
+    registry.theirShard(encChunkId, shardIndex)?.ownerServerId;
+  const owns = (e: Bytes, i: number): boolean => depositor(e, i) === ownerServerId;
+  const readable = (e: Bytes, i: number): boolean => {
+    const d = depositor(e, i);
+    if (d === undefined) return false;
+    return d === ownerServerId || sameAccountNamespace(d, ownerServerId);
+  };
   return {
     put: (e, i, b) => store.put(e, i, b),
-    get: (e, i) => (owns(e, i) ? store.get(e, i) : undefined),
+    get: (e, i) => (readable(e, i) ? store.get(e, i) : undefined),
     delete: (e, i) => (owns(e, i) ? store.delete(e, i) : false),
-    slice: (e, i, o, l) => (owns(e, i) ? store.slice(e, i, o, l) : undefined),
+    slice: (e, i, o, l) => (readable(e, i) ? store.slice(e, i, o, l) : undefined),
   };
 }
 
