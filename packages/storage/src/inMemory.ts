@@ -63,6 +63,9 @@ import type {
   MarketplaceListingRecord,
   MarketplaceSearchQuery,
   MarketplaceStorage,
+  AppSalesStorage,
+  AppSaleRecord,
+  AppSalesTotals,
   PushTokenRecord,
   PushTokenStorage,
   RoutingRecord,
@@ -584,6 +587,30 @@ export class InMemoryMarketplaceStorage implements MarketplaceStorage {
           (l.scanCompletedAt === undefined || l.scanCompletedAt < staleBeforeMs),
       )
       .map((l) => ({ ...l }));
+  }
+}
+
+export class InMemoryAppSalesStorage implements AppSalesStorage {
+  private rows = new Map<string, AppSaleRecord>();
+  async record(rec: AppSaleRecord): Promise<boolean> {
+    if (this.rows.has(rec.saleKey)) return false;
+    this.rows.set(rec.saleKey, { ...rec });
+    return true;
+  }
+  async listForCreator(creatorAccount: string): Promise<AppSaleRecord[]> {
+    return [...this.rows.values()]
+      .filter((r) => r.creatorAccount === creatorAccount)
+      .sort((a, b) => b.at - a.at)
+      .map((r) => ({ ...r }));
+  }
+  async totalsForCreator(creatorAccount: string): Promise<AppSalesTotals> {
+    const mine = [...this.rows.values()].filter((r) => r.creatorAccount === creatorAccount);
+    return {
+      grossCents: mine.reduce((s, r) => s + r.grossCents, 0),
+      cutCents: mine.reduce((s, r) => s + r.cutCents, 0),
+      netCents: mine.reduce((s, r) => s + r.netCents, 0),
+      saleCount: mine.length,
+    };
   }
 }
 

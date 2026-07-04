@@ -2246,6 +2246,52 @@ export interface AppPurchaseStorage {
   listForUser(username: string): Promise<AppPurchaseRecord[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Developer payouts + revenue cut (migration 0091) — feat/marketplace #15
+// ──────────────────────────────────────────────────────────────────────
+
+/** One completed paid-app sale: the gross the buyer paid, the platform cut,
+ *  and the net owed to the creator. The payout-ledger primitive the developer
+ *  console reads. Written once per purchase, idempotently. */
+export interface AppSaleRecord {
+  /** Idempotency key: the Stripe event id, or `<source>:<creator>:<slug>:<buyer>`
+   *  for an admin comp / voucher. A redelivery with the same key is a no-op. */
+  saleKey: string;
+  /** Composite listing id `<creator>--<slug>`. */
+  listingId: string;
+  creatorAccount: string;
+  buyerAccount: string;
+  grossCents: number;
+  cutCents: number;
+  netCents: number;
+  /** ISO-4217-ish lowercase (e.g. "usd"). */
+  currency: string;
+  /** Audit provenance; absent for admin/voucher comps. */
+  stripeEventId?: string;
+  at: number;
+}
+
+/** Roll-up of a creator's sales (developer console totals). */
+export interface AppSalesTotals {
+  grossCents: number;
+  cutCents: number;
+  netCents: number;
+  saleCount: number;
+}
+
+/** Standalone store (like AppPurchaseStorage — not part of the `Storage`
+ *  aggregate). */
+export interface AppSalesStorage {
+  /** Idempotently record a sale. Returns true iff THIS call inserted it;
+   *  false when `saleKey` already existed (redelivery / re-grant), so a
+   *  sale is never double-counted. */
+  record(rec: AppSaleRecord): Promise<boolean>;
+  /** A creator's sales, newest first (the developer console ledger). */
+  listForCreator(creatorAccount: string): Promise<AppSaleRecord[]>;
+  /** Gross/cut/net + count rolled up for a creator. */
+  totalsForCreator(creatorAccount: string): Promise<AppSalesTotals>;
+}
+
 /** Standalone store (like UsageStorage — not part of the `Storage` aggregate). */
 export interface VoucherStorage {
   /** Insert a new voucher. Collision on code_hash → ok:false. */

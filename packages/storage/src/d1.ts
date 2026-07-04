@@ -58,6 +58,9 @@ import type {
   StripeEventStore,
   AppPurchaseStorage,
   AppPurchaseRecord,
+  AppSalesStorage,
+  AppSaleRecord,
+  AppSalesTotals,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -3265,6 +3268,88 @@ export class D1AppPurchaseStorage implements AppPurchaseStorage {
       source: r.source,
       ref: r.ref ?? undefined,
     }));
+  }
+}
+
+interface RawAppSaleRow {
+  sale_key: string;
+  listing_id: string;
+  creator_account: string;
+  buyer_account: string;
+  gross_cents: number;
+  cut_cents: number;
+  net_cents: number;
+  currency: string;
+  stripe_event_id: string | null;
+  at: number;
+}
+
+function saleRowToRecord(r: RawAppSaleRow): AppSaleRecord {
+  return {
+    saleKey: r.sale_key,
+    listingId: r.listing_id,
+    creatorAccount: r.creator_account,
+    buyerAccount: r.buyer_account,
+    grossCents: r.gross_cents,
+    cutCents: r.cut_cents,
+    netCents: r.net_cents,
+    currency: r.currency,
+    ...(r.stripe_event_id ? { stripeEventId: r.stripe_event_id } : {}),
+    at: r.at,
+  };
+}
+
+export class D1AppSalesStorage implements AppSalesStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async record(rec: AppSaleRecord): Promise<boolean> {
+    // INSERT OR IGNORE on the sale_key: a redelivered stripe event / re-grant
+    // changes 0 rows, so a sale is recorded exactly once.
+    const r = await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO app_sales
+           (sale_key, listing_id, creator_account, buyer_account,
+            gross_cents, cut_cents, net_cents, currency, stripe_event_id, at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .bind(
+        rec.saleKey, rec.listingId, rec.creatorAccount, rec.buyerAccount,
+        rec.grossCents, rec.cutCents, rec.netCents, rec.currency,
+        rec.stripeEventId ?? null, rec.at,
+      )
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+
+  async listForCreator(creatorAccount: string): Promise<AppSaleRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT sale_key, listing_id, creator_account, buyer_account,
+                gross_cents, cut_cents, net_cents, currency, stripe_event_id, at
+           FROM app_sales WHERE creator_account = ? ORDER BY at DESC`,
+      )
+      .bind(creatorAccount)
+      .all<RawAppSaleRow>();
+    return (result.results ?? []).map(saleRowToRecord);
+  }
+
+  async totalsForCreator(creatorAccount: string): Promise<AppSalesTotals> {
+    const row = await this.db
+      .prepare(
+        `SELECT COALESCE(SUM(gross_cents),0) AS g,
+                COALESCE(SUM(cut_cents),0)   AS c,
+                COALESCE(SUM(net_cents),0)   AS n,
+                COUNT(*)                     AS k
+           FROM app_sales WHERE creator_account = ?`,
+      )
+      .bind(creatorAccount)
+      .first<{ g: number; c: number; n: number; k: number }>();
+    return {
+      grossCents: row?.g ?? 0,
+      cutCents: row?.c ?? 0,
+      netCents: row?.n ?? 0,
+      saleCount: row?.k ?? 0,
+    };
   }
 }
 

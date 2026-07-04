@@ -45,6 +45,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // Parked at 0090 (not 0083–0089) so main keeps 0083+ free for its next
   // organic allocations; the prod ledger stores only the 4-digit prefix.
   "0090",
+  // feat/marketplace — app_sales payout ledger (#15 developer payouts).
+  "0091",
 ];
 
 export interface SchemaStatusDeps {
