@@ -191,7 +191,7 @@ public struct InviteManageScreen: View {
                     }
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                    Text("IRK \(String(row.irkPubHex.prefix(12)))…")
+                    Text("Account key \(String(row.irkPubHex.prefix(12)))…")
                         .font(FS.font.mono())
                         .foregroundColor(c.textMuted)
                 }

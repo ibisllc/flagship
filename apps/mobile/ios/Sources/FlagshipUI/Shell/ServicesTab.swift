@@ -231,7 +231,7 @@ public struct ServicesTab: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
-                        Text("Describe it in plain English. The AI writes it, the daemon runs it.")
+                        Text("Describe it in plain English. The AI writes it, your server runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                         FSPrimaryButton("Build a service", block: true) {
                             path.append(.buildSource)

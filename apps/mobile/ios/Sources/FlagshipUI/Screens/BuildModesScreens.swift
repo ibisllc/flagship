@@ -220,7 +220,7 @@ public struct BuildGitScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                     FSSecondaryButton("Build with AI instead", block: true) { onBuildWithAI() }
                         .accessibilityIdentifier("build-git-adapt")
-                    Text("The AI rewrites this repo into a Flagship service — adds the manifest, removes its own login, and wires it to your box's data layer.")
+                    Text("The AI rewrites this repo into a Flagship service — adds the app config, removes its own login, and wires it to your box's data layer.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     journalLink(c: c)
