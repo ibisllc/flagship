@@ -27,6 +27,7 @@ import {
   type LlmPromoIssueRequest,
   type LlmProvider,
 } from "@flagship/protocol";
+import type { InferenceEndpoint } from "./inferenceEndpoint.js";
 import type {
   DemoLlmLedgerStorage,
   LlmPromoStorage,
@@ -54,6 +55,14 @@ export interface LlmPromoDeps {
     dailyOutputTokenCap: number;
     expiresAt: number;
   }) => Promise<{ key: string; providerKeyId: string }>;
+  /**
+   * The blessed in-house inference endpoint. REQUIRED for a
+   * `provider:"flagship"` issue — absent ⇒ that issue is refused (503)
+   * rather than minting a key the box can't route. Upstream providers
+   * (anthropic/openai/google) never consult it. Surfaced in the issue
+   * response as `baseUrl`+`model` so the client saves them with the key.
+   */
+  inferenceEndpoint?: InferenceEndpoint | null;
   freshnessMs?: number;
   now?: () => number;
   /** Override caps per tier. */
@@ -111,7 +120,10 @@ export async function handleLlmPromoIssue(
     typeof r.username !== "string" ||
     typeof r.serverFqdn !== "string" ||
     typeof r.provider !== "string" ||
-    (r.provider !== "anthropic" && r.provider !== "openai" && r.provider !== "google") ||
+    (r.provider !== "anthropic" &&
+      r.provider !== "openai" &&
+      r.provider !== "google" &&
+      r.provider !== "flagship") ||
     typeof r.desiredDailyInputTokenCap !== "number" ||
     typeof r.desiredDailyOutputTokenCap !== "number" ||
     typeof r.issuedAt !== "number" ||
@@ -214,7 +226,16 @@ export async function handleLlmPromoIssue(
     }
   }
 
-  // Mint the upstream provider key.
+  // In-house inference: a `flagship` issue is only valid when the blessed
+  // endpoint is configured — otherwise refuse rather than hand the box a
+  // key with nowhere to route. Upstream providers ignore this.
+  if (r.provider === "flagship" && !deps.inferenceEndpoint) {
+    return { status: 503, body: { error: "in-house inference not configured" } };
+  }
+
+  // Mint the provider key. For `flagship` the minter returns a scoped
+  // `.com` token; for upstream providers it returns the provider's own
+  // scoped key.
   const minted = await deps.mintProviderKey({
     provider: r.provider,
     username: r.username,
@@ -240,6 +261,17 @@ export async function handleLlmPromoIssue(
     dailyInputTokenCap: dailyInput,
     dailyOutputTokenCap: dailyOutput,
     tier,
+    // For `flagship`, hand the client the blessed endpoint so it saves
+    // baseUrl+model with the key and the box talks to it directly. The
+    // credential is marked promo-sourced so the daemon pins its SSRF
+    // guard to this host.
+    ...(r.provider === "flagship" && deps.inferenceEndpoint
+      ? {
+          baseUrl: deps.inferenceEndpoint.baseUrl,
+          model: deps.inferenceEndpoint.model,
+          source: "promo" as const,
+        }
+      : {}),
   });
 }
 

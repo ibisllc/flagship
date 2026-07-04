@@ -157,6 +157,8 @@ import {
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
+  parseBlessedInferenceEndpoint,
+  mintScopedInferenceToken,
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
@@ -2935,6 +2937,8 @@ export async function tryControlPlane(
 
   // ── LLM promo ──────────────────────────────────────────────
   if (method === "POST" && ROUTE_RE.LLM_PROMO_ISSUE.test(path)) {
+    const inferenceEndpoint = parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT);
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
     return finish(
       await handleLlmPromoIssue(
         {
@@ -2943,12 +2947,38 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           // #85 — enforce the demo rolling-token ceiling in production.
           demoLlmLedger: storage.demoLlmLedger,
-          // Stub minter: returns a deterministic fake key. Real Worker
-          // wiring calls the upstream provider's scoped-key API.
-          mintProviderKey: async (args) => ({
-            key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
-            providerKeyId: `pkid-${args.expiresAt}`,
-          }),
+          // Both the endpoint AND the signing secret must be present for
+          // a `flagship` issue; missing either ⇒ the handler's 503.
+          inferenceEndpoint: inferenceSecret ? inferenceEndpoint : null,
+          // For `provider:"flagship"` mint a scoped, short-lived (1h)
+          // `.com`-signed token the metering shim verifies — NOT a real
+          // upstream key. Refuse if the signing secret is unset (belt to
+          // the handler's endpoint-configured check). Upstream providers
+          // (anthropic/openai/google) keep the deterministic stub until
+          // their real scoped-key APIs are wired.
+          mintProviderKey: async (args) => {
+            if (args.provider === "flagship") {
+              if (!inferenceSecret) throw new Error("inference token secret not configured");
+              const keyId = `fp-${crypto.randomUUID()}`;
+              const key = await mintScopedInferenceToken(
+                {
+                  username: args.username,
+                  keyId,
+                  iat: Date.now(),
+                  exp: args.expiresAt,
+                  dailyInputTokenCap: args.dailyInputTokenCap,
+                  dailyOutputTokenCap: args.dailyOutputTokenCap,
+                  serverFqdn: args.serverFqdn,
+                },
+                inferenceSecret,
+              );
+              return { key, providerKeyId: keyId };
+            }
+            return {
+              key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
+              providerKeyId: `pkid-${args.expiresAt}`,
+            };
+          },
         },
         await readJson(request),
       ),

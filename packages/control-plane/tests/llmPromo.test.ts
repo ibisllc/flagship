@@ -11,6 +11,7 @@ import {
   InMemoryUsernameStorage,
 } from "@flagship/storage";
 import { handleLlmPromoIssue, handleLlmPromoStatus } from "../src/llmPromo.js";
+import { verifyScopedInferenceToken, mintScopedInferenceToken } from "../src/inferenceToken.js";
 
 function makeIrk(): Keypair {
   const priv = new Uint8Array(32);
@@ -28,7 +29,7 @@ const stubMint = async (args: { provider: string; expiresAt: number }) => ({
   providerKeyId: `pkid-${args.expiresAt}`,
 });
 
-function makeRequest(overrides: Partial<{ provider: "anthropic" | "openai" | "google"; desiredDailyInputTokenCap: number; desiredDailyOutputTokenCap: number; issuedAt: number }> = {}) {
+function makeRequest(overrides: Partial<{ provider: "anthropic" | "openai" | "google" | "flagship"; desiredDailyInputTokenCap: number; desiredDailyOutputTokenCap: number; issuedAt: number }> = {}) {
   return {
     username: "alice",
     serverFqdn: "home.alice.flagship.services",
@@ -160,6 +161,82 @@ describe("/api/llm-promo/issue", () => {
       { request: claim, signature: bytesToHex(sig) },
     );
     expect(r.status).toBe(403);
+  });
+});
+
+describe("/api/llm-promo/issue — in-house flagship provider", () => {
+  const endpoint = { baseUrl: "https://coder.runpod.example.com", model: "flagship-coder-v1" };
+  const SECRET = "test-inference-secret";
+  // Mirror the Worker's real minter so the test exercises the true token.
+  const flagshipMint = async (args: {
+    provider: string; username: string; serverFqdn: string;
+    dailyInputTokenCap: number; dailyOutputTokenCap: number; expiresAt: number;
+  }) => {
+    if (args.provider !== "flagship") {
+      return { key: `fk-${args.provider}-${args.expiresAt}`, providerKeyId: `pkid-${args.expiresAt}` };
+    }
+    const keyId = "fp-test-1";
+    const key = await mintScopedInferenceToken(
+      { username: args.username, keyId, iat: Date.now(), exp: args.expiresAt,
+        dailyInputTokenCap: args.dailyInputTokenCap, dailyOutputTokenCap: args.dailyOutputTokenCap,
+        serverFqdn: args.serverFqdn },
+      SECRET,
+    );
+    return { key, providerKeyId: keyId };
+  };
+
+  it("mints a scoped token + surfaces baseUrl/model/source when the endpoint is configured", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "flagship" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: endpoint, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as { apiKey: string; baseUrl: string; model: string; source: string };
+    expect(body.baseUrl).toBe(endpoint.baseUrl);
+    expect(body.model).toBe(endpoint.model);
+    expect(body.source).toBe("promo");
+    // The minted key verifies under the shared secret and carries the scope.
+    const v = await verifyScopedInferenceToken(body.apiKey, SECRET);
+    expect(v.ok).toBe(true);
+    if (v.ok) {
+      expect(v.claims.username).toBe("alice");
+      expect(v.claims.dailyInputTokenCap).toBe(1000);
+    }
+  });
+
+  it("refuses (503) a flagship issue when the endpoint is unconfigured", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "flagship" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: null, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(503);
+    expect((r.body as { error: string }).error).toContain("inference not configured");
+  });
+
+  it("does not leak baseUrl/model on an upstream-provider issue", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = makeRequest({ provider: "openai" });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames,
+        inferenceEndpoint: endpoint, mintProviderKey: flagshipMint },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as Record<string, unknown>;
+    expect(body.baseUrl).toBeUndefined();
+    expect(body.source).toBeUndefined();
   });
 });
 
