@@ -55,6 +55,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0086",
   // Share this server: offers, the second account's boot copy, its inbox.
   "0087",
+  // feat/marketplace — carries the app manifest JSON on the listing (Blocker 1).
+  // Parked at 0090 (main skips 0088–0094 for the feature branches); the prod
+  // ledger stores only the 4-digit prefix.
+  "0090",
   // The capability table behind own-key AI model menus.
   "0095",
   // The owner's server order (who leads, who's next).
