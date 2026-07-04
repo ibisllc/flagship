@@ -217,6 +217,105 @@ describe("claimSetLeaderDeposit", () => {
     expect(getter()).toEqual({ stkHex: hex(self.publicKey), date: 5_000 });
   });
 
+  // v1-sec GAP 6 — a replayed OLDER signed vote must NOT overwrite a newer
+  // preferred-server choice. Only a strictly-newer issuedAt is applied.
+  it("REJECTS a replayed older vote — the newer preferred server survives", async () => {
+    const irk = makeKey(1);
+    const first = makeKey(9); // the newer preferred server
+    const second = makeKey(8); // the older vote's (stale) target
+    const store = memStore();
+
+    // Apply the NEWER vote (issuedAt 5_000) first.
+    const newOut = await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(
+        carrier({ irk, preferredStkPubHex: hex(first.publicKey), issuedAt: 5_000 }),
+      ),
+      onLog: () => {},
+    });
+    expect(newOut.stored).toBe(true);
+
+    // `.com` re-serves an OLDER validly-signed vote (issuedAt 4_000).
+    const staleOut = await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(
+        carrier({ irk, preferredStkPubHex: hex(second.publicKey), issuedAt: 4_000 }),
+      ),
+      onLog: () => {},
+    });
+    expect(staleOut).toEqual({ stored: false, reason: "stale" });
+    // The newer preferred server is untouched.
+    expect(store.value?.preferredStkPubHex).toBe(hex(first.publicKey));
+    expect(store.value?.issuedAt).toBe(5_000);
+  });
+
+  it("REJECTS re-applying the SAME issuedAt (no overwrite churn)", async () => {
+    const irk = makeKey(1);
+    const self = makeKey(9);
+    const store = memStore();
+    const same = carrier({ irk, preferredStkPubHex: hex(self.publicKey), issuedAt: 7_000 });
+    const first = await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(same),
+      onLog: () => {},
+    });
+    expect(first.stored).toBe(true);
+    const replay = await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(same),
+      onLog: () => {},
+    });
+    expect(replay).toEqual({ stored: false, reason: "stale" });
+  });
+
+  it("ACCEPTS a strictly-newer vote (a genuine preference change applies)", async () => {
+    const irk = makeKey(1);
+    const first = makeKey(9);
+    const next = makeKey(8);
+    const store = memStore();
+    await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(
+        carrier({ irk, preferredStkPubHex: hex(first.publicKey), issuedAt: 5_000 }),
+      ),
+      onLog: () => {},
+    });
+    const out = await claimSetLeaderDeposit({
+      serverDomain: DOMAIN,
+      user: USER,
+      ownerIrkPub: irk.publicKey,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      store,
+      fetchImpl: fetchReturning(
+        carrier({ irk, preferredStkPubHex: hex(next.publicKey), issuedAt: 6_000 }),
+      ),
+      onLog: () => {},
+    });
+    expect(out.stored).toBe(true);
+    expect(store.value?.preferredStkPubHex).toBe(hex(next.publicKey));
+    expect(store.value?.issuedAt).toBe(6_000);
+  });
+
   it("a forged vote is NOT stored (keep polling)", async () => {
     const irk = makeKey(1);
     const wrong = makeKey(2);
