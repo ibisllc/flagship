@@ -156,10 +156,10 @@
 		EA35BF39206378728D34AE65 /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_039491B6-E874-4CB2-A850-D5624EEE82EF" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_3AB068A0-8653-4AA8-96DE-4FDC150386C9" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_3CE356E4-5B14-4A87-922B-C297A77080A5" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_EE2BB094-7642-4DDF-98DB-125B5DBA2944" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -318,13 +318,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_EAFB3C99-497C-480C-9306-33BDC552C151" /* . */ = {
+		"TEMP_2A289F95-ED80-401F-AACD-2B9A8A2A188B" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_3AB068A0-8653-4AA8-96DE-4FDC150386C9" /* project.yml */,
-				"TEMP_EE2BB094-7642-4DDF-98DB-125B5DBA2944" /* FlagshipApp.xcodeproj */,
-				"TEMP_3CE356E4-5B14-4A87-922B-C297A77080A5" /* FlagshipApp.entitlements */,
-				"TEMP_039491B6-E874-4CB2-A850-D5624EEE82EF" /* Info.plist */,
+				"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */,
+				"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */,
+				"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */,
+				"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
