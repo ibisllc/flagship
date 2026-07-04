@@ -198,7 +198,7 @@ export function stripIdentityHeaders(headers: Record<string, string>): Record<st
   return out;
 }
 
-async function defaultForward(host: string, port: number, req: HttpRequest): Promise<HttpResponse> {
+export async function defaultForward(host: string, port: number, req: HttpRequest): Promise<HttpResponse> {
   return new Promise<HttpResponse>((resolve, reject) => {
     const proxyReq = httpRequest(
       {
@@ -219,9 +219,12 @@ async function defaultForward(host: string, port: number, req: HttpRequest): Pro
             else if (Array.isArray(v)) headers[k] = v.join(", ");
           }
           // Strip hop-by-hop response headers (we'll write our own
-          // content-length).
+          // content-length — the container's copy must go too, or every
+          // proxied response carries a duplicate Content-Length and
+          // spec-compliant fetch clients reject it, RFC 9112 §6.3).
           delete headers["transfer-encoding"];
           delete headers["connection"];
+          delete headers["content-length"];
           resolve({ status: res.statusCode ?? 502, headers, body });
         });
         res.on("error", reject);

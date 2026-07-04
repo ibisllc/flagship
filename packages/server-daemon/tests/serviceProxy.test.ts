@@ -263,3 +263,34 @@ describe("handleAppRequest — full flow", () => {
     expect(String(r.body)).toBe("container said hi");
   });
 });
+
+describe("defaultForward — hop-by-hop header stripping", () => {
+  it("drops the container's content-length (the runtime writes its own; a duplicate makes fetch clients reject every proxied response)", async () => {
+    const { createServer } = await import("node:http");
+    const { defaultForward } = await import("../src/serviceProxy.js");
+    const srv = createServer((_req, res) => {
+      res.setHeader("Content-Length", "2");
+      res.setHeader("Content-Type", "text/plain");
+      res.setHeader("Connection", "close");
+      res.end("ok");
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const res = await defaultForward("127.0.0.1", port, {
+        method: "GET",
+        path: "/",
+        headers: {},
+        body: Buffer.alloc(0),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.toString()).toBe("ok");
+      expect(res.headers["content-length"]).toBeUndefined();
+      expect(res.headers["transfer-encoding"]).toBeUndefined();
+      expect(res.headers["connection"]).toBeUndefined();
+      expect(res.headers["content-type"]).toContain("text/plain");
+    } finally {
+      srv.close();
+    }
+  });
+});
