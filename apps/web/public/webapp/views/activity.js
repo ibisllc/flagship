@@ -19,6 +19,7 @@ import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
 import { flagIcon } from "../lib/icons.js";
 import { fetchPodInventory } from "./home.js";
 import { toast } from "../lib/toast.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -70,7 +71,7 @@ function wireActivityPodSwitcher(root) {
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatDateTime(unixMs);
 }
 
 const COM_BASE = controlApex();

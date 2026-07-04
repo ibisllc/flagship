@@ -75,7 +75,7 @@ export async function renderServiceDetail(serviceId) {
 
       ${renderWebDomainsSection(s, currentServiceLinks)}
       <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
-      <h2 class="mt-4">Manifest</h2>
+      <h2 class="mt-4">App config</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
       </div>

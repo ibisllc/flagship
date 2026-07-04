@@ -431,7 +431,7 @@ async function triggerDeploy() {
   if (!activeSessionId) return;
   const baseUrl = getPodBaseUrl();
   const tok = getSessionToken();
-  if (!baseUrl || !tok) return toast("not paired", "err");
+  if (!baseUrl || !tok) return toast("Not paired", "err");
   const btn = $("vc-deploy-go");
   btn.disabled = true;
   btn.textContent = "deploying…";
@@ -447,7 +447,7 @@ async function triggerDeploy() {
       const text = await r.text().catch(() => "");
       throw new Error(`deploy failed: ${r.status} ${text}`.trim());
     }
-    toast("deployed");
+    toast("Deployed");
     schedulePoll();
   } catch (e) {
     toast(e.message, "err");

@@ -15,6 +15,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   listSecuredSessions,
   removeSecuredSession,
@@ -29,8 +30,8 @@ const liveness = new Map();
 
 function statusPill(secretId) {
   const s = liveness.get(secretId);
-  if (!s || s.status === "unknown") return '<span class="pill">unknown</span>';
-  return s.status === "online" ? '<span class="pill ok">online</span>' : '<span class="pill">offline</span>';
+  if (!s || s.status === "unknown") return '<span class="pill">Unknown</span>';
+  return s.status === "online" ? '<span class="pill ok">Online</span>' : '<span class="pill">Offline</span>';
 }
 
 export function renderSecuredSessions() {
@@ -42,7 +43,7 @@ export function renderSecuredSessions() {
   }
   root.innerHTML = sessions
     .map((s) => {
-      const started = Number.isFinite(s.startedAt) ? new Date(s.startedAt).toLocaleString() : "";
+      const started = Number.isFinite(s.startedAt) ? formatWhen(s.startedAt) : "";
       return `
       <div class="card">
         <div class="row row-top">
@@ -124,7 +125,7 @@ async function stopOne(secretId) {
   }
   removeSecuredSession(secretId);
   liveness.delete(secretId);
-  toast("stopped");
+  toast("Stopped");
   renderSecuredSessions();
 }
 

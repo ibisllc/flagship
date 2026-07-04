@@ -30,6 +30,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-url-controller");
 
@@ -54,7 +55,7 @@ function closeSiblingSocket() {
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function kindPill(kind) {
@@ -163,7 +164,7 @@ export async function renderLiveSiblings() {
       <div class="card">
         <div class="row row-top">
           <div>
-            <div class="weight-600">${escapeHtml(s.siblingId ?? "?")} ${online ? '<span class="pill ok">online</span>' : '<span class="pill warn">offline</span>'}</div>
+            <div class="weight-600">${escapeHtml(s.siblingId ?? "?")} ${online ? '<span class="pill ok">Online</span>' : '<span class="pill warn">Offline</span>'}</div>
             <div class="value text-xs">${fqdns}</div>
             <div class="faint-sm">${lastSeen}</div>
           </div>
@@ -190,7 +191,7 @@ async function runClaim() {
   const input = $("url-controller-claim-input");
   const btn = $("url-controller-claim-go");
   const fqdn = (input?.value ?? "").trim();
-  if (!fqdn) return toast("enter an FQDN", "err");
+  if (!fqdn) return toast("Enter an FQDN", "err");
   if (btn) {
     btn.disabled = true;
     btn.textContent = "claiming…";
@@ -200,7 +201,7 @@ async function runClaim() {
       method: "POST",
       body: JSON.stringify({ fqdn }),
     });
-    toast(`claimed ${fqdn}`);
+    toast(`Claimed ${fqdn}`);
     if (input) input.value = "";
     await renderOwned();
     // Auto-kick a verify request so the user sees the TXT record they
@@ -229,7 +230,7 @@ async function runVerify(fqdn) {
       body: JSON.stringify({ fqdn }),
     });
     if (body.status === "verified") {
-      toast(`verified ${fqdn}`);
+      toast(`Verified ${fqdn}`);
       return;
     }
     if (body.status === "pending") {
@@ -240,14 +241,14 @@ async function runVerify(fqdn) {
       );
       return;
     }
-    toast(`verify failed: ${body.reason ?? "unknown"}`, "err");
+    toast(`Verify failed: ${body.reason ?? "unknown"}`, "err");
   } catch (e) {
     if (e.status === 404) {
       // Daemon hasn't shipped /verify yet — silently skip rather than
       // confuse the user. iOS surfaces the same case as a noop.
       return;
     }
-    toast(`verify error: ${e.message ?? e}`, "err");
+    toast(`Verify error: ${e.message ?? e}`, "err");
   }
 }
 
@@ -282,7 +283,7 @@ async function runDrop(fqdn, btn) {
       const text = await r.text().catch(() => "");
       throw new Error(`drop failed: ${r.status} ${text}`.trim());
     }
-    toast(`dropped ${fqdn}`);
+    toast(`Dropped ${fqdn}`);
     await renderOwned();
   } catch (e) {
     toast(e.message ?? String(e), "err");

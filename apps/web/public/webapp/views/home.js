@@ -12,6 +12,7 @@ import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
@@ -36,22 +37,15 @@ import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 
 registerView("view-home", { tab: "home" });
 
-// #36 — empty-state pennant illustration. Inline SVG so we don't add
-// a network round-trip for a single decorative asset; sized to ~140px
-// tall so it reads as "illustration", not "icon", on mobile.
-const PENNANT_SVG = `
-<svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-pennant">
-  <defs>
-    <linearGradient id="pennant-flag" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="var(--accent)" stop-opacity="0.95" />
-      <stop offset="1" stop-color="var(--accent-press)" stop-opacity="0.85" />
-    </linearGradient>
-  </defs>
-  <line x1="60" y1="20" x2="60" y2="150" stroke="var(--ink-muted)" stroke-width="3" stroke-linecap="round" />
-  <circle cx="60" cy="20" r="4" fill="var(--ink-muted)" />
-  <path d="M60 32 L180 38 L150 64 L180 90 L60 96 Z" fill="url(#pennant-flag)"
-        stroke="var(--accent-press)" stroke-width="1.5" stroke-linejoin="round" />
-  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--border)" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 6" />
+// #36 — empty-state brand mark. The flag-on-mast pennant is RETIRED;
+// the empty state now shows the current brand mark (a rounded square
+// containing a circle) in teal so it reads as "a moment", not a missing
+// asset. Inline SVG to avoid a network round-trip for one decorative glyph.
+const EMPTY_MARK_SVG = `
+<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-mark">
+  <rect x="8" y="8" width="80" height="80" rx="22" fill="var(--accent-soft)"
+        stroke="var(--accent)" stroke-width="2" />
+  <circle cx="48" cy="48" r="20" fill="none" stroke="var(--accent)" stroke-width="4" />
 </svg>
 `;
 
@@ -155,9 +149,9 @@ export function renderPendingCard(order) {
   const row = listRow({
     leading: { kind: "icon", svg: serverIcon, tone: "warning" },
     title: String(label),
-    subtitle: "installing",
+    subtitle: "Installing",
     detail: String(order.fqdn),
-    trailing: `<span class="pill warn">pending</span>`,
+    trailing: `<span class="pill warn">Pending</span>`,
   });
   return `
     ${row}
@@ -187,7 +181,7 @@ export const COMING_ONLINE_GRACE_MS = 20 * 60 * 1000;
  * @param {{ hasLiveUnlockRequest?: boolean, now?: number }} [opts]
  */
 export function classifyServer(server, pod, opts = {}) {
-  if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
+  if (server.revoked) return { kind: "revoked", label: `Revoked: ${server.revoked.reason}` };
   const now = opts.now ?? Date.now();
 
   // Fix A — honor the new /pods `liveness` field when present.
@@ -212,16 +206,16 @@ export function classifyServer(server, pod, opts = {}) {
     // The box has checked in before but is not reachable right now.
     const msAgo = typeof pod.lastSeenMsAgo === "number" ? pod.lastSeenMsAgo : null;
     const ageLabel = msAgo != null ? formatAge(msAgo) : "unknown";
-    return { kind: "offline", label: `offline (last seen ${ageLabel} ago)` };
+    return { kind: "offline", label: `Offline (last seen ${ageLabel} ago)` };
   }
 
   if (liveness === "never") {
     // Box registered but never sent a heartbeat. Check approval / grace states
     // first — they override "never" (same logic as the no-lastReported path).
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "waiting for approval" };
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
-    return { kind: "never-seen", label: "still coming up" };
+    return { kind: "never-seen", label: "Still coming up" };
   }
 
   if (!pod || pod.lastReported == null) {
@@ -234,41 +228,29 @@ export function classifyServer(server, pod, opts = {}) {
     // in is what stops a box stuck on serve-authorization from reading "never
     // came online").
     if (opts.hasLiveUnlockRequest || (pod?.pendingRequests?.length ?? 0) > 0) {
-      return { kind: "waiting-for-approval", label: "waiting for approval" };
+      return { kind: "waiting-for-approval", label: "Waiting for approval" };
     }
     // Within the grace window after registration ⇒ still coming online.
     const registeredAt = pod?.registeredAt;
     if (registeredAt != null && now - registeredAt <= COMING_ONLINE_GRACE_MS) {
-      return { kind: "coming-online", label: "coming online…" };
+      return { kind: "coming-online", label: "Coming online…" };
     }
-    return { kind: "never-seen", label: "never seen" };
+    return { kind: "never-seen", label: "Never seen" };
   }
   const ageMs = now - pod.lastReported;
   // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
-  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `offline (${formatAge(ageMs)} ago)` };
+  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `Offline (${formatAge(ageMs)} ago)` };
   // Cert expiry within 30d — surface as warning even when daemon is online.
   if (pod.currentCert?.validUntil) {
     const msToExpiry = pod.currentCert.validUntil - Date.now();
-    if (msToExpiry < 0) return { kind: "cert-expired", label: "cert expired" };
+    if (msToExpiry < 0) return { kind: "cert-expired", label: "Cert expired" };
     if (msToExpiry < 30 * 86400_000) {
-      return { kind: "cert-expiring-soon", label: `cert renews in ${formatDays(msToExpiry)}` };
+      return { kind: "cert-expiring-soon", label: `Cert renews in ${formatDays(msToExpiry)}` };
     }
   }
-  return { kind: "online", label: "online" };
-}
-
-function formatAge(ms) {
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
-  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h`;
-  return `${Math.round(ms / 86400_000)}d`;
-}
-
-function formatDays(ms) {
-  const d = Math.max(1, Math.round(ms / 86400_000));
-  return `${d}d`;
+  return { kind: "online", label: "Online" };
 }
 
 /** The short server label for the operations-sliver "preparing <name>"
@@ -487,7 +469,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
   const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">
-      ${PENNANT_SVG}
+      ${EMPTY_MARK_SVG}
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
@@ -777,7 +759,15 @@ function renderServerCards() {
 
   const cardsHtml = visible.length
     ? visible
-        .map((e) => `<div class="card ${e.cardClass}">${e.html}</div>`)
+        .map((e) => {
+          // A registered (non-pending) card is tappable → opens server-detail.
+          const openable = e.bucket !== "pending" && e.fields.fqdn;
+          const attrs = openable
+            ? ` data-open-fqdn="${escapeHtml(e.fields.fqdn)}"`
+            : "";
+          const cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          return `<div class="card ${cls}"${attrs}>${e.html}</div>`;
+        })
         .join("")
     : `<div class="card placeholder">${
         homeQuery || homeFilter !== "all"
@@ -812,6 +802,18 @@ function wireHomeListControls(list) {
   list.querySelector("#home-add-server")?.addEventListener("click", async () => {
     const { enterCreateServer } = await import("./create-server.js");
     await enterCreateServer();
+  });
+  // Tap a registered server card → open its detail screen. Clicks that
+  // land on an inner control (approve / delete / links) are ignored so the
+  // card tap never hijacks a button.
+  list.querySelectorAll("[data-open-fqdn]").forEach((card) => {
+    card.addEventListener("click", async (ev) => {
+      if (ev.target.closest("button, a, input, label, select, textarea")) return;
+      const fqdn = card.getAttribute("data-open-fqdn");
+      if (!fqdn) return;
+      const { enterServerDetail } = await import("./server-detail.js");
+      await enterServerDetail(fqdn);
+    });
   });
   // "Take over a box" — the standalone acquirer claim (paste / scan a
   // transfer link). The same view a `/transfer?o=` deep link routes into.
@@ -941,7 +943,7 @@ export async function renderHome() {
   const list = $("servers-list");
   list.innerHTML = "";
   if (!sid) {
-    sessionStatusEl.textContent = "unpaired";
+    sessionStatusEl.textContent = "Unpaired";
     sessionStatusEl.classList.remove("ok");
     // #36 — real empty state, not a "no paired session" stub. Phase 2:
     // if the account is already open (username claimed), this is the
@@ -956,7 +958,7 @@ export async function renderHome() {
     const r = await fetch(`/api/me/servers?sessionId=${encodeURIComponent(sid)}`);
     if (!r.ok) throw new Error(`status ${r.status}`);
     const body = await r.json();
-    sessionStatusEl.textContent = "paired";
+    sessionStatusEl.textContent = "Paired";
     sessionStatusEl.classList.add("ok");
     // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
     // returns BOTH the registered pods (liveness/cert enrichment) AND the
@@ -1123,7 +1125,7 @@ export async function renderHome() {
     // show when the list comes back empty. Keep the failure in the
     // console for debugging, but leave the surface clean.
     console.warn("home: servers list failed to load", e);
-    sessionStatusEl.textContent = "no servers";
+    sessionStatusEl.textContent = "No servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
     activeOperations.syncDeployOperations([]);
@@ -1173,7 +1175,7 @@ async function deleteDeadServer(serverDomain, btn) {
   const session = getSession();
   const username = session.username;
   if (!username) {
-    toast("unlock the webapp first", "warn");
+    toast("Unlock the webapp first", "warn");
     return;
   }
   const ok = confirm(
@@ -1204,12 +1206,12 @@ async function deleteDeadServer(serverDomain, btn) {
         return;
       }
     }
-    toast(`deleted — "${serverDomain}" is free again`);
+    toast(`Deleted — "${serverDomain}" is free again`);
     await renderHome();
   } catch (e) {
     // Keep the card: the name is still reserved, so re-render would just hide
     // a name the user can't reuse. Surface the error + re-enable the button.
-    toast(`delete failed: ${e.message ?? e}`, "err");
+    toast(`Delete failed: ${e.message ?? e}`, "err");
     if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
   }
 }

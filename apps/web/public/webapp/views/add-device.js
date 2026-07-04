@@ -83,7 +83,7 @@ async function renderQr(link) {
 async function startPairing() {
   const session = getSession();
   if (!session.umk || !session.username) {
-    return toast("unlock the webapp first", "err");
+    return toast("Unlock the webapp first", "err");
   }
   if (activePairing) {
     try { activePairing.abort(); } catch { /* ignore */ }
@@ -145,10 +145,10 @@ async function startPairing() {
     }
     if (result.promotedAdmin) {
       setStatus("done", "admin device added — it joins under a 14-day review window.");
-      toast("admin device added (quarantined for review)", "ok");
+      toast("Admin device added (quarantined for review)", "ok");
     } else {
       setStatus("done", "device added — it joins under a 14-day review window.");
-      toast("device added (quarantined for review)", "ok");
+      toast("Device added (quarantined for review)", "ok");
     }
   } catch (e) {
     setStatus("error", String(e?.message || e));

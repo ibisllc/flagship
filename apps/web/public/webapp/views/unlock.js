@@ -27,9 +27,9 @@ async function handleUnlock() {
       /* best-effort — never block an otherwise-good unlock */
     }
     await dispatchInitialView();
-    toast("unlocked");
+    toast("Unlocked");
   } catch {
-    toast("wrong passphrase", "err");
+    toast("Wrong passphrase", "err");
   }
 }
 

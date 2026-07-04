@@ -16,6 +16,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 import { get as profileGet } from "../lib/profilesStore.js";
 import {
   createAuditLogModel,
@@ -43,7 +44,7 @@ function activeUsername() {
 
 function fmtDate(ms) {
   if (typeof ms !== "number") return "—";
-  return new Date(ms).toLocaleString();
+  return formatDateTime(ms);
 }
 
 function eventRow(e) {

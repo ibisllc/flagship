@@ -38,7 +38,7 @@ function refreshConfirmGate() {
 async function runDelete() {
   const session = getSession();
   if (!session.umk) {
-    toast("unlock first", "err");
+    toast("Unlock first", "err");
     return;
   }
   const includeServers = !!$("account-delete-wipe-content")?.checked;
@@ -62,7 +62,7 @@ async function runDelete() {
       show,
       setSubtitle,
     });
-    toast("account deleted");
+    toast("Account deleted");
   } catch (e) {
     // 403 "not the last device", stale request, etc. — surface and leave the
     // device intact (nothing local was touched: the wipe runs only after 200).

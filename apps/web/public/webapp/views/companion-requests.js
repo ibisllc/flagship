@@ -41,12 +41,13 @@ import { revokeServer } from "../lib/revokeServer.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-companion-requests");
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function timeLeft(expiresAt, nowMs = Date.now()) {
@@ -279,7 +280,7 @@ export async function runApprove(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`approved ${row.kind}`, "ok");
+  toast(`Approved ${row.kind}`, "ok");
   // Refresh the list — non-fatal if the DOM isn't here (test env).
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
@@ -301,7 +302,7 @@ export async function runDeny(row, deps = {}) {
     setRowError(row.requestId, humanError(e));
     return { ok: false, error: String(e?.message ?? e) };
   }
-  toast(`denied`, "ok");
+  toast(`Denied`, "ok");
   if (typeof document !== "undefined") {
     await renderCompanionRequests(deps).catch(() => { /* swallow */ });
   }

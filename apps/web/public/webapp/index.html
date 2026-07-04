@@ -92,10 +92,18 @@
             <span class="label">Status</span>
             <span class="pill" id="session-status">unpaired</span>
           </div>
-          <div class="row-2">
-            <button class="secondary" id="pair-with-server">Pair to a server</button>
-            <button class="secondary" id="open-pod-pair">Pod pairing</button>
-          </div>
+          <details class="advanced-disclosure mt-2">
+            <summary>Advanced — connect to an existing server manually</summary>
+            <p class="note mt-2">
+              Most people just tap <strong>Add a server</strong> above — new
+              servers pair automatically. Use these only to connect this
+              browser to a server you already run.
+            </p>
+            <div class="row-2 mt-2">
+              <button class="secondary" id="pair-with-server">Scan a server QR</button>
+              <button class="secondary" id="open-pod-pair">Enter a server URL</button>
+            </div>
+          </details>
         </div>
 
         <h2 class="mt-5">Identity</h2>
@@ -109,12 +117,12 @@
                (fully-scoped or legacy single-IRK) session. -->
           <div id="home-device-capability" class="hidden mt-1"></div>
           <div class="row">
-            <span class="label">IRK pubkey</span>
+            <span class="label">Account key</span>
             <span class="value" id="home-irkpub">…</span>
           </div>
         </div>
 
-        <h2 class="mt-5">AI providers</h2>
+        <h2 class="mt-5">AI keys</h2>
         <div class="card" id="home-active-provider">
           <p class="note">loading…</p>
         </div>
@@ -197,29 +205,59 @@
         <div class="fs-group-section">
           <div class="fs-group-header">ACCOUNT</div>
           <div class="fs-group">
-            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI providers</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-account-security"><span class="fs-row-icon icon" data-row-icon="security"></span><span class="fs-row-body"><span class="fs-row-title">Account security</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Browser notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-          </div>
-        </div>
-
-        <div class="fs-group-section">
-          <div class="fs-group-header">RECOVERY &amp; DEVICES</div>
-          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-providers"><span class="fs-row-icon icon" data-row-icon="providers"></span><span class="fs-row-body"><span class="fs-row-title">AI keys</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-recovery"><span class="fs-row-icon icon" data-row-icon="recovery"></span><span class="fs-row-body"><span class="fs-row-title">Recovery</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-process-url"><span class="fs-row-icon icon" data-row-icon="processurl"></span><span class="fs-row-body"><span class="fs-row-title">Process URL</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-backup-key"><span class="fs-row-icon icon" data-row-icon="backupkey"></span><span class="fs-row-body"><span class="fs-row-title">Back up account key</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
             <button class="fs-row" id="settings-tab-profiles"><span class="fs-row-icon icon" data-row-icon="profiles"></span><span class="fs-row-body"><span class="fs-row-title">Profiles</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
           </div>
         </div>
 
         <div class="fs-group-section">
-          <div class="fs-group-header">ADVANCED</div>
+          <div class="fs-group-header">DEVICES</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-trusted-devices"><span class="fs-row-icon icon" data-row-icon="devices"></span><span class="fs-row-body"><span class="fs-row-title">Trusted devices</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-sessions"><span class="fs-row-icon icon" data-row-icon="sessions"></span><span class="fs-row-body"><span class="fs-row-title">Browser sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-dock"><span class="fs-row-icon icon" data-row-icon="dock"></span><span class="fs-row-body"><span class="fs-row-title">Dock a browser</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-companion-requests"><span class="fs-row-icon icon" data-row-icon="requests"></span><span class="fs-row-body"><span class="fs-row-title">Companion requests</span></span><span id="companion-requests-badge" class="fs-row-badge hidden" aria-label="pending companion requests">0</span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">WEB ACCESS</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-secured-sessions"><span class="fs-row-icon icon" data-row-icon="secured"></span><span class="fs-row-body"><span class="fs-row-title">Open secured sessions</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-process-url"><span class="fs-row-icon icon" data-row-icon="processurl"></span><span class="fs-row-body"><span class="fs-row-title">Process URL</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">BACKUP &amp; PEERS</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-peer-backup"><span class="fs-row-icon icon" data-row-icon="backup"></span><span class="fs-row-body"><span class="fs-row-title">Peer-backup</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">APP</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-appearance"><span class="fs-row-icon icon" data-row-icon="appearance"></span><span class="fs-row-body"><span class="fs-row-title">Appearance</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-push"><span class="fs-row-icon icon" data-row-icon="push"></span><span class="fs-row-body"><span class="fs-row-title">Notifications</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-privacy"><span class="fs-row-icon icon" data-row-icon="privacy"></span><span class="fs-row-body"><span class="fs-row-title">Privacy</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-about"><span class="fs-row-icon icon" data-row-icon="about"></span><span class="fs-row-body"><span class="fs-row-title">About</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">DANGER ZONE</div>
+          <div class="fs-group">
+            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Remove this device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+            <button class="fs-row" id="settings-tab-account-delete"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="accountdelete"></span><span class="fs-row-body"><span class="fs-row-title">Delete account</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          </div>
+        </div>
+
+        <div class="fs-group-section">
+          <div class="fs-group-header">DEVELOPER</div>
           <div class="card stack-md">
             <label class="inline-check">
               <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
@@ -229,17 +267,61 @@
             </p>
             <div id="settings-developer-row" class="hidden">
               <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
-              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server (draft composer)</button>
+              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server</button>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="fs-group-section">
-          <div class="fs-group-header">DANGER ZONE</div>
-          <div class="fs-group">
-            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Reset device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-          </div>
+      <!-- Settings → App → Appearance. Static: the webapp keeps a fixed
+           dark surface by design so server screens read the same anywhere. -->
+      <section id="view-appearance" class="hidden">
+        <h2>Appearance</h2>
+        <div class="card">
+          <p class="note">
+            The Flagship app uses a single dark theme so your server screens
+            read the same on every device. There's nothing to configure here
+            yet — theme options are coming in a later release.
+          </p>
         </div>
+        <button class="secondary full-width mt-2" id="appearance-back">← Back</button>
+      </section>
+
+      <!-- Settings → App → Privacy. Static: restate the core privacy model. -->
+      <section id="view-privacy" class="hidden">
+        <h2>Privacy</h2>
+        <div class="card">
+          <p class="note">
+            Your server runs on your own hardware and terminates its own TLS,
+            so flagshipserver.com cannot read your content — it only relays
+            encrypted traffic and holds your account identity. Your account key
+            never leaves your devices.
+          </p>
+        </div>
+        <div class="card mt-2">
+          <a class="pill" href="https://flagshipserver.com/security/disclosure.html" target="_blank" rel="noopener">
+            Read the security disclosure →
+          </a>
+        </div>
+        <button class="secondary full-width mt-2" id="privacy-back">← Back</button>
+      </section>
+
+      <!-- Settings → App → About. Static: what Flagship is + links. -->
+      <section id="view-about" class="hidden">
+        <h2>About Flagship</h2>
+        <div class="card">
+          <p class="note">
+            Flagship is a personal cloud you own end to end: your phone is the
+            trust root, your server runs on commodity hardware you control, and
+            flagshipserver.com literally can't read your content.
+          </p>
+        </div>
+        <div class="card mt-2">
+          <div class="row"><span class="label">License</span><span class="value">BUSL-1.1</span></div>
+          <div class="row"><span class="label">Home</span><span class="value"><a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a></span></div>
+          <div class="row"><span class="label">Report an issue</span><span class="value"><a href="https://flagshipserver.com/security/report.html" target="_blank" rel="noopener">Security report</a></span></div>
+        </div>
+        <button class="secondary full-width mt-2" id="about-back">← Back</button>
       </section>
 
       <!-- View 6: Pod pairing — sign an add-paired-session order, persist token -->

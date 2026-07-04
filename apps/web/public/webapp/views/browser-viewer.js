@@ -75,14 +75,14 @@ function openStream(tabId) {
   activeTabId = tabId;
   const baseUrl = getPodBaseUrl();
   const tok = getSessionToken();
-  if (!baseUrl || !tok) return toast("not paired", "err");
+  if (!baseUrl || !tok) return toast("Not paired", "err");
   const wsBase = baseUrl.replace(/^http/, "ws").replace(/\/+$/, "");
   const url = `${wsBase}/api/screens/browser-tabs/${encodeURIComponent(tabId)}/stream?sessionToken=${encodeURIComponent(tok)}`;
   let s;
   try {
     s = new WebSocket(url);
   } catch (e) {
-    return toast(`could not open stream: ${e.message}`, "err");
+    return toast(`Could not open stream: ${e.message}`, "err");
   }
   socket = s;
   $("bv-stream-status").textContent = "connecting…";
@@ -171,7 +171,7 @@ export async function enterBrowserViewer(serviceId) {
   // from service-detail.js for services that declare a browser bundle). The
   // legacy window.prompt() fallback is gone.
   if (!serviceId) {
-    toast("open the browser viewer from a service's detail screen", "err");
+    toast("Open the browser viewer from a service's detail screen", "err");
     return;
   }
   activeAppId = serviceId;

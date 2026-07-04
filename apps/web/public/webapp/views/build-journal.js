@@ -7,6 +7,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, buildEntryError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-build-journal");
 
@@ -65,7 +66,7 @@ async function renderDetail(buildId) {
           ${entries
             .map(
               (e) => `<li>
-                <span class="note">${new Date(e.ts).toLocaleString()}</span>
+                <span class="note">${escapeHtml(formatDateTime(e.ts))}</span>
                 <span class="badge">${escapeHtml(e.kind)}</span>
                 <span class="badge">${escapeHtml(e.actor)}</span>
                 <div>${escapeHtml(e.summary)}</div>
