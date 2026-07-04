@@ -1179,6 +1179,7 @@ class MockFlagshipServerClient(
         val credentialId: String,
         val wrappedUmk: String,
         val wrappedAcmeAccountKey: String?,
+        val wrappedAdminRoot: String?,
         val fetchTokenHashHex: String?,
         val prfSaltHashHex: String?,
         val updatedAt: Long,
@@ -1335,20 +1336,24 @@ class MockFlagshipServerClient(
         // omits it, mirroring the control-plane upsert (#28).
         val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
         val resolvedAcme = r.wrappedAcmeAccountKey ?: priorAcme
+        val priorAdminRoot = recoveryStore[r.credentialId]?.wrappedAdminRoot
+        val resolvedAdminRoot = r.wrappedAdminRoot ?: priorAdminRoot
         recoveryStore[r.credentialId] = RecoveryEnvelope(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme,
+            wrappedAdminRoot = resolvedAdminRoot,
         )
         // Also mirror the by-username row the gated /fetch endpoint reads,
         // carrying the passphrase-gate hashes (Task #74). Preserve a prior
-        // ACME escrow / hashes the same way the Worker's upsert does.
+        // ACME / admin-root escrow / hashes the same way the Worker's upsert does.
         val key = r.username.lowercase()
         val prior = recoveryByUsername[key]
         recoveryByUsername[key] = MockRecoveryRecord(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
             wrappedAcmeAccountKey = resolvedAcme ?: prior?.wrappedAcmeAccountKey,
+            wrappedAdminRoot = resolvedAdminRoot ?: prior?.wrappedAdminRoot,
             fetchTokenHashHex = r.fetchTokenHash?.lowercase() ?: prior?.fetchTokenHashHex,
             prfSaltHashHex = r.prfSaltHash?.lowercase() ?: prior?.prfSaltHashHex,
             updatedAt = nowMs(),
@@ -1382,6 +1387,7 @@ class MockFlagshipServerClient(
             credentialId = rec.credentialId,
             wrappedUmk = rec.wrappedUmk,
             wrappedAcmeAccountKey = rec.wrappedAcmeAccountKey,
+            wrappedAdminRoot = rec.wrappedAdminRoot,
             prfSaltHash = rec.prfSaltHashHex,
             updatedAt = rec.updatedAt,
         )

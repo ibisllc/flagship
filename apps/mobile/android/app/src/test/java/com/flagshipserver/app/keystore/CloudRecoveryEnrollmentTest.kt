@@ -290,6 +290,165 @@ class CloudRecoveryEnrollmentTest {
         }
     }
 
+    // ---- Slice D (D-3) post-rotation re-escrow --------------------------
+
+    /** Enroll with an ACME escrow + an OLD admin root so the pass-through
+     *  fields are all populated, returning the capturing wrapper. */
+    private suspend fun enrollWithAdminRoot(
+        capturing: CapturingServer,
+        oldAdminRootSeed: ByteArray,
+    ) {
+        CloudRecoveryEnrollment.enroll(
+            server = capturing,
+            passkeys = FakeCeremony(),
+            irk = irk(0x03),
+            username = username,
+            umkSeed = umkSeed,
+            passphrase = passphrase,
+            passphraseConfirm = passphrase,
+            acmeScalar = AcmeAccountKey.generateScalar(),
+            now = 1_700_000_000_000L,
+            adminRootSeed = oldAdminRootSeed,
+        )
+    }
+
+    @Test
+    fun reEscrow_replacesAdminRootInPlace_passesEverythingElseThrough() = runTest {
+        val capturing = CapturingServer(MockFlagshipServerClient(simulatedLatencyMs = 0))
+        val oldSeed = ByteArray(32) { 0x11 }
+        val newSeed = ByteArray(32) { 0x42 }
+        enrollWithAdminRoot(capturing, oldSeed)
+        val enrolled = capturing.captured!!.request
+
+        CloudRecoveryEnrollment.reEscrowAdminRoot(
+            server = capturing,
+            passkeys = FakeCeremony(),
+            irk = irk(0x03),
+            username = username,
+            passphrase = passphrase,
+            newAdminRootSeed = newSeed,
+            now = 1_700_000_000_001L,
+        )
+        val reposted = capturing.captured!!.request
+
+        // SAME credential (assert, never create) + byte-identical pass-through
+        // of the UMK / ACME ciphertexts and the gate hashes.
+        assertEquals(enrolled.credentialId, reposted.credentialId)
+        assertEquals(enrolled.wrappedUmk, reposted.wrappedUmk)
+        assertEquals(enrolled.wrappedAcmeAccountKey, reposted.wrappedAcmeAccountKey)
+        assertEquals(enrolled.fetchTokenHash, reposted.fetchTokenHash)
+        assertEquals(enrolled.prfSaltHash, reposted.prfSaltHash)
+
+        // The NEW wrappedAdminRoot round-trips to the NEW seed under the SAME
+        // PRF secret the credential emits.
+        val secrets = RecoveryDerivation.derivePassphraseSecrets(passphrase, username)
+        val unwrapped = com.flagshipserver.app.core.AdminRootEscrow.unwrapFromEscrow(
+            reposted.wrappedAdminRoot!!,
+            prfSecret(credentialIdHex, secrets.prfSalt),
+        )
+        assertEquals(HexUtil.encode(newSeed), HexUtil.encode(unwrapped))
+
+        // …and restore() now transparently yields the ROTATED root.
+        val restored = CloudRecoveryEnrollment.restore(
+            server = capturing,
+            passkeys = FakeCeremony(),
+            username = username,
+            passphrase = passphrase,
+            now = 1_700_000_000_002L,
+        )
+        assertEquals(HexUtil.encode(umkSeed), HexUtil.encode(restored.umkSeed))
+        assertEquals(HexUtil.encode(newSeed), HexUtil.encode(restored.adminRootSeed!!))
+    }
+
+    @Test
+    fun reEscrow_wrongPassphrase_mapsGate403ToValidation_withoutPosting() = runTest {
+        val capturing = CapturingServer(MockFlagshipServerClient(simulatedLatencyMs = 0))
+        enrollWithAdminRoot(capturing, ByteArray(32) { 0x11 })
+        capturing.captured = null
+        try {
+            CloudRecoveryEnrollment.reEscrowAdminRoot(
+                server = capturing,
+                passkeys = FakeCeremony(),
+                irk = irk(0x03),
+                username = username,
+                passphrase = "the wrong passphrase entirely",
+                newAdminRootSeed = ByteArray(32) { 0x42 },
+                now = 1_700_000_000_001L,
+            )
+            fail("a wrong passphrase must be refused by the gate")
+        } catch (e: CloudRecoveryEnrollment.ValidationError) {
+            assertEquals("That passphrase didn't match.", e.message)
+        }
+        assertNull("nothing may be posted on a refused fetch", capturing.captured)
+    }
+
+    @Test
+    fun reEscrow_stalePrfSaltHash_refused_withoutPosting() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val capturing = CapturingServer(server)
+        enrollWithAdminRoot(capturing, ByteArray(32) { 0x11 })
+        capturing.captured = null
+        // Passes the fetch gate but lies about the salt commitment — the same
+        // malicious-.com defense restore() applies.
+        val poisoned = object : com.flagshipserver.app.api.FlagshipServerClient by capturing {
+            override suspend fun fetchWrappedUmkWithToken(
+                username: String,
+                fetchTokenHex: String,
+                issuedAt: Long,
+            ): com.flagshipserver.app.api.GatedRecoveryEnvelope {
+                val real = server.fetchWrappedUmkWithToken(username, fetchTokenHex, issuedAt)
+                return real.copy(prfSaltHash = "f".repeat(64))
+            }
+        }
+        try {
+            CloudRecoveryEnrollment.reEscrowAdminRoot(
+                server = poisoned,
+                passkeys = FakeCeremony(),
+                irk = irk(0x03),
+                username = username,
+                passphrase = passphrase,
+                newAdminRootSeed = ByteArray(32) { 0x42 },
+                now = 1_700_000_000_001L,
+            )
+            fail("a stale prfSaltHash must be refused")
+        } catch (e: CloudRecoveryEnrollment.ValidationError) {
+            assertTrue(e.message!!.contains("prfSaltHash"))
+        }
+        assertNull("nothing may be posted on a salt mismatch", capturing.captured)
+    }
+
+    @Test
+    fun reEscrow_umkUnwrapFailure_abortsWithoutPosting() = runTest {
+        val capturing = CapturingServer(MockFlagshipServerClient(simulatedLatencyMs = 0))
+        enrollWithAdminRoot(capturing, ByteArray(32) { 0x11 })
+        capturing.captured = null
+        // A ceremony that asserts a DIFFERENT PRF secret — the sanity unwrap
+        // of the fetched UMK must fail BEFORE the record is overwritten (else
+        // we'd brick the escrow with a blob wrapped under the wrong key).
+        val wrongSecretCeremony = object : CloudRecoveryEnrollment.PasskeyCeremony {
+            override suspend fun create(username: String, prfEvalInput: ByteArray): Pair<String, ByteArray> =
+                throw IllegalStateException("re-escrow must never create a passkey")
+
+            override suspend fun assert(credentialId: String, prfEvalInput: ByteArray): ByteArray =
+                ByteArray(32) { 0x7f }
+        }
+        try {
+            CloudRecoveryEnrollment.reEscrowAdminRoot(
+                server = capturing,
+                passkeys = wrongSecretCeremony,
+                irk = irk(0x03),
+                username = username,
+                passphrase = passphrase,
+                newAdminRootSeed = ByteArray(32) { 0x42 },
+                now = 1_700_000_000_001L,
+            )
+            fail("a failed UMK sanity-unwrap must abort")
+        } catch (e: javax.crypto.AEADBadTagException) {
+            // expected — the wrap key is wrong
+        }
+        assertNull("nothing may be posted after a failed sanity unwrap", capturing.captured)
+    }
+
     @Test
     fun enroll_mismatchedPassphrase_throwsValidation() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
