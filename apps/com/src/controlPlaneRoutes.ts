@@ -149,6 +149,7 @@ import {
   handleMarketplaceSearch,
   handleMarketplaceRemove,
   handleMarketplaceInstall,
+  parseBlockedInstallGrades,
   handleMarketplaceScanResult,
   handleMarketplaceScanQueue,
   buildPushForwarder,
@@ -289,6 +290,9 @@ export interface ControlPlaneEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Hex-encoded Ed25519 pubkey of the marketplace scanner (Flagship-operated). */
   MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
+  /** Comma list of scan grades that BLOCK install (require an explicit
+   *  override). Absent ⇒ ["F"] (see DEFAULT_BLOCKED_INSTALL_GRADES). */
+  MARKETPLACE_INSTALL_BLOCKED_GRADES?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
 
@@ -3061,16 +3065,21 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_INSTALL))) {
     // #14 — paid apps gate on ownership. The installer identifies the account
     // via ?username=; a free app ignores it.
+    const override =
+      url.searchParams.get("override") === "1" ||
+      url.searchParams.get("installAnyway") === "1";
     return finish(
       await handleMarketplaceInstall(
         {
           marketplace: storage.marketplace,
           usernames: storage.usernames,
           purchases: new D1AppPurchaseStorage(env.DB),
+          blockedInstallGrades: parseBlockedInstallGrades(env.MARKETPLACE_INSTALL_BLOCKED_GRADES),
         },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
         url.searchParams.get("username"),
+        override,
       ),
     );
   }

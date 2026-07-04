@@ -21,6 +21,8 @@ import {
   handleMarketplaceScanResult,
   handleMarketplaceScanQueue,
   handleMarketplaceSearch,
+  installGateDecision,
+  parseBlockedInstallGrades,
 } from "../src/marketplace.js";
 
 function makeIrk(): Keypair {
@@ -376,6 +378,100 @@ describe("handleMarketplaceInstall", () => {
     await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
     const after = (await marketplace.get("alice", "habit-tracker"))!.installCount;
     expect(after).toBe(before + 1);
+  });
+
+  async function seedListed(grade?: "A" | "B" | "C" | "D" | "F") {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    const claim = listingPayload();
+    const sig = signMarketplaceList(claim, irk);
+    await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    if (grade) {
+      await marketplace.setScanResult("alice", "habit-tracker", grade, "k.json", Date.now());
+    }
+    return { usernames, marketplace };
+  }
+
+  it("BLOCKS an F-grade listing with 403 + override_required and does NOT bump the count", async () => {
+    const { usernames, marketplace } = await seedListed("F");
+    const before = (await marketplace.get("alice", "habit-tracker"))!.installCount;
+    const r = await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
+    expect(r.status).toBe(403);
+    const body = r.body as { blocked: boolean; override_required: boolean; scan_grade: string; reason: string };
+    expect(body.blocked).toBe(true);
+    expect(body.override_required).toBe(true);
+    expect(body.scan_grade).toBe("F");
+    const after = (await marketplace.get("alice", "habit-tracker"))!.installCount;
+    expect(after).toBe(before); // blocked install is not recorded
+  });
+
+  it("an explicit override installs a blocked F-grade listing (scan_gate=overridden)", async () => {
+    const { usernames, marketplace } = await seedListed("F");
+    const r = await handleMarketplaceInstall(
+      { marketplace, usernames },
+      "alice",
+      "habit-tracker",
+      null,
+      true, // overrideBlockedInstall
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as { scan_gate: string }).scan_gate).toBe("overridden");
+    expect((await marketplace.get("alice", "habit-tracker"))!.installCount).toBe(1);
+  });
+
+  it("a NULL/ungraded listing installs with a caution flag (scan_gate=caution)", async () => {
+    const { usernames, marketplace } = await seedListed(); // no scan
+    const r = await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
+    expect(r.status).toBe(200);
+    expect((r.body as { scan_gate: string; scan_grade: string | null }).scan_gate).toBe("caution");
+    expect((r.body as { scan_grade: string | null }).scan_grade).toBeNull();
+  });
+
+  it("A/B/C grades install normally (scan_gate=ok)", async () => {
+    for (const g of ["A", "B", "C"] as const) {
+      const { usernames, marketplace } = await seedListed(g);
+      const r = await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
+      expect(r.status).toBe(200);
+      expect((r.body as { scan_gate: string }).scan_gate).toBe("ok");
+    }
+  });
+
+  it("a configurable block set can also block D", async () => {
+    const { usernames, marketplace } = await seedListed("D");
+    const r = await handleMarketplaceInstall(
+      { marketplace, usernames, blockedInstallGrades: ["D", "F"] },
+      "alice",
+      "habit-tracker",
+    );
+    expect(r.status).toBe(403);
+    // ...and D still installs under the default (F-only) policy.
+    const r2 = await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
+    expect(r2.status).toBe(200);
+  });
+});
+
+describe("installGateDecision + parseBlockedInstallGrades", () => {
+  it("caution for null/undefined, allow for A–D, block for F by default", () => {
+    expect(installGateDecision(null)).toBe("caution");
+    expect(installGateDecision(undefined)).toBe("caution");
+    for (const g of ["A", "B", "C", "D"] as const) expect(installGateDecision(g)).toBe("allow");
+    expect(installGateDecision("F")).toBe("block");
+  });
+  it("honors a configurable block set", () => {
+    expect(installGateDecision("D", ["D", "F"])).toBe("block");
+    expect(installGateDecision("C", ["D", "F"])).toBe("allow");
+  });
+  it("parseBlockedInstallGrades falls back to ['F'] on empty/garbage", () => {
+    expect(parseBlockedInstallGrades(undefined)).toEqual(["F"]);
+    expect(parseBlockedInstallGrades("")).toEqual(["F"]);
+    expect(parseBlockedInstallGrades("zzz,!!")).toEqual(["F"]);
+    expect(parseBlockedInstallGrades("d, f")).toEqual(["D", "F"]);
+    expect(parseBlockedInstallGrades("F,F")).toEqual(["F"]); // de-duped
   });
 });
 
