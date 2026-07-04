@@ -23,6 +23,7 @@ import {
   signTunnelHelloV2,
   type ServiceEntitlement,
   type Bytes,
+  type Keypair,
   type RootEntitlement,
   type TunnelHelloV2,
 } from "@flagship/protocol";
@@ -88,11 +89,14 @@ export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
   /**
-   * Signs the HELLO envelope's canonical bytes with the pod's STK. A closure,
-   * not the raw keypair: the internet-facing tunnel client never holds the box
+   * Signs the HELLO envelope's canonical bytes with the pod's STK. Prefer the
+   * closure form: the internet-facing tunnel client then never holds the box
    * identity seed — it holds only "sign this" (custodian-backed in production).
+   * `signingKey` (a raw Keypair) is the legacy form, kept for callers (e.g. the
+   * hub e2e harness) that still hand over a keypair. Exactly one is required.
    */
-  sign: (msg: Bytes) => Bytes;
+  sign?: (msg: Bytes) => Bytes;
+  signingKey?: Keypair;
   /**
    * Source of fresh entitlement bundles. Called every HELLO so the
    * pod can pick up rotated certs on the fly. The serverId for HELLO
@@ -228,7 +232,11 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       nonce,
       issuedAt,
     };
-    const signature = signTunnelHelloV2(envelope, opts.sign);
+    // signTunnelHelloV2 accepts a Keypair OR a sign(msg) closure (MsgSigner),
+    // so either option form yields byte-identical signatures.
+    const signer = opts.sign ?? opts.signingKey;
+    if (!signer) throw new Error("tunnel client requires `sign` or `signingKey`");
+    const signature = signTunnelHelloV2(envelope, signer);
     const payload = JSON.stringify({
       version: 2,
       serverId: bundle.rootEntitlement.podCanonical,
@@ -594,7 +602,8 @@ export function superviseTunnelClient(
     try {
       client = startClient({
         hubUrl: opts.hubUrl,
-        sign: opts.sign,
+        ...(opts.sign ? { sign: opts.sign } : {}),
+        ...(opts.signingKey ? { signingKey: opts.signingKey } : {}),
         getEntitlements: opts.getEntitlements,
         resolveBackend: opts.resolveBackend,
         onDomainGranted: opts.onDomainGranted,
