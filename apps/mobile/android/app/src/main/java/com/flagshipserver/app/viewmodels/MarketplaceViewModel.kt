@@ -11,6 +11,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.InstallServiceEnvelope
 import com.flagshipserver.app.api.InstallServiceRequest
 import com.flagshipserver.app.api.MarketplaceListing
+import com.flagshipserver.app.api.ScanGradeBucket
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.installServiceCanonicalBytes
 import com.flagshipserver.app.api.manifestSha256Hex
@@ -65,6 +66,11 @@ class MarketplaceViewModel(
         data object Installing : InstallState
         data class Succeeded(val serviceId: String) : InstallState
         data class Failed(val message: String) : InstallState
+        /** The listing failed the marketplace scan (grade F) and [install] was
+         *  called WITHOUT an explicit override — the client must surface a
+         *  distinct "Install anyway" action before it can proceed. Nothing was
+         *  posted to the box. */
+        data object BlockedByScan : InstallState
     }
 
     private val _installState = MutableStateFlow<InstallState>(InstallState.Idle)
@@ -78,7 +84,21 @@ class MarketplaceViewModel(
      * `manifestJson`, then sign + POST. The signature is over the canonical
      * bytes — NOT the request JSON — so the daemon's recomputed bytes verify.
      */
-    suspend fun install(creator: String, slug: String, serverId: String) {
+    suspend fun install(
+        creator: String,
+        slug: String,
+        serverId: String,
+        /** The listing's scanner grade (A..F or null). A failing grade (F)
+         *  BLOCKS the install unless [overrideScanBlock] is set by the UI's
+         *  explicit "Install anyway" action — a conservative CLIENT-SIDE consent
+         *  gate (the daemon still verifies the signed envelope). */
+        scanGrade: String? = null,
+        overrideScanBlock: Boolean = false,
+    ) {
+        if (ScanGradeBucket.blocksInstall(scanGrade) && !overrideScanBlock) {
+            _installState.value = InstallState.BlockedByScan
+            return
+        }
         _installState.value = InstallState.Installing
         try {
             val detail = client.marketplaceFetchListing(creator, slug)
