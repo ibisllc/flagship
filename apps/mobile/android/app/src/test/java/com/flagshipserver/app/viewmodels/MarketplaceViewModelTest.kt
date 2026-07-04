@@ -99,6 +99,55 @@ class MarketplaceViewModelTest {
         assertEquals(0, mock.installCalls.size)
     }
 
+    @Test fun install_gradeF_withoutOverride_isBlocked_andPostsNothing() = runTest {
+        val mock = client()
+        val vm = MarketplaceViewModel(
+            client = mock,
+            signer = { Ed25519Sign(Ed25519Sign.KeyPair.newKeyPair().privateKey) },
+        )
+        vm.install(
+            creator = "trent", slug = "scratchpad",
+            serverId = "home.harry.flagship.services", scanGrade = "F",
+        )
+        assertTrue(vm.installState.value is MarketplaceViewModel.InstallState.BlockedByScan)
+        // A failing-scan app must not touch the box without an explicit override —
+        // not even the listing fetch or a signature request.
+        assertEquals(0, mock.installCalls.size)
+        assertEquals(0, mock.listingFetches.size)
+    }
+
+    @Test fun install_gradeF_withOverride_proceeds() = runTest {
+        val kp = Ed25519Sign.KeyPair.newKeyPair()
+        val mock = client()
+        val vm = MarketplaceViewModel(
+            client = mock,
+            signer = { Ed25519Sign(kp.privateKey) },
+            now = { 1_700_000_000_000L },
+        )
+        vm.install(
+            creator = "trent", slug = "scratchpad",
+            serverId = "home.harry.flagship.services",
+            scanGrade = "F", overrideScanBlock = true,
+        )
+        assertTrue(vm.installState.value is MarketplaceViewModel.InstallState.Succeeded)
+        assertEquals(1, mock.installCalls.size)
+    }
+
+    @Test fun install_ungraded_proceedsWithoutOverride() = runTest {
+        val mock = client()
+        val vm = MarketplaceViewModel(
+            client = mock,
+            signer = { Ed25519Sign(Ed25519Sign.KeyPair.newKeyPair().privateKey) },
+        )
+        // null grade → cautioned but allowed; the normal path posts.
+        vm.install(
+            creator = "trent", slug = "scratchpad",
+            serverId = "home.harry.flagship.services", scanGrade = null,
+        )
+        assertTrue(vm.installState.value is MarketplaceViewModel.InstallState.Succeeded)
+        assertEquals(1, mock.installCalls.size)
+    }
+
     @Test fun install_signerFailure_failsWithoutPosting() = runTest {
         val mock = client()
         val vm = MarketplaceViewModel(

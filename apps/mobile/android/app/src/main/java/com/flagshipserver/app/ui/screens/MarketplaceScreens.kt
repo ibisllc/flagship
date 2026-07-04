@@ -38,6 +38,7 @@ import com.flagshipserver.app.api.ScanGradeBucket
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
@@ -311,17 +312,46 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
             is MarketplaceViewModel.InstallState.Failed -> {
                 ErrorCard("Install failed: ${st.message}", onRetry = { vm.resetInstall() })
             }
+            is MarketplaceViewModel.InstallState.BlockedByScan -> {
+                // Defensive backstop: the VM refused an F-graded install that
+                // arrived without an explicit override. Surface the same danger
+                // gate + the distinct "Install anyway" override.
+                val selectedFqdn = pods.firstOrNull { it.podId == selectedPod }?.fqdn
+                ScanBlockedNotice(
+                    onInstallAnyway = {
+                        val fqdn = selectedFqdn ?: return@ScanBlockedNotice
+                        scope.launch {
+                            vm.install(
+                                creator = creator, slug = slug, serverId = fqdn,
+                                scanGrade = listing?.scanGrade, overrideScanBlock = true,
+                            )
+                        }
+                    },
+                    enabled = selectedPod != null && canInstall,
+                )
+            }
             else -> {
                 val installing = st is MarketplaceViewModel.InstallState.Installing
                 val selectedFqdn = pods.firstOrNull { it.podId == selectedPod }?.fqdn
-                FSPrimaryButton(
-                    label = if (installing) "Installing…" else "Install",
-                    onClick = {
-                        if (selectedFqdn != null) confirmingInstall = true
-                    },
-                    block = true,
-                    enabled = selectedPod != null && canInstall && !installing,
-                )
+                // Grade F fails the scan → the normal Install is BLOCKED: show a
+                // distinct danger warning + require the explicit "Install anyway"
+                // action (never the plain Install tap).
+                val blocked = ScanGradeBucket.blocksInstall(listing?.scanGrade)
+                if (blocked) {
+                    ScanBlockedNotice(
+                        onInstallAnyway = { if (selectedFqdn != null) confirmingInstall = true },
+                        enabled = selectedPod != null && canInstall && !installing,
+                    )
+                } else {
+                    FSPrimaryButton(
+                        label = if (installing) "Installing…" else "Install",
+                        onClick = {
+                            if (selectedFqdn != null) confirmingInstall = true
+                        },
+                        block = true,
+                        enabled = selectedPod != null && canInstall && !installing,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(FS.space.s3))
@@ -340,25 +370,88 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
     // against the IRK before the daemon starts the container.
     if (confirmingInstall) {
         val selectedFqdn = pods.firstOrNull { it.podId == selectedPod }?.fqdn
+        val grade = listing?.scanGrade
+        val blocked = ScanGradeBucket.blocksInstall(grade)
+        val ungraded = ScanGradeBucket.isUngraded(grade)
         AlertDialog(
             onDismissRequest = { confirmingInstall = false },
-            title = { Text("Install $creator/$slug?") },
+            title = { Text(if (blocked) "Install $creator/$slug anyway?" else "Install $creator/$slug?") },
             text = {
-                Text("The signed app envelope is verified against your IRK before the daemon starts the container.")
+                Column {
+                    if (blocked) {
+                        Text(
+                            text = "This app FAILED the security scan (grade F). Installing it could put your box at risk — only continue if you fully trust the developer.",
+                            color = FS.colors.danger,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+                        )
+                        Spacer(Modifier.height(FS.space.s2))
+                    } else if (ungraded) {
+                        Text(
+                            text = "This app has not yet been security-scanned. Install only if you trust the developer.",
+                            color = FS.colors.warning,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                        )
+                        Spacer(Modifier.height(FS.space.s2))
+                    }
+                    Text(
+                        text = "The signed app envelope is verified against your IRK before the daemon starts the container.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         confirmingInstall = false
                         val fqdn = selectedFqdn ?: return@TextButton
-                        scope.launch { vm.install(creator = creator, slug = slug, serverId = fqdn) }
+                        scope.launch {
+                            vm.install(
+                                creator = creator, slug = slug, serverId = fqdn,
+                                scanGrade = grade, overrideScanBlock = blocked,
+                            )
+                        }
                     },
-                    modifier = Modifier.semantics { testTag = "marketplace-install-confirm" },
-                ) { Text("Install") }
+                    modifier = Modifier.semantics {
+                        testTag = if (blocked) "marketplace-install-anyway-confirm" else "marketplace-install-confirm"
+                    },
+                ) { Text(if (blocked) "Install anyway" else "Install") }
             },
             dismissButton = {
                 TextButton(onClick = { confirmingInstall = false }) { Text("Cancel") }
             },
         )
     }
+}
+
+/**
+ * Distinct danger gate shown in place of the normal Install button when a
+ * listing has failed the marketplace scan (grade F). The only path forward is
+ * the visually-distinct "Install anyway" override — never the plain Install tap.
+ */
+@Composable
+private fun ScanBlockedNotice(onInstallAnyway: () -> Unit, enabled: Boolean) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column {
+            Text(
+                text = "Security scan failed (grade F)",
+                color = FS.colors.danger,
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Spacer(Modifier.height(FS.space.s1))
+            Text(
+                text = "The marketplace scanner flagged this app as unsafe. Installing it is not recommended — only continue if you fully trust the developer.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+        }
+    }
+    Spacer(Modifier.height(FS.space.s3))
+    FSDangerButton(
+        label = "Install anyway",
+        onClick = onInstallAnyway,
+        block = true,
+        enabled = enabled,
+        modifier = Modifier.semantics { testTag = "marketplace-install-anyway" },
+    )
 }
