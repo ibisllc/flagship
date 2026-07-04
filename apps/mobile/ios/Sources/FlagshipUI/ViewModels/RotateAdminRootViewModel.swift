@@ -16,8 +16,13 @@ import FlagshipCore
 ///      (`old → new`, the box verifies it against its pinned OLD root — `.com`
 ///      is never a trust anchor),
 ///   4. POSTs it to `.com` `POST /api/users/:username/admin-root-rotation`,
-///   5. only on success re-seals the NEW root device-local + re-escrows it
-///      under recovery.
+///   5. only on success re-seals the NEW root device-local,
+///   6. then — if recovery is enrolled — asks the user for the interactive
+///      re-escrow step (§5.3 / D-3): the recovery envelope still wraps the
+///      OLD root, so a later credential recovery would restore a dead key
+///      until the user runs `updateRecoveryBackup(passphrase:)` (recovery
+///      passphrase + WebAuthn PRF against the EXISTING credential; see
+///      `AdminRootReEscrow`).
 ///
 /// ⚠️ Rotation EXCLUDES every OTHER admin device: they still hold the OLD root,
 /// so once each box re-pins to the new root their old-root-signed orders stop
@@ -30,7 +35,11 @@ import FlagshipCore
 /// Order matters: sign + POST FIRST, and re-seal the NEW root locally only
 /// AFTER `.com` accepts it. If the POST fails we must NOT have already
 /// replaced this device's sealed root — that would strand it (old root gone,
-/// new root unrecorded). So the local re-seal is the LAST step.
+/// new root unrecorded). So the local re-seal is the LAST mutating step, and
+/// the recovery re-escrow comes strictly AFTER it: by then the rotation is
+/// published + sealed, so a re-escrow failure (or skip) can never fail the
+/// rotation itself — it only leaves the recovery backup pointing at the old
+/// root, which the user can fix later by re-running recovery setup.
 @Observable
 @MainActor
 public final class RotateAdminRootViewModel {
@@ -41,10 +50,23 @@ public final class RotateAdminRootViewModel {
         /// Rotation accepted + the new root re-sealed. `newAdminRootPubHex` is
         /// the account's new authority anchor (lowercased hex).
         case rotated(newAdminRootPubHex: String)
+        /// Rotation accepted + sealed, but recovery is enrolled and its
+        /// envelope still wraps the OLD root — the UI renders the inline
+        /// re-escrow step (passphrase → `updateRecoveryBackup`, or
+        /// `skipRecoveryUpdate`). The rotation itself is DONE in this state.
+        case rotatedNeedsRecoveryUpdate(newAdminRootPubHex: String)
         case failed(String)
     }
 
     public private(set) var phase: Phase = .idle
+    /// True while `updateRecoveryBackup` is in flight (drives the button's
+    /// progress state).
+    public private(set) var isUpdatingRecoveryBackup = false
+    /// Inline, retryable error from the last `updateRecoveryBackup` attempt.
+    public private(set) var recoveryUpdateError: String?
+    /// Set by `skipRecoveryUpdate` so the UI can warn that the recovery
+    /// backup still wraps the OLD admin root.
+    public private(set) var didSkipRecoveryUpdate = false
 
     private let server: any FlagshipServerClient
     private let username: @MainActor () -> String?
@@ -59,12 +81,23 @@ public final class RotateAdminRootViewModel {
     /// Seam: seal the freshly-minted NEW admin root seed device-local.
     /// Defaults to `Keystore.importAdminRoot`.
     private let sealNewAdminRoot: @MainActor (Data) async throws -> Void
-    /// Seam: re-escrow the NEW root under the WebAuthn-PRF recovery credential
-    /// (§5.2 / D-3). Runs after a successful rotation so a later credential
-    /// recovery can re-establish the CURRENT root. Optional: the host wires it
-    /// to the recovery re-enroll flow (which needs the recovery passphrase /
-    /// credential); nil ⇒ skipped (the user can re-run recovery setup later).
-    private let reEscrowNewAdminRoot: (@MainActor () async -> Void)?
+    /// Seam: is WebAuthn-PRF cloud recovery enrolled for this account? Decides
+    /// whether a successful rotation lands in `.rotatedNeedsRecoveryUpdate`
+    /// (the envelope wraps the OLD root and needs the interactive re-escrow)
+    /// or straight in `.rotated`. A throw is treated as "not enrolled" — the
+    /// check is best-effort and must NEVER fail an already-published rotation.
+    /// Defaults to `server.hasCloudRecovery`.
+    private let recoveryEnrolled: @MainActor () async throws -> Bool
+    /// Seam: the interactive re-escrow of the CURRENT admin root under the
+    /// existing recovery credential (§5.3 / D-3), taking the user's recovery
+    /// passphrase. Defaults to `AdminRootReEscrow` built on the production
+    /// WebAuthn provider — the passphrase + PRF assert EMIT the wrap key, so
+    /// the step is user-driven, not automatic.
+    private let reEscrow: @MainActor (String) async throws -> Void
+
+    private struct NoAccountError: LocalizedError {
+        var errorDescription: String? { "No active account on this device." }
+    }
 
     public init(
         server: any FlagshipServerClient,
@@ -76,14 +109,25 @@ public final class RotateAdminRootViewModel {
         sealNewAdminRoot: @escaping @MainActor (Data) async throws -> Void = { seed in
             _ = try await Keystore.importAdminRoot(seed: seed, reason: "Save your new admin key")
         },
-        reEscrowNewAdminRoot: (@MainActor () async -> Void)? = nil
+        recoveryEnrolled: (@MainActor () async throws -> Bool)? = nil,
+        reEscrow: (@MainActor (String) async throws -> Void)? = nil
     ) {
         self.server = server
         self.username = username
         self.hasAdminRoot = hasAdminRoot
         self.loadOldAdminRoot = loadOldAdminRoot
         self.sealNewAdminRoot = sealNewAdminRoot
-        self.reEscrowNewAdminRoot = reEscrowNewAdminRoot
+        self.recoveryEnrolled = recoveryEnrolled ?? {
+            guard let user = username(), !user.isEmpty else { return false }
+            return try await server.hasCloudRecovery(username: user)
+        }
+        self.reEscrow = reEscrow ?? { passphrase in
+            guard let user = username(), !user.isEmpty else { throw NoAccountError() }
+            try await AdminRootReEscrow(
+                client: server,
+                webAuthn: PlatformWebAuthnProvider()
+            ).run(username: user, passphrase: passphrase)
+        }
     }
 
     /// True iff the control should be enabled — only a device that holds the
@@ -153,20 +197,60 @@ public final class RotateAdminRootViewModel {
             return
         }
 
-        // 5 — .com accepted; NOW replace the local root + re-escrow it. A
-        // re-seal failure here leaves the account rotated at `.com`/boxes but
-        // this device still holding the OLD root — surface it so the user can
-        // recover onto the new root.
+        // 5 — .com accepted; NOW replace the local root. A re-seal failure
+        // here leaves the account rotated at `.com`/boxes but this device
+        // still holding the OLD root — surface it so the user can recover
+        // onto the new root.
         do {
             try await sealNewAdminRoot(newRoot.rawRepresentation)
         } catch {
             phase = .failed("Your admin key was rotated, but saving it on this device failed. Recover on this device to finish. (\(error.localizedDescription))")
             return
         }
-        await reEscrowNewAdminRoot?()
 
+        // 6 — the rotation is DONE (published + sealed); everything from here
+        // is best-effort and must not undo that. If recovery is enrolled, the
+        // envelope still wraps the OLD root — hand the UI the interactive
+        // re-escrow step. An enrollment-check failure ⇒ treat as not enrolled
+        // (the user can always re-run recovery setup later).
+        didSkipRecoveryUpdate = false
+        recoveryUpdateError = nil
+        let enrolled = (try? await recoveryEnrolled()) ?? false
+        phase = enrolled
+            ? .rotatedNeedsRecoveryUpdate(newAdminRootPubHex: newPubHex)
+            : .rotated(newAdminRootPubHex: newPubHex)
+    }
+
+    /// Run the interactive re-escrow (§5.3 / D-3) with the user's recovery
+    /// passphrase. Success completes the flow (`.rotated`); failure keeps the
+    /// step on screen with an inline, retryable error — the rotation itself is
+    /// already done either way.
+    public func updateRecoveryBackup(passphrase: String) async {
+        guard case .rotatedNeedsRecoveryUpdate(let newPubHex) = phase else { return }
+        recoveryUpdateError = nil
+        isUpdatingRecoveryBackup = true
+        defer { isUpdatingRecoveryBackup = false }
+        do {
+            try await reEscrow(passphrase)
+            phase = .rotated(newAdminRootPubHex: newPubHex)
+        } catch {
+            recoveryUpdateError = error.localizedDescription
+        }
+    }
+
+    /// Decline the re-escrow step. The recovery envelope keeps wrapping the
+    /// OLD admin root (a later credential recovery restores a dead key) — the
+    /// UI warns via `didSkipRecoveryUpdate`; re-running recovery setup fixes it.
+    public func skipRecoveryUpdate() {
+        guard case .rotatedNeedsRecoveryUpdate(let newPubHex) = phase else { return }
+        didSkipRecoveryUpdate = true
+        recoveryUpdateError = nil
         phase = .rotated(newAdminRootPubHex: newPubHex)
     }
 
-    public func reset() { phase = .idle }
+    public func reset() {
+        phase = .idle
+        recoveryUpdateError = nil
+        didSkipRecoveryUpdate = false
+    }
 }

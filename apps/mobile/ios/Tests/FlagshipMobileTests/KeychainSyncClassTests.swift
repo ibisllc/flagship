@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import Flagship
 @testable import FlagshipCore
 
@@ -53,5 +54,34 @@ final class KeychainSyncClassTests: XCTestCase {
 
     func test_cloudRootAndDeviceLocal_areDistinct() {
         XCTAssertNotEqual(KeychainSyncClass.cloudRoot, KeychainSyncClass.deviceLocal)
+    }
+
+    /// Slice D residual-risk #6 (device-admin-tier-spec §9) — the ADMIN MASTER
+    /// ROOT is the authority anchor and must be DEVICE-LOCAL: a write that
+    /// silently flips any of its three slots to the synced class would hand
+    /// admin authority to every iCloud-Keychain device, re-collapsing the
+    /// membership-vs-authority custody split. Drives the real
+    /// `Keystore.importAdminRoot` and asserts every admin-root account landed
+    /// `.deviceLocal`, never `.cloudRoot`.
+    func test_adminRootImport_allSlotsAreDeviceLocal_neverSynced() async throws {
+        let adminRootAccounts = [
+            "com.flagship.adminroot.wrapped",
+            "com.flagship.adminroot.ephemeralpub",
+            "com.flagship.adminroot.pub",
+        ]
+        Keystore.setActiveProfile(nil)
+        Keystore.wipe()
+        defer { Keystore.wipe() }
+
+        let seed = Curve25519.Signing.PrivateKey().rawRepresentation
+        _ = try await Keystore.importAdminRoot(seed: seed, reason: "test")
+
+        for account in adminRootAccounts {
+            XCTAssertEqual(
+                KeystoreTestSupport.lastWrittenSyncClass(account: account),
+                .deviceLocal,
+                "\(account) MUST be kSecAttrSynchronizable=false — a synced admin root clones authority onto every Apple-ID device."
+            )
+        }
     }
 }

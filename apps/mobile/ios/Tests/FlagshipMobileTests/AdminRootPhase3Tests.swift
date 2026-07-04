@@ -17,7 +17,7 @@ import CryptoKit
 ///   - the WebAuthn-PRF recovery round-trip re-establishes the escrowed root.
 final class AdminRootPhase3Tests: XCTestCase {
 
-    private static let usedProfiles = ["acme", "personal", "rotator"]
+    private static let usedProfiles = ["acme", "personal", "rotator", "reescrow"]
 
     private func resetKeystore() {
         for name in Self.usedProfiles {
@@ -185,16 +185,16 @@ final class AdminRootPhase3Tests: XCTestCase {
     @MainActor
     func test_rotate_signsOldToNew_underOldRoot_andPosts() async throws {
         let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
         let oldRoot = Curve25519.Signing.PrivateKey()
         let sealedSeed = LockedBox<Data?>(nil)
-        let reEscrowed = LockedBox<Bool>(false)
 
         let vm = RotateAdminRootViewModel(
             server: server, username: { "alice" },
             hasAdminRoot: { true },
             loadOldAdminRoot: { _ in oldRoot },
             sealNewAdminRoot: { seed in sealedSeed.set(seed) },
-            reEscrowNewAdminRoot: { reEscrowed.set(true) }
+            recoveryEnrolled: { false }
         )
         await vm.rotate()
 
@@ -226,11 +226,10 @@ final class AdminRootPhase3Tests: XCTestCase {
                        "…and MUST NOT verify under the new root (old→new is one-directional)")
 
         // The new root was re-sealed locally (its pub matches the posted new
-        // pub) + re-escrowed — the last two steps of the rotate action.
+        // pub) — the last mutating step of the rotate action.
         let sealed = try XCTUnwrap(sealedSeed.get())
         let sealedPub = try Curve25519.Signing.PrivateKey(rawRepresentation: sealed).publicKey.rawRepresentation
         XCTAssertEqual(HexUtil.encode(sealedPub), newPubHex)
-        XCTAssertTrue(reEscrowed.get(), "the new root is re-escrowed under recovery after rotation")
     }
 
     @MainActor
@@ -246,6 +245,279 @@ final class AdminRootPhase3Tests: XCTestCase {
         await vm.rotate()
         guard case .failed = vm.phase else { return XCTFail("expected failed; phase=\(vm.phase)") }
         XCTAssertTrue(server.adminRootRotations.isEmpty, "a non-admin device posts nothing")
+    }
+
+    // MARK: - Rotate → post-rotation recovery re-escrow phase (§5.3 / D-3)
+
+    @MainActor
+    func test_rotate_recoveryEnrolled_landsInNeedsRecoveryUpdate() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { true },
+            reEscrow: { _ in XCTFail("re-escrow is user-driven (passphrase), never automatic") }
+        )
+        await vm.rotate()
+        guard case .rotatedNeedsRecoveryUpdate = vm.phase else {
+            return XCTFail("expected rotatedNeedsRecoveryUpdate; phase=\(vm.phase)")
+        }
+        // Exactly one rotation was still posted — the re-escrow phase comes
+        // strictly AFTER the rotation is published + sealed.
+        XCTAssertEqual(server.adminRootRotations.count, 1)
+    }
+
+    @MainActor
+    func test_rotate_recoveryNotEnrolled_skipsStraightToRotated() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let reEscrowCalled = LockedBox<Bool>(false)
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { false },
+            reEscrow: { _ in reEscrowCalled.set(true) }
+        )
+        await vm.rotate()
+        guard case .rotated = vm.phase else {
+            return XCTFail("expected rotated; phase=\(vm.phase)")
+        }
+        XCTAssertFalse(reEscrowCalled.get(), "no enrollment ⇒ no re-escrow prompt, no invocation")
+    }
+
+    @MainActor
+    func test_rotate_recoveryCheckThrows_treatedAsNotEnrolled() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { throw ScreensClientError.http(status: 503, message: "flaky") },
+            reEscrow: { _ in XCTFail("must not re-escrow when the check failed") }
+        )
+        await vm.rotate()
+        guard case .rotated = vm.phase else {
+            return XCTFail("a failed enrollment check must NEVER fail the rotation; phase=\(vm.phase)")
+        }
+        XCTAssertEqual(server.adminRootRotations.count, 1)
+    }
+
+    @MainActor
+    func test_updateRecoveryBackup_success_completesToRotated() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let passed = LockedBox<String?>(nil)
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { true },
+            reEscrow: { p in passed.set(p) }
+        )
+        await vm.rotate()
+        guard case .rotatedNeedsRecoveryUpdate(let newPubHex) = vm.phase else {
+            return XCTFail("expected rotatedNeedsRecoveryUpdate; phase=\(vm.phase)")
+        }
+        await vm.updateRecoveryBackup(passphrase: "correcthorse")
+        XCTAssertEqual(passed.get(), "correcthorse")
+        XCTAssertNil(vm.recoveryUpdateError)
+        guard case .rotated(let donePubHex) = vm.phase else {
+            return XCTFail("expected rotated; phase=\(vm.phase)")
+        }
+        XCTAssertEqual(donePubHex, newPubHex, "the completed phase carries the SAME new root")
+    }
+
+    @MainActor
+    func test_updateRecoveryBackup_failureStaysRetryable_thenSkipCompletes() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let attempts = LockedBox<Int>(0)
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { true },
+            reEscrow: { _ in
+                attempts.set(attempts.get() + 1)
+                throw AdminRootReEscrow.ReEscrowError.wrongPassphrase
+            }
+        )
+        await vm.rotate()
+        await vm.updateRecoveryBackup(passphrase: "wrong")
+        guard case .rotatedNeedsRecoveryUpdate = vm.phase else {
+            return XCTFail("a re-escrow failure must keep the step on screen; phase=\(vm.phase)")
+        }
+        XCTAssertEqual(vm.recoveryUpdateError, "That passphrase didn't match.")
+
+        // Retryable: the failed attempt didn't consume the step.
+        await vm.updateRecoveryBackup(passphrase: "wrong-again")
+        XCTAssertEqual(attempts.get(), 2)
+        guard case .rotatedNeedsRecoveryUpdate = vm.phase else {
+            return XCTFail("still retryable; phase=\(vm.phase)")
+        }
+
+        // Skip completes the flow but flags the stale backup.
+        vm.skipRecoveryUpdate()
+        guard case .rotated = vm.phase else {
+            return XCTFail("expected rotated after skip; phase=\(vm.phase)")
+        }
+        XCTAssertTrue(vm.didSkipRecoveryUpdate)
+        XCTAssertNil(vm.recoveryUpdateError)
+    }
+
+    @MainActor
+    func test_updateRecoveryBackup_retryAfterFailure_succeeds() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let attempts = LockedBox<Int>(0)
+        let vm = RotateAdminRootViewModel(
+            server: server, username: { "alice" },
+            hasAdminRoot: { true },
+            loadOldAdminRoot: { _ in Curve25519.Signing.PrivateKey() },
+            sealNewAdminRoot: { _ in },
+            recoveryEnrolled: { true },
+            reEscrow: { _ in
+                attempts.set(attempts.get() + 1)
+                if attempts.get() == 1 { throw AdminRootReEscrow.ReEscrowError.wrongPassphrase }
+            }
+        )
+        await vm.rotate()
+        await vm.updateRecoveryBackup(passphrase: "wrong")
+        guard case .rotatedNeedsRecoveryUpdate = vm.phase else {
+            return XCTFail("expected needs-update after failure; phase=\(vm.phase)")
+        }
+        await vm.updateRecoveryBackup(passphrase: "correcthorse")
+        guard case .rotated = vm.phase else {
+            return XCTFail("a retry with the right passphrase completes; phase=\(vm.phase)")
+        }
+        XCTAssertFalse(vm.didSkipRecoveryUpdate)
+    }
+
+    // MARK: - The re-escrow mechanism itself (real Keystore + mock client/PRF)
+
+    /// Full happy path: enroll recovery (escrows the ORIGINAL root), rotate the
+    /// LOCAL admin root, run `AdminRootReEscrow` — the stored record keeps the
+    /// SAME credentialId + byte-identical wrappedUmk/wrappedAcme, and the NEW
+    /// wrappedAdminRoot unwraps (under the same PRF secret) to the CURRENT
+    /// Keystore admin root.
+    @MainActor
+    func test_reEscrow_replacesOnlyAdminRoot_passthroughEnvelope() async throws {
+        let user = "reescrow"
+        Keystore.setActiveProfile(user)
+        _ = try await Keystore.openAccountRoots(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let webAuthn = MockWebAuthnProvider()
+        let recovery = RecoveryViewModel(client: server, webAuthn: webAuthn, username: { user })
+        await recovery.setup(umkSeed: umk, passphrase: "correcthorse")
+        guard case .registered(let credentialId) = recovery.phase else {
+            return XCTFail("recovery setup failed: \(recovery.phase)")
+        }
+
+        let secrets = try RecoveryDerivation.derivePassphraseSecrets("correcthorse", user)
+        let before = try await server.fetchWrappedUmk(
+            username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
+        )
+        let oldWrappedAdmin = try XCTUnwrap(before.wrappedAdminRoot)
+
+        // Rotate the LOCAL root (what RotateAdminRootViewModel's seal step does).
+        let newRoot = Curve25519.Signing.PrivateKey()
+        _ = try await Keystore.importAdminRoot(seed: newRoot.rawRepresentation, reason: "test")
+
+        try await AdminRootReEscrow(client: server, webAuthn: webAuthn)
+            .run(username: user, passphrase: "correcthorse")
+
+        let after = try await server.fetchWrappedUmk(
+            username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
+        )
+        XCTAssertEqual(after.credentialId, credentialId, "SAME credential ⇒ replaced in place")
+        XCTAssertEqual(after.wrappedUmk, before.wrappedUmk, "wrappedUmk passes through unchanged")
+        XCTAssertEqual(after.wrappedAcmeAccountKey, before.wrappedAcmeAccountKey,
+                       "wrappedAcmeAccountKey passes through unchanged")
+        let newWrappedAdmin = try XCTUnwrap(after.wrappedAdminRoot)
+        XCTAssertNotEqual(newWrappedAdmin, oldWrappedAdmin)
+
+        // The new blob unwraps under the SAME PRF secret to the CURRENT root.
+        let prfSecret = try await webAuthn.prfAssert(
+            credentialId: after.credentialId, prfSalt: secrets.prfSalt
+        )
+        let unwrapped = try AdminRootEscrow.unwrapFromEscrow(base64: newWrappedAdmin, prfSecret: prfSecret)
+        XCTAssertEqual(unwrapped, newRoot.rawRepresentation)
+        XCTAssertEqual(
+            HexUtil.encode(try Curve25519.Signing.PrivateKey(rawRepresentation: unwrapped).publicKey.rawRepresentation),
+            Keystore.adminRootPubHex(),
+            "restore now yields the rotated Keystore root"
+        )
+    }
+
+    /// The three abort paths — wrong passphrase (403), prfSaltHash tamper, and
+    /// a wrap-key sanity failure — must all throw WITHOUT posting (the stored
+    /// wrappedAdminRoot stays byte-identical).
+    @MainActor
+    func test_reEscrow_abortPaths_neverPost() async throws {
+        let user = "reescrow"
+        Keystore.setActiveProfile(user)
+        _ = try await Keystore.openAccountRoots(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let webAuthn = MockWebAuthnProvider()
+        let recovery = RecoveryViewModel(client: server, webAuthn: webAuthn, username: { user })
+        await recovery.setup(umkSeed: umk, passphrase: "correcthorse")
+        guard case .registered = recovery.phase else {
+            return XCTFail("recovery setup failed: \(recovery.phase)")
+        }
+        let secrets = try RecoveryDerivation.derivePassphraseSecrets("correcthorse", user)
+        let baseline = try await server.fetchWrappedUmk(
+            username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
+        ).wrappedAdminRoot
+
+        // (a) Wrong passphrase ⇒ the gated fetch 403s.
+        do {
+            try await AdminRootReEscrow(client: server, webAuthn: webAuthn)
+                .run(username: user, passphrase: "not-the-passphrase")
+            XCTFail("expected wrongPassphrase")
+        } catch let e as AdminRootReEscrow.ReEscrowError {
+            XCTAssertEqual(e, .wrongPassphrase)
+        }
+
+        // (b) A tampered prfSaltHash from `.com` ⇒ refuse before PRF/upload.
+        server.tamperedPrfSaltHashOnFetch = String(repeating: "0", count: 64)
+        do {
+            try await AdminRootReEscrow(client: server, webAuthn: webAuthn)
+                .run(username: user, passphrase: "correcthorse")
+            XCTFail("expected prfSaltMismatch")
+        } catch let e as AdminRootReEscrow.ReEscrowError {
+            XCTAssertEqual(e, .prfSaltMismatch)
+        }
+        server.tamperedPrfSaltHashOnFetch = nil
+
+        // (c) A PRF secret that can't unwrap the stored wrappedUmk ⇒ the
+        // sanity gate refuses BEFORE overwriting a working escrow.
+        do {
+            try await AdminRootReEscrow(client: server, webAuthn: GarbagePrfProvider())
+                .run(username: user, passphrase: "correcthorse")
+            XCTFail("expected wrapKeySanityFailed")
+        } catch let e as AdminRootReEscrow.ReEscrowError {
+            XCTAssertEqual(e, .wrapKeySanityFailed)
+        }
+
+        let final = try await server.fetchWrappedUmk(
+            username: user, fetchTokenHex: HexUtil.encode(secrets.fetchToken)
+        ).wrappedAdminRoot
+        XCTAssertEqual(final, baseline, "no abort path may mutate the stored record")
     }
 
     // MARK: - Recovery restore round-trip (real Keystore, PRF escrow)
@@ -308,6 +580,20 @@ final class AdminRootPhase3Tests: XCTestCase {
         adminVm._forceGateExpiredForTests()
         await adminVm.confirmMatch()
         await incomingTask.value
+    }
+}
+
+/// WebAuthnProvider whose PRF output is garbage — drives the re-escrow wrap-key
+/// sanity gate (the fetched wrappedUmk must NOT unwrap under it).
+final class GarbagePrfProvider: WebAuthnProvider, @unchecked Sendable {
+    func register(prfSalt: Data) async throws -> WebAuthnRegistration {
+        WebAuthnRegistration(credentialId: "aabbccdd0011223344556677")
+    }
+    func assertAny() async throws -> WebAuthnRegistration {
+        WebAuthnRegistration(credentialId: "aabbccdd0011223344556677")
+    }
+    func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data {
+        Data(repeating: 0x42, count: 32)
     }
 }
 
