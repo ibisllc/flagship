@@ -229,6 +229,31 @@ async function main(): Promise<void> {
     return `state=${p.state} cert=${p.currentCert ? "set" : "-"} hb=${p.lastReported ? "set" : "-"}`;
   });
 
+  // ── 5.5 Slice-D admin-authority posture: this driver signs every sensitive
+  // op (journal / power / env-set / deadman / install / uninstall) with the
+  // DEMO OWNER IRK. That is only authoritative while the Slice-D transition
+  // gate is CLOSED for this account: demo/sample-user accounts are claimed by
+  // `admin-claim-and-issue` (packages/control-plane/src/demoUsersAdmin.ts —
+  // `usernames.put` with NO `adminRootPubHex`), so
+  // `authorizeSensitiveComOp` / `authorizeSensitiveOrder`
+  // (packages/control-plane/src/adminAuthorityGate.ts,
+  // packages/server-daemon/src/adminAuthorityLocal.ts) fall back to the legacy
+  // owner-IRK path. If demo provisioning ever starts pinning an admin master
+  // root, every owner-IRK-signed check below turns into a silent 403 — so
+  // fail FAST and LOUD here instead, with the fix spelled out.
+  await check("Slice-D gate is CLOSED for the gym user (no admin root pinned)", async () => {
+    const r = await http(`https://${CONTROL}/api/username/${user}`);
+    assert(r.status === 200, `username lookup got ${r.status}`);
+    assert(
+      r.json?.adminRootPub == null,
+      `account '${user}' has a PINNED admin master root (${String(r.json?.adminRootPub).slice(0, 12)}…) — ` +
+        `the Slice-D authority gate is OPEN, so the owner-IRK envelopes this driver signs are no longer ` +
+        `authoritative for sensitive ops. Implement admin-root signing in tools/live-e2e/run.ts ` +
+        `(derive/load the demo admin root and sign sensitive orders with it) before trusting these checks.`,
+    );
+    return "adminRootPub=null → legacy owner-IRK auth applies";
+  });
+
   // ── 6. Box: owner-IRK SIGNED API (derive demo IRK, sign real envelopes) ───
   if (KEK) {
     log("[box: owner-IRK signed API]");
