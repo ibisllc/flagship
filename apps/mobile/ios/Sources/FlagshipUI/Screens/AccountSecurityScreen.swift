@@ -323,10 +323,7 @@ public struct AccountSecurityScreen: View {
 
     private func formattedDate(_ ms: Int64?) -> String {
         guard let ms else { return "an unknown date" }
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
+        return Date.flagshipFormatted(epochMs: ms)
     }
 }
 

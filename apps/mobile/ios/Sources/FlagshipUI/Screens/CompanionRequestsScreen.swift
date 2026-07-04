@@ -186,10 +186,7 @@ public struct CompanionRequestsScreen: View {
     }
 
     private func relativeQueued(_ row: CompanionPendingWrite) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(row.queuedAt) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        let queued = fmt.localizedString(for: date, relativeTo: Date())
+        let queued = Date.flagshipFormatted(epochMs: row.queuedAt)
         let remainingMs = row.expiresAt - nowMs
         if remainingMs <= 0 { return "queued \(queued) · expired" }
         let mins = remainingMs / 60_000

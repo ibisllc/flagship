@@ -29,8 +29,8 @@ public struct FSPrimaryButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.primary.opacity(enabled ? 1 : 0.4))
                 .foregroundColor(.white)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
@@ -55,8 +55,8 @@ public struct FSSecondaryButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .background(c.surface)
                 .foregroundColor(c.text)
                 .overlay(
@@ -83,8 +83,8 @@ public struct FSGhostButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(c.text)
         }
     }
@@ -111,8 +111,8 @@ public struct FSDangerButton: View {
             Text(label)
                 .font(.system(size: large ? 16 : 14, weight: .semibold))
                 .frame(maxWidth: block ? .infinity : nil)
-                .frame(height: large ? 48 : 40)
-                .padding(.horizontal, large ? 28 : 20)
+                .frame(minHeight: large ? 48 : 44)
+                .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
                 .foregroundColor(fg)
                 .overlay(
                     RoundedRectangle(cornerRadius: FS.radius.md)
