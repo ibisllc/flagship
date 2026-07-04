@@ -17,7 +17,7 @@ import CryptoKit
 /// Canonical bytes (byte-identical to TS + the Kotlin mirror):
 ///
 ///   flagship/server-transfer-offer/v1|<serverDomain>|<transferNonce>|<issuedAt>|<expiresAt>
-///   flagship/server-transfer-claim/v1|<serverDomain>|<transferNonce>|<acquirerUsername>|<acquirerIrkPubHex>|<issuedAt>
+///   flagship/server-transfer-claim/v2|<serverDomain>|<transferNonce>|<acquirerUsername>|<acquirerIrkPubHex>|<acquirerAdminRootPubHex or "">|<issuedAt>
 ///
 /// `serverDomain`, `transferNonce`, and `acquirerUsername` are lowercased into
 /// the canonical bytes (matching the TS `.toLowerCase()`).
@@ -54,20 +54,28 @@ public struct ServerTransferOfferOrder: Equatable, Sendable {
 }
 
 public struct ServerTransferClaimOrder: Equatable, Sendable {
-    public static let canonicalTag = "flagship/server-transfer-claim/v1"
+    /// v2 (spec §9.8): the claim canonical now COMMITS to the acquirer's admin
+    /// master root pub, so `.com` can't substitute a different anchor for the
+    /// box to re-pin — the acquirer's own signature covers it. Empty string ⇒
+    /// the acquirer account has no admin root (legacy).
+    public static let canonicalTag = "flagship/server-transfer-claim/v2"
 
     public let serverDomain: String
     public let transferNonce: String
     public let acquirerUsername: String
     /// The acquirer's owner IRK pubkey, hex — ownership re-binds to this.
     public let acquirerIrkPubHex: String
+    /// The acquirer's admin master root pubkey, hex — the anchor the box
+    /// re-pins on re-home. "" when the acquirer account has no admin root.
+    public let acquirerAdminRootPubHex: String
     public let issuedAt: Int64
 
-    public init(serverDomain: String, transferNonce: String, acquirerUsername: String, acquirerIrkPubHex: String, issuedAt: Int64) {
+    public init(serverDomain: String, transferNonce: String, acquirerUsername: String, acquirerIrkPubHex: String, acquirerAdminRootPubHex: String = "", issuedAt: Int64) {
         self.serverDomain = serverDomain
         self.transferNonce = transferNonce
         self.acquirerUsername = acquirerUsername
         self.acquirerIrkPubHex = acquirerIrkPubHex
+        self.acquirerAdminRootPubHex = acquirerAdminRootPubHex
         self.issuedAt = issuedAt
     }
 
@@ -79,6 +87,7 @@ public struct ServerTransferClaimOrder: Equatable, Sendable {
                 transferNonce.lowercased(),
                 acquirerUsername.lowercased(),
                 acquirerIrkPubHex.lowercased(),
+                acquirerAdminRootPubHex.lowercased(),
                 String(issuedAt),
             ].joined(separator: "|").utf8
         )

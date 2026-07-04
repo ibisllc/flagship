@@ -39,17 +39,23 @@ public final class TransferAcquirerViewModel {
     private let username: String
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     private let now: () -> Int64
+    /// This account's admin master root pub, hex (biometric-free); nil ⇒ the
+    /// account has no admin root and the claim carries "" (§9.8). Injectable
+    /// seam over `Keystore.adminRootPubHex`.
+    private let adminRootPubHex: @MainActor () -> String?
 
     public init(
         client: any ServerTransferClient,
         username: String,
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
-        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        adminRootPubHex: @escaping @MainActor () -> String? = { Keystore.adminRootPubHex() }
     ) {
         self.client = client
         self.username = username
         self.now = now
         self.signer = signer ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.adminRootPubHex = adminRootPubHex
     }
 
     /// Reset to the scanner after a failure so the user can re-aim.
@@ -120,11 +126,15 @@ public final class TransferAcquirerViewModel {
             // Slice D — the transfer CLAIM is SENSITIVE ⇒ sign with the acquirer's
             // admin master root when present (`.com` gates against it); the
             // `acquirerIrkPub` identity field stays the registered IRK (`key`).
+            // §9.8: the v2 claim also commits to THIS account's admin root pub
+            // ("" when none) — the box re-pins that anchor at re-home, so it
+            // rides inside the signed canonical, never as a `.com`-editable field.
             let orderKey = Keystore.hasAdminRoot
                 ? try await Keystore.adminRootKey(reason: "Take over \(parsed.serverDomain)")
                 : nil
             let body = try ServerTransferFlow.buildClaim(
-                offer: parsed, acquirerUsername: username, acquirerIrk: key, orderKey: orderKey, issuedAt: now()
+                offer: parsed, acquirerUsername: username, acquirerIrk: key, orderKey: orderKey,
+                acquirerAdminRootPubHex: adminRootPubHex() ?? "", issuedAt: now()
             )
             phase = .posting
             let result = try await client.postClaim(serverDomain: parsed.serverDomain, body: body)

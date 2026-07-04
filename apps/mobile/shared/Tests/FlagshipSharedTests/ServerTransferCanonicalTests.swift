@@ -37,7 +37,9 @@ final class ServerTransferCanonicalTests: XCTestCase {
         )
     }
 
-    func testClaimCanonicalBytes() {
+    /// v2 (§9.8) — the admin-root slot sits between the IRK pub and issuedAt;
+    /// EMPTY when the acquirer account has no admin root.
+    func testClaimCanonicalBytes_noAdminRoot() {
         let pubHex = String(repeating: "cd", count: 32)
         let c = ServerTransferClaimOrder(
             serverDomain: "home.alice.flagship.services", transferNonce: nonce,
@@ -45,8 +47,66 @@ final class ServerTransferCanonicalTests: XCTestCase {
         )
         XCTAssertEqual(
             str(c.canonicalBytes()),
-            "flagship/server-transfer-claim/v1|home.alice.flagship.services|\(nonce)|bob|\(pubHex)|1800"
+            "flagship/server-transfer-claim/v2|home.alice.flagship.services|\(nonce)|bob|\(pubHex)||1800"
         )
+    }
+
+    func testClaimCanonicalBytes_withAdminRoot() {
+        let pubHex = String(repeating: "cd", count: 32)
+        let adminHex = String(repeating: "EF", count: 32)
+        let c = ServerTransferClaimOrder(
+            serverDomain: "home.alice.flagship.services", transferNonce: nonce,
+            acquirerUsername: "Bob", acquirerIrkPubHex: pubHex,
+            acquirerAdminRootPubHex: adminHex, issuedAt: 1800
+        )
+        XCTAssertEqual(
+            str(c.canonicalBytes()),
+            "flagship/server-transfer-claim/v2|home.alice.flagship.services|\(nonce)|bob|\(pubHex)|\(String(repeating: "ef", count: 32))|1800"
+        )
+    }
+
+    func testAdminRootTransferCanonicalBytes() {
+        let old = String(repeating: "aa", count: 32)
+        let new = String(repeating: "BB", count: 32)
+        let h = AdminRootTransfer(
+            serverDomain: "home.alice.flagship.services", giverUsername: "Alice",
+            acquirerUsername: "Bob", oldAdminRootPubHex: old, newAdminRootPubHex: new,
+            transferNonce: nonce, issuedAt: 1_700_000_000_000
+        )
+        XCTAssertEqual(
+            str(h.canonicalBytes()),
+            "flagship/admin-root-transfer/v1|home.alice.flagship.services|alice|bob|\(old)|\(String(repeating: "bb", count: 32))|\(nonce)|1700000000000"
+        )
+    }
+
+    /// "" newAdminRootPubHex = unpin (acquirer has no admin root) — the empty
+    /// slot must survive canonicalization.
+    func testAdminRootTransferCanonicalBytes_emptyNewRoot() {
+        let old = String(repeating: "aa", count: 32)
+        let h = AdminRootTransfer(
+            serverDomain: "home.alice.flagship.services", giverUsername: "alice",
+            acquirerUsername: "bob", oldAdminRootPubHex: old, newAdminRootPubHex: "",
+            transferNonce: nonce, issuedAt: 42
+        )
+        XCTAssertEqual(
+            str(h.canonicalBytes()),
+            "flagship/admin-root-transfer/v1|home.alice.flagship.services|alice|bob|\(old)||\(nonce)|42"
+        )
+    }
+
+    func testAdminRootTransferSignVerify_onlyUnderGiverRoot() throws {
+        let giverRoot = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
+        let other = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 6, count: 32))
+        let h = AdminRootTransfer(
+            serverDomain: "home.alice.flagship.services", giverUsername: "alice",
+            acquirerUsername: "bob",
+            oldAdminRootPubHex: HexUtil.encode(giverRoot.publicKey.rawRepresentation),
+            newAdminRootPubHex: String(repeating: "bb", count: 32),
+            transferNonce: nonce, issuedAt: 7
+        )
+        let sig = try h.sign(withGiverAdminRoot: giverRoot)
+        XCTAssertTrue(h.verify(signature: sig, giverAdminRootPub: giverRoot.publicKey.rawRepresentation))
+        XCTAssertFalse(h.verify(signature: sig, giverAdminRootPub: other.publicKey.rawRepresentation))
     }
 
     func testSignVerifyRoundTrip() {

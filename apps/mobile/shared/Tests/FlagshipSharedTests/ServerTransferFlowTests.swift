@@ -46,17 +46,48 @@ final class ServerTransferFlowTests: XCTestCase {
             giverIrkPub: HexUtil.encode(giver.publicKey.rawRepresentation),
             issuedAt: 1, expiresAt: 9_999_999_999_999, offerSignature: String(repeating: "00", count: 64)
         )
+        let adminHex = String(repeating: "ef", count: 32)
         let body = try ServerTransferFlow.buildClaim(
-            offer: qr, acquirerUsername: "Bob", acquirerIrk: acquirer, issuedAt: 1800
+            offer: qr, acquirerUsername: "Bob", acquirerIrk: acquirer,
+            acquirerAdminRootPubHex: adminHex, issuedAt: 1800
         )
         XCTAssertEqual(body.claim.acquirerUsername, "bob")
         XCTAssertEqual(body.claim.acquirerIrkPub, HexUtil.encode(acquirer.publicKey.rawRepresentation))
+        XCTAssertEqual(body.claim.acquirerAdminRootPub, adminHex)
         let order = ServerTransferClaimOrder(
             serverDomain: host, transferNonce: qr.transferNonce,
-            acquirerUsername: "bob", acquirerIrkPubHex: body.claim.acquirerIrkPub, issuedAt: 1800
+            acquirerUsername: "bob", acquirerIrkPubHex: body.claim.acquirerIrkPub,
+            acquirerAdminRootPubHex: adminHex, issuedAt: 1800
         )
         let sig = HexUtil.decode(body.claimSignature)!
         XCTAssertTrue(acquirer.publicKey.isValidSignature(sig, for: order.canonicalBytes()))
+    }
+
+    /// §9.8 — the giver's admin root signs the hand-off; the wire body carries
+    /// the exact canonical fields and the signature verifies under the giver
+    /// root (the box's pinned anchor).
+    func testBuildAdminHandoffSignsUnderGiverAdminRoot() throws {
+        let giverRoot = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 33, count: 32))
+        let acquirerRootHex = String(repeating: "ef", count: 32)
+        let nonce = String(repeating: "cd", count: 32)
+        let body = try ServerTransferFlow.buildAdminHandoff(
+            serverDomain: host, giverUsername: "alice", acquirerUsername: "bob",
+            acquirerAdminRootPubHex: acquirerRootHex, giverAdminRoot: giverRoot,
+            transferNonce: nonce, issuedAt: 1900
+        )
+        XCTAssertEqual(body.handoff.serverDomain, host)
+        XCTAssertEqual(body.handoff.giverUsername, "alice")
+        XCTAssertEqual(body.handoff.acquirerUsername, "bob")
+        XCTAssertEqual(body.handoff.oldAdminRootPub, HexUtil.encode(giverRoot.publicKey.rawRepresentation))
+        XCTAssertEqual(body.handoff.newAdminRootPub, acquirerRootHex)
+        XCTAssertEqual(body.handoff.transferNonce, nonce)
+        let h = AdminRootTransfer(
+            serverDomain: host, giverUsername: "alice", acquirerUsername: "bob",
+            oldAdminRootPubHex: body.handoff.oldAdminRootPub,
+            newAdminRootPubHex: acquirerRootHex, transferNonce: nonce, issuedAt: 1900
+        )
+        let sig = HexUtil.decode(body.signatureHex)!
+        XCTAssertTrue(h.verify(signature: sig, giverAdminRootPub: giverRoot.publicKey.rawRepresentation))
     }
 
     func testBuildClaimRejectsExpiredOffer() {
