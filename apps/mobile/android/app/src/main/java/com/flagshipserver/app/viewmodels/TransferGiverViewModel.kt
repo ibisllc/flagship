@@ -7,7 +7,9 @@
 //   2. builds + signs a one-time short-TTL offer + IRK mailbox-auth and deposits it,
 //   3. exposes the QR text to render,
 //   4. polls for the claim; on the claim it re-seals the disk key (Layer B):
-//      unseal with the giver IRK, re-seal to the acquirer IRK, deposit.
+//      unseal with the giver IRK, re-seal to the acquirer IRK, deposit — and,
+//      when this device holds the admin master root, deposits the giver-signed
+//      admin-root hand-off the box verifies before re-pinning (§9.8).
 //
 // The biometric fires ONCE (in `signer`); the derived IRK + seed are reused for
 // the re-seal so there's no second prompt.
@@ -45,8 +47,9 @@ class TransferGiverViewModel(
     /** The IRK pub hex (after the biometric). */
     private val irkPubHex: suspend () -> String = { Keystore.irkPubHex() },
     /** Slice D — resolves the ADMIN MASTER ROOT to sign the SENSITIVE transfer
-     *  OFFER, or null (legacy ⇒ IRK). The mailbox AUTH + the disk-key re-seal
-     *  (which needs the giver IRK) stay IRK; only the offer signature switches. */
+     *  OFFER + the §9.8 admin-root hand-off, or null (legacy ⇒ IRK offer, no
+     *  hand-off). The mailbox AUTH + the disk-key re-seal (which needs the
+     *  giver IRK) stay IRK. */
     private val orderSigner: suspend (reason: String) -> Ed25519Sign? =
         { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
     /** Admin-root pub hex — the QR `giverIrkPub` must TRACK the offer's signing
@@ -64,6 +67,8 @@ class TransferGiverViewModel(
 
     private var irk: Ed25519Sign? = null
     private var pubHex: String? = null
+    /** The offer's nonce — the admin hand-off canonical binds to it. */
+    private var transferNonce: String? = null
 
     /** Build + deposit the offer (biometric). Advances to AwaitingClaim with
      *  [qrText] set on success. */
@@ -90,6 +95,7 @@ class TransferGiverViewModel(
                 serverDomain = serverDomain, username = username, irk = key, irkPubHex = pub,
                 issuedAt = now(), orderKey = orderKey, orderKeyPubHex = orderPub,
             )
+            transferNonce = built.body.offer.transferNonce
             _phase.value = TransferGiverPhase.Posting
             client.postOffer(serverDomain, built.body)
             // The QR is the universal-link form (`…/transfer?o=<b64url>`), NOT the
@@ -130,11 +136,38 @@ class TransferGiverViewModel(
                 )
                 client.postDiskKey(serverDomain, deposit)
             }
+        } catch (e: Throwable) {
+            _phase.value = TransferGiverPhase.Failed(
+                "Ownership moved, but the disk key re-seal failed: ${e.message}. The new owner can retry from their device.",
+            )
+            return true
+        }
+        // §9.8 — hand the acquirer's admin root to the box. The box only trusts
+        // its PINNED anchor (the giver's admin root), so the GIVER signs the
+        // hand-off; the biometric gate EMITS that signature (consent-as-crypto).
+        // No admin root on this device ⇒ nothing pinned to hand off — skip.
+        try {
+            val nonce = transferNonce
+            val giverAdminRoot = if (nonce != null) orderSigner("Hand off admin of $serverDomain") else null
+            if (nonce != null && giverAdminRoot != null) {
+                val oldPub = orderKeyPubHex() ?: error("admin root pub unavailable")
+                val handoff = ServerTransferFlow.buildAdminHandoff(
+                    serverDomain = serverDomain,
+                    giverUsername = username,
+                    acquirerUsername = poll.acquirerUsername ?: "",
+                    oldAdminRootPubHex = oldPub,
+                    newAdminRootPubHex = poll.acquirerAdminRootPub ?: "",
+                    transferNonce = nonce,
+                    issuedAt = now(),
+                    giverAdminRoot = giverAdminRoot,
+                )
+                client.postAdminHandoff(serverDomain, handoff)
+            }
             _phase.value = TransferGiverPhase.Completed(poll.newServerDomain)
             return true
         } catch (e: Throwable) {
             _phase.value = TransferGiverPhase.Failed(
-                "Ownership moved, but the disk key re-seal failed: ${e.message}. The new owner can retry from their device.",
+                "Ownership moved, but the admin hand-off failed: ${e.message}. A box with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
             )
             return true
         }

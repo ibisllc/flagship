@@ -135,9 +135,10 @@ class AdminRootEntangledSigningTest {
 
         val body = ServerTransferFlow.buildClaim(
             offer, user, irk, irkPubHex, issuedAt + 1, admin,
+            acquirerAdminRootPubHex = adminPubHex,
         )
         val canonical = ServerTransferClaimOrder.canonicalBytes(
-            offer.serverDomain, offer.transferNonce, user.lowercase(), irkPubHex, issuedAt + 1,
+            offer.serverDomain, offer.transferNonce, user.lowercase(), irkPubHex, adminPubHex, issuedAt + 1,
         )
         // The claim ORDER verifies under the acquirer's admin root, NOT the IRK.
         Ed25519Verify(adminKp.publicKey).verify(HexUtil.decode(body.claimSignature)!!, canonical)
@@ -147,6 +148,8 @@ class AdminRootEntangledSigningTest {
         // ...but the `acquirerIrkPub` IDENTITY field stays the registered IRK
         // (`.com` matches it against the acquirer's account, independent of the sig).
         assertEquals(irkPubHex.lowercase(), body.claim.acquirerIrkPub)
+        // The §9.8 admin-root pub rides the wire AND the signed canonical above.
+        assertEquals(adminPubHex.lowercase(), body.claim.acquirerAdminRootPub)
     }
 
     // ── RootEntitlement (bring-a-box-online — owner decision: ADMIN-ROOT) ──────

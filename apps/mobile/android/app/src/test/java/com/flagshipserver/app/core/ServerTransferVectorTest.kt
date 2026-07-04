@@ -8,9 +8,10 @@ import org.junit.Test
 
 /**
  * Pins the Kotlin canonical bytes for the `server-transfer-offer` +
- * `server-transfer-claim` envelopes (transfer-a-box §4) to the EXACT
- * cross-platform vector. `.com` re-derives these to verify the giver/acquirer
- * IRK signatures, so any drift breaks box transfer.
+ * `server-transfer-claim` (v2) + `admin-root-transfer` envelopes
+ * (transfer-a-box §4, device-admin-tier §9.8) to the EXACT cross-platform
+ * vector. `.com`/the box re-derive these to verify the giver/acquirer
+ * signatures, so any drift breaks box transfer.
  *
  * Mirror of the TS pin (`packages/protocol/tests/accountDeletionVectors.test.ts`)
  * and the Swift pin (`ServerTransferCanonicalTests.swift`).
@@ -43,10 +44,62 @@ class ServerTransferVectorTest {
     @Test
     fun claimCanonicalBytes() {
         val pubHex = "cd".repeat(32)
+        val adminHex = "ef".repeat(32)
         assertEquals(
-            "flagship/server-transfer-claim/v1|home.alice.flagship.services|$nonce|bob|$pubHex|1800",
+            "flagship/server-transfer-claim/v2|home.alice.flagship.services|$nonce|bob|$pubHex|$adminHex|1800",
             String(
-                ServerTransferClaimOrder.canonicalBytes("home.alice.flagship.services", nonce, "Bob", pubHex, 1800L),
+                ServerTransferClaimOrder.canonicalBytes(
+                    "home.alice.flagship.services", nonce, "Bob", pubHex, "EF".repeat(32), 1800L,
+                ),
+                Charsets.UTF_8,
+            ),
+        )
+    }
+
+    @Test
+    fun claimCanonicalBytesEmptyAdminRoot() {
+        // No admin root on the acquirer account ⇒ the v2 slot is the EMPTY string.
+        val pubHex = "cd".repeat(32)
+        assertEquals(
+            "flagship/server-transfer-claim/v2|home.alice.flagship.services|$nonce|bob|$pubHex||1800",
+            String(
+                ServerTransferClaimOrder.canonicalBytes(
+                    "home.alice.flagship.services", nonce, "Bob", pubHex, "", 1800L,
+                ),
+                Charsets.UTF_8,
+            ),
+        )
+    }
+
+    // §9.8 hand-off proof — fixed-input pins (mirrors the AdminRootRotation
+    // canonical vector style; the box re-derives these to verify the giver's
+    // admin-root signature before re-pinning).
+
+    @Test
+    fun adminRootTransferCanonicalBytes() {
+        val old = "11".repeat(32)
+        val new = "22".repeat(32)
+        assertEquals(
+            "flagship/admin-root-transfer/v1|home.alice.flagship.services|alice|bob|$old|$new|$nonce|1900",
+            String(
+                AdminRootTransferClaim.canonicalBytes(
+                    "HOME.alice.flagship.services", "Alice", "Bob",
+                    "11".repeat(32).uppercase(), "22".repeat(32).uppercase(), "AB".repeat(32), 1900L,
+                ),
+                Charsets.UTF_8,
+            ),
+        )
+    }
+
+    @Test
+    fun adminRootTransferEmptyNewRootMeansUnpin() {
+        val old = "11".repeat(32)
+        assertEquals(
+            "flagship/admin-root-transfer/v1|home.alice.flagship.services|alice|bob|$old||$nonce|1900",
+            String(
+                AdminRootTransferClaim.canonicalBytes(
+                    "home.alice.flagship.services", "alice", "bob", old, "", nonce, 1900L,
+                ),
                 Charsets.UTF_8,
             ),
         )
@@ -63,7 +116,7 @@ class ServerTransferVectorTest {
         verifier.verify(osig, offer)
 
         val claim = ServerTransferClaimOrder.canonicalBytes(
-            "home.alice.flagship.services", nonce, "bob", "cd".repeat(32), 3L,
+            "home.alice.flagship.services", nonce, "bob", "cd".repeat(32), "", 3L,
         )
         val csig = signer.sign(claim)
         verifier.verify(csig, claim)
