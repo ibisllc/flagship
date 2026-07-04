@@ -202,6 +202,7 @@ public struct ServerDetailScreen: View {
                         DecommissionDeadServerCard(serverDomain: d.serverFqdn.isEmpty ? (deadServerFqdn ?? "") : d.serverFqdn, displayName: serverName, onDeleted: onDeleted)
                     }
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
+                    UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit)
                     TransferCard(serverDomain: d.serverFqdn)
                     DangerZoneCard(serverDomain: d.serverFqdn)
                 }
@@ -345,6 +346,14 @@ public struct ServerDetailScreen: View {
         }
     }
 
+    /// Short display form of the box-reported HEAD, or nil while unknown
+    /// (e.g. an un-reburned box whose daemon predates the field).
+    static func shortCommit(_ sha: String?) -> String? {
+        guard let sha, sha.count == 40,
+              sha.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return nil }
+        return String(sha.prefix(8))
+    }
+
     private func overview(d: ServerDetailResponse, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -356,6 +365,11 @@ public struct ServerDetailScreen: View {
                     stat("Apps", "\(d.serviceCount)", c: c)
                     stat("Sessions", "\(d.pairedSessionCount)", c: c)
                     stat("Daemon", d.daemonVersion, c: c)
+                    // The box-reported running commit (short) — the version the
+                    // update card orders away from. Hidden until the box reports.
+                    if let short = Self.shortCommit(d.currentCommit) {
+                        stat("Version", short, c: c)
+                    }
                 }
                 Text("Up for \(uptime(ms: d.uptimeMs))")
                     .font(FS.font.bodySm())
@@ -982,6 +996,150 @@ struct ReplaceServerCard: View {
                 }
             }
         }
+    }
+}
+
+/// "Update this server" entry on server-detail (docs/server-update-mechanism.md).
+/// Admin-only — the update order is signed with the admin master root (when
+/// pinned) behind the biometric inside `UpdateServerViewModel`, and it is only
+/// HALF the gate: the box also requires the target commit to be maintainer-
+/// endorsed, and rolls back automatically if the new version fails to boot.
+/// Disabled (with a hint) until the box reports its running commit — the
+/// order's `fromCommit` must be truth, never a guess.
+struct UpdateServerCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+
+    let serverDomain: String
+    /// The box-reported running commit from server-detail, or nil.
+    let currentCommit: String?
+
+    @State private var showSheet = false
+
+    private var reported: Bool { ServerDetailScreen.shortCommit(currentCommit) != nil }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("UPDATE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    if let short = ServerDetailScreen.shortCommit(currentCommit) {
+                        HStack {
+                            Text("Running").font(FS.font.caption()).foregroundColor(c.textMuted)
+                            Spacer()
+                            Text(short).font(FS.font.mono()).foregroundColor(c.text)
+                        }
+                    }
+                    FSDangerButton("Update this server", block: true) {
+                        showSheet = true
+                    }
+                    .disabled(!reported)
+                    .opacity(reported ? 1 : 0.4)
+                    .accessibilityIdentifier("sd-update-server")
+                    if !reported {
+                        Text("Waiting for this server to report its current version — it can't be updated in place until it does.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            NavigationStack {
+                UpdateServerSheet(
+                    vm: UpdateServerViewModel(
+                        username: app.currentUser ?? "",
+                        serverFqdn: serverDomain,
+                        currentCommit: currentCommit,
+                        mailbox: mailbox
+                    ),
+                    serverFqdn: serverDomain
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showSheet = false }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Sheet body for the update order: running version + target-commit field +
+/// the confirm CTA. The biometric fires ONCE, on the tap (inside the VM's
+/// signer) — never on appearance.
+struct UpdateServerSheet: View {
+    @Environment(\.colorScheme) private var scheme
+
+    @State var vm: UpdateServerViewModel
+    let serverFqdn: String
+
+    @State private var target = ""
+
+    private var working: Bool {
+        if case .signing = vm.phase { return true }
+        if case .posting = vm.phase { return true }
+        return false
+    }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Update \(serverFqdn)?")
+                    .font(FS.font.h2()).foregroundColor(c.text)
+                Text("The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.")
+                    .font(FS.font.body()).foregroundColor(c.textMuted)
+                if let short = vm.runningShort {
+                    HStack {
+                        Text("Running").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        Spacer()
+                        Text(short).font(FS.font.mono()).foregroundColor(c.text)
+                    }
+                }
+                if case .done = vm.phase {
+                    Text("Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.")
+                        .font(FS.font.body()).foregroundColor(c.text)
+                } else {
+                    Text("Target release (full commit)")
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    TextField("40-character commit hash", text: $target)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(FS.font.mono())
+                        .padding(FS.space.s3)
+                        .background(c.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                        .accessibilityIdentifier("update-target-field")
+                    if let problem = vm.targetProblem(target) {
+                        Text(problem).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    if case .failed(let msg) = vm.phase {
+                        Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                    }
+                    FSDangerButton(working ? "Working…" : "Order update", block: true) {
+                        if vm.canOrder(target) && !working {
+                            Task { await vm.update(targetCommit: target) }
+                        }
+                    }
+                    .disabled(!vm.canOrder(target) || working)
+                    .opacity(vm.canOrder(target) && !working ? 1 : 0.4)
+                    .accessibilityIdentifier("update-order-btn")
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Update server")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

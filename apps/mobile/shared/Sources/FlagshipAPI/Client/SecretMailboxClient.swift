@@ -98,6 +98,57 @@ public protocol SecretMailboxClient: Sendable {
     /// Uses its own `SetLeaderDepositBody` (the `{auth, deposit, vote, signature}`
     /// shape from the TS rail).
     func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws
+
+    /// POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
+    /// order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
+    /// admin-signed `flagship/server-update/v1` order on `.com`'s update lane; the
+    /// box claims it on its heartbeat, re-verifies it under the pinned admin
+    /// master root AND separately confirms the target commit is maintainer-
+    /// ENDORSED (the daemon's ReleaseGate) before applying — 2-of-2, so this
+    /// deposit alone can never push code. Uses its own `UpdateDepositBody`
+    /// (`{auth, authSignature, deposit, order, signature}`).
+    func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws
+}
+
+/// The server-update deposit body. `auth`/`authSignature` are the SAME IRK
+/// mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+/// order to a box domain; `order` is the `ServerUpdateOrder` field set and
+/// `signature` is the ADMIN-authority signature over its canonical bytes (admin
+/// master root when pinned, owner IRK legacy). Field names match the Worker
+/// handler (`handlePostUpdateDeposit`) exactly: `{ auth, authSignature,
+/// deposit:{serverDomain,requestNonceHex}, order:{serverDomain,targetCommit,
+/// fromCommit,nonce,issuedAt}, signature }`.
+public struct UpdateDepositBody: Encodable, Equatable, Sendable {
+    public struct Deposit: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let requestNonceHex: String   // hex (32 bytes)
+        public init(serverDomain: String, requestNonceHex: String) {
+            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
+        }
+    }
+    public struct Order: Encodable, Equatable, Sendable {
+        public let serverDomain: String
+        public let targetCommit: String
+        public let fromCommit: String
+        public let nonce: String
+        public let issuedAt: Int64
+        public init(serverDomain: String, targetCommit: String, fromCommit: String, nonce: String, issuedAt: Int64) {
+            self.serverDomain = serverDomain; self.targetCommit = targetCommit
+            self.fromCommit = fromCommit; self.nonce = nonce; self.issuedAt = issuedAt
+        }
+    }
+    public let auth: MailboxAuthEnvelope.Auth
+    public let authSignature: String
+    public let deposit: Deposit
+    public let order: Order
+    public let signature: String   // hex (64 bytes) — admin authority over the order canonical bytes
+    public init(
+        auth: MailboxAuthEnvelope.Auth, authSignature: String,
+        deposit: Deposit, order: Order, signature: String
+    ) {
+        self.auth = auth; self.authSignature = authSignature
+        self.deposit = deposit; self.order = order; self.signature = signature
+    }
 }
 
 /// The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
@@ -822,6 +873,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
+    public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/update") else {
+            throw ScreensClientError.http(status: 0, message: "bad update URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if (200..<300).contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
+
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
         guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/decommission") else {
@@ -1010,6 +1076,13 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             throw e
         }
         setLeaderDeposits.append((serverDomain, body))
+    }
+    public private(set) var updateDeposits: [(serverDomain: String, body: UpdateDepositBody)] = []
+    /// When set, `depositUpdate` throws it once.
+    public var nextUpdateError: Error?
+    public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
+        if let e = nextUpdateError { nextUpdateError = nil; throw e }
+        updateDeposits.append((serverDomain, body))
     }
     /// Optional error to throw on the next `depositDecommission`, then cleared.
     public var nextDecommissionError: Error?
