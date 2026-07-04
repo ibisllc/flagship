@@ -260,6 +260,7 @@ const OPTIONAL_SHELL = [
   "/views/paired-sessions.js",
   "/views/tier-status.js",
   "/views/marketplace.js",
+  "/views/developer.js",
   "/views/vibe-code.js",
   "/views/vibecode-chat.js",
   "/views/edit-service.js",
