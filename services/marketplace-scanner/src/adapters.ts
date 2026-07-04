@@ -31,6 +31,7 @@ import {
   type ScanTarget,
 } from "./ports.js";
 import type { NpmAuditResult, SemgrepResult } from "./grade.js";
+import { resolveImageRef } from "./imageRef.js";
 import {
   findingsToVulnerabilities,
   parseTrivyJson,
@@ -141,9 +142,16 @@ export class ExecScanRunner implements ScanRunner {
         manifest = undefined; // runCustomChecks fail-closes on this
       }
 
-      // Container/source vuln scan via the injected Trivy seam. The
-      // checked-out repo path IS the scan target for `trivy fs`.
-      const findings = await this.trivy.scan(repo);
+      // Container vuln scan via the injected Trivy seam. Resolve the
+      // OCI image ref from the manifest (`runtime.image`) — that named
+      // image is the artifact the daemon actually runs, so it is the
+      // grade target (`trivy image docker://<ref>`). A manifest with no
+      // resolvable image falls back to a source-tree scan of the clone
+      // (`trivy fs <path>`) so a repo-only listing still gets graded.
+      const imageRef = resolveImageRef(manifest);
+      const findings = await this.trivy.scan(
+        imageRef ? `docker://${imageRef}` : repo,
+      );
       const npmAudit = parseNpmAudit(
         await run("npm", ["audit", "--json", "--audit-level=low"], repo, "npm-audit-failed"),
       );
@@ -257,13 +265,20 @@ export class HttpQueueSource implements QueueSource {
     const res = await fetch(u, { headers: { authorization: `Bearer ${this.bearer}` } });
     if (!res.ok) throw new Error(`scan-queue returned ${res.status}`);
     const body = (await res.json()) as {
-      queue?: Array<{ creator: string; slug: string; canonicalUrl: string; manifestHashHex: string }>;
+      queue?: Array<{
+        creator: string;
+        slug: string;
+        canonicalUrl: string;
+        manifestHashHex: string;
+        manifestJson?: string;
+      }>;
     };
     return (body.queue ?? []).map((q) => ({
       creator: q.creator,
       slug: q.slug,
       canonicalUrl: q.canonicalUrl,
       manifestHashHex: q.manifestHashHex,
+      ...(typeof q.manifestJson === "string" ? { manifestJson: q.manifestJson } : {}),
     }));
   }
 }
