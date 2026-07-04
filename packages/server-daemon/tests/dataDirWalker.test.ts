@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { walkDataDir } from "../src/dataDirWalker.js";
+import { isDumpSubtree, isRawDataMount } from "../src/volumeDump.js";
 
 let dir = "";
 afterEach(() => {
@@ -100,5 +101,69 @@ describe("walkDataDir", () => {
     const files = await walkDataDir(root);
     expect(files).toHaveLength(200);
     expect(new Set(files.map((f) => f.path)).size).toBe(200);
+  });
+
+  // ── volume-aware backup: raw data mounts excluded, `_dumps/**` ride ──
+  it("excludes the raw data-store bind mounts, ships only the `_dumps/` subtree", async () => {
+    const root = tree();
+    // Live bind mounts the walker would otherwise descend into + tear.
+    mkdirSync(join(root, "postgres/base/1"), { recursive: true });
+    mkdirSync(join(root, "minio/.minio.sys/buckets"), { recursive: true });
+    mkdirSync(join(root, "redis"), { recursive: true });
+    mkdirSync(join(root, "forgejo/data"), { recursive: true });
+    mkdirSync(join(root, "chromium/profile"), { recursive: true });
+    writeFileSync(join(root, "postgres/base/1/PG_VERSION"), "16");
+    writeFileSync(join(root, "postgres/postmaster.pid"), "123");
+    writeFileSync(join(root, "minio/.minio.sys/buckets/x"), "sys");
+    writeFileSync(join(root, "redis/dump.rdb"), "live-rdb");
+    writeFileSync(join(root, "forgejo/data/forgejo.db"), "live-sqlite");
+    writeFileSync(join(root, "chromium/profile/Cookies"), "cookie");
+    // The consistent logical dumps written by dumpDataVolumes.
+    mkdirSync(join(root, "_dumps/postgres"), { recursive: true });
+    mkdirSync(join(root, "_dumps/minio/bucket"), { recursive: true });
+    mkdirSync(join(root, "_dumps/redis"), { recursive: true });
+    mkdirSync(join(root, "_dumps/forgejo"), { recursive: true });
+    writeFileSync(join(root, "_dumps/postgres/all.dump"), "SQL");
+    writeFileSync(join(root, "_dumps/minio/bucket/obj"), "obj");
+    writeFileSync(join(root, "_dumps/redis/dump.rdb"), "snap-rdb");
+    writeFileSync(join(root, "_dumps/forgejo/forgejo.db"), "snap-sqlite");
+    // A non-store data file still rides normally.
+    writeFileSync(join(root, "app-state.json"), "state");
+
+    const files = await walkDataDir(root, {
+      exclude: isRawDataMount,
+      raiseCapFor: isDumpSubtree,
+    });
+    expect(files.map((f) => f.path)).toEqual([
+      "_dumps/forgejo/forgejo.db",
+      "_dumps/minio/bucket/obj",
+      "_dumps/postgres/all.dump",
+      "_dumps/redis/dump.rdb",
+      "app-state.json",
+    ]);
+    // Not one byte of a live mount rode.
+    expect(files.some((f) => f.path.startsWith("postgres/"))).toBe(false);
+    expect(files.some((f) => f.path.startsWith("minio/"))).toBe(false);
+    expect(files.some((f) => f.path.startsWith("chromium/"))).toBe(false);
+  });
+
+  it("raises the whole-file cap for `_dumps/**` while the default cap still bounds the rest", async () => {
+    const root = tree();
+    // A big consistent dump (would be truncated by the 64 MiB default cap in prod).
+    mkdirSync(join(root, "_dumps/postgres"), { recursive: true });
+    writeFileSync(join(root, "_dumps/postgres/all.dump"), Buffer.alloc(4096, 7));
+    // A big NON-dump file still hits the default cap and is skipped.
+    writeFileSync(join(root, "huge.bin"), Buffer.alloc(4096, 9));
+    const logs: string[] = [];
+    const files = await walkDataDir(root, {
+      maxFileBytes: 1024,
+      raiseCapFor: isDumpSubtree,
+      raisedCapBytes: 1024 * 1024,
+      exclude: isRawDataMount,
+      onLog: (m) => logs.push(m),
+    });
+    expect(files.map((f) => f.path)).toEqual(["_dumps/postgres/all.dump"]);
+    expect(logs.some((l) => l.includes("oversize huge.bin"))).toBe(true);
+    expect(logs.some((l) => l.includes("_dumps/postgres/all.dump"))).toBe(false);
   });
 });
