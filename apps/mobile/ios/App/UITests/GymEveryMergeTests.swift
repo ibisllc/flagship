@@ -102,13 +102,13 @@ final class GymEveryMergeTests: XCTestCase {
 
     // ─── Navigation: Home → create-server form ───────────────────────────────
 
-    /// From the seeded Home, the add-server affordance opens the provision-vs-pair
-    /// CHOOSER (parity with the webapp + Android); tapping "Provision a new box"
-    /// opens the create-server form. The form is a 3-step design wizard: step 0
+    /// From the seeded Home, the add-server affordance goes STRAIGHT to the
+    /// create-server form (the provision-vs-pair chooser was removed; parity
+    /// with the webapp + Android). The form is a 3-step design wizard: step 0
     /// is name + description, step 1 carries the disk-encryption toggle (the A4
-    /// create-server control). Assert the chooser → step 0 renders, then advance
-    /// to step 1 and assert the disk-encryption toggle. Renders against the mock
-    /// client; no backend.
+    /// create-server control). Assert step 0 renders, then advance to step 1
+    /// and assert the disk-encryption toggle. Renders against the mock client;
+    /// no backend.
     func test_createServerFormReachable() throws {
         let app = launch(tab: "home")
         let addServer = app.buttons["home-add-server"]

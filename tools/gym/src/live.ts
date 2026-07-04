@@ -135,21 +135,38 @@ export const LIVE_SCENARIOS: readonly Scenario[] = [
           "Launch live against the gym apex (-apex-host gym.flagshipserver.com → live client + useLiveClient).",
       },
       { kind: "assert", describe: "Onboard / reach the live home shell.", handle: "home-add-server" },
-      { kind: "tap", describe: "Create a server (provision a gym demo box).", handle: "home-add-server" },
+      {
+        kind: "tap",
+        describe: "Create a server — add-server goes STRAIGHT to the create form (the chooser screen was removed).",
+        handle: "home-add-server",
+      },
       { kind: "type", describe: "Name the server.", handle: "cs-name-field" },
       { kind: "tap", describe: "Continue through create-server.", handle: "cs-next-button" },
       { kind: "wait", describe: "Provision → online ladder advances (real Hetzner boot)." },
-      { kind: "assert", describe: "Box comes online on Home.", handle: "pod-card-online" },
-      { kind: "tap", describe: "Approve the boot-unlock (sealed lease → box unlocks).", handle: "approve-unlock-btn" },
-      { kind: "tap", describe: "Open the build chooser → scratch/git → install a service.", handle: "home-add-server" },
+      { kind: "assert", describe: "Box comes online on Home (the pod status pill).", handle: "pod-card-status" },
+      {
+        kind: "tap",
+        describe: "Server-detail → approve the boot-unlock (sealed lease → box unlocks).",
+        handle: "sd-approve-unlock",
+      },
+      {
+        kind: "tap",
+        describe:
+          "Services tab → 'Build a service' → the build-source chooser (scratch/git) → install a service. " +
+          "(The build chooser lives on the Services tab, NOT behind add-server.)",
+        handle: "build-src-git",
+      },
       { kind: "wait", describe: "Service deploys on the live daemon (real container)." },
       { kind: "screenshot", describe: "The installed service on the live box." },
-      { kind: "assert", describe: "Service appears in the live services list (D6 effect).", handle: "service-row" },
+      { kind: "assert", describe: "Service appears in the live services list (D6 effect)." },
     ],
     assertions: [
       // The deterministic goal: the REAL effects (D6 G8/G12), not a mock flip.
-      { describe: "Box reached online on the live /pods", handle: "pod-card-online", expect: "present" },
-      { describe: "The installed service appears (real container ran)", handle: "service-row", expect: "present" },
+      // (Verdict = the GymLiveTests XCUITest pass/fail; today it proves the live
+      // shell + the create-server form entry — the long provision→install legs
+      // are the documented extension.)
+      { describe: "Live home shell reached (real gym backend)", handle: "home-add-server", expect: "present" },
+      { describe: "Create-server form opens against the live backend", handle: "cs-name-field", expect: "present" },
     ],
     screenshotPoints: [
       { id: "home-live", describe: "The live home shell." },

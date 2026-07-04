@@ -124,13 +124,12 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   android(
     "android-create-server-form",
-    "Home → add-server → chooser → Provision opens the create-server form (name field + disk-encryption control).",
+    "Home → add-server goes STRAIGHT to the create-server form (name field + disk-encryption control) — the chooser screen was removed.",
     `${PKG}.GymEveryMergeTest#createServerFormReachable`,
     {
       steps: [
         { kind: "launch", describe: "Launch smokeTab=home." },
-        { kind: "tap", describe: "Add a server.", handle: "home-add-server" },
-        { kind: "tap", describe: "Provision a new box.", handle: "chooser-provision" },
+        { kind: "tap", describe: "Add a server (a NavHost push straight to the form).", handle: "home-add-server" },
         { kind: "assert", describe: "Name field.", handle: "cs-name-field" },
         { kind: "assert", describe: "Disk-encryption control.", handle: "cs-encrypt-disk-toggle" },
       ],
@@ -140,7 +139,6 @@ const EVERY_MERGE: readonly Scenario[] = [
       ],
       screenshots: [
         shot("home-ready", "Home."),
-        shot("add-server-chooser", "The add-server chooser."),
         shot("create-server-form", "The create-server form."),
       ],
       dimension: "D1",
