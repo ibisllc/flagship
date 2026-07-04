@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import FlagshipCore
 
 public struct BiometricGate {
     public enum GateError: Error {
@@ -11,6 +12,12 @@ public struct BiometricGate {
     public init() {}
 
     public func evaluate(reason: String) async throws {
+        // GYM-ONLY (`-smoke-mode` seam): the Simulator has no enrolled
+        // biometric, so this UI-consent prompt would make its gated screens
+        // unreachable in the no-backend gym. The bypass emits NO crypto —
+        // load-bearing ceremonies (keychain unseal / SE ECDH) still require
+        // the real thing. Production never sets the flag.
+        if GymSeams.bypassBiometricGates { return }
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {

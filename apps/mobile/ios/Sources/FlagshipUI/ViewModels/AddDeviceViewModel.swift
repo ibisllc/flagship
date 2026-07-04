@@ -104,7 +104,7 @@ public final class AddDeviceViewModel {
             let umk = try await Keystore.currentUMK(reason: reason)
             return HexUtil.encode(umk.withUnsafeBytes { Data($0) })
         },
-        canPromoteToAdmin: Bool = Keystore.hasAdminRoot,
+        canPromoteToAdmin: Bool = GymSeams.forceAdminRoot || Keystore.hasAdminRoot,
         adminRootSeedHex: @escaping @MainActor (String) async throws -> String = { reason in
             let key = try await Keystore.adminRootKey(reason: reason)
             return HexUtil.encode(key.rawRepresentation)

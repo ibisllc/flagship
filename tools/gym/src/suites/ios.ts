@@ -618,10 +618,155 @@ const TOTAL_DETAIL: readonly Scenario[] = [
   ),
 ];
 
+// ───── total-gym Tier-1: webapp feature-tranche mirrors (GymFeatureMirrorTests) ─────
+// iOS twins of web-total-transfer-offer / -box-inbox / -pod-switcher /
+// -cs-advanced-toggles / -admin-root-state / -rotate-admin-ceremony /
+// -promote-admin-toggle. The Slice-D admin surfaces ride the new
+// `-smoke-admin-root` launch arg (GymSeams.forceAdminRoot) — a demo session
+// never mints a real admin master root. NOT mirrored: the acquirer take-over
+// claim (web-total-transfer-claim) — deep-link/QR-only entry on mobile and its
+// verify stage needs a REAL signed offer (a signed-offer fixture seam is
+// disproportionate for a render assert).
+
+const FEATURE_MIRRORS: readonly Scenario[] = [
+  iosTotal(
+    "ios-total-transfer-offer-entry",
+    "D1 (transfer-a-box, giver): server-detail's transfer entry opens the giver ceremony — the type-the-FQDN confirm field + the danger CTA (confirm stage only; nothing signed).",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_transferOfferEntryOpensCeremony",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the Home pod's detail." },
+        { kind: "tap", describe: "Transfer to another account.", handle: "sd-transfer-server" },
+        { kind: "assert", describe: "Type-to-confirm field.", handle: "transfer-confirm-field" },
+      ],
+      assertions: [
+        { describe: "Confirm field present", handle: "transfer-confirm-field", expect: "present" },
+        { describe: "Transfer CTA present", handle: "transfer-start", expect: "present" },
+      ],
+      screenshots: [shot("transfer-entry", "The entry card."), shot("transfer-confirm-gate", "The type-to-confirm gate.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-total-box-inbox-approve",
+    "D5 (box-request inbox): a box awaiting boot-unlock (-smoke-awaiting-unlock) surfaces the one-tap Approve/Deny card at the top of its detail (never fired).",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_boxInboxApproveCard",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the waiting box (Cabin) detail (-smoke-awaiting-unlock)." },
+        { kind: "assert", describe: "Approve card.", handle: "sd-approve-unlock" },
+      ],
+      assertions: [
+        { describe: "Approve affordance present", handle: "sd-approve-unlock", expect: "present" },
+        { describe: "Deny affordance present", handle: "sd-deny-unlock", expect: "present" },
+      ],
+      screenshots: [shot("inbox-approve-card", "The one-tap approve card.")],
+      dimension: "D5",
+    },
+  ),
+  iosTotal(
+    "ios-total-pod-switcher",
+    "D5 (multi-pod): the Services tab renders the PodSwitcher (3 seeded pods); tapping it opens the pod menu.",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_podSwitcherOpensMenu",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab apps." },
+        { kind: "tap", describe: "The pod switcher.", handle: "pod-switcher" },
+        { kind: "assert", describe: "The pod menu.", handle: "pod-switcher-menu" },
+      ],
+      assertions: [
+        { describe: "Switcher present", handle: "pod-switcher", expect: "present" },
+        { describe: "Menu opens", handle: "pod-switcher-menu", expect: "present" },
+      ],
+      screenshots: [shot("pod-switcher", "The switcher."), shot("pod-switcher-menu", "The open menu.")],
+      dimension: "D5",
+    },
+  ),
+  iosTotal(
+    "ios-total-cs-advanced-toggles",
+    "D4 (one-shot pairing security choices): the create-server step-1 Advanced section — default OFF, children hidden; open → embed-secrets + debug-friendly default OFF; closing RESETS an armed debug-friendly.",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_createServerAdvancedTogglesResetRule",
+    {
+      steps: [
+        { kind: "launch", describe: "Create-server → step 1 (name → Next)." },
+        { kind: "assert", describe: "Advanced default OFF.", handle: "cs-advanced-toggle" },
+        { kind: "tap", describe: "Open Advanced; arm debug-friendly.", handle: "cs-debug-friendly-toggle" },
+        { kind: "tap", describe: "Close + reopen Advanced.", handle: "cs-advanced-toggle" },
+        { kind: "assert", describe: "Debug-friendly RESET to off.", handle: "cs-debug-friendly-toggle" },
+      ],
+      assertions: [
+        { describe: "Advanced toggle present + default OFF", handle: "cs-advanced-toggle", expect: "present" },
+        { describe: "Embed-secrets toggle revealed", handle: "cs-embed-secrets-toggle", expect: "present" },
+        { describe: "Debug-friendly reset on close", handle: "cs-debug-friendly-toggle", expect: "present" },
+      ],
+      screenshots: [shot("cs-advanced-open", "The opened Advanced section."), shot("cs-advanced-reset", "The reset-on-close rule.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-admin-root-state",
+    "D3 (Slice D §5): Account security reports THIS device's admin standing — non-admin (demo default) shows NO rotate card; -smoke-admin-root renders the Admin-key card + Rotate.",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_adminRootStateGatesRotateCard",
+    {
+      steps: [
+        { kind: "launch", describe: "Settings → Account security (no admin seed)." },
+        { kind: "assert", describe: "No rotate control.", handle: "rotate-admin-btn" },
+        { kind: "launch", describe: "Relaunch with -smoke-admin-root." },
+        { kind: "assert", describe: "Rotate control present.", handle: "rotate-admin-btn" },
+      ],
+      assertions: [
+        { describe: "Rotate absent on a non-admin device", handle: "rotate-admin-btn", expect: "absent" },
+        { describe: "Rotate present on an admin device", handle: "rotate-admin-btn", expect: "present" },
+      ],
+      screenshots: [shot("admin-root-non-admin", "The non-admin state."), shot("admin-root-admin", "The admin card with Rotate.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-total-rotate-admin-ceremony",
+    "D4 (Slice D §5): Rotate admin key opens its revoke-semantic warning alert; Cancel rotates nothing.",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_rotateAdminCeremonyFirstScreen",
+    {
+      steps: [
+        { kind: "launch", describe: "Account security as an admin device (-smoke-admin-root)." },
+        { kind: "tap", describe: "Rotate admin key.", handle: "rotate-admin-btn" },
+        { kind: "assert", describe: "The warning alert.", handle: "Rotate your admin key?" },
+        { kind: "tap", describe: "Cancel — nothing rotated." },
+      ],
+      assertions: [
+        { describe: "Warning ceremony opens", handle: "Rotate your admin key?", expect: "present" },
+        { describe: "No rotation after Cancel", handle: "rotate-admin-done-msg", expect: "absent" },
+      ],
+      screenshots: [shot("rotate-admin-ceremony", "The warning alert."), shot("rotate-admin-cancelled", "Intact after Cancel.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-total-promote-admin-toggle",
+    "D3 (Slice D D-4): the promote-to-admin toggle appears ONLY on an admin device's add-device SAS ceremony (default OFF); a non-admin device omits it.",
+    "FlagshipAppUITests/GymFeatureMirrorTests/test_promoteAdminToggleAdminOnly",
+    {
+      steps: [
+        { kind: "launch", describe: "Settings → Add a device (no admin seed)." },
+        { kind: "assert", describe: "No promote toggle.", handle: "add-device-promote-admin-toggle" },
+        { kind: "launch", describe: "Relaunch with -smoke-admin-root; reopen Add a device." },
+        { kind: "assert", describe: "Promote toggle present, default OFF.", handle: "add-device-promote-admin-toggle" },
+      ],
+      assertions: [
+        { describe: "Toggle absent on a non-admin device", handle: "add-device-promote-admin-toggle", expect: "absent" },
+        { describe: "Toggle present + default OFF on an admin device", handle: "add-device-promote-admin-toggle", expect: "present" },
+      ],
+      screenshots: [shot("promote-absent-non-admin", "No promote section."), shot("promote-toggle-admin", "The default-OFF toggle.")],
+      dimension: "D3",
+    },
+  ),
+];
+
 /** The iOS/iPad lane of the gym registry (every-merge subset + total tranche). */
 export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...EVERY_MERGE,
   ...TOTAL,
   ...IPAD,
   ...TOTAL_DETAIL,
+  ...FEATURE_MIRRORS,
 ];

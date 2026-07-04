@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -110,6 +112,9 @@ fun TransferGiverScreen(vm: TransferGiverViewModel, serverDomain: String) {
                     onClick = { if (confirmed && !working) scope.launch { vm.start() } },
                     enabled = confirmed && !working,
                     block = true,
+                    // Parity handle with iOS "transfer-start" (the gym asserts
+                    // the ceremony's confirm stage; it never fires the transfer).
+                    modifier = Modifier.semantics { contentDescription = "transfer-start" },
                 )
             }
         }

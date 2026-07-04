@@ -159,6 +159,18 @@ struct FlagshipApp: App {
                 target: .vibeCodeChat(sessionId: "gym-smoke")
             )
         }
+        // `-smoke-admin-root` treats this device as holding the admin master
+        // root (GymSeams.forceAdminRoot) so the Slice-D admin-gated surfaces
+        // (Account-security Rotate-admin card; the add-device promote toggle)
+        // render offline. Assigned BOTH ways so a prior same-process launch's
+        // seed can never leak into an unflagged run. Gym-only.
+        GymSeams.forceAdminRoot = args.contains("-smoke-admin-root")
+        // Smoke launches bypass the UI-level Face-ID consent prompts (no
+        // enrolled biometric on a Simulator) — consent-only, no crypto
+        // emitted; see GymSeams. EXCEPT under -smoke-locked: the launch lock
+        // screen AUTO-prompts, and a bypassed prompt would auto-unlock the
+        // very trap that scenario asserts (D4-E1).
+        GymSeams.bypassBiometricGates = !wantLocked
         // `-smoke-trust-untrusted` seeds a positively-untrusted maintainer-trust
         // verdict so the red GlobalTrustBar (`global-trust-bar`) renders (D4-E7).
         // The live path derives this from a real `.com` blessing check

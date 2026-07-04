@@ -22,6 +22,7 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -70,7 +71,11 @@ abstract class GymBase {
         ops: Boolean = false,
         trustUntrusted: Boolean = false,
         podsVariant: String? = null,
+        adminRoot: Boolean = false,
     ) {
+        // A test may relaunch with different seeds (e.g. the admin/non-admin
+        // state pair) — close the prior scenario so activities never stack.
+        scenario?.close()
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val intent = Intent(ctx, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -79,6 +84,7 @@ abstract class GymBase {
             if (ops) putExtra(SmokeModeConfig.EXTRA_SMOKE_OPS, true)
             if (trustUntrusted) putExtra(SmokeModeConfig.EXTRA_SMOKE_TRUST_UNTRUSTED, true)
             if (podsVariant != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_PODS, podsVariant)
+            if (adminRoot) putExtra(SmokeModeConfig.EXTRA_SMOKE_ADMIN_ROOT, true)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
@@ -94,6 +100,16 @@ abstract class GymBase {
     protected fun waitUntilExists(tag: String, timeoutMs: Long = 10_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /** Twin of [waitUntilExists] for controls exposed via
+     *  `Modifier.semantics { contentDescription = … }` (the app's parity-handle
+     *  idiom on several Slice-D / transfer / approval controls) rather than a
+     *  testTag. */
+    protected fun waitUntilExistsDesc(desc: String, timeoutMs: Long = 10_000) {
+        composeRule.waitUntil(timeoutMillis = timeoutMs) {
+            composeRule.onAllNodesWithContentDescription(desc).fetchSemanticsNodes().isNotEmpty()
         }
     }
 

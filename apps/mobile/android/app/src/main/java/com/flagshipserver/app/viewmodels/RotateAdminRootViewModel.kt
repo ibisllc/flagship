@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AdminRootRotationRequest
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.core.AdminRootRotation
+import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.AdminRootRotationClaim
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.keystore.Keystore
@@ -64,7 +65,7 @@ class RotateAdminRootViewModel(
     private val mintSeed: () -> ByteArray = { ByteArray(32).also { SecureRandom().nextBytes(it) } },
     private val now: () -> Long = { System.currentTimeMillis() },
     /** True iff this device holds the admin master root. */
-    private val hasAdminRoot: () -> Boolean = { Keystore.hasAdminRoot() },
+    private val hasAdminRoot: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
     /** Loads the OLD admin-root SIGNER (biometric-gated in production). */
     private val loadOldSigner: suspend () -> Ed25519Sign = { Keystore.adminRootKey("Rotate your admin key") },
     /** The OLD admin-root pubkey hex held on this device. */
