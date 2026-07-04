@@ -115,6 +115,13 @@ export function adaptRegistryToStorage(
       });
       return true;
     },
+    async swapAdminRootPub() {
+      // Slice D §5 — the admin-root rotation apply endpoint lives
+      // exclusively on .com (Worker). The legacy sync UsernameRegistry
+      // has no admin_root_pub_hex slot and no Fastify route calls this;
+      // required only to satisfy the UsernameStorage interface.
+      return false;
+    },
     async setDemo() {
       // Same story as swapIrkPub: the demo-account flag (#84) is set
       // only by the operator-gated provisioning path, which is .com
