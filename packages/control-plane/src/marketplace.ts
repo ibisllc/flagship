@@ -391,6 +391,10 @@ export async function handleMarketplaceScanQueue(
       slug: l.slug,
       canonicalUrl: l.canonicalUrl,
       manifestHashHex: l.manifestHashHex,
+      // The scanner resolves `runtime.image` from this to pick the
+      // container-scan target and to skip a listing with no pullable
+      // image (see services/marketplace-scanner resolveImageRefFromJson).
+      manifestJson: l.manifestJson ?? "",
       scanCompletedAt: l.scanCompletedAt ?? null,
     })),
   });
