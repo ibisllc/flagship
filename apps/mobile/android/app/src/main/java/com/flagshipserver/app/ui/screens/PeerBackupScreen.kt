@@ -53,8 +53,7 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.PeerBackupViewModel
-import java.text.DateFormat
-import java.util.Date
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Locale
 
 @Composable
@@ -80,7 +79,7 @@ fun PeerBackupScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Shard health across peers + the repair daemon's view.",
+            "Shard health across peers + repair status.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp),
         )
@@ -112,7 +111,7 @@ private fun Body(s: PeerBackupStatusResponse, togglePending: Boolean, onToggle: 
     SectionHeader("Peers backing you up")
     Spacer(Modifier.height(FS.space.s2))
     if (s.peersBackingYouUp.isEmpty()) {
-        PlaceholderCard("No peers backing you up yet — repair daemon will recruit some next tick.")
+        PlaceholderCard("No peers backing you up yet — your server will recruit some soon.")
     } else {
         s.peersBackingYouUp.forEach { p ->
             PeerHostingYouRow(p)
@@ -324,8 +323,7 @@ private fun shardPillKind(s: PeerBackupShardSummary): FSPillKind = when {
 
 private fun fmtDate(ms: Long): String {
     if (ms <= 0L) return "—"
-    val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
-    return fmt.format(Date(ms))
+    return FlagshipDateFormat.format(ms, includeTime = true)
 }
 
 private fun fmtBytes(n: Long): String {

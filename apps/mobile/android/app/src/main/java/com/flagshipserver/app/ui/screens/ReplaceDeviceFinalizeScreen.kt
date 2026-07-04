@@ -50,7 +50,7 @@ import com.flagshipserver.app.viewmodels.ReplaceDevicePhase
 import com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -254,4 +254,4 @@ internal fun remainingLabel(completesAt: Long, nowMs: Long): String {
  *  kept for parity with the banner's formatter helper). */
 @Suppress("unused")
 internal fun absoluteCompletesAt(ms: Long): String =
-    SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()).format(Date(ms))
+    FlagshipDateFormat.format(ms, includeTime = true)

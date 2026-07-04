@@ -42,7 +42,7 @@ import com.flagshipserver.app.viewmodels.ActivityFeedFilter
 import com.flagshipserver.app.viewmodels.ActivityItem
 import com.flagshipserver.app.viewmodels.ActivityViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -166,7 +166,7 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                 )
                 Text(
-                    "Membership re-attach snapshot from the most recent IRK swap.",
+                    "Membership re-attach snapshot from the most recent account key swap.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
@@ -209,7 +209,6 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
             Text("No recent activity.", color = FS.colors.textMuted)
         }
     } else {
-        val fmt = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
         recentRows.forEach { item ->
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -226,7 +225,7 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
                         )
                     }
                     Text(
-                        fmt.format(Date(item.at)),
+                        FlagshipDateFormat.format(item.at, includeTime = true),
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 11.sp),
                     )

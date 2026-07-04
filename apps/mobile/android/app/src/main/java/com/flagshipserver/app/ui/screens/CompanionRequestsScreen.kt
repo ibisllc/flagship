@@ -294,15 +294,15 @@ private fun HoldToApproveButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 40.dp)
+                .heightIn(min = 44.dp)
                 .clip(RoundedCornerShape(FS.radius.md))
                 .background(if (enabled) FS.colors.primary else FS.colors.textMuted)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = FS.space.s5, vertical = FS.space.s2),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = label,
-                color = Color.White,
+                color = FS.colors.onAccent,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             )
         }

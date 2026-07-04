@@ -1,5 +1,6 @@
-// Settings landing. Routes to providers, recovery, paired sessions,
-// add-control-device, developer pane.
+// Settings landing, organised into the spec S1 six-group taxonomy: Account ·
+// Devices · Companions · Web access · Backup & peers · App · Danger zone ·
+// Developer (hidden). One tap to any row; mirrors the iOS/webapp grouping.
 
 package com.flagshipserver.app.ui.screens
 
@@ -197,62 +198,36 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
-        // Account-security + providers.
+        // Settings taxonomy (spec S1): Account · Devices · Companions ·
+        // Web access · Backup & peers · App · Danger zone · Developer (hidden).
+        // One tap to any row; account security leads the Account group. Matches
+        // the iOS six-group result so the surfaces stay isomorphic.
+
+        // 1 — ACCOUNT: account security · AI keys · Recovery · Back up account
+        //     key · Profiles.
         FSSettingsGroup(
             header = "ACCOUNT",
             rows = listOf(
+                // Account security leads; title is stable, the live account
+                // type (single vs multi-device + 2FA) rides the subtitle. The
+                // last branch is the load-pending fallback.
+                FSSettingsRowData(
+                    icon = "🛡",
+                    title = "Account security",
+                    subtitle = when (accountType) {
+                        "multi" -> "Multi-device + 2FA — recovery needs a code."
+                        "single" -> "Single-device — recovery is a 3-day wait."
+                        else -> "Single-device vs multi-device + 2FA."
+                    },
+                    onClick = { nav.navigate("account-security") },
+                    testTag = "settings-open-account-security",
+                ),
                 FSSettingsRowData(
                     icon = "🔑",
                     title = "AI keys",
                     subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
-                ),
-                // v1.2 Phase 4 — Account security badge + drill-down. Title +
-                // subtitle reflect the live account type (mirror of iOS's
-                // accountSecuritySection); the recovery framing is the
-                // load-pending fallback.
-                FSSettingsRowData(
-                    icon = "🛡",
-                    title = when (accountType) {
-                        "multi" -> "Multi-device + 2FA"
-                        "single" -> "Single-device account"
-                        else -> "Account security"
-                    },
-                    subtitle = when (accountType) {
-                        "multi" -> "Recovery requires a 6-digit code + 24-hour grace."
-                        "single" -> "Recovery is a 3-day waiting period."
-                        else -> "Single-device vs multi-device + 2FA."
-                    },
-                    onClick = { nav.navigate("account-security") },
-                    testTag = "settings-open-account-security",
-                ),
-            ),
-        )
-
-        Spacer(Modifier.height(FS.space.s4))
-
-        // Devices + recovery cluster.
-        FSSettingsGroup(
-            header = "DEVICES & RECOVERY",
-            rows = listOf(
-                FSSettingsRowData(
-                    icon = "📱",
-                    title = "Trusted devices",
-                    subtitle = "Phones and tablets that hold your account keys.",
-                    onClick = { nav.navigate("trusted-devices") },
-                ),
-                FSSettingsRowData(
-                    icon = "🖥",
-                    title = "Browser sessions",
-                    subtitle = "Per-pod browser tabs paired with this account.",
-                    onClick = { nav.navigate("paired-sessions") },
-                ),
-                FSSettingsRowData(
-                    icon = "➕",
-                    title = "Add a control device",
-                    subtitle = "Pair a browser or tablet with the current account.",
-                    onClick = { nav.navigate("add-control-device") },
                 ),
                 FSSettingsRowData(
                     icon = "♻",
@@ -262,7 +237,7 @@ fun SettingsScreen(nav: NavController) {
                 ),
                 FSSettingsRowData(
                     icon = "💾",
-                    title = "Back up your account key",
+                    title = "Back up account key",
                     subtitle = "Save an encrypted key file to recover or move your account.",
                     onClick = { nav.navigate("keyfile-export") },
                 ),
@@ -277,9 +252,32 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s4))
 
-        // Companion + peer-backup + privacy cluster.
+        // 2 — DEVICES: the single home for Add / Replace / Wipe / Remove device
+        //     is the Trusted devices screen (the old standalone "Add a control
+        //     device" row merged in there), plus the browser sessions list.
         FSSettingsGroup(
-            header = "SHARING & BACKUP",
+            header = "DEVICES",
+            rows = listOf(
+                FSSettingsRowData(
+                    icon = "📱",
+                    title = "Trusted devices",
+                    subtitle = "Phones and tablets that hold your account keys — add, replace, or remove.",
+                    onClick = { nav.navigate("trusted-devices") },
+                ),
+                FSSettingsRowData(
+                    icon = "🖥",
+                    title = "Browser sessions",
+                    subtitle = "Per-server browser tabs paired with this account.",
+                    onClick = { nav.navigate("paired-sessions") },
+                ),
+            ),
+        )
+
+        Spacer(Modifier.height(FS.space.s4))
+
+        // 3 — COMPANIONS: read-only docked browsers + the requests they raise.
+        FSSettingsGroup(
+            header = "COMPANIONS",
             rows = listOf(
                 // P14 — companion-dock: mint a 60s pairing ticket → 4h read-only browser.
                 FSSettingsRowData(
@@ -297,28 +295,15 @@ fun SettingsScreen(nav: NavController) {
                     badge = companionPending.takeIf { it > 0 },
                     onClick = { nav.navigate("companion-requests") },
                 ),
-                // P9 — peer-backup management.
-                FSSettingsRowData(
-                    icon = "🗄",
-                    title = "Peer-backup",
-                    subtitle = "Shard health across peers + repair status.",
-                    onClick = { nav.navigate("peer-backup") },
-                ),
-                FSSettingsRowData(
-                    icon = "🔒",
-                    title = "Privacy",
-                    subtitle = "Face unlock at launch, app-level gating.",
-                    onClick = { nav.navigate("privacy") },
-                ),
             ),
         )
 
         Spacer(Modifier.height(FS.space.s4))
 
-        // Web-experience gating — the QR-login surfaces (authorize a browser
-        // for a restricted site + manage the sessions you authorized).
+        // 4 — WEB ACCESS: the QR-login surfaces (authorize a browser for a
+        //     restricted site + manage the sessions you authorized).
         FSSettingsGroup(
-            header = "SECURED WEBSITES",
+            header = "WEB ACCESS",
             rows = listOf(
                 FSSettingsRowData(
                     icon = "🌐",
@@ -337,22 +322,71 @@ fun SettingsScreen(nav: NavController) {
             ),
         )
 
-        if (devUnlocked) {
-            Spacer(Modifier.height(FS.space.s4))
-            FSSettingsGroup(
-                header = "DEVELOPER",
-                rows = listOf(
-                    FSSettingsRowData(
-                        icon = "🛠",
-                        title = "Developer",
-                        subtitle = "Toggle the live screens client + dev fixtures.",
-                        onClick = { nav.navigate("developer") },
-                    ),
-                ),
-            )
-        }
+        Spacer(Modifier.height(FS.space.s4))
 
-        Spacer(Modifier.height(FS.space.s6))
+        // 5 — BACKUP & PEERS.
+        FSSettingsGroup(
+            header = "BACKUP & PEERS",
+            rows = listOf(
+                // P9 — peer-backup management.
+                FSSettingsRowData(
+                    icon = "🗄",
+                    title = "Peer-backup",
+                    subtitle = "Shard health across peers + repair status.",
+                    onClick = { nav.navigate("peer-backup") },
+                ),
+            ),
+        )
+
+        Spacer(Modifier.height(FS.space.s4))
+
+        // 6 — APP: appearance (Light / Dark / Auto segmented control), Privacy,
+        //     About. Appearance writes straight to PrivacySettings; MainActivity
+        //     applies it app-wide.
+        Text(
+            "APP",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            ThemeSegment(Modifier.weight(1f), label = "☀️", selected = themeMode == ThemeMode.LIGHT) {
+                privacy?.setThemeMode(ThemeMode.LIGHT)
+            }
+            ThemeSegment(Modifier.weight(1f), label = "🌙", selected = themeMode == ThemeMode.DARK) {
+                privacy?.setThemeMode(ThemeMode.DARK)
+            }
+            ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
+                privacy?.setThemeMode(ThemeMode.AUTO)
+            }
+        }
+        Spacer(Modifier.height(FS.space.s2))
+        FSSettingsGroup(
+            rows = listOf(
+                FSSettingsRowData(
+                    icon = "🔒",
+                    title = "Privacy",
+                    subtitle = "Face unlock at launch, app-level gating.",
+                    onClick = { nav.navigate("privacy") },
+                ),
+                // About — Android has no separate About screen, so the version /
+                // license card below IS the About surface (it also carries the
+                // 3-tap developer unlock). This row scrolls to nothing extra; it
+                // exists for group parity with iOS/web and taps the same unlock.
+                FSSettingsRowData(
+                    icon = "ℹ",
+                    title = "About Flagship",
+                    subtitle = "Version, license, source.",
+                    showsChevron = false,
+                    onClick = {
+                        versionTaps += 1
+                        if (versionTaps >= 3) dev?.setUnlocked(true)
+                    },
+                ),
+            ),
+        )
+
+        Spacer(Modifier.height(FS.space.s4))
 
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column {
@@ -378,26 +412,20 @@ fun SettingsScreen(nav: NavController) {
             }
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        // APPEARANCE — Light / Dark / Auto as one horizontal segmented control
-        // (sun, moon, and a small "AUTO"). Applied app-wide by MainActivity.
-        Text(
-            "APPEARANCE",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            ThemeSegment(Modifier.weight(1f), label = "☀️", selected = themeMode == ThemeMode.LIGHT) {
-                privacy?.setThemeMode(ThemeMode.LIGHT)
-            }
-            ThemeSegment(Modifier.weight(1f), label = "🌙", selected = themeMode == ThemeMode.DARK) {
-                privacy?.setThemeMode(ThemeMode.DARK)
-            }
-            ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
-                privacy?.setThemeMode(ThemeMode.AUTO)
-            }
+        // 8 — DEVELOPER (hidden behind the 3-tap version unlock).
+        if (devUnlocked) {
+            Spacer(Modifier.height(FS.space.s4))
+            FSSettingsGroup(
+                header = "DEVELOPER",
+                rows = listOf(
+                    FSSettingsRowData(
+                        icon = "🛠",
+                        title = "Developer",
+                        subtitle = "Toggle the live screens client + dev fixtures.",
+                        onClick = { nav.navigate("developer") },
+                    ),
+                ),
+            )
         }
 
         Spacer(Modifier.height(FS.space.s6))
@@ -484,6 +512,25 @@ fun SettingsScreen(nav: NavController) {
             },
             block = true,
             modifier = Modifier.testTag("settings-remove-device-btn"),
+        )
+
+        // Explicit Delete-account entry (spec S1 danger zone). The guarded
+        // deletion ceremony was previously only reachable via the Remove-device
+        // path when this happened to be the last device; give it a direct,
+        // always-present door. The ceremony screen itself does the last-device
+        // + recovery gating and the final confirm.
+        Spacer(Modifier.height(FS.space.s4))
+        Text(
+            "Permanently delete your account, its username, and every server's data. This cannot be undone.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        FSDangerButton(
+            label = "Delete account",
+            onClick = { nav.navigate("delete-account") },
+            block = true,
+            modifier = Modifier.testTag("settings-delete-account-btn"),
         )
 
         if (showRemoveConfirm) {
@@ -630,7 +677,7 @@ private fun ThemeSegment(
     ) {
         Text(
             label,
-            color = if (selected) Color.White else FS.colors.text,
+            color = if (selected) FS.colors.onAccent else FS.colors.text,
             style = TextStyle(
                 fontSize = if (small) 11.sp else 18.sp,
                 fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,

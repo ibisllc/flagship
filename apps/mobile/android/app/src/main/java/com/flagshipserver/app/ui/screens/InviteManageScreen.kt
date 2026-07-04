@@ -38,9 +38,7 @@ import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.InviteManageViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
-import java.text.DateFormat
-import java.util.Date
-import java.util.Locale
+import com.flagshipserver.app.core.FlagshipDateFormat
 
 @Composable
 fun InviteManageScreen(
@@ -202,7 +200,7 @@ private fun AccessRow(
                     style = TextStyle(fontSize = 13.sp),
                 )
                 Text(
-                    "IRK ${row.irkPubHex.take(12)}…",
+                    "Account key ${row.irkPubHex.take(12)}…",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                 )
@@ -235,6 +233,5 @@ private fun PlaceholderCard(text: String) {
 
 private fun fmtDate(ms: Long): String {
     if (ms <= 0L) return "—"
-    val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
-    return fmt.format(Date(ms))
+    return FlagshipDateFormat.format(ms, includeTime = true)
 }

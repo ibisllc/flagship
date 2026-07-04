@@ -48,7 +48,7 @@ import com.flagshipserver.app.viewmodels.SecuredSessionRow
 import com.flagshipserver.app.viewmodels.SecuredSessionsViewModel
 import com.flagshipserver.app.viewmodels.SessionLiveness
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -170,7 +170,7 @@ private fun livenessColor(l: SessionLiveness) = when (l) {
 }
 
 private fun formatTs(ms: Long): String =
-    if (ms <= 0) "—" else SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(ms))
+    if (ms <= 0) "—" else FlagshipDateFormat.format(ms, includeTime = true)
 
 /**
  * "Process URL" — paste a flagship://access link / "Get link" string and run

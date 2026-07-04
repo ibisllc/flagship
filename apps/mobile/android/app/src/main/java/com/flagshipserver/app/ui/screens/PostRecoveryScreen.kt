@@ -32,7 +32,7 @@ import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -90,7 +90,6 @@ fun PostRecoveryScreen(nav: NavController) {
             return@Column
         }
 
-        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 FSPill(report.status.uppercase(), kind = when (report.status) {
@@ -109,7 +108,7 @@ fun PostRecoveryScreen(nav: NavController) {
                     style = TextStyle(fontSize = 13.sp),
                 )
                 Text(
-                    "Undo window expires ${fmt.format(Date(report.undoWindowExpiresAt))}",
+                    "Undo window expires ${FlagshipDateFormat.format(report.undoWindowExpiresAt, includeTime = true)}",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )

@@ -50,7 +50,7 @@ import com.flagshipserver.app.viewmodels.AuditLogPage
 import com.flagshipserver.app.viewmodels.AuditLogViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.auditEventLabel
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -161,7 +161,6 @@ private fun Body(page: AuditLogPage, onLoadMore: () -> Unit) {
 
 @Composable
 private fun EventRow(e: AuditEvent) {
-    val fmt = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,7 +183,7 @@ private fun EventRow(e: AuditEvent) {
         }
         Spacer(Modifier.width(FS.space.s2))
         Text(
-            fmt.format(Date(e.postedAt)),
+            FlagshipDateFormat.format(e.postedAt, includeTime = true),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 11.sp),
         )

@@ -75,7 +75,7 @@ import com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -172,6 +172,17 @@ fun TrustedDevicesScreen(nav: NavController) {
             onClick = { nav.navigate("add-device") },
             block = true,
             modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        // Spec S1/F — the "Add a control device" (browser / tablet) entry
+        // merged in from its old standalone Settings row, so every device-add
+        // path lives in one place. Distinct from "Add device" above (that pairs
+        // another phone that holds account keys); this pairs a browser/tablet.
+        com.flagshipserver.app.ui.components.FSGhostButton(
+            label = "Add a browser or tablet",
+            onClick = { nav.navigate("add-control-device") },
+            block = true,
+            modifier = Modifier.semantics { contentDescription = "trusted-devices-add-control" },
         )
         Spacer(Modifier.height(FS.space.s2))
         when (state) {
@@ -469,7 +480,7 @@ private fun PendingRePairBanner(
  *  (mirrors the webapp's formatCompletesAt). Kept top-level so a test can
  *  assert the exact shape without Compose scaffolding. */
 internal fun formatCompletesAt(ms: Long): String =
-    SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault()).format(Date(ms))
+    FlagshipDateFormat.format(ms, includeTime = true)
 
 @Composable
 private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
@@ -544,7 +555,7 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
  *  scaffolding. */
 internal fun quarantineToast(device: TrustedDevice): String {
     val until = device.quarantineUntil ?: return "This device is in quarantine. Use another device."
-    val when_ = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(until))
+    val when_ = FlagshipDateFormat.format(until)
     return "Quarantined until $when_. Use another device."
 }
 
@@ -562,14 +573,4 @@ private fun platformDisplay(raw: String): String = when (raw) {
     else      -> raw
 }
 
-private fun relative(ms: Long): String {
-    val now = System.currentTimeMillis()
-    val deltaSec = (now - ms) / 1000
-    return when {
-        deltaSec < 60       -> "just now"
-        deltaSec < 3600     -> "${deltaSec / 60}m ago"
-        deltaSec < 86_400   -> "${deltaSec / 3600}h ago"
-        deltaSec < 604_800  -> "${deltaSec / 86_400}d ago"
-        else                -> SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(ms))
-    }
-}
+private fun relative(ms: Long): String = FlagshipDateFormat.format(ms)
