@@ -3,11 +3,14 @@ import {
   ed,
   signAdminRootTransfer,
   signDeviceEndpointClaim,
+  signRehomeAuthorization,
+  verifyRehomeAuthorization,
   signServerTransferOffer,
   signServerTransferClaim,
   type AdminRootTransfer,
   type DeviceEndpointClaim,
   type Keypair,
+  type RehomeAuthorization,
   type ServerTransferOffer,
   type ServerTransferClaim,
 } from "@flagship/protocol";
@@ -18,6 +21,7 @@ import {
   handleGetTransferClaim,
   handleGetTransferRehome,
   handlePostTransferAdminHandoff,
+  handlePostTransferRehomeAuth,
   type ServerTransferDeps,
 } from "../src/serverTransfer.js";
 
@@ -656,3 +660,164 @@ describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ── v1-sec GAP 3: the LEGACY (no-admin-root) giver-owner-IRK re-home auth ────
+//
+// A box with NO pinned admin master root re-homes ONLY on a giver-owner-IRK
+// `flagship/server-rehome-auth/v1` proof it verifies against its pinned owner
+// IRK. The giver's phone deposits it post-claim; `.com` verifies against the
+// giver account's registered IRK (garbage filter) + relays it on the rehome
+// read. The deposit's SIGNATURE is the authorization — no mailbox-auth.
+
+const NEW_HOST = "home.bob.flagship.services";
+
+/** Build the giver-owner-IRK re-home-auth deposit body for the claimed transfer
+ *  (HOST → NEW_HOST, re-bound to bob's IRK). `sign` overrides the signer to
+ *  forge a non-owner signature; `acquirerIrkPub`/`newServerDomain` override the
+ *  signed canonical to prove `.com`'s reconstruction is authoritative. */
+function rehomeAuthBody(opts?: {
+  sign?: Keypair;
+  acquirerIrkPub?: Uint8Array;
+  newServerDomain?: string;
+  oldServerDomain?: string;
+  issuedAt?: number;
+}) {
+  const issuedAt = opts?.issuedAt ?? NOW;
+  const authorization: RehomeAuthorization = {
+    oldServerDomain: opts?.oldServerDomain ?? HOST,
+    newServerDomain: opts?.newServerDomain ?? NEW_HOST,
+    acquirerIrkPub: opts?.acquirerIrkPub ?? bobIrk.publicKey,
+    issuedAt,
+  };
+  const sig = signRehomeAuthorization(authorization, opts?.sign ?? aliceIrk);
+  return { issuedAt, signatureHex: hex(sig) };
+}
+
+/** Complete a LEGACY offer → claim (both parties IRK-signed, no admin roots);
+ *  returns the nonce. */
+async function claimLegacy(s: InMemoryStorage): Promise<string> {
+  const nonce = hex(rand(32));
+  expect((await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }))).status).toBe(
+    200,
+  );
+  expect(
+    (await handlePostTransferClaim(deps(s), HOST, claimBody(bobIrk, "bob", nonce))).status,
+  ).toBe(200);
+  return nonce;
+}
+
+describe("transfer-a-box legacy re-home authorization (v1-sec GAP 3)", () => {
+  it("happy path: giver-IRK proof accepted; relayed verbatim on rehome; box verifies it", async () => {
+    const s = await setup();
+    await claimLegacy(s);
+
+    // Before the deposit: rehome carries no rehomeAuth (a fail-closed box keeps
+    // polling until it appears).
+    const before = await handleGetTransferRehome(deps(s), HOST);
+    expect((before.body as { rehomeAuth?: unknown }).rehomeAuth).toBeUndefined();
+
+    const dep = await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody());
+    expect(dep.status).toBe(200);
+
+    const after = await handleGetTransferRehome(deps(s), HOST);
+    const body = after.body as {
+      newServerDomain: string;
+      acquirerIrkPub: string;
+      rehomeAuth: { issuedAt: number; signatureHex: string };
+    };
+    expect(body.rehomeAuth.issuedAt).toBe(NOW);
+    expect(body.rehomeAuth.signatureHex).toHaveLength(128);
+
+    // The box's independent verify (reuse the protocol verify): reconstruct the
+    // canonical from the relayed fields + our OLD canonical, and check it
+    // against the giver's pinned owner IRK (== alice's).
+    expect(body.newServerDomain).toBe(NEW_HOST);
+    const authorization: RehomeAuthorization = {
+      oldServerDomain: HOST,
+      newServerDomain: body.newServerDomain,
+      acquirerIrkPub: bobIrk.publicKey,
+      issuedAt: body.rehomeAuth.issuedAt,
+    };
+    expect(
+      verifyRehomeAuthorization(
+        authorization,
+        HexUtilDecode(body.rehomeAuth.signatureHex),
+        aliceIrk.publicKey,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a proof signed by a non-owner key (403 — the sig IS the auth)", async () => {
+    const s = await setup();
+    await claimLegacy(s);
+    // Signed by bob (the acquirer), not the giver alice — `.com` refuses.
+    const res = await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody({ sign: bobIrk }));
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/invalid rehome-auth signature/);
+  });
+
+  it("rejects a proof whose signed newServerDomain / acquirerIrk doesn't match the row (403)", async () => {
+    const s = await setup();
+    await claimLegacy(s);
+    // `.com` reconstructs the canonical from the CLAIMED row, so a proof signed
+    // over a different new domain or acquirer key can't verify — the box would
+    // reject it too. (The reconstruction is authoritative; the deposit body only
+    // carries issuedAt + sig.)
+    const wrongDomain = await handlePostTransferRehomeAuth(
+      deps(s),
+      HOST,
+      rehomeAuthBody({ newServerDomain: "home.carol.flagship.services" }),
+    );
+    expect(wrongDomain.status).toBe(403);
+    const wrongAcq = await handlePostTransferRehomeAuth(
+      deps(s),
+      HOST,
+      rehomeAuthBody({ acquirerIrkPub: makeKey().publicKey }),
+    );
+    expect(wrongAcq.status).toBe(403);
+  });
+
+  it("404s a proof for an unclaimed / absent transfer", async () => {
+    const s = await setup();
+    // No offer at all.
+    expect((await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody())).status).toBe(404);
+    // Offer but no claim.
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce: hex(rand(32)) }));
+    expect((await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody())).status).toBe(404);
+  });
+
+  it("malformed body ⇒ 400 (missing issuedAt / bad sig hex)", async () => {
+    const s = await setup();
+    await claimLegacy(s);
+    expect(
+      (await handlePostTransferRehomeAuth(deps(s), HOST, { signatureHex: "aa".repeat(64) })).status,
+    ).toBe(400);
+    expect(
+      (await handlePostTransferRehomeAuth(deps(s), HOST, { issuedAt: NOW, signatureHex: "zz" }))
+        .status,
+    ).toBe(400);
+  });
+
+  it("idempotent re-deposit replaces (giver phone may retry)", async () => {
+    const s = await setup();
+    await claimLegacy(s);
+    expect(
+      (await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody({ issuedAt: NOW })))
+        .status,
+    ).toBe(200);
+    expect(
+      (await handlePostTransferRehomeAuth(deps(s), HOST, rehomeAuthBody({ issuedAt: NOW + 1000 })))
+        .status,
+    ).toBe(200);
+    const rehome = await handleGetTransferRehome(deps(s), HOST);
+    expect((rehome.body as { rehomeAuth: { issuedAt: number } }).rehomeAuth.issuedAt).toBe(
+      NOW + 1000,
+    );
+  });
+});
+
+function HexUtilDecode(h: string): Uint8Array {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}

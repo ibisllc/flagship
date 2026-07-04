@@ -312,8 +312,10 @@ describe("§9.8 — view wiring (source pins)", () => {
     // A failed deposit is a RETRYABLE warning, not a transfer failure.
     expect(src).toContain("TRANSFER_ADMIN_HANDOFF_WARNING");
     expect(src).toContain('if (res.status === "failed")');
-    // No admin root ⇒ the watch never starts (silent skip).
-    expect(src).toContain("if (session.adminRootSeed)");
+    // The watch now runs for BOTH tiers, branching on the session admin root:
+    // admin-tier ⇒ runGiverAdminHandoff; LEGACY (v1-sec GAP 3) ⇒ depositRehomeAuth.
+    expect(src).toContain("session.adminRootSeed");
+    expect(src).toContain("depositRehomeAuth");
     expect(src).toContain("hand-off before re-homing");
   });
 

@@ -10,6 +10,7 @@ import com.flagshipserver.app.api.MockServerTransferClient
 import com.flagshipserver.app.core.AdminRootTransfer
 import com.flagshipserver.app.core.AdminRootTransferClaim
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.RehomeAuthorizationOrder
 import com.flagshipserver.app.core.SecretSeal
 import com.flagshipserver.app.core.ServerTransferClaimOrder
 import com.flagshipserver.app.core.ServerTransferFlow
@@ -22,6 +23,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class TransferViewModelTest {
@@ -81,8 +83,52 @@ class TransferViewModelTest {
         // The deposited blob opens with the ACQUIRER IRK seed and yields the disk key.
         val opened = ServerTransferFlow.openDiskKey(client.diskKeyDeposits[0].second.sealedDiskKey, acquirer.privateKey)
         assertArrayEquals(diskKey, opened)
-        // No admin root on the giver device ⇒ no hand-off deposit (silent skip).
+        // No admin root on the giver device ⇒ NO §9.8 admin hand-off, but the
+        // LEGACY re-home authorization (v1-sec GAP 3) IS deposited so the box
+        // (pinning the giver owner IRK) will re-home.
         assertEquals(0, client.adminHandoffDeposits.size)
+        assertEquals(1, client.rehomeAuthDeposits.size)
+    }
+
+    // ── v1-sec GAP 3: legacy giver deposits a box-verifiable re-home auth ────
+
+    @Test
+    fun giverLegacyDepositsBoxVerifiableRehomeAuth() = runTest {
+        val client = MockServerTransferClient().apply {
+            scriptedPoll = com.flagshipserver.app.api.TransferClaimPoll(
+                newServerDomain = "home.bob.flagship.services",
+                acquirerUsername = "bob",
+                acquirerIrkPub = HexUtil.encode(acquirer.publicKey),
+            )
+        }
+        val vm = TransferGiverViewModel(
+            serverDomain = host, username = "alice", client = client,
+            mailbox = MockSecretMailboxClient(),
+            signer = signer(giver), irkPubHex = pub(giver), orderSigner = { null },
+            irkSeed = { giver.privateKey }, now = { 1700 },
+        )
+        vm.start()
+        val done = vm.pollOnce()
+        assertTrue(done)
+        assertEquals(TransferGiverPhase.Completed("home.bob.flagship.services"), vm.phase.value)
+        assertEquals(0, client.adminHandoffDeposits.size)
+        assertEquals(1, client.rehomeAuthDeposits.size)
+        val (domain, body) = client.rehomeAuthDeposits[0]
+        assertEquals(host, domain)
+        assertEquals(1700L, body.issuedAt)
+        // The box re-verifies the SAME canonical against its pinned owner IRK
+        // (== the giver's) — the giver produced a box-verifiable signature.
+        val canonical = RehomeAuthorizationOrder.canonicalBytes(
+            host, "home.bob.flagship.services", HexUtil.encode(acquirer.publicKey), 1700L,
+        )
+        Ed25519Verify(giver.publicKey).verify(HexUtil.decode(body.signatureHex)!!, canonical)
+        // A box pinning the wrong owner IRK must NOT accept it.
+        try {
+            Ed25519Verify(acquirer.publicKey).verify(HexUtil.decode(body.signatureHex)!!, canonical)
+            fail("must not verify under a non-giver key")
+        } catch (_: Throwable) {
+            // expected
+        }
     }
 
     // ── §9.8: the giver hands the acquirer's admin root to the box ───────────

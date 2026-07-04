@@ -73,9 +73,50 @@ final class TransferViewModelTests: XCTestCase {
         let sealedHex = client.diskKeyDeposits[0].body.sealedDiskKey
         let opened = try! ServerTransferFlow.openDiskKey(sealedHex: sealedHex, acquirerIrk: acquirer)
         XCTAssertEqual(opened, diskKey)
-        // No admin root on the giver device ⇒ legacy account, box has no pinned
-        // anchor — the §9.8 hand-off is skipped silently.
+        // No admin root on the giver device ⇒ legacy account: NO §9.8 admin
+        // hand-off, but the LEGACY re-home authorization (v1-sec GAP 3) IS
+        // deposited so the box (pinning the giver owner IRK) will re-home.
         XCTAssertEqual(client.adminHandoffs.count, 0)
+        XCTAssertEqual(client.rehomeAuths.count, 1)
+    }
+
+    /// v1-sec GAP 3 — a legacy giver (no admin root) deposits a re-home
+    /// authorization the box verifies against its PINNED owner IRK before
+    /// re-homing. The Face ID that derived the IRK EMITS the signature.
+    func testGiverLegacyPostsBoxVerifiableRehomeAuth() async {
+        let giver = key(11)
+        let acquirer = key(22)
+        let client = MockServerTransferClient()
+        client.scriptedPoll = TransferClaimPoll(
+            newServerDomain: "home.bob.flagship.services",
+            acquirerUsername: "bob",
+            acquirerIrkPub: HexUtil.encode(acquirer.publicKey.rawRepresentation)
+        )
+        let vm = TransferGiverViewModel(
+            client: client, mailbox: MockSecretMailboxClient(), serverDomain: host,
+            username: "alice", signer: { _ in giver }, now: { 1700 }, hasAdminRoot: { false }
+        )
+        await vm.start()
+        let done = await vm.pollOnce()
+
+        XCTAssertTrue(done)
+        XCTAssertEqual(vm.phase, .completed(newServerDomain: "home.bob.flagship.services"))
+        XCTAssertEqual(client.adminHandoffs.count, 0)
+        XCTAssertEqual(client.rehomeAuths.count, 1)
+        // Deposited against the box's OLD canonical; issuedAt from `now`.
+        XCTAssertEqual(client.rehomeAuths[0].serverDomain, host)
+        let body = client.rehomeAuths[0].body
+        XCTAssertEqual(body.issuedAt, 1700)
+        // The box re-verifies the SAME canonical (old + new domain + acquirer IRK)
+        // against its pinned owner IRK (== the giver's).
+        let order = RehomeAuthorizationOrder(
+            oldServerDomain: host,
+            newServerDomain: "home.bob.flagship.services",
+            acquirerIrkPubHex: HexUtil.encode(acquirer.publicKey.rawRepresentation),
+            issuedAt: 1700
+        )
+        let sig = HexUtil.decode(body.signatureHex)!
+        XCTAssertTrue(order.verify(signature: sig, giverIrkPub: giver.publicKey.rawRepresentation))
     }
 
     /// §9.8 — a giver holding the admin master root deposits a hand-off proof

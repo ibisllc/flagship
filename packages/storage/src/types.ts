@@ -1149,6 +1149,15 @@ export interface ServerTransferRecord {
   diskKeyHandoffHex: string | null;
   /** When the giver deposited the re-sealed disk key (ms), or null. */
   diskKeyHandoffAt: number | null;
+  /** v1-sec GAP 3 — the GIVER-owner-IRK-signed `flagship/server-rehome-auth/v1`
+   *  re-home authorization (the LEGACY, no-admin-root path). `issuedAt` from the
+   *  signed `RehomeAuthorization`; the signature covers (oldServerDomain,
+   *  newServerDomain, acquirerIrkPub, issuedAt) — all reconstructible from this
+   *  row. Deposited by the giver's phone post-claim; a box with no pinned admin
+   *  root re-verifies it against its pinned owner IRK before re-homing (`.com`
+   *  relays but cannot forge). Null until deposited. */
+  rehomeAuthIssuedAt: number | null;
+  rehomeAuthSigHex: string | null;
 }
 
 export interface ServerTransferStorage {
@@ -1201,6 +1210,13 @@ export interface ServerTransferStorage {
     serverDomain: string,
     diskKeyHandoffHex: string,
     now: number,
+  ): Promise<boolean>;
+  /** v1-sec GAP 3 — the giver's phone deposits the giver-owner-IRK-signed
+   *  re-home authorization on the CLAIMED transfer row. Idempotent — a
+   *  re-deposit replaces. No-op (false) if there is no claimed row for the box. */
+  putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
   ): Promise<boolean>;
   /** Delete the offer row for a box (cleanup after a completed transfer). */
   remove(serverDomain: string): Promise<void>;

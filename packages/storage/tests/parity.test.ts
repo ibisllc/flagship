@@ -1162,6 +1162,8 @@ describe("D1 ↔ InMemory parity", () => {
       adminHandoffNewRootHex: null,
       adminHandoffIssuedAt: null,
       adminHandoffSigHex: null,
+      rehomeAuthIssuedAt: null,
+      rehomeAuthSigHex: null,
     });
 
     it("offer → claim → record carries acquirer binding; second claim rejected", async () => {
@@ -1268,6 +1270,45 @@ describe("D1 ↔ InMemory parity", () => {
         newRoot: "",
         issuedAt: 8,
         sig: "4d".repeat(64),
+      });
+    });
+
+    it("putRehomeAuth sets the legacy proof on a claimed row; refuses unclaimed; re-deposit replaces (v1-sec GAP 3)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("77".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 7,
+          sigHex: "5e".repeat(64),
+        });
+        await s.serverTransfers.claim(
+          dom, "77".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 7,
+          sigHex: "5E".repeat(64), // stored lowercased
+        });
+        // Idempotent re-deposit REPLACES.
+        const redeposit = await s.serverTransfers.putRehomeAuth(dom, {
+          issuedAt: 8,
+          sigHex: "6f".repeat(64),
+        });
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          redeposit,
+          issuedAt: row?.rehomeAuthIssuedAt,
+          sig: row?.rehomeAuthSigHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        redeposit: true,
+        issuedAt: 8,
+        sig: "6f".repeat(64),
       });
     });
 

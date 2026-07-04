@@ -40,6 +40,7 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // organic allocations.
   "0080",
   "0081",
+  "0082",
 ];
 
 export interface SchemaStatusDeps {

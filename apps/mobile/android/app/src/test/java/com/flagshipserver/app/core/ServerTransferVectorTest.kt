@@ -105,6 +105,37 @@ class ServerTransferVectorTest {
         )
     }
 
+    // v1-sec GAP 3 — the LEGACY re-home authorization. `.com` reconstructs it
+    // from the claimed row and the box re-verifies against its pinned owner IRK.
+
+    @Test
+    fun rehomeAuthorizationCanonicalBytes() {
+        val acq = "cd".repeat(32)
+        assertEquals(
+            "flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|$acq|1800",
+            String(
+                RehomeAuthorizationOrder.canonicalBytes(
+                    "home.alice.flagship.services", "home.bob.flagship.services", acq, 1800L,
+                ),
+                Charsets.UTF_8,
+            ),
+        )
+    }
+
+    @Test
+    fun rehomeAuthorizationLowercasesDomains() {
+        val acq = "cd".repeat(32)
+        assertEquals(
+            "flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|$acq|5",
+            String(
+                RehomeAuthorizationOrder.canonicalBytes(
+                    "HOME.ALICE.flagship.services", "HOME.BOB.flagship.services", "CD".repeat(32), 5L,
+                ),
+                Charsets.UTF_8,
+            ),
+        )
+    }
+
     @Test
     fun signVerifyRoundTrip() {
         val kp = Ed25519Sign.KeyPair.newKeyPair()

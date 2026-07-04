@@ -90,6 +90,30 @@ final class ServerTransferFlowTests: XCTestCase {
         XCTAssertTrue(h.verify(signature: sig, giverAdminRootPub: giverRoot.publicKey.rawRepresentation))
     }
 
+    func testBuildRehomeAuthProducesBoxVerifiableSignature() throws {
+        // The LEGACY (no-admin-root) giver produces the re-home authorization the
+        // box checks against its PINNED owner IRK (v1-sec GAP 3). The box builds
+        // the SAME canonical from the fields it already holds and re-verifies.
+        let giverIrk = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 21, count: 32))
+        let acquirerIrkHex = String(repeating: "cd", count: 32)
+        let newDomain = "home.bob.flagship.services"
+        let body = try ServerTransferFlow.buildRehomeAuth(
+            oldServerDomain: host, newServerDomain: newDomain,
+            acquirerIrkPubHex: acquirerIrkHex, giverIrk: giverIrk, issuedAt: 1900
+        )
+        XCTAssertEqual(body.issuedAt, 1900)
+        // The box's independent re-verify against its pinned owner IRK.
+        let order = RehomeAuthorizationOrder(
+            oldServerDomain: host, newServerDomain: newDomain,
+            acquirerIrkPubHex: acquirerIrkHex, issuedAt: 1900
+        )
+        let sig = HexUtil.decode(body.signatureHex)!
+        XCTAssertTrue(order.verify(signature: sig, giverIrkPub: giverIrk.publicKey.rawRepresentation))
+        // A box that pins the wrong owner IRK must NOT accept it.
+        let wrong = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 22, count: 32))
+        XCTAssertFalse(order.verify(signature: sig, giverIrkPub: wrong.publicKey.rawRepresentation))
+    }
+
     func testBuildClaimRejectsExpiredOffer() {
         let qr = ServerTransferFlow.OfferQR(
             serverDomain: host, transferNonce: String(repeating: "cd", count: 32),

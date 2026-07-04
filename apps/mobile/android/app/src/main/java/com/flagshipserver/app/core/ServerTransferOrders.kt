@@ -58,3 +58,34 @@ object ServerTransferClaimOrder {
             issuedAt.toString(),
         ).joinToString("|").toByteArray(Charsets.UTF_8)
 }
+
+// v1-sec GAP 3 — the LEGACY (no-admin-root) re-home authorization. Kotlin mirror
+// of the spine's `flagship/server-rehome-auth/v1` envelope + the Swift
+// `RehomeAuthorizationOrder`. A box with NO pinned admin master root re-homes
+// ONLY on this proof, signed by the GIVER's owner IRK (the box's pinned owner
+// IRK until it re-homes), naming the acquirer explicitly. The box verifies it
+// against its pin before writing the re-home marker; `.com` relays but cannot
+// forge it.
+//
+// Canonical bytes (byte-identical to TS + the Swift mirror):
+//
+//   flagship/server-rehome-auth/v1|<oldServerDomain>|<newServerDomain>|<acquirerIrkPubHex>|<issuedAt>
+//
+// The domains + pub hex are lowercased into the canonical bytes.
+object RehomeAuthorizationOrder {
+    const val CANONICAL_TAG = "flagship/server-rehome-auth/v1"
+
+    fun canonicalBytes(
+        oldServerDomain: String,
+        newServerDomain: String,
+        acquirerIrkPubHex: String,
+        issuedAt: Long,
+    ): ByteArray =
+        listOf(
+            CANONICAL_TAG,
+            oldServerDomain.lowercase(),
+            newServerDomain.lowercase(),
+            acquirerIrkPubHex.lowercase(),
+            issuedAt.toString(),
+        ).joinToString("|").toByteArray(Charsets.UTF_8)
+}

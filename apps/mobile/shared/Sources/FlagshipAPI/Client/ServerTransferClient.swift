@@ -39,6 +39,12 @@ public protocol ServerTransferClient: Sendable {
     /// anchor before re-pinning to the acquirer's root. Domain in the path is
     /// the box's OLD canonical.
     func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws
+
+    /// GIVER: deposit the LEGACY (no-admin-root) re-home authorization
+    /// (v1-sec GAP 3) — signed by the giver's owner IRK so a box with no pinned
+    /// admin root can verify it against its pinned owner IRK before re-homing.
+    /// Domain in the path is the box's OLD canonical.
+    func postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody) async throws
 }
 
 // MARK: - Wire types
@@ -168,6 +174,19 @@ public struct TransferAdminHandoffBody: Encodable, Equatable, Sendable {
     }
 }
 
+/// `{ issuedAt, signatureHex }` — the legacy re-home authorization deposit
+/// (v1-sec GAP 3). `signatureHex` is the GIVER owner IRK's Ed25519 signature
+/// over the `flagship/server-rehome-auth/v1` canonical bytes. `.com`
+/// reconstructs the signed (old/new domain, acquirer IRK) fields from the
+/// claimed row — the body carries only `issuedAt` + the signature.
+public struct TransferRehomeAuthBody: Encodable, Equatable, Sendable {
+    public let issuedAt: Int64
+    public let signatureHex: String
+    public init(issuedAt: Int64, signatureHex: String) {
+        self.issuedAt = issuedAt; self.signatureHex = signatureHex
+    }
+}
+
 // MARK: - Live
 
 public final class LiveServerTransferClient: ServerTransferClient, @unchecked Sendable {
@@ -203,6 +222,10 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
 
     public func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws {
         _ = try await rawPost(serverDomain, "transfer/admin-handoff", body: try JSONEncoder().encode(body))
+    }
+
+    public func postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody) async throws {
+        _ = try await rawPost(serverDomain, "transfer/rehome-auth", body: try JSONEncoder().encode(body))
     }
 
     private func urlFor(_ serverDomain: String, _ suffix: String) throws -> URL {
@@ -247,10 +270,13 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
     public private(set) var claims: [(serverDomain: String, body: TransferClaimBody)] = []
     public private(set) var diskKeyDeposits: [(serverDomain: String, body: TransferDiskKeyBody)] = []
     public private(set) var adminHandoffs: [(serverDomain: String, body: TransferAdminHandoffBody)] = []
+    public private(set) var rehomeAuths: [(serverDomain: String, body: TransferRehomeAuthBody)] = []
     /// Scripted poll result (nil ⇒ "not yet claimed").
     public var scriptedPoll: TransferClaimPoll?
     /// Scripted admin-handoff deposit failure.
     public var adminHandoffError: Error?
+    /// Scripted rehome-auth deposit failure.
+    public var rehomeAuthError: Error?
     /// Scripted acquirer disk-key (nil ⇒ "not yet deposited").
     public var scriptedDiskKey: TransferDiskKey?
     public var claimResult: TransferClaimResult?
@@ -281,5 +307,9 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
     public func postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) async throws {
         if let e = adminHandoffError { throw e }
         adminHandoffs.append((serverDomain, body))
+    }
+    public func postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody) async throws {
+        if let e = rehomeAuthError { throw e }
+        rehomeAuths.append((serverDomain, body))
     }
 }

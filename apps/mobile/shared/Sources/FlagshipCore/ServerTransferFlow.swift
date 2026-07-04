@@ -335,6 +335,33 @@ public enum ServerTransferFlow {
         )
     }
 
+    // MARK: - GIVER: legacy re-home authorization (v1-sec GAP 3)
+
+    /// Build + sign the `flagship/server-rehome-auth/v1` re-home authorization
+    /// with the GIVER's owner IRK (the box's pinned owner IRK until it re-homes).
+    /// A box with NO pinned admin master root verifies this against its pin
+    /// before writing the re-home marker — never on `.com`'s unsigned word. The
+    /// deposit body carries only `issuedAt` + the signature; `.com` reconstructs
+    /// the signed (old/new domain, acquirer IRK) fields from the claimed row.
+    /// `oldServerDomain` is the box's OLD canonical; `newServerDomain` +
+    /// `acquirerIrkPubHex` come from the giver's claim poll.
+    public static func buildRehomeAuth(
+        oldServerDomain: String,
+        newServerDomain: String,
+        acquirerIrkPubHex: String,
+        giverIrk: Curve25519.Signing.PrivateKey,
+        issuedAt: Int64
+    ) throws -> TransferRehomeAuthBody {
+        let order = RehomeAuthorizationOrder(
+            oldServerDomain: oldServerDomain,
+            newServerDomain: newServerDomain,
+            acquirerIrkPubHex: acquirerIrkPubHex,
+            issuedAt: issuedAt
+        )
+        let sig = try order.sign(withGiverIrk: giverIrk)
+        return TransferRehomeAuthBody(issuedAt: issuedAt, signatureHex: HexUtil.encode(sig))
+    }
+
     /// GIVER: open the box's install-time disk key (sealed FOR the giver IRK)
     /// with the giver IRK seed — the first half of the re-seal step.
     public static func openGiverDiskKey(sealedHex: String, giverIrk: Curve25519.Signing.PrivateKey) throws -> Data {

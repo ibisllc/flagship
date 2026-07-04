@@ -84,6 +84,7 @@ import {
   handlePostTransferClaim,
   handleGetTransferClaim,
   handleGetTransferRehome,
+  handlePostTransferRehomeAuth,
   handlePostTransferDiskKey,
   handleGetTransferDiskKey,
   handlePostTransferAdminHandoff,
@@ -611,6 +612,10 @@ const ROUTE_RE = {
   // Slice D §9.8 — the giver deposits the admin-root handoff proof (the
   // giver-admin-root SIGNATURE is the auth; the box re-verifies vs its pin).
   TRANSFER_ADMIN_HANDOFF: /^\/api\/server\/([^/]+)\/transfer\/admin-handoff$/,
+  // v1-sec GAP 3 — the LEGACY (no-admin-root) sibling: the giver deposits the
+  // giver-owner-IRK-signed re-home authorization (the SIGNATURE is the auth; a
+  // box with no pinned admin root re-verifies it vs its pinned owner IRK).
+  TRANSFER_REHOME_AUTH: /^\/api\/server\/([^/]+)\/transfer\/rehome-auth$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1886,6 +1891,26 @@ export async function tryControlPlane(
     if (method === "POST" && (m = path.match(ROUTE_RE.TRANSFER_ADMIN_HANDOFF))) {
       return finishPlain(
         await handlePostTransferAdminHandoff(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    // v1-sec GAP 3 — the giver deposits the LEGACY owner-IRK re-home
+    // authorization. No mailbox-auth: the giver-owner-IRK signature IS the
+    // authorization (the handler verifies it against the giver account's
+    // registered owner IRK as a garbage filter; the box re-verifies against its
+    // PINNED owner IRK). No DNS deps — a content-blind proof store on the row.
+    if (method === "POST" && (m = path.match(ROUTE_RE.TRANSFER_REHOME_AUTH))) {
+      return finishPlain(
+        await handlePostTransferRehomeAuth(
           {
             servers: storage.servers,
             usernames: storage.usernames,

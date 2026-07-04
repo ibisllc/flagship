@@ -1832,6 +1832,8 @@ interface ServerTransferRow {
   admin_handoff_new_root_hex: string | null;
   admin_handoff_issued_at: number | null;
   admin_handoff_sig_hex: string | null;
+  rehome_auth_issued_at: number | null;
+  rehome_auth_sig_hex: string | null;
 }
 
 function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
@@ -1855,6 +1857,8 @@ function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
     adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
     adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
     adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
+    rehomeAuthIssuedAt: r.rehome_auth_issued_at ?? null,
+    rehomeAuthSigHex: r.rehome_auth_sig_hex ?? null,
   };
 }
 
@@ -1981,6 +1985,8 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
         adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
         adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
+        rehomeAuthIssuedAt: r.rehome_auth_issued_at ?? null,
+        rehomeAuthSigHex: r.rehome_auth_sig_hex ?? null,
       },
     };
   }
@@ -2024,6 +2030,24 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         handoff.sigHex.toLowerCase(),
         serverDomain,
       )
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the legacy re-home authorization (the giver
+    // signs it for the acquirer IRK learned from the claim). Idempotent replace.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET rehome_auth_issued_at = ?1, rehome_auth_sig_hex = ?2
+         WHERE server_domain = ?3 AND claimed_at IS NOT NULL`,
+      )
+      .bind(auth.issuedAt, auth.sigHex.toLowerCase(), serverDomain)
       .run();
     const meta = (w as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined || meta.changes > 0;

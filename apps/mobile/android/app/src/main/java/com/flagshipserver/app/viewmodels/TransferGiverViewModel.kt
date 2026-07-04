@@ -142,14 +142,19 @@ class TransferGiverViewModel(
             )
             return true
         }
-        // §9.8 — hand the acquirer's admin root to the box. The box only trusts
-        // its PINNED anchor (the giver's admin root), so the GIVER signs the
-        // hand-off; the biometric gate EMITS that signature (consent-as-crypto).
-        // No admin root on this device ⇒ nothing pinned to hand off — skip.
-        try {
-            val nonce = transferNonce
-            val giverAdminRoot = if (nonce != null) orderSigner("Hand off admin of $serverDomain") else null
-            if (nonce != null && giverAdminRoot != null) {
+        // Authority hand-off. Two mutually-exclusive proofs, both EMITTED by the
+        // biometric gate (consent-as-crypto), each verified by the box against
+        // what IT already pins — never `.com`'s word:
+        //   • ADMIN-TIER (§9.8): the box pins the giver's admin master root ⇒ the
+        //     GIVER root signs the `AdminRootTransfer` hand-off.
+        //   • LEGACY (v1-sec GAP 3): the box pins the giver's OWNER IRK ⇒ the
+        //     giver IRK (`key`, already derived above) signs the
+        //     `RehomeAuthorization`. A box with no pinned admin root REFUSES to
+        //     re-home without it.
+        val nonce = transferNonce
+        val giverAdminRoot = if (nonce != null) orderSigner("Hand off admin of $serverDomain") else null
+        if (nonce != null && giverAdminRoot != null) {
+            try {
                 val oldPub = orderKeyPubHex() ?: error("admin root pub unavailable")
                 val handoff = ServerTransferFlow.buildAdminHandoff(
                     serverDomain = serverDomain,
@@ -162,14 +167,33 @@ class TransferGiverViewModel(
                     giverAdminRoot = giverAdminRoot,
                 )
                 client.postAdminHandoff(serverDomain, handoff)
+            } catch (e: Throwable) {
+                _phase.value = TransferGiverPhase.Failed(
+                    "Ownership moved, but the admin hand-off failed: ${e.message}. A box with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
+                )
+                return true
             }
-            _phase.value = TransferGiverPhase.Completed(poll.newServerDomain)
-            return true
-        } catch (e: Throwable) {
-            _phase.value = TransferGiverPhase.Failed(
-                "Ownership moved, but the admin hand-off failed: ${e.message}. A box with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
-            )
-            return true
+        } else {
+            val newDomain = poll.newServerDomain
+            if (newDomain != null) {
+                try {
+                    val rehomeAuth = ServerTransferFlow.buildRehomeAuth(
+                        oldServerDomain = serverDomain,
+                        newServerDomain = newDomain,
+                        acquirerIrkPubHex = acquirerIrk,
+                        giverIrk = key,
+                        issuedAt = now(),
+                    )
+                    client.postRehomeAuth(serverDomain, rehomeAuth)
+                } catch (e: Throwable) {
+                    _phase.value = TransferGiverPhase.Failed(
+                        "Ownership moved, but the re-home authorization failed: ${e.message}. The new owner's box will wait for this authorization before re-homing — retry from this device.",
+                    )
+                    return true
+                }
+            }
         }
+        _phase.value = TransferGiverPhase.Completed(poll.newServerDomain)
+        return true
     }
 }

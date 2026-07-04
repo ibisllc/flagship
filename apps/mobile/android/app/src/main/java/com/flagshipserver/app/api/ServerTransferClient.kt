@@ -41,6 +41,12 @@ interface ServerTransferClient {
      *  master root; the box verifies vs its pinned anchor). Domain in the path is
      *  the box's OLD canonical. */
     suspend fun postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody)
+
+    /** GIVER: deposit the LEGACY (no-admin-root) re-home authorization
+     *  (v1-sec GAP 3) — signed by the GIVER's owner IRK so a box with no pinned
+     *  admin root verifies it vs its pinned owner IRK before re-homing. Domain in
+     *  the path is the box's OLD canonical. */
+    suspend fun postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody)
 }
 
 // ── Wire types ──────────────────────────────────────────────────────────────
@@ -127,6 +133,17 @@ data class TransferAdminHandoffBody(
     val signatureHex: String,
 )
 
+/** The legacy re-home authorization deposit (v1-sec GAP 3). `signatureHex` is
+ *  the GIVER owner IRK's Ed25519 signature over the
+ *  `flagship/server-rehome-auth/v1` canonical bytes; `.com` reconstructs the
+ *  signed (old/new domain, acquirer IRK) fields from the claimed row, so the
+ *  body carries only `issuedAt` + the signature. */
+@Serializable
+data class TransferRehomeAuthBody(
+    val issuedAt: Long,
+    val signatureHex: String,
+)
+
 // ── Live ────────────────────────────────────────────────────────────────────
 
 class LiveServerTransferClient(
@@ -178,6 +195,13 @@ class LiveServerTransferClient(
         )
     }
 
+    override suspend fun postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody) {
+        transport.postJson(
+            urlFor(serverDomain, "transfer/rehome-auth"), body,
+            serializer = TransferRehomeAuthBody.serializer(), accept = setOf(200),
+        )
+    }
+
     /** POST the IRK mailbox-auth in the body; 404 ⇒ null (not-yet-claimed /
      *  not-yet-deposited), 200 ⇒ decode. */
     private suspend fun <R> postOptional(
@@ -208,10 +232,12 @@ class MockServerTransferClient : ServerTransferClient {
     val claims = mutableListOf<Pair<String, TransferClaimBody>>()
     val diskKeyDeposits = mutableListOf<Pair<String, TransferDiskKeyBody>>()
     val adminHandoffDeposits = mutableListOf<Pair<String, TransferAdminHandoffBody>>()
+    val rehomeAuthDeposits = mutableListOf<Pair<String, TransferRehomeAuthBody>>()
     var scriptedPoll: TransferClaimPoll? = null
     var scriptedDiskKey: TransferDiskKey? = null
     var claimResult: TransferClaimResult? = null
     var adminHandoffError: Throwable? = null
+    var rehomeAuthError: Throwable? = null
 
     override suspend fun postOffer(serverDomain: String, body: TransferOfferBody): TransferOfferResult {
         offers.add(serverDomain to body)
@@ -239,5 +265,10 @@ class MockServerTransferClient : ServerTransferClient {
     override suspend fun postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) {
         adminHandoffError?.let { throw it }
         adminHandoffDeposits.add(serverDomain to body)
+    }
+
+    override suspend fun postRehomeAuth(serverDomain: String, body: TransferRehomeAuthBody) {
+        rehomeAuthError?.let { throw it }
+        rehomeAuthDeposits.add(serverDomain to body)
     }
 }

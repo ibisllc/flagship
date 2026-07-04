@@ -1130,6 +1130,17 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
     return true;
   }
 
+  async putRehomeAuth(
+    serverDomain: string,
+    auth: { issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.rehomeAuthIssuedAt = auth.issuedAt;
+    r.rehomeAuthSigHex = auth.sigHex.toLowerCase();
+    return true;
+  }
+
   async remove(serverDomain: string): Promise<void> {
     this.rows.delete(serverDomain);
   }
