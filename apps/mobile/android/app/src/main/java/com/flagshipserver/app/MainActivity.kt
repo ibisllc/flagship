@@ -166,6 +166,13 @@ class MainActivity : FragmentActivity() {
         }
 
         val devSettings = DeveloperSettings.create(applicationContext)
+        // GYM: a smoke-mode launch is NO-BACKEND by contract — force the MOCK
+        // client (in-memory only) so the shell renders from MockScreensClient
+        // and the live maintainer-trust check never runs (it would clobber the
+        // seeded untrusted verdict). Debug-gated with the smoke seam above.
+        if (isDebuggable && smokeInitialTab != null) {
+            devSettings.forceMockForSmokeRun()
+        }
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         val okHttp = buildOkHttp()
