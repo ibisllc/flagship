@@ -1,4 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { verifyAdminRootTransfer, type AdminRootTransfer } from "@flagship/protocol";
 
 /**
  * Box-side re-home consumer for transfer-a-box
@@ -34,10 +36,74 @@ import { readFile, writeFile } from "node:fs/promises";
  * pointing the box at an attacker IRK still can't produce an entitlement signed
  * by the real acquirer. The marker is idempotent: once the box's live FQDN
  * already equals the marker's target there is nothing more to do.
+ *
+ * ADMIN AUTHORITY (Slice D §9.8 — docs/device-admin-tier-spec.md): the same
+ * "never `.com`'s word" posture holds for the box's pinned ADMIN MASTER ROOT
+ * (`cfg.adminRootPub`), and the proof is even stronger than the IRK story
+ * above — the anchor re-pins ONLY on a giver-root-SIGNED
+ * `flagship/admin-root-transfer/v1` proof this consumer verifies LOCALLY
+ * against the root the box already pins (old giver root → new acquirer root,
+ * bound to this box's OLD canonical + the offer's nonce). `.com` relays the
+ * proof but cannot forge it (it holds no admin master root). A box WITH a
+ * pinned admin root therefore REFUSES to write the re-home marker until a
+ * valid proof arrives (`awaiting-admin-handoff` — the poller keeps polling so
+ * a late giver deposit is picked up); a legacy box with no admin root re-homes
+ * exactly as before, byte-identical marker included.
  */
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const FQDN = /^[a-z0-9.-]{1,255}$/;
+
+function hexToBytesLocal(hex: string): Uint8Array {
+  const clean = hex.toLowerCase();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+interface ParsedAdminHandoff {
+  giverUsername: string;
+  acquirerUsername: string;
+  oldAdminRootPub: string;
+  newAdminRootPub: string;
+  transferNonce: string;
+  issuedAt: number;
+  signatureHex: string;
+}
+
+/** Shape-validate the relayed admin handoff (all hex lowercased). Null on any
+ *  malformation — the caller treats that as "no proof yet". */
+function parseAdminHandoff(h: unknown): ParsedAdminHandoff | null {
+  const HEX128 = /^[0-9a-f]{128}$/;
+  const o = h as Partial<ParsedAdminHandoff> | undefined;
+  if (
+    !o ||
+    typeof o.giverUsername !== "string" ||
+    typeof o.acquirerUsername !== "string" ||
+    typeof o.oldAdminRootPub !== "string" ||
+    !HEX64.test(o.oldAdminRootPub.toLowerCase()) ||
+    typeof o.newAdminRootPub !== "string" ||
+    (o.newAdminRootPub !== "" && !HEX64.test(o.newAdminRootPub.toLowerCase())) ||
+    typeof o.transferNonce !== "string" ||
+    !HEX64.test(o.transferNonce.toLowerCase()) ||
+    typeof o.issuedAt !== "number" ||
+    typeof o.signatureHex !== "string" ||
+    !HEX128.test(o.signatureHex.toLowerCase())
+  ) {
+    return null;
+  }
+  return {
+    giverUsername: o.giverUsername.toLowerCase(),
+    acquirerUsername: o.acquirerUsername.toLowerCase(),
+    oldAdminRootPub: o.oldAdminRootPub.toLowerCase(),
+    newAdminRootPub: o.newAdminRootPub.toLowerCase(),
+    transferNonce: o.transferNonce.toLowerCase(),
+    issuedAt: o.issuedAt,
+    signatureHex: o.signatureHex.toLowerCase(),
+  };
+}
 
 export interface RehomeMarker {
   /** The NEW canonical FQDN to serve under (`<server>.<acquirer>.<apex>`). */
@@ -50,6 +116,13 @@ export interface RehomeMarker {
   oldServerDomain: string;
   /** When the broker recorded the claim (ms). */
   claimedAt: number;
+  /**
+   * Slice D §9.8 — the acquirer's admin master root the box re-pins to, from
+   * the LOCALLY-VERIFIED giver-root-signed handoff proof. "" = UNPIN (the
+   * acquirer account has no admin root). ABSENT on a legacy re-home (the box
+   * had no pinned admin root ⇒ marker byte-identical to pre-§9.8).
+   */
+  newAdminRootPubHex?: string;
 }
 
 /** Read the persisted re-home marker, or null when absent/unparseable. */
@@ -72,12 +145,25 @@ export async function readRehomeMarker(markerPath: string): Promise<RehomeMarker
     ) {
       return null;
     }
+    // The admin field is optional (absent on a legacy re-home) but if present
+    // it must be well-formed — a corrupt admin field rejects the WHOLE marker
+    // (fail-closed: never apply a re-home whose authority half is garbage).
+    if (
+      m.newAdminRootPubHex !== undefined &&
+      (typeof m.newAdminRootPubHex !== "string" ||
+        (m.newAdminRootPubHex !== "" && !HEX64.test(m.newAdminRootPubHex.toLowerCase())))
+    ) {
+      return null;
+    }
     return {
       newServerDomain: m.newServerDomain.toLowerCase(),
       acquirerUsername: m.acquirerUsername.toLowerCase(),
       acquirerIrkPubHex: m.acquirerIrkPubHex.toLowerCase(),
       oldServerDomain: m.oldServerDomain.toLowerCase(),
       claimedAt: typeof m.claimedAt === "number" ? m.claimedAt : 0,
+      ...(m.newAdminRootPubHex !== undefined
+        ? { newAdminRootPubHex: m.newAdminRootPubHex.toLowerCase() }
+        : {}),
     };
   } catch {
     return null;
@@ -95,12 +181,24 @@ export interface CheckRehomeOptions {
   controlPlaneBaseUrl: string;
   /** Where the re-home marker is persisted. */
   markerPath: string;
+  /**
+   * Slice D §9.8 — the box's EFFECTIVE pinned admin master root (hex, after
+   * admin-root-pin resolution), or null/absent when the box has no admin root.
+   * When present, a re-home is REFUSED (`awaiting-admin-handoff`) until the
+   * response carries a giver-root-signed `AdminRootTransfer` that verifies
+   * against this pin — never `.com`'s word. Absent ⇒ legacy behavior,
+   * byte-identical marker.
+   */
+  pinnedAdminRootPubHex?: string | null;
   fetchImpl?: typeof fetch;
   onLog?: (m: string) => void;
 }
 
 export type RehomeOutcome =
-  | { rehomed: false; reason: "no-transfer" | "already-current" | "error" }
+  | {
+      rehomed: false;
+      reason: "no-transfer" | "already-current" | "awaiting-admin-handoff" | "error";
+    }
   | { rehomed: true; marker: RehomeMarker };
 
 /**
@@ -123,6 +221,16 @@ export async function checkAndRecordRehome(opts: CheckRehomeOptions): Promise<Re
     acquirerUsername?: string;
     acquirerIrkPub?: string;
     claimedAt?: number;
+    acquirerAdminRootPub?: string;
+    adminHandoff?: {
+      giverUsername?: string;
+      acquirerUsername?: string;
+      oldAdminRootPub?: string;
+      newAdminRootPub?: string;
+      transferNonce?: string;
+      issuedAt?: number;
+      signatureHex?: string;
+    };
   };
   try {
     const res = await fetchImpl(url, { method: "GET" });
@@ -156,12 +264,68 @@ export async function checkAndRecordRehome(opts: CheckRehomeOptions): Promise<Re
     return { rehomed: false, reason: "already-current" };
   }
 
+  // ── Slice D §9.8 — admin-root handoff gate ────────────────────────────
+  // A box with a pinned admin master root re-pins its AUTHORITY anchor only on
+  // a proof SIGNED BY THAT PINNED ROOT — the giver's `AdminRootTransfer`. Any
+  // absence/failure refuses the re-home (no marker) but keeps the poller alive
+  // so a late giver deposit is picked up on a later poll. The canonical is
+  // rebuilt with OUR old canonical as serverDomain, so a proof minted for a
+  // different box can never verify here (instance binding).
+  const pinned =
+    typeof opts.pinnedAdminRootPubHex === "string" && HEX64.test(opts.pinnedAdminRootPubHex.toLowerCase())
+      ? opts.pinnedAdminRootPubHex.toLowerCase()
+      : null;
+  let newAdminRootPubHex: string | undefined;
+  if (pinned) {
+    const h = parseAdminHandoff(body.adminHandoff);
+    if (!h) {
+      log(
+        `[rehome] transfer reported for ${opts.serverDomain} but no valid admin-root ` +
+          `handoff yet — REFUSING to re-home until the giver-root-signed proof arrives`,
+      );
+      return { rehomed: false, reason: "awaiting-admin-handoff" };
+    }
+    if (h.oldAdminRootPub !== pinned) {
+      log(
+        `[rehome] admin handoff's oldAdminRootPub (${h.oldAdminRootPub.slice(0, 12)}…) does not ` +
+          `match our pinned admin root (${pinned.slice(0, 12)}…); refusing`,
+      );
+      return { rehomed: false, reason: "awaiting-admin-handoff" };
+    }
+    if (h.acquirerUsername !== body.acquirerUsername.toLowerCase()) {
+      log("[rehome] admin handoff names a different acquirer than the transfer; refusing");
+      return { rehomed: false, reason: "awaiting-admin-handoff" };
+    }
+    const transfer: AdminRootTransfer = {
+      serverDomain: opts.serverDomain,
+      giverUsername: h.giverUsername,
+      acquirerUsername: h.acquirerUsername,
+      oldAdminRootPubHex: h.oldAdminRootPub,
+      newAdminRootPubHex: h.newAdminRootPub,
+      transferNonce: h.transferNonce,
+      issuedAt: h.issuedAt,
+    };
+    if (!verifyAdminRootTransfer(transfer, hexToBytesLocal(h.signatureHex), hexToBytesLocal(pinned))) {
+      log(
+        "[rehome] admin-root handoff signature does NOT verify against our pinned root " +
+          "(forged / wrong box / tampered); refusing to re-home",
+      );
+      return { rehomed: false, reason: "awaiting-admin-handoff" };
+    }
+    newAdminRootPubHex = h.newAdminRootPub;
+    log(
+      `[rehome] admin-root handoff VERIFIED against the pinned root: ` +
+        `${pinned.slice(0, 12)}… → ${newAdminRootPubHex === "" ? "(unpinned — acquirer has no admin root)" : `${newAdminRootPubHex.slice(0, 12)}…`}`,
+    );
+  }
+
   const marker: RehomeMarker = {
     newServerDomain: newDomain,
     acquirerUsername: body.acquirerUsername.toLowerCase(),
     acquirerIrkPubHex: body.acquirerIrkPub.toLowerCase(),
     oldServerDomain: opts.serverDomain.toLowerCase(),
     claimedAt: typeof body.claimedAt === "number" ? body.claimedAt : 0,
+    ...(newAdminRootPubHex !== undefined ? { newAdminRootPubHex } : {}),
   };
   try {
     await writeRehomeMarker(opts.markerPath, marker);
@@ -214,4 +378,114 @@ export function buildRehomePoller(opts: CheckRehomeOptions & { intervalMs?: numb
     },
     stop,
   };
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Boot-apply helpers (Slice D §9.8) — used by index.ts `main` when it applies
+ * the persisted marker at the TOP of boot.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+export type RehomeAdminOverride =
+  | { kind: "none" } //  legacy marker — leave cfg.adminRootPub + the pin file untouched
+  | { kind: "unpin" } // acquirer has no admin root — drop cfg.adminRootPub, remove the pin file
+  | { kind: "repin"; adminRootPubHex: string };
+
+/** PURE — what the marker says the box's admin anchor should become. */
+export function rehomeAdminRootOverride(marker: RehomeMarker): RehomeAdminOverride {
+  if (marker.newAdminRootPubHex === undefined) return { kind: "none" };
+  if (marker.newAdminRootPubHex === "") return { kind: "unpin" };
+  return { kind: "repin", adminRootPubHex: marker.newAdminRootPubHex };
+}
+
+/**
+ * Reconcile the admin-root-pin store (`admin-root-pin.json`, the rotation
+ * consumer's persisted re-pin) with a re-home marker — ONCE per transfer.
+ *
+ * WHY: the marker apply overrides `cfg.adminRootPub` (the SEED) BEFORE the
+ * boot's pin resolution, but `resolvePinnedAdminRoot` prefers the PIN FILE over
+ * the seed — so a stale GIVER-era pin (a rotation the giver applied before
+ * handing the box over) would silently override the transferred root forever.
+ * The pin file's format (adminRootPubHex/seq/updatedAt) has no lineage notion,
+ * so we RESET it to the acquirer's root (seq 0 — the acquirer's rotation chain
+ * is a fresh lineage; the rotation consumer matches hops by old-root equality,
+ * not seq, so 0 is safe) or REMOVE it on an unpin.
+ *
+ * WHY ONCE (the sibling `.applied` receipt): the marker is re-applied on EVERY
+ * boot (the baked FLAGSHIP_SUBDOMAIN never changes), but after this first
+ * reconciliation the pin file belongs to the ACQUIRER's lineage — the acquirer
+ * may legitimately rotate their admin root, and clobbering that rotation back
+ * to the marker's (now-old) acquirer root on every reboot would reopen a
+ * stolen-old-root window. The receipt records which transfer was reconciled;
+ * a LATER transfer (different newServerDomain/claimedAt) reconciles again.
+ */
+export async function reconcileAdminRootPinOnRehome(args: {
+  marker: RehomeMarker;
+  /** The rotation consumer's pin file (`<dataDir>/admin-root-pin.json`). */
+  pinPath: string;
+  /** The one-time receipt (`<markerPath>.applied`). */
+  appliedPath: string;
+  now?: () => number;
+  onLog?: (m: string) => void;
+}): Promise<"repinned" | "unpinned" | "already-applied" | "legacy-no-op"> {
+  const { marker, pinPath, appliedPath } = args;
+  const log = args.onLog ?? (() => {});
+  const override = rehomeAdminRootOverride(marker);
+  if (override.kind === "none") return "legacy-no-op";
+
+  interface AppliedReceipt {
+    newServerDomain?: string;
+    claimedAt?: number;
+    newAdminRootPubHex?: string;
+  }
+  try {
+    const receipt = JSON.parse(await readFile(appliedPath, "utf-8")) as AppliedReceipt;
+    if (
+      receipt.newServerDomain === marker.newServerDomain &&
+      receipt.claimedAt === marker.claimedAt &&
+      receipt.newAdminRootPubHex === marker.newAdminRootPubHex
+    ) {
+      return "already-applied";
+    }
+  } catch {
+    /* no receipt yet — first apply for this transfer */
+  }
+
+  if (override.kind === "unpin") {
+    await rm(pinPath, { force: true });
+    log("[rehome] admin root UNPINNED (acquirer account has no admin root); pin file removed");
+  } else {
+    // Same atomic write-then-rename + modes as fileAdminRootPinStore.
+    await mkdir(dirname(pinPath), { recursive: true, mode: 0o700 });
+    const tmp = `${pinPath}.tmp`;
+    await writeFile(
+      tmp,
+      JSON.stringify(
+        {
+          adminRootPubHex: override.adminRootPubHex,
+          seq: 0,
+          updatedAt: (args.now ?? Date.now)(),
+        },
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    );
+    await rename(tmp, pinPath);
+    log(
+      `[rehome] admin-root pin RESET to the acquirer's root ` +
+        `${override.adminRootPubHex.slice(0, 12)}… (giver-era pins can no longer override)`,
+    );
+  }
+
+  await writeFile(
+    appliedPath,
+    JSON.stringify({
+      newServerDomain: marker.newServerDomain,
+      claimedAt: marker.claimedAt,
+      newAdminRootPubHex: marker.newAdminRootPubHex,
+      appliedAt: (args.now ?? Date.now)(),
+    }),
+    { mode: 0o600 },
+  );
+  return override.kind === "unpin" ? "unpinned" : "repinned";
 }
