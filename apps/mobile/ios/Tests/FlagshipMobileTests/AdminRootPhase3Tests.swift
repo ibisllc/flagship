@@ -17,7 +17,7 @@ import CryptoKit
 ///   - the WebAuthn-PRF recovery round-trip re-establishes the escrowed root.
 final class AdminRootPhase3Tests: XCTestCase {
 
-    private static let usedProfiles = ["acme", "personal", "rotator", "reescrow"]
+    private static let usedProfiles = ["acme", "personal", "rotator", "reescrow", "chain", "hazard"]
 
     private func resetKeystore() {
         for name in Self.usedProfiles {
@@ -552,6 +552,85 @@ final class AdminRootPhase3Tests: XCTestCase {
         XCTAssertTrue(Keystore.hasAdminRoot, "credential recovery re-establishes the admin root")
         XCTAssertEqual(Keystore.adminRootPubHex(), originalAdminPub,
                        "the recovered admin root is byte-identical to the original")
+    }
+
+    // MARK: - Adversarial rotate→recover chain (2026-07-03 invariant, VM-level)
+
+    /// LIVE-root restore: rotate the local admin root, RE-ESCROW under the
+    /// recovery credential, then recover on a fresh device — the restored root
+    /// is the CURRENT (rotated) one, not the enrolled original.
+    @MainActor
+    func test_rotate_reEscrow_recover_restoresLiveRoot() async throws {
+        let user = "chain"
+        Keystore.setActiveProfile(user)
+        let roots = try await Keystore.openAccountRoots(reason: "test")
+        let pub0 = roots.adminRootPubHex
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let webAuthn = MockWebAuthnProvider()
+        let recovery = RecoveryViewModel(client: server, webAuthn: webAuthn, username: { user })
+        await recovery.setup(umkSeed: umk, passphrase: "correcthorse")   // escrows root0
+        guard case .registered = recovery.phase else {
+            return XCTFail("recovery setup failed: \(recovery.phase)")
+        }
+
+        // Rotate the LOCAL admin root (what RotateAdminRootViewModel's seal does)
+        // then re-escrow the NEW root under the SAME credential.
+        let newRoot = Curve25519.Signing.PrivateKey()
+        _ = try await Keystore.importAdminRoot(seed: newRoot.rawRepresentation, reason: "test")
+        let pub1 = Keystore.adminRootPubHex()
+        XCTAssertNotEqual(pub1, pub0, "the rotated root is fresh, not the enrolled one")
+        try await AdminRootReEscrow(client: server, webAuthn: webAuthn)
+            .run(username: user, passphrase: "correcthorse")
+
+        // Fresh device: wipe local key material, then recover from the escrow.
+        Keystore.wipe()
+        XCTAssertFalse(Keystore.hasAdminRoot)
+        let seed = await recovery.recover(username: user, passphrase: "correcthorse")
+        XCTAssertNotNil(seed, "UMK recovered")
+        XCTAssertTrue(Keystore.hasAdminRoot, "recovery re-establishes the admin root")
+        XCTAssertEqual(Keystore.adminRootPubHex(), pub1,
+                       "recovery restores the LIVE (rotated) root after re-escrow")
+        XCTAssertNotEqual(Keystore.adminRootPubHex(), pub0)
+    }
+
+    /// HAZARD (skipRecoveryUpdate): rotate the local root but SKIP the re-escrow
+    /// → recovery restores the DEAD (pre-rotation) root. Pinned so the hazard is
+    /// explicit and a future auto-re-escrow change flips this test.
+    @MainActor
+    func test_rotate_skipReEscrow_recover_restoresDeadRoot() async throws {
+        let user = "hazard"
+        Keystore.setActiveProfile(user)
+        let roots = try await Keystore.openAccountRoots(reason: "test")
+        let pub0 = roots.adminRootPubHex
+        let umk = try await Keystore.currentUMK(reason: "test")
+
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let webAuthn = MockWebAuthnProvider()
+        let recovery = RecoveryViewModel(client: server, webAuthn: webAuthn, username: { user })
+        await recovery.setup(umkSeed: umk, passphrase: "correcthorse")   // escrows root0
+        guard case .registered = recovery.phase else {
+            return XCTFail("recovery setup failed: \(recovery.phase)")
+        }
+
+        // Rotate the LOCAL root but DO NOT re-escrow (the skip path).
+        let newRoot = Curve25519.Signing.PrivateKey()
+        _ = try await Keystore.importAdminRoot(seed: newRoot.rawRepresentation, reason: "test")
+        let pub1 = Keystore.adminRootPubHex()
+        XCTAssertNotEqual(pub1, pub0)
+
+        // Fresh device: recover. The escrow still wraps root0, so recovery brings
+        // back the DEAD root — NOT the live rotated one.
+        Keystore.wipe()
+        _ = await recovery.recover(username: user, passphrase: "correcthorse")
+        XCTAssertTrue(Keystore.hasAdminRoot)
+        XCTAssertEqual(Keystore.adminRootPubHex(), pub0,
+                       "skip-re-escrow ⇒ recovery restores the stale/dead pre-rotation root")
+        XCTAssertNotEqual(Keystore.adminRootPubHex(), pub1,
+                          "…NOT the live rotated root — the documented skip-recovery hazard")
     }
 
     // MARK: - Helpers
