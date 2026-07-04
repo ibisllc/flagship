@@ -151,7 +151,7 @@ public struct VibeCodeChatScreen: View {
             }
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -339,7 +339,7 @@ public struct VibeCodeChatScreen: View {
         do {
             state = try await client.vibeCodeSessionState(sessionId: sessionId)
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -375,7 +375,7 @@ public struct VibeCodeChatScreen: View {
             replyDraft = ""
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -419,7 +419,7 @@ public struct VibeCodeChatScreen: View {
             envValueDraft = ""
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 
@@ -433,7 +433,7 @@ public struct VibeCodeChatScreen: View {
             )
             await reload()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = ScreensClientError.userFacing(error)
         }
     }
 }

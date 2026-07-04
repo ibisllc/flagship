@@ -58,7 +58,19 @@ function platformDisplay(p) {
     apns: "iPhone / iPad",
     fcm: "Android",
     webpush: "Web",
-  })[p] ?? p;
+  })[p] ?? (p || "Unknown platform");
+}
+
+/** The name shown for a device row. Never renders the literal string
+ *  "undefined": falls back to a platform-derived label, then a short
+ *  token id, then a generic name — so a record missing its `label`
+ *  (or `label` AND `platform`) still reads sensibly. */
+function deviceName(device) {
+  if (device.label) return device.label;
+  if (device.platform) return `Untitled ${platformDisplay(device.platform)}`;
+  const id = device.tokenPrefix || device.tokenId;
+  if (id) return `Device ${String(id).slice(0, 8)}`;
+  return "Unnamed device";
 }
 
 function relative(ms) {
@@ -163,7 +175,7 @@ function renderDeviceCard(device) {
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">${platformIcon(device.platform)}</span>
-          ${escapeHtml(device.label || `Untitled ${device.platform}`)}
+          ${escapeHtml(deviceName(device))}
           ${quarantined ? `<span aria-hidden="true" title="${escapeHtml(quarantineMsg)}"
                   data-quarantine-icon="${escapeHtml(device.tokenPrefix)}"
                   style="margin-left: 4px;">⏱</span>` : ""}
@@ -273,16 +285,17 @@ async function renderTrustedDevices() {
           return;
         }
         const { inlineConfirm } = await import("../lib/modal.js");
+        const name = deviceName(device);
         const ok = await inlineConfirm({
-          title: `Disconnect ${device.label}?`,
-          message: `We'll stop sending alerts to ${device.label}. It can sign back in with your passkey.`,
+          title: `Disconnect ${name}?`,
+          message: `We'll stop sending alerts to ${name}. It can sign back in with your passkey.`,
           okLabel: "Disconnect",
           danger: true,
         });
         if (!ok) return;
         try {
           await disconnectDevice(device);
-          toast(`Disconnected ${device.label}`);
+          toast(`Disconnected ${name}`);
           await renderTrustedDevices();
         } catch (e) {
           toast(e.message ?? "Couldn't disconnect", "err");

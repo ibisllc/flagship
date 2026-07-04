@@ -18,8 +18,19 @@ interface TrustedDevice {
 // Mirror of the helpers inside views/trusted-devices.js. If they
 // drift, the assertions below break — the file's the source of
 // truth, this test is the contract check.
-function platformDisplay(p: string): string {
-  return ({ apns: "iPhone / iPad", fcm: "Android", webpush: "Web" } as Record<string, string>)[p] ?? p;
+function platformDisplay(p: string | undefined): string {
+  return ({ apns: "iPhone / iPad", fcm: "Android", webpush: "Web" } as Record<string, string>)[p ?? ""] ?? (p || "Unknown platform");
+}
+
+// Mirror of deviceName() inside views/trusted-devices.js — the row's
+// display name must NEVER render the literal string "undefined", even
+// when `label` (and `platform`) are absent from the record.
+function deviceName(device: { label?: string; platform?: string; tokenPrefix?: string; tokenId?: string }): string {
+  if (device.label) return device.label;
+  if (device.platform) return `Untitled ${platformDisplay(device.platform)}`;
+  const id = device.tokenPrefix || device.tokenId;
+  if (id) return `Device ${String(id).slice(0, 8)}`;
+  return "Unnamed device";
 }
 
 function relative(ms: number, now: number): string {
@@ -41,6 +52,27 @@ describe("trusted-devices helpers", () => {
 
   it("platformDisplay passes through unknown platforms verbatim", () => {
     expect(platformDisplay("xrOS")).toBe("xrOS");
+  });
+
+  it("platformDisplay never renders 'undefined' for a missing platform", () => {
+    expect(platformDisplay(undefined)).toBe("Unknown platform");
+    expect(platformDisplay("")).toBe("Unknown platform");
+  });
+
+  it("deviceName never renders the literal string 'undefined'", () => {
+    // A well-formed record uses its label.
+    expect(deviceName({ label: "iPhone", platform: "apns" })).toBe("iPhone");
+    // Missing label → a platform-derived name, not "Untitled undefined".
+    expect(deviceName({ platform: "apns" })).toBe("Untitled iPhone / iPad");
+    // Missing label AND platform → a token-derived name, never "undefined".
+    expect(deviceName({ tokenPrefix: "ab12cd34" })).toBe("Device ab12cd34");
+    expect(deviceName({ tokenId: "deadbeefcafe" })).toBe("Device deadbeef");
+    // Nothing at all → a generic name.
+    expect(deviceName({})).toBe("Unnamed device");
+    // The guarantee: no fallback path yields the substring "undefined".
+    for (const d of [{}, { platform: "apns" }, { tokenPrefix: "x" }, {} as any]) {
+      expect(deviceName(d)).not.toContain("undefined");
+    }
   });
 
   it("relative() returns 'just now' under 60s", () => {

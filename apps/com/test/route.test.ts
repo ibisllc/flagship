@@ -77,6 +77,60 @@ describe("flagshipserver.com Worker — routing", () => {
     expect(await r3.text()).toBe("asset:/deck/");
   });
 
+  it("a missing .css/.js 404s instead of falling through to the SPA HTML", async () => {
+    // The assets binding runs `not_found_handling = single-page-application`,
+    // so a MISSING file resolves to index.html (200 + text/html). For a
+    // stylesheet/script that must read as a real 404 — otherwise the browser
+    // parses marketing HTML as CSS/JS and flashes the page unstyled mid-deploy.
+    const cookie = { cookie: "flagship_preview=1" };
+    const spaFallbackEnv = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          const path = new URL(req.url).pathname;
+          // A real asset the binding can resolve.
+          if (path === "/site.css") {
+            return new Response("body{color:red}", {
+              status: 200,
+              headers: { "content-type": "text/css" },
+            });
+          }
+          // Everything else "misses" → the SPA fallback (index.html).
+          return new Response("<!doctype html><title>Flagship</title>", {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        },
+      },
+    });
+    // A missing stylesheet → real 404, NOT the 200-with-HTML fallback.
+    const missing = await route(
+      new Request("https://flagshipserver.com/theme-ui.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("content-type")).toContain("text/plain");
+    expect(await missing.text()).not.toContain("<!doctype");
+    const missingJs = await route(
+      new Request("https://flagshipserver.com/theme.js", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(missingJs.status).toBe(404);
+    // A real asset is still served untouched.
+    const realCss = await route(
+      new Request("https://flagshipserver.com/site.css", { headers: cookie }),
+      spaFallbackEnv,
+    );
+    expect(realCss.status).toBe(200);
+    expect(realCss.headers.get("content-type")).toContain("text/css");
+    // An SPA route (no file extension) still gets the HTML fallback.
+    const spaRoute = await route(
+      new Request("https://flagshipserver.com/ready/"),
+      spaFallbackEnv,
+    );
+    expect(spaRoute.status).toBe(200);
+    expect((spaRoute.headers.get("content-type") ?? "")).toContain("text/html");
+  });
+
   it("/api/* is forwarded to SERVICES_BASE_URL preserving method + path + query", async () => {
     await route(
       new Request("https://flagshipserver.com/api/me/servers?sessionId=abc"),
