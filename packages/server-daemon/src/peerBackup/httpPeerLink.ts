@@ -317,6 +317,43 @@ function ownerScopedStore(
   };
 }
 
+/**
+ * Adapter for the runtime's first-non-null handler chain (the box's
+ * PUBLIC pipe — the Fastify API is 127.0.0.1-only, and peers dial
+ * `https://<fqdn>/api/peer-backup/frames`). Falls through (null) for
+ * every other path/method, like buildLeadsHttpHandler. `opts` is a
+ * thunk so the frames surface can be registered the moment the runtime
+ * is up and light up when peer-backup wiring lands (503 until then).
+ */
+export function buildPbFramesRuntimeHandler(
+  opts: () => PbFramesHandlerOptions | null,
+): (req: {
+  method: string;
+  path: string;
+  body: Buffer | Uint8Array;
+}) => Promise<{ status: number; headers?: Record<string, string>; body: string } | null> {
+  return async (req) => {
+    const path = req.path.split("?")[0] ?? req.path;
+    if (path !== PB_FRAMES_PATH) return null;
+    if (req.method.toUpperCase() !== "POST") return null;
+    const json = (b: unknown, status: number) => ({
+      status,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(b),
+    });
+    const o = opts();
+    if (!o) return json({ error: "peer backup not configured" }, 503);
+    let body: PbFramesRequestBody;
+    try {
+      body = JSON.parse(new TextDecoder().decode(req.body)) as PbFramesRequestBody;
+    } catch {
+      return json({ error: "malformed JSON" }, 400);
+    }
+    const r = await handlePbFramesRequest(o, body);
+    return json(r.body, r.status);
+  };
+}
+
 function toHex(b: Bytes): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");

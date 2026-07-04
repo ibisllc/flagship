@@ -17,6 +17,22 @@ import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
 import { RepairStatsAccumulator } from "./peerBackup/repairStatsAccumulator.js";
+import { FileShardRegistry } from "./peerBackup/fileShardRegistry.js";
+import { FileShardBytesStore } from "./peerBackup/fileShardStore.js";
+import {
+  FileManifestStore,
+  uploadBackupManifest,
+  type BackupManifest,
+} from "./peerBackup/manifest.js";
+import {
+  buildComStkResolver,
+  buildHttpShardPusher,
+  buildLivePeerProvider,
+} from "./peerBackup/shipper.js";
+import {
+  buildPbFramesRuntimeHandler,
+  type PbFramesHandlerOptions,
+} from "./peerBackup/httpPeerLink.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
@@ -554,8 +570,14 @@ async function main(): Promise<void> {
         "current recipe to enable build-a-service.",
     );
   }
-  const { backupLoop, repairAccumulator, repairScheduler } =
-    wirePeerBackup({ swkHex });
+  const { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler } =
+    wirePeerBackup({
+      swkHex,
+      serverId: env.serverFqdn ?? null,
+      identityPrivKeyHex: env.identityPrivKeyHex ?? null,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+      dataDir,
+    });
 
   // BFF in-memory ledgers (collaborator invites + companion-dock).
   const { appInviteStore, companionTicketStore, companionWriteRequestStore } =
@@ -977,6 +999,11 @@ async function main(): Promise<void> {
         snapshot: () => leadsSnapshotRef.current(),
       }),
     );
+    // Peer-backup shard transport (box↔box). Registered on the PUBLIC pipe —
+    // peers dial https://<fqdn>/api/peer-backup/frames; the handler verifies
+    // the caller's STK envelope against the .com directory and owner-scopes
+    // reads. 503s until wirePeerBackup had identity + .com reachability.
+    runtime.addHandler(pbFramesHandler);
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt
     // (cert acquisition is async + retried so a transient ACME failure can't
@@ -1150,18 +1177,91 @@ interface PeerBackupBundle {
   backupLoop: BackupLoop | null;
   repairAccumulator: RepairStatsAccumulator;
   repairScheduler: RepairScheduler;
+  /** Public-pipe frames endpoint (box↔box shard transport). Register on the runtime chain. */
+  pbFramesHandler: ReturnType<typeof buildPbFramesRuntimeHandler>;
 }
 
 /**
- * Peer-backup participation: the encrypting BackupLoop (only when an SWK is
- * available) + the B4 repair accumulator/scheduler. The scheduler is started
- * here (idempotent no-op today with daemon=null) exactly as before — the wire
- * site is in place for the upstream RepairDaemon to flip on later.
+ * Peer-backup participation. Two independent halves:
+ *
+ *  HOSTING (their-shards) — needs only an identity + `.com` reachability:
+ *  the public frames endpoint accepts STK-verified peers' shards into the
+ *  flat-file pool + persistent registry. Lit even without an SWK, so a
+ *  box can reciprocate storage before its own platform is provisioned.
+ *
+ *  SHIPPING (my-shards) — needs the SWK (chunks encrypt under it): the
+ *  BackupLoop ships shards via the .com matchmaker + HttpPeerLink and
+ *  maintains the sealed manifest on .com (the fresh-box recovery root).
+ *
+ * Participation stays inert until the owner toggles backup on (the
+ * BackupLoop `enabled` gate); the repair accumulator/scheduler wire-site
+ * is unchanged (daemon=null today — flipped on by the upstream later).
  */
-function wirePeerBackup(deps: { swkHex: string | null }): PeerBackupBundle {
-  const backupLoop = deps.swkHex
-    ? new BackupLoop({ swk: hexToBytes(deps.swkHex.trim()), k: 3, n: 5 })
+function wirePeerBackup(deps: {
+  swkHex: string | null;
+  serverId: string | null;
+  identityPrivKeyHex: string | null;
+  controlPlaneBaseUrl: string | null;
+  dataDir: string;
+}): PeerBackupBundle {
+  const registry = new FileShardRegistry(`${deps.dataDir}/peer-backup/registry.json`);
+  const peerPool = new FileShardBytesStore(`${deps.dataDir}/peer-pool`);
+  const ownShards = new FileShardBytesStore(`${deps.dataDir}/peer-backup/own-shards`);
+  const manifestStore = new FileManifestStore(`${deps.dataDir}/peer-backup/manifest.json`);
+
+  const identity: Keypair | null = deps.identityPrivKeyHex
+    ? (() => {
+        const priv = hexToBytes(deps.identityPrivKeyHex);
+        return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+      })()
     : null;
+  const live = !!(deps.serverId && identity && deps.controlPlaneBaseUrl);
+
+  let backupLoop: BackupLoop | null = null;
+  if (deps.swkHex) {
+    const swk = hexToBytes(deps.swkHex.trim());
+    const shipping =
+      live && deps.serverId && identity && deps.controlPlaneBaseUrl
+        ? {
+            myServerId: deps.serverId,
+            peerProvider: buildLivePeerProvider({
+              controlPlaneBaseUrl: deps.controlPlaneBaseUrl,
+              myServerId: deps.serverId,
+              mySTK: identity,
+              onLog: (m) => console.log(`[peer-backup] ${m}`),
+            }),
+            pusher: buildHttpShardPusher({ myServerId: deps.serverId, mySTK: identity }),
+            registry,
+            ownShards,
+            manifestStore,
+            uploadManifest: (m: BackupManifest) =>
+              uploadBackupManifest(
+                {
+                  controlPlaneBaseUrl: deps.controlPlaneBaseUrl!,
+                  serverId: deps.serverId!,
+                  mySTK: identity,
+                  swk,
+                },
+                m,
+              ),
+            onLog: (m: string) => console.log(`[peer-backup] ${m}`),
+          }
+        : undefined;
+    backupLoop = new BackupLoop({ swk, k: 3, n: 5, ...(shipping ? { shipping } : {}) });
+  }
+
+  const framesOpts: PbFramesHandlerOptions | null =
+    live && deps.serverId && identity && deps.controlPlaneBaseUrl
+      ? {
+          myServerId: deps.serverId,
+          mySTK: identity,
+          store: peerPool,
+          registry,
+          resolveCallerStk: buildComStkResolver({ controlPlaneBaseUrl: deps.controlPlaneBaseUrl }),
+          onShardAccepted: (info) => backupLoop?.recordHostedBytes(info.sizeBytes),
+        }
+      : null;
+  const pbFramesHandler = buildPbFramesRuntimeHandler(() => framesOpts);
 
   const repairAccumulator = new RepairStatsAccumulator();
   const repairTickMs = (() => {
@@ -1180,7 +1280,7 @@ function wirePeerBackup(deps: { swkHex: string | null }): PeerBackupBundle {
   // .start() will arm the interval.
   repairScheduler.start();
 
-  return { backupLoop, repairAccumulator, repairScheduler };
+  return { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler };
 }
 
 interface BffStores {
