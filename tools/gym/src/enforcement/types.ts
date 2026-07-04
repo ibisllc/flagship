@@ -55,6 +55,13 @@ export interface Assertion {
   /** true = the control behaved correctly (gated/rejected/verified). */
   readonly ok: boolean;
   readonly detail: string;
+  /**
+   * true ⇒ this is a NOT-ASSERTED note (a probe whose infra doesn't exist in this
+   * env), carried for visibility only. It is `ok:true` so it never trips a bypass,
+   * but it must NOT be read as a real enforcement pass — the verdict is decided by
+   * the mandatory (non-informational) assertions.
+   */
+  readonly informational?: boolean;
 }
 
 /**

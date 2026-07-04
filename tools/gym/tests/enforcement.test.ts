@@ -125,6 +125,39 @@ describe("control 1 — restricted-mode on the real request path (GAP-1)", () =>
     expect(o.assertions.some((a) => a.label.includes("ABSENT Host") && !a.ok)).toBe(true);
   });
 
+  // A box where tier-1 + raw probes enforce, but the tier-2 leader-routed meta-URL
+  // has no shared cert/route yet (the fresh single-pod gym case) → the fetch throws.
+  const tier2Unreachable: HttpFn = async (url, init) => {
+    if (url.includes(`${TARGET.serviceSlug}.${TARGET.user}.${TARGET.servicesApex}`)) {
+      throw new Error("fetch failed: TLS handshake — no shared service cert");
+    }
+    if (init?.headers?.accept === "application/json") return R(403, "forbidden");
+    return R(200, "Access is restricted — open flagship://access?page=abc to knock");
+  };
+
+  it("tier-2 unreachable (no shared cert) → INFORMATIONAL note, control still ENFORCED from mandatory probes", async () => {
+    const o = await checkRestrictedMode(ctx(tier2Unreachable, gatedRaw));
+    expect(o.status).toBe("enforced");
+    expect(o.assertions).toHaveLength(5);
+    const tier2 = o.assertions.find((a) => a.label.includes("tier-2"))!;
+    expect(tier2.informational).toBe(true);
+    expect(tier2.ok).toBe(true); // ok:true so it can't trip a bypass…
+    expect(tier2.detail).toContain("unreachable");
+    // …but it must not be the reason for the pass: the mandatory probes carry it.
+    const mandatory = o.assertions.filter((a) => !a.informational);
+    expect(mandatory).toHaveLength(4);
+    expect(mandatory.every((a) => a.ok)).toBe(true);
+  });
+
+  it("tier-2 unreachable does NOT mask a mandatory bypass (a raw spoofed-Host serve is still RED)", async () => {
+    const servingRaw: RawFn = async () => R(200, "Hostname: x\nGET / HTTP/1.1");
+    const o = await checkRestrictedMode(ctx(tier2Unreachable, servingRaw));
+    expect(o.status).toBe("bypassed");
+    expect(o.assertions.some((a) => a.label.includes("SPOOFED") && !a.ok)).toBe(true);
+    // The tier-2 note is still informational, not counted as the verdict.
+    expect(o.assertions.find((a) => a.label.includes("tier-2"))!.informational).toBe(true);
+  });
+
   it("SKIPPED (not passed) when the box is unreachable", async () => {
     const o = await checkRestrictedMode(ctx(throwingHttp, throwingRaw));
     expect(o.status).toBe("skipped");

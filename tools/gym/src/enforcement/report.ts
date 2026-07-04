@@ -75,7 +75,8 @@ export function renderReport(report: EnforcementReport): string {
       lines.push(`         TODO(live): ${o.deferred.todo}`);
     }
     for (const a of o.assertions) {
-      lines.push(`         ${a.ok ? "✓" : "✗ BYPASS"} ${a.label} — ${a.detail}`);
+      const mark = a.informational ? "· (info, not asserted)" : a.ok ? "✓" : "✗ BYPASS";
+      lines.push(`         ${mark} ${a.label} — ${a.detail}`);
     }
   }
   lines.push("");
