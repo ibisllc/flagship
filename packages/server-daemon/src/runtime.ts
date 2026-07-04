@@ -8,7 +8,12 @@ import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js"
 import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./serviceProxy.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import { AppRunner } from "./serviceRunner.js";
+import {
+  AppRunner,
+  DEFAULT_DOCKER_BUILD_LIMITS,
+  ensureDockerNetwork,
+  realCommandRunner,
+} from "./serviceRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
   DataProvisioner,
@@ -1094,6 +1099,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const appRunner = new AppRunner();
   await appRunner.ensureNetwork().catch((e) => {
     console.warn(`[runtime] could not ensure app bridge network: ${(e as Error).message}`);
+  });
+  // Dedicated, non-default bridge for the sandboxed `docker build` (see
+  // DockerBuildLimits). Best-effort; a build simply fails clearly if absent.
+  await ensureDockerNetwork(realCommandRunner, DEFAULT_DOCKER_BUILD_LIMITS.network).catch((e) => {
+    console.warn(`[runtime] could not ensure build bridge network: ${(e as Error).message}`);
   });
   const dataProvisioner = await maybeBuildDataProvisioner(
     opts.servicePlatform?.dataServicesEnvFile,

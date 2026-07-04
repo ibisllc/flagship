@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   AppRunner,
   DEFAULT_CONTAINER_LIMITS,
+  DEFAULT_DOCKER_BUILD_LIMITS,
+  assertNoHostPathInDockerArgs,
+  dockerBuildArgs,
   realCommandRunner,
   runDockerBuild,
   type CommandRunner,
+  type CommandRunnerOpts,
 } from "../src/serviceRunner.js";
 
 describe("realCommandRunner spawn-failure (regression: docker-missing daemon crash loop)", () => {
@@ -61,7 +65,7 @@ describe("runDockerBuild", () => {
       },
       capture: async (c, args) => {
         expect(c).toBe("docker");
-        expect(args).toEqual(["build", "-t", "img:1", "/ctx"]);
+        expect(args[0]).toBe("build");
         throw Object.assign(new Error("docker exited with code 1: COPY failed"), {
           stdout: "",
           stderr: "COPY failed\n",
@@ -70,11 +74,90 @@ describe("runDockerBuild", () => {
     };
     await expect(runDockerBuild(cmd, "img:1", "/ctx")).rejects.toThrow(/COPY failed/);
   });
-  it("falls back to run when the runner has no capture", async () => {
-    const calls: string[][] = [];
-    const cmd: CommandRunner = { run: async (c, args) => { calls.push([c, ...args]); } };
+  it("falls back to run when the runner has no capture, still hardened", async () => {
+    const calls: { args: string[]; opts?: CommandRunnerOpts }[] = [];
+    const cmd: CommandRunner = { run: async (_c, args, opts) => { calls.push({ args, opts }); } };
     await runDockerBuild(cmd, "img:1", "/ctx");
-    expect(calls).toEqual([["docker", "build", "-t", "img:1", "/ctx"]]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args[0]).toBe("build");
+    expect(calls[0]!.args).toContain("--network");
+    expect(calls[0]!.opts?.timeoutMs).toBe(DEFAULT_DOCKER_BUILD_LIMITS.timeoutMs);
+  });
+});
+
+describe("docker build hardening (attacker-authored Dockerfile is the least-contained surface)", () => {
+  it("emits every resource cap + the restricted network in the build args", async () => {
+    let seen: { args: string[]; opts?: CommandRunnerOpts } | null = null;
+    const cmd: CommandRunner = {
+      run: async () => {},
+      capture: async (_c, args, opts) => { seen = { args, opts }; return { stdout: "", stderr: "" }; },
+    };
+    await runDockerBuild(cmd, "img:1", "/ctx");
+    const args = seen!.args;
+    // Restricted, non-default bridge (isolation from the default + app bridges).
+    expect(flagValue(args, "--network")).toBe(DEFAULT_DOCKER_BUILD_LIMITS.network);
+    expect(DEFAULT_DOCKER_BUILD_LIMITS.network).not.toBe("bridge");
+    expect(DEFAULT_DOCKER_BUILD_LIMITS.network).not.toBe("host");
+    // Memory + CPU + process (pids-equivalent) caps.
+    expect(flagValue(args, "--memory")).toBe(DEFAULT_DOCKER_BUILD_LIMITS.memory);
+    expect(flagValue(args, "--cpu-period")).toBe("100000");
+    expect(flagValue(args, "--cpu-quota")).toBe("200000"); // 2.0 cpus × 100000
+    expect(flagValue(args, "--ulimit")).toBe(`nproc=${DEFAULT_DOCKER_BUILD_LIMITS.pidsLimit}:${DEFAULT_DOCKER_BUILD_LIMITS.pidsLimit}`);
+    // The image tag + context are still there.
+    expect(flagValue(args, "-t")).toBe("img:1");
+    expect(args.at(-1)).toBe("/ctx");
+    // A wall-clock kill bound is passed to the runner.
+    expect(seen!.opts?.timeoutMs).toBe(DEFAULT_DOCKER_BUILD_LIMITS.timeoutMs);
+  });
+
+  it("NEVER bind-mounts a host path or the docker socket in the build args", () => {
+    const args = dockerBuildArgs("img:1", "/ctx", DEFAULT_DOCKER_BUILD_LIMITS);
+    expect(args).not.toContain("-v");
+    expect(args).not.toContain("--volume");
+    expect(args).not.toContain("--mount");
+    expect(args.join(" ")).not.toContain("/var/flagship");
+    expect(args.join(" ")).not.toContain("docker.sock");
+  });
+
+  it("honors overridden limits (operator can point at a locked egress bridge)", () => {
+    const args = dockerBuildArgs("img:2", "/c", {
+      memory: "512m",
+      cpus: "1.0",
+      pidsLimit: 256,
+      network: "flagship-build-locked",
+      timeoutMs: 60_000,
+    });
+    expect(flagValue(args, "--memory")).toBe("512m");
+    expect(flagValue(args, "--cpu-quota")).toBe("100000");
+    expect(flagValue(args, "--ulimit")).toBe("nproc=256:256");
+    expect(flagValue(args, "--network")).toBe("flagship-build-locked");
+  });
+
+  it("the real runner enforces the timeout by killing a hung child", async () => {
+    // A node child that never exits; the timeout must SIGKILL it and reject.
+    await expect(
+      realCommandRunner.run(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], { timeoutMs: 150 }),
+    ).rejects.toThrow(/timed out/);
+  });
+});
+
+describe("assertNoHostPathInDockerArgs (Part-3 regression guard)", () => {
+  it("passes a clean arg list", () => {
+    expect(() => assertNoHostPathInDockerArgs(["run", "-d", "--name", "flagship-x", "img"]))
+      .not.toThrow();
+  });
+  it("rejects a /var/flagship path", () => {
+    expect(() => assertNoHostPathInDockerArgs(["run", "-v", "/var/flagship:/data", "img"]))
+      .toThrow(/\/var\/flagship|mount/);
+  });
+  it("rejects the docker socket", () => {
+    expect(() => assertNoHostPathInDockerArgs(["run", "-v", "/var/run/docker.sock:/var/run/docker.sock", "img"]))
+      .toThrow(/docker socket|mount/);
+  });
+  it("rejects a -v / --volume / --mount host-path mount", () => {
+    expect(() => assertNoHostPathInDockerArgs(["run", "--volume", "/etc:/etc", "img"])).toThrow(/mount/);
+    expect(() => assertNoHostPathInDockerArgs(["run", "--mount", "type=bind,src=/etc,dst=/etc", "img"])).toThrow(/mount/);
+    expect(() => assertNoHostPathInDockerArgs(["run", "--mount=type=bind,src=/x", "img"])).toThrow(/mount/);
   });
 });
 
