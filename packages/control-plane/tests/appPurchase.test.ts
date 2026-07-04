@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryMarketplaceStorage, InMemoryUsernameStorage, InMemoryAppSalesStorage } from "@flagship/storage";
+import { InMemoryMarketplaceStorage, InMemoryUsernameStorage, InMemoryAppSalesStorage, InMemoryServerStorage } from "@flagship/storage";
 import type { AppPurchaseRecord, AppPurchaseStorage, MarketplaceListingRecord } from "@flagship/storage";
+import { ed, signSetAppPrice, type Keypair, type SetAppPriceRequest } from "@flagship/protocol";
 import {
   grantAppPurchase,
   isEntitledToInstall,
   isPaidListing,
   handleListUserPurchases,
   handleAdminSetAppPrice,
+  handleCreatorSetAppPrice,
   handleAdminGrantPurchase,
   computeCut,
   parseCutBps,
@@ -14,6 +16,16 @@ import {
   MAX_APP_PRICE_CENTS,
 } from "../src/appPurchase.js";
 import { handleMarketplaceInstall } from "../src/marketplace.js";
+
+function hex(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+function makeKp(seed = 7): Keypair {
+  const priv = new Uint8Array(32).fill(seed);
+  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+}
 
 const NOW = Date.UTC(2026, 5, 14);
 
@@ -162,6 +174,82 @@ describe("revenue cut (#15)", () => {
     );
     expect(res.saleRecorded).toBe(false);
     expect(await sales.listForCreator("acme")).toHaveLength(0);
+  });
+});
+
+describe("handleCreatorSetAppPrice (#15 self-serve pricing)", () => {
+  async function ctx(seed = 7) {
+    const marketplace = await seed0();
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeKp(seed);
+    await usernames.put({ username: "acme", irkPubHex: hex(irk.publicKey), claimedAt: NOW });
+    return { marketplace, usernames, irk };
+  }
+  async function seed0() {
+    const marketplace = new InMemoryMarketplaceStorage();
+    await marketplace.upsert(listing());
+    return marketplace;
+  }
+  function signed(irk: Keypair, over: Partial<SetAppPriceRequest> = {}) {
+    const req: SetAppPriceRequest = { creator: "acme", slug: "notes", priceUsdCents: 500, issuedAt: NOW, ...over };
+    return { request: req, signature: hex(signSetAppPrice(req, irk)) };
+  }
+
+  it("a valid creator-signed request sets the price", async () => {
+    const { marketplace, usernames, irk } = await ctx();
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", signed(irk));
+    expect(res.status).toBe(200);
+    expect((await marketplace.get("acme", "notes"))!.priceUsdCents).toBe(500);
+  });
+
+  it("0 makes the app free", async () => {
+    const { marketplace, usernames, irk } = await ctx();
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", signed(irk, { priceUsdCents: 0 }));
+    expect(res.status).toBe(200);
+    expect((await marketplace.get("acme", "notes"))!.priceUsdCents).toBeUndefined();
+  });
+
+  it("rejects a wrong signer (not the creator)", async () => {
+    const { marketplace, usernames } = await ctx(7);
+    const attacker = makeKp(9);
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", signed(attacker));
+    expect(res.status).toBe(403);
+    expect((await marketplace.get("acme", "notes"))!.priceUsdCents).toBeUndefined();
+  });
+
+  it("caps at MAX_APP_PRICE_CENTS", async () => {
+    const { marketplace, usernames, irk } = await ctx();
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", signed(irk, { priceUsdCents: MAX_APP_PRICE_CENTS + 1 }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a request whose signed creator/slug differs from the route", async () => {
+    const { marketplace, usernames, irk } = await ctx();
+    const env = signed(irk, { slug: "other" });
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", env);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a stale request", async () => {
+    const { marketplace, usernames, irk } = await ctx();
+    const env = signed(irk, { issuedAt: NOW - 10 * 60_000 });
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, now: () => NOW }, "acme", "notes", env);
+    expect(res.status).toBe(403);
+  });
+
+  it("accepts a non-revoked server identity key of the creator's account", async () => {
+    const { marketplace, usernames } = await ctx();
+    const servers = new InMemoryServerStorage();
+    const srvKey = makeKp(21);
+    await servers.put({
+      serverDomain: "notes.acme.flagship.services",
+      username: "acme",
+      identityPubKeyHex: hex(srvKey.publicKey),
+      registeredAt: NOW,
+    });
+    const res = await handleCreatorSetAppPrice({ marketplace, usernames, servers, now: () => NOW }, "acme", "notes", signed(srvKey));
+    expect(res.status).toBe(200);
+    expect((await marketplace.get("acme", "notes"))!.priceUsdCents).toBe(500);
   });
 });
 
