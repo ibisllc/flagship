@@ -198,6 +198,12 @@ export interface DaemonRuntimeOptions {
   orders?: {
     pskPub: Uint8Array;
     executor: OrderExecutor;
+    /** Slice D — the pinned admin master root (`ServerConfig.adminRootPub`);
+     *  present ⇒ the destructive order types are gated by `requireMasterAdmin`,
+     *  absent ⇒ legacy pskPub verification (a strict no-op on pre-wipe boxes). */
+    adminRootPub?: Uint8Array;
+    /** This box's owner account (cfg.userId) — for the delegated-grant check. */
+    username?: string;
   };
   /**
    * App-platform plumbing.
@@ -419,6 +425,8 @@ function buildDefaultHandler(
         serverFqdn: opts.serverFqdn,
         pskPub: opts.orders.pskPub,
         executor: opts.orders.executor,
+        ...(opts.orders.adminRootPub ? { adminRootPub: opts.orders.adminRootPub } : {}),
+        ...(opts.orders.username ? { username: opts.orders.username } : {}),
       })
     : null;
 
