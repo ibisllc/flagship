@@ -40,6 +40,28 @@ struct WizardView: View {
     }
 
     var body: some View {
+        HStack(spacing: 0) {
+            wizardColumn
+                .frame(width: 560)
+            // Right sidebar: appears once this Mac hosts at least one server.
+            if !model.vmManager.servers.isEmpty {
+                Divider()
+                HostedServersSidebar(model: model, vmManager: model.vmManager)
+                    .frame(width: 230)
+            }
+        }
+        .frame(height: 700)
+        .background(FB.Colors.bg)
+        .preferredColorScheme(preferredScheme)
+        .task { await model.refreshDisks() }
+        .onChange(of: showLog) { _, shown in
+            // Drop keyboard focus the instant the log opens so AppKit doesn't
+            // leave a stale focus ring painted where the field used to be.
+            if shown { wifiFocus = nil }
+        }
+    }
+
+    private var wizardColumn: some View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, FB.Spacing.s5)
@@ -64,27 +86,188 @@ struct WizardView: View {
             .clipped()
             logBar
         }
-        .frame(width: 560, height: 700)
-        .background(FB.Colors.bg)
-        .preferredColorScheme(preferredScheme)
-        .task { await model.refreshDisks() }
-        .onChange(of: showLog) { _, shown in
-            // Drop keyboard focus the instant the log opens so AppKit doesn't
-            // leave a stale focus ring painted where the field used to be.
-            if shown { wifiFocus = nil }
-        }
     }
 
     // MARK: - Body
 
     /// The live phone session is the gate: locked cover → SAS confirm →
-    /// the burn form. "I have a recipe" jumps straight to a Simple-only
-    /// burn form (no Advanced — no session to authorize it).
+    /// the destination chooser → the burn form OR the host-here pane. A
+    /// sidebar selection overrides everything with that server's detail.
+    /// "I have a recipe" jumps straight to a Simple-only burn form (no
+    /// Advanced — no session to authorize it).
     @ViewBuilder private var stageContent: some View {
-        switch model.burnerStage {
-        case .locked:    coverView
-        case .pairing:   pairingConfirmView
-        case .session, .recipeFile: panes
+        if let selected = model.selectedHostedServer {
+            VMDetailView(model: model, vmManager: model.vmManager, name: selected)
+        } else {
+            switch model.burnerStage {
+            case .locked:    coverView
+            case .pairing:   pairingConfirmView
+            case .session, .recipeFile: destinationOrPanes
+            }
+        }
+    }
+
+    /// Once a recipe is verified the user picks its destination; before that
+    /// (waiting for the phone / loading a file) the existing panes show.
+    @ViewBuilder private var destinationOrPanes: some View {
+        if model.verified != nil && model.destination == nil {
+            destinationChooser
+        } else if model.destination == .hostHere {
+            hostHerePane
+        } else {
+            panes
+        }
+    }
+
+    // MARK: - Destination chooser (Burn to USB / Host here)
+
+    private var destinationChooser: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            if model.advancedAllowed { sessionHeader }
+            if let v = model.verified {
+                StatusCard(icon: "checkmark.seal.fill",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Recipe verified — choose where this server should live.")
+            }
+            destinationCard(
+                icon: "externaldrive.fill",
+                title: "Burn to USB",
+                subtitle: "Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick.",
+                badge: ServerTier.hardware.badgeLabel,
+                disabledReason: nil
+            ) { model.destination = .burnToUSB }
+            destinationCard(
+                icon: "desktopcomputer",
+                title: "Host on this Mac",
+                subtitle: "Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys.",
+                badge: ServerTier.hostedVM.badgeLabel,
+                disabledReason: hostHereDisabledReason
+            ) { model.destination = .hostHere }
+        }
+    }
+
+    private var hostHereDisabledReason: String? {
+        let cap = model.vmManager.maxVMCount
+        if cap == 0 {
+            return "This Mac doesn't have enough free memory to host a server."
+        }
+        if model.vmManager.servers.count >= cap {
+            return "This Mac is at its hosting limit (\(cap))."
+        }
+        return nil
+    }
+
+    private func destinationCard(icon: String, title: String, subtitle: String,
+                                 badge: String, disabledReason: String?,
+                                 action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: FB.Spacing.s3) {
+                ZStack {
+                    Circle().fill(FB.Colors.surfaceElev).frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .foregroundStyle(FB.Colors.primary)
+                        .imageScale(.medium)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(title).font(FB.Font.rowTitle()).foregroundStyle(FB.Colors.ink)
+                        Spacer()
+                        Text(badge)
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                    }
+                    Text(disabledReason ?? subtitle)
+                        .font(FB.Font.rowHint())
+                        .foregroundStyle(disabledReason != nil ? FB.Colors.warning : FB.Colors.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(FB.Spacing.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: FB.Radius.md).fill(FB.Colors.surface))
+            .overlay(RoundedRectangle(cornerRadius: FB.Radius.md)
+                .strokeBorder(FB.Colors.border, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: FB.Radius.md))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .disabled(disabledReason != nil)
+        .opacity(disabledReason != nil ? 0.6 : 1)
+    }
+
+    // MARK: - Host here pane
+
+    private var hostHerePane: some View {
+        let host = HostResources.current()
+        return VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            HStack {
+                Button {
+                    model.destination = nil
+                } label: {
+                    Label("Choose destination", systemImage: "chevron.left")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .disabled(model.isRunning)
+                Spacer()
+            }
+            if let v = model.verified {
+                StatusCard(icon: "desktopcomputer",
+                           tint: FB.Colors.primary,
+                           title: v.serverDomain,
+                           subtitle: "Will run as a managed VM on this Mac — \(VMResourcePlan.vmCPUCount(host: host)) vCPU, \(VMResourcePlan.vmMemoryBytes(host: host) / VMResourcePlan.gib) GiB RAM, \(VMResourcePlan.defaultMainDiskSizeBytes / VMResourcePlan.gib) GiB disk.")
+            }
+            Text("The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: FB.Spacing.s2)
+            VStack(spacing: FB.Spacing.s2) {
+                if model.isRunning {
+                    VStack(spacing: FB.Spacing.s2) {
+                        Group {
+                            if let p = model.progress {
+                                ProgressView(value: p)
+                            } else {
+                                ProgressView()
+                            }
+                        }
+                        .progressViewStyle(.linear)
+                        .tint(progressTint)
+                        .frame(width: 260)
+                        Text(progressCaption)
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                            .monospacedDigit()
+                        if let url = model.baseDownloadURL {
+                            Text(url)
+                                .font(FB.Font.mono())
+                                .foregroundStyle(FB.Colors.textMuted)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 300)
+                        }
+                    }
+                } else {
+                    Button {
+                        Task { await model.runHostHere() }
+                    } label: {
+                        Text("Create server on this Mac")
+                            .font(FB.Font.rowTitle())
+                            .frame(minWidth: 200, minHeight: 28)
+                    }
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.verified == nil)
+                    Text("Encrypted disk · unlocked by your phone")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, FB.Spacing.s2)
         }
     }
 
@@ -96,6 +279,19 @@ struct WizardView: View {
                 modePicker
             } else {
                 recipeFileHeader
+            }
+            // Back to the destination chooser (only shown once a verified
+            // recipe made the chooser meaningful).
+            if model.destination == .burnToUSB && model.verified != nil {
+                Button {
+                    model.destination = nil
+                } label: {
+                    Label("Host on this Mac instead", systemImage: "desktopcomputer")
+                        .font(FB.Font.caption())
+                }
+                .buttonStyle(.link)
+                .pointerCursor()
+                .disabled(model.isRunning)
             }
             if model.burnerStage == .recipeFile {
                 recipeRow
