@@ -54,6 +54,19 @@ public final class DeveloperSettings {
         } else {
             self.useLiveClient = DeveloperSettings.releaseDefaultUseLive
         }
+        // GYM-ONLY: `-smoke-mode` scenarios are NO-BACKEND by contract — they
+        // seed DemoFixtures and must render from the MOCK client (GymLiveTests
+        // documents this split: live tests launch WITHOUT `-smoke-mode`).
+        // Since `releaseDefaultUseLive` flipped to true (2026-06-19), a smoke
+        // launch would otherwise ride the LIVE client with no session token —
+        // every BFF read fails `noSessionToken` ("not paired" / "connection
+        // expired"). Assigned in init, so `didSet` does NOT fire: the override
+        // is in-memory only and never persists onto the simulator (a later
+        // live-tier launch on the same simulator keeps its own default).
+        // Production never passes `-smoke-mode`.
+        if ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
+            self.useLiveClient = false
+        }
         self.unlocked = defaults.bool(forKey: revealedKey)
         let raw = defaults.integer(forKey: mockLatencyKey)
         self.mockLatencyMs = raw == 0 ? 180 : raw

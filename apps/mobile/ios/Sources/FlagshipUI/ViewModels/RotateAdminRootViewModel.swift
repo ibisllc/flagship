@@ -102,7 +102,7 @@ public final class RotateAdminRootViewModel {
     public init(
         server: any FlagshipServerClient,
         username: @escaping @MainActor () -> String?,
-        hasAdminRoot: @escaping @MainActor () -> Bool = { Keystore.hasAdminRoot },
+        hasAdminRoot: @escaping @MainActor () -> Bool = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot },
         loadOldAdminRoot: @escaping @MainActor (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
             try await Keystore.adminRootKey(reason: reason)
         },

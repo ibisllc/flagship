@@ -810,6 +810,202 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D6",
     },
   ),
+
+  // ── Feature-coverage tranche (gym-features.spec.ts) — transfer-a-box,
+  // box-request inbox, multi-pod switcher, create-server Advanced toggles,
+  // Slice-D admin-tier client surfaces. All fixture-tier; crypto is REAL
+  // (in-page Ed25519) so the client verify paths pass honestly.
+  webTotal(
+    "web-total-transfer-offer",
+    "D1 (transfer-a-box, giver): server-detail's 'Transfer to another account' opens the irreversible-warning ceremony; Create is gated on typing the FQDN; the signed offer (stubbed broker POST) renders the universal transfer link.",
+    "gym total webapp transfer offer opens the giver ceremony and renders the code",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail (routed BFF); stub the .com transfer/offer POST." },
+        { kind: "tap", describe: "Transfer to another account.", handle: "#transfer-start-btn" },
+        { kind: "assert", describe: "Ceremony opens; Create disabled.", handle: "[data-transfer-go]" },
+        { kind: "type", describe: "Type the server's full name.", handle: "[data-transfer-confirm]" },
+        { kind: "tap", describe: "Create transfer code (IRK-signed; POST stubbed).", handle: "[data-transfer-go]" },
+        { kind: "assert", describe: "The /transfer?o= link renders.", handle: "[data-transfer-qr]" },
+      ],
+      assertions: [
+        { describe: "Transfer ceremony dialog opens", handle: 'dialog[aria-label="Transfer this server"]', expect: "present" },
+        { describe: "Create gated until the FQDN is typed", handle: "[data-transfer-go]", expect: "disabled" },
+        { describe: "The universal transfer link renders", handle: "[data-transfer-qr]", expect: "present" },
+      ],
+      screenshots: [
+        shot("transfer-confirm-gate", "The type-to-confirm gate."),
+        shot("transfer-offer-code", "The rendered transfer link."),
+      ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-transfer-claim",
+    "D1 (transfer-a-box, acquirer): Home's Take-over entry opens the paste/scan claim; a pasted offer is signature-verified (real in-page IRK signing) BEFORE the severe type-to-confirm; Cancel — no claim fires.",
+    "gym total webapp take-over claim verifies an offer into the severe confirm",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home (account open, no servers)." },
+        { kind: "tap", describe: "Someone handing you a box? Take over.", handle: "#empty-take-over" },
+        { kind: "type", describe: "Paste a REAL signed offer (session-IRK-signed in-page).", handle: "[data-claim-input]" },
+        { kind: "tap", describe: "Continue → verify.", handle: "[data-claim-continue]" },
+        { kind: "assert", describe: "Severe confirm names the box; Take over gated.", handle: "[data-confirm-go]" },
+        { kind: "tap", describe: "Cancel — nothing claimed.", handle: "[data-confirm-cancel]" },
+      ],
+      assertions: [
+        { describe: "Take-over dialog opens", handle: 'dialog[aria-label="Take over a box"]', expect: "present" },
+        { describe: "Confirm stage names the box", handle: "[data-confirm-domain]", expect: "text", text: "hali.giver.flagship.services" },
+        { describe: "Take over gated until the FQDN is typed", handle: "[data-confirm-go]", expect: "disabled" },
+      ],
+      screenshots: [
+        shot("take-over-input", "The paste/scan input stage."),
+        shot("take-over-confirm", "The severe type-to-confirm stage."),
+      ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-box-inbox",
+    "D5 (box-request-inbox): a pod's pendingRequests digest renders the Home card as 'waiting for approval' with the one-tap Approve affordance; tapping opens the inbox whose card is STK-re-verified (a real in-page-minted STK signs the request).",
+    "gym total webapp box inbox surfaces a pending request and its approve card",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach paired Home; mint a box STK + sign a secret-request in-page; route /pods + /api/secret-requests." },
+        { kind: "assert", describe: "The card reads waiting-for-approval + Approve unlock.", handle: "#servers-list" },
+        { kind: "tap", describe: "Approve unlock (the one-tap affordance)." },
+        { kind: "assert", describe: "The verified request card renders with the approve button.", handle: "#view-boot-approval" },
+      ],
+      assertions: [
+        { describe: "Home card reads waiting for approval", handle: "#servers-list", expect: "text", text: "waiting for approval" },
+        { describe: "Box Request Inbox opens", handle: "#view-boot-approval", expect: "present" },
+        { describe: "Verified request card with approve affordance", handle: "[data-boot-request-id]", expect: "present" },
+      ],
+      screenshots: [
+        shot("inbox-home-card", "The waiting-for-approval one-tap card."),
+        shot("inbox-approve-card", "The STK-verified approve card."),
+      ],
+      dimension: "D5",
+    },
+  ),
+  webTotal(
+    "web-total-pod-switcher",
+    "D5 (multi-pod): two seeded pods (one live, one unreachable) render HONEST liveness on Home; the Services PodSwitcher lists All servers + both pods and tapping a chip switches the active pod context (base-URL slot).",
+    "gym total webapp pod switcher lists both pods with honest liveness and switches",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach paired Home; route two pods (live + unreachable)." },
+        { kind: "assert", describe: "Home cards: online vs offline (last seen …).", handle: "#servers-list" },
+        { kind: "tap", describe: "Services tab.", handle: '[data-tab-target="apps"]' },
+        { kind: "assert", describe: "Switcher shows All servers + both pods." },
+        { kind: "tap", describe: "Tap the unreachable pod's chip → context switches." },
+      ],
+      assertions: [
+        { describe: "Live pod reads online", handle: "#servers-list", expect: "text", text: "online" },
+        { describe: "Unreachable pod reads offline (last seen …)", handle: "#servers-list", expect: "text", text: "offline (last seen" },
+        { describe: "Pod switcher renders", handle: ".pod-switcher", expect: "present" },
+        { describe: "Switching selects the tapped pod's chip", handle: ".pod-switcher-chip.is-selected", expect: "present" },
+      ],
+      screenshots: [
+        shot("multi-pod-home-liveness", "Honest per-pod liveness on Home."),
+        shot("pod-switcher-all", "The switcher with All servers selected."),
+        shot("pod-switcher-switched", "The switched pod context."),
+      ],
+      dimension: "D5",
+    },
+  ),
+  webTotal(
+    "web-total-cs-advanced-toggles",
+    "D4 (one-shot pairing security choices): create-server's Advanced section gates embed-secrets + debug-friendly — hidden + default OFF, each with warning copy; closing Advanced RESETS both so a debug/secret choice can never stay silently armed.",
+    "gym total webapp create-server advanced toggles default off with the debug warning",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the create-server form." },
+        { kind: "assert", describe: "Advanced unchecked; options hidden.", handle: "#cs-advanced" },
+        { kind: "tap", describe: "Open Advanced.", handle: "#cs-advanced" },
+        { kind: "assert", describe: "Both toggles OFF + the debug warning copy.", handle: "#cs-debug-friendly" },
+        { kind: "tap", describe: "Arm debug-friendly, then close + reopen Advanced.", handle: "#cs-debug-friendly" },
+        { kind: "assert", describe: "The reset rule cleared it.", handle: "#cs-debug-friendly" },
+      ],
+      assertions: [
+        { describe: "Advanced toggle present + default OFF", handle: "#cs-advanced", expect: "present" },
+        { describe: "Embed-secrets toggle present", handle: "#cs-embed-secrets", expect: "present" },
+        { describe: "Debug-friendly toggle present", handle: "#cs-debug-friendly", expect: "present" },
+        { describe: "Debug warning copy renders", handle: "#cs-debug-friendly-hint", expect: "text", text: "physical access" },
+      ],
+      screenshots: [
+        shot("cs-advanced-open", "The opened Advanced section."),
+        shot("cs-advanced-reset", "The reset-on-close rule."),
+      ],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-admin-root-state",
+    "D3 (Slice D §5): account-security's Admin key card reports THIS device's admin standing honestly — non-admin shows the can't-rotate note (no button); an admin device (session.adminRootSeed) shows the warning + the Rotate control.",
+    "gym total webapp account-security shows the admin-root state",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings → Account security (routed account-type)." },
+        { kind: "assert", describe: "Non-admin: the unavailable card, no rotate.", handle: '[data-account-security-rotate="unavailable"]' },
+        { kind: "tap", describe: "Seed session.adminRootSeed; re-render." },
+        { kind: "assert", describe: "Admin: the available card + Rotate.", handle: "#account-security-rotate-admin" },
+      ],
+      assertions: [
+        { describe: "Non-admin state card", handle: '[data-account-security-rotate="unavailable"]', expect: "present" },
+        { describe: "Admin state card after seeding", handle: '[data-account-security-rotate="available"]', expect: "present" },
+        { describe: "Rotate control on an admin device", handle: "#account-security-rotate-admin", expect: "present" },
+      ],
+      screenshots: [
+        shot("admin-root-non-admin", "The non-admin Admin-key card."),
+        shot("admin-root-admin", "The admin Admin-key card with Rotate."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-rotate-admin-ceremony",
+    "D4 (Slice D §5): Rotate admin key opens its ceremony first screen — the revoke-semantic warning + a danger Continue; Cancel signs/rotates nothing (the typed-ROTATE stage + real rotation are the live slice).",
+    "gym total webapp rotate admin key opens its warning ceremony",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Account security as an admin device (seeded adminRootSeed)." },
+        { kind: "tap", describe: "Rotate admin key.", handle: "#account-security-rotate-admin" },
+        { kind: "assert", describe: "The warning ceremony opens.", handle: ".modal-title" },
+        { kind: "tap", describe: "Cancel — nothing rotated.", handle: "[data-modal-cancel]" },
+      ],
+      assertions: [
+        { describe: "Ceremony title", handle: ".modal-title", expect: "text", text: "Rotate admin key?" },
+        { describe: "Revoke-semantic warning", handle: ".modal-message", expect: "text", text: "REVOKES admin" },
+        { describe: "Admin card intact after Cancel", handle: '[data-account-security-rotate="available"]', expect: "present" },
+      ],
+      screenshots: [shot("rotate-admin-ceremony", "The rotate warning ceremony (not executed).")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-promote-admin-toggle",
+    "D3 (Slice D D-4): the promote-to-admin toggle appears ONLY on an admin device's synchronous add-device SAS ceremony — default OFF with the full-admin-authority warning; a non-admin device omits the section entirely.",
+    "gym total webapp add-device offers promote-to-admin only on an admin device",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach add-device as a NON-admin device." },
+        { kind: "assert", describe: "No promote section.", handle: '[data-section="promote-admin"]' },
+        { kind: "tap", describe: "Seed session.adminRootSeed; re-render." },
+        { kind: "assert", describe: "Promote toggle present, default OFF, hard warning.", handle: "#add-device-promote-admin" },
+      ],
+      assertions: [
+        { describe: "Promote section absent on a non-admin device", handle: '[data-section="promote-admin"]', expect: "absent" },
+        { describe: "Promote toggle present on an admin device", handle: "#add-device-promote-admin", expect: "present" },
+        { describe: "Full-admin-authority warning", handle: '[data-section="promote-admin-warning"]', expect: "text", text: "full admin authority" },
+      ],
+      screenshots: [
+        shot("promote-absent-non-admin", "No promote section on a non-admin device."),
+        shot("promote-toggle-admin", "The default-OFF promote toggle + warning."),
+      ],
+      dimension: "D3",
+    },
+  ),
 ];
 
 /** The webapp lane of the gym registry (every-merge subset + total tranche). */

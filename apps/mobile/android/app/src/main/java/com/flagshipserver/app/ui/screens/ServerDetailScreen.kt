@@ -383,8 +383,13 @@ private fun BootUnlockApprovalCard(
     val state by vm.state.collectAsState()
 
     // Directory-driven surfacing — no biometric, no network. Arms/clears the
-    // prompt on entry + whenever the flag changes.
-    LaunchedEffect(awaitingUnlock) { vm.setAwaitingUnlock(awaitingUnlock) }
+    // prompt on entry + whenever the flag changes. ALSO keyed on the VM
+    // instance: `remember(serverDomain, …)` re-creates the VM when the loaded
+    // BFF detail supplies its own FQDN, and the fresh (Idle) VM must re-arm or
+    // the card silently vanishes the moment the detail loads. On a real box
+    // the BFF FQDN equals the pod FQDN so the key never changes — this only
+    // matters when the two strings differ (the mock client's canned detail).
+    LaunchedEffect(vm, awaitingUnlock) { vm.setAwaitingUnlock(awaitingUnlock) }
 
     when (val s = state) {
         is BootUnlockApprovalViewModel.State.Idle -> Unit

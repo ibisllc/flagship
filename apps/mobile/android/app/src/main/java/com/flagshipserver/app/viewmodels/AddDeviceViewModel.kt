@@ -27,6 +27,7 @@ package com.flagshipserver.app.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flagshipserver.app.core.AdminPairingRelay
+import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.DeviceAdmit
 import com.flagshipserver.app.core.DeviceAdmitClaim
 import com.flagshipserver.app.core.HexUtil
@@ -97,7 +98,7 @@ class AddDeviceViewModel(
     /** Slice D (D-4) — true iff THIS device holds the admin master root, so it
      *  can seal it to the joining device. Only then is the "Also make this
      *  device an admin" toggle offered. Defaults to the live Keystore. */
-    private val canPromote: () -> Boolean = { Keystore.hasAdminRoot() },
+    private val canPromote: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
     /** Slice D (D-4) — reads the 32-byte admin master-root seed to seal into the
      *  bundle when promote is ON. Null when this device holds no root. */
     private val adminRootSeed: () -> ByteArray? = { Keystore.adminRootSeed() },

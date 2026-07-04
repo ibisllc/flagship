@@ -35,11 +35,13 @@
 		A8B2431CA8862B5B89D20922 /* GymTotalDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */; };
 		AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
 		B717FAA14A446FBAC6DCB244 /* FlagshipApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358AFC87FBA9DD274F112C5A /* FlagshipApp.swift */; };
+		BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */; };
 		C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */; };
 		C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
+		F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */; };
 		FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */; };
 		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
 /* End PBXBuildFile section */
@@ -116,6 +118,7 @@
 		02E103AA00FB9BA7E6BEC6AE /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../shared; sourceTree = SOURCE_ROOT; };
 		052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FlagshipWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymFeatureMirrorTests.swift; sourceTree = "<group>"; };
 		1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusSnapshot.swift; sourceTree = "<group>"; };
 		2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
 		2D3499CD4ED81FE13DF74CC7 /* GymIPadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymIPadTests.swift; sourceTree = "<group>"; };
@@ -139,6 +142,7 @@
 		8AB626C273D22599FB5455E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8CDD5005BBD09F56837E8ACA /* FlagshipWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWidgets.entitlements; sourceTree = "<group>"; };
 		8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSmokeTests.swift; sourceTree = "<group>"; };
+		91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymLiveTests.swift; sourceTree = "<group>"; };
 		9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymEveryMergeTests.swift; sourceTree = "<group>"; };
 		94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymTotalDetailTests.swift; sourceTree = "<group>"; };
 		95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
@@ -152,10 +156,10 @@
 		EA35BF39206378728D34AE65 /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_64F9F08D-FD84-4034-BCAA-8987505FC4B3" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_862C493C-C2FF-4E5B-8172-FED37D9C7394" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_B09ACC1A-4422-4B67-8B1F-3C2EC3B15196" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_E38F49BF-E8B5-4CD6-A8DB-0461BE211F8C" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -303,7 +307,9 @@
 			isa = PBXGroup;
 			children = (
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
+				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
 				2D3499CD4ED81FE13DF74CC7 /* GymIPadTests.swift */,
+				91E3BD7AFAF1A09A4E82D2FA /* GymLiveTests.swift */,
 				D6FD61316C29AFC0C85995C9 /* GymSmokeTests.swift */,
 				94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */,
 				43F4AD878708DBCD211ECF8F /* GymTotalTests.swift */,
@@ -312,13 +318,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_A610F796-C964-4F50-9771-C71BC7E1D7BA" /* . */ = {
+		"TEMP_2A289F95-ED80-401F-AACD-2B9A8A2A188B" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_64F9F08D-FD84-4034-BCAA-8987505FC4B3" /* project.yml */,
-				"TEMP_E38F49BF-E8B5-4CD6-A8DB-0461BE211F8C" /* FlagshipApp.xcodeproj */,
-				"TEMP_B09ACC1A-4422-4B67-8B1F-3C2EC3B15196" /* FlagshipApp.entitlements */,
-				"TEMP_862C493C-C2FF-4E5B-8172-FED37D9C7394" /* Info.plist */,
+				"TEMP_AE0FBE8D-43B8-4516-8E8C-CC600F640198" /* project.yml */,
+				"TEMP_2D4D028C-D4A4-442C-AEE5-727F6B1762EA" /* FlagshipApp.xcodeproj */,
+				"TEMP_B4264F74-5889-48D8-A154-96A1E848C843" /* FlagshipApp.entitlements */,
+				"TEMP_0B2B8D3C-D22D-4B90-9757-16D032229FD6" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -518,7 +524,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
+				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,
 				044DDAEFDED42ACC06772BE5 /* GymIPadTests.swift in Sources */,
+				F8E5776F2B87DE67108074EE /* GymLiveTests.swift in Sources */,
 				7ACDEC69F8BFED51EA2AC646 /* GymSmokeTests.swift in Sources */,
 				A8B2431CA8862B5B89D20922 /* GymTotalDetailTests.swift in Sources */,
 				A49AA68BBB3B27F04E02C2C9 /* GymTotalTests.swift in Sources */,
