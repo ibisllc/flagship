@@ -86,8 +86,11 @@ public final class AccountSecurityViewModel {
     }
 
     /// Slice D §5 — build the "Rotate admin key" VM off the same server +
-    /// username injection. Keystore-backed crypto uses its defaults. Only a
-    /// device holding the admin master root can actually rotate (`canRotate`).
+    /// username injection. Keystore-backed crypto uses its defaults, and the
+    /// post-rotation recovery re-escrow seams take their production defaults
+    /// too (`server.hasCloudRecovery` + `AdminRootReEscrow` over the platform
+    /// WebAuthn provider). Only a device holding the admin master root can
+    /// actually rotate (`canRotate`).
     public func makeRotateAdminRootViewModel() -> RotateAdminRootViewModel {
         RotateAdminRootViewModel(server: server, username: username)
     }

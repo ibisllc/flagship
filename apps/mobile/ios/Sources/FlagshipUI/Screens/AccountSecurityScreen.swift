@@ -16,6 +16,7 @@ public struct AccountSecurityScreen: View {
     @State private var watchVM: WatchDelegateViewModel?
     @State private var rotateVM: RotateAdminRootViewModel?
     @State private var showRotateConfirm = false
+    @State private var reEscrowPassphrase = ""
     @Bindable var viewModel: AccountSecurityViewModel
 
     public init(viewModel: AccountSecurityViewModel) {
@@ -201,7 +202,9 @@ public struct AccountSecurityScreen: View {
     /// Shown ONLY on a device that holds the admin master root. Rotating mints
     /// a fresh root, signs an `old → new` proof under the old root, publishes
     /// it, and re-seals the new root here — which revokes admin from every
-    /// OTHER device (they hold the old root).
+    /// OTHER device (they hold the old root). When recovery is enrolled, an
+    /// inline follow-up step (`reEscrowStep`) re-wraps the NEW root under the
+    /// existing recovery credential.
     @ViewBuilder
     private func rotateAdminSection(c: FSColors, vm: RotateAdminRootViewModel) -> some View {
         FSCard {
@@ -227,6 +230,14 @@ public struct AccountSecurityScreen: View {
                         .font(FS.font.caption())
                         .foregroundColor(c.success)
                         .accessibilityIdentifier("rotate-admin-done-msg")
+                    if vm.didSkipRecoveryUpdate {
+                        Text("Your recovery backup still holds your old admin key. Re-run recovery setup to fix this.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.warning)
+                            .accessibilityIdentifier("rotate-admin-reescrow-skipped-msg")
+                    }
+                case .rotatedNeedsRecoveryUpdate:
+                    reEscrowStep(c: c, vm: vm)
                 case .failed(let msg):
                     Text(msg)
                         .font(FS.font.caption())
@@ -240,8 +251,73 @@ public struct AccountSecurityScreen: View {
                     showRotateConfirm = true
                 }
                 .accessibilityIdentifier("rotate-admin-btn")
-                .disabled(vm.phase == .rotating)
+                .disabled(vm.phase == .rotating || awaitingReEscrow(vm) || vm.isUpdatingRecoveryBackup)
             }
+        }
+    }
+
+    private func awaitingReEscrow(_ vm: RotateAdminRootViewModel) -> Bool {
+        if case .rotatedNeedsRecoveryUpdate = vm.phase { return true }
+        return false
+    }
+
+    /// Slice D §5.3 (D-3) — inline post-rotation step: the recovery envelope
+    /// still wraps the OLD admin root, so the user re-derives the wrap key
+    /// (recovery passphrase + WebAuthn PRF) to re-escrow the NEW one. Skipping
+    /// is allowed — the rotation is already done — but leaves recovery
+    /// restoring a dead admin key until recovery setup is re-run.
+    @ViewBuilder
+    private func reEscrowStep(c: FSColors, vm: RotateAdminRootViewModel) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Your admin key changed. Enter your recovery passphrase to update your recovery backup — otherwise recovery would restore the OLD admin key.")
+                .font(FS.font.caption())
+                .foregroundColor(c.text)
+
+            SecureField("Recovery passphrase", text: $reEscrowPassphrase)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(c.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: FS.radius.md)
+                        .stroke(c.border, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .accessibilityIdentifier("rotate-admin-reescrow-passphrase")
+
+            if let err = vm.recoveryUpdateError {
+                Text(err)
+                    .font(FS.font.caption())
+                    .foregroundColor(c.danger)
+                    .accessibilityIdentifier("rotate-admin-reescrow-error")
+            }
+            if vm.isUpdatingRecoveryBackup {
+                HStack(spacing: FS.space.s2) {
+                    ProgressView()
+                    Text("Updating recovery backup…")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+
+            FSPrimaryButton(
+                "Update recovery backup",
+                enabled: !reEscrowPassphrase.isEmpty && !vm.isUpdatingRecoveryBackup,
+                block: true
+            ) {
+                Task {
+                    await vm.updateRecoveryBackup(passphrase: reEscrowPassphrase)
+                    if case .rotated = vm.phase { reEscrowPassphrase = "" }
+                }
+            }
+            .accessibilityIdentifier("rotate-admin-reescrow-btn")
+
+            FSGhostButton("Skip for now", block: true) {
+                vm.skipRecoveryUpdate()
+                reEscrowPassphrase = ""
+            }
+            .accessibilityIdentifier("rotate-admin-reescrow-skip")
         }
     }
 
