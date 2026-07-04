@@ -25,9 +25,11 @@ import type {
   MarketplaceListingRecord,
   MarketplaceSearchQuery,
   MarketplaceStorage,
+  ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
-import { hexToBytes } from "./hex.js";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex, equalHex, hexToBytes } from "./hex.js";
 import { constantTimeEqual } from "./customDomainRedirections.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 import { isPaidListing, isEntitledToInstall, type AppPurchaseDeps } from "./appPurchase.js";
@@ -35,6 +37,13 @@ import { isPaidListing, isEntitledToInstall, type AppPurchaseDeps } from "./appP
 export interface MarketplaceDeps {
   marketplace: MarketplaceStorage;
   usernames: UsernameStorage;
+  /** Registered servers, keyed by FQDN → {username, identityPubKeyHex}. When
+   *  present, `handleMarketplaceList` ALSO accepts a listing signed by a
+   *  non-revoked server identity key belonging to the creator's account — the
+   *  box-originated publish path (a creator publishing from their running box,
+   *  which holds its daemon identity key but NOT the phone-held owner IRK).
+   *  Absent ⇒ owner-IRK-only (unchanged). */
+  servers?: ServerStorage;
   /** Paid-app entitlement store (#14). When present, the install endpoint
    *  gates paid listings on ownership; absent ⇒ everything installs free
    *  (pre-#14 behaviour). */
@@ -65,7 +74,7 @@ export async function handleMarketplaceList(
   if (!r || typeof body?.signature !== "string") return malformed("malformed body");
   const required = [
     r.creator, r.slug, r.name, r.tagline, r.descriptionMd, r.category,
-    r.tagsCsv, r.canonicalUrl, r.manifestHashHex, r.status,
+    r.tagsCsv, r.canonicalUrl, r.manifestHashHex, r.manifestJson, r.status,
   ];
   if (required.some((x) => typeof x !== "string")) return malformed("missing required string field");
   if (typeof r.publicDistribution !== "boolean") return malformed("publicDistribution must be boolean");
@@ -98,6 +107,7 @@ export async function handleMarketplaceList(
     tagsCsv: r.tagsCsv!,
     canonicalUrl: r.canonicalUrl!,
     manifestHashHex: r.manifestHashHex!,
+    manifestJson: r.manifestJson!,
     screenshotKeys: r.screenshotKeys,
     publicDistribution: r.publicDistribution,
     status: r.status as "listed" | "private",
@@ -111,7 +121,36 @@ export async function handleMarketplaceList(
   } catch {
     return malformed("invalid hex");
   }
-  if (!verifyMarketplaceList(claim, sig, irkPub)) return forbidden("invalid signature");
+  // Accept EITHER the account's owner IRK (phone-signed) OR — when the servers
+  // store is wired — a non-revoked server identity key belonging to the
+  // creator's account (box-originated publish; the box holds its daemon
+  // identity key but not the phone-held IRK).
+  let signerOk = verifyMarketplaceList(claim, sig, irkPub);
+  if (!signerOk && deps.servers) {
+    const owned = await deps.servers.listForUser(r.creator!);
+    for (const s of owned) {
+      if (s.revokedAt) continue;
+      let idPub: Uint8Array;
+      try {
+        idPub = hexToBytes(s.identityPubKeyHex);
+      } catch {
+        continue;
+      }
+      if (verifyMarketplaceList(claim, sig, idPub)) {
+        signerOk = true;
+        break;
+      }
+    }
+  }
+  if (!signerOk) return forbidden("invalid signature");
+
+  // The manifest is carried on the listing but NOT in the canonical bytes; bind
+  // it to the (verified) signature transitively by checking its hash equals the
+  // signed `manifestHashHex`. Rejects a manifest swapped after signing.
+  const manifestHash = bytesToHex(sha256(new TextEncoder().encode(r.manifestJson!)));
+  if (!equalHex(manifestHash, r.manifestHashHex!)) {
+    return malformed("manifest_json does not match manifest_hash_hex");
+  }
 
   const freshness = deps.freshnessMs ?? 5 * 60_000;
   const now = (deps.now ?? (() => Date.now()))();
@@ -129,6 +168,7 @@ export async function handleMarketplaceList(
     tagsCsv: r.tagsCsv!,
     canonicalUrl: r.canonicalUrl!,
     manifestHashHex: r.manifestHashHex!,
+    manifestJson: r.manifestJson!,
     screenshotKeysJson: JSON.stringify(claim.screenshotKeys),
     status: claim.status,
     scanGrade: existing?.scanGrade,
@@ -367,6 +407,7 @@ function serializeListing(r: MarketplaceListingRecord) {
     tags: r.tagsCsv.split(",").filter(Boolean),
     canonical_url: r.canonicalUrl,
     manifest_hash: r.manifestHashHex,
+    manifest_json: r.manifestJson ?? "",
     screenshots: JSON.parse(r.screenshotKeysJson) as string[],
     status: r.status,
     price_usd_cents: r.priceUsdCents ?? 0,

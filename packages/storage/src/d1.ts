@@ -2762,11 +2762,11 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
       .prepare(
         `INSERT INTO marketplace_listings (
            creator, slug, name, tagline, description_md, category, tags_csv,
-           canonical_url, manifest_hash_hex, screenshot_keys_json, status,
+           canonical_url, manifest_hash_hex, manifest_json, screenshot_keys_json, status,
            scan_grade, scan_report_key, scan_completed_at, featured_until,
            rank_score, install_count, public_distribution, listed_at, updated_at,
            irk_signature_hex
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(creator, slug) DO UPDATE SET
            name=excluded.name,
            tagline=excluded.tagline,
@@ -2775,6 +2775,7 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
            tags_csv=excluded.tags_csv,
            canonical_url=excluded.canonical_url,
            manifest_hash_hex=excluded.manifest_hash_hex,
+           manifest_json=excluded.manifest_json,
            screenshot_keys_json=excluded.screenshot_keys_json,
            status=excluded.status,
            public_distribution=excluded.public_distribution,
@@ -2784,6 +2785,7 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
       .bind(
         rec.creator, rec.slug, rec.name, rec.tagline, rec.descriptionMd,
         rec.category, rec.tagsCsv, rec.canonicalUrl, rec.manifestHashHex,
+        rec.manifestJson ?? "",
         rec.screenshotKeysJson, rec.status,
         rec.scanGrade ?? null, rec.scanReportKey ?? null, rec.scanCompletedAt ?? null,
         rec.featuredUntil ?? null,
@@ -2884,7 +2886,8 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
 interface RawMarketplaceRow {
   creator: string; slug: string; name: string; tagline: string;
   description_md: string; category: string; tags_csv: string;
-  canonical_url: string; manifest_hash_hex: string; screenshot_keys_json: string;
+  canonical_url: string; manifest_hash_hex: string; manifest_json: string | null;
+  screenshot_keys_json: string;
   status: string; scan_grade: string | null; scan_report_key: string | null;
   scan_completed_at: number | null; featured_until: number | null;
   rank_score: number; install_count: number; public_distribution: number;
@@ -2903,6 +2906,7 @@ function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
     tagsCsv: r.tags_csv,
     canonicalUrl: r.canonical_url,
     manifestHashHex: r.manifest_hash_hex,
+    manifestJson: r.manifest_json ?? "",
     screenshotKeysJson: r.screenshot_keys_json,
     status: r.status as "listed" | "private" | "removed",
     priceUsdCents: r.price_usd_cents ?? undefined,

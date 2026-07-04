@@ -1907,6 +1907,11 @@ export interface MarketplaceListingRecord {
   tagsCsv: string;
   canonicalUrl: string;
   manifestHashHex: string;
+  /** The app's public manifest JSON (config, not a secret). Carried on the
+   *  listing so an install client can fetch + verify it against
+   *  `manifestHashHex` without a round-trip to the creator's pod. Empty
+   *  string on legacy rows written before migration 0090. */
+  manifestJson: string;
   screenshotKeysJson: string;       // JSON array of strings
   status: "listed" | "private" | "removed";
   /** Price in USD cents (#14). Absent/0 ⇒ free. Curated (admin-set) for now;
