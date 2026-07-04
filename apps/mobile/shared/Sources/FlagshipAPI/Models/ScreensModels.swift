@@ -6,6 +6,7 @@
 // `Codable` round-tripping with the daemon's `JSON.stringify(...)` output.
 
 import Foundation
+import CryptoKit
 
 // MARK: - Shared
 
@@ -218,19 +219,49 @@ public struct MarketplaceListingDetail: Codable, Equatable, Sendable {
     public let title: String
     public let summary: String
     public let manifestJson: String
+    /// The listing's committed `manifest_hash` (sha256 hex of manifestJson).
+    /// The VM re-checks it before install so a swapped manifest is rejected.
+    /// Empty on legacy listings that predate the carried manifest.
+    public let manifestHash: String
     public init(
         creator: String,
         slug: String,
         title: String,
         summary: String,
-        manifestJson: String
+        manifestJson: String,
+        manifestHash: String = ""
     ) {
         self.creator = creator
         self.slug = slug
         self.title = title
         self.summary = summary
         self.manifestJson = manifestJson
+        self.manifestHash = manifestHash
     }
+}
+
+/// Wire shape of the `.com` single-listing GET
+/// (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`): the
+/// listing object is wrapped under `listing` with snake_case keys. Decoded by
+/// the Live client and mapped into `MarketplaceListingDetail`.
+struct ComListingEnvelope: Decodable {
+    struct Listing: Decodable {
+        let creator: String
+        let slug: String
+        let name: String?
+        let tagline: String?
+        let manifest_json: String?
+        let manifest_hash: String?
+    }
+    let listing: Listing
+}
+
+/// sha256 hex of a UTF-8 string. Verifies a carried marketplace manifest hashes
+/// to the listing's committed `manifest_hash` before install (mirror of the
+/// webapp `sha256Hex` + Android `manifestSha256Hex`).
+public func manifestSha256Hex(_ s: String) -> String {
+    let digest = SHA256.hash(data: Data(s.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
 }
 
 /// Install-marketplace-app request. MIRRORS the webapp wire shape in

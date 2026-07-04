@@ -641,17 +641,13 @@ struct MarketplaceDetailContainer: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @State private var listing: MarketplaceListing?
-    @State private var installState: InstallState = .idle
+    /// Owns the install lifecycle (fetch → hash-verify → biometric sign → POST →
+    /// state), mirroring Android's MarketplaceViewModel. Created lazily in
+    /// `.task` once the environment client is available.
+    @State private var vm: MarketplaceViewModel?
     /// Drives the pre-install confirmation alert (parity with the webapp's
     /// `inlineConfirm`).
     @State private var confirmingInstall = false
-
-    enum InstallState: Equatable {
-        case idle
-        case installing
-        case succeeded(serviceId: String)
-        case failed(message: String)
-    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -678,6 +674,7 @@ struct MarketplaceDetailContainer: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            if vm == nil { vm = MarketplaceViewModel(client: client) }
             let resp = (try? await client.marketplaceBrowse())?.listings ?? []
             listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
         }
@@ -689,7 +686,9 @@ struct MarketplaceDetailContainer: View {
             titleVisibility: .visible
         ) {
             Button("Install") {
-                if let l = listing { Task { await runInstall(listing: l) } }
+                if let l = listing, let vm, let serverFqdn = app.currentPod?.fqdn {
+                    Task { await vm.install(creator: l.creator, slug: l.slug, serverId: serverFqdn) }
+                }
             }
             .accessibilityIdentifier("marketplace-install-confirm")
             Button("Cancel", role: .cancel) {}
@@ -700,7 +699,7 @@ struct MarketplaceDetailContainer: View {
 
     @ViewBuilder
     private func installControls(listing l: MarketplaceListing, c: FSColors) -> some View {
-        switch installState {
+        switch vm?.installState ?? .idle {
         case .idle:
             FSPrimaryButton(
                 l.alreadyInstalled ? "Already installed" : "Deploy",
@@ -745,51 +744,30 @@ struct MarketplaceDetailContainer: View {
                 }
             }
             .accessibilityIdentifier("marketplace-deploy-success")
+        case .paymentRequired(let priceUsdCents):
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text(priceUsdCents > 0
+                        ? "This is a paid app (\(formatUsd(priceUsdCents)))."
+                        : "This is a paid app.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                    Text("Purchase it to install on your box.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-payment-required")
+            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
         case .failed(let message):
             ErrorCard(message: "Install failed: \(message)")
                 .accessibilityIdentifier("marketplace-deploy-error")
-            FSGhostButton("Try again", block: true) {
-                installState = .idle
-            }
+            FSGhostButton("Try again", block: true) { vm?.resetInstall() }
         }
     }
 
-    private func runInstall(listing l: MarketplaceListing) async {
-        let creator = l.creator
-        let slug = l.slug
-        installState = .installing
-        do {
-            // Fetch the full listing (manifestJson lives only on the
-            // single-listing endpoint; marketplaceBrowse returns metadata
-            // only). Mirrors the webapp's two-step fetch in
-            // `installFromMarketplace`.
-            let detail = try await client.marketplaceFetchListing(creator: creator, slug: slug)
-            guard let serverFqdn = app.currentPod?.fqdn else {
-                installState = .failed(message: "no pod paired yet")
-                return
-            }
-            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-            let request = InstallServiceRequest(
-                serverId: serverFqdn,
-                creator: creator,
-                slug: slug,
-                manifestJson: detail.manifestJson,
-                addOwnerToMembership: true,
-                issuedAt: issuedAt
-            )
-            let irk = try await Keystore.deriveIRK(reason: "Install \(creator)/\(slug)")
-            let sig = try irk.signature(for: installServiceCanonicalBytes(request))
-            let envelope = InstallServiceEnvelope(
-                request: request,
-                signature: HexUtil.encode(sig)
-            )
-            let resp = try await client.installFromMarketplace(envelope)
-            installState = .succeeded(serviceId: resp.serviceId)
-        } catch let e as ScreensClientError {
-            installState = .failed(message: e.errorDescription ?? "unknown error")
-        } catch {
-            installState = .failed(message: error.localizedDescription)
-        }
+    private func formatUsd(_ cents: Int) -> String {
+        String(format: "$%.2f", Double(cents) / 100.0)
     }
 }
 

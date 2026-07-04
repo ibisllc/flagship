@@ -146,18 +146,26 @@ class MockScreensClient(
     var installShouldFail: Boolean = false
     var installFailureMessage: String = "simulated daemon error"
 
+    /** When true `marketplaceFetchListing` returns a listing whose
+     *  `manifestHash` does NOT match its `manifestJson`, so the VM's
+     *  install-time hash check can be exercised. Mirrors iOS
+     *  `tamperListingManifest`. */
+    var tamperListingManifest: Boolean = false
+
     /** Deterministic listing detail. The `manifestJson` is opaque (a real
      *  daemon validates the inner JSON); the mock returns a small recognizable
      *  stub so tests can assert it round-trips into the install request. */
     override suspend fun marketplaceFetchListing(creator: String, slug: String): MarketplaceListingDetail {
         tick()
         listingFetches.add(ListingFetch(creator, slug))
+        val manifestJson = """{"name":"$slug","version":"1.0.0","creator":"$creator"}"""
         return MarketplaceListingDetail(
             creator = creator,
             slug = slug,
             title = slug.replaceFirstChar { it.uppercase() },
             summary = "Marketplace stub for $creator/$slug",
-            manifestJson = """{"name":"$slug","version":"1.0.0","creator":"$creator"}""",
+            manifestJson = manifestJson,
+            manifestHash = if (tamperListingManifest) "00".repeat(32) else manifestSha256Hex(manifestJson),
         )
     }
 

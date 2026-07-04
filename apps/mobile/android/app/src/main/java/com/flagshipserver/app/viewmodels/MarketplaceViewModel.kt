@@ -13,6 +13,7 @@ import com.flagshipserver.app.api.InstallServiceRequest
 import com.flagshipserver.app.api.MarketplaceListing
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.installServiceCanonicalBytes
+import com.flagshipserver.app.api.manifestSha256Hex
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -81,6 +82,16 @@ class MarketplaceViewModel(
         _installState.value = InstallState.Installing
         try {
             val detail = client.marketplaceFetchListing(creator, slug)
+            // The manifest is carried on the listing but not in the signed
+            // canonical bytes; bind it by re-checking it hashes to the listing's
+            // committed manifest_hash before installing a byte of it.
+            if (detail.manifestHash.isNotEmpty() &&
+                !detail.manifestHash.equals(manifestSha256Hex(detail.manifestJson), ignoreCase = true)
+            ) {
+                _installState.value =
+                    InstallState.Failed("manifest hash mismatch — refusing to install a tampered listing")
+                return
+            }
             val request = InstallServiceRequest(
                 serverId = serverId,
                 creator = creator,
