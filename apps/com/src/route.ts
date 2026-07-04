@@ -174,6 +174,15 @@ export interface RouteEnv {
    * POST /api/iso-manifest. See ControlPlaneEnv.FLAGSHIP_ISO_MANIFEST.
    */
   FLAGSHIP_ISO_MANIFEST?: string;
+  /**
+   * Blessed in-house inference endpoint (JSON `{baseUrl, model}`) that
+   * backs the free-credits `flagship` provider. See
+   * ControlPlaneEnv.FLAGSHIP_INFERENCE_ENDPOINT.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+  /** HMAC secret the promo minter signs scoped inference tokens with, and
+   *  the metering shim verifies + reports usage under. See ControlPlaneEnv. */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset

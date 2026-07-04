@@ -568,6 +568,13 @@ export class InMemoryLlmPromoStorage implements LlmPromoStorage {
     this.lifetime.set(u, next);
     return { ...next };
   }
+  async recordMeteredUsage(u: string, d: number, i: number, o: number, now: number): Promise<void> {
+    const dk = this.dailyKey(u, d);
+    const dcur = this.daily.get(dk) ?? { username: u, day: d, dailyCount: 0, dailyInputTokens: 0, dailyOutputTokens: 0 };
+    this.daily.set(dk, { ...dcur, dailyInputTokens: dcur.dailyInputTokens + i, dailyOutputTokens: dcur.dailyOutputTokens + o });
+    const lcur = this.lifetime.get(u) ?? { username: u, lifetimeCount: 0, lifetimeInputTokens: 0, lifetimeOutputTokens: 0, updatedAt: now };
+    this.lifetime.set(u, { ...lcur, lifetimeInputTokens: lcur.lifetimeInputTokens + i, lifetimeOutputTokens: lcur.lifetimeOutputTokens + o, updatedAt: now });
+  }
 }
 
 export class InMemoryDemoLlmLedgerStorage implements DemoLlmLedgerStorage {

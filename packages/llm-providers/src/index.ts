@@ -7,3 +7,4 @@ export { openai, openaiStreaming } from "./providers/openai.js";
 export { google, googleStreaming } from "./providers/google.js";
 export { openrouter } from "./providers/openrouter.js";
 export { ollama } from "./providers/ollama.js";
+export { flagship, flagshipStreaming } from "./providers/flagship.js";

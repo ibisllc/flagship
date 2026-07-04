@@ -2003,6 +2003,20 @@ export interface LlmPromoStorage {
   bumpDaily(username: string, day: number, inputTokens: number, outputTokens: number): Promise<LlmPromoUsageRecord>;
   getLifetime(username: string): Promise<LlmPromoLifetimeRecord | undefined>;
   bumpLifetime(username: string, inputTokens: number, outputTokens: number, now: number): Promise<LlmPromoLifetimeRecord>;
+  /**
+   * Record TRUE token usage reported by the in-house inference metering
+   * shim (metering model (b)). Unlike `bumpDaily`/`bumpLifetime` this
+   * adds only to the token columns and does NOT increment the call
+   * counters — a usage report is not a new issuance. Adds to BOTH the
+   * daily (for the given day) and lifetime token totals atomically.
+   */
+  recordMeteredUsage(
+    username: string,
+    day: number,
+    inputTokens: number,
+    outputTokens: number,
+    now: number,
+  ): Promise<void>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

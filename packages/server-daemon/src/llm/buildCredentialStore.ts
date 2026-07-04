@@ -73,8 +73,10 @@ function validate(obj: unknown): LlmCredential | null {
   if (typeof o.provider !== "string" || o.provider.length === 0) return null;
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return null;
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return null;
+  if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return null;
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  if (o.source === "byok" || o.source === "promo") out.source = o.source;
   return out;
 }
 

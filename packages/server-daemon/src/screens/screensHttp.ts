@@ -1451,8 +1451,10 @@ function parseCredential(raw: unknown): LlmCredential | null | "invalid" {
   if (typeof o.provider !== "string" || o.provider.length === 0) return "invalid";
   if (typeof o.apiKey !== "string" || o.apiKey.length === 0) return "invalid";
   if (o.baseUrl !== undefined && typeof o.baseUrl !== "string") return "invalid";
+  if (o.source !== undefined && o.source !== "byok" && o.source !== "promo") return "invalid";
   const out: LlmCredential = { provider: o.provider, apiKey: o.apiKey };
   if (typeof o.baseUrl === "string" && o.baseUrl.length > 0) out.baseUrl = o.baseUrl;
+  if (o.source === "byok" || o.source === "promo") out.source = o.source;
   return out;
 }
 
