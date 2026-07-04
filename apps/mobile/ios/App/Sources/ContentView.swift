@@ -142,11 +142,20 @@ struct ContentView: View {
                     let swkDeposit: SwkDepositCoordinator? = (app.currentUser.map {
                         SwkDepositCoordinator(username: $0, mailbox: mailbox)
                     })
+                    let trust = self.trust
                     return PendingServerReconciler(
                         app: app,
                         fetchPods: fetch,
                         onRegistered: { fqdn, identityPubKeyHex in
                             await swkDeposit?.depositIfNeeded(serverDomain: fqdn, identityPubKeyHex: identityPubKeyHex)
+                        },
+                        // Per-cert relay-trust aggregation (maintainer-trust Layer 3):
+                        // verify each box's STK-signed box-trust-status and aggregate
+                        // the untrusted ones BY failing relay cert-hash into the red
+                        // sliver — one line + one override per DISTINCT authority. A
+                        // warning + override source; it never gates `.com` I/O.
+                        onDirectory: { pods in
+                            trust.setRelayFailures(RelayTrustAggregator.aggregate(pods: pods))
                         }
                     )
                 }

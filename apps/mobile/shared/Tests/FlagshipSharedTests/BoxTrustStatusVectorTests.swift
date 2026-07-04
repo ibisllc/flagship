@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import FlagshipAPI
 @testable import FlagshipCore
 
 /// Pins the Swift `BoxTrustStatus` verifier to the EXACT cross-platform vector

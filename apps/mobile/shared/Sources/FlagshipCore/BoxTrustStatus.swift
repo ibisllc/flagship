@@ -20,56 +20,11 @@ import FlagshipAPI
 ///   flagship/box-trust-status/v1|<serverDomain>|<relayVerdict>|
 ///   <lockedDown "1"|"0">|<failingCertHash or "">|
 ///   <coveringExceptionCertHash or "">|<nonce>|<issuedAt>
-
-/// The box's verdict on the relay-class (`.services` hub) blessing it holds.
-public enum RelayVerdict: String, Codable, Sendable {
-    case trusted
-    case untrusted
-    case unknown
-}
-
-public struct BoxTrustStatusReport: Codable, Equatable, Sendable {
-    public let serverDomain: String
-    public let relayVerdict: RelayVerdict
-    public let lockedDown: Bool
-    /// relay-class cert-hash of the offending hub key, when untrusted.
-    public let failingCertHash: String?
-    /// relay-class cert-hash of the owner TrustException that lifted the
-    /// failing verdict, when an override is in force.
-    public let coveringExceptionCertHash: String?
-    public let nonce: String
-    public let issuedAt: Int64
-
-    public init(
-        serverDomain: String,
-        relayVerdict: RelayVerdict,
-        lockedDown: Bool,
-        failingCertHash: String?,
-        coveringExceptionCertHash: String?,
-        nonce: String,
-        issuedAt: Int64
-    ) {
-        self.serverDomain = serverDomain
-        self.relayVerdict = relayVerdict
-        self.lockedDown = lockedDown
-        self.failingCertHash = failingCertHash
-        self.coveringExceptionCertHash = coveringExceptionCertHash
-        self.nonce = nonce
-        self.issuedAt = issuedAt
-    }
-
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.serverDomain = try c.decode(String.self, forKey: .serverDomain)
-        self.relayVerdict = try c.decode(RelayVerdict.self, forKey: .relayVerdict)
-        self.lockedDown = try c.decodeIfPresent(Bool.self, forKey: .lockedDown) ?? false
-        self.failingCertHash = try c.decodeIfPresent(String.self, forKey: .failingCertHash)
-        self.coveringExceptionCertHash = try c.decodeIfPresent(String.self, forKey: .coveringExceptionCertHash)
-        self.nonce = try c.decode(String.self, forKey: .nonce)
-        self.issuedAt = try c.decode(Int64.self, forKey: .issuedAt)
-    }
-}
-
+///
+/// `RelayVerdict` + `BoxTrustStatusReport` (the DATA half) live in FlagshipAPI
+/// (`BoxTrustStatusReport.swift`) so the wire type can ride `PodDirectoryEntry`
+/// without a FlagshipCore ↔ FlagshipAPI cycle — mirroring the
+/// `DaemonStatusReport` (FlagshipAPI) / `DaemonStatus` (FlagshipCore) split.
 public enum BoxTrustStatus {
     public static let canonicalTag = "flagship/box-trust-status/v1"
 

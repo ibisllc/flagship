@@ -62,6 +62,15 @@ public final class TrustCenter {
     /// An override un-halts traffic but the failure line STAYS in `failures`.
     public private(set) var overriddenCertHashes: Set<String> = []
 
+    /// PER-CERT RELAY failures aggregated across the user's pods
+    /// (`RelayTrustAggregator`) — a SEPARATE source from the control-CA
+    /// `failures`/`verdict`. It drives the red sliver (one line per DISTINCT
+    /// faulty relay authority) but NEVER `isServerTrusted` — a relay-cert
+    /// failure is a WARNING + override, not the control-CA `.com` I/O halt. The
+    /// "overridden" marker on each entry is wire-driven (`coveringException-
+    /// CertHash`), persisting until a fresh valid blessing clears it.
+    public private(set) var relayFailures: [RelayCertFailure] = []
+
     public init() {}
 
     /// True unless we positively know the control server is untrusted AND at
@@ -112,6 +121,14 @@ public final class TrustCenter {
     /// previously-known `.untrusted` keeps halting, and a never-evaluated state
     /// stays `.unknown` (never bricks on a network failure).
     public func markNoVerdict() {}
+
+    /// Replace the per-cert RELAY failure set (verified + aggregated from
+    /// `/pods` by `RelayTrustAggregator`). Idempotent — an unchanged set never
+    /// churns observers. Independent of `verdict`/`failures`, so it never
+    /// affects `isServerTrusted` (no `.com` halt).
+    public func setRelayFailures(_ next: [RelayCertFailure]) {
+        if next != relayFailures { relayFailures = next }
+    }
 
     /// Record that the owner signed a `TrustException` for [certHash]. The
     /// failure line stays visible; traffic for that cert resumes.

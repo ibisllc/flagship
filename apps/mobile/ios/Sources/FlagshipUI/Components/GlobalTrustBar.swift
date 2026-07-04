@@ -26,24 +26,45 @@ public struct GlobalTrustBar: View {
     public init() {}
 
     public var body: some View {
-        let failures = app.isUnlocked ? trust.sliverFailures : []
+        // Two failure SOURCES share the one red sliver: the control-CA class
+        // (the `.com` global-halt) and the per-cert RELAY failures aggregated
+        // across the user's pods (a warning + override — NOT a halt). Both hide
+        // under the biometric lock.
+        let controlFailures = app.isUnlocked ? trust.sliverFailures : []
+        let relayFailures = app.isUnlocked ? trust.relayFailures : []
+        let hasAny = !controlFailures.isEmpty || !relayFailures.isEmpty
         ZStack(alignment: .top) {
-            if !failures.isEmpty {
+            if hasAny {
                 VStack(spacing: 1) {
-                    ForEach(failures) { f in
+                    ForEach(controlFailures) { f in
                         TrustSliverLine(
                             failure: f,
+                            serverCount: 0,
                             overridden: trust.overriddenCertHashes.contains(f.certHash),
                             scheme: scheme
                         ) {
                             overriding = f
                         }
                     }
+                    // One line per DISTINCT faulty relay authority, spanning all
+                    // affected servers; the "continuing" marker is wire-driven
+                    // (a covering exception the box relayed) OR a local override.
+                    ForEach(relayFailures) { rf in
+                        TrustSliverLine(
+                            failure: rf.trustFailure,
+                            serverCount: rf.serverCount,
+                            overridden: rf.overridden || trust.overriddenCertHashes.contains(rf.certHash),
+                            scheme: scheme
+                        ) {
+                            overriding = rf.trustFailure
+                        }
+                    }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: failures)
+        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: controlFailures)
+        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: relayFailures)
         .sheet(item: $overriding) { f in
             TrustOverrideSheet(failure: f, username: app.currentUser) { overriding = nil }
                 .environment(trust)
@@ -53,6 +74,9 @@ public struct GlobalTrustBar: View {
 
 private struct TrustSliverLine: View {
     let failure: TrustFailure
+    /// >1 for a relay-cert failure spanning multiple servers; 0 for the
+    /// single-authority control-CA class (no count shown).
+    let serverCount: Int
     let overridden: Bool
     let scheme: ColorScheme
     let onTap: () -> Void
@@ -69,6 +93,15 @@ private struct TrustSliverLine: View {
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if serverCount > 1 {
+                    Text("\(serverCount) servers")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.18))
+                        .clipShape(Capsule())
+                }
                 Spacer(minLength: FS.space.s2)
                 if overridden {
                     Text("continuing")
