@@ -34,6 +34,7 @@ import {
   renderTrustSliver,
 } from "./lib/trustSliver.js";
 import { grantTrustException, loadAndApplyExceptions } from "./lib/trustOverride.js";
+import { updateRelayTrustFromPods } from "./lib/relayTrust.js";
 import { inlinePrompt } from "./lib/modal.js";
 import { verifyPin, hasPin } from "./lib/pinLock.js";
 import {
@@ -637,6 +638,15 @@ async function boot() {
   // holds the IRK). Idempotent + race-safe; a locked session no-ops. Manual
   // paste (pod-pair) stays as the fallback for a brand-new pod URL not in /pods.
   liveSync.subscribe((snap) => { void autoPairFromSnapshot(snap); });
+
+  // ── Per-cert relay-trust aggregation (maintainer-trust Layer 3) ──
+  // On every /pods snapshot, re-verify each box's STK-signed box-trust-status
+  // verdict and aggregate the untrusted ones BY failing relay cert-hash into
+  // the shared trust store — ONE red sliver line + ONE override per DISTINCT
+  // faulty relay authority (not per box). This is a WARNING + override source
+  // that does NOT hard-halt .com I/O (unlike the control-CA class); the box
+  // keeps relaying once an owner exception covers it.
+  liveSync.subscribe((snap) => { void updateRelayTrustFromPods(snap.pods); });
 
   // Re-evaluate BOTH slivers' visibility on every navigation: the lock surfaces
   // hide them; unlocking back into the app reveals any running operations / a

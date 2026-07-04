@@ -14,6 +14,9 @@ import {
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
+import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
+import { sendRelayTrustAlert } from "./relaySos.js";
+import type { RelayLockdownController } from "./relayLockdown.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
 import { RepairStatsAccumulator } from "./peerBackup/repairStatsAccumulator.js";
@@ -907,11 +910,20 @@ async function main(): Promise<void> {
   const onServiceRemovedRef: { current: ((slug: string) => Promise<void>) | null } = {
     current: null,
   };
+  // Late-binding cell for the relay-trust lockdown controller (built inside
+  // startDaemonRuntime, below). The heartbeat (started here, before the runtime
+  // wires) reads the box's PER-BOX relay-trust verdict through this so the
+  // signed box-trust-status rides every beat once the runtime is up. Null until
+  // then ⇒ no trustStatus is signed/sent (additive; identical to an old box).
+  const relayLockdownRef: { current: RelayLockdownController | null } = {
+    current: null,
+  };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
+    readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
   });
 
   let runtime: DaemonRuntime;
@@ -927,6 +939,32 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
+      // Owner-override resolution for relay-trust: reads the owner-signed
+      // relay TrustExceptions from `.com` + verifies them against the box's
+      // IRK-anchored roster (anchor = the provisioned owner IRK). ONE
+      // phone-signed override, fanned out via `.com`, thereby satisfies this
+      // box too. Only when the box knows its owner (cfg present).
+      ...(cfg
+        ? {
+            resolveRelayTrustExceptions: makeRelayTrustExceptionResolver({
+              username: cfg.userId,
+              ownerIrkPub: cfg.irkPublicKey,
+              controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+            }),
+            // Real STK-signed push-relay SOS (category "cert-alert") when the
+            // box locks down under ENFORCE — replaces the log-only default. The
+            // authoritative detail rides the signed /pods box-trust-status; this
+            // is the proactive owner wake.
+            onRelaySos: () => {
+              void sendRelayTrustAlert({
+                targetUsername: cfg.userId,
+                signer: custodian,
+                controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+                log: (l) => console.log(l),
+              });
+            },
+          }
+        : {}),
       // The cert has landed and HTTPS is genuinely serving — the real
       // "your server is live" moment. Report it ONCE on the single canonical
       // channel (idempotent: only the first cert/renewal POSTs `live`). Cert
@@ -1117,6 +1155,12 @@ async function main(): Promise<void> {
     await reportStatus("error", `startup: ${msg}`.slice(0, 280));
     process.exit(1);
   }
+
+  // Back-patch the heartbeat's trust-snapshot source now that the runtime's
+  // relay-trust lockdown controller exists. From here the signed
+  // box-trust-status rides every beat (detect + propagate — NOT gated by
+  // FLAGSHIP_RELAY_TRUST_ENFORCE; only the data-plane lockdown is).
+  relayLockdownRef.current = runtime.relayLockdown;
 
   // ---- Owner-IRK handlers: dead-man + power + front-page + journal ----
   // Production-only (needs cfg.irkPublicKey). No enabled dead-man policy ⇒

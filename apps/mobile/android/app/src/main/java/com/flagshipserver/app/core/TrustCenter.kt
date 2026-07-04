@@ -58,6 +58,16 @@ class TrustCenter {
     private val _overridden = MutableStateFlow<Set<String>>(emptySet())
     val overriddenCertHashes: StateFlow<Set<String>> = _overridden.asStateFlow()
 
+    /** PER-CERT RELAY failures aggregated across the user's pods
+     *  (RelayTrustAggregator) — a SEPARATE source from the control-CA
+     *  [failures]/[verdict]. It drives the red sliver (one line per DISTINCT
+     *  faulty relay authority) but NEVER [isServerTrusted] — a relay-cert
+     *  failure is a WARNING + override, not the control-CA `.com` I/O halt. The
+     *  "overridden" marker on each entry is wire-driven
+     *  (`coveringExceptionCertHash`), persisting until a fresh valid blessing. */
+    private val _relayFailures = MutableStateFlow<List<RelayCertFailure>>(emptyList())
+    val relayFailures: StateFlow<List<RelayCertFailure>> = _relayFailures.asStateFlow()
+
     /** True unless we positively know the control server is UNTRUSTED AND at
      *  least one failing cert is still un-overridden. UNKNOWN + TRUSTED both
      *  let traffic through. Overriding every failing cert flips this back to
@@ -99,6 +109,14 @@ class TrustCenter {
      *  previously-known UNTRUSTED keeps halting; never bricks on a network
      *  failure. */
     fun markNoVerdict() {}
+
+    /** Replace the per-cert RELAY failure set (verified + aggregated from
+     *  `/pods` by RelayTrustAggregator). Idempotent — an unchanged set never
+     *  churns collectors. Independent of [verdict]/[failures], so it never
+     *  affects [isServerTrusted] (no `.com` halt). */
+    fun setRelayFailures(next: List<RelayCertFailure>) {
+        if (next != _relayFailures.value) _relayFailures.value = next
+    }
 
     /** Record that the owner signed a TrustException for [certHash]. The
      *  failure line stays visible; traffic for that cert resumes. */

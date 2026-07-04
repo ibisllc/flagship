@@ -48,6 +48,12 @@ class ServerTrustStore {
     this._verdict = null;
     // certHash → exception record, for certs the owner has accepted.
     this._overrides = new Map();
+    // Per-cert RELAY failures aggregated across the user's pods (lib/relayTrust.js).
+    // A SEPARATE source from the control-CA `_verdict`: it feeds the red sliver
+    // but NEVER the `isServerTrusted()` global halt (a relay-cert failure is a
+    // warning + override, not a .com I/O halt). Each entry:
+    //   { certClass:"relay", certHash, servers:[], serverCount, overridden }.
+    this._relayFailures = [];
     this._subscribers = new Set();
   }
 
@@ -74,17 +80,32 @@ class ServerTrustStore {
 
   /** Failing-cert descriptors the sliver renders (empty when trusted/overridden-irrelevant).
    *  Always returns the failing cert even when overridden — the sliver line
-   *  persists after override. One entry per failing certHash. */
+   *  persists after override. One entry per failing certHash, MERGING two
+   *  sources: the control-CA `_verdict` (the global-halt class) and the
+   *  per-cert RELAY failures aggregated across the user's pods. A relay entry
+   *  is "overridden" when EITHER the box relayed a covering exception
+   *  (wire-driven, standing) OR this device signed one locally. */
   failingCerts() {
+    const out = [];
     const v = this._verdict;
-    if (!v || v.trusted || !v.certHash) return [];
-    return [
-      {
+    if (v && !v.trusted && v.certHash) {
+      out.push({
         certClass: v.certClass ?? "control",
         certHash: v.certHash,
         overridden: this._overrides.has(v.certHash),
-      },
-    ];
+      });
+    }
+    for (const f of this._relayFailures) {
+      if (!f || !f.certHash) continue;
+      out.push({
+        certClass: "relay",
+        certHash: f.certHash,
+        serverCount: f.serverCount ?? (Array.isArray(f.servers) ? f.servers.length : 0),
+        servers: Array.isArray(f.servers) ? f.servers : [],
+        overridden: !!f.overridden || this._overrides.has(f.certHash),
+      });
+    }
+    return out;
   }
 
   subscribe(fn) {
@@ -126,6 +147,21 @@ class ServerTrustStore {
     this._emit();
   }
 
+  /** Replace the per-cert RELAY failure set (from lib/relayTrust.js, verified +
+   *  aggregated across `/pods`). Idempotent: an unchanged set never churns
+   *  subscribers. This source drives the sliver but NOT `isServerTrusted()`. */
+  setRelayFailures(failures) {
+    const next = Array.isArray(failures) ? failures : [];
+    if (JSON.stringify(next) === JSON.stringify(this._relayFailures)) return;
+    this._relayFailures = next;
+    this._emit();
+  }
+
+  /** The current per-cert relay failure set (test/introspection helper). */
+  relayFailures() {
+    return this._relayFailures.slice();
+  }
+
   /** Mark a cert-hash as overridden (the owner accepted it). Idempotent. */
   markOverridden(certHash, record) {
     if (!certHash) return;
@@ -156,6 +192,7 @@ class ServerTrustStore {
   _reset() {
     this._verdict = null;
     this._overrides.clear();
+    this._relayFailures = [];
     this._emit();
   }
 }

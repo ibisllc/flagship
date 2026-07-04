@@ -14,6 +14,7 @@ export * from "./erasure.js";
 export * from "./manifest.js";
 export * from "./devEntitlements.js";
 export * from "./daemonStatus.js";
+export * from "./boxTrustStatus.js";
 export * from "./pushRelay.js";
 export * from "./serviceCert.js";
 export * from "./serviceInvite.js";

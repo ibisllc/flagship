@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signDaemonStatusReport,
+  signBoxTrustStatusReport,
   verifyDaemonStatusReport,
+  verifyBoxTrustStatusReport,
+  type BoxTrustStatusReport,
   type DaemonStatusReport,
 } from "@flagship/protocol";
 import {
@@ -688,6 +691,105 @@ describe("POST /api/daemon-status — leadsServices relay on /pods", () => {
     const r = await handleGetUserPods(deps(storage), "harry");
     const out = r.body as PodsResponse & { pods: Array<{ leadsServices: string[] }> };
     expect(out.pods[0]?.leadsServices).toEqual([]);
+  });
+});
+
+describe("POST /api/daemon-status — box-trust-status (per-box relay verdict) relay on /pods", () => {
+  function btsReport(over: Partial<BoxTrustStatusReport> = {}): BoxTrustStatusReport {
+    return {
+      serverDomain: "home1.harry.flagship.services",
+      relayVerdict: "untrusted",
+      lockedDown: false,
+      failingCertHash: "ab".repeat(32),
+      coveringExceptionCertHash: null,
+      nonce: "00112233445566778899aabbccddeeff",
+      issuedAt: NOW - 1_000,
+      ...over,
+    };
+  }
+  function signedTrustStatus(r: BoxTrustStatusReport) {
+    return {
+      report: r,
+      signatureHex: bytesToHex(
+        signBoxTrustStatusReport(r, {
+          privateKey: STK_PRIV,
+          publicKey: ed.getPublicKey(STK_PRIV),
+        }),
+      ),
+    };
+  }
+
+  it("verifies + relays the box's own signed verdict verbatim; it re-verifies under the STK", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const rep = report();
+    const bts = btsReport();
+
+    const post = await handlePostDaemonStatus(deps(storage), {
+      ...signedBody(rep),
+      trustStatus: signedTrustStatus(bts),
+    });
+    expect(post.status).toBe(200);
+
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & {
+      pods: Array<{
+        trustStatus: { report: BoxTrustStatusReport; signatureHex: string } | null;
+      }>;
+    };
+    const ts = out.pods[0]!.trustStatus!;
+    expect(ts).not.toBeNull();
+    expect(ts.report).toEqual(bts);
+    // The end-to-end client re-verification against the locally-derived STK.
+    const sigBytes = Uint8Array.from(
+      ts.signatureHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+    );
+    expect(
+      verifyBoxTrustStatusReport(ts.report, sigBytes, ed.getPublicKey(STK_PRIV)),
+    ).toBe(true);
+    // The daemon-status signature still re-verifies (sibling didn't corrupt it).
+    // (covered above) — here just assert the trust sibling didn't leak in.
+    expect((ts.report as unknown as { leadsServices?: unknown }).leadsServices).toBeUndefined();
+  });
+
+  it("DROPS a box-trust-status with a bad signature but still accepts the heartbeat", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const bts = btsReport();
+    const good = signedTrustStatus(bts);
+    const post = await handlePostDaemonStatus(deps(storage), {
+      ...signedBody(report()),
+      trustStatus: { report: bts, signatureHex: good.signatureHex.replace(/^../, "ff") },
+    });
+    expect(post.status).toBe(200); // heartbeat still lands
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & {
+      pods: Array<{ trustStatus: unknown }>;
+    };
+    expect(out.pods[0]?.trustStatus).toBeNull();
+  });
+
+  it("DROPS a box-trust-status whose serverDomain mismatches the box", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    const bts = btsReport({ serverDomain: "evil.harry.flagship.services" });
+    const post = await handlePostDaemonStatus(deps(storage), {
+      ...signedBody(report()),
+      trustStatus: signedTrustStatus(bts),
+    });
+    expect(post.status).toBe(200);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & { pods: Array<{ trustStatus: unknown }> };
+    expect(out.pods[0]?.trustStatus).toBeNull();
+  });
+
+  it("absent trustStatus ⇒ null on /pods (additive; old daemon)", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    await handlePostDaemonStatus(deps(storage), signedBody(report()));
+    const r = await handleGetUserPods(deps(storage), "harry");
+    const out = r.body as PodsResponse & { pods: Array<{ trustStatus: unknown }> };
+    expect(out.pods[0]?.trustStatus).toBeNull();
   });
 });
 

@@ -1247,7 +1247,20 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.TRUST_EXCEPTIONS))) {
     return finish(
       await handleStoreTrustException(
-        { storage: storage.trustExceptions },
+        {
+          storage: storage.trustExceptions,
+          // IRK-anchored roster: the account IRK (registered at claim, the
+          // `registeredIrkPubHex` from the wrapped-UMK path) is the single
+          // anchor — every one of the user's devices signs a TrustException
+          // with the shared account IRK, so the roster is exactly that key.
+          // Wiring it here rejects a granter outside the roster AT STORE TIME,
+          // closing the directory's spam-surface fail-open (previously `.com`
+          // stored any self-consistent envelope). The consuming box re-checks.
+          resolveDeviceRoster: async (u) => {
+            const rec = await storage.usernames.get(u);
+            return rec?.irkPubHex ? [rec.irkPubHex] : null;
+          },
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
