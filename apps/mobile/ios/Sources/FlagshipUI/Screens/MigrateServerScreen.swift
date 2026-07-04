@@ -217,7 +217,7 @@ public struct MigrateServerScreen: View {
                 ProgressView().controlSize(.small)
             case .pending:
                 Image(systemName: "circle")
-                    .foregroundColor(c.textMuted.opacity(0.5))
+                    .foregroundColor(c.textMuted)
             }
             Text(step.label)
                 .font(FS.font.bodySm())

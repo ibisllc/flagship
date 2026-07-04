@@ -476,7 +476,7 @@ public struct FSSettingsRow: View {
                 if showsChevron {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(c.textMuted.opacity(0.7))
+                        .foregroundColor(c.textMuted)
                 }
             }
             .padding(.horizontal, FS.space.s4)
