@@ -115,35 +115,55 @@ function defaultBaseUrl(peerServerId: string): string {
   return `https://${peerServerId}`;
 }
 
-export function buildHttpShardPusher(opts: HttpShardTransportOptions): ShardPusher {
+/**
+ * Run one PeerBackupClient operation over a throwaway HttpPeerLink.
+ * The op fails FAST on a flush error (unreachable peer, non-200) via
+ * the link's onError — the timeout is only the backstop for a peer
+ * that accepts the POST and then never answers coherently.
+ */
+async function runLinkOp<T>(
+  opts: HttpShardTransportOptions,
+  peerServerId: string,
+  what: string,
+  op: (client: PeerBackupClient) => Promise<T>,
+): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_OP_TIMEOUT_MS;
   const baseUrlFor = opts.baseUrlFor ?? defaultBaseUrl;
+  let fail: (e: Error) => void = () => {};
+  const flushFailed = new Promise<never>((_, reject) => {
+    fail = (e) => reject(e);
+  });
+  const link = createHttpPeerLink({
+    peerBaseUrl: baseUrlFor(peerServerId),
+    remoteServerId: peerServerId,
+    myServerId: opts.myServerId,
+    mySTK: opts.mySTK,
+    onError: (e) => fail(new Error(`${what}: ${e instanceof Error ? e.message : String(e)}`)),
+    ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+  });
+  const client = new PeerBackupClient(link, opts.mySTK, opts.myServerId);
+  try {
+    return await withTimeout(Promise.race([op(client), flushFailed]), timeoutMs, what);
+  } finally {
+    client.close();
+    link.close();
+  }
+}
+
+export function buildHttpShardPusher(opts: HttpShardTransportOptions): ShardPusher {
   return {
     async push(args) {
-      const link = createHttpPeerLink({
-        peerBaseUrl: baseUrlFor(args.peerServerId),
-        remoteServerId: args.peerServerId,
-        myServerId: opts.myServerId,
-        mySTK: opts.mySTK,
-        ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-      });
-      const client = new PeerBackupClient(link, opts.mySTK, opts.myServerId);
       try {
-        return await withTimeout(
+        return await runLinkOp(opts, args.peerServerId, `putShard→${args.peerServerId}`, (client) =>
           client.putShard({
             encChunkId: args.encChunkId,
             shardIndex: args.shardIndex,
             bytes: args.bytes,
             peerServerId: args.peerServerId,
           }),
-          timeoutMs,
-          `putShard→${args.peerServerId}`,
         );
       } catch (e) {
         return { ok: false, reason: e instanceof Error ? e.message : String(e) };
-      } finally {
-        client.close();
-        link.close();
       }
     },
   };
@@ -158,32 +178,17 @@ export interface ShardFetcher {
 }
 
 export function buildHttpShardFetcher(opts: HttpShardTransportOptions): ShardFetcher {
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_OP_TIMEOUT_MS;
-  const baseUrlFor = opts.baseUrlFor ?? defaultBaseUrl;
   return {
     async fetchShard(peerServerId, encChunkId, shardIndex) {
-      const link = createHttpPeerLink({
-        peerBaseUrl: baseUrlFor(peerServerId),
-        remoteServerId: peerServerId,
-        myServerId: opts.myServerId,
-        mySTK: opts.mySTK,
-        ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-      });
-      const client = new PeerBackupClient(link, opts.mySTK, opts.myServerId);
       try {
-        const r = await withTimeout(
+        const r = await runLinkOp(opts, peerServerId, `getShard←${peerServerId}`, (client) =>
           client.getShard({ encChunkId, shardIndex }),
-          timeoutMs,
-          `getShard←${peerServerId}`,
         );
         // The empty-stream reply is the peer's "not held" signal.
         if (!r.ok || !r.bytes || r.bytes.length === 0) return null;
         return r.bytes;
       } catch {
         return null;
-      } finally {
-        client.close();
-        link.close();
       }
     },
   };
