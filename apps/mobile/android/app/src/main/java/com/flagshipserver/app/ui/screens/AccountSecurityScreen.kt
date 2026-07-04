@@ -70,7 +70,7 @@ import com.flagshipserver.app.viewmodels.RotateAdminRootViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -676,8 +676,7 @@ private fun decodeBase64Png(base64: String): android.graphics.Bitmap? {
 
 private fun formatDate(ms: Long?): String {
     if (ms == null) return "an unknown date"
-    val f = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-    return f.format(Date(ms))
+    return FlagshipDateFormat.format(ms)
 }
 
 private fun Int.dp(): androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(this.toFloat())

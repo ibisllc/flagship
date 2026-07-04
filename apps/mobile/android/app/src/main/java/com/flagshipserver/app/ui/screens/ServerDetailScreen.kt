@@ -105,7 +105,7 @@ import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
 import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
-import java.text.SimpleDateFormat
+import com.flagshipserver.app.core.FlagshipDateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -482,7 +482,7 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
                 style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                FSPill("Daemon ${detail.daemonVersion}", kind = FSPillKind.Idle)
+                FSPill("Server ${detail.daemonVersion}", kind = FSPillKind.Idle)
                 // The box-reported running commit (short) — the version the
                 // update card orders away from. Hidden until the box reports.
                 shortCommit(detail.currentCommit)?.let { short ->
@@ -491,9 +491,8 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
                 FSPill("${detail.serviceCount} apps", kind = FSPillKind.Idle)
                 FSPill("${detail.pairedSessionCount} devices", kind = FSPillKind.Idle)
             }
-            val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
             val certText = detail.certNotAfter
-                ?.let { "Cert valid until ${fmt.format(Date(it))}" }
+                ?.let { "Cert valid until ${FlagshipDateFormat.format(it, includeTime = true)}" }
                 ?: "Cert details unavailable"
             Text(certText, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
         }
