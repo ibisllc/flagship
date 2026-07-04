@@ -36,6 +36,13 @@
     <Compile Include="src\DiskWrite.cs" />
     <Compile Include="src\IsoManifestClient.cs" />
     <Compile Include="src\IsoBaseCache.cs" />
+    <Compile Include="src\VM\HostResources.cs" />
+    <Compile Include="src\VM\VMResourcePlan.cs" />
+    <Compile Include="src\VM\ServerTier.cs" />
+    <Compile Include="src\VM\RecipeSiblings.cs" />
+    <Compile Include="src\VM\VMConfig.cs" />
+    <Compile Include="src\VM\VMLifecycle.cs" />
+    <Compile Include="src\VM\VMInventoryStore.cs" />
   </ItemGroup>
 
   <ItemGroup>

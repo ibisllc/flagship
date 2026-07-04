@@ -79,6 +79,13 @@ out/
 apps/burner-mac/.build/
 __pycache__/
 
+# .NET build output (apps/burner-windows)
+apps/burner-windows/bin/
+apps/burner-windows/obj/
+apps/burner-windows/tests/bin/
+apps/burner-windows/tests/obj/
+apps/burner-windows/dist/
+
 # Snapshot of the previous website — a build artifact, not source.
 old_website.zip
 

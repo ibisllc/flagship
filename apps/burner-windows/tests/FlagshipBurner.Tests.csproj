@@ -36,6 +36,15 @@
     <!-- Manifest client + manifest-driven base-ISO cache are WPF-free. -->
     <Compile Include="..\src\IsoManifestClient.cs"/>
     <Compile Include="..\src\IsoBaseCache.cs"/>
+    <!-- The pure VM core (mirrors apps/burner-mac FlagshipBurnerCore/VM) is
+         WPF-free by design; pinned against the shared golden vectors. -->
+    <Compile Include="..\src\VM\HostResources.cs"/>
+    <Compile Include="..\src\VM\VMResourcePlan.cs"/>
+    <Compile Include="..\src\VM\ServerTier.cs"/>
+    <Compile Include="..\src\VM\RecipeSiblings.cs"/>
+    <Compile Include="..\src\VM\VMConfig.cs"/>
+    <Compile Include="..\src\VM\VMLifecycle.cs"/>
+    <Compile Include="..\src\VM\VMInventoryStore.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
     <Compile Include="CliArgsShim.cs"/>
@@ -49,6 +58,20 @@
     <Compile Include="DiskWriteTests.cs"/>
     <Compile Include="IsoManifestClientTests.cs"/>
     <Compile Include="IsoBaseCacheTests.cs"/>
+    <Compile Include="VMLifecycleTests.cs"/>
+    <Compile Include="VMResourcePlanTests.cs"/>
+    <Compile Include="VMConfigTests.cs"/>
+    <Compile Include="VMInventoryStoreTests.cs"/>
+    <Compile Include="RecipeSiblingsTests.cs"/>
+    <Compile Include="VMCoreVectorTests.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shared VM-core contract (apps/desktop-shared/golden) — the Mac
+         suite must consume the SAME file so the two cores cannot drift. -->
+    <Content Include="..\..\desktop-shared\golden\vm-core-vectors.json"
+             Link="Resources\vm-core-vectors.json"
+             CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 
   <ItemGroup>
