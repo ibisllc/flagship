@@ -85,6 +85,20 @@ class MarketplaceViewModelTest {
         assertTrue((state as MarketplaceViewModel.InstallState.Failed).message.contains("manifest signature invalid"))
     }
 
+    @Test fun install_rejectsManifestHashMismatch_withoutPosting() = runTest {
+        val mock = client().apply { tamperListingManifest = true }
+        val vm = MarketplaceViewModel(
+            client = mock,
+            signer = { Ed25519Sign(Ed25519Sign.KeyPair.newKeyPair().privateKey) },
+        )
+        vm.install(creator = "trent", slug = "scratchpad", serverId = "home.harry.flagship.services")
+        val state = vm.installState.value
+        assertTrue(state is MarketplaceViewModel.InstallState.Failed)
+        assertTrue((state as MarketplaceViewModel.InstallState.Failed).message.contains("hash mismatch"))
+        // A tampered manifest must never reach the box.
+        assertEquals(0, mock.installCalls.size)
+    }
+
     @Test fun install_signerFailure_failsWithoutPosting() = runTest {
         val mock = client()
         val vm = MarketplaceViewModel(
