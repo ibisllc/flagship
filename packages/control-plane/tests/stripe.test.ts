@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryMarketplaceStorage } from "@flagship/storage";
+import { InMemoryMarketplaceStorage, InMemoryAppSalesStorage } from "@flagship/storage";
 import type {
   TierStorage,
   TierSubscriptionRecord,
@@ -304,11 +304,19 @@ async function appDeps(fetchImpl?: typeof fetch) {
   const marketplace = new InMemoryMarketplaceStorage();
   await marketplace.upsert(paidListing());
   const purchases = fakePurchases();
-  const d: StripeDeps & { tiers: ReturnType<typeof fakeTiers>; purchases: typeof purchases; marketplace: typeof marketplace } = {
+  const sales = new InMemoryAppSalesStorage();
+  const d: StripeDeps & {
+    tiers: ReturnType<typeof fakeTiers>;
+    purchases: typeof purchases;
+    marketplace: typeof marketplace;
+    sales: InMemoryAppSalesStorage;
+  } = {
     tiers: fakeTiers(),
     stripeEvents: fakeEvents(),
     purchases,
     marketplace,
+    sales,
+    cutBps: 2000,
     config: CONFIG,
     now: () => NOW,
     ...(fetchImpl ? { fetch: fetchImpl } : {}),
@@ -328,10 +336,19 @@ describe("Stripe app purchases (#14)", () => {
     expect(res.status).toBe(200);
     expect(await d.purchases.has("alice", "acme", "notes")).toBe(true);
     expect((res.body as { action?: string }).action).toBe("purchased");
+    // The completed paid checkout also wrote a payout row (#15): gross 700,
+    // 20% cut = 140, net 560, keyed on the stripe EVENT id.
+    const salesRows = await d.sales.listForCreator("acme");
+    expect(salesRows).toHaveLength(1);
+    expect(salesRows[0]).toMatchObject({
+      saleKey: "evt_app1", listingId: "acme--notes", buyerAccount: "alice",
+      grossCents: 700, cutCents: 140, netCents: 560, stripeEventId: "evt_app1",
+    });
     // Redelivery is a no-op (idempotent at the event-id layer).
     const again = await postEvent(d, event);
     expect((again.body as { idempotent?: boolean }).idempotent).toBe(true);
     expect(d.purchases.rows.length).toBe(1);
+    expect(await d.sales.listForCreator("acme")).toHaveLength(1); // no double-count
   });
 
   it("webhook app event without the stores ACKs but grants nothing", async () => {

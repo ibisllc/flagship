@@ -173,6 +173,7 @@ import {
   handleListUserPurchases,
   handleAdminSetAppPrice,
   handleAdminGrantPurchase,
+  parseCutBps,
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
@@ -214,7 +215,7 @@ import {
   type HandlerResponseWithHeaders,
   type IsoManifest,
 } from "@flagship/control-plane";
-import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, D1UsageStorage, D1VoucherStorage, D1StripeEventStore, D1AppPurchaseStorage, D1AppSalesStorage, type D1Database } from "@flagship/storage";
 import {
   routeBoot,
   AUTH_HEADER,
@@ -293,6 +294,8 @@ export interface ControlPlaneEnv {
   /** Comma list of scan grades that BLOCK install (require an explicit
    *  override). Absent ⇒ ["F"] (see DEFAULT_BLOCKED_INSTALL_GRADES). */
   MARKETPLACE_INSTALL_BLOCKED_GRADES?: string;
+  /** Platform revenue cut in basis points (#15). Absent ⇒ 1500 (15%). */
+  MARKETPLACE_CUT_BPS?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
 
@@ -2907,6 +2910,8 @@ export async function tryControlPlane(
           stripeEvents: new D1StripeEventStore(env.DB),
           purchases: new D1AppPurchaseStorage(env.DB),
           marketplace: storage.marketplace,
+          sales: new D1AppSalesStorage(env.DB),
+          cutBps: parseCutBps(env.MARKETPLACE_CUT_BPS),
           config: stripeConfigFromEnv(env),
         },
         { rawBody, signature: request.headers.get("stripe-signature") },
