@@ -16,7 +16,11 @@ import type {
   AppSalesStorage,
   MarketplaceListingRecord,
   MarketplaceStorage,
+  ServerStorage,
+  UsernameStorage,
 } from "@flagship/storage";
+import { verifySetAppPrice, type SetAppPriceRequest } from "@flagship/protocol";
+import { hexToBytes } from "./hex.js";
 
 const USERNAME_RE = /^[a-z0-9]{3,30}$/;
 /** $1,000 ceiling — a fat-fingered price can't bill a fortune. */
@@ -213,6 +217,89 @@ export async function handleAdminSetAppPrice(
   const ok = await deps.marketplace.setPrice(creator.toLowerCase(), slug.toLowerCase(), Math.floor(b.priceUsdCents));
   if (!ok) return { status: 404, body: { error: "listing not found" } };
   return { status: 200, body: { ok: true, priceUsdCents: Math.floor(b.priceUsdCents) || 0 } };
+}
+
+/** `POST /api/marketplace/:creator/:slug/price` — CREATOR self-serve (#15).
+ *  Body `{ request: SetAppPriceRequest, signature }`. The creator signs with
+ *  their account IRK (phone) OR a non-revoked server identity key of their
+ *  account (box-originated) — the same signer set `.com` accepts for a
+ *  listing. Gated to the listing's creator; `priceUsdCents` capped at
+ *  MAX_APP_PRICE_CENTS (0 ⇒ free). Distinct from the admin path
+ *  (handleAdminSetAppPrice), which stays for curation/support. */
+export interface CreatorSetAppPriceDeps {
+  marketplace: MarketplaceStorage;
+  usernames: UsernameStorage;
+  /** When present, ALSO accept a non-revoked server identity key of the
+   *  creator's account (box-originated). Absent ⇒ owner-IRK-only. */
+  servers?: ServerStorage;
+  freshnessMs?: number;
+  now?: () => number;
+}
+
+export async function handleCreatorSetAppPrice(
+  deps: CreatorSetAppPriceDeps,
+  creator: string,
+  slug: string,
+  body: unknown,
+): Promise<AppPurchaseHttpResult> {
+  const b = (body ?? {}) as { request?: Partial<SetAppPriceRequest>; signature?: unknown };
+  const r = b.request;
+  if (!r || typeof b.signature !== "string") return { status: 400, body: { error: "malformed body" } };
+  const c = String(creator).toLowerCase();
+  const s = String(slug).toLowerCase();
+  if (typeof r.creator !== "string" || typeof r.slug !== "string" ||
+      typeof r.priceUsdCents !== "number" || typeof r.issuedAt !== "number") {
+    return { status: 400, body: { error: "request needs creator, slug, priceUsdCents, issuedAt" } };
+  }
+  // The signed request must name the same listing as the route.
+  if (r.creator.toLowerCase() !== c || r.slug.toLowerCase() !== s) {
+    return { status: 400, body: { error: "request creator/slug must match the route" } };
+  }
+  if (!Number.isFinite(r.priceUsdCents) || r.priceUsdCents < 0) {
+    return { status: 400, body: { error: "priceUsdCents must be a non-negative number" } };
+  }
+  if (r.priceUsdCents > MAX_APP_PRICE_CENTS) {
+    return { status: 400, body: { error: `priceUsdCents must be ≤ ${MAX_APP_PRICE_CENTS}` } };
+  }
+
+  const userRec = await deps.usernames.get(c);
+  if (!userRec) return { status: 404, body: { error: "creator username not registered" } };
+
+  const claim: SetAppPriceRequest = {
+    creator: r.creator, slug: r.slug, priceUsdCents: r.priceUsdCents, issuedAt: r.issuedAt,
+  };
+  let sig: Uint8Array;
+  let irkPub: Uint8Array;
+  try {
+    sig = hexToBytes(b.signature);
+    irkPub = hexToBytes(userRec.irkPubHex);
+  } catch {
+    return { status: 400, body: { error: "invalid hex" } };
+  }
+  // Accept the creator's owner IRK OR a non-revoked server identity of the
+  // creator's account (box-originated) — mirrors handleMarketplaceList.
+  let signerOk = verifySetAppPrice(claim, sig, irkPub);
+  if (!signerOk && deps.servers) {
+    const owned = await deps.servers.listForUser(c);
+    for (const srv of owned) {
+      if (srv.revokedAt) continue;
+      try {
+        if (verifySetAppPrice(claim, sig, hexToBytes(srv.identityPubKeyHex))) {
+          signerOk = true;
+          break;
+        }
+      } catch { /* skip an unparseable key */ }
+    }
+  }
+  if (!signerOk) return { status: 403, body: { error: "invalid signature" } };
+
+  const freshness = deps.freshnessMs ?? 5 * 60_000;
+  const now = deps.now ? deps.now() : Date.now();
+  if (Math.abs(now - r.issuedAt) > freshness) return { status: 403, body: { error: "stale request" } };
+
+  const okSet = await deps.marketplace.setPrice(c, s, Math.floor(r.priceUsdCents));
+  if (!okSet) return { status: 404, body: { error: "listing not found" } };
+  return { status: 200, body: { ok: true, creator: c, slug: s, priceUsdCents: Math.floor(r.priceUsdCents) || 0 } };
 }
 
 /** `POST /api/admin/marketplace/:creator/:slug/grant-purchase` — ADMIN. Body
