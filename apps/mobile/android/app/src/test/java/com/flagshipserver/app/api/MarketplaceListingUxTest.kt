@@ -13,6 +13,7 @@ package com.flagshipserver.app.api
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,6 +71,34 @@ class MarketplaceListingUxTest {
         assertEquals("scan F", ScanGradeBucket.pillLabel("F"))
         assertEquals("ungraded", ScanGradeBucket.pillLabel(null))
         assertEquals("ungraded", ScanGradeBucket.pillLabel("?"))
+    }
+
+    // ---- Install-confirm gate: ONLY F blocks; null/unknown = caution ----
+
+    @Test fun onlyGradeFBlocksInstall() {
+        assertTrue(ScanGradeBucket.blocksInstall("F"))
+        assertTrue(ScanGradeBucket.blocksInstall("f")) // case-insensitive
+        // A/B/C/D never block the normal Install.
+        assertFalse(ScanGradeBucket.blocksInstall("A"))
+        assertFalse(ScanGradeBucket.blocksInstall("B"))
+        assertFalse(ScanGradeBucket.blocksInstall("C"))
+        assertFalse(ScanGradeBucket.blocksInstall("D"))
+        // Ungraded is allowed (cautioned, not blocked).
+        assertFalse(ScanGradeBucket.blocksInstall(null))
+        assertFalse(ScanGradeBucket.blocksInstall(""))
+        assertFalse(ScanGradeBucket.blocksInstall("Z"))
+    }
+
+    @Test fun ungradedIsCautionNotBlock() {
+        // null / empty / unrecognised → caution "not yet security-scanned".
+        assertTrue(ScanGradeBucket.isUngraded(null))
+        assertTrue(ScanGradeBucket.isUngraded(""))
+        assertTrue(ScanGradeBucket.isUngraded("Z"))
+        // A graded (incl. F) listing is NOT ungraded.
+        assertFalse(ScanGradeBucket.isUngraded("A"))
+        assertFalse(ScanGradeBucket.isUngraded("F"))
+        // And an ungraded listing is never blocked.
+        assertFalse(ScanGradeBucket.blocksInstall(null))
     }
 
     // ---- Wire shape: new fields decode + tolerate absence ----
