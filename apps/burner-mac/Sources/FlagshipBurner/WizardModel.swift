@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 import FlagshipBurnerCore
 
 /// Wizard controller — drives the CLI, tracks the user's selections,
@@ -72,11 +73,34 @@ final class WizardModel: ObservableObject {
 
     private var sessionClient: BurnerSessionClient? = nil
 
+    // MARK: - Destinations (Burn to USB / Host here)
+
+    /// Where the delivered recipe goes. nil ⇒ the chooser is showing. Burn to
+    /// USB is today's flow, unchanged; Host here creates a managed VM
+    /// appliance on this Mac (docs/desktop-vm-appliance.md).
+    @Published var destination: ServerDestination? = nil
+
+    /// Sidebar selection: when set, the main area shows that hosted server's
+    /// detail instead of the wizard stage.
+    @Published var selectedHostedServer: String? = nil
+
+    /// Hosted-VM orchestrator (inventory + lifecycles + VZ hosts).
+    let vmManager = VMManager()
+    private var cancellables = Set<AnyCancellable>()
+
     init() {
         suppressWifiPersist = true
         wifiSSID = WifiCredentialStore.loadSSID()
         wifiPassword = WifiCredentialStore.loadPassword()
         suppressWifiPersist = false
+        // Nested ObservableObject: forward its changes so the sidebar/detail
+        // views observing the WizardModel re-render on VM state changes.
+        vmManager.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        vmManager.log = { [weak self] line in
+            self?.appendLog(stream: .stdout, text: "+ \(line)")
+        }
         beginPairing()
     }
 
@@ -169,6 +193,7 @@ final class WizardModel: ObservableObject {
         verified = nil
         recipeError = nil
         pairMatchCode = nil
+        destination = nil
         // Reset Advanced selections so a fresh pairing starts clean.
         mode = .simple
         useSystemISO = false
@@ -195,6 +220,7 @@ final class WizardModel: ObservableObject {
         recipe = nil
         verified = nil
         recipeError = nil
+        destination = nil
         beginPairing()
     }
     /// Simple = fetch a server-named Debian base ISO + remaster it with the
@@ -563,6 +589,88 @@ final class WizardModel: ObservableObject {
             appendLog(stream: .stderr,
                       text: result.message.isEmpty ? "write failed (code \(result.code))" : result.message)
         }
+    }
+
+    // MARK: - Host here (VM appliance)
+
+    /// "Host here": the SAME recipe → the SAME remastered installer ISO, but
+    /// applied to a managed VM on this Mac instead of a USB stick. The guest
+    /// boot chain (autoinstall → LUKS → phone-home unlock → register) runs
+    /// unmodified inside the VM; this app never holds a key.
+    func runHostHere() async {
+        guard let recipe = recipe else { return }
+        guard !isRunning else { return }
+        isRunning = true
+        progress = nil
+        phase = nil
+        baseDownloadURL = nil
+        defer { isRunning = false; endProgress() }
+
+        let parsed: Recipe
+        let recipeData: Data
+        do {
+            recipeData = try Data(contentsOf: recipe)
+            parsed = try RecipeLoader.load(data: recipeData)
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+
+        let host = HostResources.current()
+        let cap = VMResourcePlan.maxVMCount(host: host)
+        guard cap > 0 else {
+            appendLog(stream: .stderr, text: "This Mac doesn't have enough free memory to host a server (each server needs ~\(VMResourcePlan.minimumVMMemoryBytes / VMResourcePlan.gib) GiB).")
+            return
+        }
+        guard vmManager.servers.count < cap else {
+            appendLog(stream: .stderr, text: "This Mac is at its hosting limit (\(cap) server\(cap == 1 ? "" : "s")). Remove one first, or burn to USB.")
+            return
+        }
+
+        let config = VMConfig.plan(recipe: parsed, recipeJSON: recipeData, host: host)
+
+        // Same Simple-mode base ISO fetch as the USB path.
+        phase = "download"
+        let srcISO: URL
+        do {
+            srcISO = try await ensureBaseISO()
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+
+        // Create the bundle, then remaster the installer INTO it — identical
+        // remaster to the USB path (same preseed engine, same recipe bytes).
+        phase = "remaster"
+        baseDownloadURL = nil
+        progress = nil
+        DockProgress.set(nil)
+        do {
+            try vmManager.createServer(config: config)
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return
+        }
+        do {
+            let cfgs = try installerConfigs(forRecipe: recipe)
+            let outISO = vmManager.installerISOPath(for: config.name)
+            appendLog(stream: .stdout, text: "+ remaster \(srcISO.lastPathComponent) → VM installer")
+            let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                try Remaster.remasterInstaller(srcISO: srcISO, outISO: outISO,
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
+            }.value
+            didRemasterForTest = true
+            appendLog(stream: .stdout, text: "+ installer family: \(used)")
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            await vmManager.deleteServer(named: config.name)
+            return
+        }
+
+        // Shred the single-use recipe, exactly like a successful USB burn.
+        try? FileManager.default.removeItem(at: recipe)
+        selectedHostedServer = config.name
+        await vmManager.beginInstall(named: config.name)
     }
 
     private final class Box<T> {
