@@ -3286,7 +3286,11 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.MARKETPLACE_LIST.test(path)) {
     return finish(
       await handleMarketplaceList(
-        { marketplace: storage.marketplace, usernames: storage.usernames },
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+        },
         await readJson(request),
       ),
     );
