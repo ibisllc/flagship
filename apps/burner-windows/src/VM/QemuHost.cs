@@ -39,9 +39,10 @@ public sealed class QemuHost
     /// <summary>
     /// Fired (on a thread-pool thread) when the guest stops for ANY reason:
     /// (exitCode, stderrTail). A clean stop is exit 0; the caller marshals to
-    /// its own context and feeds the pure lifecycle.
+    /// its own context and feeds the pure lifecycle. Plain settable callback
+    /// (not an event) mirroring VZHost.onGuestStopped.
     /// </summary>
-    public event Action<int, string>? OnGuestStopped;
+    public Action<int, string>? OnGuestStopped { get; set; }
 
     /// <summary>
     /// Create the sparse main disk (qcow2 grows into it) + the per-VM UEFI

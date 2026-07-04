@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using Flagship.Burner.VM;
 
 namespace Flagship.Burner;
 
@@ -59,6 +60,213 @@ public sealed class Wizard : INotifyPropertyChanged
         Disks = new ObservableCollection<DiskInfo>();
         LogLines = new ObservableCollection<LogLine>();
         _baseCache = baseCache ?? new IsoBaseCache(burnerVersion: BurnerVersion);
+        Vm = VMManager.CreateDefault();
+        Vm.Log = m => AppendLog(LogStream.Stdout, m);
+        Vm.Servers.CollectionChanged += (_, _) => FireBag();
+        if (Vm.Toolchain is { } tc) _ = ProbeWhpxAsync(tc);
+    }
+
+    // ---- Hosted VMs (the "Host here" destination) ----
+
+    /// <summary>Runtime orchestrator for hosted VMs (sidebar + detail).</summary>
+    public VMManager Vm { get; }
+
+    private WhpxVerdict? _whpx;
+    private ServerDestination? _destination;
+    private string? _selectedServerName;
+
+    private async Task ProbeWhpxAsync(QemuToolchain toolchain)
+    {
+        try { _whpx = await WhpxProbe.RunAsync(toolchain); }
+        catch (Exception e) { _whpx = new WhpxVerdict(WhpxVerdictKind.Unknown, e.Message); }
+        OnUi(() => FireBag());
+    }
+
+    /// <summary>Where the verified recipe should live. Null until the user
+    /// picks on the destination chooser.</summary>
+    public ServerDestination? Destination
+    {
+        get => _destination;
+        set { if (_destination != value) { _destination = value; FireBag(); } }
+    }
+
+    /// <summary>Sidebar selection: the hosted server whose detail fills the
+    /// main area. Null shows the wizard/chooser.</summary>
+    public string? SelectedServerName
+    {
+        get => _selectedServerName;
+        set { if (_selectedServerName != value) { _selectedServerName = value; FireBag(); } }
+    }
+
+    public HostedServer? SelectedServer
+        => _selectedServerName is null ? null : Vm.Server(_selectedServerName);
+
+    // Main-area pane switching (exactly one is visible).
+    public bool ShowServerDetail => SelectedServer != null;
+    public bool ShowDestinationChooser
+        => !ShowServerDetail && Verified != null && _destination == null && !IsRunning && !IsFinished;
+    public bool ShowHostHerePane => !ShowServerDetail && _destination == ServerDestination.HostHere;
+    public bool ShowWizardPanes => !ShowServerDetail && !ShowDestinationChooser && !ShowHostHerePane;
+    /// <summary>The back-to-chooser link inside the USB pane.</summary>
+    public bool ShowDestinationBackLink
+        => ShowWizardPanes && Verified != null && _destination == ServerDestination.BurnToUSB && !IsRunning;
+
+    public bool HasHostedServers => Vm.Servers.Count > 0;
+
+    /// <summary>Why "Host on this PC" is unavailable — null means it's usable.
+    /// Honest, actionable reasons only (capacity / WHPX / toolchain).</summary>
+    public string? HostHereDisabledReason
+    {
+        get
+        {
+            if (Vm.ToolchainError != null) return Vm.ToolchainError;
+            if (_whpx is { IsAvailable: false } v) return v.Message;
+            var cap = Vm.MaxVMCount;
+            if (cap == 0)
+                return $"This PC doesn't have enough free memory to host a server (each server needs ~{VMResourcePlan.MinimumVMMemoryBytes / VMResourcePlan.GiB} GiB).";
+            if (Vm.Servers.Count >= cap)
+                return $"This PC is at its hosting limit ({cap}). Remove one first, or burn to USB.";
+            return null;
+        }
+    }
+
+    public bool HostHereEnabled => HostHereDisabledReason == null;
+    public string HardwareBadgeLabel => ServerTier.Hardware.BadgeLabel();
+    public string HostedVmBadgeLabel => ServerTier.HostedVM.BadgeLabel();
+
+    public string HostHereSpecSummary
+    {
+        get
+        {
+            var host = VM.HostResources.Current();
+            return $"Will run as a managed VM on this PC — {VMResourcePlan.VmCpuCount(host)} vCPU, " +
+                   $"{VMResourcePlan.VmMemoryBytes(host) / VMResourcePlan.GiB} GiB RAM, " +
+                   $"{VMResourcePlan.DefaultMainDiskSizeBytes / VMResourcePlan.GiB} GiB disk.";
+        }
+    }
+
+    /// <summary>The "＋ Add a server" sidebar entry: back to a fresh wizard.</summary>
+    public void ResetToNewServer()
+    {
+        SelectedServerName = null;
+        Destination = null;
+        RecipePath = null;
+        Verified = null;
+        _parsedRecipe = null;
+        RecipeError = null;
+        IsFinished = false;
+        FireBag();
+    }
+
+    /// <summary>
+    /// "Host here": the SAME recipe → the SAME remastered installer ISO
+    /// (via the Node CLI's prepare), but applied to a managed VM on this PC
+    /// instead of a USB stick. The guest boot chain (unattended install →
+    /// LUKS → phone-home unlock → register) runs unmodified inside the VM;
+    /// this app never holds a key. Mirrors WizardModel.runHostHere.
+    /// </summary>
+    public async Task RunHostHereAsync()
+    {
+        if (IsRunning || _recipePath is null || _parsedRecipe is null) return;
+        if (HostHereDisabledReason is string reason)
+        {
+            AppendLog(LogStream.Stderr, reason);
+            return;
+        }
+
+        byte[] rawRecipe;
+        try { rawRecipe = File.ReadAllBytes(_recipePath); }
+        catch (Exception e)
+        {
+            AppendLog(LogStream.Stderr, $"Cannot read the recipe: {e.Message}");
+            return;
+        }
+        var config = VMConfig.Plan(_parsedRecipe, rawRecipe, VM.HostResources.Current());
+
+        IsRunning = true;
+        Phase = "download";
+        Progress = null;
+        BaseDownloadStarted = false;
+        BaseDownloadUrl = null;
+        _cts = new System.Threading.CancellationTokenSource();
+        FireBag();
+        try
+        {
+            // Same Simple-mode base ISO fetch as the USB path; Advanced mode
+            // may bring its own stock ISO.
+            string baseIso;
+            if (Mode == BurnerMode.Advanced && HasIso)
+            {
+                baseIso = _isoPath!;
+            }
+            else
+            {
+                try
+                {
+                    var ensured = await _baseCache.EnsureAsync(
+                        progress: p => SetProgress(p),
+                        onDownloadStart: phase => OnUi(() =>
+                        {
+                            BaseDownloadStarted = true;
+                            BaseDownloadUrl = phase.Url;
+                        }),
+                        log: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
+                        cancellation: _cts.Token);
+                    baseIso = ensured.Path;
+                }
+                catch (Exception e)
+                {
+                    AppendLog(LogStream.Stderr, (e as IsoBaseCache.CacheException)?.Message ?? e.Message);
+                    return;
+                }
+            }
+
+            // Create the bundle, then remaster the installer INTO it —
+            // identical remaster to the USB path (same engine, same recipe).
+            Phase = "remaster";
+            Progress = null;
+            BaseDownloadStarted = false;
+            BaseDownloadUrl = null;
+            FireBag();
+            try { Vm.CreateServer(config); }
+            catch (VMStoreException e)
+            {
+                AppendLog(LogStream.Stderr, e.Message);
+                return;
+            }
+            DidRemasterForTest = true;
+            var recipe = _recipePath!;
+            var outIso = Vm.InstallerIsoPath(config.Name);
+            var remastered = false;
+            await RunCliCoreAsync(
+                entry => CliArgs.Prepare(entry, recipe, baseIso, outIso, keepRecipe: true),
+                onSuccess: _ => remastered = true);
+            if (!remastered)
+            {
+                await Vm.DeleteServerAsync(config.Name);
+                return;
+            }
+
+            // Shred the single-use recipe, exactly like a successful USB burn.
+            try { File.Delete(recipe); } catch { }
+            SelectedServerName = config.Name;
+            Destination = null;
+            RecipePath = null;
+            Verified = null;
+            _parsedRecipe = null;
+            await Vm.BeginInstallAsync(config.Name);
+        }
+        finally
+        {
+            IsRunning = false;
+            Phase = null;
+            Progress = null;
+            BaseDownloadStarted = false;
+            BaseDownloadUrl = null;
+            _cts?.Dispose();
+            _cts = null;
+            FireBag();
+        }
     }
 
     /// <summary>Reported to the manifest endpoint. Mirrors FlagshipBurner.csproj &lt;Version&gt;.</summary>
@@ -641,6 +849,11 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(ShowProgress), nameof(ProgressIndeterminate), nameof(ProgressValue),
         nameof(PhaseLabel), nameof(ProgressCaption), nameof(ProgressTint),
         nameof(ShowDownloadRow), nameof(DownloadUrlCaption),
+        nameof(Destination), nameof(SelectedServerName), nameof(SelectedServer),
+        nameof(ShowServerDetail), nameof(ShowDestinationChooser),
+        nameof(ShowHostHerePane), nameof(ShowWizardPanes), nameof(ShowDestinationBackLink),
+        nameof(HasHostedServers), nameof(HostHereDisabledReason), nameof(HostHereEnabled),
+        nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel),
     };
 
     private static Brush FindBrush(string key)

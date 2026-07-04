@@ -48,6 +48,7 @@
     <Compile Include="src\VM\WhpxProbe.cs" />
     <Compile Include="src\VM\QmpClient.cs" />
     <Compile Include="src\VM\QemuHost.cs" />
+    <Compile Include="src\VM\VMManager.cs" />
   </ItemGroup>
 
   <ItemGroup>

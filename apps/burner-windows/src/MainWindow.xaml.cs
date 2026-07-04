@@ -2,11 +2,15 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using Flagship.Burner.VM;
 using Microsoft.Win32;
 
 namespace Flagship.Burner;
@@ -118,6 +122,119 @@ public partial class MainWindow : Window
     private void ClearLog_Click(object sender, RoutedEventArgs e)
     {
         _wizard.ClearLog();
+    }
+
+    // ---- Destination chooser + Host here ----
+
+    private void ChooseUsb_Click(object sender, RoutedEventArgs e)
+        => _wizard.Destination = ServerDestination.BurnToUSB;
+
+    private void ChooseHostHere_Click(object sender, RoutedEventArgs e)
+        => _wizard.Destination = ServerDestination.HostHere;
+
+    private void BackToChooser_Click(object sender, RoutedEventArgs e)
+        => _wizard.Destination = null;
+
+    private async void CreateHostHere_Click(object sender, RoutedEventArgs e)
+        => await _wizard.RunHostHereAsync();
+
+    // ---- Hosted-server sidebar + detail ----
+
+    private void AddServer_Click(object sender, RoutedEventArgs e)
+    {
+        CloseConsole();
+        _wizard.ResetToNewServer();
+    }
+
+    private void ServerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => CloseConsole();
+
+    private async void StartServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is string name)
+            await _wizard.Vm.PowerOnAsync(name);
+    }
+
+    private async void StopServer_Click(object sender, RoutedEventArgs e)
+    {
+        CloseConsole();
+        if (_wizard.SelectedServerName is string name)
+            await _wizard.Vm.PowerOffAsync(name);
+    }
+
+    private async void RetryInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is string name)
+            await _wizard.Vm.BeginInstallAsync(name);
+    }
+
+    private async void DeleteServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is not string name) return;
+        var fqdn = _wizard.SelectedServer?.Fqdn ?? name;
+        var choice = MessageBox.Show(
+            this,
+            $"Delete {fqdn}?\n\nThe VM and its encrypted disk image are removed from this PC. " +
+            "The server's identity and any backups live with your phone/account, not here.",
+            "Delete this server",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (choice != MessageBoxResult.Yes) return;
+        CloseConsole();
+        await _wizard.Vm.DeleteServerAsync(name);
+        _wizard.SelectedServerName = null;
+    }
+
+    // ---- Debug serial console (only reachable for debug-grant recipes:
+    //      a production VM has no console device, so the toggle itself is
+    //      collapsed and there is nothing to connect to) ----
+
+    private SerialConsoleSession? _console;
+
+    private void ConsoleToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is not string name) return;
+        var host = _wizard.Vm.Host(name);
+        if (host is null || host.SerialPort == 0)
+        {
+            ConsoleHint.Visibility = Visibility.Visible;
+            ConsoleToggle.IsChecked = false;
+            return;
+        }
+        ConsoleHint.Visibility = Visibility.Collapsed;
+        ConsolePanel.Visibility = Visibility.Visible;
+        ConsoleOutput.Clear();
+        var session = new SerialConsoleSession();
+        session.Output += text => Dispatcher.InvokeAsync(() =>
+        {
+            ConsoleOutput.AppendText(text);
+            // Keep the buffer bounded.
+            if (ConsoleOutput.Text.Length > 200_000)
+                ConsoleOutput.Text = ConsoleOutput.Text[^150_000..];
+            ConsoleScroller.ScrollToEnd();
+        });
+        _console = session;
+        _ = session.ConnectAsync(host.SerialPort);
+        ConsoleInput.Focus();
+    }
+
+    private void ConsoleToggle_Unchecked(object sender, RoutedEventArgs e) => CloseConsole();
+
+    private void ConsoleInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        _console?.Send(ConsoleInput.Text + "\n");
+        ConsoleInput.Clear();
+        e.Handled = true;
+    }
+
+    private void CloseConsole()
+    {
+        _console?.Dispose();
+        _console = null;
+        if (ConsolePanel != null) ConsolePanel.Visibility = Visibility.Collapsed;
+        if (ConsoleHint != null) ConsoleHint.Visibility = Visibility.Collapsed;
+        if (ConsoleToggle != null) ConsoleToggle.IsChecked = false;
     }
 
     // ---- Mode toggle ----
@@ -247,4 +364,97 @@ public sealed class StreamToBrushConverter : IValueConverter
     }
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotImplementedException();
+}
+
+/// <summary>bool → !bool (for IsEnabled bindings).</summary>
+public sealed class InverseBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is not bool b || !b;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// VM state → status brush, matching the Mac sidebar's stateColor: running
+/// green, installing/sealed amber, failed red, everything else muted.
+/// </summary>
+public sealed class StateKindToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var key = value is VMStateKind kind ? kind switch
+        {
+            VMStateKind.Running => "FB.Success",
+            VMStateKind.AwaitingPhoneUnlock or VMStateKind.Installing => "FB.Warning",
+            VMStateKind.Failed => "FB.Danger",
+            _ => "FB.TextMuted",
+        } : "FB.TextMuted";
+        return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
+    }
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>VM state → status-card glyph.</summary>
+public sealed class StateKindToGlyphConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is VMStateKind kind ? kind switch
+        {
+            VMStateKind.Running => "✓",              // check
+            VMStateKind.AwaitingPhoneUnlock => "\U0001F512", // lock
+            VMStateKind.Installing => "⚙",           // gear
+            VMStateKind.Failed => "⚠",               // warning
+            _ => "\U0001F5A5",                            // server/screen
+        } : "";
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
+
+/// <summary>
+/// Minimal interactive serial console over the QEMU chardev's loopback TCP
+/// socket: a read loop raising Output, plus Send for line input. Debug-enabled
+/// VMs only — a production VM has no serial device to connect to.
+/// </summary>
+public sealed class SerialConsoleSession : IDisposable
+{
+    private readonly TcpClient _tcp = new();
+    private readonly CancellationTokenSource _cts = new();
+    private NetworkStream? _stream;
+
+    public event Action<string>? Output;
+
+    public async Task ConnectAsync(int port)
+    {
+        try
+        {
+            await _tcp.ConnectAsync("127.0.0.1", port, _cts.Token);
+            _stream = _tcp.GetStream();
+            var buffer = new byte[4096];
+            while (!_cts.IsCancellationRequested)
+            {
+                var n = await _stream.ReadAsync(buffer, _cts.Token);
+                if (n == 0) break;
+                Output?.Invoke(Encoding.UTF8.GetString(buffer, 0, n));
+            }
+        }
+        catch (Exception e) when (!_cts.IsCancellationRequested)
+        {
+            Output?.Invoke($"\n[console disconnected: {e.Message}]\n");
+        }
+        catch { }
+    }
+
+    public void Send(string text)
+    {
+        try { _stream?.Write(Encoding.UTF8.GetBytes(text)); } catch { }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        try { _tcp.Dispose(); } catch { }
+        _cts.Dispose();
+    }
 }

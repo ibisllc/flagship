@@ -5,10 +5,10 @@
         mc:Ignorable="d"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        Title="Flagship Burner"
-        Width="540" Height="640"
-        MinWidth="500" MinHeight="560"
-        MaxWidth="780"
+        Title="Flagship for Desktop"
+        Width="840" Height="660"
+        MinWidth="760" MinHeight="580"
+        MaxWidth="1200"
         Background="{StaticResource FB.Bg}"
         WindowStartupLocation="CenterScreen"
         FontFamily="{StaticResource FB.Font.Body}"
@@ -24,6 +24,9 @@
         <local:NotNullToVisibilityConverter x:Key="NotNullToVisible"/>
         <local:StreamToBrushConverter x:Key="StreamToBrush"/>
         <local:ModeToggleLabelConverter x:Key="ModeToggleLabel"/>
+        <local:InverseBoolConverter x:Key="InverseBool"/>
+        <local:StateKindToBrushConverter x:Key="StateKindToBrush"/>
+        <local:StateKindToGlyphConverter x:Key="StateKindToGlyph"/>
     </Window.Resources>
 
     <Grid Margin="0">
@@ -37,14 +40,18 @@
         <Grid Grid.Row="0" Margin="22,18,22,8">
             <StackPanel Orientation="Horizontal"
                         VerticalAlignment="Center">
-                <Border Style="{StaticResource IconCircle}"
-                        Background="{StaticResource FB.PrimaryFaded}">
-                    <TextBlock Text="&#x1F525;"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontSize="18"/>
+                <!-- The Flagship mark: rounded square frame + teal core
+                     (light scheme: dark frame, teal circle). -->
+                <Border Width="30" Height="30"
+                        CornerRadius="7"
+                        Background="{StaticResource FB.Ink}"
+                        VerticalAlignment="Center">
+                    <Ellipse Width="16" Height="16"
+                             Fill="{StaticResource FB.Primary}"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"/>
                 </Border>
-                <TextBlock Text="Flagship Burner"
+                <TextBlock Text="Flagship for Desktop"
                            FontFamily="{StaticResource FB.Font.Title}"
                            FontSize="18"
                            Foreground="{StaticResource FB.Text}"
@@ -59,255 +66,624 @@
                     Click="ModeToggle_Click"/>
         </Grid>
 
-        <!-- Three drop-rows + bake button -->
-        <ScrollViewer Grid.Row="1"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      Margin="0">
-            <StackPanel Margin="22,4,22,12">
+        <!-- Content: main area + hosted-servers sidebar -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="228"/>
+            </Grid.ColumnDefinitions>
 
-                <!-- Row 1: Recipe -->
-                <Border x:Name="RecipeRow"
-                        Style="{StaticResource DropRowBorder}"
-                        Tag="{Binding RecipeRowTag}"
-                        DragEnter="RecipeRow_DragEnter"
-                        DragOver="RecipeRow_DragOver"
-                        DragLeave="RecipeRow_DragLeave"
-                        Drop="RecipeRow_Drop"
-                        MouseLeftButtonUp="RecipeRow_Click"
-                        Cursor="Hand"
-                        Margin="0,4,0,8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Style="{StaticResource IconCircle}"
-                                Background="{Binding RecipeIconBg}">
-                            <TextBlock Text="&#x1F4C4;" FontSize="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="12,0,8,0"
-                                    VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="Recipe"/>
-                            <TextBlock Style="{StaticResource RowHint}"
-                                       Text="{Binding RecipeHint}"
-                                       Visibility="{Binding HasRecipePrimary,
-                                           Converter={StaticResource BoolToVisibility},
-                                           ConverterParameter=invert}"/>
-                            <TextBlock Style="{StaticResource RowValue}"
-                                       Text="{Binding RecipePrimary}"
-                                       Visibility="{Binding HasRecipePrimary,
-                                           Converter={StaticResource BoolToVisibility}}"/>
-                            <TextBlock Style="{StaticResource Caption}"
-                                       Text="{Binding RecipeSecondary}"
-                                       Visibility="{Binding RecipeSecondary,
-                                           Converter={StaticResource NotNullToVisible}}"/>
-                        </StackPanel>
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding RecipeStatusGlyph}"
-                                   FontSize="15"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding RecipeStatusBrush}"/>
-                    </Grid>
-                </Border>
+            <!-- ============ MAIN AREA ============ -->
+            <ScrollViewer Grid.Column="0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0">
+                <Grid>
 
-                <!-- Row 2: ISO — the user supplies a stock Debian/Ubuntu ISO,
-                     which the burner remasters with the recipe preseed. -->
-                <Border x:Name="IsoRow"
-                        Style="{StaticResource DropRowBorder}"
-                        Tag="{Binding IsoRowTag}"
-                        DragEnter="IsoRow_DragEnter"
-                        DragOver="IsoRow_DragOver"
-                        DragLeave="IsoRow_DragLeave"
-                        Drop="IsoRow_Drop"
-                        MouseLeftButtonUp="IsoRow_Click"
-                        Cursor="Hand"
-                        Margin="0,4,0,8"
-                        Visibility="{Binding ShowIsoRow,
-                            Converter={StaticResource BoolToVisibility}}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Style="{StaticResource IconCircle}"
-                                Background="{Binding IsoIconBg}">
-                            <TextBlock Text="&#x1F4BF;" FontSize="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="12,0,8,0"
-                                    VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource RowTitle}"
-                                       Text="Ubuntu Server ISO"/>
-                            <TextBlock Style="{StaticResource RowHint}"
-                                       Text="Drop ubuntu-22.04.5-live-server-amd64.iso"
-                                       Visibility="{Binding HasIso,
-                                           Converter={StaticResource BoolToVisibility},
-                                           ConverterParameter=invert}"/>
-                            <TextBlock Style="{StaticResource RowValue}"
-                                       Text="{Binding IsoFileName}"
-                                       Visibility="{Binding HasIso,
-                                           Converter={StaticResource BoolToVisibility}}"/>
-                        </StackPanel>
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding IsoStatusGlyph}"
-                                   FontSize="15"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding IsoStatusBrush}"/>
-                    </Grid>
-                </Border>
+                    <!-- ===== Pane 1: the burn wizard (rows + bake) ===== -->
+                    <StackPanel Margin="22,4,22,12"
+                                Visibility="{Binding ShowWizardPanes,
+                                    Converter={StaticResource BoolToVisibility}}">
 
-                <!-- Row 3: USB Drive -->
-                <Border x:Name="DiskRow"
-                        Style="{StaticResource DropRowBorder}"
-                        Tag="{Binding DiskRowTag}"
-                        AllowDrop="False"
-                        Margin="0,4,0,8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Style="{StaticResource IconCircle}"
-                                Background="{Binding DiskIconBg}">
-                            <TextBlock Text="&#x1F4BE;" FontSize="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="12,0,8,0"
-                                    VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource RowTitle}" Text="USB Drive"/>
+                        <!-- Back to the destination chooser (USB branch only). -->
+                        <Button Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Left"
+                                Content="‹ Choose destination"
+                                Margin="0,0,0,4"
+                                Click="BackToChooser_Click"
+                                Visibility="{Binding ShowDestinationBackLink,
+                                    Converter={StaticResource BoolToVisibility}}"/>
+
+                        <!-- Row 1: Recipe -->
+                        <Border x:Name="RecipeRow"
+                                Style="{StaticResource DropRowBorder}"
+                                Tag="{Binding RecipeRowTag}"
+                                DragEnter="RecipeRow_DragEnter"
+                                DragOver="RecipeRow_DragOver"
+                                DragLeave="RecipeRow_DragLeave"
+                                Drop="RecipeRow_Drop"
+                                MouseLeftButtonUp="RecipeRow_Click"
+                                Cursor="Hand"
+                                Margin="0,4,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <ComboBox Grid.Column="0"
-                                          x:Name="DiskCombo"
-                                          ItemsSource="{Binding Disks}"
-                                          SelectedItem="{Binding SelectedDisk, Mode=TwoWay}"
-                                          DisplayMemberPath="DisplayName"
-                                          IsEnabled="{Binding HasDisks}"
-                                          Margin="0,2,0,0"/>
-                                <Button Grid.Column="1"
-                                        Style="{StaticResource LinkButton}"
-                                        Content="Refresh"
-                                        Margin="8,0,0,0"
-                                        Click="RefreshDisks_Click"/>
+                                <Border Grid.Column="0" Style="{StaticResource IconCircle}"
+                                        Background="{Binding RecipeIconBg}">
+                                    <TextBlock Text="&#x1F4C4;" FontSize="16"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Recipe"/>
+                                    <TextBlock Style="{StaticResource RowHint}"
+                                               Text="{Binding RecipeHint}"
+                                               Visibility="{Binding HasRecipePrimary,
+                                                   Converter={StaticResource BoolToVisibility},
+                                                   ConverterParameter=invert}"/>
+                                    <TextBlock Style="{StaticResource RowValue}"
+                                               Text="{Binding RecipePrimary}"
+                                               Visibility="{Binding HasRecipePrimary,
+                                                   Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Style="{StaticResource Caption}"
+                                               Text="{Binding RecipeSecondary}"
+                                               Visibility="{Binding RecipeSecondary,
+                                                   Converter={StaticResource NotNullToVisible}}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding RecipeStatusGlyph}"
+                                           FontSize="15"
+                                           VerticalAlignment="Center"
+                                           Foreground="{Binding RecipeStatusBrush}"/>
                             </Grid>
-                            <TextBlock Style="{StaticResource Caption}"
-                                       Text="No removable drives detected. Plug one in and click Refresh."
-                                       Margin="0,4,0,0"
-                                       Visibility="{Binding HasDisks,
-                                           Converter={StaticResource BoolToVisibility},
-                                           ConverterParameter=invert}"/>
-                        </StackPanel>
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding DiskStatusGlyph}"
-                                   FontSize="15"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding DiskStatusBrush}"/>
-                    </Grid>
-                </Border>
+                        </Border>
 
-                <!-- Bake button -->
-                <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">
-                    <Button x:Name="BakeButton"
-                            Style="{StaticResource BakeButton}"
-                            Content="{Binding BakeButtonLabel}"
-                            IsEnabled="{Binding CanBake}"
-                            Click="Bake_Click"
-                            Visibility="{Binding ShowProgress,
-                                Converter={StaticResource BoolToVisibility},
-                                ConverterParameter=invert}"/>
-                    <TextBlock Style="{StaticResource Caption}"
-                               HorizontalAlignment="Center"
-                               Margin="0,8,0,0"
-                               Text="{Binding ReadinessSummary}"
-                               TextWrapping="Wrap"
-                               MaxWidth="380"
-                               TextAlignment="Center"
-                               Visibility="{Binding ShowReadiness,
-                                   Converter={StaticResource BoolToVisibility}}"/>
-
-                    <!-- Progress block — the remaster runs indeterminate, then
-                         the write fills in. ProgressTint sets the Foreground. -->
-                    <StackPanel HorizontalAlignment="Center"
-                                Visibility="{Binding ShowProgress,
+                        <!-- Row 2: ISO — Advanced mode only. -->
+                        <Border x:Name="IsoRow"
+                                Style="{StaticResource DropRowBorder}"
+                                Tag="{Binding IsoRowTag}"
+                                DragEnter="IsoRow_DragEnter"
+                                DragOver="IsoRow_DragOver"
+                                DragLeave="IsoRow_DragLeave"
+                                Drop="IsoRow_Drop"
+                                MouseLeftButtonUp="IsoRow_Click"
+                                Cursor="Hand"
+                                Margin="0,4,0,8"
+                                Visibility="{Binding ShowIsoRow,
                                     Converter={StaticResource BoolToVisibility}}">
-                        <ProgressBar x:Name="PhaseProgress"
-                                     Width="260" Height="6"
-                                     Minimum="0" Maximum="1"
-                                     Value="{Binding ProgressValue, Mode=OneWay}"
-                                     IsIndeterminate="{Binding ProgressIndeterminate}"
-                                     Foreground="{Binding ProgressTint}"
-                                     Background="{StaticResource FB.SurfaceElevated}"
-                                     BorderThickness="0"/>
-                        <TextBlock Style="{StaticResource Caption}"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,8,0,0"
-                                   Text="{Binding ProgressCaption}"/>
-                        <!-- The base-image URL being fetched, surfaced directly
-                             under the bar during the download phase only. -->
-                        <TextBlock Style="{StaticResource Caption}"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,2,0,0"
-                                   MaxWidth="380"
-                                   TextWrapping="Wrap"
-                                   TextAlignment="Center"
-                                   FontFamily="{StaticResource FB.Font.Mono}"
-                                   Text="{Binding DownloadUrlCaption}"
-                                   Visibility="{Binding ShowDownloadRow,
-                                       Converter={StaticResource BoolToVisibility}}"/>
-                        <Button Style="{StaticResource LinkButton}"
-                                HorizontalAlignment="Center"
-                                Margin="0,6,0,0"
-                                Content="Cancel"
-                                Click="Bake_Click"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconCircle}"
+                                        Background="{Binding IsoIconBg}">
+                                    <TextBlock Text="&#x1F4BF;" FontSize="16"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}"
+                                               Text="Debian / Ubuntu ISO"/>
+                                    <TextBlock Style="{StaticResource RowHint}"
+                                               Text="Drop a stock installer ISO to remaster"
+                                               Visibility="{Binding HasIso,
+                                                   Converter={StaticResource BoolToVisibility},
+                                                   ConverterParameter=invert}"/>
+                                    <TextBlock Style="{StaticResource RowValue}"
+                                               Text="{Binding IsoFileName}"
+                                               Visibility="{Binding HasIso,
+                                                   Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding IsoStatusGlyph}"
+                                           FontSize="15"
+                                           VerticalAlignment="Center"
+                                           Foreground="{Binding IsoStatusBrush}"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Row 3: USB Drive -->
+                        <Border x:Name="DiskRow"
+                                Style="{StaticResource DropRowBorder}"
+                                Tag="{Binding DiskRowTag}"
+                                AllowDrop="False"
+                                Margin="0,4,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconCircle}"
+                                        Background="{Binding DiskIconBg}">
+                                    <TextBlock Text="&#x1F4BE;" FontSize="16"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="USB Drive"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0"
+                                                  x:Name="DiskCombo"
+                                                  ItemsSource="{Binding Disks}"
+                                                  SelectedItem="{Binding SelectedDisk, Mode=TwoWay}"
+                                                  DisplayMemberPath="DisplayName"
+                                                  IsEnabled="{Binding HasDisks}"
+                                                  Margin="0,2,0,0"/>
+                                        <Button Grid.Column="1"
+                                                Style="{StaticResource LinkButton}"
+                                                Content="Refresh"
+                                                Margin="8,0,0,0"
+                                                Click="RefreshDisks_Click"/>
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource Caption}"
+                                               Text="No removable drives detected. Plug one in and click Refresh."
+                                               Margin="0,4,0,0"
+                                               Visibility="{Binding HasDisks,
+                                                   Converter={StaticResource BoolToVisibility},
+                                                   ConverterParameter=invert}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding DiskStatusGlyph}"
+                                           FontSize="15"
+                                           VerticalAlignment="Center"
+                                           Foreground="{Binding DiskStatusBrush}"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Bake button -->
+                        <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">
+                            <Button x:Name="BakeButton"
+                                    Style="{StaticResource BakeButton}"
+                                    Content="{Binding BakeButtonLabel}"
+                                    IsEnabled="{Binding CanBake}"
+                                    Click="Bake_Click"
+                                    Visibility="{Binding ShowProgress,
+                                        Converter={StaticResource BoolToVisibility},
+                                        ConverterParameter=invert}"/>
+                            <TextBlock Style="{StaticResource Caption}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,8,0,0"
+                                       Text="{Binding ReadinessSummary}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="380"
+                                       TextAlignment="Center"
+                                       Visibility="{Binding ShowReadiness,
+                                           Converter={StaticResource BoolToVisibility}}"/>
+
+                            <!-- Progress block -->
+                            <StackPanel HorizontalAlignment="Center"
+                                        Visibility="{Binding ShowProgress,
+                                            Converter={StaticResource BoolToVisibility}}">
+                                <ProgressBar x:Name="PhaseProgress"
+                                             Width="260" Height="6"
+                                             Minimum="0" Maximum="1"
+                                             Value="{Binding ProgressValue, Mode=OneWay}"
+                                             IsIndeterminate="{Binding ProgressIndeterminate}"
+                                             Foreground="{Binding ProgressTint}"
+                                             Background="{StaticResource FB.SurfaceElevated}"
+                                             BorderThickness="0"/>
+                                <TextBlock Style="{StaticResource Caption}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,8,0,0"
+                                           Text="{Binding ProgressCaption}"/>
+                                <TextBlock Style="{StaticResource Caption}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,2,0,0"
+                                           MaxWidth="380"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           FontFamily="{StaticResource FB.Font.Mono}"
+                                           Text="{Binding DownloadUrlCaption}"
+                                           Visibility="{Binding ShowDownloadRow,
+                                               Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Style="{StaticResource LinkButton}"
+                                        HorizontalAlignment="Center"
+                                        Margin="0,6,0,0"
+                                        Content="Cancel"
+                                        Click="Bake_Click"/>
+                            </StackPanel>
+
+                            <!-- Done card -->
+                            <Border BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="14"
+                                    Margin="0,12,0,0"
+                                    BorderBrush="{StaticResource FB.Success}"
+                                    Background="{StaticResource FB.SuccessFaded}"
+                                    Visibility="{Binding IsFinished,
+                                        Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#x2713;"
+                                                   FontSize="15"
+                                                   Foreground="{StaticResource FB.Success}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Ready to boot"
+                                                   Style="{StaticResource RowTitle}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding DoneServerDomain}"
+                                               FontFamily="{StaticResource FB.Font.Mono}"
+                                               Margin="0,6,0,0"
+                                               Visibility="{Binding DoneServerDomain,
+                                                   Converter={StaticResource NotNullToVisible}}"/>
+                                    <TextBlock Text="{Binding DoneOutputPath}"
+                                               FontFamily="{StaticResource FB.Font.Mono}"
+                                               Style="{StaticResource Caption}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,2,0,0"
+                                               Visibility="{Binding DoneOutputPath,
+                                                   Converter={StaticResource NotNullToVisible}}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
 
-                    <!-- Done card -->
-                    <Border BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="14"
-                            Margin="0,12,0,0"
-                            BorderBrush="{StaticResource FB.Success}"
-                            Background="{StaticResource FB.SuccessFaded}"
-                            Visibility="{Binding IsFinished,
-                                Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
+                    <!-- ===== Pane 2: destination chooser (Burn to USB / Host here) ===== -->
+                    <StackPanel Margin="22,10,22,12"
+                                Visibility="{Binding ShowDestinationChooser,
+                                    Converter={StaticResource BoolToVisibility}}">
+                        <Border Background="{StaticResource FB.PrimaryFaded}"
+                                BorderBrush="{StaticResource FB.Primary}"
+                                BorderThickness="1" CornerRadius="8"
+                                Padding="14" Margin="0,0,0,14">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#x2713;"
-                                           FontSize="15"
-                                           Foreground="{StaticResource FB.Success}"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="Ready to boot"
-                                           Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="&#x2713;" FontSize="16"
+                                           Foreground="{StaticResource FB.PrimaryDeep}"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DoneServerDomain}"
+                                               Style="{StaticResource RowTitle}"/>
+                                    <TextBlock Text="Recipe verified — choose where this server should live."
+                                               Style="{StaticResource RowHint}"/>
+                                </StackPanel>
                             </StackPanel>
-                            <TextBlock Text="{Binding DoneServerDomain}"
-                                       FontFamily="{StaticResource FB.Font.Mono}"
-                                       Margin="0,6,0,0"
-                                       Visibility="{Binding DoneServerDomain,
-                                           Converter={StaticResource NotNullToVisible}}"/>
-                            <TextBlock Text="{Binding DoneOutputPath}"
-                                       FontFamily="{StaticResource FB.Font.Mono}"
-                                       Style="{StaticResource Caption}"
-                                       TextTrimming="CharacterEllipsis"
-                                       Margin="0,2,0,0"
-                                       Visibility="{Binding DoneOutputPath,
-                                           Converter={StaticResource NotNullToVisible}}"/>
+                        </Border>
+
+                        <Button Style="{StaticResource DestinationCard}"
+                                Margin="0,0,0,10"
+                                Click="ChooseUsb_Click">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconCircle}">
+                                    <TextBlock Text="&#x1F4BE;" FontSize="16"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <Grid>
+                                        <TextBlock Text="Burn to USB" Style="{StaticResource RowTitle}"/>
+                                        <TextBlock Text="{Binding HardwareBadgeLabel}"
+                                                   Style="{StaticResource Caption}"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource RowHint}"
+                                               Text="Build a dedicated hardware appliance — the gold standard. Boot any spare box from the USB stick."/>
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+
+                        <Button Style="{StaticResource DestinationCard}"
+                                IsEnabled="{Binding HostHereEnabled}"
+                                Click="ChooseHostHere_Click">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconCircle}">
+                                    <TextBlock Text="&#x1F5A5;" FontSize="16"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <Grid>
+                                        <TextBlock Text="Host on this PC" Style="{StaticResource RowTitle}"/>
+                                        <TextBlock Text="{Binding HostedVmBadgeLabel}"
+                                                   Style="{StaticResource Caption}"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource RowHint}"
+                                               Text="Run the same encrypted, phone-gated appliance as a managed VM inside this app. Same recipe, same unlock — your phone still holds the keys."
+                                               Visibility="{Binding HostHereDisabledReason,
+                                                   Converter={StaticResource NullToCollapsed}}"/>
+                                    <TextBlock Style="{StaticResource RowHint}"
+                                               Foreground="{StaticResource FB.Warning}"
+                                               Text="{Binding HostHereDisabledReason}"
+                                               Visibility="{Binding HostHereDisabledReason,
+                                                   Converter={StaticResource NotNullToVisible}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- ===== Pane 3: Host here (create the VM) ===== -->
+                    <StackPanel Margin="22,10,22,12"
+                                Visibility="{Binding ShowHostHerePane,
+                                    Converter={StaticResource BoolToVisibility}}">
+                        <Button Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Left"
+                                Content="‹ Choose destination"
+                                IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}"
+                                Click="BackToChooser_Click"/>
+
+                        <Border Background="{StaticResource FB.Surface}"
+                                BorderBrush="{StaticResource FB.Border}"
+                                BorderThickness="1" CornerRadius="8"
+                                Padding="14" Margin="0,10,0,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding DoneServerDomain}"
+                                           Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="{Binding HostHereSpecSummary}"
+                                           Style="{StaticResource RowHint}"
+                                           Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource Caption}"
+                                   TextWrapping="Wrap"
+                                   Text="The VM installs unattended from the same image a USB burn uses, then boots encrypted and waits for your phone to unlock it. This app never sees the disk key."/>
+
+                        <StackPanel Margin="0,22,0,0" HorizontalAlignment="Center">
+                            <Button Style="{StaticResource BakeButton}"
+                                    Content="Create server on this PC"
+                                    Click="CreateHostHere_Click"
+                                    Visibility="{Binding ShowProgress,
+                                        Converter={StaticResource BoolToVisibility},
+                                        ConverterParameter=invert}"/>
+                            <TextBlock Style="{StaticResource Caption}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,8,0,0"
+                                       Text="Encrypted disk · unlocked by your phone"
+                                       Visibility="{Binding ShowProgress,
+                                           Converter={StaticResource BoolToVisibility},
+                                           ConverterParameter=invert}"/>
+
+                            <StackPanel HorizontalAlignment="Center"
+                                        Visibility="{Binding ShowProgress,
+                                            Converter={StaticResource BoolToVisibility}}">
+                                <ProgressBar Width="260" Height="6"
+                                             Minimum="0" Maximum="1"
+                                             Value="{Binding ProgressValue, Mode=OneWay}"
+                                             IsIndeterminate="{Binding ProgressIndeterminate}"
+                                             Foreground="{Binding ProgressTint}"
+                                             Background="{StaticResource FB.SurfaceElevated}"
+                                             BorderThickness="0"/>
+                                <TextBlock Style="{StaticResource Caption}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,8,0,0"
+                                           Text="{Binding ProgressCaption}"/>
+                                <TextBlock Style="{StaticResource Caption}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,2,0,0"
+                                           MaxWidth="380"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           FontFamily="{StaticResource FB.Font.Mono}"
+                                           Text="{Binding DownloadUrlCaption}"
+                                           Visibility="{Binding ShowDownloadRow,
+                                               Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
                         </StackPanel>
+                    </StackPanel>
+
+                    <!-- ===== Pane 4: hosted-server detail ===== -->
+                    <StackPanel Margin="22,10,22,12"
+                                DataContext="{Binding SelectedServer}"
+                                Visibility="{Binding DataContext.ShowServerDetail,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding DisplayName}"
+                                   FontFamily="{StaticResource FB.Font.Title}"
+                                   FontSize="18"
+                                   Foreground="{StaticResource FB.Text}"/>
+                        <TextBlock Text="{Binding Fqdn}"
+                                   FontFamily="{StaticResource FB.Font.Mono}"
+                                   Style="{StaticResource Caption}"/>
+                        <TextBlock Text="{Binding BadgeLabel}"
+                                   Style="{StaticResource Caption}"
+                                   Foreground="{StaticResource FB.PrimaryDeep}"
+                                   Margin="0,2,0,0"/>
+
+                        <!-- Status card -->
+                        <Border Background="{StaticResource FB.Surface}"
+                                BorderBrush="{StaticResource FB.Border}"
+                                BorderThickness="1" CornerRadius="8"
+                                Padding="14" Margin="0,12,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding StateKind, Converter={StaticResource StateKindToGlyph}}"
+                                           FontSize="18"
+                                           Foreground="{Binding StateKind, Converter={StaticResource StateKindToBrush}}"
+                                           VerticalAlignment="Top"
+                                           Margin="0,0,10,0"/>
+                                <StackPanel MaxWidth="420">
+                                    <TextBlock Text="{Binding StateLabel}"
+                                               Style="{StaticResource RowTitle}"/>
+                                    <TextBlock Text="{Binding StatusSubtitle}"
+                                               Style="{StaticResource RowHint}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{Binding SpecSummary}"
+                                   Style="{StaticResource Caption}"
+                                   Margin="0,0,0,12"/>
+
+                        <!-- Controls -->
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource BakeButton}"
+                                    MinWidth="110"
+                                    Content="Start"
+                                    Click="StartServer_Click"
+                                    Visibility="{Binding CanStart,
+                                        Converter={StaticResource BoolToVisibility}}"/>
+                            <Button Style="{StaticResource SecondaryButton}"
+                                    Content="Stop"
+                                    Click="StopServer_Click"
+                                    Visibility="{Binding CanStop,
+                                        Converter={StaticResource BoolToVisibility}}"/>
+                            <Button Style="{StaticResource BakeButton}"
+                                    MinWidth="130"
+                                    Content="Retry install"
+                                    Click="RetryInstall_Click"
+                                    Visibility="{Binding CanRetryInstall,
+                                        Converter={StaticResource BoolToVisibility}}"/>
+                        </StackPanel>
+
+                        <!-- Debug console — exists IFF the recipe carried the
+                             owner-signed debug grant. A production VM shows no
+                             console affordance at all (the phone-signed grant
+                             is the gate; there is no host-side override). -->
+                        <StackPanel Margin="0,16,0,0"
+                                    Visibility="{Binding ConsoleEnabled,
+                                        Converter={StaticResource BoolToVisibility}}">
+                            <ToggleButton x:Name="ConsoleToggle"
+                                          Background="Transparent" BorderThickness="0"
+                                          Cursor="Hand" Padding="0"
+                                          HorizontalAlignment="Left"
+                                          Checked="ConsoleToggle_Checked"
+                                          Unchecked="ConsoleToggle_Unchecked">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                                            <TextBlock Text="&#x276F;_" Margin="0,0,6,0"
+                                                       FontFamily="{StaticResource FB.Font.Mono}"
+                                                       Foreground="{StaticResource FB.PrimaryDeep}"/>
+                                            <ContentPresenter VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <TextBlock Text="Open CLI/console"
+                                           Foreground="{StaticResource FB.PrimaryDeep}"
+                                           FontSize="12.5"/>
+                            </ToggleButton>
+                            <TextBlock x:Name="ConsoleHint"
+                                       Style="{StaticResource Caption}"
+                                       Text="Console available while the server is running."
+                                       Visibility="Collapsed"/>
+                            <Border x:Name="ConsolePanel"
+                                    Visibility="Collapsed"
+                                    Background="{StaticResource FB.SurfaceElevated}"
+                                    BorderBrush="{StaticResource FB.Border}"
+                                    BorderThickness="1" CornerRadius="6"
+                                    Margin="0,8,0,0" Padding="0">
+                                <StackPanel>
+                                    <ScrollViewer x:Name="ConsoleScroller"
+                                                  Height="200"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <TextBox x:Name="ConsoleOutput"
+                                                 IsReadOnly="True"
+                                                 BorderThickness="0"
+                                                 Background="Transparent"
+                                                 FontFamily="{StaticResource FB.Font.Mono}"
+                                                 FontSize="11.5"
+                                                 TextWrapping="Wrap"
+                                                 Padding="8"/>
+                                    </ScrollViewer>
+                                    <TextBox x:Name="ConsoleInput"
+                                             FontFamily="{StaticResource FB.Font.Mono}"
+                                             FontSize="12"
+                                             Margin="8"
+                                             KeyDown="ConsoleInput_KeyDown"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Danger row -->
+                        <Button Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Right"
+                                Margin="0,24,0,0"
+                                Foreground="{StaticResource FB.Danger}"
+                                Content="Delete this server"
+                                Click="DeleteServer_Click"/>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+
+            <!-- ============ SIDEBAR: servers hosted in this app ============ -->
+            <Border Grid.Column="1"
+                    BorderThickness="1,0,0,0"
+                    BorderBrush="{StaticResource FB.Border}"
+                    Background="{StaticResource FB.Surface}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="Servers on this PC"
+                               Style="{StaticResource RowTitle}"
+                               Margin="12,12,12,8"/>
+                    <ListBox Grid.Row="1"
+                             x:Name="ServerList"
+                             ItemsSource="{Binding Vm.Servers}"
+                             SelectedValuePath="Name"
+                             SelectedValue="{Binding SelectedServerName, Mode=TwoWay}"
+                             SelectionChanged="ServerList_SelectionChanged"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Margin="8,0,8,0"
+                             ItemContainerStyle="{StaticResource ServerRowItem}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               Style="{StaticResource RowTitle}"
+                                               FontSize="13"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding BadgeLabel}"
+                                               Style="{StaticResource Caption}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                        <Ellipse Width="7" Height="7"
+                                                 VerticalAlignment="Center"
+                                                 Fill="{Binding StateKind,
+                                                     Converter={StaticResource StateKindToBrush}}"/>
+                                        <TextBlock Text="{Binding StateLabel}"
+                                                   Style="{StaticResource Caption}"
+                                                   Margin="5,0,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="1"
+                                VerticalAlignment="Top" Margin="12,4,12,0"
+                                Visibility="{Binding HasHostedServers,
+                                    Converter={StaticResource BoolToVisibility},
+                                    ConverterParameter=invert}">
+                        <TextBlock Style="{StaticResource Caption}"
+                                   TextWrapping="Wrap"
+                                   Text="None yet. Verify a recipe and choose “Host on this PC”."/>
+                    </StackPanel>
+                    <Border Grid.Row="2"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{StaticResource FB.Border}">
+                        <Button Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Left"
+                                Margin="8,6,8,8"
+                                Content="＋ Add a server"
+                                Click="AddServer_Click"/>
                     </Border>
-                </StackPanel>
-            </StackPanel>
-        </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
 
         <!-- Log drawer -->
         <Border Grid.Row="2"
