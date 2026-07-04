@@ -259,10 +259,18 @@ for t in $(grep -oiE 'DELETE FROM [a-z_]+' ../../scripts/wipe-all-users-prerelea
 done
 ```
 
-**B. Via the script with a DB override** (if/when `scripts/wipe-all-users.sh`
-grows a `FLAGSHIP_D1_DB`/`--db` knob — today it hardcodes `flagship-state`; the
-loop above is the gym-safe path until then). PRESERVES `marketplace_listings`
-+ CF/SQLite internals, same as prod.
+**B. Via the guarded runner with the DB override** (the preferred path — ONE
+table list, parsed from the canonical .sql; no duplication):
+```sh
+cd /Users/harrywinner/flagship
+WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1=flagship-state-gym \
+    WIPE_WRANGLER_CONFIG=wrangler.gym.toml \
+    bash scripts/wipe-all-users.sh --yes
+```
+The runner HARD-REFUSES a non-prod `WIPE_ENV` pointed at the prod
+`flagship-state` (even by default/omission), so the gym path is structurally
+incapable of wiping prod. PRESERVES `marketplace_listings` + CF/SQLite
+internals, same as prod.
 
 > NEVER run the prod `scripts/wipe-all-users.sh` (it targets `flagship-state`)
 > as part of a gym run — the gym wipe MUST name `flagship-state-gym`.
@@ -359,6 +367,37 @@ npx wrangler r2 bucket delete flagship-backups-gym
 The manual `gym.flagship.services` / `*.gym.flagship.services` A+AAAA records (if
 you added them in step 3) are the only DNS to remove by hand; the four
 `*.flagshipserver.com` custom-domain records are torn down by `wrangler delete`.
+
+---
+
+## The weekly unattended run — `npm run gym:weekly`
+
+`scripts/gym-weekly.sh` is the ONE command a weekly CI job runs. It wraps
+`gym:total` with the warm-up / wipe / simulator / cleanup ceremony this runbook
+otherwise describes by hand:
+
+1. **Phase 0** — `flyctl scale count 1 -a flagship-services-gym` + poll a
+   machine `started` (≤5 min) + verify `https://gym.flagshipserver.com/api/health`.
+   Already-scaled is a no-op.
+2. **Phase 0b** — re-zero `flagship-state-gym` via the guarded
+   `wipe-all-users.sh` runner (step 5B above; the prod DB is hard-refused).
+3. **Phase 0c** — boot the newest available iPhone simulator (if none booted)
+   and the `flagship_gym` AVD headless (if no adb device). Skippable:
+   `--skip-ios-sim` / `--skip-avd` / `--skip-sims`.
+4. **Phase 1** — `scripts/gym-total.sh` (mock matrix → live e2e → gating e2e).
+   **Weekly means FULL**: gym-total's exit 3 ("mocks passed, cloud skipped —
+   no secrets") FAILS the weekly run.
+5. **Phase 2** (trap EXIT — always runs) — scale the gym Fly app back to 0
+   (`--no-scale-down` to keep it up) + shut the AVD down if the script booted it.
+
+It ends with a one-screen report: mock / live / gating verdicts, the
+`gym-results/<ts>/` dir, and duration. Exit 0 only when everything that must
+run ran green. Secrets come from `.gym-secrets.env` as in `gym:total`
+(required — weekly fails without the cloud half).
+
+Self-test without touching anything: `GYM_WEEKLY_DRY_RUN=1 npm run gym:weekly`
+(or `--dry-run`) walks every phase, executes nothing external, and exits 0 —
+pinned by `scripts/gym-weekly.test.ts`.
 
 ---
 
