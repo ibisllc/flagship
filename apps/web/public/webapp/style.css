@@ -530,6 +530,25 @@ button.linklike:hover, .btn.linklike:hover {
   text-decoration: underline;
 }
 
+/* Advanced disclosure (Home session card): demotes the manual-pair paths
+   below the primary "Add a server" affordance without hiding them. */
+.advanced-disclosure > summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+  font-size: 13px;
+  list-style: none;
+}
+.advanced-disclosure > summary::-webkit-details-marker { display: none; }
+.advanced-disclosure > summary::before {
+  content: "▸ ";
+  color: var(--ink-faint);
+}
+.advanced-disclosure[open] > summary::before { content: "▾ "; }
+
+/* A home server card is tappable to open its detail screen (the inner
+   action buttons still handle their own clicks). */
+.server-card.is-tappable { cursor: pointer; }
+
 /* ── Pill / status ──────────────────────────────────────────────── */
 .pill {
   display: inline-flex;

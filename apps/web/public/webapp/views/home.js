@@ -759,7 +759,15 @@ function renderServerCards() {
 
   const cardsHtml = visible.length
     ? visible
-        .map((e) => `<div class="card ${e.cardClass}">${e.html}</div>`)
+        .map((e) => {
+          // A registered (non-pending) card is tappable → opens server-detail.
+          const openable = e.bucket !== "pending" && e.fields.fqdn;
+          const attrs = openable
+            ? ` data-open-fqdn="${escapeHtml(e.fields.fqdn)}"`
+            : "";
+          const cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          return `<div class="card ${cls}"${attrs}>${e.html}</div>`;
+        })
         .join("")
     : `<div class="card placeholder">${
         homeQuery || homeFilter !== "all"
@@ -794,6 +802,18 @@ function wireHomeListControls(list) {
   list.querySelector("#home-add-server")?.addEventListener("click", async () => {
     const { enterCreateServer } = await import("./create-server.js");
     await enterCreateServer();
+  });
+  // Tap a registered server card → open its detail screen. Clicks that
+  // land on an inner control (approve / delete / links) are ignored so the
+  // card tap never hijacks a button.
+  list.querySelectorAll("[data-open-fqdn]").forEach((card) => {
+    card.addEventListener("click", async (ev) => {
+      if (ev.target.closest("button, a, input, label, select, textarea")) return;
+      const fqdn = card.getAttribute("data-open-fqdn");
+      if (!fqdn) return;
+      const { enterServerDetail } = await import("./server-detail.js");
+      await enterServerDetail(fqdn);
+    });
   });
   // "Take over a box" — the standalone acquirer claim (paste / scan a
   // transfer link). The same view a `/transfer?o=` deep link routes into.
@@ -923,7 +943,7 @@ export async function renderHome() {
   const list = $("servers-list");
   list.innerHTML = "";
   if (!sid) {
-    sessionStatusEl.textContent = "unpaired";
+    sessionStatusEl.textContent = "Unpaired";
     sessionStatusEl.classList.remove("ok");
     // #36 — real empty state, not a "no paired session" stub. Phase 2:
     // if the account is already open (username claimed), this is the
@@ -938,7 +958,7 @@ export async function renderHome() {
     const r = await fetch(`/api/me/servers?sessionId=${encodeURIComponent(sid)}`);
     if (!r.ok) throw new Error(`status ${r.status}`);
     const body = await r.json();
-    sessionStatusEl.textContent = "paired";
+    sessionStatusEl.textContent = "Paired";
     sessionStatusEl.classList.add("ok");
     // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
     // returns BOTH the registered pods (liveness/cert enrichment) AND the
@@ -1105,7 +1125,7 @@ export async function renderHome() {
     // show when the list comes back empty. Keep the failure in the
     // console for debugging, but leave the surface clean.
     console.warn("home: servers list failed to load", e);
-    sessionStatusEl.textContent = "no servers";
+    sessionStatusEl.textContent = "No servers";
     sessionStatusEl.classList.remove("ok");
     renderEmptyServersList(list, { reason: "no-servers", username: session.username });
     activeOperations.syncDeployOperations([]);

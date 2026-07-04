@@ -24,6 +24,7 @@ test("S4 — vibe-code start hits /api/screens/vibe-code/start with a prompt", a
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
   await syncWebappPubkey(page, podSim);
 
+  await page.locator("#view-home .advanced-disclosure").evaluate((d) => { d.open = true; });
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
   await page.fill("#pod-pair-label", "e2e-s4");

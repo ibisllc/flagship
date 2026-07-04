@@ -32,6 +32,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { formatWhen } from "../../public/webapp/lib/dateFormat.js";
 
 /** A passphrase that satisfies the bootstrap 8+ rule. */
 const PASSPHRASE = "correct-horse-battery-staple-gym";
@@ -107,7 +108,7 @@ async function reachSettingsTab(page: Page): Promise<void> {
 
 /** Reach the Settings DETAIL page (`#view-settings`) — the providers (AI-keys)
  *  section + the session-tier cluster (PIN lock / passkey-lock / remove-device)
- *  live here, reached from the tab's "AI providers" row. `renderProviders()`
+ *  live here, reached from the tab's "AI keys" row. `renderProviders()`
  *  runs on entry, which is what greys the recovery-gated session actions. */
 async function reachSettingsDetail(page: Page): Promise<void> {
   await reachSettingsTab(page);
@@ -450,7 +451,8 @@ test.describe("gym webapp total", () => {
       await enterServerDetail();
     });
     await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
-    const expected = new Date(soon).toLocaleString();
+    // server-detail routes cert dates through the shared S2 date helper.
+    const expected = formatWhen(soon);
     await expect(page.locator("#server-detail-content")).toContainText(expected, { timeout: 10_000 });
     await shot(page, testInfo, "cert-near-expiry");
   });
@@ -467,7 +469,7 @@ test.describe("gym webapp total", () => {
       await enterServerDetail();
     });
     await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#server-detail-content")).toContainText(new Date(renewed).toLocaleString(), {
+    await expect(page.locator("#server-detail-content")).toContainText(formatWhen(renewed), {
       timeout: 10_000,
     });
     await shot(page, testInfo, "cert-renewed");

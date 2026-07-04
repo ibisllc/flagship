@@ -50,6 +50,9 @@ import {
   hardDriveIcon,
   unlockIcon,
   chevronRightIcon,
+  alertCircleIcon,
+  alertTriangleIcon,
+  downloadIcon,
 } from "./lib/icons.js";
 import { profileCard } from "./lib/uikit.js";
 import { getSession } from "./lib/state.js";
@@ -88,7 +91,7 @@ import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initPostRecoveryChoiceView } from "./views/post-recovery-choice.js";
-import { initAccountDeleteView } from "./views/account-delete.js";
+import { initAccountDeleteView, enterAccountDelete } from "./views/account-delete.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
@@ -115,6 +118,10 @@ import {
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
 registerView("view-settings-tab", { tab: "settings" });
+// Static App-group sub-screens (no view module of their own).
+registerView("view-appearance", { tab: "settings" });
+registerView("view-privacy", { tab: "settings" });
+registerView("view-about", { tab: "settings" });
 
 // Sub-views inherit a parent tab so the tab bar lights up the right
 // entry when the user drills into a detail screen. Centralised here
@@ -156,6 +163,14 @@ const SUB_VIEW_TABS = {
   "view-companion-requests": "settings",
   "view-profiles": "settings",
   "view-orders-debug": "settings",
+  // Settings sub-screens that previously left the tab bar dark.
+  "view-trusted-devices": "settings",
+  "view-account-delete": "settings",
+  "view-appearance": "settings",
+  "view-privacy": "settings",
+  "view-about": "settings",
+  // Reached from the Activity tab's audit-log "see all".
+  "view-audit-log": "activity",
 };
 
 async function enterActivityTab() {
@@ -170,6 +185,7 @@ const SETTINGS_ROW_ICONS = {
   push: activityIcon,
   tier: activityIcon,
   recovery: keyIcon,
+  backupkey: downloadIcon,
   devices: usersIcon,
   sessions: monitorIcon,
   secured: shieldIcon,
@@ -178,7 +194,11 @@ const SETTINGS_ROW_ICONS = {
   dock: monitorIcon,
   requests: usersIcon,
   profiles: userIcon,
+  appearance: monitorIcon,
+  privacy: shieldIcon,
+  about: alertCircleIcon,
   reset: unlockIcon,
+  accountdelete: alertTriangleIcon,
   chevron: chevronRightIcon,
 };
 
@@ -285,6 +305,12 @@ function wireSettingsTabEntries() {
     document.querySelector("#push-enable")?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   wire("settings-tab-recovery", enterRecovery);
+  // "Back up account key" reuses the Recovery screen's `.flagshipkey`
+  // export ceremony — jump there and focus the backup button.
+  wire("settings-tab-backup-key", async () => {
+    await enterRecovery();
+    document.querySelector("#recovery-keyfile-export")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
@@ -296,6 +322,15 @@ function wireSettingsTabEntries() {
   wire("settings-tab-profiles", enterProfiles);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
+  // App group — static informational sub-screens.
+  wire("settings-tab-appearance", () => show("view-appearance"));
+  wire("settings-tab-privacy", () => show("view-privacy"));
+  wire("settings-tab-about", () => show("view-about"));
+  wire("appearance-back", () => show("view-settings-tab"));
+  wire("privacy-back", () => show("view-settings-tab"));
+  wire("about-back", () => show("view-settings-tab"));
+  // Danger zone — Delete account.
+  wire("settings-tab-account-delete", enterAccountDelete);
   $("settings-tab-reset")?.addEventListener("click", async () => {
     const { handleReset } = await import("./views/unlock.js");
     await handleReset();
