@@ -47,6 +47,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/set-deadman-policy/v1", //     dead-man policy
   "flagship/deadman-affirm/v1", //         dead-man affirmation
   // `.com`-side (authorizeSensitiveComOp)
+  "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion
   "flagship/servers-self-delete/v1", //    content wipe
   "flagship/custom-domain/v1", //          attach custom domain
