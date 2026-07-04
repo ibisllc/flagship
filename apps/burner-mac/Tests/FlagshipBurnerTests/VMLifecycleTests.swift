@@ -142,6 +142,49 @@ final class VMLifecycleTests: XCTestCase {
         }
     }
 
+    // MARK: - Install-stop interpretation (reboot / poweroff / never-booted)
+
+    func testCleanInstallStopAfterPlausibleDurationIsInstalled() {
+        // A real unattended install runs for minutes; a clean stop once that
+        // much time has passed is a genuine completion — whether the finished
+        // installer POWERED OFF (the shipping preseed) or REBOOTED (a base image
+        // whose finish-install reboots). VZ surfaces both as a clean
+        // guestDidStop, so the verdict is duration-based and covers both.
+        let start = Date(timeIntervalSince1970: 0)
+        let poweroff = start.addingTimeInterval(600) // 10 min later
+        XCTAssertEqual(VMLifecycle.verdictForCleanInstallStop(installStartedAt: start, now: poweroff),
+                       .installed)
+        // Reboot-at-end path: same signal (clean stop), also well past the floor.
+        let reboot = start.addingTimeInterval(VMLifecycle.minPlausibleInstallDuration + 1)
+        XCTAssertEqual(VMLifecycle.verdictForCleanInstallStop(installStartedAt: start, now: reboot),
+                       .installed)
+    }
+
+    func testFastCleanStopIsFailureNotInstalled() {
+        // The Phase-0 hardware finding: an amd64 base image on an Apple-silicon
+        // host makes VZ stop the guest ~0.3s after start with error=nil. That is
+        // NOT a finished install — reading it as success boots an empty disk.
+        let start = Date(timeIntervalSince1970: 0)
+        let instantStop = start.addingTimeInterval(0.3)
+        guard case .failedTooFast(let elapsed) =
+                VMLifecycle.verdictForCleanInstallStop(installStartedAt: start, now: instantStop) else {
+            return XCTFail("a 0.3s clean stop must be failedTooFast, not installed")
+        }
+        XCTAssertEqual(elapsed, 0.3, accuracy: 0.001)
+    }
+
+    func testInstallStopVerdictBoundary() {
+        let start = Date(timeIntervalSince1970: 0)
+        // Exactly at the floor counts as installed (inclusive).
+        let atFloor = start.addingTimeInterval(VMLifecycle.minPlausibleInstallDuration)
+        XCTAssertEqual(VMLifecycle.verdictForCleanInstallStop(installStartedAt: start, now: atFloor),
+                       .installed)
+        let justUnder = start.addingTimeInterval(VMLifecycle.minPlausibleInstallDuration - 0.5)
+        guard case .failedTooFast = VMLifecycle.verdictForCleanInstallStop(installStartedAt: start, now: justUnder) else {
+            return XCTFail("just under the floor must be failedTooFast")
+        }
+    }
+
     // MARK: - Injectable clock
 
     func testStateTimestampsComeFromTheInjectedClock() throws {
