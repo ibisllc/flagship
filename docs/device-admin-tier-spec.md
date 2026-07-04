@@ -39,14 +39,19 @@ approve-a-request join (story 3). Default OFF everywhere.
 
 ---
 
-Status: **Phases 0–3 BUILT + merged** (spine, enforcement, clients, and promote /
-recovery-rotation — all gated/clean-slate, so a strict no-op until a box is reburned with
-an admin root). **Remaining:** (a) re-escrow of the *new* admin root after a rotation
-under the WebAuthn-PRF credential — currently a documented seam on all three clients (the
-rotate itself works; post-rotation recovery restores the *old* root until this lands);
-(b) the inert `orders.ts` dead-PSK path; and (c) the owner-side rollout — wipe → reburn
-with admin roots pinned → deploy `.com` (also activates the `/transfer` universal-link
-hosting) + apply migrations **0064 / 0065 / 0066** before the Worker deploy. This is the
+Status: **Phases 0–3 + the re-escrow seam BUILT + merged** (spine, enforcement, clients,
+promote / recovery-rotation, and — closed 2026-07-03 — post-rotation re-escrow of the NEW
+admin root under the WebAuthn-PRF credential on all three clients, with the `.com`
+recovery record now actually PERSISTING the mobile `wrappedAdminRoot` escrow field it had
+been silently dropping — migration **0067**. All gated/clean-slate, so a strict no-op
+until a box is reburned with an admin root). The inert `orders.ts` dead-PSK path is also
+gated (§9.3 — destructive phone orders route through `authorizeSensitiveOrder` when an
+admin root is pinned). **Remaining:** (a) the owner-side rollout — wipe → reburn with
+admin roots pinned → deploy `.com` (also activates the `/transfer` universal-link
+hosting) + apply migrations **0064 / 0065 / 0066 / 0067** before the Worker deploy; and
+(b) the §9.8 transfer re-home admin-root gap (audited 2026-07-03: CONFIRMED —
+`transferRehomeConsumer.ts` never re-pins the acquirer's admin root; a transferred box
+keeps the giver's anchor until reburn. A follow-up seam of its own). This is the
 dedicated spec pass the
 `docs/device-admin-entitlements.md` review (§"⚠️ Review outcome (2026-06-30)")
 demanded before any D code lands. It honors the owner-set "D decisions
@@ -586,10 +591,14 @@ piece (`device-admin-entitlements.md:171-172`).
 2. **Poll-window exposure (§5.4).** A stolen active admin remains effective until
    each box polls the rotation. Accepted, but if any op needs instant fleet-wide
    authority cut, it must be gated at the routing/hub layer, not the box.
-3. **`orders.ts` PSK path (row 10).** `psk.pub.hex` is never written on real
-   Debian boxes, so the destructive orders there are already dead. If that path
-   is ever revived, it must rewire to the admin root — the CI gate should include
-   it in the sensitive allowlist now so a revival can't skip the boundary.
+3. **`orders.ts` PSK path (row 10) — ✅ CLOSED 2026-07-03.** `psk.pub.hex` is
+   never written on real Debian boxes, so the destructive orders there are dead —
+   but the boundary is now structural: the destructive order types (`shut-down`,
+   `revoke-self`, `rotate-server-identity`, `deliver-bak`, `set-backup-policy`,
+   `backup-app`) route through `authorizeSensitiveOrder` when an admin root is
+   pinned (legacy no-root behavior unchanged; the live `add-paired-session` BFF
+   pairing mint stays non-sensitive per rows 14–15). A revival can no longer skip
+   the admin boundary.
 4. **RootEntitlement bootstrap (rows 11–12).** Moving the entitlement anchor to
    the admin root means only an admin device brings a box online. First-device-
    is-admin covers the common case; confirm no non-admin-only provisioning flow
@@ -600,19 +609,28 @@ piece (`device-admin-entitlements.md:171-172`).
    binds admin-recoverability to the credential's security. This is consistent
    with credentials-are-the-gate, but note the master root now has the same
    blast radius as the credential.
-6. **Two synced-vs-device-local key stores.** The membership account key is
-   iCloud-synced; the master root must be device-local. A client bug that syncs
-   the master root would silently hand authority to every device (re-collapsing
-   the split). Add a test asserting the master root is stored without the
-   synchronizable attribute on each platform.
+6. **Two synced-vs-device-local key stores — ✅ tests added 2026-07-03.** The
+   membership account key is iCloud-synced; the master root must be device-local.
+   A client bug that syncs the master root would silently hand authority to every
+   device (re-collapsing the split). Regression guards: iOS
+   `KeychainSyncClassTests.test_adminRootImport_allSlotsAreDeviceLocal_neverSynced`
+   (all three admin-root keychain slots are `.deviceLocal`); Android
+   `AdminRootBackupExclusionTest` (pins `allowBackup=false` on the merged
+   manifest, so the encrypted prefs holding `admin.root.seed` never ride Auto
+   Backup / d2d transfer). The webapp seed is UMK-wrapped in IndexedDB, which is
+   origin+device-local by construction.
 7. **Grant refresh latency box-side.** `requireMasterAdminLocal` depends on the
    box's periodic `/api/users/:u/device-grants` refresh to see a new `admin`
    grant or a revocation. A freshly-promoted admin can't sign box-side ops until
    the box refreshes; a revoked admin keeps signing until refresh. Bound the
    refresh interval and document it.
-8. **Transfer re-home authority (row 29).** On a transfer, the acquirer's box is
-   re-homed to the acquirer's account — it must re-pin the **acquirer's** admin
-   root, not the giver's. Confirm the transfer re-home handshake
-   (`transferRehomeConsumer.ts`) carries + pins the acquirer `adminRootPub`
-   (mirrors the disk-key handshake); otherwise a transferred box has no valid
-   admin anchor.
+8. **Transfer re-home authority (row 29) — ⚠️ AUDITED 2026-07-03: gap CONFIRMED.**
+   On a transfer, the acquirer's box is re-homed to the acquirer's account — it
+   must re-pin the **acquirer's** admin root, not the giver's. The transfer
+   re-home handshake (`transferRehomeConsumer.ts`) does NOT carry or pin an
+   acquirer `adminRootPub` today: a transferred box keeps the giver's anchor (or
+   none) until reburned. Needs its own seam (thread the acquirer's admin root
+   through the claim → re-home handshake, mirroring the disk-key handshake). Not
+   a rollout blocker for the clean-slate launch (transfers between admin-tier
+   accounts are post-launch), but must land before transfer-a-box is exercised
+   between two admin-rooted accounts.

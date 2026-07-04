@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-06-28**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-03**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,50 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BURNER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-03 — Slice D re-escrow seam CLOSED (device-admin tier is now build-complete).**
+The last build item of the admin tier: after an admin-root rotation the NEW root is
+re-wrapped under the WebAuthn-PRF recovery credential on all three clients, so a
+post-rotation credential recovery restores the CURRENT root (before this it restored the
+dead OLD one).
+- **Root-cause discovery:** `.com` was silently DROPPING the mobile `wrappedAdminRoot`
+  escrow field — no storage column, no handler support — so the mobile D-3 escrow
+  round-trip was a client-side illusion (webapp unaffected: it concatenates
+  `umk||adminRoot` inside `wrappedUmk`). Fixed end-to-end: `wrapped_admin_root_b64`
+  (migration **0067** — joins 0064–0066 in the apply-before-the-next-Worker-deploy
+  list), upload accept-if-present + preserve-on-replace (mirrors the ACME escrow),
+  gated fetch returns it.
+- **Mobile mechanism (iOS + Android, byte-parity):** re-wrap under the EXISTING
+  credential — recovery passphrase → Argon2id secrets → gated fetch (validates the
+  passphrase) → PRF-assert on the existing credentialId → sanity-unwrap the fetched
+  wrappedUmk BEFORE overwriting anything → wrap the new root (same
+  `flagship/recovery-admin-root-wrap/v1` salt) → IRK-signed re-upload with
+  wrappedUmk/wrappedAcme passed through byte-unchanged. The rotate flow gains an
+  "update your recovery backup" passphrase step (iOS `.rotatedNeedsRecoveryUpdate` /
+  Android `DoneNeedsRecoveryUpdate`), gated on `hasCloudRecovery`, skippable with a
+  standing warning; re-escrow runs strictly AFTER publish+seal and can never fail the
+  rotation.
+- **Webapp:** the seam was already real (the rotation puts the new seed on the session
+  before `setupCloudRecovery` re-wraps); now the rotation reports
+  `reEscrow: ok|failed|skipped` and an enrolled-but-failed re-escrow shows a persistent
+  warning instead of a silent success.
+- **Also closed:** the inert `orders.ts` dead-PSK path is admin-gated (destructive phone
+  orders route through `authorizeSensitiveOrder` when an admin root is pinned; the live
+  `add-paired-session` pairing mint untouched); §9.6 custody regression tests (iOS
+  keychain sync-class test for all three admin-root slots; Android backup-exclusion
+  test pinning `allowBackup=false`); the release-guard's debug-console markers
+  re-pointed at `debugAccessGate.ts` (false-green since the 95a460bb console lockdown —
+  its self-test was red on main); a missing `swapAdminRootPub` stub in the legacy
+  Fastify adapter (main didn't typecheck).
+- **Flagged, not built:** spec §9.8 CONFIRMED — the transfer re-home never re-pins the
+  ACQUIRER's admin root (`transferRehomeConsumer.ts`); a transferred box keeps the
+  giver's anchor until reburn. Needs its own seam before transfer-a-box runs between
+  two admin-rooted accounts.
+
+Gates: vitest 523 files green · `tsc -b` clean · iOS package tests green · Android
+`:app:testDebugUnitTest` + `assembleDebug` green · release-guard + admin-authority-guard
+OK. **REMAINING (owner):** the Slice D rollout — apply migrations **0064–0067** → deploy
+`.com` → wipe → rebuild burner + apps → reburn (spec §7).
 
 **2026-06-30 — burner pairing → ONE-SHOT deposit; debug box LAN-SSH-able; daemon self-heal; status/sliver fixes.**
 A multi-part day driven by live hand-testing.
