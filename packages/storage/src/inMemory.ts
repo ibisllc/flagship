@@ -36,6 +36,9 @@ import type {
   ServerTransferStorage,
   ServerEvictionRecord,
   ServerEvictionStorage,
+  ServerMigrationPhase,
+  ServerMigrationRecord,
+  ServerMigrationStorage,
   AdminRootRotationRecord,
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
@@ -1213,6 +1216,86 @@ export class InMemoryServerEvictionStorage implements ServerEvictionStorage {
     }
     return count;
   }
+
+  async deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean> {
+    return this.rows.delete(this.k(podCanonical, retiredStkPubHex));
+  }
+}
+
+export class InMemoryServerMigrationStorage implements ServerMigrationStorage {
+  // One row per migrating FQDN (v1: at most one session per name at a time;
+  // the handler gates when replacing a terminal session is legal).
+  private rows = new Map<string, ServerMigrationRecord>();
+
+  async putSession(rec: ServerMigrationRecord): Promise<void> {
+    this.rows.set(rec.serverDomain.toLowerCase(), {
+      ...rec,
+      serverDomain: rec.serverDomain.toLowerCase(),
+      username: rec.username.toLowerCase(),
+      oldStkPubHex: rec.oldStkPubHex.toLowerCase(),
+      orderSignatureHex: rec.orderSignatureHex.toLowerCase(),
+      newServerDomain: rec.newServerDomain?.toLowerCase() ?? null,
+      newStkPubHex: rec.newStkPubHex?.toLowerCase() ?? null,
+    });
+  }
+
+  async getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined> {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+
+  async listForUser(username: string): Promise<ServerMigrationRecord[]> {
+    const u = username.toLowerCase();
+    const out: ServerMigrationRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.username === u) out.push({ ...r });
+    }
+    return out.sort((a, b) => a.initiatedAt - b.initiatedAt);
+  }
+
+  async attachNewBox(
+    serverDomain: string,
+    newServerDomain: string,
+    newStkPubHex: string,
+    at: number,
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    if (!r) return false;
+    r.newServerDomain = newServerDomain.toLowerCase();
+    r.newStkPubHex = newStkPubHex.toLowerCase();
+    r.attachedAt = at;
+    r.phase = "provisioned";
+    return true;
+  }
+
+  private stamp(
+    serverDomain: string,
+    phase: ServerMigrationPhase,
+    field: "preSeededAt" | "readyAt" | "freezeAt" | "takenOverAt" | "abortedAt",
+    at: number,
+  ): boolean {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    if (!r) return false;
+    r[field] = at;
+    r.phase = phase;
+    return true;
+  }
+
+  async markPreSeeded(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "pre-seeded", "preSeededAt", at);
+  }
+  async markReady(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "ready", "readyAt", at);
+  }
+  async markFreeze(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "freezing", "freezeAt", at);
+  }
+  async markTakenOver(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "taken-over", "takenOverAt", at);
+  }
+  async markAborted(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "aborted", "abortedAt", at);
+  }
 }
 
 export class InMemoryAdminRootRotationStorage implements AdminRootRotationStorage {
@@ -1697,6 +1780,7 @@ export class InMemoryStorage implements Storage {
   secretMailbox = new InMemorySecretMailboxStorage();
   serverTransfers = new InMemoryServerTransferStorage();
   serverEvictions = new InMemoryServerEvictionStorage();
+  serverMigrations = new InMemoryServerMigrationStorage();
   adminRootRotations = new InMemoryAdminRootRotationStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();

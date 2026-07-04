@@ -14,6 +14,8 @@ import type {
   ServerTransferStorage,
   ServerEvictionRecord,
   ServerEvictionStorage,
+  ServerMigrationRecord,
+  ServerMigrationStorage,
   AdminRootRotationRecord,
   AdminRootRotationStorage,
   BoxSealedLeaseRecord,
@@ -2162,6 +2164,168 @@ export class D1ServerEvictionStorage implements ServerEvictionStorage {
     const meta = (w as { meta?: { changes?: number } }).meta;
     return meta?.changes ?? 0;
   }
+
+  async deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        "DELETE FROM server_evictions WHERE pod_canonical = ?1 AND retired_stk_pub_hex = ?2",
+      )
+      .bind(podCanonical.toLowerCase(), retiredStkPubHex.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return (meta?.changes ?? 0) > 0;
+  }
+}
+
+interface ServerMigrationRow {
+  server_domain: string;
+  username: string;
+  old_stk_pub_hex: string;
+  order_json: string;
+  order_signature_hex: string;
+  disposition: string;
+  phase: string;
+  initiated_at: number;
+  new_server_domain: string | null;
+  new_stk_pub_hex: string | null;
+  attached_at: number | null;
+  pre_seeded_at: number | null;
+  ready_at: number | null;
+  freeze_at: number | null;
+  taken_over_at: number | null;
+  aborted_at: number | null;
+}
+
+function rowToServerMigration(r: ServerMigrationRow): ServerMigrationRecord {
+  return {
+    serverDomain: r.server_domain,
+    username: r.username,
+    oldStkPubHex: r.old_stk_pub_hex,
+    orderJson: r.order_json,
+    orderSignatureHex: r.order_signature_hex,
+    disposition: r.disposition,
+    phase: r.phase as ServerMigrationRecord["phase"],
+    initiatedAt: r.initiated_at,
+    newServerDomain: r.new_server_domain,
+    newStkPubHex: r.new_stk_pub_hex,
+    attachedAt: r.attached_at,
+    preSeededAt: r.pre_seeded_at,
+    readyAt: r.ready_at,
+    freezeAt: r.freeze_at,
+    takenOverAt: r.taken_over_at,
+    abortedAt: r.aborted_at,
+  };
+}
+
+/**
+ * D1 ServerMigrationStorage (migration 0069) — one session row per migrating
+ * FQDN (docs/server-migration.md). The `phase` column is the authoritative
+ * cursor; each mark* stamps its timestamp column + the phase, mirroring the
+ * server_evictions handshake style. The handlers own the transition legality.
+ */
+export class D1ServerMigrationStorage implements ServerMigrationStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putSession(rec: ServerMigrationRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO server_migrations
+           (server_domain, username, old_stk_pub_hex, order_json,
+            order_signature_hex, disposition, phase, initiated_at,
+            new_server_domain, new_stk_pub_hex, attached_at, pre_seeded_at,
+            ready_at, freeze_at, taken_over_at, aborted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.username.toLowerCase(),
+        rec.oldStkPubHex.toLowerCase(),
+        rec.orderJson,
+        rec.orderSignatureHex.toLowerCase(),
+        rec.disposition,
+        rec.phase,
+        rec.initiatedAt,
+        rec.newServerDomain?.toLowerCase() ?? null,
+        rec.newStkPubHex?.toLowerCase() ?? null,
+        rec.attachedAt,
+        rec.preSeededAt,
+        rec.readyAt,
+        rec.freezeAt,
+        rec.takenOverAt,
+        rec.abortedAt,
+      )
+      .run();
+  }
+
+  async getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM server_migrations WHERE server_domain = ?1")
+      .bind(serverDomain.toLowerCase())
+      .first<ServerMigrationRow>();
+    return r ? rowToServerMigration(r) : undefined;
+  }
+
+  async listForUser(username: string): Promise<ServerMigrationRecord[]> {
+    const res = await this.db
+      .prepare(
+        "SELECT * FROM server_migrations WHERE username = ?1 ORDER BY initiated_at ASC",
+      )
+      .bind(username.toLowerCase())
+      .all<ServerMigrationRow>();
+    return (res.results ?? []).map(rowToServerMigration);
+  }
+
+  async attachNewBox(
+    serverDomain: string,
+    newServerDomain: string,
+    newStkPubHex: string,
+    at: number,
+  ): Promise<boolean> {
+    const w = await this.db
+      .prepare(
+        `UPDATE server_migrations
+           SET new_server_domain = ?1, new_stk_pub_hex = ?2, attached_at = ?3,
+               phase = 'provisioned'
+         WHERE server_domain = ?4`,
+      )
+      .bind(newServerDomain.toLowerCase(), newStkPubHex.toLowerCase(), at, serverDomain.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  private async stamp(
+    serverDomain: string,
+    phase: string,
+    column: string,
+    at: number,
+  ): Promise<boolean> {
+    // `column` is one of a fixed internal set — never caller input.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_migrations SET ${column} = ?1, phase = ?2 WHERE server_domain = ?3`,
+      )
+      .bind(at, phase, serverDomain.toLowerCase())
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async markPreSeeded(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "pre-seeded", "pre_seeded_at", at);
+  }
+  async markReady(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "ready", "ready_at", at);
+  }
+  async markFreeze(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "freezing", "freeze_at", at);
+  }
+  async markTakenOver(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "taken-over", "taken_over_at", at);
+  }
+  async markAborted(serverDomain: string, at: number): Promise<boolean> {
+    return this.stamp(serverDomain, "aborted", "aborted_at", at);
+  }
 }
 
 interface AdminRootRotationRow {
@@ -3545,6 +3709,7 @@ export class D1Storage implements Storage {
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
   serverEvictions: ServerEvictionStorage;
+  serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
@@ -3589,6 +3754,7 @@ export class D1Storage implements Storage {
     this.secretMailbox = new D1SecretMailboxStorage(db);
     this.serverTransfers = new D1ServerTransferStorage(db);
     this.serverEvictions = new D1ServerEvictionStorage(db);
+    this.serverMigrations = new D1ServerMigrationStorage(db);
     this.adminRootRotations = new D1AdminRootRotationStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);

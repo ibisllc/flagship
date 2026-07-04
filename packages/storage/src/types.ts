@@ -1244,6 +1244,74 @@ export interface ServerEvictionStorage {
   markNewAcked(podCanonical: string, now: number): Promise<number>;          // marks all rows for the pod; returns count
   markEpochComplete(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
   gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs; returns count
+  /**
+   * Server-migration abort: neutralize a deposited-but-not-yet-honored
+   * eviction so an aborted migration's decommission order is never served to
+   * (or re-served after) the old box — the old box stays authoritative.
+   * Returns true iff a row was deleted.
+   */
+  deleteEviction(podCanonical: string, retiredStkPubHex: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Server migration — same owner, same <server>.<user> name, NEW hardware
+// (docs/server-migration.md). One tracked session per migrating FQDN.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The migration session's phase cursor. Transitions (enforced by the
+ * control-plane handlers, mirrored box-side):
+ *   initiated   — admin order deposited; awaiting the new box
+ *   provisioned — new box registered as a same-account pod + attached
+ *   pre-seeded  — new box restored the latest peer-backup
+ *   ready       — admin confirmed "ready to take over"
+ *   freezing    — decommission (finalBackup) deposited for the old box
+ *   taken-over  — new box restored the final delta + acked; directory rebound;
+ *                 the POINT OF NO RETURN (abort is rejected from here on)
+ *   aborted     — terminal escape; the old box stays authoritative
+ * "done" is derived, not stored: taken-over + the eviction row's oldAckedAt.
+ */
+export type ServerMigrationPhase =
+  | "initiated"
+  | "provisioned"
+  | "pre-seeded"
+  | "ready"
+  | "freezing"
+  | "taken-over"
+  | "aborted";
+
+export interface ServerMigrationRecord {
+  serverDomain: string;          // the migrating pod FQDN, lowercased
+  username: string;              // owning account, lowercased
+  oldStkPubHex: string;          // the current (old) instance STK, hex lowercased
+  orderJson: string;             // JSON.stringify of the admin-signed ServerMigrationOrder
+  orderSignatureHex: string;     // signature over the order's canonical bytes
+  disposition: string;           // "keep" | "wipe-after-handoff" (validated at the handler)
+  phase: ServerMigrationPhase;
+  initiatedAt: number;
+  newServerDomain: string | null; // the new box's provisional pod FQDN (attach)
+  newStkPubHex: string | null;    // the new box's registered STK (attach)
+  attachedAt: number | null;
+  preSeededAt: number | null;
+  readyAt: number | null;
+  freezeAt: number | null;
+  takenOverAt: number | null;
+  abortedAt: number | null;
+}
+
+export interface ServerMigrationStorage {
+  /** Upsert on serverDomain (the handler gates WHEN replacing is legal). */
+  putSession(rec: ServerMigrationRecord): Promise<void>;
+  getSession(serverDomain: string): Promise<ServerMigrationRecord | undefined>;
+  /** Every session for the account (the new box's assignment lookup filters). */
+  listForUser(username: string): Promise<ServerMigrationRecord[]>;
+  /** Attach the new box: stamps newServerDomain/newStkPubHex/attachedAt + phase=provisioned. */
+  attachNewBox(serverDomain: string, newServerDomain: string, newStkPubHex: string, at: number): Promise<boolean>;
+  markPreSeeded(serverDomain: string, at: number): Promise<boolean>;   // phase=pre-seeded
+  markReady(serverDomain: string, at: number): Promise<boolean>;       // phase=ready
+  markFreeze(serverDomain: string, at: number): Promise<boolean>;      // phase=freezing
+  markTakenOver(serverDomain: string, at: number): Promise<boolean>;   // phase=taken-over
+  markAborted(serverDomain: string, at: number): Promise<boolean>;     // phase=aborted
 }
 
 /**
@@ -1511,6 +1579,7 @@ export interface Storage {
   secretMailbox: SecretMailboxStorage;
   serverTransfers: ServerTransferStorage;
   serverEvictions: ServerEvictionStorage;
+  serverMigrations: ServerMigrationStorage;
   adminRootRotations: AdminRootRotationStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   pendingRePairs: PendingRePairStorage;
