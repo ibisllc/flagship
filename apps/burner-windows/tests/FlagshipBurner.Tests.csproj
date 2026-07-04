@@ -45,6 +45,11 @@
     <Compile Include="..\src\VM\VMConfig.cs"/>
     <Compile Include="..\src\VM\VMLifecycle.cs"/>
     <Compile Include="..\src\VM\VMInventoryStore.cs"/>
+    <Compile Include="..\src\VM\QemuLocator.cs"/>
+    <Compile Include="..\src\VM\QemuCommandLine.cs"/>
+    <Compile Include="..\src\VM\WhpxProbe.cs"/>
+    <Compile Include="..\src\VM\QmpClient.cs"/>
+    <Compile Include="..\src\VM\QemuHost.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
     <Compile Include="CliArgsShim.cs"/>
@@ -64,6 +69,9 @@
     <Compile Include="VMInventoryStoreTests.cs"/>
     <Compile Include="RecipeSiblingsTests.cs"/>
     <Compile Include="VMCoreVectorTests.cs"/>
+    <Compile Include="QemuCommandLineTests.cs"/>
+    <Compile Include="QemuLocatorTests.cs"/>
+    <Compile Include="WhpxProbeTests.cs"/>
   </ItemGroup>
 
   <ItemGroup>

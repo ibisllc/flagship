@@ -43,6 +43,11 @@
     <Compile Include="src\VM\VMConfig.cs" />
     <Compile Include="src\VM\VMLifecycle.cs" />
     <Compile Include="src\VM\VMInventoryStore.cs" />
+    <Compile Include="src\VM\QemuLocator.cs" />
+    <Compile Include="src\VM\QemuCommandLine.cs" />
+    <Compile Include="src\VM\WhpxProbe.cs" />
+    <Compile Include="src\VM\QmpClient.cs" />
+    <Compile Include="src\VM\QemuHost.cs" />
   </ItemGroup>
 
   <ItemGroup>
