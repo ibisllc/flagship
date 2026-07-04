@@ -630,7 +630,7 @@ private fun ThemeSegment(
     ) {
         Text(
             label,
-            color = if (selected) Color.White else FS.colors.text,
+            color = if (selected) FS.colors.onAccent else FS.colors.text,
             style = TextStyle(
                 fontSize = if (small) 11.sp else 18.sp,
                 fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,

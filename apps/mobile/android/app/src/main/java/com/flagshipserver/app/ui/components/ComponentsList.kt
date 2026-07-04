@@ -95,13 +95,13 @@ fun FSChip(
     ) {
         Text(
             text = label,
-            color = if (selected) Color.White else FS.colors.text,
+            color = if (selected) FS.colors.onAccent else FS.colors.text,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
         )
         if (count != null) {
             Text(
                 text = count.toString(),
-                color = if (selected) Color.White.copy(alpha = 0.9f) else FS.colors.textMuted,
+                color = if (selected) FS.colors.onAccent.copy(alpha = 0.9f) else FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             )
         }
@@ -313,14 +313,14 @@ fun FSAnnouncementCard(
         if (ctaLabel != null) {
             Box(
                 modifier = Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 44.dp)
                     .clip(RoundedCornerShape(FS.radius.md))
                     .background(accent)
                     .clickable(onClick = onCta)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = FS.space.s5),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(ctaLabel, color = Color.White, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+                Text(ctaLabel, color = FS.colors.onAccent, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
             }
         }
     }

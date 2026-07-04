@@ -285,7 +285,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 ) {
                     Text(
                         text = label,
-                        color = if (selected) Color.White else FS.colors.text,
+                        color = if (selected) FS.colors.onAccent else FS.colors.text,
                         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                     )
                 }
