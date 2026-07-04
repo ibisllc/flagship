@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -22,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -30,6 +33,7 @@ import com.flagshipserver.app.api.PairedSessionSummary
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
@@ -44,6 +48,10 @@ fun PairedSessionsScreen(nav: NavController) {
     val sessions = remember { mutableStateListOf<PairedSessionSummary>() }
     var error by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    // Revoking a browser session is destructive (the docked computer loses
+    // access), so it gates behind a grey Cancel / red Revoke confirm dialog
+    // like every other destructive action (spec S3).
+    var revokeTarget by remember { mutableStateOf<PairedSessionSummary?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -113,21 +121,42 @@ fun PairedSessionsScreen(nav: NavController) {
                     )
                     if (session.current) FSPill("This device", kind = FSPillKind.Online)
                     if (!session.current) {
-                        FSGhostButton(label = "Revoke", onClick = {
-                            scope.launch {
-                                try {
-                                    client.revokePairedSession(session.tokenPrefix)
-                                    sessions.removeAll { it.tokenPrefix == session.tokenPrefix }
-                                    toasts.success("Device revoked.")
-                                } catch (t: Throwable) {
-                                    toasts.error(t.message ?: "Couldn't revoke.")
-                                }
-                            }
-                        })
+                        FSDangerButton(
+                            label = "Revoke",
+                            onClick = { revokeTarget = session },
+                            modifier = Modifier.testTag("revoke-session-${session.tokenPrefix}"),
+                        )
                     }
                 }
             }
             Spacer(Modifier.height(FS.space.s2))
         }
+    }
+
+    revokeTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { revokeTarget = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    revokeTarget = null
+                    scope.launch {
+                        try {
+                            client.revokePairedSession(target.tokenPrefix)
+                            sessions.removeAll { it.tokenPrefix == target.tokenPrefix }
+                            toasts.success("Session revoked.")
+                        } catch (t: Throwable) {
+                            toasts.error(t.message ?: "Couldn't revoke.")
+                        }
+                    }
+                }) {
+                    Text("Revoke", color = FS.colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { revokeTarget = null }) { Text("Cancel") }
+            },
+            title = { Text("Revoke this session?") },
+            text = { Text("The browser docked from ${target.label} loses access to this account.") },
+        )
     }
 }
