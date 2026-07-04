@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
@@ -162,6 +163,18 @@ import {
   buildPairingDepositPoller,
   filePairingMarkerStore,
 } from "./pairingDepositConsumer.js";
+import {
+  buildUpdateConsumerPoller,
+  filePendingVerifyStore,
+  fileUsedNonceStore,
+  realUpdateCommandRunner,
+} from "./updateConsumer.js";
+import {
+  buildUpdateHealthSignal,
+  runUpdateBootGate,
+  type UpdateHealthSignal,
+} from "./updateHealthGate.js";
+import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -474,6 +487,31 @@ async function main(): Promise<void> {
   console.log(
     `[daemon] services endpoints (${endpoints.source}): tunnelHub=${endpoints.endpoints.tunnelHub}`,
   );
+
+  // ---- Self-update boot health-gate (docs/server-update-mechanism.md) ----
+  // Runs FIRST on every boot (fire-and-forget so bring-up is never blocked; the
+  // attempt count is persisted inside BEFORE the health wait, so even a boot
+  // that crashes later still walks toward the rollback bound). If a staged
+  // update's marker exists: commit it once THIS boot proves healthy (tunnel
+  // HELLO_ACK + a signed daemon-status heartbeat — marked below), restart to
+  // retry when it doesn't, and ROLL BACK to the previous commit once the boot
+  // budget is spent. A bad update can never brick a box. Code swap only —
+  // /var/flagship keys/data are never touched.
+  const selfUpdateRepoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+  const selfUpdateHealth: UpdateHealthSignal = buildUpdateHealthSignal();
+  void runUpdateBootGate({
+    pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
+    repoPath: selfUpdateRepoPath,
+    runner: realUpdateCommandRunner,
+    // Generous window: first boot after an update does a full ACME + tunnel
+    // bring-up; a transient network outage shouldn't burn a boot attempt.
+    awaitHealthy: () => selfUpdateHealth.whenHealthy(10 * 60_000),
+    requestRestart: () => {
+      console.log("[self-update] restarting (health gate)");
+      process.exit(0);
+    },
+    onLog: (m) => console.log(m),
+  }).catch(() => {});
 
   // ---- Service Workload Key (SWK) resolution ----
   // The SWK gates the service/build platform (and peer-backup participation,
@@ -809,6 +847,9 @@ async function main(): Promise<void> {
         // cert so /pods gets REAL fingerprint/validity/issuer + a fresh
         // lastReported (true liveness), fired immediately + on renewals.
         statusHeartbeat.update(cert, notAfter, names);
+        // Self-update boot health-gate: a signed heartbeat just fired — the
+        // second of the two health signals a staged update needs to COMMIT.
+        selfUpdateHealth.markHeartbeat();
       },
       // Fine-grained ACME observability stays in the daemon log only — it is
       // NOT its own UI vocabulary on the canonical channel (the `sealing`/
@@ -868,6 +909,9 @@ async function main(): Promise<void> {
       updateServer,
     });
     servicePlatformRefForServer.current = runtime.servicePlatform;
+    // Self-update boot health-gate: startDaemonRuntime resolves only after the
+    // supervised tunnel's first HELLO_ACK — the first of the two health signals.
+    selfUpdateHealth.markTunnelUp();
     if (orders) {
       console.log(
         `[daemon] orders-from-user endpoint enabled (verify key: ${pskPubHex ? "psk.pub.hex" : "owner IRK"})`,
@@ -2273,6 +2317,50 @@ async function wireOwnerHandlers(deps: {
     process.once("SIGTERM", () => decommissionPoller.stop());
     process.once("SIGINT", () => decommissionPoller.stop());
     console.log("[daemon] graceful-decommission poller armed");
+  }
+  // Phone-ordered, dual-signed in-place self-update
+  // (docs/server-update-mechanism.md): poll the `.com` update lane on the
+  // heartbeat cadence. The 2-of-2 gate is enforced ON-BOX, independently:
+  // the order re-verifies under the Slice-D master-admin authority (pinned
+  // admin root ⇒ NEVER the bare owner IRK — the same gate as self-delete /
+  // decommission), AND the target commit must be maintainer-ENDORSED via the
+  // ReleaseGate (verify-forward from the baked pin, offline). Armed only when
+  // the box actually runs from a git checkout (production /opt/flagship; dev
+  // runs without one simply never poll). Code swap only; the boot health gate
+  // in main() commits or rolls back after the restart.
+  {
+    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+    const repoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+    if (existsSync(join(repoPath, ".git"))) {
+      const updatePoller = buildUpdateConsumerPoller({
+        serverDomain: env.serverFqdn,
+        ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+        repoPath,
+        releaseGate: buildMaintainersReleaseGate({
+          repoPath,
+          onLog: (m) => console.log(m),
+        }),
+        runner: realUpdateCommandRunner,
+        usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
+        pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),
+        requestExit: () => {
+          console.log("[self-update] restarting into the staged update");
+          process.exit(0);
+        },
+        onLog: (m) => console.log(m),
+      });
+      updatePoller.start();
+      process.once("SIGTERM", () => updatePoller.stop());
+      process.once("SIGINT", () => updatePoller.stop());
+      console.log("[daemon] self-update consumer armed");
+    } else {
+      console.log(
+        `[daemon] self-update consumer NOT armed (no git checkout at ${repoPath})`,
+      );
+    }
   }
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
   // A): poll `.com` for "did my owner change?". On a completed transfer the
