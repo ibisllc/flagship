@@ -53,7 +53,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/auto-unlock-lease/v1", //      deposit LUKS auto-unlock lease
   "flagship/revoke-auto-unlock-lease/v1", //  revoke lease
   "flagship/server-transfer-offer/v1", //  transfer (giver)
-  "flagship/server-transfer-claim/v1", //  transfer (acquirer)
+  "flagship/server-transfer-claim/v2", //  transfer (acquirer; v2 binds their admin root pub)
   "flagship/release-server-name/v1", //    release server name
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)

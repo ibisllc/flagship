@@ -38,7 +38,15 @@ import {
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
-import { createTransferOffer, buildTransferLink } from "../lib/serverTransfer.js";
+import {
+  createTransferOffer,
+  buildTransferLink,
+  pollTransferClaim,
+} from "../lib/serverTransfer.js";
+import {
+  runGiverAdminHandoff,
+  watchClaimThenHandoff,
+} from "../lib/adminRootTransfer.js";
 import {
   resolveReplacementContext,
   preflightGate,
@@ -846,6 +854,13 @@ function wireTransfer(body) {
   });
 }
 
+// Slice D §9.8 — a failed admin-root hand-off deposit is RETRYABLE, never a
+// transfer failure: ownership already moved when the claim landed.
+export const TRANSFER_ADMIN_HANDOFF_WARNING =
+  "Claimed — but the admin-key hand-off didn't go through yet. Retrying while " +
+  "this dialog is open; a box with a pinned admin key will wait for this " +
+  "hand-off before re-homing.";
+
 // Giver "Transfer to another account": full irreversible warning + type-to-
 // confirm the FQDN, then sign + deposit the offer and render the claim code the
 // acquirer pastes into "Pair an existing box". The disk-key re-seal is a later
@@ -879,6 +894,7 @@ async function openTransferDialog(body) {
       <em>Take over a box</em>. After they claim it you'll be asked to finish
       handing over the disk key.</p>
       <textarea class="full-width" rows="4" readonly data-transfer-qr></textarea>
+      <p class="note small hidden" data-transfer-handoff></p>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -891,6 +907,7 @@ async function openTransferDialog(body) {
   const errEl = dlg.querySelector("[data-transfer-error]");
   const resultEl = dlg.querySelector("[data-transfer-result]");
   const qrEl = dlg.querySelector("[data-transfer-qr]");
+  const handoffEl = dlg.querySelector("[data-transfer-handoff]");
 
   return new Promise((resolve, reject) => {
     const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
@@ -924,6 +941,45 @@ async function openTransferDialog(body) {
         confirmEl.disabled = true;
         cancelBtn.textContent = "Done";
         toast("Transfer code created", "ok");
+        // Slice D §9.8 — hand the box's ADMIN AUTHORITY anchor to the
+        // acquirer at claim-received: poll for the claim while this dialog
+        // stays open, then deposit the giver-root-signed hand-off proof
+        // (acquirer root from the v2 claim, "" = unpin). No admin root on
+        // this session ⇒ nothing pinned to move ⇒ skip silently.
+        if (session.adminRootSeed) {
+          void watchClaimThenHandoff({
+            poll: () =>
+              pollTransferClaim({
+                serverDomain: serverFqdn,
+                username: session.username,
+                umk: session.umk,
+                irkPubHex: bytesToHex(session.irk.publicKey),
+                signWithIrk,
+              }),
+            handoff: (claim) =>
+              runGiverAdminHandoff({
+                serverDomain: serverFqdn,
+                giverUsername: session.username,
+                acquirerUsername: claim.acquirerUsername,
+                acquirerAdminRootPub: claim.acquirerAdminRootPub || "",
+                transferNonce: out.qr.transferNonce,
+                adminRootSeed: session.adminRootSeed,
+                umkSeed: session.umk,
+              }),
+            isActive: () => dlg.open,
+            onStatus: (res, claim) => {
+              if (res.status === "failed") {
+                handoffEl.textContent = TRANSFER_ADMIN_HANDOFF_WARNING;
+                handoffEl.classList.add("err-text");
+                handoffEl.classList.remove("hidden");
+              } else if (res.status === "deposited") {
+                handoffEl.textContent = `Claimed by ${claim.acquirerUsername} — admin key handed off.`;
+                handoffEl.classList.remove("err-text");
+                handoffEl.classList.remove("hidden");
+              }
+            },
+          });
+        }
         resolve(out);
       } catch (e) {
         errEl.textContent = humanError(e);

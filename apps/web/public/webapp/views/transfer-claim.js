@@ -20,7 +20,7 @@
 
 import { show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { signWithIrk, bytesToHex } from "../keystore.js";
+import { bytesToHex, adminRootPubHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import {
   parseTransferLink,
@@ -166,6 +166,13 @@ export async function enterTransferClaim(prefillOffer) {
             acquirerUsername: session.username,
             umk: session.umk,
             acquirerIrkPubHex: bytesToHex(session.irk.publicKey),
+            // Slice D §9.8: the v2 claim binds the ACQUIRER's admin root pub
+            // into the signed canonical ("" for a legacy account) so the
+            // giver's hand-off proof re-pins the box to a key the acquirer
+            // actually signed for.
+            acquirerAdminRootPubHex: session.adminRootSeed
+              ? await adminRootPubHex(session.adminRootSeed)
+              : "",
             // Slice D: the transfer CLAIM order is signed with the ACQUIRER's
             // admin root (when present); the co-signed mailbox-auth stays the
             // IRK (tag-routed). Legacy accounts sign with the IRK.

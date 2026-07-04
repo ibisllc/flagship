@@ -28,7 +28,7 @@ import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keyst
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
-export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v1";
+export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
 export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 
 function defaultBytesToHex(b) {
@@ -63,13 +63,17 @@ export function canonicalOfferBytes({ serverDomain, transferNonce, issuedAt, exp
   );
 }
 
-/** ServerTransferClaim canonical bytes (acquirer IRK). serverDomain, nonce +
- *  acquirerUsername lowercased; acquirerIrkPub is its raw hex. */
+/** ServerTransferClaim v2 canonical bytes (acquirer). All string fields
+ *  lowercased. v2 (Slice D §9.8) binds the acquirer's ADMIN MASTER ROOT pub
+ *  into the signed claim — empty string when the acquirer account has none —
+ *  so the giver's hand-off proof (and the box's re-pin) can never be pointed
+ *  at a key the acquirer didn't sign for. */
 export function canonicalClaimBytes({
   serverDomain,
   transferNonce,
   acquirerUsername,
   acquirerIrkPubHex,
+  acquirerAdminRootPubHex,
   issuedAt,
 }) {
   return new TextEncoder().encode(
@@ -79,6 +83,7 @@ export function canonicalClaimBytes({
       String(transferNonce).toLowerCase(),
       String(acquirerUsername).toLowerCase(),
       String(acquirerIrkPubHex).toLowerCase(),
+      String(acquirerAdminRootPubHex ?? "").toLowerCase(),
       issuedAt,
     ].join("|"),
   );
@@ -435,6 +440,8 @@ export async function verifyTransferOffer(offer, deps = {}) {
  * @param {string} args.acquirerUsername
  * @param {Uint8Array} args.umk
  * @param {string} args.acquirerIrkPubHex   the acquirer's registered IRK pubkey
+ * @param {string} [args.acquirerAdminRootPubHex]  the acquirer's admin master
+ *   root pub, hex — "" (default) when the acquirer account has no admin root
  * @param {(umk, bytes) => Promise<Uint8Array>} args.signWithIrk
  */
 export async function submitTransferClaim(args, deps = {}) {
@@ -446,6 +453,10 @@ export async function submitTransferClaim(args, deps = {}) {
   if (!acquirerUsername || !acquirerIrkPubHex) throw err("acquirer identity required", 400);
   if (typeof offer.expiresAt === "number" && offer.expiresAt <= (deps.now || Date.now)()) {
     throw err("this transfer code has expired", 410);
+  }
+  const acquirerAdminRootPubHex = String(args.acquirerAdminRootPubHex ?? "").toLowerCase();
+  if (acquirerAdminRootPubHex && !/^[0-9a-f]{64}$/.test(acquirerAdminRootPubHex)) {
+    throw err("acquirerAdminRootPubHex must be 32-byte hex or empty", 400);
   }
   const f = deps.fetch || fetch;
   const toHex = deps.bytesToHex || defaultBytesToHex;
@@ -460,6 +471,7 @@ export async function submitTransferClaim(args, deps = {}) {
       transferNonce: offer.transferNonce,
       acquirerUsername: lowered,
       acquirerIrkPubHex,
+      acquirerAdminRootPubHex,
       issuedAt,
     }),
   );
@@ -469,6 +481,7 @@ export async function submitTransferClaim(args, deps = {}) {
       transferNonce: offer.transferNonce,
       acquirerUsername: lowered,
       acquirerIrkPub: String(acquirerIrkPubHex).toLowerCase(),
+      acquirerAdminRootPub: acquirerAdminRootPubHex,
       issuedAt,
     },
     claimSignature: toHex(claimSig),
@@ -530,6 +543,10 @@ export async function pollTransferClaim(args, deps = {}) {
     acquirerIrkPub: body.acquirerIrkPub,
     acquirerUsername: body.acquirerUsername,
     newServerDomain: body.newServerDomain,
+    // Slice D §9.8: the acquirer's admin master root pub from the v2 claim —
+    // "" when the acquirer account has none, null on a pre-v2 broker.
+    acquirerAdminRootPub:
+      typeof body.acquirerAdminRootPub === "string" ? body.acquirerAdminRootPub : null,
   };
 }
 
