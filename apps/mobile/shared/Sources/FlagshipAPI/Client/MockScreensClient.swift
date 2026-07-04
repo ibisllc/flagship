@@ -46,6 +46,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             serverFqdn: "\(podName).harry.flagship.services",
             username: "harry",
             daemonVersion: "0.18.4",
+            currentCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt: now - Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             uptimeMs: Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             certNotAfter: now + 67 * oneDay,

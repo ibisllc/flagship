@@ -779,7 +779,8 @@ export type SecretMailboxPurpose =
   | "self-delete"
   | "swk"
   | "cgk"
-  | "set-leader";
+  | "set-leader"
+  | "update";
 
 /**
  * Deposit-on-unlock pairing — a phone-deposited, box-sealed blob carrying an
@@ -1003,6 +1004,25 @@ export interface SecretMailboxStorage {
    * harmless; the box re-verifies under the owner IRK.
    */
   consumeSetLeaderDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /**
+   * Admin-authorized in-place server-update order delivery
+   * (docs/server-update-mechanism.md) — the PHONE deposits an admin-signed
+   * `UpdateOrder` (the PUBLIC envelope, not an encrypted secret — it carries only
+   * `{serverDomain, targetCommit, fromCommit, nonce, issuedAt}` + signature) so a
+   * box can fetch the order addressed to it and apply the blessed update. Stored
+   * like a deposit in a `purpose:"update"` row whose `sealedHex` holds the order
+   * carrier; the box re-verifies under the pinned admin master root (and confirms
+   * maintainer endorsement of the commit), so a public consume-once read is
+   * harmless. Caller has admin-gate-authorized + verified the order before storing.
+   */
+  putUpdateDeposit(rec: PairingDepositRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box: atomically consume the freshest un-expired update-order deposit for
+   * `serverDomain` (consume-once), or undefined. Expired rows GC'd. Public read at
+   * the handler — the order is admin-signed, so a public consume-once read is
+   * harmless; the box re-verifies under the pinned admin authority.
+   */
+  consumeUpdateDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

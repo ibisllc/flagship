@@ -42,6 +42,11 @@ data class ServerDetailResponse(
     val serverFqdn: String,
     val username: String,
     val daemonVersion: String,
+    /** The box's code-checkout HEAD (full git SHA, lowercase) — the
+     *  applied-commit truth the self-update consumer enforces `fromCommit`
+     *  against. Defaults null so an old box's daemon (pre-field) still
+     *  parses; the update action is disabled without it. */
+    val currentCommit: String? = null,
     val startedAt: Long,
     val uptimeMs: Long,
     val certNotAfter: Long? = null,

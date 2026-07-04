@@ -38,6 +38,7 @@ import {
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
+import { depositUpdateOrder, COMMIT_SHA_RE } from "../lib/serverUpdate.js";
 import {
   createTransferOffer,
   buildTransferLink,
@@ -79,6 +80,12 @@ function fmtDate(unixMs) {
   return new Date(unixMs).toLocaleString();
 }
 
+// Short display form of the box-reported HEAD (or "—" while unknown —
+// e.g. an un-reburned box whose daemon predates the currentCommit field).
+function shortCommit(sha) {
+  return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 8) : "—";
+}
+
 export async function renderServerDetail() {
   const root = $("server-detail-content");
   root.innerHTML = skeletonCards(2);
@@ -89,6 +96,7 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
         <div class="row"><span class="label">Username</span><span class="value">${escapeHtml(body.username)}</span></div>
         <div class="row"><span class="label">Daemon</span><span class="value">${escapeHtml(body.daemonVersion)}</span></div>
+        <div class="row"><span class="label">Version</span><span class="value">${escapeHtml(shortCommit(body.currentCommit))}</span></div>
         <div class="row"><span class="label">Uptime</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
       </div>
       <h2 class="mt-4">Cert</h2>
@@ -257,6 +265,26 @@ export async function renderServerDetail() {
         <button id="replace-start-btn" class="full-width mt-2">Replace this server</button>
       </div>
 
+      <h2 class="mt-4">Update</h2>
+      <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">
+          Move <strong>${escapeHtml(body.serverFqdn)}</strong> to a different
+          blessed release in place — no reburn, keys and data untouched. Two
+          signatures are required: Flagship's maintainers must have blessed the
+          release, and you must authorize applying it here. The box verifies
+          both, and rolls back automatically if the new version fails to boot.
+        </p>
+        <div class="row mt-2">
+          <span class="label">Running</span>
+          <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
+        </div>
+        <button id="update-server-btn" class="danger full-width mt-2"${body.currentCommit ? "" : " disabled"}>Update this server</button>
+        <p class="note small${body.currentCommit ? " hidden" : ""}" id="update-hint">
+          Waiting for this server to report its current version — it can't be
+          updated in place until it does.
+        </p>
+      </div>
+
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -275,6 +303,7 @@ export async function renderServerDetail() {
     wirePreferredServer(body);
     wireTransfer(body);
     wireReplace(body);
+    wireUpdate(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -1146,6 +1175,135 @@ async function openReplaceDialog(body) {
         errEl.classList.remove("hidden");
         goBtn.textContent = orig;
         refreshGate();
+      }
+    });
+  });
+}
+
+// ---- Update this server (dual-signed in-place update) ------------------
+
+function wireUpdate(body) {
+  $("update-server-btn")?.addEventListener("click", () => {
+    openUpdateDialog(body).catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("server update failed", e);
+        toast(humanError(e), "err");
+      }
+    });
+  });
+}
+
+// "Update this server": show the box-reported running commit, take a blessed
+// target commit (40-hex), then sign the UpdateOrder with the sensitive signer
+// (admin master root when present) and deposit it on `.com`'s update lane.
+// The box only applies it if the commit is ALSO maintainer-endorsed — this
+// order alone can never push unblessed code.
+async function openUpdateDialog(body) {
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const serverFqdn = body.serverFqdn;
+  const currentCommit = body.currentCommit;
+  if (!COMMIT_SHA_RE.test(String(currentCommit))) {
+    toast("This server hasn't reported its current version yet", "err");
+    return;
+  }
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Update this server");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Update ${escapeHtml(serverFqdn)}?</h3>
+    <p class="modal-message">
+      The server moves to the release you name below — only if Flagship's
+      maintainers have blessed it. It restarts into the new version and rolls
+      back automatically if that version fails to boot.
+    </p>
+    <div class="row mt-2">
+      <span class="label">Running</span>
+      <span class="value">${escapeHtml(shortCommit(currentCommit))}</span>
+    </div>
+    <label class="caption mt-2">Target release (full commit)</label>
+    <input class="full-width" data-update-target placeholder="40-character commit hash" autocomplete="off" spellcheck="false" />
+    <p class="note small hidden" data-update-target-hint></p>
+    <p class="modal-error err-text hidden" data-update-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-update-cancel>Cancel</button>
+      <button class="danger" data-update-go disabled>Order update</button>
+    </div>
+    <div class="mt-3 hidden" data-update-result>
+      <p class="note">Update ordered — the server picks it up on its next
+      check-in, verifies the release is maintainer-blessed, applies it, and
+      rolls back if the new version fails to boot.</p>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const cleanup = () => { if (dlg.open) dlg.close(); dlg.remove(); };
+  const targetEl = dlg.querySelector("[data-update-target]");
+  const hintEl = dlg.querySelector("[data-update-target-hint]");
+  const errEl = dlg.querySelector("[data-update-error]");
+  const goBtn = dlg.querySelector("[data-update-go]");
+  const cancelBtn = dlg.querySelector("[data-update-cancel]");
+  const resultEl = dlg.querySelector("[data-update-result]");
+
+  const refresh = () => {
+    const t = targetEl.value.trim().toLowerCase();
+    if (t.length === 0) {
+      hintEl.classList.add("hidden");
+      goBtn.disabled = true;
+    } else if (!COMMIT_SHA_RE.test(t)) {
+      hintEl.textContent = "Enter the full 40-character commit hash of the blessed release.";
+      hintEl.classList.remove("hidden");
+      goBtn.disabled = true;
+    } else if (t === currentCommit.toLowerCase()) {
+      hintEl.textContent = "The server is already running this release.";
+      hintEl.classList.remove("hidden");
+      goBtn.disabled = true;
+    } else {
+      hintEl.classList.add("hidden");
+      goBtn.disabled = false;
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+    targetEl.addEventListener("input", refresh);
+
+    goBtn.addEventListener("click", async () => {
+      errEl.classList.add("hidden");
+      goBtn.disabled = true;
+      const orig = goBtn.textContent;
+      goBtn.textContent = "Signing…";
+      try {
+        await depositUpdateOrder({
+          serverDomain: serverFqdn,
+          targetCommit: targetEl.value.trim().toLowerCase(),
+          fromCommit: currentCommit,
+          username: session.username || body.username,
+          umk: session.umk,
+          irkPubHex: bytesToHex(session.irk.publicKey),
+          // Slice D: the update order is a SENSITIVE order — signed with the
+          // admin root (when present); the co-signed mailbox-auth stays the
+          // IRK (tag-routed by the gated signer).
+          signWithIrk: sensitiveSigner(),
+        });
+        resultEl.classList.remove("hidden");
+        goBtn.classList.add("hidden");
+        targetEl.disabled = true;
+        cancelBtn.textContent = "Done";
+        toast("Update ordered", "ok");
+        resolve({ ok: true });
+      } catch (e) {
+        errEl.textContent = humanError(e);
+        errEl.classList.remove("hidden");
+        goBtn.textContent = orig;
+        refresh();
       }
     });
   });

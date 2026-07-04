@@ -58,6 +58,8 @@ import {
   handleConsumeCgkDeposit,
   handlePostSetLeaderDeposit,
   handleConsumeSetLeaderDeposit,
+  handlePostUpdateDeposit,
+  handleConsumeUpdateDeposit,
   handleConsumeSelfDeleteDeposit,
   handlePostDecommission,
   handleGetDecommission,
@@ -529,6 +531,11 @@ const ROUTE_RE = {
   // Owner preferred-server vote (Phase 6): POST phone deposit (IRK mailbox-auth,
   // owner-IRK set-leader vote, verified before storing) / GET box consume-once read.
   SET_LEADER_DEPOSIT: /^\/api\/server\/([^/]+)\/set-leader$/,
+  // Admin-authorized in-place server-update order (docs/server-update-mechanism.md):
+  //   POST  phone deposits the admin-signed UpdateOrder (mailbox-auth + Slice-D
+  //         admin-authority gate — the sensitive-op check)
+  //   GET   the box fetches its own order (PUBLIC consume-once; re-verifies box-side)
+  UPDATE_DEPOSIT: /^\/api\/server\/([^/]+)\/update$/,
   SELF_DELETE_DEPOSIT: /^\/api\/server\/([^/]+)\/self-delete$/,
   // Graceful server-replacement decommission (docs/server-replacement-graceful-
   // decommission.md). The bare `decommission` path is method-discriminated:
@@ -1588,6 +1595,23 @@ export async function tryControlPlane(
     if (method === "GET" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
       return finishPlain(
         await handleConsumeSetLeaderDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    // Admin-authorized in-place server-update order — phone deposit (IRK mailbox-
+    // auth + the Slice-D admin-authority gate, the sensitive-op check) + box
+    // consume-once read (the box re-verifies the order under its pinned admin root).
+    if (method === "POST" && (m = path.match(ROUTE_RE.UPDATE_DEPOSIT))) {
+      return finishPlain(
+        await handlePostUpdateDeposit(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.UPDATE_DEPOSIT))) {
+      return finishPlain(
+        await handleConsumeUpdateDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
     // Account-death content-wipe — box consume-once read of the owner-IRK-signed

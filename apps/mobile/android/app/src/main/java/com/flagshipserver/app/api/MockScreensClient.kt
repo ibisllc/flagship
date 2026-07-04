@@ -39,6 +39,7 @@ class MockScreensClient(
             serverFqdn = "$pod.harry.flagship.services",
             username = "harry",
             daemonVersion = "0.18.4",
+            currentCommit = "9f2c1ab3de4567890abcdef1234567890abcdef1",
             startedAt = now() - 11L * day,
             uptimeMs = 11L * day,
             certNotAfter = now() + 67L * day,

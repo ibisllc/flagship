@@ -34,6 +34,11 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let serverFqdn: String
     public let username: String
     public let daemonVersion: String
+    /// The box's code-checkout HEAD (full git SHA, lowercase) — the
+    /// applied-commit truth the self-update consumer enforces `fromCommit`
+    /// against. Optional: an old box's daemon (or a non-git deploy) doesn't
+    /// report it, and the update action is disabled without it.
+    public let currentCommit: String?
     public let startedAt: Int64
     public let uptimeMs: Int64
     public let certNotAfter: Int64?

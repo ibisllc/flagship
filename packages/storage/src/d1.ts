@@ -1715,13 +1715,22 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "set-leader");
   }
 
+  // ── Admin-authorized server-update order lane (purpose:"update") ───────
+  async putUpdateDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "update");
+  }
+
+  async consumeUpdateDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "update");
+  }
+
   // Shared deposit-lane helpers — the SWK/cgk/set-leader lanes are identical
   // store-and-forward shapes on `secret_mailbox`, distinguished only by purpose
   // (no migration — the column is plain TEXT, the SWK lane already inserts a
   // literal). Parameterized so a new lane is one purpose string.
   private async putGenericDeposit(
     rec: PairingDepositRecord,
-    purpose: "cgk" | "set-leader",
+    purpose: "cgk" | "set-leader" | "update",
   ) {
     try {
       await this.db
@@ -1759,7 +1768,7 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
   private async consumeGenericDeposit(
     serverDomain: string,
     now: number,
-    purpose: "cgk" | "set-leader",
+    purpose: "cgk" | "set-leader" | "update",
   ) {
     await this.db
       .prepare(

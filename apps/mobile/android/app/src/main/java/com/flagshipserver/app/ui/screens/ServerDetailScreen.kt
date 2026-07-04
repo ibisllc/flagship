@@ -64,6 +64,8 @@ import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.viewmodels.TransferGiverViewModel
+import com.flagshipserver.app.viewmodels.UpdateServerViewModel
+import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.DeadManReminders
 import com.flagshipserver.app.core.JournalUnits
@@ -209,6 +211,11 @@ fun ServerDetailScreen(
             JournalCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             ReplaceServerCard(serverDomain = d.value.serverFqdn, onReplaced = onBack)
+            Spacer(Modifier.height(FS.space.s6))
+            UpdateServerCard(
+                serverDomain = d.value.serverFqdn,
+                currentCommit = d.value.currentCommit,
+            )
             Spacer(Modifier.height(FS.space.s6))
             TransferCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
@@ -468,6 +475,11 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
             )
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 FSPill("Daemon ${detail.daemonVersion}", kind = FSPillKind.Idle)
+                // The box-reported running commit (short) — the version the
+                // update card orders away from. Hidden until the box reports.
+                shortCommit(detail.currentCommit)?.let { short ->
+                    FSPill("Version $short", kind = FSPillKind.Idle)
+                }
                 FSPill("${detail.serviceCount} apps", kind = FSPillKind.Idle)
                 FSPill("${detail.pairedSessionCount} devices", kind = FSPillKind.Idle)
             }
@@ -1232,6 +1244,158 @@ private fun ReplaceServerCard(serverDomain: String, onReplaced: () -> Unit) {
                     })
                 }
                 ReplaceServerScreen(vm = vm, serverFqdn = serverDomain)
+            }
+        }
+    }
+}
+
+/** Short display form of the box-reported HEAD, or null while unknown
+ *  (e.g. an un-reburned box whose daemon predates the field). */
+private fun shortCommit(sha: String?): String? =
+    sha?.takeIf { it.length == 40 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }?.take(8)
+
+// "Update this server" entry on server-detail (docs/server-update-mechanism.md).
+// Admin-only — the update order is signed with the admin master root (when
+// pinned) behind the biometric inside UpdateServerViewModel, and it is only
+// HALF the gate: the box also requires the target commit to be maintainer-
+// endorsed, and rolls back automatically if the new version fails to boot.
+// Disabled (with a hint) until the box reports its running commit — the
+// order's `fromCommit` must be truth, never a guess. Mirror of iOS
+// UpdateServerCard.
+@Composable
+private fun UpdateServerCard(serverDomain: String, currentCommit: String?) {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    val toasts = LocalToastCenter.current
+    val username by app.currentUser.collectAsState()
+    val scope = rememberCoroutineScope()
+    var showSheet by remember { mutableStateOf(false) }
+    val reported = shortCommit(currentCommit) != null
+
+    Text(
+        "Update",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            shortCommit(currentCommit)?.let { short ->
+                Text(
+                    "Running $short",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                )
+            }
+            FSDangerButton(
+                label = "Update this server",
+                onClick = { showSheet = true },
+                block = true,
+                enabled = reported,
+                modifier = Modifier.semantics { contentDescription = "sd-update-server" },
+            )
+            if (!reported) {
+                Text(
+                    "Waiting for this server to report its current version — it can't be updated in place until it does.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+            }
+        }
+    }
+
+    if (showSheet) {
+        val vm = remember(serverDomain) {
+            UpdateServerViewModel(
+                username = username ?: "",
+                serverFqdn = serverDomain,
+                currentCommit = currentCommit,
+                mailbox = mailbox,
+            )
+        }
+        val phase by vm.phase.collectAsState()
+        var target by remember { mutableStateOf("") }
+        val working = phase is UpdateServerViewModel.Phase.Signing ||
+            phase is UpdateServerViewModel.Phase.Posting
+        Dialog(
+            onDismissRequest = { showSheet = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
+                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
+                    FSGhostButton(label = "Done", onClick = { showSheet = false })
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = FS.space.s4)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                ) {
+                    Text(
+                        "Update $serverDomain?",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        "The server moves to the release you name below — only if Flagship's maintainers have blessed it. It restarts into the new version and rolls back automatically if that version fails to boot.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    )
+                    vm.runningShort?.let { short ->
+                        Text(
+                            "Running $short",
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                        )
+                    }
+                    if (phase is UpdateServerViewModel.Phase.Done) {
+                        Text(
+                            "Update ordered — the server picks it up on its next check-in, verifies the release is maintainer-blessed, applies it, and rolls back if the new version fails to boot.",
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                        )
+                    } else {
+                        FSField(
+                            value = target,
+                            onValueChange = { target = it },
+                            label = "Target release (full commit)",
+                            placeholder = "40-character commit hash",
+                            fieldTag = "update-target-field",
+                        )
+                        vm.targetProblem(target)?.let { problem ->
+                            Text(
+                                problem,
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 13.sp),
+                            )
+                        }
+                        (phase as? UpdateServerViewModel.Phase.Failed)?.let { f ->
+                            Text(
+                                f.message,
+                                color = FS.colors.danger,
+                                style = TextStyle(fontSize = 13.sp),
+                            )
+                        }
+                        FSDangerButton(
+                            label = if (working) "Working…" else "Order update",
+                            onClick = onClick@{
+                                if (!vm.canOrder(target) || working) return@onClick
+                                scope.launch {
+                                    if (vm.update(target)) toasts.success("Update ordered")
+                                }
+                            },
+                            block = true,
+                            enabled = vm.canOrder(target) && !working,
+                            modifier = Modifier.semantics { contentDescription = "update-order-btn" },
+                        )
+                    }
+                }
             }
         }
     }

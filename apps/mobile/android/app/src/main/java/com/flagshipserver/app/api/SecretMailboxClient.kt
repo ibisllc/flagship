@@ -98,6 +98,48 @@ interface SecretMailboxClient {
     suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody)
 
     suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
+
+    /** POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
+     *  order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
+     *  admin-signed `flagship/server-update/v1` order on `.com`'s update lane; the
+     *  box claims it on its heartbeat, re-verifies it under the pinned admin
+     *  master root AND separately confirms the target commit is maintainer-
+     *  ENDORSED (the daemon's ReleaseGate) before applying — 2-of-2, so this
+     *  deposit alone can never push code. Uses its own [UpdateDepositBody]
+     *  (`{auth, authSignature, deposit, order, signature}`). */
+    suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody)
+}
+
+/** The server-update deposit body. `auth`/`authSignature` are the SAME IRK
+ *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
+ *  order to a box domain; `order` is the `ServerUpdateOrder` field set and
+ *  `signature` is the ADMIN-authority signature over its canonical bytes (admin
+ *  master root when pinned, owner IRK legacy). Field names match the Worker
+ *  handler (`handlePostUpdateDeposit`) exactly: `{ auth, authSignature,
+ *  deposit:{serverDomain,requestNonceHex}, order:{serverDomain,targetCommit,
+ *  fromCommit,nonce,issuedAt}, signature }`. */
+@Serializable
+data class UpdateDepositBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val deposit: Deposit,
+    val order: Order,
+    val signature: String,   // hex (64 bytes) — admin authority over the order canonical bytes
+) {
+    @Serializable
+    data class Deposit(
+        val serverDomain: String,
+        val requestNonceHex: String,   // hex (32 bytes)
+    )
+
+    @Serializable
+    data class Order(
+        val serverDomain: String,
+        val targetCommit: String,
+        val fromCommit: String,
+        val nonce: String,
+        val issuedAt: Long,
+    )
 }
 
 /** The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
@@ -631,6 +673,20 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(UpdateDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/update",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -738,5 +794,13 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody) {
         nextDecommissionError?.let { nextDecommissionError = null; throw it }
         decommissionDeposits.add(serverDomain to body)
+    }
+
+    /** When set, the next [depositUpdate] throws this, then clears it. */
+    var nextUpdateError: Throwable? = null
+    val updateDeposits: MutableList<Pair<String, UpdateDepositBody>> = mutableListOf()
+    override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
+        nextUpdateError?.let { nextUpdateError = null; throw it }
+        updateDeposits.add(serverDomain to body)
     }
 }

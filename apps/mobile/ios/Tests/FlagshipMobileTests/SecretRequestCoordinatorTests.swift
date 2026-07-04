@@ -67,6 +67,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
             setLeaderDeposits.append((serverDomain, body))
         }
+        func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {}
     }
 
     // Fixtures: a phone IRK, a box STK, and a phone unseal key.

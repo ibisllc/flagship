@@ -984,6 +984,15 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "set-leader");
   }
 
+  // ── Admin-authorized server-update order lane (purpose:"update") ───────
+  async putUpdateDeposit(rec: PairingDepositRecord) {
+    return this.putGenericDeposit(rec, "update");
+  }
+
+  async consumeUpdateDeposit(serverDomain: string, now: number) {
+    return this.consumeGenericDeposit(serverDomain, now, "update");
+  }
+
   // Shared deposit-lane helpers (the SWK/cgk/set-leader lanes are identical
   // store-and-forward shapes; factored so a new lane is one purpose string).
   private putGenericDeposit(rec: PairingDepositRecord, purpose: SecretMailboxPurpose) {
