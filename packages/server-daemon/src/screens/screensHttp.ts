@@ -157,6 +157,15 @@ export interface ScreensHttpDeps {
    * cert chain itself (no PEM parsing in the BFF).
    */
   certInfo?: (() => { notAfter?: number; notBefore?: number; sans?: string[] } | null) | null;
+  /**
+   * The box's own code-checkout HEAD — the applied-commit truth the
+   * self-update consumer enforces `fromCommit` against (production:
+   * `buildCurrentCommitProvider` over FLAGSHIP_SELF_REPO). Unset/null
+   * when the daemon isn't running from a git checkout; server-detail
+   * then reports `currentCommit: null` and clients disable the
+   * update action.
+   */
+  currentCommit?: (() => string | null) | null;
   /** Recent install/uninstall events for server-detail. */
   installEventLog?: InstallEventLog | null;
   /** Tab ownership for app-detail / browser-tabs. */
@@ -1315,6 +1324,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     serverFqdn: deps.serverFqdn,
     username: deps.username,
     daemonVersion: deps.daemonVersion,
+    currentCommit: deps.currentCommit?.() ?? null,
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,
     certNotAfter: cert?.notAfter,

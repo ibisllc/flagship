@@ -25,6 +25,7 @@ import {
   type UpdateOrder,
 } from "@flagship/protocol";
 import {
+  buildCurrentCommitProvider,
   decodeUpdateOrderCarrier,
   runUpdateConsumer,
   type PendingVerifyMarker,
@@ -364,5 +365,37 @@ describe("runUpdateConsumer — the 2-of-2 + replay gates", () => {
     ]);
     expect(pending.current).toBeNull();
     expect(exits.count).toBe(0);
+  });
+});
+
+describe("buildCurrentCommitProvider — the BFF's applied-commit truth", () => {
+  const HEAD = "9f2c1ab3de4567890abcdef1234567890abcdef1";
+
+  it("reads HEAD once, normalizes, and caches (one read per process)", () => {
+    let reads = 0;
+    const provider = buildCurrentCommitProvider("/repo", (repo) => {
+      reads++;
+      expect(repo).toBe("/repo");
+      return `${HEAD.toUpperCase()}\n`;
+    });
+    expect(provider()).toBe(HEAD);
+    expect(provider()).toBe(HEAD);
+    expect(reads).toBe(1);
+  });
+
+  it("returns null (and caches it) when the read throws — not a git checkout", () => {
+    let reads = 0;
+    const provider = buildCurrentCommitProvider("/repo", () => {
+      reads++;
+      throw new Error("not a git repository");
+    });
+    expect(provider()).toBeNull();
+    expect(provider()).toBeNull();
+    expect(reads).toBe(1);
+  });
+
+  it("returns null on a non-SHA read (never surfaces junk as a version)", () => {
+    const provider = buildCurrentCommitProvider("/repo", () => "HEAD\n");
+    expect(provider()).toBeNull();
   });
 });

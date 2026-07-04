@@ -53,6 +53,14 @@ export interface ServerDetailResponse {
   serverFqdn: string;
   username: string;
   daemonVersion: string;
+  /**
+   * The box's own code-checkout HEAD (full git SHA, lowercase), or null
+   * when the daemon isn't running from a git checkout / can't read it.
+   * This is the applied-commit truth the self-update consumer enforces
+   * `fromCommit` against — clients display it as the current version and
+   * seed `fromCommit` in an UpdateOrder from it instead of guessing.
+   */
+  currentCommit: string | null;
   /** Unix-ms; when this daemon process started. */
   startedAt: number;
   uptimeMs: number;

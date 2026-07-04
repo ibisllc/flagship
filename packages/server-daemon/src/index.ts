@@ -164,6 +164,7 @@ import {
   filePairingMarkerStore,
 } from "./pairingDepositConsumer.js";
 import {
+  buildCurrentCommitProvider,
   buildUpdateConsumerPoller,
   filePendingVerifyStore,
   fileUsedNonceStore,
@@ -1947,6 +1948,11 @@ async function wireRuntimeSurfaces(deps: {
     serverFqdn: env.serverFqdn,
     username,
     daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
+    // The applied-commit truth the self-update consumer enforces
+    // `fromCommit` against — same checkout the consumer updates.
+    currentCommit: buildCurrentCommitProvider(
+      process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship",
+    ),
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     pairedSessions,

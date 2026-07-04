@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import {
@@ -94,6 +94,41 @@ export async function rebuildWorkspace(
     await runner("npm", ["install", "--no-audit", "--no-fund"], { cwd: repoPath });
   }
   await runner("npx", ["tsc", "-b"], { cwd: repoPath });
+}
+
+/**
+ * Lazily-cached reader of the box's own checkout HEAD — the SAME
+ * applied-commit truth step 7 of the consumer enforces `fromCommit`
+ * against. The screens BFF surfaces it on server-detail so clients can
+ * display the current version and mint `fromCommit` from the box's real
+ * HEAD instead of guessing.
+ *
+ * Sync (the BFF's server-detail builder is synchronous) and cached after
+ * the first read: HEAD only ever changes across a daemon restart (the
+ * consumer exits into systemd after a checkout), so one read per process
+ * is the truth for the process's lifetime. Returns null when the daemon
+ * isn't running from a git checkout or the read fails — clients disable
+ * the update action on null.
+ */
+export function buildCurrentCommitProvider(
+  repoPath: string,
+  readHead: (repo: string) => string = (repo) =>
+    execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+      encoding: "utf-8",
+      timeout: 10_000,
+    }),
+): () => string | null {
+  let cached: string | null | undefined;
+  return () => {
+    if (cached !== undefined) return cached;
+    try {
+      const head = readHead(repoPath).trim().toLowerCase();
+      cached = /^[0-9a-f]{40}$/.test(head) ? head : null;
+    } catch {
+      cached = null;
+    }
+    return cached;
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────
