@@ -282,6 +282,124 @@ final class SwkDepositCoordinatorTests: XCTestCase {
     }
 }
 
+/// Server-migration SWK contract (docs/server-migration.md invariant 4): the
+/// coordinator consults the migration resolver BEFORE deriving, so a
+/// migration's provisional new pod gets the MIGRATING domain's SWK (DOTS
+/// `flagship.swk.v1|<migrating domain>` — the deriveIRKBoxStkAndSwk path) and
+/// an ambiguous pod (live migration, no attached box yet) DEFERS instead of
+/// depositing a wrong-name SWK that would poison the restore.
+@MainActor
+final class SwkDepositMigrationContractTests: XCTestCase {
+    private let migratingDomain = "home.alice.flagship.services"
+    private let provisionalDomain = "attic.alice.flagship.services"
+
+    private func freshStore() -> PendingSwkDepositStore {
+        let suite = "flagship.swkDeposit.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return PendingSwkDepositStore(defaults: defaults)
+    }
+    private func freshCgkStore() -> PendingCgkDepositStore {
+        let suite = "flagship.cgkDeposit.tests.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!; d.removePersistentDomain(forName: suite)
+        return PendingCgkDepositStore(defaults: d)
+    }
+
+    private func ownerIrk() -> Curve25519.Signing.PrivateKey {
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32))
+    }
+    private let boxSeed = Data(repeating: 0x09, count: 32)
+    private func boxIdentityPubHex() -> String {
+        HexUtil.encode(try! Curve25519.Signing.PrivateKey(rawRepresentation: boxSeed).publicKey.rawRepresentation)
+    }
+
+    private final class DerivedBox { var serverIds: [String] = [] }
+
+    private func coordinator(
+        store: PendingSwkDepositStore,
+        mailbox: MockSecretMailboxClient,
+        resolution: MigrationSwkResolution,
+        derived: DerivedBox
+    ) -> SwkDepositCoordinator {
+        let irk = ownerIrk()
+        return SwkDepositCoordinator(
+            username: "alice",
+            mailbox: mailbox,
+            store: store,
+            cgkStore: freshCgkStore(),
+            deriveIrkAndSwk: { serverId, _ in
+                derived.serverIds.append(serverId)
+                return (irk, HexUtil.encode(Data(repeating: 0x33, count: 32)))
+            },
+            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
+            resolveMigrationSwk: { _ in resolution }
+        )
+    }
+
+    func test_attachedNewPodDerivesFromMigratingDomain() async {
+        let store = freshStore()
+        store.markPending(for: provisionalDomain)
+        let mailbox = MockSecretMailboxClient()
+        let derived = DerivedBox()
+        await coordinator(store: store, mailbox: mailbox, resolution: .migratingDomain(migratingDomain), derived: derived)
+            .depositIfNeeded(serverDomain: provisionalDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        XCTAssertEqual(derived.serverIds, [migratingDomain], "SWK derives from the MIGRATING domain, not the pod's own name")
+        XCTAssertEqual(mailbox.swkDeposits.count, 1)
+        // The deposit still ADDRESSES the provisional pod (it claims the blob).
+        XCTAssertEqual(mailbox.swkDeposits[0].serverDomain, provisionalDomain)
+        XCTAssertEqual(mailbox.swkDeposits[0].body.deposit.serverDomain, provisionalDomain)
+        XCTAssertTrue(store.isDeposited(for: provisionalDomain))
+    }
+
+    func test_unattachedMigrationDefersDeposit() async {
+        let store = freshStore()
+        store.markPending(for: provisionalDomain)
+        let mailbox = MockSecretMailboxClient()
+        let derived = DerivedBox()
+        await coordinator(store: store, mailbox: mailbox, resolution: .deferDeposit, derived: derived)
+            .depositIfNeeded(serverDomain: provisionalDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty, "no deposit while the migration hasn't attached its new box")
+        XCTAssertTrue(derived.serverIds.isEmpty, "nothing owed ⇒ no biometric derivation at all")
+        XCTAssertTrue(store.isPending(for: provisionalDomain), "the pending marker stays — the next reconcile retries")
+    }
+
+    func test_normalResolutionDerivesFromOwnName() async {
+        let store = freshStore()
+        store.markPending(for: provisionalDomain)
+        let mailbox = MockSecretMailboxClient()
+        let derived = DerivedBox()
+        await coordinator(store: store, mailbox: mailbox, resolution: .normal, derived: derived)
+            .depositIfNeeded(serverDomain: provisionalDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        XCTAssertEqual(derived.serverIds, [provisionalDomain])
+        XCTAssertEqual(mailbox.swkDeposits.count, 1)
+    }
+
+    func test_deferStillDeliversAnOwedCgk() async {
+        // The defer is SWK-scoped: the CGK is per-cloud (not serverId-derived),
+        // so an owed CGK still goes out on the same pass.
+        let store = freshStore()
+        store.markPending(for: provisionalDomain)
+        let cgkStore = freshCgkStore()
+        cgkStore.markPending(for: provisionalDomain)
+        let mailbox = MockSecretMailboxClient()
+        let irk = ownerIrk()
+        let coord = SwkDepositCoordinator(
+            username: "alice", mailbox: mailbox, store: store, cgkStore: cgkStore,
+            deriveIrkAndSwk: { _, _ in (irk, HexUtil.encode(Data(repeating: 0x33, count: 32))) },
+            deriveCgkHex: { _ in HexUtil.encode(Data(repeating: 0x55, count: 32)) },
+            resolveMigrationSwk: { _ in .deferDeposit }
+        )
+        await coord.depositIfNeeded(serverDomain: provisionalDomain, identityPubKeyHex: boxIdentityPubHex())
+
+        XCTAssertTrue(mailbox.swkDeposits.isEmpty)
+        XCTAssertTrue(store.isPending(for: provisionalDomain))
+        XCTAssertEqual(mailbox.cgkDeposits.count, 1)
+    }
+}
+
 /// The PendingPairingDepositStore three-state lifecycle (stash → deposited).
 final class PendingPairingDepositStoreTests: XCTestCase {
     private func freshStore() -> PendingPairingDepositStore {

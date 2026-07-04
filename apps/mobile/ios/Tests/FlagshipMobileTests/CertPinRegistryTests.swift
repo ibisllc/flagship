@@ -202,6 +202,14 @@ final class CertPinRegistryTests: XCTestCase {
     func testNewVerifiedReportReplacesThePin() {
         // Case 2 — a legit cert renewal: the box re-mints, its daemon signs a
         // fresh report carrying the NEW fingerprint, and that supersedes.
+        //
+        // This is ALSO the server-migration cutover re-pin
+        // (docs/server-migration.md phase 6): the migrated box keeps the SAME
+        // serverDomain ⇒ same SWK ⇒ same SWK-derived status STK, mints its own
+        // A′ cert, and its first verified daemon-status report replaces the old
+        // box's fingerprint automatically — no manual re-pin step exists or is
+        // needed. Unverified reports still never clear/replace (the retain
+        // tests below).
         let reg = CertPinRegistry(persistingIn: nil)
         reg.update(pods: [makePod()], umkSeed: umkSeed, nowMs: now)
         XCTAssertEqual(reg.pinFor(host: domain), pinHex)
@@ -211,6 +219,17 @@ final class CertPinRegistryTests: XCTestCase {
         let renewed = renewedSignedPod(newPin: newPin, issuedAt: now)
         reg.update(pods: [renewed.pod], umkSeed: umkSeed, nowMs: renewed.report.issuedAt + 1_000)
         XCTAssertEqual(reg.pinFor(host: domain), newPin)
+
+        // Migration framing of the same reconcile: yet another box behind the
+        // same name (same STK — the migrated hardware), a fresh verified report
+        // with ITS new cert ⇒ the pin follows again; a subsequent unverifiable
+        // refresh does NOT downgrade it.
+        let migratedPin = String(repeating: "6d", count: 32)
+        let migrated = renewedSignedPod(newPin: migratedPin, issuedAt: now + 2_000)
+        reg.update(pods: [migrated.pod], umkSeed: umkSeed, nowMs: now + 3_000)
+        XCTAssertEqual(reg.pinFor(host: domain), migratedPin)
+        reg.update(pods: [makePod(signedStatus: false)], nowMs: now + 4_000)
+        XCTAssertEqual(reg.pinFor(host: domain), migratedPin)
     }
 
     func testAbsentPodIsUnpinned() {
