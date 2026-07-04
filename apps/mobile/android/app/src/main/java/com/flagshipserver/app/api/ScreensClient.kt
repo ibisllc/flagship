@@ -125,3 +125,15 @@ sealed class ScreensError(message: String) : Throwable(message) {
     data class Decoding(val reason: String) : ScreensError("Could not parse response: $reason")
     data class NotImplemented(val feature: String) : ScreensError("Not implemented yet: $feature")
 }
+
+/**
+ * Plain-language copy for a thrown error, mirroring iOS `ScreensClientError.userFacing`.
+ * A typed [ScreensError] already carries user-safe wording; anything else (raw
+ * network/IO exceptions, JSON parse throwables) must NOT reach the UI verbatim —
+ * a user should never see "noSessionToken" or a stack message. Surfaces that show
+ * an error to the user route it through this instead of a raw `t.message`.
+ */
+fun Throwable.userFacing(): String = when (this) {
+    is ScreensError -> message ?: "Something went wrong. Try again."
+    else -> "Couldn't reach the server. Check your connection and try again."
+}
