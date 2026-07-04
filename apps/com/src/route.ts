@@ -661,7 +661,23 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   }
 
   // Static asset path — let the assets binding handle it.
-  return env.ASSETS.fetch(request);
+  const assetResponse = await env.ASSETS.fetch(request);
+  // Deploy-flash guard: the assets binding runs `not_found_handling =
+  // "single-page-application"`, so a MISSING file falls back to index.html
+  // (200 + text/html). For a stylesheet/script that's the wrong answer —
+  // the browser tries to parse the marketing HTML as CSS/JS, flashing the
+  // page unstyled mid-deploy. A `.css`/`.js` miss must read as a real 404
+  // so the browser treats it as a failed asset, not a document, and retries.
+  if (/\.(?:css|js|mjs)$/.test(url.pathname)) {
+    const contentType = assetResponse.headers.get("content-type") ?? "";
+    if (assetResponse.ok && contentType.includes("text/html")) {
+      return new Response("Not found", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+  }
+  return assetResponse;
 }
 
 interface ProbeResult {
