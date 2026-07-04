@@ -12,7 +12,8 @@ import {
   type Keypair,
   type MarketplaceListRequest,
 } from "@flagship/protocol";
-import { InMemoryUsernameStorage, InMemoryMarketplaceStorage } from "@flagship/storage";
+import { InMemoryUsernameStorage, InMemoryMarketplaceStorage, InMemoryServerStorage } from "@flagship/storage";
+import { sha256 } from "@noble/hashes/sha256";
 import {
   handleMarketplaceGet,
   handleMarketplaceInstall,
@@ -34,6 +35,11 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
+const MANIFEST_JSON = JSON.stringify({ name: "Habit Tracker", version: "1.0.0" });
+function sha256Hex(s: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(s)));
+}
+
 async function seedUser(usernames: InMemoryUsernameStorage, name: string, irk: Keypair) {
   await usernames.put({
     username: name,
@@ -52,7 +58,8 @@ function listingPayload(overrides: Partial<MarketplaceListRequest> = {}): Market
     category: "productivity",
     tagsCsv: "productivity,habits,streaks",
     canonicalUrl: "habit-tracker.alice.flagship.services",
-    manifestHashHex: "deadbeef".repeat(8),
+    manifestHashHex: sha256Hex(MANIFEST_JSON),
+    manifestJson: MANIFEST_JSON,
     screenshotKeys: ["s1.png", "s2.png"],
     publicDistribution: true,
     status: "listed",
@@ -168,6 +175,95 @@ describe("handleMarketplaceList", () => {
       { request: { ...claim }, signature: bytesToHex(sig) },
     );
     expect(r.status).toBe(400);
+  });
+
+  it("rejects a listing whose manifest_json doesn't hash to manifest_hash_hex", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    // Sign over the honest hash, then swap the manifest body so its hash no
+    // longer matches — the signature still verifies (manifest isn't in the
+    // canonical bytes) but the write-time hash check must reject it.
+    const claim = listingPayload({ manifestJson: JSON.stringify({ name: "evil", version: "9.9.9" }) });
+    const sig = signMarketplaceList(claim, irk);
+    const r = await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(400);
+    expect(await marketplace.get("alice", "habit-tracker")).toBeUndefined();
+  });
+
+  it("stores + returns the manifest_json on the listing", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    const claim = listingPayload();
+    const sig = signMarketplaceList(claim, irk);
+    await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect((await marketplace.get("alice", "habit-tracker"))?.manifestJson).toBe(MANIFEST_JSON);
+    const got = await handleMarketplaceGet({ marketplace, usernames }, "alice", "habit-tracker");
+    const body = got.body as { listing: { manifest_json: string; manifest_hash: string } };
+    expect(body.listing.manifest_json).toBe(MANIFEST_JSON);
+    expect(body.listing.manifest_hash).toBe(sha256Hex(MANIFEST_JSON));
+  });
+
+  it("accepts a listing signed by a non-revoked server identity key of the creator (box publish)", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const servers = new InMemoryServerStorage();
+    const ownerIrk = makeIrk();
+    const boxIdentity = makeIrk(); // the box's daemon identity keypair
+    await seedUser(usernames, "alice", ownerIrk);
+    await servers.put({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      identityPubKeyHex: bytesToHex(boxIdentity.publicKey),
+      registeredAt: Date.now(),
+    });
+    const claim = listingPayload();
+    const sig = signMarketplaceList(claim, boxIdentity); // signed by the BOX, not the phone IRK
+    // Without the servers dep → rejected (owner-IRK-only).
+    const noServers = await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect(noServers.status).toBe(403);
+    // With the servers dep → accepted.
+    const r = await handleMarketplaceList(
+      { marketplace, usernames, servers },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+    expect((await marketplace.get("alice", "habit-tracker"))?.name).toBe("Habit Tracker");
+  });
+
+  it("rejects a box-signed listing when that server is revoked", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const servers = new InMemoryServerStorage();
+    const ownerIrk = makeIrk();
+    const boxIdentity = makeIrk();
+    await seedUser(usernames, "alice", ownerIrk);
+    await servers.put({
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      identityPubKeyHex: bytesToHex(boxIdentity.publicKey),
+      registeredAt: Date.now(),
+    });
+    await servers.revoke("home.alice.flagship.services", "decommissioned", Date.now());
+    const claim = listingPayload();
+    const sig = signMarketplaceList(claim, boxIdentity);
+    const r = await handleMarketplaceList(
+      { marketplace, usernames, servers },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(403);
   });
 
   it("preserves install_count + scan_grade across re-listing", async () => {

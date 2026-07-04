@@ -43,6 +43,10 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0082",
   // Private account/device naming: the clean directory schema.
   "0083",
+  // feat/marketplace — carries the app manifest JSON on the listing (Blocker 1).
+  // Parked at 0090 (not 0083–0089) so main keeps 0083+ free for its next
+  // organic allocations; the prod ledger stores only the 4-digit prefix.
+  "0090",
 ];
 
 export interface SchemaStatusDeps {

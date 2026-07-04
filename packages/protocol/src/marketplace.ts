@@ -65,9 +65,16 @@ export function verifyMarketplaceScanResult(
 // ──────────────────────────────────────────────────────────────────────
 
 /**
- * Phone-signed marketplace listing request. .com stores ONLY the metadata
- * here — never code or data. `manifestHashHex` commits to the manifest
- * the listing claims; phone clients re-check before installing.
+ * Phone-signed marketplace listing request. .com stores the listing
+ * metadata AND the public app manifest here — never code or user data.
+ * `manifestHashHex` commits to the manifest the listing claims; clients
+ * re-check `sha256(manifestJson) == manifestHashHex` before installing.
+ *
+ * `manifestJson` is the app's public manifest (config, not a secret). It is
+ * deliberately NOT part of the canonical bytes: the signature covers
+ * `manifestHashHex`, and .com verifies `manifestHashHex == sha256(manifestJson)`
+ * at listing-write time, so a tampered manifest is rejected without rippling
+ * the canonical-bytes / signature construction across every platform.
  *
  * `descriptionMd` is markdown, capped at 10_000 chars on the .com side.
  * `screenshotKeys` is a list of R2 keys uploaded via a separate route;
@@ -83,6 +90,9 @@ export interface MarketplaceListRequest {
   tagsCsv: string;        // comma-separated lowercase tags
   canonicalUrl: string;   // <slug>.<creator>.flagship.services
   manifestHashHex: string;
+  /** The app's public manifest JSON. NOT in the canonical bytes — bound to
+   *  the signature transitively via `manifestHashHex` (see above). */
+  manifestJson: string;
   screenshotKeys: string[];
   publicDistribution: boolean;
   status: "listed" | "private";
