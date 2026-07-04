@@ -47,6 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.api.LiveTrustExceptionClient
+import com.flagshipserver.app.api.TrustExceptionSignature
+import com.flagshipserver.app.api.TrustExceptionWire
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalToastCenter
@@ -69,6 +72,10 @@ fun GlobalTrustBar() {
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+    val currentUser by app.currentUser.collectAsState()
+    // Best-effort transmit of the signed exception to `.com` for fleet-wide
+    // fan-out (constructed once; never throws).
+    val trustExceptions = remember { LiveTrustExceptionClient() }
 
     val verdict by trust.verdict.collectAsState()
     val failuresState by trust.failures.collectAsState()
@@ -129,17 +136,35 @@ fun GlobalTrustBar() {
                                 "Continue with an unverified Flagship control server",
                             )
                             val devicePub = Keystore.irkPubHex()
+                            val grantedAt = System.currentTimeMillis()
                             val bytes = TrustException.canonicalBytes(
                                 certClass = failure.certClass,
                                 certHash = failure.certHash,
-                                grantedAt = System.currentTimeMillis(),
+                                grantedAt = grantedAt,
                                 grantedByDevicePub = devicePub,
                             )
-                            // Sign so the envelope is producible for `.com`
-                            // directory propagation (a follow-up wire); the
-                            // local override is what un-sticks THIS device.
-                            HexUtil.encode(signer.sign(bytes))
+                            val signatureHex = HexUtil.encode(signer.sign(bytes))
+                            // Record the local override FIRST so this device
+                            // un-sticks even if the transmit fails.
                             trust.recordOverride(failure.certHash)
+                            // LOAD-BEARING FAN-OUT: transmit the signed WIRE
+                            // envelope to `.com` so EVERY box the user owns pulls
+                            // this exception and is satisfied on the same
+                            // cert-hash. Previously the signature was computed
+                            // then DISCARDED — the override never propagated.
+                            val wire = TrustExceptionWire(
+                                certClass = failure.certClass.wire,
+                                certHash = failure.certHash,
+                                grantedAt = grantedAt,
+                                grantedByDevicePub = devicePub,
+                                signatures = listOf(
+                                    TrustExceptionSignature(pubkey = devicePub, sig = signatureHex),
+                                ),
+                            )
+                            val user = currentUser
+                            if (!user.isNullOrEmpty()) {
+                                trustExceptions.post(user, wire)
+                            }
                         } catch (t: Throwable) {
                             toasts.error("Couldn't continue: ${t.message}")
                         }

@@ -45,7 +45,7 @@ public struct GlobalTrustBar: View {
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.9), value: failures)
         .sheet(item: $overriding) { f in
-            TrustOverrideSheet(failure: f) { overriding = nil }
+            TrustOverrideSheet(failure: f, username: app.currentUser) { overriding = nil }
                 .environment(trust)
         }
     }
@@ -104,6 +104,7 @@ private struct TrustOverrideSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(TrustCenter.self) private var trust
     let failure: TrustFailure
+    let username: String?
     let onDone: () -> Void
 
     @State private var vm: TrustOverrideViewModel?
@@ -134,7 +135,9 @@ private struct TrustOverrideSheet: View {
                 block: true
             ) {
                 Task {
-                    if vm == nil { vm = TrustOverrideViewModel(failure: failure, center: trust) }
+                    if vm == nil {
+                        vm = TrustOverrideViewModel(failure: failure, center: trust, username: username)
+                    }
                     await vm?.confirmOverride()
                     if vm?.phase == .done { onDone() }
                 }
