@@ -69,8 +69,15 @@ public static class QemuCommandLine
             "-drive", $"if=pflash,format=raw,readonly=on,file={uefiCodePath}",
             "-drive", $"if=pflash,format=raw,file={layout.EfiVariableStorePath(name)}",
 
-            // Main disk first so it stays the stable primary device.
-            "-drive", $"if=virtio,format=qcow2,file={layout.DiskImagePath(name)}",
+            // Main disk on the q35 built-in AHCI so the guest sees /dev/sda —
+            // METAL-IDENTICAL naming. The preseed's partman/early_command
+            // targets `list-devices disk | head -n1`; with a virtio main disk
+            // (vda) the USB installer stick becomes sda and d-i tries to
+            // install onto the 755MB stick ("failed to partition: too small",
+            // found live). SATA main + USB installer reproduces the metal
+            // order: sda = system disk, sdb = installer.
+            "-drive", $"id=flagship-main,if=none,format=qcow2,file={layout.DiskImagePath(name)}",
+            "-device", "ide-hd,drive=flagship-main",
         };
 
         if (attachInstallerISO)

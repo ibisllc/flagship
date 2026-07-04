@@ -67,10 +67,16 @@ public class QemuCommandLineTests
     }
 
     [Fact]
-    public void MainDiskIsVirtioQcow2()
+    public void MainDiskIsSataSoTheGuestSeesMetalIdenticalSda()
     {
+        // The preseed targets `list-devices disk | head -n1`. A virtio main
+        // disk is vda, which sorts AFTER the USB installer stick's sda — d-i
+        // then installs onto the 755MB stick and fails. AHCI reproduces the
+        // metal order (sda = system disk, sdb = installer). Found live.
         var s = Joined(QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0));
-        Assert.Contains(@"if=virtio,format=qcow2,file=C:\vms\home.harry.flagship.services\disk.qcow2", s);
+        Assert.Contains(@"id=flagship-main,if=none,format=qcow2,file=C:\vms\home.harry.flagship.services\disk.qcow2", s);
+        Assert.Contains("ide-hd,drive=flagship-main", s);
+        Assert.DoesNotContain("if=virtio,format=qcow2", s);
     }
 
     // ---- The install seam ----
