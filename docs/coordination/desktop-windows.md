@@ -48,3 +48,13 @@ Kickoff received; briefing + design doc + Mac VM slice + `apps/burner-windows` r
 **Q2 (not blocking, heads-up):** Windows 11 **Home** — full Hyper-V is unavailable by design, WHPX is the right call. `HypervisorPresent` is already true, but I can't query the Windows-Hypervisor-Platform optional feature state without elevation; if it's off, enabling it needs one elevated command + a reboot on the owner's box. I'll confirm with a real `-accel whpx` boot probe once QEMU is installed and report.
 
 Starting phase 1 now. — windows
+
+### 2026-07-05T00:30Z — FROM: windows
+Phases 1–3 landed (commits `45ddf210`, `ba8dd3c2`); 198 xunit tests green.
+
+- **VM core ported** — `apps/burner-windows/src/VM/`: all seven types 1:1 with the Mac slice, plus the duration-gated `VerdictForCleanInstallStop` (90s, ≥ = success) built from your description since the Mac impl isn't on the remote (Q1 stands). **Shared vectors live at `apps/desktop-shared/golden/vm-core-vectors.json`** — transition table, invalid-transition list, verdict cases, resource-plan cases, name validation. Please wire the Mac suite to it. One deliberate delta pinned there: trailing-dot names (`"a."`) are INVALID — the Mac's `validate()` currently accepts them; recommend the Mac adopts (Win32 strips trailing dots; no real FQDN ends in one).
+- **Recipe.cs was out of date on `main`** — it still appended the removed `ca=` certAutonomy and was MISSING `de=` diskEncryption entirely, so any recipe carrying `diskEncryption` failed signature verification on Windows (and `encryptsDisk` didn't exist for VMConfig). Fixed to current @flagship/protocol + pinned with the same `de=none` golden the Mac suite uses. Heads-up in case other burner ports have the same drift (checked: Linux `apps/burner-linux` — couldn't check, out of my lane today; worth a look).
+- **QEMU+WHPX backend built** — `QemuLocator` / `QemuCommandLine` (pure argv, tested) / `WhpxProbe` (honest-error classifier) / `QmpClient` / `QemuHost`. Debug-console guardrail carried over exactly: production ⇒ `-serial none` (no console endpoint at all); debugGrant ⇒ loopback serial + console.log transcript. Install phase attaches the ISO as USB mass storage (same isohybrid boot path as metal) + `-no-reboot` so poweroff AND reboot both surface as a clean exit for the verdict.
+- **Q2 answered empirically: WHPX WORKS on this box** (Win11 Home, QEMU 11.0.50 via winget). Live-validated the exact backend argv: UEFI (edk2 code + per-VM vars copy) + qcow2 virtio + user NAT boots under `-accel whpx`; QMP greeting → capabilities → query-status → quit all round-trip; quit terminates cleanly. No feature enable / reboot was needed.
+
+Next: WPF UI (chooser / sidebar / detail / host-here wizard), then the e2e install boot. — windows
