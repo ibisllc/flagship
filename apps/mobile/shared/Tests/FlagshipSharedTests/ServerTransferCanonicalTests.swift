@@ -94,6 +94,48 @@ final class ServerTransferCanonicalTests: XCTestCase {
         )
     }
 
+    /// v1-sec GAP 3 — the LEGACY re-home authorization. Pins the canonical to
+    /// the exact cross-platform string; `.com` reconstructs it from the claimed
+    /// row and the box re-verifies against its pinned owner IRK.
+    func testRehomeAuthorizationCanonicalBytes() {
+        let acq = String(repeating: "cd", count: 32)
+        let o = RehomeAuthorizationOrder(
+            oldServerDomain: "home.alice.flagship.services",
+            newServerDomain: "home.bob.flagship.services",
+            acquirerIrkPubHex: acq, issuedAt: 1800
+        )
+        XCTAssertEqual(
+            str(o.canonicalBytes()),
+            "flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|\(acq)|1800"
+        )
+    }
+
+    func testRehomeAuthorizationLowercasesDomains() {
+        let acq = String(repeating: "CD", count: 32)
+        let o = RehomeAuthorizationOrder(
+            oldServerDomain: "HOME.ALICE.flagship.services",
+            newServerDomain: "HOME.BOB.flagship.services",
+            acquirerIrkPubHex: acq, issuedAt: 5
+        )
+        XCTAssertEqual(
+            str(o.canonicalBytes()),
+            "flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|\(String(repeating: "cd", count: 32))|5"
+        )
+    }
+
+    func testRehomeAuthorizationSignVerify_onlyUnderGiverIrk() throws {
+        let giverIrk = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
+        let other = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 6, count: 32))
+        let o = RehomeAuthorizationOrder(
+            oldServerDomain: "home.alice.flagship.services",
+            newServerDomain: "home.bob.flagship.services",
+            acquirerIrkPubHex: String(repeating: "cd", count: 32), issuedAt: 7
+        )
+        let sig = try o.sign(withGiverIrk: giverIrk)
+        XCTAssertTrue(o.verify(signature: sig, giverIrkPub: giverIrk.publicKey.rawRepresentation))
+        XCTAssertFalse(o.verify(signature: sig, giverIrkPub: other.publicKey.rawRepresentation))
+    }
+
     func testAdminRootTransferSignVerify_onlyUnderGiverRoot() throws {
         let giverRoot = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
         let other = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 6, count: 32))
