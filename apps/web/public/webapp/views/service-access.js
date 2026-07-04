@@ -50,6 +50,7 @@ import {
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-service-access");
 
@@ -480,7 +481,7 @@ function peopleRowHtml(i) {
     const cap = i.maxRedemptions === 0 ? "∞" : i.maxRedemptions;
     statusText = `group — ${used}/${cap} joined`;
     if (i.expiresAt) {
-      statusText += i.expiresAt <= Date.now() ? " · expired" : ` · expires ${new Date(i.expiresAt).toLocaleDateString()}`;
+      statusText += i.expiresAt <= Date.now() ? " · expired" : ` · expires ${formatWhen(i.expiresAt)}`;
     }
   } else if (i.approvalMode === "manual" && !i.boundAID) {
     statusText = "approve-each — waiting for their acceptance";

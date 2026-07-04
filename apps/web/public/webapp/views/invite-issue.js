@@ -25,6 +25,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   buildShareUrl,
   generateOpaqueTag,
@@ -147,7 +148,7 @@ async function onIssue(app) {
       notes: "",
     });
     status.className = "mt-2 text-sm ok-text";
-    status.textContent = `issued — expires ${new Date(body.expiresAt).toLocaleString()}`;
+    status.textContent = `Issued — expires ${formatWhen(body.expiresAt)}`;
     const result = $("ii-result");
     const linkEl = $("ii-link");
     result.classList.remove("hidden");

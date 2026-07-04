@@ -21,6 +21,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import { humanError } from "../lib/humanError.js";
 import {
   fetchAccountType as totpFetchAccountType,
@@ -85,9 +86,7 @@ async function fetchAccountType() {
 
 function fmtDate(ms) {
   if (!ms) return "an unknown date";
-  return new Date(ms).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
-  });
+  return formatWhen(ms);
 }
 
 /** Renders the badge + explainer at the top of the screen. */

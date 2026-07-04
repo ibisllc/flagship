@@ -30,6 +30,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDateTime } from "../lib/dateFormat.js";
 
 registerView("view-audit-log");
 registerView("view-audit-entry");
@@ -101,7 +102,7 @@ export const KNOWN_EVENT_KINDS = Object.freeze(Object.keys(KIND_LABELS));
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatDateTime(unixMs);
 }
 
 function kindLabel(kind) {

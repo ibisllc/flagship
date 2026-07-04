@@ -17,6 +17,7 @@ import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { inlineConfirm } from "../lib/modal.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import { listLabelsForApp, removeLabel } from "../lib/labelBook.js";
 
 registerView("view-invite-manage");
@@ -63,7 +64,7 @@ async function renderPending(app, labelByTag) {
           <div class="row row-top">
             <div>
               <div class="weight-600">${escapeHtml(labelText)}</div>
-              <div class="muted-sm">role: ${escapeHtml(inv.role ?? "")} · expires ${escapeHtml(new Date(inv.expiresAt ?? 0).toLocaleString())}</div>
+              <div class="muted-sm">role: ${escapeHtml(inv.role ?? "")} · expires ${escapeHtml(formatWhen(inv.expiresAt ?? 0))}</div>
               <div class="value text-xs">tag ${escapeHtml((inv.opaqueTag ?? "").slice(0, 12))}…</div>
             </div>
             <button class="danger" data-action="revoke-invite" data-name="${escapeHtml(labelText)}" data-tag="${escapeHtml(inv.opaqueTag ?? "")}" data-id="${escapeHtml(inv.inviteId ?? "")}">Revoke</button>
@@ -88,7 +89,7 @@ async function renderPending(app, labelByTag) {
       root.innerHTML = local.map((l) => `
         <div class="card">
           <div class="weight-600">${escapeHtml(l.displayName)}</div>
-          <div class="muted-sm">channel: ${escapeHtml(l.channel)} · sent ${escapeHtml(new Date(l.sentAt).toLocaleString())}</div>
+          <div class="muted-sm">channel: ${escapeHtml(l.channel)} · sent ${escapeHtml(formatWhen(l.sentAt))}</div>
           <div class="value text-xs">tag ${escapeHtml((l.opaqueTagHex ?? "").slice(0, 12))}…</div>
         </div>
       `).join("");
@@ -117,7 +118,7 @@ async function renderActive(app, labelByTag) {
           <div class="row row-top">
             <div>
               <div class="weight-600">${escapeHtml(labelText)}</div>
-              <div class="muted-sm">role: ${escapeHtml(a.role ?? "")} · since ${escapeHtml(new Date(a.grantedAt ?? 0).toLocaleString())}</div>
+              <div class="muted-sm">role: ${escapeHtml(a.role ?? "")} · since ${escapeHtml(formatWhen(a.grantedAt ?? 0))}</div>
               <div class="value text-xs">IRK ${escapeHtml((a.irkPubHex ?? "").slice(0, 12))}…</div>
             </div>
             <button class="danger" data-action="revoke-access" data-name="${escapeHtml(labelText)}" data-irk="${escapeHtml(a.irkPubHex ?? "")}" data-tag="${escapeHtml(a.opaqueTag ?? "")}">Revoke</button>

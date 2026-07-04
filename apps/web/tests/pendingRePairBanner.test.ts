@@ -8,6 +8,7 @@ import {
   shouldRenderBanner,
   formatCompletesAt,
 } from "../public/webapp/lib/pendingRePairBanner.js";
+import { formatWhen } from "../public/webapp/lib/dateFormat.js";
 
 const NOW = 1_700_000_000_000;
 const FUTURE = NOW + 7 * 86_400_000;
@@ -82,10 +83,11 @@ describe("pendingRePairBanner — renderPendingBanner", () => {
     expect(html).toContain('aria-live="polite"');
   });
 
-  it("escapes the completesAt timestamp into the copy", () => {
-    // formatCompletesAt → locale string; just assert the value appears.
+  it("renders the completesAt timestamp into the copy", () => {
+    // formatCompletesAt → shared S2 helper (formatWhen); FUTURE is 7 days
+    // out so it lands in the calendar branch. Assert that value appears.
     const html = renderPendingBanner(pending({ completesAt: FUTURE }), NOW);
-    const expected = new Date(FUTURE).toLocaleString();
+    const expected = formatCompletesAt(FUTURE, NOW);
     expect(html).toContain(expected);
   });
 });
@@ -122,7 +124,10 @@ describe("pendingRePairBanner — formatCompletesAt", () => {
     expect(formatCompletesAt("nope" as any)).toBe("soon");
   });
 
-  it("returns a locale string for a numeric epoch", () => {
-    expect(formatCompletesAt(NOW)).toBe(new Date(NOW).toLocaleString());
+  it("returns the shared S2 format for a numeric epoch", () => {
+    // NOW relative to NOW is < 60s → "just now".
+    expect(formatCompletesAt(NOW, NOW)).toBe("just now");
+    // A 7-day-out epoch lands in the calendar branch.
+    expect(formatCompletesAt(FUTURE, NOW)).toBe(formatWhen(FUTURE, NOW));
   });
 });

@@ -15,6 +15,7 @@ import { bytesToHex, signWithIrk } from "../keystore.js";
 import { canonicalPushRevoke } from "../lib/push.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   runReplaceDeviceCeremony,
   completeReplaceDeviceCeremony,
@@ -160,10 +161,7 @@ function isQuarantined(device) {
 function quarantineMessage(device) {
   const until = device.quarantineUntil;
   if (!until) return "This device is in quarantine. Use another device.";
-  const when = new Date(until).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
-  });
-  return `Quarantined until ${when}. Use another device.`;
+  return `Quarantined until ${formatWhen(until)}. Use another device.`;
 }
 
 function renderDeviceCard(device) {
@@ -619,8 +617,7 @@ async function promptForTotpProof() {
 
 function formatCompletesAt(ms) {
   if (typeof ms !== "number" || !ms) return "soon";
-  const d = new Date(ms);
-  return d.toLocaleString();
+  return formatWhen(ms);
 }
 
 export function initTrustedDevicesView() {

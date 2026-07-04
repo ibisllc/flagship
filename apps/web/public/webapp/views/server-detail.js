@@ -72,6 +72,7 @@ import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { inlineConfirm } from "../lib/modal.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-server-detail");
@@ -91,7 +92,7 @@ function fmtUptime(ms) {
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 // Short display form of the box-reported HEAD (or "—" while unknown —
@@ -371,7 +372,7 @@ function wireAutoUnlock(serverFqdn) {
     }
     try {
       const r = await enableLongLived(serverFqdn);
-      toast(`auto-unlock on; lease expires ${new Date(r.expiresAt).toLocaleString()}`, "ok");
+      toast(`Auto-unlock on; lease expires ${formatWhen(r.expiresAt)}`, "ok");
       await refreshLeases(serverFqdn);
     } catch (e) {
       toast(`enable failed: ${e.message ?? e}`, "err");
@@ -476,7 +477,7 @@ function startMetricsPolling(serverFqdn) {
       if (disk) disk.textContent = `${humanBytes(m.diskUsedBytes)} / ${humanBytes(m.diskTotalBytes)}`;
       if (net) net.textContent =
         `↓ ${humanBytes(m.netRxBytesPerSec)}/s · ↑ ${humanBytes(m.netTxBytesPerSec)}/s`;
-      if (at) at.textContent = `Collected ${new Date(m.collectedAt).toLocaleTimeString()}`;
+      if (at) at.textContent = `Collected ${formatWhen(m.collectedAt)}`;
     } catch (e) {
       const at = $("metrics-collected-at");
       if (at) at.textContent = `Couldn't reach daemon: ${e.message ?? e}`;

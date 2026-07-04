@@ -15,6 +15,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   listSecuredSessions,
   removeSecuredSession,
@@ -42,7 +43,7 @@ export function renderSecuredSessions() {
   }
   root.innerHTML = sessions
     .map((s) => {
-      const started = Number.isFinite(s.startedAt) ? new Date(s.startedAt).toLocaleString() : "";
+      const started = Number.isFinite(s.startedAt) ? formatWhen(s.startedAt) : "";
       return `
       <div class="card">
         <div class="row row-top">

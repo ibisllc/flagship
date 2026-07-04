@@ -26,6 +26,7 @@ import { bytesToHex, signWithIrk, deriveSwkFromSeed } from "../keystore.js";
 import { ensureAdminRoot, sensitiveSigner } from "../lib/adminRoot.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   canonicalInstallBlob,
   deleteDraft,
@@ -195,7 +196,7 @@ function renderDraftList(drafts) {
       </div>
       <div class="row">
         <span class="label">updated</span>
-        <span class="value">${escapeHtml(new Date(d.updatedAt).toLocaleString())}</span>
+        <span class="value">${escapeHtml(formatWhen(d.updatedAt))}</span>
       </div>
       <div class="row-2 mt-2">
         <button class="secondary" data-action="resume" data-id="${escapeHtml(d.id)}">Resume</button>

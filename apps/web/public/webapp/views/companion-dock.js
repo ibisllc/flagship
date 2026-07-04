@@ -23,6 +23,7 @@ import { humanError } from "../lib/humanError.js";
 import { ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 import {
   buildCompanionReceiverUrl,
   companionList,
@@ -34,7 +35,7 @@ registerView("view-companion-dock");
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function timeLeft(expiresAt, nowMs = Date.now()) {

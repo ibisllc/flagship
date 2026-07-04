@@ -37,6 +37,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-peer-backup");
 
@@ -50,7 +51,7 @@ function fmtBytes(n) {
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "never";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 // Daemon-side honest-zero accounting for fields the my-shard layer

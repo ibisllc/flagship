@@ -12,6 +12,7 @@ import { activeOperations } from "../lib/activeOperations.js";
 import { $, registerView, show, setSubtitle, currentViewId } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatDuration as formatAge, formatDays } from "../lib/dateFormat.js";
 import { toast } from "../lib/toast.js";
 import { releaseServerName } from "../lib/releaseServer.js";
 import { getActiveProfile } from "../lib/profiles.js";
@@ -257,18 +258,6 @@ export function classifyServer(server, pod, opts = {}) {
     }
   }
   return { kind: "online", label: "online" };
-}
-
-function formatAge(ms) {
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
-  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h`;
-  return `${Math.round(ms / 86400_000)}d`;
-}
-
-function formatDays(ms) {
-  const d = Math.max(1, Math.round(ms / 86400_000));
-  return `${d}d`;
 }
 
 /** The short server label for the operations-sliver "preparing <name>"

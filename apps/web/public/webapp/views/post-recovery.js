@@ -16,6 +16,7 @@ import { humanError } from "../lib/humanError.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-post-recovery");
 
@@ -55,7 +56,7 @@ function renderReport(report) {
       ? '<span class="pill err">Failed</span>'
       : '<span class="pill">Running…</span>';
   const undoText = report.undoWindowExpiresAt
-    ? new Date(report.undoWindowExpiresAt).toLocaleString()
+    ? formatWhen(report.undoWindowExpiresAt)
     : "—";
   root.innerHTML = `
     <div class="card">

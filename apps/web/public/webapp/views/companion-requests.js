@@ -41,12 +41,13 @@ import { revokeServer } from "../lib/revokeServer.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-companion-requests");
 
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number" || unixMs <= 0) return "—";
-  return new Date(unixMs).toLocaleString();
+  return formatWhen(unixMs);
 }
 
 function timeLeft(expiresAt, nowMs = Date.now()) {
