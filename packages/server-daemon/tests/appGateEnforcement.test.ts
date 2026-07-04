@@ -44,7 +44,16 @@ function req(over: Partial<HttpRequest>): HttpRequest {
   };
 }
 
-async function harness(mode: "open" | "restricted") {
+async function harness(
+  mode: "open" | "restricted",
+  /**
+   * The serviceId the SNI-router resolved to select the container (what
+   * `buildGatedAppHandler` now threads through to the gates). Defaults to the
+   * gated SERVICE, mirroring a real box where SNI `<label>.<fqdn>` picked it.
+   * Pass `null` to model an unresolved/fallback SNI.
+   */
+  appServiceRef: string | null = SERVICE,
+) {
   const store = new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "age-")), "sa.json"));
   await store.load();
   await store.setMode(SERVICE, mode);
@@ -52,14 +61,16 @@ async function harness(mode: "open" | "restricted") {
   const sessions = new ServiceSessionStore(join(mkdtempSync(join(tmpdir(), "age-")), "ss.json"));
   await sessions.load();
   const accessWeb = buildServiceAccessWeb({ serverId: FQDN, store, sessions, now: () => NOW });
-  // Mirrors index.ts: resolve the host's leftmost label to the installed
-  // serviceId, knock via accessWeb.
+  // Mirrors index.ts: the SNI-selected app ref wins; Host is only the fallback
+  // when no app was resolved (the daemon's own chain). Enforcing off Host on
+  // the app path was the live bypass (v1-sec GAP 1).
   const enforcement = buildAccessEnforcementHandler(
     {
       store,
       decide: (ref, r) => decideServiceAccess({ serverId: FQDN, store, sessions, now: () => NOW }, ref, r),
     },
-    (r) => {
+    (r, resolvedRef) => {
+      if (resolvedRef) return resolvedRef;
       const host = (r.headers.host ?? "").split(":")[0]!.toLowerCase();
       const suffix = `.${FQDN.toLowerCase()}`;
       if (!host.endsWith(suffix) || host.length === suffix.length) return null;
@@ -74,7 +85,7 @@ async function harness(mode: "open" | "restricted") {
     proxied++;
     return { status: 200, headers: { "content-type": "text/plain" }, body: "app content" };
   };
-  const handler = buildGatedAppHandler([accessWeb.handle, enforcement], app);
+  const handler = buildGatedAppHandler([accessWeb.handle, enforcement], app, appServiceRef);
   return { handler, sessions, wasProxied: () => proxied };
 }
 
@@ -127,10 +138,47 @@ describe("per-app proxy path is fronted by the service-access gates", () => {
     expect(wasProxied()).toBe(1);
   });
 
-  it("an unknown label (not an installed service) falls through to the app handler", async () => {
-    const { handler, wasProxied } = await harness("restricted");
+  it("an unknown label (no SNI-resolved app) falls through to the app handler", async () => {
+    // No app was selected by SNI (appServiceRef=null) — the enforcement's Host
+    // fallback finds no installed service for `other.<fqdn>` and falls through.
+    const { handler, wasProxied } = await harness("restricted", null);
     const r = await handler(req({ headers: { host: `other.${FQDN}`, accept: "text/html" } }));
     expect(r.status).toBe(200);
     expect(wasProxied()).toBe(1);
+  });
+
+  // v1-sec GAP 1 — the gate must key off the SNI-selected app, NOT the client
+  // Host. These modelled two live bypasses that served a RESTRICTED service
+  // anonymously because enforcement re-derived the ref from Host and found no
+  // match. They FAIL on the pre-fix code (which discarded the app ref).
+  it("RESTRICTED via SNI but a tier-2-style Host (not under the box wildcard) is STILL enforced", async () => {
+    // Tier-2 leader-routed share URL: Host is `<svc>.<user>.flagship.services`,
+    // which does NOT end in `.<serverFqdn>`, so a Host-based resolver returns
+    // null and would serve the app. The SNI-selected app ref must win.
+    const { handler, wasProxied } = await harness("restricted", SERVICE);
+    const r = await handler(
+      req({ headers: { host: "gate.alice.flagship.services", accept: "application/json" } }),
+    );
+    expect(r.status).toBe(403);
+    expect(JSON.parse(String(r.body)).error).toBe("access restricted");
+    expect(wasProxied()).toBe(0);
+  });
+
+  it("RESTRICTED via SNI with an ABSENT Host is STILL enforced", async () => {
+    // `curl --resolve` with a valid SNI but no Host header.
+    const { handler, wasProxied } = await harness("restricted", SERVICE);
+    const r = await handler(req({ headers: { accept: "application/json" } }));
+    expect(r.status).toBe(403);
+    expect(wasProxied()).toBe(0);
+  });
+
+  it("RESTRICTED via SNI with a MISMATCHED (open-decoy) Host is STILL enforced", async () => {
+    // A bogus Host pointing at a different label must not launder access.
+    const { handler, wasProxied } = await harness("restricted", SERVICE);
+    const r = await handler(
+      req({ headers: { host: `other.${FQDN}`, accept: "application/json" } }),
+    );
+    expect(r.status).toBe(403);
+    expect(wasProxied()).toBe(0);
   });
 });

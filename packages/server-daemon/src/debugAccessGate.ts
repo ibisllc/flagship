@@ -4,8 +4,10 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   verifyDebugAccessGrant,
+  type AdminGrantView,
   type DebugAccessGrant,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 
 const execFileP = promisify(execFile);
 
@@ -296,8 +298,26 @@ export async function applyDebugAccess(
 export interface DebugAccessGateOptions {
   /** This box's canonical FQDN — the grant must name it. */
   serverDomain: string;
-  /** The config-pinned owner IRK pubkey — the only trust anchor. */
+  /**
+   * The config-pinned MEMBERSHIP owner IRK — the LEGACY (fallback) anchor, used
+   * ONLY when no admin master root is pinned (a pre-admin-tier box).
+   */
   ownerIrkPub: Uint8Array;
+  /**
+   * Slice D — the config-pinned ADMIN MASTER ROOT (`ServerConfig.adminRootPub`).
+   * When present, the debug grant (which yields a LAN/console ROOT shell) is
+   * held to the SAME authority boundary as wipe/transfer/decommission: it must
+   * be admin-root-signed. A membership-IRK-only grant is rejected. Absent ⇒
+   * legacy owner-IRK path (v1-sec GAP 2).
+   */
+  adminRootPub?: Uint8Array;
+  /** The account name (for the delegated-admin-grant username check). */
+  username?: string;
+  /**
+   * The account's ACTIVE admin device grants (box-local snapshot). Box-side today
+   * this is `[]` (bare-admin-root only), mirroring the decommission consumer.
+   */
+  activeGrants?: readonly AdminGrantView[];
   /** Idempotency marker store. */
   markerStore: DebugMarkerStore;
   /** Command runner for the OS mutations (injected for tests). */
@@ -363,8 +383,24 @@ export async function runDebugAccessGate(
     log("[debug-access] grant signature is not valid hex; ignoring");
     return { enabled: false, reason: "rejected" };
   }
-  if (!verifyDebugAccessGrant(carrier.grant, sig, opts.ownerIrkPub)) {
-    log("[debug-access] grant signature does not verify under the owner IRK; ignoring");
+  // A debug grant creates a passworded `debug` sudoer + password-auth SSH = a
+  // LAN/console ROOT shell, so it must clear the SAME authority boundary as
+  // wipe/transfer/decommission. Route it through the shared Slice-D gate:
+  //   - admin root pinned ⇒ the grant MUST be admin-root-signed (a
+  //     membership-IRK-only grant is rejected — no escalation around the tier);
+  //   - no admin root pinned ⇒ legacy owner-IRK verification, unchanged.
+  if (
+    !authorizeSensitiveOrder({
+      order: carrier.grant,
+      signature: sig,
+      verify: verifyDebugAccessGrant,
+      ownerIrkPub: opts.ownerIrkPub,
+      ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+      username: opts.username ?? "",
+      ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),
+    })
+  ) {
+    log("[debug-access] grant is not authorized (admin root / owner IRK); ignoring");
     return { enabled: false, reason: "rejected" };
   }
 

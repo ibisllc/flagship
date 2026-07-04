@@ -23,8 +23,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ed,
   signAdminRootTransfer,
+  signRehomeAuthorization,
   type AdminRootTransfer,
   type Keypair,
+  type RehomeAuthorization,
 } from "@flagship/protocol";
 import {
   buildRehomePoller,
@@ -39,6 +41,41 @@ const ACQUIRER_IRK = "a".repeat(64);
 const OLD = "home.alice.flagship.services";
 const NEW = "home.bob.flagship.services";
 const CTRL = "https://flagshipserver.com";
+
+// v1-sec GAP 3 — the box pins the GIVER's owner IRK; the giver phone signs the
+// legacy `RehomeAuthorization`. A real keypair so the box-side verify passes.
+function fillKey(fill: number): Keypair {
+  const seed = new Uint8Array(32).fill(fill);
+  return { privateKey: seed, publicKey: ed.getPublicKey(seed) };
+}
+function toHex(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+function hexToBytes(h: string): Uint8Array {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+const GIVER_IRK = fillKey(0x51);
+const GIVER_IRK_HEX = toHex(GIVER_IRK.publicKey);
+
+/** A giver-owner-IRK-signed re-home authorization as the `.com` relays it. */
+function signedRehomeAuth(
+  over?: Partial<RehomeAuthorization> & { signer?: Keypair; issuedAt?: number },
+) {
+  const auth: RehomeAuthorization = {
+    oldServerDomain: over?.oldServerDomain ?? OLD,
+    newServerDomain: over?.newServerDomain ?? NEW,
+    acquirerIrkPub: over?.acquirerIrkPub ?? hexToBytes(ACQUIRER_IRK),
+    issuedAt: over?.issuedAt ?? 1234,
+  };
+  return {
+    issuedAt: auth.issuedAt,
+    signatureHex: toHex(signRehomeAuthorization(auth, over?.signer ?? GIVER_IRK)),
+  };
+}
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(status === 204 ? null : JSON.stringify(body), {
@@ -82,6 +119,7 @@ describe("transferRehomeConsumer", () => {
         acquirerUsername: "bob",
         acquirerIrkPub: ACQUIRER_IRK,
         claimedAt: 1234,
+        rehomeAuth: signedRehomeAuth(),
       });
     }) as unknown as typeof fetch;
 
@@ -89,6 +127,7 @@ describe("transferRehomeConsumer", () => {
       serverDomain: OLD,
       controlPlaneBaseUrl: CTRL,
       markerPath,
+      pinnedOwnerIrkPubHex: GIVER_IRK_HEX,
       fetchImpl,
     });
     expect(calledUrl).toBe(`${CTRL}/api/server/${encodeURIComponent(OLD)}/transfer/rehome`);
@@ -169,17 +208,95 @@ describe("transferRehomeConsumer", () => {
         acquirerUsername: "bob",
         acquirerIrkPub: ACQUIRER_IRK,
         claimedAt: 9,
+        rehomeAuth: signedRehomeAuth({ issuedAt: 9 }),
       })) as unknown as typeof fetch;
     const poller = buildRehomePoller({
       serverDomain: OLD,
       controlPlaneBaseUrl: CTRL,
       markerPath,
+      pinnedOwnerIrkPubHex: GIVER_IRK_HEX,
       fetchImpl,
     });
     const out = await poller.pollOnce();
     expect(out.rehomed).toBe(true);
     expect(JSON.parse(await readFile(markerPath, "utf-8")).newServerDomain).toBe(NEW);
     poller.stop();
+  });
+
+  // ── v1-sec GAP 3: legacy (no admin root) owner-IRK re-home gate ───────────
+  // A legacy box must NOT re-home on `.com`'s unauthenticated word — it requires
+  // a giver-owner-IRK-signed authorization verified against its pinned owner IRK.
+  describe("legacy owner-IRK re-home gate (no admin root pinned)", () => {
+    function legacyBody(rehomeAuth?: unknown) {
+      return {
+        rehomed: true,
+        serverDomain: OLD,
+        newServerDomain: NEW,
+        acquirerUsername: "bob",
+        acquirerIrkPub: ACQUIRER_IRK,
+        claimedAt: 1234,
+        ...(rehomeAuth !== undefined ? { rehomeAuth } : {}),
+      };
+    }
+    async function check(body: unknown, ownerIrk: string | null = GIVER_IRK_HEX) {
+      const fetchImpl = (async () => jsonResponse(200, body)) as unknown as typeof fetch;
+      return checkAndRecordRehome({
+        serverDomain: OLD,
+        controlPlaneBaseUrl: CTRL,
+        markerPath,
+        pinnedOwnerIrkPubHex: ownerIrk,
+        fetchImpl,
+      });
+    }
+
+    it("REFUSES an UNSIGNED re-home (rogue-`.com` hijack) — no marker", async () => {
+      const out = await check(legacyBody()); // no rehomeAuth at all
+      expect(out).toEqual({ rehomed: false, reason: "awaiting-owner-auth" });
+      expect(await readRehomeMarker(markerPath)).toBeNull();
+    });
+
+    it("REFUSES a re-home signed by a WRONG (attacker) IRK — no marker", async () => {
+      const attacker = fillKey(0x77);
+      const out = await check(legacyBody(signedRehomeAuth({ signer: attacker })));
+      expect(out).toEqual({ rehomed: false, reason: "awaiting-owner-auth" });
+      expect(await readRehomeMarker(markerPath)).toBeNull();
+    });
+
+    it("REFUSES an authorization minted for a DIFFERENT new domain (namespace binding)", async () => {
+      const out = await check(
+        legacyBody(signedRehomeAuth({ newServerDomain: "home.mallory.flagship.services" })),
+      );
+      expect(out).toEqual({ rehomed: false, reason: "awaiting-owner-auth" });
+      expect(await readRehomeMarker(markerPath)).toBeNull();
+    });
+
+    it("REFUSES an authorization minted for a DIFFERENT acquirer IRK", async () => {
+      const out = await check(
+        legacyBody(signedRehomeAuth({ acquirerIrkPub: hexToBytes("b".repeat(64)) })),
+      );
+      expect(out).toEqual({ rehomed: false, reason: "awaiting-owner-auth" });
+      expect(await readRehomeMarker(markerPath)).toBeNull();
+    });
+
+    it("REFUSES when no owner IRK is configured to authorize (fail-closed)", async () => {
+      const out = await check(legacyBody(signedRehomeAuth()), null);
+      expect(out).toEqual({ rehomed: false, reason: "awaiting-owner-auth" });
+      expect(await readRehomeMarker(markerPath)).toBeNull();
+    });
+
+    it("ACCEPTS a correctly giver-owner-IRK-signed re-home → writes the legacy marker", async () => {
+      const out = await check(legacyBody(signedRehomeAuth()));
+      expect(out.rehomed).toBe(true);
+      const marker = await readRehomeMarker(markerPath);
+      expect(marker).toEqual({
+        newServerDomain: NEW,
+        acquirerUsername: "bob",
+        acquirerIrkPubHex: ACQUIRER_IRK,
+        oldServerDomain: OLD,
+        claimedAt: 1234,
+      });
+      expect(marker && "newAdminRootPubHex" in marker).toBe(false);
+    });
   });
 
   // ── Slice D §9.8: admin-root handoff gate ────────────────────────────────
@@ -230,6 +347,9 @@ describe("transferRehomeConsumer", () => {
         acquirerUsername: "bob",
         acquirerIrkPub: ACQUIRER_IRK,
         claimedAt: 1234,
+        // Always present: ignored on the admin (pinned) path; used on the
+        // UNPINNED legacy path (v1-sec GAP 3).
+        rehomeAuth: signedRehomeAuth(),
         ...(adminHandoff !== undefined ? { adminHandoff } : {}),
       };
     }
@@ -241,6 +361,7 @@ describe("transferRehomeConsumer", () => {
         controlPlaneBaseUrl: CTRL,
         markerPath,
         pinnedAdminRootPubHex: pinned,
+        pinnedOwnerIrkPubHex: GIVER_IRK_HEX,
         fetchImpl,
       });
     }

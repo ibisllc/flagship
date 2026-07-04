@@ -1265,13 +1265,18 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
  * valid allow-listed proof; OPEN services + unknown labels fall through
  * (returns null) so the normal serve path handles them.
  *
- * `resolveServiceRef(req)` maps an inbound request to its `<creator>-<slug>`
- * service id (e.g. via the Host/url-label → installed-service lookup), or null
- * if the request isn't targeting a gated service.
+ * `resolveServiceRef(req, appServiceRef)` maps an inbound request to its
+ * `<creator>-<slug>` service id, or null if the request isn't targeting a
+ * gated service. On the SNI-routed per-app proxy path the router passes the
+ * already-resolved `appServiceRef` (the service that selected the container),
+ * which the resolver MUST prefer over any client-supplied `Host` — otherwise a
+ * tier-2 leader-routed share URL or a spoofed `curl --resolve` Host skips
+ * enforcement (v1-sec GAP 1). On the daemon's own chain `appServiceRef` is
+ * undefined and the resolver falls back to its Host-based lookup.
  */
 export function buildAccessEnforcementHandler(
   access: Pick<ServiceAccessHttp, "decide" | "store">,
-  resolveServiceRef: (req: HttpRequest) => string | null,
+  resolveServiceRef: (req: HttpRequest, appServiceRef?: string | null) => string | null,
   /**
    * Web-experience hook: on a DENY, this gets first refusal. For a top-level
    * browser navigation it returns the QR-login knock page (200 HTML); for an
@@ -1279,9 +1284,9 @@ export function buildAccessEnforcementHandler(
    * always 403 (no behavior change).
    */
   maybeServeKnock?: (serviceRef: string, req: HttpRequest) => HttpResponse | null,
-): (req: HttpRequest) => Promise<HttpResponse | null> {
-  return async (req: HttpRequest): Promise<HttpResponse | null> => {
-    const serviceRef = resolveServiceRef(req);
+): (req: HttpRequest, appServiceRef?: string | null) => Promise<HttpResponse | null> {
+  return async (req: HttpRequest, appServiceRef?: string | null): Promise<HttpResponse | null> => {
+    const serviceRef = resolveServiceRef(req, appServiceRef);
     if (!serviceRef) return null;
     if (access.store.mode(serviceRef) === "open") return null;
     const decision = access.decide(serviceRef, req);

@@ -4,7 +4,12 @@ import {
   type RegisterRck,
   type SetRoutingTarget,
 } from "@flagship/protocol";
-import type { RoutingStorage, UsernameStorage } from "@flagship/storage";
+import type {
+  DeviceCapabilityGrantStorage,
+  RoutingStorage,
+  UsernameStorage,
+} from "@flagship/storage";
+import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { validateServerLabel } from "./labels.js";
 import {
@@ -48,6 +53,15 @@ export function __resetRoutingReplayRing(): void {
 export interface RoutingDeps {
   routing: RoutingStorage;
   usernames: UsernameStorage;
+  /**
+   * Slice D — device-grant store for the master-admin authority gate. RCK
+   * register grants control of a subdomain's routing target, so it is a
+   * SENSITIVE op (v1-sec GAP 4): it routes through `authorizeSensitiveComOp`.
+   * Optional — absent ⇒ only the bare admin root satisfies the open gate; and
+   * when no admin root is pinned the gate is the legacy owner-IRK verify,
+   * byte-identical to the pre-D behavior.
+   */
+  grants?: DeviceCapabilityGrantStorage;
   /**
    * The data-plane apex subdomains live under — `flagship.services` in
    * prod, `gym.flagship.services` in the test env (docs/ui-test-gym.md
@@ -112,7 +126,19 @@ export async function handleRegisterRck(
     issuedAt: r.issuedAt,
   };
   const sig = hexToBytes(body.signature);
-  if (!verifyRegisterRck(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  // SENSITIVE (v1-sec GAP 4): claiming a subdomain's routing target is an
+  // authority-bearing op, so authorize it through the shared master-admin gate
+  // (admin-root-signed when an admin root is pinned; legacy owner-IRK verify
+  // otherwise) instead of a raw owner-IRK check.
+  const authz = await authorizeSensitiveComOp(
+    { grants: deps.grants, now: deps.now },
+    {
+      username: r.username.toLowerCase(),
+      userRec,
+      verifyWith: (pub) => verifyRegisterRck(claim, sig, hexToBytes(pub)),
+    },
+  );
+  if (!authz.ok) {
     return forbidden("invalid signature");
   }
 

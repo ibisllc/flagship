@@ -345,4 +345,78 @@ describe("runDebugAccessGate", () => {
     });
     expect(out).toEqual({ enabled: true });
   });
+
+  // v1-sec GAP 2 — a debug grant yields a LAN/console ROOT shell, so on a box
+  // with a pinned admin master root it must clear the SAME authority boundary as
+  // wipe/transfer/decommission (admin-root-signed), NOT the membership IRK. A
+  // membership-IRK-only grant would otherwise be an escalation AROUND Slice D.
+  describe("admin-root authority boundary (Slice D)", () => {
+    const grant: DebugAccessGrant = {
+      serverDomain: DOMAIN,
+      sshAuthorizedKey: SSH_KEY,
+      issuedAt: 42,
+    };
+
+    it("(g) admin root PINNED + membership-IRK-only grant → REJECTED (no debug user)", async () => {
+      const owner = makeKey(10); // membership IRK
+      const adminRoot = makeKey(20); // the pinned admin master root
+      // Signed by the OWNER IRK only — never the admin root.
+      await writeBlob({ debugGrant: grantSibling(grant, owner) });
+
+      const runner = recordingRunner();
+      const marker = memMarker();
+      const out = await runDebugAccessGate({
+        serverDomain: DOMAIN,
+        ownerIrkPub: owner.publicKey,
+        adminRootPub: adminRoot.publicKey,
+        username: "alice",
+        markerStore: marker,
+        runner,
+      });
+
+      expect(out).toEqual({ enabled: false, reason: "rejected" });
+      expect(runner.calls).toHaveLength(0); // no useradd / chpasswd / sshd
+      expect(marker.marked).toBe(false);
+    });
+
+    it("(h) admin root PINNED + admin-root-signed grant → ACCEPTED", async () => {
+      const owner = makeKey(10);
+      const adminRoot = makeKey(20);
+      // Signed by the ADMIN ROOT — the proper authority for a root shell.
+      await writeBlob({ debugGrant: grantSibling(grant, adminRoot) });
+
+      const runner = recordingRunner();
+      const out = await runDebugAccessGate({
+        serverDomain: DOMAIN,
+        ownerIrkPub: owner.publicKey,
+        adminRootPub: adminRoot.publicKey,
+        username: "alice",
+        markerStore: memMarker(),
+        runner,
+        installAuthorizedKey: async () => {},
+        writeConfigFile: async () => {},
+      });
+
+      expect(out).toEqual({ enabled: true });
+      expect(runner.calls.some(([c]) => c === "useradd")).toBe(true);
+    });
+
+    it("(i) admin root ABSENT (legacy box) + owner-IRK grant → ACCEPTED", async () => {
+      const owner = makeKey(10);
+      await writeBlob({ debugGrant: grantSibling(grant, owner) });
+
+      const out = await runDebugAccessGate({
+        serverDomain: DOMAIN,
+        ownerIrkPub: owner.publicKey,
+        // no adminRootPub → legacy owner-IRK path, unchanged
+        username: "alice",
+        markerStore: memMarker(),
+        runner: recordingRunner(),
+        installAuthorizedKey: async () => {},
+        writeConfigFile: async () => {},
+      });
+
+      expect(out).toEqual({ enabled: true });
+    });
+  });
 });

@@ -111,6 +111,10 @@ export function decodeAndVerifyDecommissionOrder(args: {
     finalBackup: p.finalBackup,
     diskDisposition: p.diskDisposition,
     backupEpoch: p.backupEpoch,
+    // v1-sec GAP 6 — `nonce` is signed but not consumed box-side; replay is
+    // already a no-op here (the `/var/flagship/decommissioned` marker fires the
+    // closeout once, the STK-match binds the order to this one instance, and
+    // `.com` consumes the deposit once). No separate nonce marker is needed.
     nonce: p.nonce,
     issuedAt: p.issuedAt,
   };

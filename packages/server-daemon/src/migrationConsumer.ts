@@ -92,6 +92,10 @@ export function decodeAndVerifyMigrationOrder(args: {
     serverDomain: p.serverDomain,
     oldStkPubHex: p.oldStkPubHex,
     diskDisposition: p.diskDisposition,
+    // v1-sec GAP 6 — `nonce` is signed but not consumed box-side; replay is
+    // already a no-op here (the idempotent migration marker file + the
+    // oldStkPubHex instance-binding + `.com`'s once-only order deposit). No
+    // separate nonce marker is needed.
     nonce: p.nonce,
     issuedAt: p.issuedAt,
   };

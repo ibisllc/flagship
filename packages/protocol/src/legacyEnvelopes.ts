@@ -62,6 +62,7 @@ const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
 // breaking the acquirer's signature. Clean-slate replacement — no dual-accept;
 // every client in this repo signs/verifies v2.
 const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
+const TAG_SERVER_REHOME_AUTH = "flagship/server-rehome-auth/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -288,6 +289,35 @@ export interface ServerTransferClaim {
    * box independently verifies.
    */
   acquirerAdminRootPubHex: string;
+  issuedAt: number;
+}
+
+/**
+ * GIVER-owner-IRK-signed re-home authorization (transfer-a-box LEGACY path —
+ * docs/account-deletion-and-name-reclaim.md §4). This is the box-verifiable
+ * proof that closes v1-sec GAP 3: a box with NO pinned admin master root used
+ * to write its re-home marker (new FQDN + acquirer IRK) purely on `.com`'s
+ * unauthenticated word, so a rogue `.com` could move a legacy box's
+ * FQDN/cert/routing into an attacker namespace.
+ *
+ * The box pins the GIVER's owner IRK (its config `irkPublicKey` is still the
+ * giver's until it re-homes), and the giver's phone — which alone holds that
+ * IRK — signs this after the acquirer scans, naming the acquirer explicitly.
+ * The box verifies it against its pinned owner IRK before writing the marker;
+ * `.com` merely relays it and cannot forge it. It commits to
+ * (oldServerDomain, newServerDomain, acquirerIrkPub, issuedAt) so a captured
+ * signature can't be re-aimed at a different box, namespace, or acquirer.
+ *
+ * The admin-tier path keeps its stronger, separate `AdminRootTransfer` proof;
+ * this envelope is ONLY the legacy (no-admin-root) authority.
+ */
+export interface RehomeAuthorization {
+  /** The box's OLD canonical FQDN (`<server>.<giver>.<apex>`). */
+  oldServerDomain: string;
+  /** The NEW canonical FQDN to re-home to (`<server>.<acquirer>.<apex>`). */
+  newServerDomain: string;
+  /** The acquirer's owner-IRK pubkey — ownership re-binds to this. */
+  acquirerIrkPub: Bytes;
   issuedAt: number;
 }
 
@@ -661,6 +691,32 @@ function canonicalServerTransferClaim(c: ServerTransferClaim): Bytes {
       c.issuedAt,
     ].join("|"),
   );
+}
+
+function canonicalRehomeAuthorization(c: RehomeAuthorization): Bytes {
+  legacyFieldGuard("oldServerDomain", c.oldServerDomain);
+  legacyFieldGuard("newServerDomain", c.newServerDomain);
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_REHOME_AUTH,
+      c.oldServerDomain.toLowerCase(),
+      c.newServerDomain.toLowerCase(),
+      hex(c.acquirerIrkPub),
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signRehomeAuthorization(c: RehomeAuthorization, giverIrk: Keypair): Bytes {
+  return ed.sign(canonicalRehomeAuthorization(c), giverIrk.privateKey);
+}
+
+export function verifyRehomeAuthorization(c: RehomeAuthorization, sig: Bytes, giverIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRehomeAuthorization(c), giverIrkPub);
+  } catch {
+    return false;
+  }
 }
 
 export function signRebuildRequest(r: ImageRebuildRequest, irk: Keypair): Bytes {

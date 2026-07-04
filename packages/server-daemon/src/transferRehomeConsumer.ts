@@ -1,6 +1,11 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { verifyAdminRootTransfer, type AdminRootTransfer } from "@flagship/protocol";
+import {
+  verifyAdminRootTransfer,
+  verifyRehomeAuthorization,
+  type AdminRootTransfer,
+  type RehomeAuthorization,
+} from "@flagship/protocol";
 
 /**
  * Box-side re-home consumer for transfer-a-box
@@ -190,6 +195,17 @@ export interface CheckRehomeOptions {
    * byte-identical marker.
    */
   pinnedAdminRootPubHex?: string | null;
+  /**
+   * v1-sec GAP 3 — the box's config-pinned MEMBERSHIP owner IRK (hex, the
+   * GIVER's until re-home). On the LEGACY path (no admin master root pinned) the
+   * re-home is written ONLY when the response carries a giver-owner-IRK-signed
+   * `RehomeAuthorization` that verifies against THIS key — never `.com`'s
+   * unauthenticated word. Absent/malformed ⇒ the legacy re-home is REFUSED
+   * (fail-closed): a rogue `.com` must not be able to move a legacy box's
+   * FQDN/cert/routing. Ignored on the admin path (the AdminRootTransfer proof
+   * is the stronger authority there).
+   */
+  pinnedOwnerIrkPubHex?: string | null;
   fetchImpl?: typeof fetch;
   onLog?: (m: string) => void;
 }
@@ -197,7 +213,12 @@ export interface CheckRehomeOptions {
 export type RehomeOutcome =
   | {
       rehomed: false;
-      reason: "no-transfer" | "already-current" | "awaiting-admin-handoff" | "error";
+      reason:
+        | "no-transfer"
+        | "already-current"
+        | "awaiting-admin-handoff"
+        | "awaiting-owner-auth"
+        | "error";
     }
   | { rehomed: true; marker: RehomeMarker };
 
@@ -228,6 +249,16 @@ export async function checkAndRecordRehome(opts: CheckRehomeOptions): Promise<Re
       oldAdminRootPub?: string;
       newAdminRootPub?: string;
       transferNonce?: string;
+      issuedAt?: number;
+      signatureHex?: string;
+    };
+    /**
+     * v1-sec GAP 3 — the giver-owner-IRK-signed re-home authorization
+     * (`RehomeAuthorization`). The signature commits to (oldServerDomain,
+     * newServerDomain, acquirerIrkPub, issuedAt); old/new/acquirerIrkPub are
+     * reconstructed from the already-validated fields above.
+     */
+    rehomeAuth?: {
       issuedAt?: number;
       signatureHex?: string;
     };
@@ -316,6 +347,62 @@ export async function checkAndRecordRehome(opts: CheckRehomeOptions): Promise<Re
     log(
       `[rehome] admin-root handoff VERIFIED against the pinned root: ` +
         `${pinned.slice(0, 12)}… → ${newAdminRootPubHex === "" ? "(unpinned — acquirer has no admin root)" : `${newAdminRootPubHex.slice(0, 12)}…`}`,
+    );
+  } else {
+    // ── v1-sec GAP 3 — LEGACY (no admin root pinned) owner-IRK gate ────────
+    // A box with no admin master root re-homes ONLY on a giver-owner-IRK-signed
+    // `RehomeAuthorization` verified against its config-pinned owner IRK (still
+    // the giver's until re-home). This closes the "rogue `.com` re-homes a
+    // legacy box on its unauthenticated word" hijack. Fail-closed: an
+    // absent/malformed pinned IRK, or an absent/forged/mismatched auth, refuses
+    // the re-home (no marker) and keeps the poller alive for a late deposit.
+    const ownerIrk =
+      typeof opts.pinnedOwnerIrkPubHex === "string" &&
+      HEX64.test(opts.pinnedOwnerIrkPubHex.toLowerCase())
+        ? opts.pinnedOwnerIrkPubHex.toLowerCase()
+        : null;
+    if (!ownerIrk) {
+      log(
+        "[rehome] legacy re-home reported but no pinned owner IRK is configured to " +
+          "authorize it; REFUSING (never re-home on `.com`'s unsigned word)",
+      );
+      return { rehomed: false, reason: "awaiting-owner-auth" };
+    }
+    const auth = body.rehomeAuth;
+    if (
+      !auth ||
+      typeof auth.issuedAt !== "number" ||
+      typeof auth.signatureHex !== "string" ||
+      !/^[0-9a-f]{128}$/.test(auth.signatureHex.toLowerCase())
+    ) {
+      log(
+        `[rehome] legacy transfer reported for ${opts.serverDomain} but no valid ` +
+          `giver-owner-IRK re-home authorization yet — REFUSING until it arrives`,
+      );
+      return { rehomed: false, reason: "awaiting-owner-auth" };
+    }
+    const authorization: RehomeAuthorization = {
+      oldServerDomain: opts.serverDomain,
+      newServerDomain: newDomain,
+      acquirerIrkPub: hexToBytesLocal(body.acquirerIrkPub.toLowerCase()),
+      issuedAt: auth.issuedAt,
+    };
+    if (
+      !verifyRehomeAuthorization(
+        authorization,
+        hexToBytesLocal(auth.signatureHex.toLowerCase()),
+        hexToBytesLocal(ownerIrk),
+      )
+    ) {
+      log(
+        "[rehome] re-home authorization signature does NOT verify against our pinned " +
+          "owner IRK (forged / wrong box / wrong acquirer / tampered); refusing",
+      );
+      return { rehomed: false, reason: "awaiting-owner-auth" };
+    }
+    log(
+      `[rehome] legacy re-home authorization VERIFIED against the pinned owner IRK ` +
+        `(${ownerIrk.slice(0, 12)}…): ${opts.serverDomain} → ${newDomain}`,
     );
   }
 

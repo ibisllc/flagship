@@ -60,7 +60,9 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite"
   "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite"
   "packages/control-plane/src/secretMailbox.ts|handlePostSetLeaderDeposit"
+  "packages/control-plane/src/secretMailbox.ts|handlePostUpdateDeposit"
   "packages/control-plane/src/deviceCapabilityGrants.ts|handleMintDeviceGrant"
+  "packages/control-plane/src/routing.ts|handleRegisterRck"
 )
 
 # A gate token proves the handler routes authorization through the master-admin

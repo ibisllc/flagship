@@ -1323,7 +1323,12 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {
     return finish(
       await handleRegisterRck(
-        { routing: storage.routing, usernames: storage.usernames, apex: env.SERVICES_APEX },
+        {
+          routing: storage.routing,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+          apex: env.SERVICES_APEX,
+        },
         await readJson(request),
       ),
     );

@@ -2481,6 +2481,10 @@ async function wireOwnerHandlers(deps: {
     void runDebugAccessGate({
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
+      // Slice D — hold the root-shell grant to the admin-root boundary when one
+      // is pinned (v1-sec GAP 2); no pin ⇒ legacy owner-IRK path, unchanged.
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
       markerStore: fileDebugMarkerStore(`${dataDir}/debug-access-done.json`),
       runner: realDebugCommandRunner,
       onLog: (m) => console.log(m),
@@ -2622,6 +2626,10 @@ async function wireOwnerHandlers(deps: {
       markerPath:
         process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`,
       pinnedAdminRootPubHex: cfg.adminRootPub ? bytesToHexLocal(cfg.adminRootPub) : null,
+      // v1-sec GAP 3 — on the legacy (no-admin-root) path the re-home is written
+      // only against a giver-owner-IRK-signed authorization verified under THIS
+      // pinned IRK, never `.com`'s unsigned word.
+      pinnedOwnerIrkPubHex: bytesToHexLocal(cfg.irkPublicKey),
       onLog: (m) => console.log(m),
     });
     rehomePoller.start();
@@ -2645,7 +2653,14 @@ async function wireOwnerHandlers(deps: {
   // On a DENY, a top-level browser navigation gets the QR-login knock page.
   const accessEnforcement = buildAccessEnforcementHandler(
     access,
-    (req) => {
+    (req, appServiceRef) => {
+      // On the SNI-routed per-app proxy path the router already resolved the
+      // service that selected the container — enforce on THAT, never on the
+      // client-supplied Host (a tier-2 leader-routed share URL or a spoofed
+      // `curl --resolve` Host would otherwise skip the gate). v1-sec GAP 1.
+      if (appServiceRef) return appServiceRef;
+      // Daemon's own chain (no SNI-selected app): Host-based lookup, which is
+      // the only signal available there.
       const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
       const suffix = `.${env.serverFqdn.toLowerCase()}`;
       if (!host.endsWith(suffix) || host.length === suffix.length) return null;

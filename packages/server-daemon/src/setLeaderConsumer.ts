@@ -214,7 +214,7 @@ export interface ClaimSetLeaderOptions {
 }
 
 export type SetLeaderClaimOutcome =
-  | { stored: false; reason: "no-deposit" | "rejected" | "error" }
+  | { stored: false; reason: "no-deposit" | "rejected" | "stale" | "error" }
   | { stored: true; vote: StoredSetLeaderVote };
 
 /**
@@ -259,6 +259,24 @@ export async function claimSetLeaderDeposit(
   if (!vote) {
     log("[set-leader] vote rejected (signature/account mismatch); ignoring");
     return { stored: false, reason: "rejected" };
+  }
+
+  // v1-sec GAP 6 — monotonic replay defense. A captured OLDER signed vote must
+  // NOT overwrite a newer preferred-server choice: `.com` is not a trust anchor
+  // and could re-serve a stale deposit. Only accept a vote STRICTLY newer than
+  // the last applied one (a re-served equal vote is a no-op, not an overwrite).
+  let prior: StoredSetLeaderVote | null = null;
+  try {
+    prior = await opts.store.read();
+  } catch {
+    /* unreadable/absent prior ⇒ treat as no prior vote */
+  }
+  if (prior && vote.issuedAt <= prior.issuedAt) {
+    log(
+      `[set-leader] ignoring stale/replayed vote (issuedAt ${vote.issuedAt} ` +
+        `<= last applied ${prior.issuedAt})`,
+    );
+    return { stored: false, reason: "stale" };
   }
 
   try {
