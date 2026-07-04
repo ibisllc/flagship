@@ -113,7 +113,11 @@ function defaultMintSeed() {
  *   fetch?: typeof fetch,
  *   baseUrl?: string,
  * }} deps
- * @returns {Promise<{ oldAdminRootPub: string, newAdminRootPub: string, issuedAt: number, newAdminRootSeed: Uint8Array }>}
+ * @returns {Promise<{ oldAdminRootPub: string, newAdminRootPub: string, issuedAt: number, newAdminRootSeed: Uint8Array, reEscrow: "ok"|"failed"|"skipped" }>}
+ *   `reEscrow` reports the best-effort re-escrow outcome ("skipped" = no
+ *   `reEscrow` dep passed). A "failed" re-escrow NEVER fails the rotation, but
+ *   the caller must surface it: the recovery credential still wraps the OLD
+ *   (now-dead) admin root until the user re-runs recovery setup.
  */
 export async function runRotateAdminRoot(deps) {
   const { username, umkSeed } = deps;
@@ -166,11 +170,19 @@ export async function runRotateAdminRoot(deps) {
   // 5 — re-store the NEW root, update the session, re-escrow under recovery.
   await persist(umkSeed, newSeed);
   if (deps.session) deps.session.adminRootSeed = newSeed;
+  let reEscrow = "skipped";
   if (typeof deps.reEscrow === "function") {
     // Best-effort: a rotation still succeeds even if the account has no recovery
-    // credential enrolled (nothing to re-wrap) or re-escrow transiently fails.
-    try { await deps.reEscrow(username); } catch { /* best-effort re-escrow */ }
+    // credential enrolled (nothing to re-wrap) or re-escrow transiently fails —
+    // but the outcome is reported so the caller can warn that the recovery
+    // backup still restores the OLD root.
+    try {
+      await deps.reEscrow(username);
+      reEscrow = "ok";
+    } catch {
+      reEscrow = "failed";
+    }
   }
 
-  return { oldAdminRootPub, newAdminRootPub, issuedAt, newAdminRootSeed: newSeed };
+  return { oldAdminRootPub, newAdminRootPub, issuedAt, newAdminRootSeed: newSeed, reEscrow };
 }

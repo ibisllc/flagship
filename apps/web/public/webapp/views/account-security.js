@@ -39,6 +39,24 @@ const ROTATE_CONFIRM_PHRASE = "ROTATE";
 export const ROTATE_ADMIN_WARNING =
   "Rotating mints a brand-new admin key and REVOKES admin from every OTHER admin device — they keep access as members but can no longer wipe, transfer, or decommission your cloud. Do this if an admin device was lost or you want to cut off the others. Your boxes adopt the change on their next check-in.";
 
+export const ROTATE_REESCROW_FAILED_MESSAGE =
+  "Admin key rotated, but your recovery backup wasn't updated — it still holds your OLD admin key. Run recovery setup again from Settings to fix this.";
+
+/**
+ * The post-rotation re-escrow the rotation lib runs. Not-enrolled resolves
+ * clean (nothing to re-wrap → the lib records "ok"); enrolled-but-failed
+ * (popup blocked, WebAuthn cancelled, network) throws so the lib records
+ * "failed" and the view can warn that the recovery backup still restores the
+ * OLD admin root. Exported for tests.
+ */
+export function makeRotationReEscrow(deps = {}) {
+  const enrolled = deps.hasCloudRecovery ?? hasCloudRecovery;
+  const setup = deps.setupCloudRecovery ?? setupCloudRecovery;
+  return async (username) => {
+    if (await enrolled(username)) await setup(username);
+  };
+}
+
 const state = {
   username: "",
   accountType: null,         // null = loading | "single" | "multi"
@@ -428,18 +446,22 @@ function bindHandlers() {
     state.failureMessage = null;
     await renderAccountSecurity();
     try {
-      await runRotateAdminRoot({
+      const result = await runRotateAdminRoot({
         username: session.username,
         umkSeed: session.umk,
         currentAdminRootSeed: session.adminRootSeed,
         session,
         // Re-escrow the NEW root under the recovery credential — best-effort +
         // only when recovery is actually enrolled.
-        reEscrow: async (u) => {
-          if (await hasCloudRecovery(u)) await setupCloudRecovery(u);
-        },
+        reEscrow: makeRotationReEscrow(),
       });
-      toast("Admin key rotated — your other admin devices are no longer admins.", "ok");
+      if (result.reEscrow === "failed") {
+        // The rotation itself succeeded — but a stale escrow silently restores
+        // the dead root, so the warning must persist past a toast's lifetime.
+        state.failureMessage = ROTATE_REESCROW_FAILED_MESSAGE;
+      } else {
+        toast("Admin key rotated — your other admin devices are no longer admins.", "ok");
+      }
     } catch (e) {
       console.error("admin-root rotation failed", e);
       state.failureMessage = humanError(e);
