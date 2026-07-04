@@ -206,7 +206,13 @@ total_log="${TMPDIR:-/tmp}/gym-weekly-total-$$.log"
 total_rc=0
 if [ "$DRY" = "1" ]; then
   echo "DRY-RUN would exec: bash scripts/gym-total.sh (tee → $total_log)"
+  echo "DRY-RUN plan: gym:total runs 4 phases — (1) mock matrix, (2) live backend e2e,"
+  echo "DRY-RUN plan: (3) live gating e2e, (4) live ENFORCEMENT gates (does each security"
+  echo "DRY-RUN plan: control fire on the wire? restricted-mode bypass / admin gate /"
+  echo "DRY-RUN plan: revocation-reaches-box / debug-access authority / transfer re-home)."
   echo "DRY-RUN: exit 3 (cloud skipped) would be treated as FAILURE — weekly means full"
+  echo "DRY-RUN: a BYPASSED enforcement control (red) OR a SKIPPED one (inconclusive — never"
+  echo "DRY-RUN: a pass) FAILS the weekly run — a silently-skipped security check is not green"
 else
   set +e
   bash scripts/gym-total.sh 2>&1 | tee "$total_log"
@@ -225,11 +231,22 @@ verdict_of() { # $1=pass-marker  $2=fail-marker
 mock_v="$(verdict_of "✓ mock matrix PASSED" "✗ mock matrix FAILED")"
 live_v="$(verdict_of "✓ live backend e2e PASSED" "✗ live backend e2e FAILED")"
 gate_v="$(verdict_of "✓ live gating e2e PASSED" "✗ live gating e2e FAILED")"
+# Enforcement has THREE outcomes: PASS / FAIL (a bypass) / SKIPPED (inconclusive —
+# a control couldn't be reached). SKIPPED is NOT a pass; weekly (full) fails on it.
+enf_verdict() {
+  if [ "$DRY" = "1" ]; then echo "dry-run"; return; fi
+  if grep -qF "✓ live enforcement PASSED" "$total_log" 2>/dev/null; then echo "PASS"
+  elif grep -qF "✗ live enforcement FAILED" "$total_log" 2>/dev/null; then echo "FAIL (bypass)"
+  elif grep -qF "· live enforcement SKIPPED" "$total_log" 2>/dev/null; then echo "SKIPPED"
+  else echo "not-run"; fi
+}
+enf_v="$(enf_verdict)"
 results_dir="$(ls -1dt gym-results/*/ 2>/dev/null | head -1 || true)"
 elapsed=$(( $(date +%s) - started_epoch ))
 printf '  mock matrix : %s\n'  "$mock_v"
 printf '  live e2e    : %s\n'  "$live_v"
 printf '  gating e2e  : %s\n'  "$gate_v"
+printf '  enforcement : %s\n'  "$enf_v"
 printf '  results dir : %s\n'  "${results_dir:-<none>}"
 printf '  duration    : %dm%02ds\n' $((elapsed / 60)) $((elapsed % 60))
 
@@ -244,6 +261,14 @@ fi
 if [ "$total_rc" -ne 0 ]; then
   echo "  verdict     : FAILED (gym-total exit $total_rc) — see $total_log + gym-results/" >&2
   exit "$total_rc"
+fi
+# gym-total treats an enforcement SKIP as soft (its own exit is about the mock +
+# backend + gating phases). Weekly means FULL: an enforcement control that was
+# BYPASSED (red) or SKIPPED (inconclusive — never a pass) fails the weekly run. A
+# silently-skipped security check can never read as green.
+if [ "$enf_v" != "PASS" ]; then
+  echo "  verdict     : FAILED — enforcement gates are '$enf_v' (a bypass is red; a skip is not a pass; weekly means full)" >&2
+  exit 1
 fi
 echo "  verdict     : OK — weekly gym is green"
 exit 0

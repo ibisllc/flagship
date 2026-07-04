@@ -84,6 +84,20 @@ describe("gym-weekly.sh — dry-run self-test", () => {
     expect(r.stdout).toMatch(/exit 3 .*FAILURE/);
   });
 
+  it("the enforcement phase appears in the dry-run plan and is described as gate-blocking", () => {
+    const r = run([], { GYM_WEEKLY_DRY_RUN: "1" });
+    expect(r.code).toBe(0);
+    // Phase 4 — the live enforcement gates — must be named in the plan.
+    expect(r.stdout).toContain("live ENFORCEMENT gates");
+    // Its controls are enumerated so a reviewer sees WHAT is proven on the wire.
+    expect(r.stdout).toContain("restricted-mode bypass");
+    expect(r.stdout).toContain("admin gate");
+    expect(r.stdout).toContain("revocation-reaches-box");
+    // And the standing-gate lesson is stated: a skip is never a pass, and both a
+    // bypass and a skip fail the weekly run.
+    expect(r.stdout).toMatch(/SKIPPED one .*FAILS the weekly run|skipped security check is not green/i);
+  });
+
   it("the wipe phase targets the GYM db through the guarded runner (one table list)", () => {
     const r = run([], { GYM_WEEKLY_DRY_RUN: "1" });
     expect(r.stdout).toContain("WIPE_ENV=gym");

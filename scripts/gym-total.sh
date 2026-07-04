@@ -48,7 +48,7 @@ fail=0
 phase() { echo; echo "════════════════════════════════════════════════════════════"; echo "  $1"; echo "════════════════════════════════════════════════════════════"; }
 
 # ── Phase 1: the deterministic mock matrix (no cloud) ───────────────────────────
-phase "PHASE 1/3 — deterministic frontend matrix (gym:locked, no cloud)"
+phase "PHASE 1/4 — deterministic frontend matrix (gym:locked, no cloud)"
 if npm run --silent gym:locked; then
   echo "✓ mock matrix PASSED"
 else
@@ -65,7 +65,7 @@ if [ -z "${GYM_ADMIN_SECRET:-}" ]; then
 fi
 
 # ── Phase 2: live backend e2e (real box, full chain, self-teardown) ─────────────
-phase "PHASE 2/3 — live backend e2e (provisions a REAL box → drives the chain → tears down)"
+phase "PHASE 2/4 — live backend e2e (provisions a REAL box → drives the chain → tears down)"
 if npx tsx tools/live-e2e/run.ts; then
   echo "✓ live backend e2e PASSED"
 else
@@ -74,11 +74,30 @@ else
 fi
 
 # ── Phase 3: live service-access GATING e2e (real box, self-teardown) ───────────
-phase "PHASE 3/3 — live gating e2e (restricted service + the 3 invite tiers, real box → tears down)"
+phase "PHASE 3/4 — live gating e2e (restricted service + the 3 invite tiers, real box → tears down)"
 if npx tsx tools/live-e2e/gating-drive.ts; then
   echo "✓ live gating e2e PASSED"
 else
   echo "✗ live gating e2e FAILED"
+  fail=1
+fi
+
+# ── Phase 4: live ENFORCEMENT gates (real box, self-teardown) ───────────────────
+# The standing "does this security control actually fire on the wire" check
+# (restricted-mode bypass class, admin gate, revocation-reaches-box, debug-access
+# authority, transfer re-home authorization). A BYPASS (exit 1) is RED and FAILS
+# the run. A SKIP (exit 3 — a control couldn't be provisioned/reached) is
+# INCONCLUSIVE: printed as SKIPPED (never a pass) but soft here — gym:weekly (full)
+# escalates it to a failure, exactly like the cloud-half skip.
+phase "PHASE 4/4 — live enforcement gates (does each security control fire on the wire?)"
+npx tsx tools/live-e2e/enforcement-drive.ts
+enf_rc=$?
+if [ "$enf_rc" -eq 0 ]; then
+  echo "✓ live enforcement PASSED"
+elif [ "$enf_rc" -eq 3 ]; then
+  echo "· live enforcement SKIPPED (inconclusive — a control couldn't be reached/provisioned)"
+else
+  echo "✗ live enforcement FAILED (a control was BYPASSED on the wire)"
   fail=1
 fi
 
