@@ -34,6 +34,53 @@ import { constantTimeEqual } from "./customDomainRedirections.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 import { isPaidListing, isEntitledToInstall, type AppPurchaseDeps } from "./appPurchase.js";
 
+export type ScanGrade = "A" | "B" | "C" | "D" | "F";
+
+/** The install-gate outcome for a listing's scan grade.
+ *   - "allow":   A–C (or any grade not on the block list) → normal install.
+ *   - "caution": NULL / ungraded → allowed, but the client MUST surface a
+ *                "not yet security-scanned" caution on the confirm.
+ *   - "block":   a blocked grade (F by default) → install refused unless the
+ *                caller passes an explicit override (a distinct "install
+ *                anyway" action, never the normal install tap). */
+export type InstallGate = "allow" | "caution" | "block";
+
+/**
+ * Grades that BLOCK install by default. F is the scanner's fail-closed
+ * grade: a scan that could not complete, a no-ship custom-check failure,
+ * OR a CRITICAL CVE all resolve to F (see the scanner's grade policy), so
+ * blocking F blocks both a graded-F listing AND a hard-failed scan.
+ * Conservative by design — only the worst grade blocks; A–D install
+ * normally. Override the set per-deployment via
+ * MARKETPLACE_INSTALL_BLOCKED_GRADES (a comma list, e.g. "D,F").
+ */
+export const DEFAULT_BLOCKED_INSTALL_GRADES: readonly ScanGrade[] = ["F"];
+
+/** Parse the configurable blocked-grade set. Empty/garbage ⇒ the default. */
+export function parseBlockedInstallGrades(csv: string | undefined): ScanGrade[] {
+  if (!csv) return [...DEFAULT_BLOCKED_INSTALL_GRADES];
+  const out: ScanGrade[] = [];
+  for (const raw of csv.split(",")) {
+    const g = raw.trim().toUpperCase();
+    if (g === "A" || g === "B" || g === "C" || g === "D" || g === "F") {
+      if (!out.includes(g)) out.push(g);
+    }
+  }
+  return out.length > 0 ? out : [...DEFAULT_BLOCKED_INSTALL_GRADES];
+}
+
+/**
+ * Pure install-gate policy. Deterministic given (grade, blocked-set) so
+ * the server enforces it and the clients mirror it for their confirm UX.
+ */
+export function installGateDecision(
+  grade: ScanGrade | null | undefined,
+  blocked: readonly ScanGrade[] = DEFAULT_BLOCKED_INSTALL_GRADES,
+): InstallGate {
+  if (grade == null) return "caution"; // never security-scanned
+  return blocked.includes(grade) ? "block" : "allow";
+}
+
 export interface MarketplaceDeps {
   marketplace: MarketplaceStorage;
   usernames: UsernameStorage;
@@ -48,6 +95,10 @@ export interface MarketplaceDeps {
    *  gates paid listings on ownership; absent ⇒ everything installs free
    *  (pre-#14 behaviour). */
   purchases?: AppPurchaseDeps["purchases"];
+  /** Grades that block install (require an explicit override). Defaults to
+   *  DEFAULT_BLOCKED_INSTALL_GRADES (["F"]); the route layer supplies the
+   *  parsed MARKETPLACE_INSTALL_BLOCKED_GRADES env override. */
+  blockedInstallGrades?: readonly ScanGrade[];
   freshnessMs?: number;
   now?: () => number;
   /** Cap descriptionMd at this many chars. Default 10_000. */
@@ -248,9 +299,35 @@ export async function handleMarketplaceInstall(
   creator: string,
   slug: string,
   username?: string | null,
+  /** An explicit "install anyway" override for a blocked (F-grade) listing.
+   *  Threaded from the client's distinct override action — NOT the normal
+   *  install tap. Ignored for allow/caution grades. */
+  overrideBlockedInstall?: boolean,
 ): Promise<HandlerResponse> {
   const rec = await deps.marketplace.get(creator, slug);
   if (!rec || rec.status !== "listed") return notFound("listing not found");
+
+  // Security-scan gate (#L GA). Grade F (which the scanner also assigns to a
+  // hard-failed scan) is BLOCKED unless the caller passes an explicit
+  // override; NULL/ungraded is ALLOWED but flagged so the client cautions;
+  // A–D install normally. Enforced ahead of the paid gate so a dangerous app
+  // is refused even to someone who already owns it.
+  const blocked = deps.blockedInstallGrades ?? DEFAULT_BLOCKED_INSTALL_GRADES;
+  const gate = installGateDecision(rec.scanGrade ?? null, blocked);
+  if (gate === "block" && !overrideBlockedInstall) {
+    return {
+      status: 403,
+      body: {
+        ok: false,
+        blocked: true,
+        reason: "security-scan-failed",
+        scan_grade: rec.scanGrade ?? null,
+        override_required: true,
+        error:
+          "this app failed its security scan (grade F); installing is blocked — an explicit override is required to install anyway",
+      },
+    };
+  }
 
   // Paid-app gate (#14): a paid listing needs a purchase. Free apps (or a
   // deployment without the purchases store wired) install unconditionally.
@@ -278,7 +355,16 @@ export async function handleMarketplaceInstall(
   }
 
   await deps.marketplace.recordInstall(creator, slug);
-  return ok({ ok: true, paid, owned: paid ? true : undefined });
+  return ok({
+    ok: true,
+    paid,
+    owned: paid ? true : undefined,
+    scan_grade: rec.scanGrade ?? null,
+    // Surface the advisory state so a client that calls this endpoint can
+    // reflect it: "caution" ⇒ never-scanned; "overridden" ⇒ a blocked app
+    // installed via the explicit override.
+    scan_gate: gate === "caution" ? "caution" : gate === "block" ? "overridden" : "ok",
+  });
 }
 
 /**
