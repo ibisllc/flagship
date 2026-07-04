@@ -157,8 +157,10 @@ import {
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
+  handleLlmPromoUsage,
   parseBlessedInferenceEndpoint,
   mintScopedInferenceToken,
+  verifyScopedInferenceToken,
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
@@ -695,6 +697,7 @@ const ROUTE_RE = {
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
+  LLM_PROMO_USAGE: /^\/api\/llm-promo\/usage$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
   REVOCATIONS_LIST: /^\/api\/revocations$/,
@@ -2994,6 +2997,27 @@ export async function tryControlPlane(
           mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Metering webhook — the in-house inference shim reports TRUE token
+  // usage (model (b)). Authenticated by the scoped token the shim
+  // re-presents; refused if the signing secret is unset.
+  if (method === "POST" && ROUTE_RE.LLM_PROMO_USAGE.test(path)) {
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
+    if (!inferenceSecret) {
+      return finishPlain({ status: 503, body: { error: "in-house inference not configured" } });
+    }
+    return finish(
+      await handleLlmPromoUsage(
+        {
+          llmPromo: storage.llmPromo,
+          verifyToken: async (token) => {
+            const v = await verifyScopedInferenceToken(token, inferenceSecret);
+            return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
+          },
+        },
+        await readJson(request),
       ),
     );
   }

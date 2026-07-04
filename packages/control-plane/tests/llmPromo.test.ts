@@ -10,7 +10,7 @@ import {
   InMemoryTierStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
-import { handleLlmPromoIssue, handleLlmPromoStatus } from "../src/llmPromo.js";
+import { handleLlmPromoIssue, handleLlmPromoStatus, handleLlmPromoUsage } from "../src/llmPromo.js";
 import { verifyScopedInferenceToken, mintScopedInferenceToken } from "../src/inferenceToken.js";
 
 function makeIrk(): Keypair {
@@ -318,6 +318,52 @@ describe("/api/llm-promo/issue — demo cap (#85)", () => {
     );
     expect(r.status).toBe(200); // cap of 1 would block a demo user; ignored here
     expect(await demoLlmLedger.sumSince("alice", 0)).toBe(0);
+  });
+});
+
+describe("/api/llm-promo/usage — metering webhook (model b)", () => {
+  const SECRET = "shim-secret";
+  async function tokenFor(username: string): Promise<string> {
+    return mintScopedInferenceToken(
+      { username, keyId: "fp-x", iat: Date.now(), exp: Date.now() + 3_600_000, dailyInputTokenCap: 100_000, dailyOutputTokenCap: 100_000 },
+      SECRET,
+    );
+  }
+  const verifyToken = async (token: string) => {
+    const v = await verifyScopedInferenceToken(token, SECRET);
+    return v.ok ? { ok: true as const, username: v.claims.username } : { ok: false as const };
+  };
+
+  it("records TRUE token usage against the token's account WITHOUT bumping call counts", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const token = await tokenFor("alice");
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken }, { token, inputTokens: 1234, outputTokens: 567 });
+    expect(r.status).toBe(200);
+    const today = Math.floor(Date.now() / 86_400_000);
+    const daily = await llmPromo.getDaily("alice", today);
+    expect(daily?.dailyInputTokens).toBe(1234);
+    expect(daily?.dailyOutputTokens).toBe(567);
+    expect(daily?.dailyCount).toBe(0); // a usage report is NOT a new issuance
+    const life = await llmPromo.getLifetime("alice");
+    expect(life?.lifetimeInputTokens).toBe(1234);
+    expect(life?.lifetimeCount).toBe(0);
+  });
+
+  it("rejects a report with an invalid/forged token", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const bad = await mintScopedInferenceToken(
+      { username: "alice", keyId: "x", iat: Date.now(), exp: Date.now() + 1000, dailyInputTokenCap: 1, dailyOutputTokenCap: 1 },
+      "WRONG-SECRET",
+    );
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken }, { token: bad, inputTokens: 10, outputTokens: 10 });
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a malformed report", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const token = await tokenFor("alice");
+    expect((await handleLlmPromoUsage({ llmPromo, verifyToken }, { token, inputTokens: -1, outputTokens: 0 })).status).toBe(400);
+    expect((await handleLlmPromoUsage({ llmPromo, verifyToken }, { inputTokens: 1, outputTokens: 1 })).status).toBe(400);
   });
 });
 

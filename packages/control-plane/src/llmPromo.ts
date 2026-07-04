@@ -275,6 +275,64 @@ export async function handleLlmPromoIssue(
   });
 }
 
+export interface LlmPromoUsageDeps {
+  llmPromo: LlmPromoStorage;
+  /**
+   * Authenticate a usage report: verify the scoped inference token the
+   * metering shim re-presents (the SAME token it validated to serve the
+   * request) and return the account it was minted for. Only our shim can
+   * present a valid token, so this both authenticates the report and
+   * identifies the user — no separate shared secret needed. The Worker
+   * wires this to `verifyScopedInferenceToken(env secret)`.
+   */
+  verifyToken: (token: string) => Promise<{ ok: true; username: string } | { ok: false }>;
+  now?: () => number;
+}
+
+interface UsageBody {
+  token?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+/**
+ * POST /api/llm-promo/usage — the in-house inference metering webhook
+ * (metering model (b)). The shim in front of RunPod reports TRUE token
+ * usage per request; we record it against the token's account so
+ * /api/llm-promo/status reflects real consumption. Because we own the
+ * endpoint, this closes the integrity gap of the pessimistic issue-time
+ * estimate used for providers we don't proxy.
+ */
+export async function handleLlmPromoUsage(
+  deps: LlmPromoUsageDeps,
+  body: UsageBody | undefined,
+): Promise<HandlerResponse> {
+  if (
+    !body ||
+    typeof body.token !== "string" ||
+    typeof body.inputTokens !== "number" ||
+    typeof body.outputTokens !== "number" ||
+    !Number.isFinite(body.inputTokens) ||
+    !Number.isFinite(body.outputTokens) ||
+    body.inputTokens < 0 ||
+    body.outputTokens < 0
+  ) {
+    return malformed("malformed usage report");
+  }
+  const v = await deps.verifyToken(body.token);
+  if (!v.ok) return forbidden("invalid inference token");
+  const now = (deps.now ?? (() => Date.now()))();
+  const day = Math.floor(now / 86_400_000);
+  await deps.llmPromo.recordMeteredUsage(
+    v.username,
+    day,
+    Math.floor(body.inputTokens),
+    Math.floor(body.outputTokens),
+    now,
+  );
+  return ok({ ok: true });
+}
+
 export async function handleLlmPromoStatus(
   deps: LlmPromoDeps,
   username: string,
