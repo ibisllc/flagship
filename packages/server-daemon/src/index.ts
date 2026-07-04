@@ -118,7 +118,12 @@ import {
   fileMarkerStore as decommissionMarkerStore,
   pollReplacementRestored,
 } from "./decommissionConsumer.js";
-import { buildRehomePoller, readRehomeMarker } from "./transferRehomeConsumer.js";
+import {
+  buildRehomePoller,
+  readRehomeMarker,
+  reconcileAdminRootPinOnRehome,
+  rehomeAdminRootOverride,
+} from "./transferRehomeConsumer.js";
 import {
   runDebugAccessGate,
   fileDebugMarkerStore,
@@ -377,6 +382,9 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+  const adminRootPinPath = `${dataDir}/admin-root-pin.json`;
+
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
   // A). If a prior boot's poller observed an ownership transfer it persisted a
   // marker; apply it BEFORE anything reads the canonical / owner IRK so cert SANs
@@ -385,8 +393,7 @@ async function main(): Promise<void> {
   // load-bearing once a fresh acquirer-IRK-signed entitlement verifies under it.
   {
     const rehomeMarkerPath =
-      process.env.FLAGSHIP_REHOME_MARKER ??
-      `${process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship"}/transfer-rehome.json`;
+      process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`;
     const marker = await readRehomeMarker(rehomeMarkerPath);
     if (marker && marker.newServerDomain !== env.serverFqdn.toLowerCase()) {
       console.log(
@@ -400,6 +407,37 @@ async function main(): Promise<void> {
           userId: marker.acquirerUsername,
           irkPublicKey: hexToBytes(marker.acquirerIrkPubHex),
         };
+        // Slice D §9.8 — the AUTHORITY anchor moves with the ownership, but
+        // ONLY because the poller verified a giver-root-signed AdminRootTransfer
+        // before it ever wrote `newAdminRootPubHex` into this marker (never
+        // `.com`'s word). Applied HERE — before the admin-root-pin resolution
+        // below — and paired with a ONE-TIME pin-file reset so a stale
+        // GIVER-era pin in admin-root-pin.json can never override the
+        // transferred root (see reconcileAdminRootPinOnRehome for why the
+        // reset must not repeat on every boot: it would clobber the acquirer's
+        // own later rotations).
+        const adminOverride = rehomeAdminRootOverride(marker);
+        if (adminOverride.kind === "repin") {
+          cfg = { ...cfg, adminRootPub: hexToBytes(adminOverride.adminRootPubHex) };
+        } else if (adminOverride.kind === "unpin") {
+          const { adminRootPub: _giverRoot, ...rest } = cfg;
+          cfg = rest;
+        }
+        if (adminOverride.kind !== "none") {
+          try {
+            await reconcileAdminRootPinOnRehome({
+              marker,
+              pinPath: adminRootPinPath,
+              appliedPath: `${rehomeMarkerPath}.applied`,
+              onLog: (m) => console.log(m),
+            });
+          } catch (e) {
+            console.warn(
+              `[daemon] admin-root pin reconciliation failed (${(e as Error).message}); ` +
+                `will retry next boot`,
+            );
+          }
+        }
       }
     }
   }
@@ -407,7 +445,6 @@ async function main(): Promise<void> {
   const identityPrivKey = hexToBytes(env.identityPrivKeyHex);
 
   // ---- Discover the tunnel hub (so we can move infra without redeploying daemons) ----
-  const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
 
   // ---- Admin master-root re-pin resolution (Slice D §5) ----
   // The box boots pinning the recipe's admin root (cfg.adminRootPub, the SEED);
@@ -416,7 +453,8 @@ async function main(): Promise<void> {
   // Phase-1 `authorizeSensitiveOrder` gate reads the rotated authority root.
   // Never trust `.com`'s reported root: only a proof that chained to the pinned
   // anchor could have written this file (the rotation consumer verifies it).
-  const adminRootPinPath = `${dataDir}/admin-root-pin.json`;
+  // (adminRootPinPath is hoisted above the re-home marker apply, which resets
+  // the pin file once on a transfer so a giver-era pin can't win here.)
   if (cfg?.adminRootPub) {
     const seedHex = bytesToHexLocal(cfg.adminRootPub);
     const pinned = await resolvePinnedAdminRoot(seedHex, fileAdminRootPinStore(adminRootPinPath));
@@ -2240,7 +2278,11 @@ async function wireOwnerHandlers(deps: {
   // A): poll `.com` for "did my owner change?". On a completed transfer the
   // poller persists a marker; the box re-homes (new FQDN + owner IRK ⇒ cert
   // re-issue + fresh acquirer entitlement) on its NEXT restart. Best-effort; a
-  // box that was never transferred just 404s cheaply on every poll.
+  // box that was never transferred just 404s cheaply on every poll. Slice D
+  // §9.8: a box with a pinned admin root passes it here (cfg.adminRootPub is
+  // already the EFFECTIVE pinned root — main resolved admin-root-pin.json
+  // before wiring us) so the poller refuses to record a re-home until the
+  // giver-root-signed admin handoff verifies against that pin.
   {
     const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
     const rehomePoller = buildRehomePoller({
@@ -2248,6 +2290,7 @@ async function wireOwnerHandlers(deps: {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerPath:
         process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`,
+      pinnedAdminRootPubHex: cfg.adminRootPub ? bytesToHexLocal(cfg.adminRootPub) : null,
       onLog: (m) => console.log(m),
     });
     rehomePoller.start();

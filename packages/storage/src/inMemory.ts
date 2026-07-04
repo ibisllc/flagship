@@ -1072,6 +1072,7 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
     transferNonce: string,
     acquirerUsername: string,
     acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
     claimIssuedAt: number,
     claimSignatureHex: string,
     now: number,
@@ -1084,6 +1085,7 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
     r.claimedAt = now;
     r.acquirerUsername = acquirerUsername;
     r.acquirerIrkPubHex = acquirerIrkPubHex;
+    r.acquirerAdminRootPubHex = acquirerAdminRootPubHex.toLowerCase();
     r.claimIssuedAt = claimIssuedAt;
     r.claimSignatureHex = claimSignatureHex;
     return { ok: true as const, record: { ...r } };
@@ -1098,6 +1100,19 @@ export class InMemoryServerTransferStorage implements ServerTransferStorage {
     if (!r || r.claimedAt === null) return false;
     r.diskKeyHandoffHex = diskKeyHandoffHex;
     r.diskKeyHandoffAt = now;
+    return true;
+  }
+
+  async putAdminHandoff(
+    serverDomain: string,
+    handoff: { oldRootHex: string; newRootHex: string; issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    const r = this.rows.get(serverDomain);
+    if (!r || r.claimedAt === null) return false;
+    r.adminHandoffOldRootHex = handoff.oldRootHex.toLowerCase();
+    r.adminHandoffNewRootHex = handoff.newRootHex.toLowerCase();
+    r.adminHandoffIssuedAt = handoff.issuedAt;
+    r.adminHandoffSigHex = handoff.sigHex.toLowerCase();
     return true;
   }
 

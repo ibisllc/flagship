@@ -25,6 +25,7 @@ import {
 import { InMemoryStorage } from "@flagship/storage";
 import {
   handlePostTransferOffer,
+  handlePostTransferClaim,
   handleGetTransferClaim,
   handlePostTransferDiskKey,
   handleGetTransferDiskKey,
@@ -144,13 +145,10 @@ function deps(s: InMemoryStorage, now: number): ServerTransferDeps {
 
 /** Route a webapp fetch(url, init) into the matching broker handler.
  *
- *  The /transfer/claim + claim-poll legs go through a v2 CONTRACT SHIM: this
- *  worktree's handlePostTransferClaim still verifies the v1 claim canonical,
- *  so the shim enforces the fixed v2 wire contract itself (body shape +
- *  Ed25519 over the independently-built v2 bytes) and records the claim
- *  through the same storage the real handlers read. */
+ *  Every leg — including /transfer/claim + claim-poll — goes through the REAL
+ *  control-plane handlers, which verify the v2 claim canonical (admin root pub
+ *  bound in) and round-trip `acquirerAdminRootPub` through storage. */
 function brokerFetch(s: InMemoryStorage, now: number) {
-  const shim = { acquirerAdminRootPub: null as string | null };
   return async (url: string, init: any) => {
     const u = new URL(url);
     const body = init?.body ? JSON.parse(init.body) : {};
@@ -159,48 +157,12 @@ function brokerFetch(s: InMemoryStorage, now: number) {
       res = await handlePostTransferOffer(deps(s, now), HOST, body);
     } else if (u.pathname.endsWith("/transfer/claim-poll")) {
       res = await handleGetTransferClaim(deps(s, now), HOST, body);
-      if (res.status === 200) {
-        res = {
-          status: 200,
-          body: { ...(res.body as object), acquirerAdminRootPub: shim.acquirerAdminRootPub ?? "" },
-        };
-      }
     } else if (u.pathname.endsWith("/transfer/disk-key-claim")) {
       res = await handleGetTransferDiskKey(deps(s, now), HOST, body);
     } else if (u.pathname.endsWith("/transfer/disk-key")) {
       res = await handlePostTransferDiskKey(deps(s, now), HOST, body);
     } else if (u.pathname.endsWith("/transfer/claim")) {
-      const c = body?.claim ?? {};
-      if (typeof c.acquirerAdminRootPub !== "string") {
-        res = { status: 400, body: { error: "acquirerAdminRootPub required (\"\" allowed)" } };
-      } else if (
-        !ed.verify(
-          fromHex(body.claimSignature),
-          claimCanonicalV2(c),
-          fromHex(c.acquirerIrkPub),
-        )
-      ) {
-        res = { status: 403, body: { error: "claim signature does not verify (v2)" } };
-      } else {
-        const claimed = await s.serverTransfers.claim(
-          c.serverDomain,
-          c.transferNonce,
-          c.acquirerUsername,
-          c.acquirerIrkPub,
-          c.issuedAt,
-          body.claimSignature,
-          now,
-        );
-        if (!claimed.ok) {
-          res = { status: 409, body: { error: claimed.reason } };
-        } else {
-          shim.acquirerAdminRootPub = c.acquirerAdminRootPub;
-          res = {
-            status: 200,
-            body: { ok: true, newServerDomain: `home.${c.acquirerUsername}.${APEX}` },
-          };
-        }
-      }
+      res = await handlePostTransferClaim(deps(s, now), HOST, body);
     } else {
       res = { status: 404, body: { error: "not found" } };
     }

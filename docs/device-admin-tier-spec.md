@@ -48,10 +48,12 @@ until a box is reburned with an admin root). The inert `orders.ts` dead-PSK path
 gated (§9.3 — destructive phone orders route through `authorizeSensitiveOrder` when an
 admin root is pinned). **Remaining:** (a) the owner-side rollout — wipe → reburn with
 admin roots pinned → deploy `.com` (also activates the `/transfer` universal-link
-hosting) + apply migrations **0064 / 0065 / 0066 / 0067** before the Worker deploy; and
-(b) the §9.8 transfer re-home admin-root gap (audited 2026-07-03: CONFIRMED —
-`transferRehomeConsumer.ts` never re-pins the acquirer's admin root; a transferred box
-keeps the giver's anchor until reburn. A follow-up seam of its own). This is the
+hosting) + apply migrations **0064 / 0065 / 0066 / 0067 / 0068** before the Worker
+deploy; and (b) the §9.8 transfer re-home admin-root seam — **backend + box side BUILT
+2026-07-03** (giver-root-signed `flagship/admin-root-transfer/v1` proof; claim canonical
+→ v2 with the acquirer's admin anchor in-signature; migration **0068**; the box refuses
+to re-home until the proof verifies against its PINNED root — see §9.8 for what
+remains: the phone-client halves + a reburn-validated live transfer). This is the
 dedicated spec pass the
 `docs/device-admin-entitlements.md` review (§"⚠️ Review outcome (2026-06-30)")
 demanded before any D code lands. It honors the owner-set "D decisions
@@ -624,13 +626,33 @@ piece (`device-admin-entitlements.md:171-172`).
    grant or a revocation. A freshly-promoted admin can't sign box-side ops until
    the box refreshes; a revoked admin keeps signing until refresh. Bound the
    refresh interval and document it.
-8. **Transfer re-home authority (row 29) — ⚠️ AUDITED 2026-07-03: gap CONFIRMED.**
-   On a transfer, the acquirer's box is re-homed to the acquirer's account — it
-   must re-pin the **acquirer's** admin root, not the giver's. The transfer
-   re-home handshake (`transferRehomeConsumer.ts`) does NOT carry or pin an
-   acquirer `adminRootPub` today: a transferred box keeps the giver's anchor (or
-   none) until reburned. Needs its own seam (thread the acquirer's admin root
-   through the claim → re-home handshake, mirroring the disk-key handshake). Not
-   a rollout blocker for the clean-slate launch (transfers between admin-tier
-   accounts are post-launch), but must land before transfer-a-box is exercised
-   between two admin-rooted accounts.
+8. **Transfer re-home authority (row 29) — ✅ BACKEND + BOX SEAM BUILT 2026-07-03**
+   (gap audited + confirmed same day). On a transfer the box re-pins the
+   **acquirer's** admin root via a giver-root-SIGNED cryptographic proof —
+   never `.com`'s word:
+   - **Protocol:** `flagship/admin-root-transfer/v1`
+     (`packages/protocol/src/adminRootTransfer.ts`) — the GIVER's admin root
+     signs (box old canonical, giver, acquirer, old root → new root, offer
+     nonce, issuedAt); a DISTINCT tag from `admin-root-rotation/v1` so a
+     transfer proof can't replay as an account rotation. The transfer CLAIM
+     canonical is now **v2** (`flagship/server-transfer-claim/v2`) carrying
+     `acquirerAdminRootPubHex` ("" = legacy acquirer ⇒ UNPIN) in-signature, so
+     a rogue `.com` can't swap the acquirer's anchor. Golden vectors added.
+   - **`.com`:** migration **0068** (5 handoff columns on `server_transfers`);
+     claim v2 verified + anchor stored; giver claim-poll returns
+     `acquirerAdminRootPub`; new `POST /api/server/:domain/transfer/admin-handoff`
+     (the admin-root signature IS the auth; `.com`'s verify vs the giver's
+     registered root is a garbage filter); the rehome read relays
+     `adminHandoff` + `acquirerAdminRootPub`.
+   - **Box:** `transferRehomeConsumer` — a box with a pinned admin root REFUSES
+     the re-home (`awaiting-admin-handoff`, poller keeps polling) until the
+     proof verifies against its PINNED root; the marker then carries
+     `newAdminRootPubHex`; boot-apply overrides `cfg.adminRootPub` and does a
+     ONE-TIME `admin-root-pin.json` reset (receipt-guarded so the acquirer's own
+     later rotations are never clobbered). Legacy (unpinned) boxes are
+     byte-identical.
+   **Remaining:** the giver/acquirer CLIENT halves (phone builds + deposits the
+   signed handoff after claim-poll; iOS/Android claim signers still emit v1 —
+   webapp is on v2) and a reburn-validated live transfer between two
+   admin-rooted accounts. Not a rollout blocker for the clean-slate launch
+   (admin-tier transfers are post-launch).

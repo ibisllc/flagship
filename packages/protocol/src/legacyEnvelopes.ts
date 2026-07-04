@@ -57,7 +57,11 @@ const TAG_ACCOUNT_SELF_DELETE = "flagship/account-self-delete/v1";
 const TAG_SERVERS_SELF_DELETE = "flagship/servers-self-delete/v1";
 const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
 const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
-const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v1";
+// v2: the claim canonical gained `acquirerAdminRootPubHex` (Slice D §9.8) so a
+// rogue `.com` cannot swap the acquirer's admin anchor on a real claim without
+// breaking the acquirer's signature. Clean-slate replacement — no dual-accept;
+// every client in this repo signs/verifies v2.
+const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -275,6 +279,15 @@ export interface ServerTransferClaim {
   acquirerUsername: string;
   /** The acquirer's owner IRK pubkey — ownership re-binds to this. */
   acquirerIrkPub: Bytes;
+  /**
+   * Slice D §9.8 — the acquirer's ADMIN MASTER ROOT pubkey, hex, or "" when the
+   * acquirer account has no admin root (legacy). IN-CANONICAL (v2) so a rogue
+   * `.com` cannot swap the acquirer's admin anchor on a real claim without
+   * breaking the acquirer's signature: the giver's phone reads it back from the
+   * claim row and folds it into the giver-root-signed `AdminRootTransfer` the
+   * box independently verifies.
+   */
+  acquirerAdminRootPubHex: string;
   issuedAt: number;
 }
 
@@ -636,6 +649,7 @@ function canonicalServerTransferClaim(c: ServerTransferClaim): Bytes {
   legacyFieldGuard("serverDomain", c.serverDomain);
   legacyFieldGuard("transferNonce", c.transferNonce);
   legacyFieldGuard("acquirerUsername", c.acquirerUsername);
+  legacyFieldGuard("acquirerAdminRootPubHex", c.acquirerAdminRootPubHex);
   return new TextEncoder().encode(
     [
       TAG_SERVER_TRANSFER_CLAIM,
@@ -643,6 +657,7 @@ function canonicalServerTransferClaim(c: ServerTransferClaim): Bytes {
       c.transferNonce.toLowerCase(),
       c.acquirerUsername.toLowerCase(),
       hex(c.acquirerIrkPub),
+      c.acquirerAdminRootPubHex.toLowerCase(),
       c.issuedAt,
     ].join("|"),
   );

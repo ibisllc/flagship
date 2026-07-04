@@ -145,7 +145,9 @@ describe("server-transfer-offer vector (transfer-a-box §4)", () => {
   });
 });
 
-describe("server-transfer-claim vector (transfer-a-box §4)", () => {
+describe("server-transfer-claim v2 vector (transfer-a-box §4 + Slice D §9.8)", () => {
+  const ADMIN_ROOT = "1a".repeat(32);
+
   it("canonical bytes match the pinned cross-platform string", () => {
     const irk = makeKey(7); // acquirer IRK
     const claim: ServerTransferClaim = {
@@ -153,27 +155,46 @@ describe("server-transfer-claim vector (transfer-a-box §4)", () => {
       transferNonce: "ab".repeat(32),
       acquirerUsername: "bob",
       acquirerIrkPub: irk.publicKey,
+      acquirerAdminRootPubHex: ADMIN_ROOT,
       issuedAt: 1800,
     };
     const sig = signServerTransferClaim(claim, irk);
     const expected = new TextEncoder().encode(
-      `flagship/server-transfer-claim/v1|home.alice.flagship.services|${"ab".repeat(32)}|bob|${hex(irk.publicKey)}|1800`,
+      `flagship/server-transfer-claim/v2|home.alice.flagship.services|${"ab".repeat(32)}|bob|${hex(irk.publicKey)}|${ADMIN_ROOT}|1800`,
     );
     expect(ed.verify(sig, expected, irk.publicKey)).toBe(true);
   });
 
-  it("acquirerUsername is lowercased; binds to the acquirer IRK", () => {
+  it('an empty admin root ("") pins the legacy-acquirer shape', () => {
+    const irk = makeKey(9);
+    const claim: ServerTransferClaim = {
+      serverDomain: "home.alice.flagship.services",
+      transferNonce: "ab".repeat(32),
+      acquirerUsername: "bob",
+      acquirerIrkPub: irk.publicKey,
+      acquirerAdminRootPubHex: "",
+      issuedAt: 1800,
+    };
+    const sig = signServerTransferClaim(claim, irk);
+    const expected = new TextEncoder().encode(
+      `flagship/server-transfer-claim/v2|home.alice.flagship.services|${"ab".repeat(32)}|bob|${hex(irk.publicKey)}||1800`,
+    );
+    expect(ed.verify(sig, expected, irk.publicKey)).toBe(true);
+  });
+
+  it("acquirerUsername + admin root are lowercased; binds to the acquirer IRK", () => {
     const irk = makeKey(10);
     const claim: ServerTransferClaim = {
       serverDomain: "home.alice.flagship.services",
       transferNonce: "cd".repeat(32),
       acquirerUsername: "BOB",
       acquirerIrkPub: irk.publicKey,
+      acquirerAdminRootPubHex: ADMIN_ROOT.toUpperCase(),
       issuedAt: 5,
     };
     const sig = signServerTransferClaim(claim, irk);
     const expected = new TextEncoder().encode(
-      `flagship/server-transfer-claim/v1|home.alice.flagship.services|${"cd".repeat(32)}|bob|${hex(irk.publicKey)}|5`,
+      `flagship/server-transfer-claim/v2|home.alice.flagship.services|${"cd".repeat(32)}|bob|${hex(irk.publicKey)}|${ADMIN_ROOT}|5`,
     );
     expect(ed.verify(sig, expected, irk.publicKey)).toBe(true);
   });
@@ -186,9 +207,34 @@ describe("server-transfer-claim vector (transfer-a-box §4)", () => {
       transferNonce: "ef".repeat(32),
       acquirerUsername: "bob",
       acquirerIrkPub: irk.publicKey,
+      acquirerAdminRootPubHex: ADMIN_ROOT,
       issuedAt: 5,
     };
     const sig = signServerTransferClaim(claim, irk);
     expect(verifyServerTransferClaim(claim, sig, other.publicKey)).toBe(false);
+  });
+
+  it("a swapped admin root breaks the signature (the §9.8 point)", () => {
+    const irk = makeKey(13);
+    const claim: ServerTransferClaim = {
+      serverDomain: "home.alice.flagship.services",
+      transferNonce: "ef".repeat(32),
+      acquirerUsername: "bob",
+      acquirerIrkPub: irk.publicKey,
+      acquirerAdminRootPubHex: ADMIN_ROOT,
+      issuedAt: 5,
+    };
+    const sig = signServerTransferClaim(claim, irk);
+    expect(verifyServerTransferClaim(claim, sig, irk.publicKey)).toBe(true);
+    expect(
+      verifyServerTransferClaim(
+        { ...claim, acquirerAdminRootPubHex: "2b".repeat(32) },
+        sig,
+        irk.publicKey,
+      ),
+    ).toBe(false);
+    expect(
+      verifyServerTransferClaim({ ...claim, acquirerAdminRootPubHex: "" }, sig, irk.publicKey),
+    ).toBe(false);
   });
 });

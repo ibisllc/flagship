@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   ed,
+  signAdminRootTransfer,
   signDeviceEndpointClaim,
   signServerTransferOffer,
   signServerTransferClaim,
+  type AdminRootTransfer,
   type DeviceEndpointClaim,
   type Keypair,
   type ServerTransferOffer,
@@ -15,6 +17,7 @@ import {
   handlePostTransferClaim,
   handleGetTransferClaim,
   handleGetTransferRehome,
+  handlePostTransferAdminHandoff,
   type ServerTransferDeps,
 } from "../src/serverTransfer.js";
 
@@ -126,14 +129,16 @@ function claimBody(
   irk: Keypair,
   username: string,
   nonce: string,
-  opts?: { now?: number; acquirerIrkPub?: Uint8Array; sign?: Keypair },
+  opts?: { now?: number; acquirerIrkPub?: Uint8Array; sign?: Keypair; adminRoot?: string },
 ) {
   const now = opts?.now ?? NOW;
+  const adminRoot = opts?.adminRoot ?? "";
   const claim: ServerTransferClaim = {
     serverDomain: HOST,
     transferNonce: nonce,
     acquirerUsername: username,
     acquirerIrkPub: opts?.acquirerIrkPub ?? irk.publicKey,
+    acquirerAdminRootPubHex: adminRoot,
     issuedAt: now,
   };
   const sig = signServerTransferClaim(claim, opts?.sign ?? irk);
@@ -143,6 +148,7 @@ function claimBody(
       transferNonce: nonce,
       acquirerUsername: username,
       acquirerIrkPub: hex(claim.acquirerIrkPub),
+      acquirerAdminRootPub: adminRoot,
       issuedAt: now,
     },
     claimSignature: hex(sig),
@@ -373,5 +379,280 @@ describe("transfer-a-box broker", () => {
     expect(body.newServerDomain).toBe("home.bob.flagship.services");
     expect(body.acquirerUsername).toBe("bob");
     expect(body.acquirerIrkPub).toBe(hex(bobIrk.publicKey));
+  });
+});
+
+// ── Slice D §9.8: claim v2 admin anchor + the admin-root handoff lane ───────
+//
+// Between two admin-rooted accounts: alice's OFFER + bob's CLAIM must be
+// signed by their ADMIN roots (the sensitive gate is open), the claim (v2)
+// commits to bob's admin root, and the box only re-pins on alice's
+// admin-root-signed `flagship/admin-root-transfer/v1` proof relayed via the
+// rehome read. `.com`'s verify on deposit is a garbage filter — the deposit
+// carries NO other auth because the admin-root signature IS the authorization.
+
+const aliceAdmin = makeKey();
+const bobAdmin = makeKey();
+
+async function setupAdminTier(): Promise<InMemoryStorage> {
+  const s = await setup();
+  await s.usernames.put({
+    username: "alice",
+    irkPubHex: hex(aliceIrk.publicKey),
+    claimedAt: 1,
+    adminRootPubHex: hex(aliceAdmin.publicKey),
+  });
+  await s.usernames.put({
+    username: "bob",
+    irkPubHex: hex(bobIrk.publicKey),
+    claimedAt: 1,
+    adminRootPubHex: hex(bobAdmin.publicKey),
+  });
+  return s;
+}
+
+/** Complete an admin-tier offer → claim; returns the nonce. */
+async function claimAdminTier(s: InMemoryStorage): Promise<string> {
+  const nonce = hex(rand(32));
+  const offerRes = await handlePostTransferOffer(
+    deps(s),
+    HOST,
+    offerBody(aliceIrk, { nonce, sign: aliceAdmin }),
+  );
+  expect(offerRes.status).toBe(200);
+  const claimRes = await handlePostTransferClaim(
+    deps(s),
+    HOST,
+    claimBody(bobIrk, "bob", nonce, { sign: bobAdmin, adminRoot: hex(bobAdmin.publicKey) }),
+  );
+  expect(claimRes.status).toBe(200);
+  return nonce;
+}
+
+function handoffBody(
+  signer: Keypair,
+  nonce: string,
+  overrides?: Partial<{
+    serverDomain: string;
+    giverUsername: string;
+    acquirerUsername: string;
+    oldAdminRootPub: string;
+    newAdminRootPub: string;
+    transferNonce: string;
+    issuedAt: number;
+  }>,
+) {
+  const handoff = {
+    serverDomain: HOST,
+    giverUsername: "alice",
+    acquirerUsername: "bob",
+    oldAdminRootPub: hex(aliceAdmin.publicKey),
+    newAdminRootPub: hex(bobAdmin.publicKey),
+    transferNonce: nonce,
+    issuedAt: NOW,
+    ...overrides,
+  };
+  const t: AdminRootTransfer = {
+    serverDomain: handoff.serverDomain,
+    giverUsername: handoff.giverUsername,
+    acquirerUsername: handoff.acquirerUsername,
+    oldAdminRootPubHex: handoff.oldAdminRootPub,
+    newAdminRootPubHex: handoff.newAdminRootPub,
+    transferNonce: handoff.transferNonce,
+    issuedAt: handoff.issuedAt,
+  };
+  return { handoff, signatureHex: hex(signAdminRootTransfer(t, signer)) };
+}
+
+describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
+  it("claim v2 requires acquirerAdminRootPub (missing ⇒ 400; bad hex ⇒ 400)", async () => {
+    const s = await setup();
+    const nonce = hex(rand(32));
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
+    const good = claimBody(bobIrk, "bob", nonce);
+    const missing = { ...good, claim: { ...good.claim } } as {
+      claim: Record<string, unknown>;
+      claimSignature: string;
+    };
+    delete missing.claim.acquirerAdminRootPub;
+    expect((await handlePostTransferClaim(deps(s), HOST, missing)).status).toBe(400);
+    const badHex = {
+      ...good,
+      claim: { ...good.claim, acquirerAdminRootPub: "zz".repeat(32) },
+    };
+    expect((await handlePostTransferClaim(deps(s), HOST, badHex)).status).toBe(400);
+  });
+
+  it("legacy accounts (no admin roots) claim with \"\" — giver poll + rehome carry it", async () => {
+    const s = await setup();
+    const nonce = hex(rand(32));
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
+    const res = await handlePostTransferClaim(deps(s), HOST, claimBody(bobIrk, "bob", nonce));
+    expect(res.status).toBe(200);
+
+    const poll = await handleGetTransferClaim(deps(s), HOST, mailboxAuth(aliceIrk, "alice"));
+    expect((poll.body as { acquirerAdminRootPub: string }).acquirerAdminRootPub).toBe("");
+
+    const rehome = await handleGetTransferRehome(deps(s), HOST);
+    const rb = rehome.body as { acquirerAdminRootPub?: string; adminHandoff?: unknown };
+    expect(rb.acquirerAdminRootPub).toBe("");
+    expect(rb.adminHandoff).toBeUndefined();
+  });
+
+  it("happy path: admin-tier claim stores the anchor; deposit relays the proof on rehome", async () => {
+    const s = await setupAdminTier();
+    const nonce = await claimAdminTier(s);
+
+    // Giver poll surfaces the acquirer's admin anchor for the proof.
+    const poll = await handleGetTransferClaim(deps(s), HOST, mailboxAuth(aliceIrk, "alice"));
+    expect((poll.body as { acquirerAdminRootPub: string }).acquirerAdminRootPub).toBe(
+      hex(bobAdmin.publicKey),
+    );
+
+    // Before the deposit: rehome carries the anchor but NO handoff yet.
+    const before = await handleGetTransferRehome(deps(s), HOST);
+    expect((before.body as { adminHandoff?: unknown }).adminHandoff).toBeUndefined();
+
+    const dep = await handlePostTransferAdminHandoff(deps(s), HOST, handoffBody(aliceAdmin, nonce));
+    expect(dep.status).toBe(200);
+
+    const after = await handleGetTransferRehome(deps(s), HOST);
+    const body = after.body as {
+      acquirerAdminRootPub: string;
+      adminHandoff: {
+        giverUsername: string;
+        acquirerUsername: string;
+        oldAdminRootPub: string;
+        newAdminRootPub: string;
+        transferNonce: string;
+        issuedAt: number;
+        signatureHex: string;
+      };
+    };
+    expect(body.acquirerAdminRootPub).toBe(hex(bobAdmin.publicKey));
+    expect(body.adminHandoff.giverUsername).toBe("alice");
+    expect(body.adminHandoff.acquirerUsername).toBe("bob");
+    expect(body.adminHandoff.oldAdminRootPub).toBe(hex(aliceAdmin.publicKey));
+    expect(body.adminHandoff.newAdminRootPub).toBe(hex(bobAdmin.publicKey));
+    expect(body.adminHandoff.transferNonce).toBe(nonce);
+    expect(body.adminHandoff.signatureHex).toHaveLength(128);
+  });
+
+  it("rejects a handoff signed by the wrong key (403 — the sig IS the auth)", async () => {
+    const s = await setupAdminTier();
+    const nonce = await claimAdminTier(s);
+    // Signed by bob's admin root (or any non-giver key) — `.com` refuses.
+    const res = await handlePostTransferAdminHandoff(deps(s), HOST, handoffBody(bobAdmin, nonce));
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/invalid admin-handoff signature/);
+  });
+
+  it("rejects a mismatched nonce / acquirer / newRoot (409)", async () => {
+    const s = await setupAdminTier();
+    const nonce = await claimAdminTier(s);
+
+    const wrongNonce = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, hex(rand(32))),
+    );
+    expect(wrongNonce.status).toBe(409);
+    expect((wrongNonce.body as { error: string }).error).toMatch(/transferNonce/);
+
+    const wrongAcquirer = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, nonce, { acquirerUsername: "carol" }),
+    );
+    expect(wrongAcquirer.status).toBe(409);
+    expect((wrongAcquirer.body as { error: string }).error).toMatch(/acquirerUsername/);
+
+    // A giver aiming the box at a THIRD root (not what bob's signed claim
+    // committed to) is refused — the claim's anchor is the only valid target.
+    const wrongNewRoot = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, nonce, { newAdminRootPub: "3c".repeat(32) }),
+    );
+    expect(wrongNewRoot.status).toBe(409);
+    expect((wrongNewRoot.body as { error: string }).error).toMatch(/admin anchor/);
+  });
+
+  it("rejects a handoff when the giver account has no admin root (409)", async () => {
+    const s = await setup(); // legacy alice — no admin root registered
+    const nonce = hex(rand(32));
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
+    await handlePostTransferClaim(deps(s), HOST, claimBody(bobIrk, "bob", nonce));
+    const res = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, nonce, { newAdminRootPub: "" }),
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toMatch(/no admin root/);
+  });
+
+  it("404s a handoff for an unclaimed / absent transfer", async () => {
+    const s = await setupAdminTier();
+    const nonce = hex(rand(32));
+    // No offer at all.
+    expect(
+      (await handlePostTransferAdminHandoff(deps(s), HOST, handoffBody(aliceAdmin, nonce))).status,
+    ).toBe(404);
+    // Offer but no claim.
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce, sign: aliceAdmin }));
+    expect(
+      (await handlePostTransferAdminHandoff(deps(s), HOST, handoffBody(aliceAdmin, nonce))).status,
+    ).toBe(404);
+  });
+
+  it("idempotent re-deposit replaces (giver phone may retry)", async () => {
+    const s = await setupAdminTier();
+    const nonce = await claimAdminTier(s);
+    const first = handoffBody(aliceAdmin, nonce, { issuedAt: NOW });
+    expect((await handlePostTransferAdminHandoff(deps(s), HOST, first)).status).toBe(200);
+    const second = handoffBody(aliceAdmin, nonce, { issuedAt: NOW + 1000 });
+    expect((await handlePostTransferAdminHandoff(deps(s), HOST, second)).status).toBe(200);
+    const rehome = await handleGetTransferRehome(deps(s), HOST);
+    expect((rehome.body as { adminHandoff: { issuedAt: number } }).adminHandoff.issuedAt).toBe(
+      NOW + 1000,
+    );
+  });
+
+  it("unpin handoff (\"\" new root) round-trips when the acquirer is a legacy account", async () => {
+    const s = await setupAdminTier();
+    // carol is a LEGACY acquirer — an IRK but no admin root (a benign re-put
+    // preserves adminRootPubHex, so a fresh account is the honest fixture).
+    const carolIrk = makeKey();
+    await s.usernames.put({ username: "carol", irkPubHex: hex(carolIrk.publicKey), claimedAt: 1 });
+    const nonce = hex(rand(32));
+    await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce, sign: aliceAdmin }));
+    const claimRes = await handlePostTransferClaim(
+      deps(s),
+      HOST,
+      claimBody(carolIrk, "carol", nonce), // legacy carol: IRK-signed, adminRoot ""
+    );
+    expect(claimRes.status).toBe(200);
+
+    const dep = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, nonce, { acquirerUsername: "carol", newAdminRootPub: "" }),
+    );
+    expect(dep.status).toBe(200);
+    const rehome = await handleGetTransferRehome(deps(s), HOST);
+    const body = rehome.body as { adminHandoff: { newAdminRootPub: string } };
+    expect(body.adminHandoff.newAdminRootPub).toBe("");
+  });
+
+  it("rejects a handoff whose serverDomain doesn't match the route host (403)", async () => {
+    const s = await setupAdminTier();
+    const nonce = await claimAdminTier(s);
+    const res = await handlePostTransferAdminHandoff(
+      deps(s),
+      HOST,
+      handoffBody(aliceAdmin, nonce, { serverDomain: "blog.alice.flagship.services" }),
+    );
+    expect(res.status).toBe(403);
   });
 });

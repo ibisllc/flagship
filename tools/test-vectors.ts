@@ -36,6 +36,7 @@ import {
   ed,
   signAccountRecovery,
   signAdminRootRotation,
+  signAdminRootTransfer,
   signAuthCode,
   signDaemonStatusReport,
   signDeviceCapabilityGrant,
@@ -56,11 +57,13 @@ import {
   signRevocation,
   signRevokeDeviceCapabilityGrant,
   signServerRegister,
+  signServerTransferClaim,
   signSetRoutingTarget,
   signTunnelHello,
   signWatchDelegateKey,
   type AccountRecovery,
   type AdminRootRotation,
+  type AdminRootTransfer,
   type AuthCode,
   type DaemonStatusReport,
   type DeviceCapabilityGrant,
@@ -82,6 +85,7 @@ import {
   type RevokeDeviceCapabilityGrant,
   type ServerRegisterRequest,
   type ServerRevocation,
+  type ServerTransferClaim,
   type SetRoutingTarget,
   type TunnelHello,
   type WatchDelegateKey,
@@ -788,6 +792,65 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- ServerTransferClaim v2 (acquirer IRK) — transfer-a-box. v2 folds the
+  // acquirer's ADMIN MASTER ROOT into the canonical (Slice D §9.8) so a rogue
+  // `.com` cannot swap the acquirer's admin anchor on a real claim. Here the
+  // fixture `irk` plays the ACQUIRER; `newAdminRoot` is the acquirer's admin
+  // root the box will re-pin to. ----
+  const transferClaim: ServerTransferClaim = {
+    serverDomain: "home.harry.flagship.services",
+    transferNonce: hex(FIXED_NONCE),
+    acquirerUsername: "sarah",
+    acquirerIrkPub: irk.publicKey,
+    acquirerAdminRootPubHex: hex(newAdminRoot.publicKey),
+    issuedAt: ISSUED_AT,
+  };
+  const transferClaimInput = {
+    serverDomain: transferClaim.serverDomain,
+    transferNonce: transferClaim.transferNonce,
+    acquirerUsername: transferClaim.acquirerUsername,
+    acquirerIrkPub: hex(transferClaim.acquirerIrkPub),
+    acquirerAdminRootPubHex: transferClaim.acquirerAdminRootPubHex,
+    issuedAt: transferClaim.issuedAt,
+  };
+  vectors.push(
+    makeVector(
+      "server-transfer-claim",
+      "irk",
+      transferClaimInput,
+      signServerTransferClaim(transferClaim, irk),
+      payloadByName("server-transfer-claim", transferClaimInput),
+      ["ts", "webapp"],
+    ),
+  );
+
+  // ---- AdminRootTransfer (GIVER's admin master root) — Slice D §9.8 transfer
+  // handoff proof. The giver's root (`adminRoot`, the box's pinned anchor)
+  // signs (this box, this offer's nonce, old giver root → new acquirer root);
+  // the box re-pins ONLY on this proof, never `.com`'s word. Deliberately a
+  // DISTINCT tag from admin-root-rotation (a transfer proof must not replay as
+  // an account rotation of the giver). ----
+  const adminTransfer: AdminRootTransfer = {
+    serverDomain: "home.harry.flagship.services",
+    giverUsername: "harry",
+    acquirerUsername: "sarah",
+    oldAdminRootPubHex: hex(adminRoot.publicKey),
+    newAdminRootPubHex: hex(newAdminRoot.publicKey),
+    transferNonce: hex(FIXED_NONCE),
+    issuedAt: ISSUED_AT,
+  };
+  const adminTransferInput = { ...adminTransfer };
+  vectors.push(
+    makeVector(
+      "admin-root-transfer",
+      "admin-root",
+      adminTransferInput,
+      signAdminRootTransfer(adminTransfer, adminRoot),
+      payloadByName("admin-root-transfer", adminTransferInput as unknown as Record<string, unknown>),
+      ["ts"],
+    ),
+  );
+
   return vectors;
 }
 
@@ -1017,6 +1080,31 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
           i.username,
           i.oldAdminRootPub,
           i.newAdminRootPub,
+          i.issuedAt,
+        ].join("|"),
+      );
+    case "server-transfer-claim":
+      return enc(
+        [
+          "flagship/server-transfer-claim/v2",
+          (i.serverDomain as string).toLowerCase(),
+          (i.transferNonce as string).toLowerCase(),
+          (i.acquirerUsername as string).toLowerCase(),
+          i.acquirerIrkPub,
+          (i.acquirerAdminRootPubHex as string).toLowerCase(),
+          i.issuedAt,
+        ].join("|"),
+      );
+    case "admin-root-transfer":
+      return enc(
+        [
+          "flagship/admin-root-transfer/v1",
+          (i.serverDomain as string).toLowerCase(),
+          (i.giverUsername as string).toLowerCase(),
+          (i.acquirerUsername as string).toLowerCase(),
+          (i.oldAdminRootPubHex as string).toLowerCase(),
+          (i.newAdminRootPubHex as string).toLowerCase(),
+          (i.transferNonce as string).toLowerCase(),
           i.issuedAt,
         ].join("|"),
       );

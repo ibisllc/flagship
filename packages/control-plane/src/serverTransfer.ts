@@ -2,9 +2,11 @@
  * Transfer-a-box broker — a cross-account ownership handoff brokered by `.com`.
  * docs/account-deletion-and-name-reclaim.md §4.
  *
- *   POST /api/server/:domain/transfer/offer   giver, IRK mailbox-auth
- *   POST /api/server/:domain/transfer/claim   acquirer, signed ServerTransferClaim
- *   GET  /api/server/:domain/transfer/claim   giver, IRK mailbox-auth (re-seal poll)
+ *   POST /api/server/:domain/transfer/offer          giver, IRK mailbox-auth
+ *   POST /api/server/:domain/transfer/claim          acquirer, signed ServerTransferClaim (v2)
+ *   GET  /api/server/:domain/transfer/claim          giver, IRK mailbox-auth (re-seal poll)
+ *   POST /api/server/:domain/transfer/admin-handoff  giver, admin-root-signed AdminRootTransfer
+ *                                                    (Slice D §9.8 — the sig IS the auth)
  *
  * Three envelopes, two parties:
  *   - The GIVER (current owner) deposits a `ServerTransferOffer` (giver-IRK-
@@ -38,9 +40,11 @@
  */
 
 import {
+  verifyAdminRootTransfer,
   verifyDeviceEndpointClaim,
   verifyServerTransferOffer,
   verifyServerTransferClaim,
+  type AdminRootTransfer,
   type DeviceEndpointClaim,
   type ServerTransferOffer,
   type ServerTransferClaim,
@@ -281,6 +285,11 @@ export async function handlePostTransferOffer(
     claimSignatureHex: null,
     diskKeyHandoffHex: null,
     diskKeyHandoffAt: null,
+    acquirerAdminRootPubHex: null,
+    adminHandoffOldRootHex: null,
+    adminHandoffNewRootHex: null,
+    adminHandoffIssuedAt: null,
+    adminHandoffSigHex: null,
   });
 
   if (deps.auditEvents) {
@@ -323,6 +332,7 @@ export async function handlePostTransferClaim(
     typeof c.transferNonce !== "string" ||
     typeof c.acquirerUsername !== "string" ||
     typeof c.acquirerIrkPub !== "string" ||
+    typeof c.acquirerAdminRootPub !== "string" ||
     typeof c.issuedAt !== "number" ||
     typeof b?.claimSignature !== "string"
   ) {
@@ -336,6 +346,12 @@ export async function handlePostTransferClaim(
   }
   if (!HEX64.test(c.acquirerIrkPub.toLowerCase())) {
     return malformed("acquirerIrkPub must be 32 bytes hex");
+  }
+  // Claim canonical v2 (Slice D §9.8) — the acquirer's admin master root rides
+  // INSIDE the signed claim ("" = the acquirer account has no admin root), so a
+  // rogue `.com` cannot swap the anchor the giver's handoff proof will commit to.
+  if (c.acquirerAdminRootPub !== "" && !HEX64.test(c.acquirerAdminRootPub.toLowerCase())) {
+    return malformed("acquirerAdminRootPub must be empty or 32 bytes hex");
   }
   if (!HEX128.test(b.claimSignature.toLowerCase())) {
     return malformed("claimSignature must be 64 bytes hex");
@@ -379,6 +395,7 @@ export async function handlePostTransferClaim(
     transferNonce: c.transferNonce,
     acquirerUsername: c.acquirerUsername,
     acquirerIrkPub: hexToBytes(c.acquirerIrkPub),
+    acquirerAdminRootPubHex: c.acquirerAdminRootPub,
     issuedAt: c.issuedAt,
   };
   let claimSig: Uint8Array;
@@ -410,6 +427,7 @@ export async function handlePostTransferClaim(
     c.transferNonce.toLowerCase(),
     acquirerNorm,
     acquirer.irkPubHex.toLowerCase(),
+    c.acquirerAdminRootPub.toLowerCase(),
     c.issuedAt,
     b.claimSignature.toLowerCase(),
     now(),
@@ -561,6 +579,10 @@ export async function handleGetTransferClaim(
     acquirerUsername: row.acquirerUsername,
     // The acquirer IRK the giver's phone re-seals the disk key for.
     acquirerIrkPub: row.acquirerIrkPubHex,
+    // Slice D §9.8 — the acquirer's admin master root the CLAIM committed to
+    // ("" = the acquirer has no admin root; null = pre-v2 legacy claim). The
+    // giver's phone folds it into the giver-root-signed AdminRootTransfer.
+    acquirerAdminRootPub: row.acquirerAdminRootPubHex,
   });
 }
 
@@ -598,6 +620,30 @@ export async function handleGetTransferRehome(
     acquirerUsername: row.acquirerUsername,
     acquirerIrkPub: row.acquirerIrkPubHex,
     claimedAt: row.claimedAt,
+    // Slice D §9.8 — advisory echo of the claim's admin anchor (the box never
+    // acts on it directly; it acts only on the verified adminHandoff below).
+    ...(row.acquirerAdminRootPubHex !== null
+      ? { acquirerAdminRootPub: row.acquirerAdminRootPubHex }
+      : {}),
+    // The GIVER-admin-root-signed handoff proof, once deposited. A box with a
+    // pinned admin root REFUSES to re-home until this verifies against its
+    // pinned anchor — `.com` relays the proof but cannot forge it.
+    ...(row.adminHandoffSigHex !== null &&
+    row.adminHandoffOldRootHex !== null &&
+    row.adminHandoffNewRootHex !== null &&
+    row.adminHandoffIssuedAt !== null
+      ? {
+          adminHandoff: {
+            giverUsername: row.giverUsername,
+            acquirerUsername: row.acquirerUsername,
+            oldAdminRootPub: row.adminHandoffOldRootHex,
+            newAdminRootPub: row.adminHandoffNewRootHex,
+            transferNonce: row.transferNonce,
+            issuedAt: row.adminHandoffIssuedAt,
+            signatureHex: row.adminHandoffSigHex,
+          },
+        }
+      : {}),
   });
 }
 
@@ -669,4 +715,120 @@ export async function handleGetTransferDiskKey(
   }
   if (!row.diskKeyHandoffHex) return notFound("re-sealed disk key not yet deposited");
   return ok({ sealedDiskKey: row.diskKeyHandoffHex });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 7. POST /api/server/:domain/transfer/admin-handoff  (giver's phone)
+//
+// Slice D §9.8 — the giver deposits the ADMIN-ROOT handoff proof: a
+// `flagship/admin-root-transfer/v1` envelope signed by the GIVER's admin
+// master root, committing (this box, this offer's nonce, giver root →
+// acquirer root). The box will ONLY re-pin its authority anchor on this
+// proof, verified against the root it already pins — never on `.com`'s word.
+//
+// This endpoint carries NO additional auth gate (no mailbox-auth): the
+// admin-root signature IS the authorization — only the giver's admin master
+// root can produce it, and `.com` cannot forge it. `.com`'s verify below
+// (against the giver account's registered `admin_root_pub_hex`) is a
+// sanity/garbage filter so junk never occupies the relay slot; the box
+// re-verifies against its PINNED root regardless, so a compromised `.com`
+// gains nothing by skipping or corrupting this check.
+//
+// Idempotent: a re-deposit replaces (the giver's phone may retry).
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostTransferAdminHandoff(
+  deps: ServerTransferDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const now = deps.now ?? (() => Date.now());
+  const b = body as { handoff?: Record<string, unknown>; signatureHex?: unknown };
+  const h = b?.handoff ?? {};
+  if (
+    typeof h.serverDomain !== "string" ||
+    typeof h.giverUsername !== "string" ||
+    typeof h.acquirerUsername !== "string" ||
+    typeof h.oldAdminRootPub !== "string" ||
+    typeof h.newAdminRootPub !== "string" ||
+    typeof h.transferNonce !== "string" ||
+    typeof h.issuedAt !== "number" ||
+    typeof b?.signatureHex !== "string"
+  ) {
+    return malformed("malformed admin handoff");
+  }
+  if (h.serverDomain !== host) {
+    return forbidden("serverDomain / host mismatch");
+  }
+  if (!HEX64.test(h.oldAdminRootPub.toLowerCase())) {
+    return malformed("oldAdminRootPub must be 32 bytes hex");
+  }
+  if (h.newAdminRootPub !== "" && !HEX64.test(h.newAdminRootPub.toLowerCase())) {
+    return malformed("newAdminRootPub must be empty or 32 bytes hex");
+  }
+  if (!HEX_NONCE.test(h.transferNonce.toLowerCase())) {
+    return malformed("transferNonce must be 32 bytes hex");
+  }
+  if (!HEX128.test(b.signatureHex.toLowerCase())) {
+    return malformed("signatureHex must be 64 bytes hex");
+  }
+
+  const row = await deps.serverTransfers.getOffer(host, now());
+  if (!row || row.claimedAt === null) return notFound("no claimed transfer for this server");
+  if (row.transferNonce !== h.transferNonce.toLowerCase()) {
+    return conflict("transferNonce does not match the claimed transfer");
+  }
+  if (row.acquirerUsername !== h.acquirerUsername.toLowerCase()) {
+    return conflict("acquirerUsername does not match the claimed transfer");
+  }
+  if (row.giverUsername !== h.giverUsername.toLowerCase()) {
+    return conflict("giverUsername does not match the offering account");
+  }
+  // The handoff's target root must be EXACTLY the anchor the acquirer's SIGNED
+  // claim committed to (both may be "") — the giver can't aim the box at a
+  // third-party root, and `.com` can't have swapped the claim's anchor without
+  // breaking the acquirer's v2 claim signature.
+  if (row.acquirerAdminRootPubHex === null) {
+    return conflict("claim carried no admin anchor (pre-v2 legacy claim)");
+  }
+  if (row.acquirerAdminRootPubHex !== h.newAdminRootPub.toLowerCase()) {
+    return conflict("newAdminRootPub does not match the claim's admin anchor");
+  }
+
+  const giver = await deps.usernames.get(row.giverUsername);
+  if (!giver) return notFound("unknown giver account");
+  if (!giver.adminRootPubHex) {
+    return conflict("account has no admin root");
+  }
+  if (giver.adminRootPubHex.toLowerCase() !== h.oldAdminRootPub.toLowerCase()) {
+    return conflict("oldAdminRootPub does not match the giver account's admin root");
+  }
+
+  const transfer: AdminRootTransfer = {
+    serverDomain: h.serverDomain,
+    giverUsername: h.giverUsername,
+    acquirerUsername: h.acquirerUsername,
+    oldAdminRootPubHex: h.oldAdminRootPub,
+    newAdminRootPubHex: h.newAdminRootPub,
+    transferNonce: h.transferNonce,
+    issuedAt: h.issuedAt,
+  };
+  let sigBytes: Uint8Array;
+  try {
+    sigBytes = hexToBytes(b.signatureHex);
+  } catch {
+    return malformed("invalid hex");
+  }
+  if (!verifyAdminRootTransfer(transfer, sigBytes, hexToBytes(giver.adminRootPubHex))) {
+    return forbidden("invalid admin-handoff signature");
+  }
+
+  const stored = await deps.serverTransfers.putAdminHandoff(host, {
+    oldRootHex: h.oldAdminRootPub.toLowerCase(),
+    newRootHex: h.newAdminRootPub.toLowerCase(),
+    issuedAt: h.issuedAt,
+    sigHex: b.signatureHex.toLowerCase(),
+  });
+  if (!stored) return notFound("no claimed transfer for this server");
+  return ok({ ok: true });
 }

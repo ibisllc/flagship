@@ -1106,16 +1106,21 @@ describe("D1 ↔ InMemory parity", () => {
       claimSignatureHex: null,
       diskKeyHandoffHex: null,
       diskKeyHandoffAt: null,
+      acquirerAdminRootPubHex: null,
+      adminHandoffOldRootHex: null,
+      adminHandoffNewRootHex: null,
+      adminHandoffIssuedAt: null,
+      adminHandoffSigHex: null,
     });
 
     it("offer → claim → record carries acquirer binding; second claim rejected", async () => {
       const r = await bothAdapters(async (s) => {
         await s.serverTransfers.putOffer(mkOffer("11".repeat(16)));
         const first = await s.serverTransfers.claim(
-          dom, "11".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+          dom, "11".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
         );
         const second = await s.serverTransfers.claim(
-          dom, "11".repeat(16), "carol", "dd".repeat(32), 6, "ee".repeat(64), 11,
+          dom, "11".repeat(16), "carol", "dd".repeat(32), "", 6, "ee".repeat(64), 11,
         );
         const after = await s.serverTransfers.getOffer(dom, 12);
         return {
@@ -1144,7 +1149,7 @@ describe("D1 ↔ InMemory parity", () => {
         // Unclaimed → refused.
         const beforeClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 9);
         await s.serverTransfers.claim(
-          dom, "55".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+          dom, "55".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
         );
         const afterClaim = await s.serverTransfers.putDiskKeyHandoff(dom, "ab".repeat(60), 12);
         const row = await s.serverTransfers.getOffer(dom, 13);
@@ -1164,16 +1169,67 @@ describe("D1 ↔ InMemory parity", () => {
       });
     });
 
+    it("claim records the acquirer admin root; putAdminHandoff sets the proof on a claimed row (Slice D §9.8)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serverTransfers.putOffer(mkOffer("99".repeat(16)));
+        // Unclaimed → refused.
+        const beforeClaim = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "2b".repeat(32),
+          issuedAt: 7,
+          sigHex: "3c".repeat(64),
+        });
+        await s.serverTransfers.claim(
+          dom, "99".repeat(16), "bob", "bb".repeat(32), "1B".repeat(32), 5, "cc".repeat(64), 10,
+        );
+        const afterClaim = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "2b".repeat(32),
+          issuedAt: 7,
+          sigHex: "3c".repeat(64),
+        });
+        // Idempotent re-deposit REPLACES.
+        const redeposit = await s.serverTransfers.putAdminHandoff(dom, {
+          oldRootHex: "1a".repeat(32),
+          newRootHex: "", // unpin shape stores the empty string, not NULL
+          issuedAt: 8,
+          sigHex: "4d".repeat(64),
+        });
+        const row = await s.serverTransfers.getOffer(dom, 13);
+        return {
+          beforeClaim,
+          afterClaim,
+          redeposit,
+          acquirerAdminRoot: row?.acquirerAdminRootPubHex, // lowercased on write
+          oldRoot: row?.adminHandoffOldRootHex,
+          newRoot: row?.adminHandoffNewRootHex,
+          issuedAt: row?.adminHandoffIssuedAt,
+          sig: row?.adminHandoffSigHex,
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        beforeClaim: false,
+        afterClaim: true,
+        redeposit: true,
+        acquirerAdminRoot: "1b".repeat(32),
+        oldRoot: "1a".repeat(32),
+        newRoot: "",
+        issuedAt: 8,
+        sig: "4d".repeat(64),
+      });
+    });
+
     it("re-issued offer replaces the prior unclaimed row", async () => {
       const r = await bothAdapters(async (s) => {
         await s.serverTransfers.putOffer(mkOffer("22".repeat(16)));
         await s.serverTransfers.putOffer(mkOffer("33".repeat(16)));
         // The old nonce can no longer be claimed; only the freshest stands.
         const oldClaim = await s.serverTransfers.claim(
-          dom, "22".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+          dom, "22".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
         );
         const newClaim = await s.serverTransfers.claim(
-          dom, "33".repeat(16), "bob", "bb".repeat(32), 6, "cc".repeat(64), 11,
+          dom, "33".repeat(16), "bob", "bb".repeat(32), "", 6, "cc".repeat(64), 11,
         );
         return {
           oldOk: oldClaim.ok,
@@ -1189,7 +1245,7 @@ describe("D1 ↔ InMemory parity", () => {
       const r = await bothAdapters(async (s) => {
         await s.serverTransfers.putOffer(mkOffer("44".repeat(16), 50));
         const expiredClaim = await s.serverTransfers.claim(
-          dom, "44".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 100,
+          dom, "44".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 100,
         );
         const gone = await s.serverTransfers.getOffer(dom, 100);
         return {
@@ -1205,11 +1261,11 @@ describe("D1 ↔ InMemory parity", () => {
     it("claim of an absent / nonce-mismatched offer is rejected", async () => {
       const r = await bothAdapters(async (s) => {
         const absent = await s.serverTransfers.claim(
-          dom, "55".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+          dom, "55".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
         );
         await s.serverTransfers.putOffer(mkOffer("66".repeat(16)));
         const wrongNonce = await s.serverTransfers.claim(
-          dom, "77".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 10,
+          dom, "77".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 10,
         );
         return {
           absentReason: absent.ok ? null : absent.reason,
@@ -1224,7 +1280,7 @@ describe("D1 ↔ InMemory parity", () => {
       const r = await bothAdapters(async (s) => {
         await s.serverTransfers.putOffer(mkOffer("88".repeat(16), 50));
         await s.serverTransfers.claim(
-          dom, "88".repeat(16), "bob", "bb".repeat(32), 5, "cc".repeat(64), 40,
+          dom, "88".repeat(16), "bob", "bb".repeat(32), "", 5, "cc".repeat(64), 40,
         );
         const afterExpiry = await s.serverTransfers.getOffer(dom, 100);
         await s.serverTransfers.remove(dom);
