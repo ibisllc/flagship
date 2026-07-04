@@ -80,7 +80,7 @@ fun PeerBackupScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Shard health across peers + the repair daemon's view.",
+            "Shard health across peers + repair status.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp),
         )
@@ -112,7 +112,7 @@ private fun Body(s: PeerBackupStatusResponse, togglePending: Boolean, onToggle: 
     SectionHeader("Peers backing you up")
     Spacer(Modifier.height(FS.space.s2))
     if (s.peersBackingYouUp.isEmpty()) {
-        PlaceholderCard("No peers backing you up yet — repair daemon will recruit some next tick.")
+        PlaceholderCard("No peers backing you up yet — your server will recruit some soon.")
     } else {
         s.peersBackingYouUp.forEach { p ->
             PeerHostingYouRow(p)

@@ -110,7 +110,7 @@ fun InviteIssueScreen(nav: NavController, serviceId: String) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Invites are bearer share-links. The daemon enforces a 24-hour default TTL. Names you type stay on this device.",
+            "Invites are share-links — anyone with the link can claim access. Your server expires them after 24 hours by default. Names you type stay on this device.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )

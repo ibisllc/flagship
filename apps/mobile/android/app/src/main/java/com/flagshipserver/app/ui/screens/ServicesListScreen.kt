@@ -171,7 +171,7 @@ fun ServicesListScreen(nav: NavController) {
                         style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                     )
                     Text(
-                        text = "Describe what you want in plain English. The AI writes it; the daemon runs it.",
+                        text = "Describe what you want in plain English. The AI writes it; your server runs it.",
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                     )

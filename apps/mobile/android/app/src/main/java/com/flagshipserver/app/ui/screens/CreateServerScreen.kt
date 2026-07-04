@@ -1141,7 +1141,7 @@ internal suspend fun mintRecipeBundle(
 
     val irk = Keystore.deriveIRK("Create server $serverName")
     val irkPubHex = Keystore.irkPubHex()
-    val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt IRK pub")
+    val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt account key")
 
     val delegated = Ed25519Sign.KeyPair.newKeyPair()
     val delegatedPubHex = HexUtil.encode(delegated.publicKey)

@@ -321,7 +321,7 @@ private fun VerdictCard(p: BuildGitViewModel.GitPhase.Verdict, vm: BuildGitViewM
             Text(p.reason, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
             Spacer(Modifier.height(FS.space.s3))
             Text(
-                "The AI rewrites this repo into a Flagship app — adds the manifest, removes its own login, and wires it to your box's data layer.",
+                "The AI rewrites this repo into a Flagship app — adds the app config, removes its own login, and wires it to your box's data layer.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
