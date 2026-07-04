@@ -172,6 +172,7 @@ import {
   type StripeConfig,
   handleListUserPurchases,
   handleAdminSetAppPrice,
+  handleCreatorSetAppPrice,
   handleAdminGrantPurchase,
   parseCutBps,
   handleVouchedDeviceAdmit,
@@ -722,6 +723,7 @@ const ROUTE_RE = {
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
   MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
   MARKETPLACE_SCAN_RESULT: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/scan$/,
+  MARKETPLACE_SET_PRICE: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/price$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -3108,6 +3110,22 @@ export async function tryControlPlane(
     return finish(
       await handleMarketplaceScanResult(
         { marketplace: storage.marketplace, scannerPubkey },
+        await readJson(request),
+      ),
+    );
+  }
+  // POST /api/marketplace/:creator/:slug/price (CREATOR, #15) — creator-signed
+  // self-serve pricing (distinct from the admin path below).
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_SET_PRICE))) {
+    return finishPlain(
+      await handleCreatorSetAppPrice(
+        {
+          marketplace: storage.marketplace,
+          usernames: storage.usernames,
+          servers: storage.servers,
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
         await readJson(request),
       ),
     );

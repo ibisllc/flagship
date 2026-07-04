@@ -133,3 +133,48 @@ export function verifyMarketplaceList(r: MarketplaceListRequest, sig: Bytes, irk
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Creator self-serve pricing (#15)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Creator-signed price change for their OWN listing. Signed by the
+ * creator's account IRK (phone) OR a non-revoked server identity key of
+ * the creator's account (box-originated) — the SAME signer set `.com`
+ * already accepts for `MarketplaceListRequest`. `.com` gates the handler
+ * to the listing's creator and caps `priceUsdCents` at MAX_APP_PRICE_CENTS.
+ * `0` makes the app free.
+ */
+export interface SetAppPriceRequest {
+  creator: string;
+  slug: string;
+  priceUsdCents: number;
+  issuedAt: number;
+}
+
+const TAG_MARKETPLACE_SET_PRICE = "flagship/marketplace-set-price/v1";
+
+function canonicalSetAppPrice(r: SetAppPriceRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_MARKETPLACE_SET_PRICE,
+      r.creator,
+      r.slug,
+      r.priceUsdCents,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signSetAppPrice(r: SetAppPriceRequest, signer: Keypair): Bytes {
+  return ed.sign(canonicalSetAppPrice(r), signer.privateKey);
+}
+
+export function verifySetAppPrice(r: SetAppPriceRequest, sig: Bytes, signerPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalSetAppPrice(r), signerPub);
+  } catch {
+    return false;
+  }
+}
