@@ -116,6 +116,29 @@ function certInfo(fqdn: string): { issuer: string; subject: string; sans: string
   return { issuer, subject, sans };
 }
 
+/** Raw HTTP/1.1 GET over openssl s_client — shows what the server writes after
+ *  the TLS handshake even when fetch() dies at the socket layer (undici hides
+ *  the real cause behind a generic "fetch failed"). Diagnostic only. */
+function rawHttpsGet(fqdn: string): string {
+  const out = spawnSync(
+    "bash",
+    [
+      "-c",
+      `printf 'GET / HTTP/1.1\\r\\nHost: ${fqdn}\\r\\nConnection: close\\r\\n\\r\\n' | ` +
+        `openssl s_client -quiet -connect ${fqdn}:443 -servername ${fqdn} 2>/dev/null | head -c 400`,
+    ],
+    { encoding: "utf8", timeout: 25000 },
+  );
+  return (out.stdout || "").replace(/\s+/g, " ").trim();
+}
+
+/** Unwrap undici's "fetch failed" to the underlying cause for diagnostics. */
+function fetchErr(e: unknown): string {
+  const cause = (e as any)?.cause;
+  const inner = cause?.code ?? cause?.message ?? cause ?? (e as any)?.message ?? e;
+  return String(inner).slice(0, 120);
+}
+
 async function main(): Promise<void> {
   assert(ADMIN, "GYM_ADMIN_SECRET (or FLAGSHIP_ADMIN_SECRET) is required");
   const startedAt = new Date();
@@ -606,7 +629,10 @@ async function main(): Promise<void> {
               issuedAt: Date.now(),
             };
             const sig = bytesToHex(signSetServiceEnv(req, userIrk));
-            const serviceId = `${user}-${slug}`;
+            // serviceId is the immutable composite `<creator>--<slug>` (DOUBLE
+            // dash — packages/protocol/src/serviceId.ts; the daemon 400s
+            // "serviceId / (creator,slug) mismatch" on anything else).
+            const serviceId = `${user}--${slug}`;
             const r = await http(
               `https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`,
               { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
@@ -617,7 +643,7 @@ async function main(): Promise<void> {
           });
           await check("manage service env REJECTS a forged signature", async () => {
             const req: SetServiceEnvRequest = { serverId: fqdn, creator: user, slug, env: { X: "y" }, issuedAt: Date.now() };
-            const serviceId = `${user}-${slug}`;
+            const serviceId = `${user}--${slug}`;
             const r = await http(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`, {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -639,28 +665,53 @@ async function main(): Promise<void> {
             const url = `https://${slug}.${fqdn}/`;
             let last = { status: 0, snippet: "" };
             for (let i = 0; i < 24; i++) {
-              const c = await http(url, {}, 12000).catch(() => ({ status: 0, text: "fetch failed", json: null }) as any);
+              const c = await http(url, {}, 12000).catch(
+                (e) => ({ status: 0, text: `fetch failed: ${fetchErr(e)}`, json: null }) as any,
+              );
               if (c.status === 200) {
                 const whoami = /Hostname|GET \/|RemoteAddr/i.test(String(c.text ?? "")) ? " (whoami body)" : "";
                 return `container serving 200 at ${slug}.${fqdn}${whoami} — full app-proxy path proven`;
               }
-              last = { status: c.status, snippet: String(c.text ?? "").replace(/\s+/g, " ").slice(0, 60) };
+              last = { status: c.status, snippet: String(c.text ?? "").replace(/\s+/g, " ").slice(0, 120) };
               await new Promise((r) => setTimeout(r, 5000));
             }
             // No 200 in 120s — diagnose before failing (SSH-free): does the
             // subdomain present the box's wildcard cert? If yes, routing+cert are
             // fine and the issue is the container/proxy hop; if no, it's routing.
+            // Then show what the daemon actually WRITES after the handshake (raw
+            // openssl GET — survives whatever kills fetch()) and grep the daemon
+            // journal (owner-IRK signed) for deploy/proxy errors.
             const c = certInfo(`${slug}.${fqdn}`);
             const tlsOk = /Let's Encrypt/i.test(c.issuer) || c.sans.includes(`*.${fqdn}`);
+            const raw = rawHttpsGet(`${slug}.${fqdn}`);
+            let journalHint = "";
+            try {
+              const jr: JournalRequest = { serverId: fqdn, unit: "flagship-daemon", lines: 150, issuedAt: Date.now() };
+              const js = bytesToHex(signJournalRequest(jr, userIrk));
+              const j = await http(`https://${fqdn}/api/journal`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ request: jr, signature: js }),
+              });
+              const lines: string[] = j.json?.lines ?? j.json?.log ?? [];
+              const hits = lines
+                .filter((l) => new RegExp(`docker|proxy|deploy|502|error|${slug}`, "i").test(l))
+                .slice(-5);
+              if (hits.length) journalHint = ` | journal: ${hits.join(" ⏎ ").slice(0, 400)}`;
+            } catch {
+              /* diagnostic only */
+            }
             const diag = tlsOk
               ? `TLS+routing OK (cert ${c.issuer || c.sans.join(",")}) but HTTP ${last.status || "no-response"} ${last.snippet}`
               : `TLS/routing did NOT complete (issuer=${c.issuer || "<none>"})`;
-            throw new Error(`container not serving 200 in 120s — ${diag}`);
+            throw new Error(
+              `container not serving 200 in 120s — ${diag} | raw GET: ${raw.slice(0, 200) || "<no bytes>"}${journalHint}`,
+            );
           });
           await check("uninstall the service (owner-IRK signed) → 200", async () => {
             const req: UninstallServiceRequest = { serverId: fqdn, creator: user, slug, issuedAt: Date.now() };
             const sig = bytesToHex(signUninstallService(req, userIrk));
-            const serviceId = `${user}-${slug}`;
+            const serviceId = `${user}--${slug}`;
             const r = await http(
               `https://${fqdn}/api/services/${encodeURIComponent(serviceId)}`,
               { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
