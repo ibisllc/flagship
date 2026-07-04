@@ -29,6 +29,8 @@ import {
   handleGetTransferClaim,
   handlePostTransferDiskKey,
   handleGetTransferDiskKey,
+  handleGetTransferRehome,
+  handlePostTransferRehomeAuth,
   type ServerTransferDeps,
 } from "@flagship/control-plane";
 
@@ -161,6 +163,8 @@ function brokerFetch(s: InMemoryStorage, now: number) {
       res = await handleGetTransferDiskKey(deps(s, now), HOST, body);
     } else if (u.pathname.endsWith("/transfer/disk-key")) {
       res = await handlePostTransferDiskKey(deps(s, now), HOST, body);
+    } else if (u.pathname.endsWith("/transfer/rehome-auth")) {
+      res = await handlePostTransferRehomeAuth(deps(s, now), HOST, body);
     } else if (u.pathname.endsWith("/transfer/claim")) {
       res = await handlePostTransferClaim(deps(s, now), HOST, body);
     } else {
@@ -449,6 +453,80 @@ describe("transfer-a-box — webapp", () => {
     const blob = await lib.__sealToEd25519ForTest(diskKey, hex(edPub));
     const opened = openSealedFromEd25519Recipient(blob, seed);
     expect([...opened]).toEqual([...diskKey]);
+  });
+
+  it("v1-sec GAP 3: rehome-auth canonical is the EXACT fixed wire bytes", async () => {
+    const lib = await loadLib();
+    expect(lib.TAG_SERVER_REHOME_AUTH).toBe("flagship/server-rehome-auth/v1");
+    const bytes = lib.canonicalRehomeAuthBytes({
+      oldServerDomain: HOST.toUpperCase(),
+      newServerDomain: "HOME.BOB.flagship.services",
+      acquirerIrkPubHex: hex(bobIrk.publicKey).toUpperCase(),
+      issuedAt: 1800,
+    });
+    expect(new TextDecoder().decode(bytes)).toBe(
+      `flagship/server-rehome-auth/v1|${HOST}|home.bob.flagship.services|${hex(bobIrk.publicKey)}|1800`,
+    );
+  });
+
+  it("v1-sec GAP 3: legacy giver deposits a rehome-auth the box verifies + `.com` echoes on rehome", async () => {
+    const lib = await loadLib();
+    const { verifyRehomeAuthorization } = (await import("@flagship/protocol")) as any;
+    const s = await brokerStore();
+    const now = 1_000_000;
+    const fetchImpl = brokerFetch(s, now);
+
+    // Complete a LEGACY transfer (no admin roots) so the row is CLAIMED.
+    const created = await lib.createTransferOffer(
+      { serverDomain: HOST, username: "alice", umk: new Uint8Array(32), irkPubHex: hex(aliceIrk.publicKey), signWithIrk: signerFor(aliceIrk) },
+      { fetch: fetchImpl, origin: "https://x", now: () => now },
+    );
+    const parsed = lib.parseTransferOfferQR(created.qrText);
+    await lib.submitTransferClaim(
+      { offer: parsed, acquirerUsername: "bob", umk: new Uint8Array(32), acquirerIrkPubHex: hex(bobIrk.publicKey), signWithIrk: signerFor(bobIrk) },
+      { fetch: fetchImpl, origin: "https://x", now: () => now },
+    );
+
+    // GIVER polls (learns the acquirer IRK + new domain), then deposits the
+    // giver-owner-IRK re-home authorization.
+    const poll = await lib.pollTransferClaim(
+      { serverDomain: HOST, username: "alice", umk: new Uint8Array(32), irkPubHex: hex(aliceIrk.publicKey), signWithIrk: signerFor(aliceIrk) },
+      { fetch: fetchImpl, origin: "https://x", now: () => now },
+    );
+    const dep = await lib.depositRehomeAuth(
+      {
+        serverDomain: HOST,
+        newServerDomain: poll.newServerDomain,
+        acquirerIrkPubHex: poll.acquirerIrkPub,
+        umk: new Uint8Array(32),
+        signWithIrk: signerFor(aliceIrk),
+      },
+      { fetch: fetchImpl, origin: "https://x", now: () => now },
+    );
+    expect(dep.ok).toBe(true);
+
+    // The box's rehome read now carries the giver-signed proof; the box
+    // reconstructs the canonical + verifies it against its pinned owner IRK
+    // (== alice's).
+    const rehome = await handleGetTransferRehome(deps(s, now), HOST);
+    const rb = rehome.body as {
+      newServerDomain: string;
+      acquirerIrkPub: string;
+      rehomeAuth: { issuedAt: number; signatureHex: string };
+    };
+    expect(rb.newServerDomain).toBe("home.bob.flagship.services");
+    expect(rb.rehomeAuth.signatureHex).toHaveLength(128);
+    const ok = verifyRehomeAuthorization(
+      {
+        oldServerDomain: HOST,
+        newServerDomain: rb.newServerDomain,
+        acquirerIrkPub: fromHex(rb.acquirerIrkPub),
+        issuedAt: rb.rehomeAuth.issuedAt,
+      },
+      fromHex(rb.rehomeAuth.signatureHex),
+      aliceIrk.publicKey,
+    );
+    expect(ok).toBe(true);
   });
 
   it("submitTransferClaim refuses an expired offer locally (no network)", async () => {

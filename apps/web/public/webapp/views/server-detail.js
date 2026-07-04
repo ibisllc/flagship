@@ -43,6 +43,7 @@ import {
   createTransferOffer,
   buildTransferLink,
   pollTransferClaim,
+  depositRehomeAuth,
 } from "../lib/serverTransfer.js";
 import {
   runGiverAdminHandoff,
@@ -1005,45 +1006,61 @@ async function openTransferDialog(body) {
         confirmEl.disabled = true;
         cancelBtn.textContent = "Done";
         toast("Transfer code created", "ok");
-        // Slice D §9.8 — hand the box's ADMIN AUTHORITY anchor to the
-        // acquirer at claim-received: poll for the claim while this dialog
-        // stays open, then deposit the giver-root-signed hand-off proof
-        // (acquirer root from the v2 claim, "" = unpin). No admin root on
-        // this session ⇒ nothing pinned to move ⇒ skip silently.
-        if (session.adminRootSeed) {
-          void watchClaimThenHandoff({
-            poll: () =>
-              pollTransferClaim({
-                serverDomain: serverFqdn,
-                username: session.username,
-                umk: session.umk,
-                irkPubHex: bytesToHex(session.irk.publicKey),
-                signWithIrk,
-              }),
-            handoff: (claim) =>
-              runGiverAdminHandoff({
-                serverDomain: serverFqdn,
-                giverUsername: session.username,
-                acquirerUsername: claim.acquirerUsername,
-                acquirerAdminRootPub: claim.acquirerAdminRootPub || "",
-                transferNonce: out.qr.transferNonce,
-                adminRootSeed: session.adminRootSeed,
-                umkSeed: session.umk,
-              }),
-            isActive: () => dlg.open,
-            onStatus: (res, claim) => {
-              if (res.status === "failed") {
-                handoffEl.textContent = TRANSFER_ADMIN_HANDOFF_WARNING;
-                handoffEl.classList.add("err-text");
-                handoffEl.classList.remove("hidden");
-              } else if (res.status === "deposited") {
-                handoffEl.textContent = `Claimed by ${claim.acquirerUsername} — admin key handed off.`;
-                handoffEl.classList.remove("err-text");
-                handoffEl.classList.remove("hidden");
-              }
-            },
-          });
-        }
+        // Hand the box's AUTHORITY anchor to the acquirer at claim-received:
+        // poll for the claim while this dialog stays open, then deposit the
+        // giver-signed proof the box verifies against what IT already pins.
+        //   • ADMIN-TIER (§9.8): the box pins the giver admin root ⇒ deposit the
+        //     giver-root-signed AdminRootTransfer (acquirer root from the v2
+        //     claim, "" = unpin).
+        //   • LEGACY (v1-sec GAP 3): the box pins the giver OWNER IRK ⇒ deposit
+        //     the giver-IRK-signed RehomeAuthorization. A box with no pinned
+        //     admin root REFUSES to re-home without it, so this is NOT optional
+        //     for a legacy transfer — it always runs.
+        void watchClaimThenHandoff({
+          poll: () =>
+            pollTransferClaim({
+              serverDomain: serverFqdn,
+              username: session.username,
+              umk: session.umk,
+              irkPubHex: bytesToHex(session.irk.publicKey),
+              signWithIrk,
+            }),
+          handoff: (claim) =>
+            session.adminRootSeed
+              ? runGiverAdminHandoff({
+                  serverDomain: serverFqdn,
+                  giverUsername: session.username,
+                  acquirerUsername: claim.acquirerUsername,
+                  acquirerAdminRootPub: claim.acquirerAdminRootPub || "",
+                  transferNonce: out.qr.transferNonce,
+                  adminRootSeed: session.adminRootSeed,
+                  umkSeed: session.umk,
+                })
+              : depositRehomeAuth({
+                  serverDomain: serverFqdn,
+                  newServerDomain: claim.newServerDomain,
+                  acquirerIrkPubHex: claim.acquirerIrkPub,
+                  umk: session.umk,
+                  signWithIrk,
+                }).then(
+                  () => ({ status: "deposited" }),
+                  (e) => ({ status: "failed", error: (e && e.message) || String(e) }),
+                ),
+          isActive: () => dlg.open,
+          onStatus: (res, claim) => {
+            if (res.status === "failed") {
+              handoffEl.textContent = TRANSFER_ADMIN_HANDOFF_WARNING;
+              handoffEl.classList.add("err-text");
+              handoffEl.classList.remove("hidden");
+            } else if (res.status === "deposited") {
+              handoffEl.textContent = session.adminRootSeed
+                ? `Claimed by ${claim.acquirerUsername} — admin key handed off.`
+                : `Claimed by ${claim.acquirerUsername} — re-home authorized.`;
+              handoffEl.classList.remove("err-text");
+              handoffEl.classList.remove("hidden");
+            }
+          },
+        });
         resolve(out);
       } catch (e) {
         errEl.textContent = humanError(e);

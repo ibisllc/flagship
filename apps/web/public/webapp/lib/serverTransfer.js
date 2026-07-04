@@ -30,6 +30,7 @@ import { verifyWithEd25519Pub, hexToBytes as keystoreHexToBytes } from "../keyst
 export const TAG_SERVER_TRANSFER_OFFER = "flagship/server-transfer-offer/v1";
 export const TAG_SERVER_TRANSFER_CLAIM = "flagship/server-transfer-claim/v2";
 export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
+export const TAG_SERVER_REHOME_AUTH = "flagship/server-rehome-auth/v1";
 
 function defaultBytesToHex(b) {
   let s = "";
@@ -84,6 +85,27 @@ export function canonicalClaimBytes({
       String(acquirerUsername).toLowerCase(),
       String(acquirerIrkPubHex).toLowerCase(),
       String(acquirerAdminRootPubHex ?? "").toLowerCase(),
+      issuedAt,
+    ].join("|"),
+  );
+}
+
+/** RehomeAuthorization canonical bytes (giver owner IRK) — v1-sec GAP 3. The
+ *  old/new domains + acquirer IRK pub are lowercased to match the TS
+ *  canonicalRehomeAuthorization. A box with NO pinned admin master root
+ *  re-homes ONLY on this proof, verified against its pinned owner IRK. */
+export function canonicalRehomeAuthBytes({
+  oldServerDomain,
+  newServerDomain,
+  acquirerIrkPubHex,
+  issuedAt,
+}) {
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_REHOME_AUTH,
+      String(oldServerDomain).toLowerCase(),
+      String(newServerDomain).toLowerCase(),
+      String(acquirerIrkPubHex).toLowerCase(),
       issuedAt,
     ].join("|"),
   );
@@ -598,6 +620,65 @@ export async function resealDiskKeyForAcquirer(args, deps = {}) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...mailboxAuth, sealedDiskKey: sealedHex }),
     });
+  } catch (e) {
+    throw err(`network error: ${(e && e.message) || e}`);
+  }
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw err((body && body.error) || `HTTP ${resp.status}`, resp.status);
+  return { ok: true };
+}
+
+// ── v1-sec GAP 3 — giver-phone LEGACY re-home authorization ────────────────
+//
+// A box with NO pinned admin master root re-homes ONLY on a giver-owner-IRK
+// `flagship/server-rehome-auth/v1` proof it verifies against its pinned owner
+// IRK — never on `.com`'s unauthenticated word. Runs at the SAME point as the
+// disk-key re-seal (once `pollTransferClaim` yields the acquirer IRK + the new
+// domain), the LEGACY sibling of `runGiverAdminHandoff`. `.com` reconstructs
+// the signed (old/new domain, acquirer IRK) fields from the claimed row, so the
+// deposit body carries only `issuedAt` + the signature.
+
+/**
+ * GIVER: sign the RehomeAuthorization with the owner IRK and deposit it.
+ * `acquirerIrkPubHex` + `newServerDomain` come from `pollTransferClaim`.
+ * Resolves `{ ok: true }` on a 200; throws on a non-200 (ownership has already
+ * moved, so the caller surfaces a retryable warning like the disk-key re-seal).
+ */
+export async function depositRehomeAuth(args, deps = {}) {
+  const { serverDomain, newServerDomain, acquirerIrkPubHex, umk, signWithIrk } = args;
+  if (!serverDomain) throw err("serverDomain required", 400);
+  if (!newServerDomain) throw err("newServerDomain required", 400);
+  if (!acquirerIrkPubHex) throw err("acquirerIrkPubHex required", 400);
+  if (!(umk instanceof Uint8Array) || typeof signWithIrk !== "function") {
+    throw err("unlock the webapp first", 400);
+  }
+  const toHex = deps.bytesToHex || defaultBytesToHex;
+  const now = (deps.now || Date.now)();
+  const f = deps.fetch || fetch;
+  const origin = deps.origin || controlApex();
+
+  const issuedAt = now;
+  const sig = await signWithIrk(
+    umk,
+    canonicalRehomeAuthBytes({
+      oldServerDomain: serverDomain,
+      newServerDomain,
+      acquirerIrkPubHex,
+      issuedAt,
+    }),
+  );
+  const signatureHex = toHex(sig);
+
+  let resp;
+  try {
+    resp = await f(
+      `${origin}/api/server/${encodeURIComponent(serverDomain)}/transfer/rehome-auth`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ issuedAt, signatureHex }),
+      },
+    );
   } catch (e) {
     throw err(`network error: ${(e && e.message) || e}`);
   }
