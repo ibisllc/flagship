@@ -233,6 +233,7 @@ describe("Phase 3 — rotate-admin-root", () => {
     const persisted: any[] = [];
     const session: any = { adminRootSeed: oldSeed };
     let reEscrowed = "";
+    let seedAtReEscrow = "";
 
     const result = await runRotateAdminRoot({
       username: "harry",
@@ -246,7 +247,13 @@ describe("Phase 3 — rotate-admin-root", () => {
       now: () => 1735689600000,
       postAdminRootRotation: vi.fn(async (args: any) => { order.push("post"); posted.push(args); }),
       persistAdminRootSeed: vi.fn(async (umk: Uint8Array, s: Uint8Array) => { order.push("persist"); persisted.push([umk, s]); }),
-      reEscrow: vi.fn(async (u: string) => { order.push("reEscrow"); reEscrowed = u; }),
+      reEscrow: vi.fn(async (u: string) => {
+        order.push("reEscrow");
+        reEscrowed = u;
+        // Snapshot what a real re-escrow would wrap: the session must already
+        // carry the NEW seed, or the escrow would re-wrap the dead OLD root.
+        seedAtReEscrow = toHex(session.adminRootSeed);
+      }),
     });
 
     // The pubkeys the webapp derived match the raw-seed Ed25519 pubkeys.
@@ -281,6 +288,9 @@ describe("Phase 3 — rotate-admin-root", () => {
     expect(toHex(persisted[0][1])).toBe(toHex(newSeed));
     expect(toHex(session.adminRootSeed)).toBe(toHex(newSeed));
     expect(reEscrowed).toBe("harry");
+    // reEscrow ran AFTER persist + session update and saw the NEW seed.
+    expect(seedAtReEscrow).toBe(toHex(newSeed));
+    expect(result.reEscrow).toBe("ok");
   });
 
   it("a failed POST leaves the OLD root in place (no half-rotation)", async () => {
@@ -313,5 +323,110 @@ describe("Phase 3 — rotate-admin-root", () => {
       currentAdminRootSeed: null,
       loadAdminRootSeed: async () => null,
     })).rejects.toThrow(/isn't an admin device/);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 4. Re-escrow the NEW root after rotation — observable, still best-effort.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+const loadAccountSecurityView = () => loadWebapp("views/account-security.js");
+
+function rotationDeps(k: any, overrides: Record<string, unknown> = {}) {
+  const oldSeed = new Uint8Array(32).fill(0x11);
+  return {
+    username: "harry",
+    umkSeed: new Uint8Array(32).fill(0xaa),
+    currentAdminRootSeed: oldSeed,
+    session: { adminRootSeed: oldSeed } as any,
+    adminRootPubHex: k.adminRootPubHex,
+    signWithAdminRoot: k.signWithAdminRoot,
+    bytesToHex: k.bytesToHex,
+    mintSeed: () => new Uint8Array(32).fill(0x22),
+    postAdminRootRotation: vi.fn(async () => {}),
+    persistAdminRootSeed: vi.fn(async () => {}),
+    ...overrides,
+  };
+}
+
+describe("Phase 3 — post-rotation re-escrow status (D-3 seam)", () => {
+  it("a throwing reEscrow NEVER fails the rotation → resolves with reEscrow:'failed'", async () => {
+    const k = await loadKeystore();
+    const { runRotateAdminRoot } = await loadRotation();
+    const persist = vi.fn(async () => {});
+    const deps = rotationDeps(k, {
+      persistAdminRootSeed: persist,
+      reEscrow: vi.fn(async () => { throw new Error("popup blocked"); }),
+    });
+    const result = await runRotateAdminRoot(deps);
+    expect(result.reEscrow).toBe("failed");
+    // The rotation itself fully landed: persisted + session on the NEW seed.
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(toHex((deps.session as any).adminRootSeed)).toBe("22".repeat(32));
+  });
+
+  it("no reEscrow dep → reEscrow:'skipped'", async () => {
+    const k = await loadKeystore();
+    const { runRotateAdminRoot } = await loadRotation();
+    const result = await runRotateAdminRoot(rotationDeps(k));
+    expect(result.reEscrow).toBe("skipped");
+  });
+
+  it("makeRotationReEscrow: not-enrolled resolves clean, setupCloudRecovery never called → 'ok'", async () => {
+    const k = await loadKeystore();
+    const { runRotateAdminRoot } = await loadRotation();
+    const { makeRotationReEscrow } = await loadAccountSecurityView();
+    const setup = vi.fn(async () => {});
+    const result = await runRotateAdminRoot(rotationDeps(k, {
+      reEscrow: makeRotationReEscrow({
+        hasCloudRecovery: vi.fn(async () => false),
+        setupCloudRecovery: setup,
+      }),
+    }));
+    expect(setup).not.toHaveBeenCalled();
+    expect(result.reEscrow).toBe("ok");
+  });
+
+  it("makeRotationReEscrow: enrolled + setup succeeds → 'ok', setup called with the username", async () => {
+    const k = await loadKeystore();
+    const { runRotateAdminRoot } = await loadRotation();
+    const { makeRotationReEscrow } = await loadAccountSecurityView();
+    const setup = vi.fn(async () => {});
+    const result = await runRotateAdminRoot(rotationDeps(k, {
+      reEscrow: makeRotationReEscrow({
+        hasCloudRecovery: vi.fn(async () => true),
+        setupCloudRecovery: setup,
+      }),
+    }));
+    expect(setup).toHaveBeenCalledWith("harry");
+    expect(result.reEscrow).toBe("ok");
+  });
+
+  it("makeRotationReEscrow: enrolled + setup throws (WebAuthn cancelled) → 'failed'", async () => {
+    const k = await loadKeystore();
+    const { runRotateAdminRoot } = await loadRotation();
+    const { makeRotationReEscrow } = await loadAccountSecurityView();
+    const result = await runRotateAdminRoot(rotationDeps(k, {
+      reEscrow: makeRotationReEscrow({
+        hasCloudRecovery: vi.fn(async () => true),
+        setupCloudRecovery: vi.fn(async () => { throw new Error("NotAllowedError"); }),
+      }),
+    }));
+    expect(result.reEscrow).toBe("failed");
+  });
+
+  it("the view surfaces a failed re-escrow as a persistent warning (not just the toast)", async () => {
+    const view = await loadAccountSecurityView();
+    expect(view.ROTATE_REESCROW_FAILED_MESSAGE).toMatch(/recovery backup wasn't updated/);
+    expect(view.ROTATE_REESCROW_FAILED_MESSAGE).toMatch(/OLD admin key/);
+    // The rotate handler branches on the lib's returned status into
+    // state.failureMessage (the persistent render), keeping the success
+    // toast for the happy path.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(
+      resolve(__dirname, "..", "public", "webapp", "views", "account-security.js"), "utf8");
+    expect(src).toContain('result.reEscrow === "failed"');
+    expect(src).toContain("state.failureMessage = ROTATE_REESCROW_FAILED_MESSAGE");
+    expect(src).toContain("reEscrow: makeRotationReEscrow()");
   });
 });
