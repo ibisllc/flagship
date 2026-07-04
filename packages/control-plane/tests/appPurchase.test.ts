@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryMarketplaceStorage, InMemoryUsernameStorage } from "@flagship/storage";
+import { InMemoryMarketplaceStorage, InMemoryUsernameStorage, InMemoryAppSalesStorage } from "@flagship/storage";
 import type { AppPurchaseRecord, AppPurchaseStorage, MarketplaceListingRecord } from "@flagship/storage";
 import {
   grantAppPurchase,
@@ -8,6 +8,9 @@ import {
   handleListUserPurchases,
   handleAdminSetAppPrice,
   handleAdminGrantPurchase,
+  computeCut,
+  parseCutBps,
+  DEFAULT_MARKETPLACE_CUT_BPS,
   MAX_APP_PRICE_CENTS,
 } from "../src/appPurchase.js";
 import { handleMarketplaceInstall } from "../src/marketplace.js";
@@ -89,6 +92,76 @@ describe("grantAppPurchase", () => {
     const d = deps(await seed({ priceUsdCents: 500 }));
     await expect(grantAppPurchase(d, { username: "x", creator: "acme", slug: "notes", source: "admin" })).rejects.toThrow(/username/);
     await expect(grantAppPurchase(d, { username: "alice", creator: "acme", slug: "ghost", source: "admin" })).rejects.toThrow(/listing not found/);
+  });
+});
+
+describe("revenue cut (#15)", () => {
+  it("computeCut floors the cut (creator-favorable) and defaults to 15%", () => {
+    expect(computeCut(1000)).toEqual({ cutCents: 150, netCents: 850 }); // 15% default
+    expect(computeCut(1000, 3000)).toEqual({ cutCents: 300, netCents: 700 });
+    expect(computeCut(999, 1500)).toEqual({ cutCents: 149, netCents: 850 }); // floor(149.85)=149
+    expect(computeCut(0, 1500)).toEqual({ cutCents: 0, netCents: 0 });
+    expect(computeCut(1000, 0)).toEqual({ cutCents: 0, netCents: 1000 }); // 0% cut
+  });
+  it("parseCutBps clamps garbage / out-of-range to the default", () => {
+    expect(parseCutBps(undefined)).toBe(DEFAULT_MARKETPLACE_CUT_BPS);
+    expect(parseCutBps("")).toBe(DEFAULT_MARKETPLACE_CUT_BPS);
+    expect(parseCutBps("abc")).toBe(DEFAULT_MARKETPLACE_CUT_BPS);
+    expect(parseCutBps("-1")).toBe(DEFAULT_MARKETPLACE_CUT_BPS);
+    expect(parseCutBps("10001")).toBe(DEFAULT_MARKETPLACE_CUT_BPS);
+    expect(parseCutBps("2000")).toBe(2000);
+  });
+
+  it("a stripe grant writes an idempotent app_sales row keyed on the event id", async () => {
+    const marketplace = await seed({ priceUsdCents: 1000 });
+    const purchases = fakePurchases();
+    const sales = new InMemoryAppSalesStorage();
+    const d = { marketplace, purchases, sales, cutBps: 2000, now: () => NOW };
+    const res = await grantAppPurchase(d, {
+      username: "alice", creator: "acme", slug: "notes", source: "stripe", stripeEventId: "evt_9",
+    });
+    expect(res.saleRecorded).toBe(true);
+    const rows = await sales.listForCreator("acme");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      saleKey: "evt_9", listingId: "acme--notes", buyerAccount: "alice",
+      grossCents: 1000, cutCents: 200, netCents: 800, currency: "usd", stripeEventId: "evt_9",
+    });
+    // Same event redelivered ⇒ purchase already owned ⇒ no second sale.
+    const again = await grantAppPurchase(d, {
+      username: "alice", creator: "acme", slug: "notes", source: "stripe", stripeEventId: "evt_9",
+    });
+    expect(again.granted).toBe(false);
+    expect(await sales.listForCreator("acme")).toHaveLength(1);
+  });
+
+  it("an admin comp does NOT write a sale (no revenue), a voucher does", async () => {
+    const marketplace = await seed({ priceUsdCents: 500 });
+    const sales = new InMemoryAppSalesStorage();
+    const comp = await grantAppPurchase(
+      { marketplace, purchases: fakePurchases(), sales, now: () => NOW },
+      { username: "alice", creator: "acme", slug: "notes", source: "admin" },
+    );
+    expect(comp.saleRecorded).toBe(false);
+    expect(await sales.listForCreator("acme")).toHaveLength(0);
+
+    const vouch = await grantAppPurchase(
+      { marketplace, purchases: fakePurchases(), sales, now: () => NOW },
+      { username: "bob", creator: "acme", slug: "notes", source: "voucher" },
+    );
+    expect(vouch.saleRecorded).toBe(true);
+    expect((await sales.listForCreator("acme"))[0]!.saleKey).toBe("voucher:acme:notes:bob");
+  });
+
+  it("a free listing never writes a sale even with a sales store wired", async () => {
+    const marketplace = await seed(); // no price
+    const sales = new InMemoryAppSalesStorage();
+    const res = await grantAppPurchase(
+      { marketplace, purchases: fakePurchases(), sales, now: () => NOW },
+      { username: "alice", creator: "acme", slug: "notes", source: "stripe", stripeEventId: "evt_x" },
+    );
+    expect(res.saleRecorded).toBe(false);
+    expect(await sales.listForCreator("acme")).toHaveLength(0);
   });
 });
 

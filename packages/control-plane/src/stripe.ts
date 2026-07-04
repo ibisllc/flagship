@@ -18,7 +18,7 @@
 // Everything is env-gated: with no STRIPE_* config the surfaces 503, so the
 // feature ships dark until the owner sets the keys (task #12).
 
-import type { TierName, StripeEventStore, AppPurchaseStorage, MarketplaceStorage } from "@flagship/storage";
+import type { TierName, StripeEventStore, AppPurchaseStorage, AppSalesStorage, MarketplaceStorage } from "@flagship/storage";
 import { grantTier, type TierGrantDeps } from "./tierGrant.js";
 import { grantAppPurchase } from "./appPurchase.js";
 
@@ -47,6 +47,11 @@ export interface StripeDeps extends TierGrantDeps {
    *  checkouts + /api/stripe/app-checkout works. Absent ⇒ subscription-only. */
   purchases?: AppPurchaseStorage;
   marketplace?: MarketplaceStorage;
+  /** Payout ledger (#15). Present ⇒ a completed paid checkout also writes an
+   *  app_sales row (gross/cut/net). */
+  sales?: AppSalesStorage;
+  /** Platform cut in bps for the sale split (default DEFAULT_MARKETPLACE_CUT_BPS). */
+  cutBps?: number;
   /** Injectable for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
@@ -194,7 +199,7 @@ export async function handleStripeWebhook(
   if (!claimed) return { status: 200, body: { ok: true, idempotent: true } };
 
   try {
-    const handled = await applyEvent(deps, eventType, event?.data?.object);
+    const handled = await applyEvent(deps, eventType, event?.data?.object, eventId);
     return { status: 200, body: { ok: true, ...handled } };
   } catch (e) {
     // We've already claimed the event id; a thrown handler means a genuine
@@ -208,6 +213,7 @@ async function applyEvent(
   deps: StripeDeps,
   type: string,
   obj: any,
+  eventId: string,
 ): Promise<{ action: string; username?: string; tier?: TierName }> {
   if (type === "checkout.session.completed") {
     // An app purchase (mode=payment) is tagged kind="app" in metadata.
@@ -218,8 +224,23 @@ async function applyEvent(
       const slug = String(obj?.metadata?.slug ?? "").toLowerCase();
       if (!username || !creator || !slug) throw new Error("app checkout missing username/creator/slug metadata");
       const res = await grantAppPurchase(
-        { purchases: deps.purchases, marketplace: deps.marketplace, ...(deps.now ? { now: deps.now } : {}) },
-        { username, creator, slug, source: "stripe", ref: typeof obj?.id === "string" ? obj.id : undefined },
+        {
+          purchases: deps.purchases,
+          marketplace: deps.marketplace,
+          ...(deps.sales ? { sales: deps.sales } : {}),
+          ...(deps.cutBps !== undefined ? { cutBps: deps.cutBps } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+        {
+          username,
+          creator,
+          slug,
+          source: "stripe",
+          ref: typeof obj?.id === "string" ? obj.id : undefined,
+          // Key the payout on the stripe EVENT id (stable across the
+          // session-id churn) so a redelivery can't double-count.
+          stripeEventId: eventId,
+        },
       );
       return { action: res.granted ? "purchased" : "already-owned", username };
     }
