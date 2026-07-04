@@ -626,8 +626,8 @@ piece (`device-admin-entitlements.md:171-172`).
    grant or a revocation. A freshly-promoted admin can't sign box-side ops until
    the box refreshes; a revoked admin keeps signing until refresh. Bound the
    refresh interval and document it.
-8. **Transfer re-home authority (row 29) — ✅ BACKEND + BOX SEAM BUILT 2026-07-03**
-   (gap audited + confirmed same day). On a transfer the box re-pins the
+8. **Transfer re-home authority (row 29) — ✅ FULLY BUILT 2026-07-03**
+   (gap audited + confirmed + closed across all surfaces same day). On a transfer the box re-pins the
    **acquirer's** admin root via a giver-root-SIGNED cryptographic proof —
    never `.com`'s word:
    - **Protocol:** `flagship/admin-root-transfer/v1`
@@ -651,8 +651,13 @@ piece (`device-admin-entitlements.md:171-172`).
      ONE-TIME `admin-root-pin.json` reset (receipt-guarded so the acquirer's own
      later rotations are never clobbered). Legacy (unpinned) boxes are
      byte-identical.
-   **Remaining:** the giver/acquirer CLIENT halves (phone builds + deposits the
-   signed handoff after claim-poll; iOS/Android claim signers still emit v1 —
-   webapp is on v2) and a reburn-validated live transfer between two
-   admin-rooted accounts. Not a rollout blocker for the clean-slate launch
-   (admin-tier transfers are post-launch).
+   - **Clients (all three):** the ACQUIRER's claim mint now includes their admin
+     root pub under the v2 canonical (iOS/Android/webapp); the GIVER, at
+     claim-received, signs the `admin-root-transfer/v1` proof with the giver
+     admin root (Face-ID/biometric gate EMITS the signature — consent-as-crypto)
+     and deposits it via the handoff route, degrading to a retryable
+     completed-with-warning on failure exactly like the disk-key re-seal. A
+     giver device with no admin root skips silently.
+   **Remaining:** only a reburn-validated live transfer between two admin-rooted
+   accounts (owner + hardware). The whole seam is a strict no-op on legacy
+   (unpinned) boxes, so it is not a rollout blocker for the clean-slate launch.

@@ -183,15 +183,25 @@ dead OLD one).
   re-pointed at `debugAccessGate.ts` (false-green since the 95a460bb console lockdown —
   its self-test was red on main); a missing `swapAdminRootPub` stub in the legacy
   Fastify adapter (main didn't typecheck).
-- **Flagged, not built:** spec §9.8 CONFIRMED — the transfer re-home never re-pins the
-  ACQUIRER's admin root (`transferRehomeConsumer.ts`); a transferred box keeps the
-  giver's anchor until reburn. Needs its own seam before transfer-a-box runs between
-  two admin-rooted accounts.
+- **§9.8 transfer re-home admin-root — CLOSED same day (was "flagged, not built").**
+  A transferred box now re-pins the ACQUIRER's admin root via a GIVER-root-signed
+  proof it verifies against its PINNED anchor (never `.com`'s word). New spine
+  envelope `flagship/admin-root-transfer/v1` (distinct tag from the rotation proof so
+  it can't replay as an account rotation); the transfer CLAIM canonical → **v2**
+  carrying the acquirer's admin root pub in-signature ("" = legacy ⇒ unpin); migration
+  **0068** (5 handoff columns on `server_transfers`) + `POST …/transfer/admin-handoff`
+  (the admin-root signature IS the auth); `transferRehomeConsumer` REFUSES the re-home
+  (`awaiting-admin-handoff`, keeps polling) until the proof verifies, then the marker
+  carries `newAdminRootPubHex` and boot-apply overrides `cfg.adminRootPub` with a
+  one-time receipt-guarded pin reset. All three clients: acquirer claim carries the
+  admin pub, giver deposits the biometric-signed proof at claim-received. Legacy
+  (unpinned) boxes byte-identical. Only a reburn-validated live two-account transfer
+  remains (owner + hardware).
 
-Gates: vitest 523 files green · `tsc -b` clean · iOS package tests green · Android
-`:app:testDebugUnitTest` + `assembleDebug` green · release-guard + admin-authority-guard
-OK. **REMAINING (owner):** the Slice D rollout — apply migrations **0064–0067** → deploy
-`.com` → wipe → rebuild burner + apps → reburn (spec §7).
+Gates: vitest 525 files green · `tsc -b` clean · iOS build + package tests green ·
+Android `:app:testDebugUnitTest` + `assembleDebug` green · release-guard +
+admin-authority-guard OK. **REMAINING (owner):** the Slice D rollout — apply migrations
+**0064–0068** → deploy `.com` → wipe → rebuild burner + apps → reburn (spec §7).
 
 **2026-06-30 — burner pairing → ONE-SHOT deposit; debug box LAN-SSH-able; daemon self-heal; status/sliver fixes.**
 A multi-part day driven by live hand-testing.
