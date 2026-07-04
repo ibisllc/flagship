@@ -108,6 +108,30 @@ interface SecretMailboxClient {
      *  deposit alone can never push code. Uses its own [UpdateDepositBody]
      *  (`{auth, authSignature, deposit, order, signature}`). */
     suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody)
+
+    /** POST /api/server/:domain/migration — phone, IRK mailbox-auth. Phase 1 of
+     *  "Migrate to new hardware" (docs/server-migration.md): deposits the
+     *  admin-signed ServerMigrationOrder. Throws on non-2xx (409 ⇒ a different
+     *  migration is already in progress). */
+    suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody)
+
+    /** GET /api/server/:domain/migration — PUBLIC phase state for the progress
+     *  timeline. Returns null when no session exists (404). */
+    suspend fun fetchMigration(serverDomain: String): MigrationSession?
+
+    /** POST /api/server/:domain/migration/confirm-ready — phone, admin-signed
+     *  control (409 unless the session is pre-seeded). */
+    suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody)
+
+    /** POST /api/server/:domain/migration/freeze — phone. Phase 5: EXACTLY the
+     *  graceful-decommission deposit (the eviction lane reused verbatim), posted
+     *  to the session-validated freeze route (409 unless ready/freezing). */
+    suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody)
+
+    /** POST /api/server/:domain/migration/abort — phone, admin-signed control.
+     *  Allowed at every phase before take-over; 409 after (the point of no
+     *  return). */
+    suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody)
 }
 
 /** The server-update deposit body. `auth`/`authSignature` are the SAME IRK
@@ -141,6 +165,73 @@ data class UpdateDepositBody(
         val issuedAt: Long,
     )
 }
+
+/** The server-migration initiate deposit — `{ auth, authSignature, order,
+ *  signature }`. `auth`/`authSignature` are the SAME IRK mailbox-auth shape as
+ *  the other phone-mailbox calls; `order` is the ServerMigrationOrder field set
+ *  and `signature` is the admin-root (legacy IRK) signature over its canonical
+ *  bytes. Field names match the Worker handler (`handlePostMigrationStart`)
+ *  exactly. */
+@Serializable
+data class MigrationStartBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val order: Order,
+    val signature: String,
+) {
+    @Serializable
+    data class Order(
+        val serverDomain: String,
+        val oldStkPubHex: String,     // hex (32 bytes) — the CURRENT instance's STK
+        val diskDisposition: String,  // "keep" | "wipe-after-handoff" (never "wipe-now")
+        val nonce: String,            // hex (32 bytes)
+        val issuedAt: Long,
+    )
+}
+
+/** The confirm-ready / abort deposit — `{ auth, authSignature, control,
+ *  signature }`. */
+@Serializable
+data class MigrationControlBody(
+    val auth: MailboxAuthEnvelope.Auth,
+    val authSignature: String,
+    val control: Control,
+    val signature: String,
+) {
+    @Serializable
+    data class Control(
+        val serverDomain: String,
+        val action: String,   // "confirm-ready" | "abort"
+        val nonce: String,    // hex (32 bytes)
+        val issuedAt: Long,
+    )
+}
+
+/** The GET body — the session's phase state + the 8-step timeline stamps.
+ *  `finalDeltaAt`/`oldClosedOutAt` are joined live from the eviction row by the
+ *  Worker. Every stamp is defaulted so an absent field never breaks the poll
+ *  (mixed-deploy tolerance, like the /pods decode). */
+@Serializable
+data class MigrationSession(
+    val serverDomain: String,
+    /** initiated | provisioned | pre-seeded | ready | freezing | taken-over | aborted */
+    val phase: String,
+    val disposition: String = "",
+    val oldStkPubHex: String = "",
+    val newServerDomain: String? = null,
+    val newStkPubHex: String? = null,
+    val initiatedAt: Long? = null,
+    val attachedAt: Long? = null,
+    val preSeededAt: Long? = null,
+    val readyAt: Long? = null,
+    val freezeAt: Long? = null,
+    val finalDeltaAt: Long? = null,
+    val takenOverAt: Long? = null,
+    val abortedAt: Long? = null,
+    val oldClosedOutAt: Long? = null,
+    /** Derived by the Worker: taken over AND the old box closed out. */
+    val done: Boolean = false,
+)
 
 /** The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
  *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
@@ -687,6 +778,75 @@ class LiveSecretMailboxClient(
             accept = setOf(200),
         )
     }
+
+    override suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationStartBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun fetchMigration(serverDomain: String): MigrationSession? {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/server/$encoded/migration",
+            accept = setOf(200, 404),
+        )
+        if (resp.status == 404) return null
+        return transport.json.decodeFromString(
+            MigrationSession.serializer(), String(resp.body, Charsets.UTF_8),
+        )
+    }
+
+    override suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationControlBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/confirm-ready",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(DecommissionDepositBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/freeze",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
+
+    override suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody) {
+        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(MigrationControlBody.serializer(), body)
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$base/api/server/$encoded/migration/abort",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -802,5 +962,45 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
         nextUpdateError?.let { nextUpdateError = null; throw it }
         updateDeposits.add(serverDomain to body)
+    }
+
+    /** Scripted GET result for [fetchMigration] (null ⇒ 404 / no session). */
+    var migrationSession: MigrationSession? = null
+    /** When set, the next call of that kind throws it once. */
+    var nextMigrationStartError: Throwable? = null
+    var nextMigrationFetchError: Throwable? = null
+    var nextMigrationConfirmError: Throwable? = null
+    var nextMigrationFreezeError: Throwable? = null
+    var nextMigrationAbortError: Throwable? = null
+    val migrationStarts: MutableList<Pair<String, MigrationStartBody>> = mutableListOf()
+    val migrationConfirms: MutableList<Pair<String, MigrationControlBody>> = mutableListOf()
+    val migrationFreezes: MutableList<Pair<String, DecommissionDepositBody>> = mutableListOf()
+    val migrationAborts: MutableList<Pair<String, MigrationControlBody>> = mutableListOf()
+    val migrationFetches: MutableList<String> = mutableListOf()
+
+    override suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody) {
+        nextMigrationStartError?.let { nextMigrationStartError = null; throw it }
+        migrationStarts.add(serverDomain to body)
+    }
+
+    override suspend fun fetchMigration(serverDomain: String): MigrationSession? {
+        migrationFetches.add(serverDomain)
+        nextMigrationFetchError?.let { nextMigrationFetchError = null; throw it }
+        return migrationSession
+    }
+
+    override suspend fun depositMigrationConfirmReady(serverDomain: String, body: MigrationControlBody) {
+        nextMigrationConfirmError?.let { nextMigrationConfirmError = null; throw it }
+        migrationConfirms.add(serverDomain to body)
+    }
+
+    override suspend fun depositMigrationFreeze(serverDomain: String, body: DecommissionDepositBody) {
+        nextMigrationFreezeError?.let { nextMigrationFreezeError = null; throw it }
+        migrationFreezes.add(serverDomain to body)
+    }
+
+    override suspend fun depositMigrationAbort(serverDomain: String, body: MigrationControlBody) {
+        nextMigrationAbortError?.let { nextMigrationAbortError = null; throw it }
+        migrationAborts.add(serverDomain to body)
     }
 }

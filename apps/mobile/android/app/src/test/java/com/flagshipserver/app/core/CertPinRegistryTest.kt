@@ -191,15 +191,52 @@ class CertPinRegistryTest {
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
+    /** A freshly-signed report carrying [newPin] — the renewal/migration
+     *  "new box behind the same name" path. Signs with the STK derived from
+     *  the vector UMK (the same trust anchor the registry re-derives). */
+    private fun renewedSignedPod(newPin: String, issuedAt: Long): PodDirectoryEntry {
+        val report = DaemonStatusVector.REPORT.copy(certSha256 = newPin, issuedAt = issuedAt)
+        val sig = com.google.crypto.tink.subtle.Ed25519Sign(
+            ServerKeys.deriveStkSeed(DaemonStatusVector.UMK_SEED, DaemonStatusVector.SERVER_ID),
+        ).sign(DaemonStatusReport.canonicalBytes(report))
+        return pod(
+            signedStatus = SignedDaemonStatus(
+                report = wireReport(report),
+                signatureHex = HexUtil.encode(sig),
+            ),
+        )
+    }
+
     // A genuine renewal: the pod is listed and a NEWLY-verified report carries
     // a different fingerprint ⇒ replace.
+    //
+    // This is ALSO the server-migration cutover re-pin
+    // (docs/server-migration.md phase 6): the migrated box keeps the SAME
+    // serverDomain ⇒ same SWK ⇒ same SWK-derived status STK, mints its own
+    // A′ cert, and its first verified daemon-status report replaces the old
+    // box's fingerprint automatically — no manual re-pin step exists or is
+    // needed. Unverified reports still never clear/replace (the retain tests
+    // above).
     @Test fun newlyVerifiedReportReplacesThePin() {
         val reg = registryWith(pod())
         assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
-        // The fixture only has one signed vector, so re-applying the same
-        // verified report is the renewal path that must keep the pin set.
-        reg.update(listOf(pod()), DaemonStatusVector.UMK_SEED, now)
-        assertEquals(DaemonStatusVector.CERT_SHA256, reg.pinFor(DaemonStatusVector.SERVER_ID))
+
+        // A verified report with a NEW fingerprint replaces the pin.
+        val renewedPin = "cd".repeat(32)
+        val renewed = renewedSignedPod(renewedPin, DaemonStatusVector.REPORT.issuedAt + 1_000)
+        reg.update(listOf(renewed), DaemonStatusVector.UMK_SEED, now + 2_000)
+        assertEquals(renewedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
+
+        // Migration framing of the same reconcile: yet another box behind the
+        // same name (same STK — the migrated hardware), a fresh verified report
+        // with ITS new cert ⇒ the pin follows again; a subsequent unverifiable
+        // refresh does NOT downgrade it.
+        val migratedPin = "6d".repeat(32)
+        val migrated = renewedSignedPod(migratedPin, DaemonStatusVector.REPORT.issuedAt + 2_000)
+        reg.update(listOf(migrated), DaemonStatusVector.UMK_SEED, now + 3_000)
+        assertEquals(migratedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
+        reg.update(listOf(pod(signedStatus = null)), DaemonStatusVector.UMK_SEED, now + 4_000)
+        assertEquals(migratedPin, reg.pinFor(DaemonStatusVector.SERVER_ID))
     }
 
     // A pod that was never verified and reports nothing stays unpinned — keep-

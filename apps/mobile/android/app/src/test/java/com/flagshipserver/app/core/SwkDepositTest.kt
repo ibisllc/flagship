@@ -75,6 +75,10 @@ class SwkDepositTest {
         mailbox: MockSecretMailboxClient,
         pairingStore: PendingPairingDepositStore = freshPairingStore(),
         cgkStore: PendingCgkDepositStore = freshCgkStore(),
+        resolution: MigrationSwkResolution = MigrationSwkResolution.Normal,
+        /** Records the serverId each SWK derivation used (the migration seam's
+         *  observable output). */
+        derivedServerIds: MutableList<String> = mutableListOf(),
     ) =
         SwkDepositCoordinator(
             username = "alice",
@@ -82,8 +86,12 @@ class SwkDepositTest {
             store = store,
             pairingStore = pairingStore,
             cgkStore = cgkStore,
-            deriveIrkAndSwk = { Triple(Ed25519Sign(irkKp.privateKey), HexUtil.encode(irkKp.publicKey), HexUtil.encode(swk)) },
+            deriveIrkAndSwk = { serverId, _ ->
+                derivedServerIds.add(serverId)
+                Triple(Ed25519Sign(irkKp.privateKey), HexUtil.encode(irkKp.publicKey), HexUtil.encode(swk))
+            },
             deriveCgkHex = { HexUtil.encode(cgk) },
+            resolveMigrationSwk = { resolution },
         )
 
     @Test
@@ -191,5 +199,88 @@ class SwkDepositTest {
         coordinator(freshStore(), mailbox, freshPairingStore()).depositIfNeeded(serverDomain, boxPubHex)
         assertTrue(mailbox.pairingDeposits.isEmpty())
         assertTrue(mailbox.swkDeposits.isEmpty())
+    }
+
+    // ── Server-migration SWK contract (docs/server-migration.md invariant 4) ──
+    //
+    // The coordinator consults the migration resolver BEFORE deriving, so a
+    // migration's provisional new pod gets the MIGRATING domain's SWK (DOTS
+    // `flagship.swk.v1|<migrating domain>`) and an ambiguous pod (live
+    // migration, no attached box yet) DEFERS instead of depositing a
+    // wrong-name SWK that would poison the restore.
+
+    private val migratingDomain = "home.alice.flagship.services"
+
+    @Test
+    fun migrationAttachedNewPodDerivesFromMigratingDomain() = runBlocking {
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        val derived = mutableListOf<String>()
+        coordinator(
+            store, mailbox,
+            resolution = MigrationSwkResolution.MigratingDomain(migratingDomain),
+            derivedServerIds = derived,
+        ).depositIfNeeded(serverDomain, boxPubHex)
+
+        assertEquals(
+            "SWK derives from the MIGRATING domain, not the pod's own name",
+            listOf(migratingDomain), derived,
+        )
+        assertEquals(1, mailbox.swkDeposits.size)
+        // The deposit still ADDRESSES the provisional pod (it claims the blob).
+        assertEquals(serverDomain, mailbox.swkDeposits[0].first)
+        assertEquals(serverDomain, mailbox.swkDeposits[0].second.deposit.serverDomain)
+        assertTrue(store.isDeposited(serverDomain))
+    }
+
+    @Test
+    fun migrationDeferHoldsTheDepositAndKeepsPending() = runBlocking {
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        val derived = mutableListOf<String>()
+        coordinator(
+            store, mailbox,
+            resolution = MigrationSwkResolution.DeferDeposit,
+            derivedServerIds = derived,
+        ).depositIfNeeded(serverDomain, boxPubHex)
+
+        assertTrue("no deposit while the migration hasn't attached its new box", mailbox.swkDeposits.isEmpty())
+        assertTrue("nothing owed ⇒ no biometric derivation at all", derived.isEmpty())
+        assertTrue("the pending marker stays — the next reconcile retries", store.isPending(serverDomain))
+    }
+
+    @Test
+    fun migrationNormalResolutionDerivesFromOwnName() = runBlocking {
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        val derived = mutableListOf<String>()
+        coordinator(store, mailbox, derivedServerIds = derived)
+            .depositIfNeeded(serverDomain, boxPubHex)
+
+        assertEquals(listOf(serverDomain), derived)
+        assertEquals(1, mailbox.swkDeposits.size)
+    }
+
+    @Test
+    fun migrationDeferStillDeliversAnOwedCgk() = runBlocking {
+        // The defer is SWK-scoped: the CGK is per-cloud (not serverId-derived),
+        // so an owed CGK still goes out on the same pass.
+        val store = freshStore()
+        store.markPending(serverDomain)
+        val cgkStore = freshCgkStore()
+        cgkStore.markPending(serverDomain)
+        val mailbox = MockSecretMailboxClient()
+        coordinator(
+            store, mailbox, cgkStore = cgkStore,
+            resolution = MigrationSwkResolution.DeferDeposit,
+        ).depositIfNeeded(serverDomain, boxPubHex)
+
+        assertTrue(mailbox.swkDeposits.isEmpty())
+        assertTrue(store.isPending(serverDomain))
+        assertEquals(1, mailbox.cgkDeposits.size)
+        assertTrue(cgkStore.isDeposited(serverDomain))
     }
 }
