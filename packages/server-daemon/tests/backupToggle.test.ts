@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { swkOps } from "./helpers/keyCustody.js";
 import {
   deriveIRK,
   deriveSWK,
@@ -28,7 +29,7 @@ function makeCtx(extra: { backupLoop?: BackupLoop; serverId?: string } = {}): Da
     apps,
     resolveSession: () => null,
     injectors: new Map<string, IdentityInjector>(),
-    backupLoop: extra.backupLoop ?? new BackupLoop({ swk, k: 10, n: 16 }),
+    backupLoop: extra.backupLoop ?? new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 }),
     irkPubKey: irk.publicKey,
   };
 }
@@ -47,7 +48,7 @@ function buildSignedToggle(over: Partial<BackupToggle> = {}, signer = irk) {
 
 describe("BackupLoop — enabled flag gates work", () => {
   it("does nothing when disabled (the default at boot)", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const r = await loop.runOnce([{ path: "x", content: new Uint8Array([1, 2, 3]) }]);
     expect(r.filesProcessed).toBe(0);
     expect(loop.status().enabled).toBe(false);
@@ -55,7 +56,7 @@ describe("BackupLoop — enabled flag gates work", () => {
   });
 
   it("processes work when enabled, and stamps lastBackupAt", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16, initiallyEnabled: true });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16, initiallyEnabled: true });
     const r = await loop.runOnce([{ path: "x", content: new Uint8Array(1024).fill(7) }], 999);
     expect(r.filesProcessed).toBe(1);
     expect(loop.status().lastBackupAt).toBe(999);
@@ -63,7 +64,7 @@ describe("BackupLoop — enabled flag gates work", () => {
   });
 
   it("setEnabled(false) immediately stops new work", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16, initiallyEnabled: true });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16, initiallyEnabled: true });
     await loop.runOnce([{ path: "x", content: new Uint8Array([1]) }]);
     loop.setEnabled(false);
     const r = await loop.runOnce([{ path: "y", content: new Uint8Array([2]) }]);
@@ -71,7 +72,7 @@ describe("BackupLoop — enabled flag gates work", () => {
   });
 
   it("recordHostedBytes tracks reciprocal hosting (clamped at 0)", () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     loop.recordHostedBytes(4096);
     loop.recordHostedBytes(2048);
     expect(loop.status().hostingBytes).toBe(6144);
@@ -82,7 +83,7 @@ describe("BackupLoop — enabled flag gates work", () => {
 
 describe("daemon HTTP — GET /backup/status", () => {
   it("returns the BackupLoop status as JSON", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16, initiallyEnabled: true });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16, initiallyEnabled: true });
     loop.recordHostedBytes(2048);
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop }));
     const r = await app.inject({ method: "GET", url: "/backup/status" });
@@ -103,7 +104,7 @@ describe("daemon HTTP — GET /backup/status", () => {
 
 describe("daemon HTTP — POST /backup/toggle (IRK-signed)", () => {
   it("flips enabled on a valid IRK-signed claim", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop }));
     const r = await app.inject({
       method: "POST",
@@ -116,7 +117,7 @@ describe("daemon HTTP — POST /backup/toggle (IRK-signed)", () => {
   });
 
   it("rejects toggles signed for a different serverId (cross-server replay)", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop, serverId: "home-box" }));
     const r = await app.inject({
       method: "POST",
@@ -129,7 +130,7 @@ describe("daemon HTTP — POST /backup/toggle (IRK-signed)", () => {
   });
 
   it("rejects forged signatures", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop }));
     const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(99) });
     const r = await app.inject({
@@ -142,7 +143,7 @@ describe("daemon HTTP — POST /backup/toggle (IRK-signed)", () => {
   });
 
   it("rejects stale claims (5-minute replay window)", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop }));
     const r = await app.inject({
       method: "POST",
@@ -153,7 +154,7 @@ describe("daemon HTTP — POST /backup/toggle (IRK-signed)", () => {
   });
 
   it("rejects malformed bodies with 400", async () => {
-    const loop = new BackupLoop({ swk, k: 10, n: 16 });
+    const loop = new BackupLoop({ swk: swkOps(swk), k: 10, n: 16 });
     const app = buildDaemonHttp(makeCtx({ backupLoop: loop }));
     const r = await app.inject({
       method: "POST",

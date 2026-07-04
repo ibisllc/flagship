@@ -1,8 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import {
-  openPairingOrderEnvelope,
-  openSealedFromEd25519Recipient,
-} from "@flagship/protocol";
+import { openPairingOrderEnvelope } from "@flagship/protocol";
 
 /**
  * Box-side claim of the secret-free-recipe PAIRING delivery — the twin of
@@ -80,8 +77,8 @@ export interface ClaimPairingDepositOptions {
   serverFqdn: string;
   /** The config-pinned owner IRK pubkey — the only trust anchor. */
   ownerIrkPub: Uint8Array;
-  /** The box's Ed25519 identity SEED (its 32-byte private key) — unseals the blob. */
-  boxIdentityPriv: Uint8Array;
+  /** Custodian-backed unseal — opens the pairing blob sealed to the box identity. */
+  unsealToBox: (blob: Uint8Array) => Uint8Array;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /** Where the claimed session lands. */
@@ -139,7 +136,7 @@ export async function claimPairingDeposit(
   // Unseal with the box identity key → the plaintext {request, signature} JSON.
   let json: string;
   try {
-    const plain = openSealedFromEd25519Recipient(hexToBytes(sealedHex.toLowerCase()), opts.boxIdentityPriv);
+    const plain = opts.unsealToBox(hexToBytes(sealedHex.toLowerCase()));
     json = new TextDecoder().decode(plain);
   } catch {
     log("[pairing-deposit] could not unseal with the box identity key; keep polling");

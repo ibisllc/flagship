@@ -17,10 +17,48 @@ export interface AppSpec {
   containerPort?: number;
 }
 
+export interface CommandRunnerOpts {
+  /**
+   * Kill the child after this many ms (SIGKILL). Used to bound `docker build`
+   * so an attacker-authored Dockerfile can't spin forever. 0/absent ⇒ no bound.
+   */
+  timeoutMs?: number;
+}
+
 export interface CommandRunner {
-  run(cmd: string, args: string[]): Promise<void>;
+  run(cmd: string, args: string[], opts?: CommandRunnerOpts): Promise<void>;
   /** Capture stdout. Default impl uses spawn with pipe; tests inject a mock. */
-  capture?(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string }>;
+  capture?(cmd: string, args: string[], opts?: CommandRunnerOpts): Promise<{ stdout: string; stderr: string }>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Docker-invocation safety guard (privilege-separation regression insurance).
+//
+// The daemon's private state lives under /var/flagship, and the Docker socket
+// IS root on the box. NO container the daemon launches — build OR run — may
+// ever bind-mount a host path or the socket. This assertion is a cheap tripwire
+// on every docker arg list so a future change that introduces a `-v`,
+// `--volume`, `--mount`, a `/var/flagship` path, or `docker.sock` fails loudly
+// at the invocation site instead of silently handing an attacker-authored
+// image the keys to the box. (Runtime app containers already avoid these; this
+// keeps it that way.)
+// ──────────────────────────────────────────────────────────────────────
+export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
+  for (const a of args) {
+    const lower = a.toLowerCase();
+    if (lower.includes("/var/flagship")) {
+      throw new Error(`refusing docker invocation: arg references /var/flagship (${a})`);
+    }
+    if (lower.includes("docker.sock")) {
+      throw new Error(`refusing docker invocation: arg references the docker socket (${a})`);
+    }
+    // Host-path bind mounts. `--volume`/`-v`/`--mount` on the app-build/run
+    // surface is never legitimate (data stores reach containers over the
+    // host-gateway alias, not a mount).
+    if (a === "-v" || a === "--volume" || a === "--mount" || lower.startsWith("--mount=")) {
+      throw new Error(`refusing docker invocation: host-path mount arg is not allowed (${a})`);
+    }
+  }
 }
 
 /**
@@ -106,28 +144,61 @@ function resolveLimits(limits: Partial<ContainerLimits> | undefined): ContainerL
   return { ...DEFAULT_CONTAINER_LIMITS, ...(limits ?? {}) };
 }
 
+/** Arm a kill-timer for a spawned child; returns the timer (or null when no
+ *  bound is requested). On expiry the child is SIGKILLed and the promise rejects. */
+function armTimeout(
+  child: ReturnType<typeof spawn>,
+  opts: CommandRunnerOpts | undefined,
+  reject: (e: Error) => void,
+): ReturnType<typeof setTimeout> | null {
+  const ms = opts?.timeoutMs ?? 0;
+  if (!ms || ms <= 0) return null;
+  const timer = setTimeout(() => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    reject(new Error(`command timed out after ${ms}ms and was killed`));
+  }, ms);
+  if (typeof (timer as { unref?: () => void }).unref === "function") {
+    (timer as { unref?: () => void }).unref!();
+  }
+  return timer;
+}
+
 export const realCommandRunner: CommandRunner = {
-  run(cmd, args) {
+  run(cmd, args, opts) {
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: "inherit" });
+      const timer = armTimeout(p, opts, reject);
       // A spawn failure (e.g. the binary is missing — `docker` ENOENT) emits
       // an 'error' event, not 'exit'. Without this listener Node treats it as
       // an unhandled error and crashes the daemon; reject so callers can swallow.
-      p.on("error", reject);
-      p.on("exit", (code) =>
-        code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`)),
-      );
+      p.on("error", (e) => {
+        if (timer) clearTimeout(timer);
+        reject(e);
+      });
+      p.on("exit", (code) => {
+        if (timer) clearTimeout(timer);
+        code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`));
+      });
     });
   },
-  capture(cmd, args) {
+  capture(cmd, args, opts) {
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
-      p.on("error", reject);
+      const timer = armTimeout(p, opts, reject);
+      p.on("error", (e) => {
+        if (timer) clearTimeout(timer);
+        reject(e);
+      });
       p.stdout?.on("data", (d) => (stdout += d.toString()));
       p.stderr?.on("data", (d) => (stderr += d.toString()));
       p.on("exit", (code) => {
+        if (timer) clearTimeout(timer);
         if (code === 0) return resolve({ stdout, stderr });
         // Carry the tail of the process output in the message — a bare
         // "exited with code 1" is undiagnosable from a remote client (the
@@ -145,17 +216,117 @@ export const realCommandRunner: CommandRunner = {
 };
 
 /**
+ * Sandbox posture for `docker build`. The build runs an ATTACKER-AUTHORED
+ * Dockerfile whose `RUN` steps execute as root — the single least-contained
+ * surface in the daemon. These caps bound its blast radius:
+ *
+ *  - `--network` pins the build to a dedicated, non-default bridge
+ *    (`flagship-build`) so the builder never joins the default bridge (where
+ *    every container is mutually reachable) or the app bridge. NOTE (v1
+ *    caveat): a user-defined bridge still has NAT egress, so this ISOLATES the
+ *    builder from other containers but does NOT yet enforce an egress allow-
+ *    list — package installs (`npm install`, `apt`) still reach the internet.
+ *    Tightening this to an allow-listed egress bridge is the follow-up; the
+ *    knob is here so an operator can point it at a locked bridge today.
+ *  - `--memory` / `--cpu-period`+`--cpu-quota` bound RAM + CPU so a build can't
+ *    OOM the host or starve the daemon (honored by the legacy builder; BuildKit
+ *    ignores them harmlessly).
+ *  - `--ulimit nproc` is the build-time process cap (docker build has no
+ *    `--pids-limit`; `nproc` is its equivalent) — a fork-bomb in a RUN step
+ *    can't exhaust host PIDs.
+ *  - a wall-clock TIMEOUT (enforced by the CommandRunner) kills a build that
+ *    hangs or spins, so a malicious Dockerfile can't pin a builder forever.
+ *
+ * NO base-image digest pinning is imposed here: the user's Dockerfile picks its
+ * own `FROM`, so we can't rewrite it — the base is recorded in the build log
+ * (the captured output below) rather than forced. Where the build pipeline
+ * controls the base (future first-party templates), pin at that layer.
+ */
+export interface DockerBuildLimits {
+  /** `--memory`, e.g. "2g". */
+  memory: string;
+  /** CPU cap in whole+fractional cores, e.g. "2.0" → --cpu-quota 200000. */
+  cpus: string;
+  /** Process cap via `--ulimit nproc=<n>:<n>` (build's pids-limit equivalent). */
+  pidsLimit: number;
+  /** `--network` — the dedicated, non-default build bridge. */
+  network: string;
+  /** Wall-clock kill bound for the whole build (ms). */
+  timeoutMs: number;
+}
+
+export const DEFAULT_DOCKER_BUILD_LIMITS: DockerBuildLimits = {
+  memory: "2g",
+  cpus: "2.0",
+  pidsLimit: 2048,
+  network: "flagship-build",
+  timeoutMs: 10 * 60_000,
+};
+
+const CPU_PERIOD = 100_000;
+
+/**
+ * Ensure a docker bridge network exists (idempotent — a duplicate create exits
+ * non-zero, which we swallow). Call once at boot for the dedicated build bridge
+ * so `docker build --network <name>` resolves.
+ */
+export async function ensureDockerNetwork(cmd: CommandRunner, network: string): Promise<void> {
+  try {
+    await cmd.run("docker", ["network", "create", network]);
+  } catch {
+    // already exists — fine
+  }
+}
+
+/** The hardened `docker build` arg list (pure, so it is unit-testable). */
+export function dockerBuildArgs(
+  image: string,
+  contextDir: string,
+  limits: DockerBuildLimits,
+): string[] {
+  const cpuQuota = Math.max(1, Math.round(Number(limits.cpus) * CPU_PERIOD));
+  const args = [
+    "build",
+    "--network",
+    limits.network,
+    "--memory",
+    limits.memory,
+    "--cpu-period",
+    String(CPU_PERIOD),
+    "--cpu-quota",
+    String(cpuQuota),
+    "--ulimit",
+    `nproc=${limits.pidsLimit}:${limits.pidsLimit}`,
+    "-t",
+    image,
+    contextDir,
+  ];
+  // Regression insurance: a build must NEVER bind-mount a host path or the
+  // docker socket (Part-3 guard). Throws loudly at the invocation site.
+  assertNoHostPathInDockerArgs(args);
+  return args;
+}
+
+/**
  * Run `docker build` preferring capture over inherit so a FAILURE carries the
  * builder's stderr back to the caller (the deploy HTTP surface returns the
  * reason to the phone/driver — with stdio:"inherit" the error was an opaque
  * "docker exited with code 1"). The captured output is echoed to the daemon's
- * own stdio so the full build log still lands in the journal.
+ * own stdio so the full build log still lands in the journal. The build is
+ * sandboxed per `DockerBuildLimits` (network/memory/cpu/pids) + a wall-clock
+ * timeout — see the interface doc for the rationale + the v1 egress caveat.
  */
-export async function runDockerBuild(cmd: CommandRunner, image: string, contextDir: string): Promise<void> {
-  const args = ["build", "-t", image, contextDir];
-  if (!cmd.capture) return cmd.run("docker", args);
+export async function runDockerBuild(
+  cmd: CommandRunner,
+  image: string,
+  contextDir: string,
+  limits: DockerBuildLimits = DEFAULT_DOCKER_BUILD_LIMITS,
+): Promise<void> {
+  const args = dockerBuildArgs(image, contextDir, limits);
+  const runOpts: CommandRunnerOpts = { timeoutMs: limits.timeoutMs };
+  if (!cmd.capture) return cmd.run("docker", args, runOpts);
   try {
-    const { stdout, stderr } = await cmd.capture("docker", args);
+    const { stdout, stderr } = await cmd.capture("docker", args, runOpts);
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(stderr);
   } catch (e) {
@@ -187,6 +358,9 @@ export class AppRunner {
       ...this.portArgs(spec.port, spec.containerPort),
       spec.image,
     ];
+    // Regression insurance: a runtime container must never bind-mount a host
+    // path or the docker socket either (/var/flagship stays off every mount).
+    assertNoHostPathInDockerArgs(args);
     await this.cmd.run("docker", args);
     return args;
   }

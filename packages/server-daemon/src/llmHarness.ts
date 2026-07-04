@@ -1,9 +1,5 @@
-import {
-  openLlmPayload,
-  sealLlmPayload,
-  type Bytes,
-  type SealedBlob,
-} from "@flagship/protocol";
+import { type SealedBlob } from "@flagship/protocol";
+import type { SwkOps } from "./keyCustodian.js";
 import {
   assertSafeProviderBaseUrl,
   defaultRegistry,
@@ -24,7 +20,7 @@ import {
 } from "@flagship/llm-providers";
 
 export interface LlmHarnessOptions {
-  swk: Bytes;
+  swk: SwkOps;
   registry?: ProviderRegistry;
   /**
    * Streaming-provider registry for `chatStream`. Defaults to the
@@ -94,7 +90,7 @@ export class LlmHarness {
   private readonly streamingRegistry: StreamingProviderRegistry;
   private readonly fetchImpl: FetchLike;
   private readonly streamingFetchImpl: StreamingFetchLike;
-  private readonly swk: Bytes;
+  private readonly swk: SwkOps;
   private readonly baseUrlGuard?: BaseUrlGuardOptions;
 
   constructor(opts: LlmHarnessOptions) {
@@ -208,7 +204,7 @@ export class LlmHarness {
   async chat(sealed: SealedBlob): Promise<SealedBlob> {
     let opened: Uint8Array;
     try {
-      opened = openLlmPayload(sealed, this.swk);
+      opened = this.swk.openWithSwk(sealed);
     } catch {
       return this.sealError({ ok: false, message: "decrypt failed" });
     }
@@ -255,7 +251,7 @@ export class LlmHarness {
         this.fetchImpl,
       );
       const sealedResp: SealedResponse = { ok: true, response };
-      return sealLlmPayload(new TextEncoder().encode(JSON.stringify(sealedResp)), this.swk);
+      return this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(sealedResp)));
     } catch (e) {
       if (e instanceof ProviderError) {
         return this.sealError({
@@ -274,7 +270,7 @@ export class LlmHarness {
   }
 
   private sealError(err: SealedError): SealedBlob {
-    return sealLlmPayload(new TextEncoder().encode(JSON.stringify(err)), this.swk);
+    return this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(err)));
   }
 }
 

@@ -72,6 +72,7 @@ import {
   defaultPendingIdentityPath,
 } from "./identityRotateHttp.js";
 import { AppMembership } from "./membership.js";
+import { KeyCustodian, type SwkOps } from "./keyCustodian.js";
 import { IdentityInjector } from "./identityInjector.js";
 import {
   defaultPairedSessionPath,
@@ -578,9 +579,23 @@ async function main(): Promise<void> {
         "current recipe to enable build-a-service.",
     );
   }
+  // ---- KeyCustodian — the single owner of the box's raw private key bytes ----
+  // Constructed once here from the loaded material (identity seed + SWK when
+  // provisioned + CGK when present) and threaded everywhere the raw keys used
+  // to go. From this point on, no other module holds the identity `Keypair`
+  // or the raw SWK: they hold a narrow interface slice (BoxSigner / SwkOps /
+  // GossipOps) and call an operation. See keyCustodian.ts for the honest
+  // in-process-boundary caveat.
+  const custodian = new KeyCustodian({
+    identityPriv: identityPrivKey,
+    swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
+    cgk: (await resolveCgk({ cgkHexFilePath: "/var/flagship/cgk.hex" })) ?? undefined,
+  });
+
   const { backupLoop, repairAccumulator, repairScheduler, pbFramesHandler } =
     wirePeerBackup({
       swkHex,
+      swkOps: swkHex ? custodian.asSwkOps() : null,
       serverId: env.serverFqdn ?? null,
       identityPrivKeyHex: env.identityPrivKeyHex ?? null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
@@ -632,7 +647,7 @@ async function main(): Promise<void> {
     const swkPoller = buildSwkDepositPoller({
       serverDomain: env.serverFqdn,
       ownerIrkPub: cfg.irkPublicKey,
-      boxIdentityPriv: identityPrivKey,
+      unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       persistSwk: (hex) => persistSwkHex(swkHexFilePath, hex),
       restart: () => {
@@ -665,7 +680,7 @@ async function main(): Promise<void> {
     const cgkPoller = buildCgkDepositPoller({
       serverDomain: env.serverFqdn!,
       ownerIrkPub: cfg.irkPublicKey,
-      boxIdentityPriv: identityPrivKey,
+      unsealToBox: (blob) => custodian.unsealToBox(blob),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       persistCgk: (hex) => persistCgkHex(cgkHexFilePath, hex),
       restart: () => {
@@ -818,6 +833,7 @@ async function main(): Promise<void> {
     cfg,
     dataDir,
     identityKeypair,
+    custodian,
     reportStatus,
   });
 
@@ -848,7 +864,7 @@ async function main(): Promise<void> {
   };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
-    identity: identityKeypair,
+    sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
   });
@@ -858,6 +874,7 @@ async function main(): Promise<void> {
     runtime = await startDaemonRuntime({
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
+      custodian,
       tunnelHubUrl: endpoints.endpoints.tunnelHub,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
       acmeEmail: env.acmeEmail!,
@@ -921,7 +938,7 @@ async function main(): Promise<void> {
         // half is phone-held) is accepted by ServicePlatform.install. The
         // phone-signed install path still verifies the owner IRK.
         hostIrk: identityKeypair,
-        swk: swkHex ? hexToBytes(swkHex.trim()) : undefined,
+        swk: swkHex ? custodian.asSwkOps() : undefined,
         // The data-services compose stack writes its admin creds here on
         // first boot. If it's missing, the runtime degrades gracefully:
         // apps declaring `data.stores` will refuse to install with a
@@ -982,7 +999,7 @@ async function main(): Promise<void> {
           serverFqdn: env.serverFqdn!,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl,
           ownerIrkPub: cfg.irkPublicKey,
-          boxIdentityPriv: identityPrivKey,
+          unsealToBox: (blob) => custodian.unsealToBox(blob),
           pairedSessions,
           markerStore: pairingMarker,
           onLog: (m) => console.log(m),
@@ -1033,6 +1050,7 @@ async function main(): Promise<void> {
       dataDir,
       swkHex,
       identityKeypair,
+      custodian,
       pairedSessions,
       browserBundle,
       alertInbox,
@@ -1318,6 +1336,10 @@ interface PeerBackupBundle {
  */
 function wirePeerBackup(deps: {
   swkHex: string | null;
+  /** The custodian's SwkOps slice — used by the live BackupLoop (encryptChunk).
+   *  The raw `swkHex` stays for the manifest seal/upload plumbing, which still
+   *  calls the pure `sealBackupManifest`/`fetchBackupManifest` helpers. */
+  swkOps: SwkOps | null;
   serverId: string | null;
   identityPrivKeyHex: string | null;
   controlPlaneBaseUrl: string | null;
@@ -1366,7 +1388,7 @@ function wirePeerBackup(deps: {
             onLog: (m: string) => console.log(`[peer-backup] ${m}`),
           }
         : undefined;
-    backupLoop = new BackupLoop({ swk, k: 3, n: 5, ...(shipping ? { shipping } : {}) });
+    backupLoop = new BackupLoop({ swk: deps.swkOps!, k: 3, n: 5, ...(shipping ? { shipping } : {}) });
   }
 
   const framesOpts: PbFramesHandlerOptions | null =
@@ -1630,9 +1652,10 @@ async function loadEntitlementsOrExit(deps: {
   cfg: ServerConfig | null;
   dataDir: string;
   identityKeypair: Keypair;
+  custodian: KeyCustodian;
   reportStatus: StatusReporter;
 }): Promise<EntitlementBundle> {
-  const { env, cfg, dataDir, identityKeypair, reportStatus } = deps;
+  const { env, cfg, dataDir, identityKeypair, custodian, reportStatus } = deps;
   const entitlementBundlePath =
     process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
   try {
@@ -1700,7 +1723,7 @@ async function loadEntitlementsOrExit(deps: {
         // report fired once the bundle loads below — no separate UI phase.
         const relayed = await fetchEntitlementViaRelay({
           serverDomain: env.serverFqdn,
-          identity: identityKeypair,
+          signer: custodian,
           ownerIrkPub: cfg.irkPublicKey,
           ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
           username: cfg.userId,
@@ -1773,6 +1796,7 @@ async function wireRuntimeSurfaces(deps: {
   dataDir: string;
   swkHex: string | null;
   identityKeypair: Keypair;
+  custodian: KeyCustodian;
   pairedSessions: FilePairedSessionStore;
   browserBundle: BrowserBundle | null;
   alertInbox: InMemoryAlertInbox;
@@ -1792,6 +1816,7 @@ async function wireRuntimeSurfaces(deps: {
     dataDir,
     swkHex,
     identityKeypair,
+    custodian,
     pairedSessions,
     browserBundle,
     alertInbox,
@@ -1868,12 +1893,16 @@ async function wireRuntimeSurfaces(deps: {
   // for an OpenAI-compatible / proxy endpoint is allowed by the guard's
   // normal public-host rules. (LAN baseUrl override is a future
   // self-host item, not enabled here.)
+  // Both take the custodian's SwkOps slice (never the raw SWK). Construction is
+  // safe even on a platform-less box (no SWK provisioned) — the ops only throw
+  // if actually invoked, and the build surfaces that would invoke them are
+  // themselves gated on an SWK-backed ServicePlatform.
   const llmHarness = new LlmHarness({
-    swk: swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+    swk: custodian.asSwkOps(),
   });
   const llmCredentials = new FileBuildCredentialStore(
     join(dataDir, "llm-credentials"),
-    swkHex ? hexToBytes(swkHex.trim()) : new Uint8Array(32),
+    custodian.asSwkOps(),
   );
   await llmCredentials.load();
   const defaultLlmModel =
@@ -1882,7 +1911,7 @@ async function wireRuntimeSurfaces(deps: {
   const deploySession = runtime.servicePlatform
     ? buildDeploySession({
         servicePlatform: runtime.servicePlatform,
-        hostIrk: identityKeypair,
+        signer: custodian,
         hostUsername: username,
         workingDir: vibeAppDir,
         cmd: (await import("./serviceRunner.js")).realCommandRunner,
@@ -1948,7 +1977,7 @@ async function wireRuntimeSurfaces(deps: {
     });
     const artifactDeployer = buildArtifactDeployer({
       servicePlatform: runtime.servicePlatform,
-      hostIrk: identityKeypair,
+      signer: custodian,
       hostUsername: username,
       workingDir: vibeAppDir,
       cmd: realCmd,
@@ -3199,6 +3228,8 @@ export {
 } from "./entitlementBundleStore.js";
 export type { EntitlementBundleFile } from "./entitlementBundleStore.js";
 export { startDaemonRuntime, renewIfNeeded, resolveAccountKey } from "./runtime.js";
+export { KeyCustodian } from "./keyCustodian.js";
+export type { BoxSigner, SwkOps, GossipOps } from "./keyCustodian.js";
 export type {
   DaemonRuntime,
   DaemonRuntimeOptions,

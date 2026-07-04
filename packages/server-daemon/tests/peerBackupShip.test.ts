@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha256";
 import { deriveSWK } from "@flagship/protocol";
@@ -64,7 +65,7 @@ function harness(over: Partial<BackupShipping> = {}) {
     },
     ...over,
   };
-  const loop = new BackupLoop({ swk, k: 3, n: 5, initiallyEnabled: true, shipping });
+  const loop = new BackupLoop({ swk: swkOps(swk), k: 3, n: 5, initiallyEnabled: true, shipping });
   return { loop, registry, ownShards, manifestStore, uploads, stored, calls };
 }
 

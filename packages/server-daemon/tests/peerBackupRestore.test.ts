@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -96,7 +97,7 @@ const FILES = [
 
 async function backupOnBoxA(world: World) {
   const loop = new BackupLoop({
-    swk,
+    swk: swkOps(swk),
     k: 3,
     n: 5,
     initiallyEnabled: true,

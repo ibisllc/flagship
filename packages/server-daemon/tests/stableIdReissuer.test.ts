@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, type Keypair } from "@flagship/protocol";
 import { ServicePlatform } from "../src/servicePlatform.js";
@@ -59,7 +60,7 @@ async function buildPlatformWith(memberKeys: Keypair[]): Promise<ServicePlatform
   const hostIrk = makeKey();
   const platform = new ServicePlatform({
     host: { username: HOST_USERNAME, irkPub: hostIrk.publicKey },
-    swk: fakeSwk(),
+    swk: swkOps(fakeSwk()),
     appRunner: fakeRunner(),
     dataProvisioner: new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),

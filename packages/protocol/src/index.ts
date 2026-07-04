@@ -28,3 +28,4 @@ export * from "./adminAuthority.js";
 export * from "./peerBackupManifest.js";
 export * from "./serverMigration.js";
 export { ed } from "./edSync.js";
+export { resolveMsgSigner, type MsgSigner } from "./canonicalBase.js";

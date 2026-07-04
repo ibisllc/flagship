@@ -1,10 +1,9 @@
 import {
-  signSecretRequest,
   verifyRootEntitlement,
   type AdminGrantView,
-  type Keypair,
   type SecretRequest,
 } from "@flagship/protocol";
+import type { BoxSigner } from "./keyCustodian.js";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import {
@@ -44,8 +43,9 @@ const HEX_NONCE = /^[0-9a-f]{64}$/;
 export interface FetchEntitlementViaRelayOptions {
   /** This box's canonical FQDN (= the daemon's serverFqdn). */
   serverDomain: string;
-  /** The daemon identity keypair — signs the SecretRequest with the STK. */
-  identity: Keypair;
+  /** Box-identity signer (custodian slice) — signs the SecretRequest as the
+   *  STK + supplies its pubkey; never the raw keypair. */
+  signer: BoxSigner;
   /** The user's IRK pubkey (baked into the install config) — verifies the
    *  RootEntitlement signature. The relay reply is checked against THIS,
    *  not against anything `.com` asserts. */
@@ -106,18 +106,18 @@ function defaultRandomNonce(): Uint8Array {
  */
 export function buildEntitlementSecretRequest(args: {
   serverDomain: string;
-  identity: Keypair;
+  signer: BoxSigner;
   nonce: Uint8Array;
   issuedAt: number;
 }): { request: SecretRequest; signatureHex: string } {
   const request: SecretRequest = {
     serverDomain: args.serverDomain,
-    stkPub: args.identity.publicKey,
+    stkPub: args.signer.boxPublicKey(),
     purpose: "entitlement",
     nonce: args.nonce,
     issuedAt: args.issuedAt,
   };
-  const sig = signSecretRequest(request, args.identity);
+  const sig = args.signer.signSecretRequest(request);
   return { request, signatureHex: bytesToHex(sig) };
 }
 
@@ -235,7 +235,7 @@ export async function fetchEntitlementViaRelay(
 
   const { request, signatureHex } = buildEntitlementSecretRequest({
     serverDomain: opts.serverDomain,
-    identity: opts.identity,
+    signer: opts.signer,
     nonce,
     issuedAt: now(),
   });
@@ -316,7 +316,7 @@ export async function fetchEntitlementViaRelay(
           sealedHex,
           ownerIrkPub: opts.ownerIrkPub,
           serverDomain: opts.serverDomain,
-          stkPub: opts.identity.publicKey,
+          stkPub: opts.signer.boxPublicKey(),
           ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
           ...(opts.username ? { username: opts.username } : {}),
           ...(opts.activeGrants ? { activeGrants: opts.activeGrants } : {}),

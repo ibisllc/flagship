@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { swkOps } from "./helpers/keyCustody.js";
 import {
   deriveIRK,
   deriveSWK,
@@ -56,7 +57,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
       return { content: `echo:${req.messages.at(-1)!.content}`, model: req.model };
     });
     const registry = new ProviderRegistry([stub]);
-    const harness = new LlmHarness({ swk, registry });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry });
 
     const sealed = buildSealedRequest({
       provider: "stub",
@@ -73,7 +74,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
   });
 
   it("seals errors when the provider name is unknown (no plaintext leak on the wire)", async () => {
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([]) });
     const sealed = buildSealedRequest({
       provider: "made-up",
       apiKey: "x",
@@ -87,7 +88,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
   });
 
   it("seals decrypt-failure messages without leaking which step failed", async () => {
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([]) });
     const out = await harness.chat({ ciphertext: new Uint8Array([1, 2, 3]), nonce: new Uint8Array(12) });
     const opened = openLlmPayload(out, swk);
     expect(JSON.parse(new TextDecoder().decode(opened)).message).toMatch(/decrypt failed/);
@@ -102,7 +103,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
         return { content: "ok", model: "m" };
       },
     };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     const sealed = buildSealedRequest({
       provider: "withbase",
       apiKey: "x",
@@ -122,7 +123,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
         return { content: "ok", model: "m" };
       },
     };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     const sealed = buildSealedRequest({
       provider: "withbase",
       apiKey: "x",
@@ -143,7 +144,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
         return { content: "ok", model: "m" };
       },
     };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     const sealed = buildSealedRequest({
       provider: "withbase",
       apiKey: "x",
@@ -166,7 +167,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
       },
     };
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       registry: new ProviderRegistry([stub]),
       baseUrlGuard: { allowHttp: true, hostAllowlist: ["ollama.lan"] },
     });
@@ -182,7 +183,7 @@ describe("LlmHarness — seal/open and provider dispatch", () => {
 
   it("listProviders reflects the registry exactly", () => {
     const stub: LLMProvider = { name: "a", async chat() { return { content: "", model: "" }; } };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     expect(harness.listProviders()).toEqual(["a"]);
   });
 });
@@ -213,7 +214,7 @@ describe("LlmHarness.chatStream — live BYOK streaming", () => {
   it("streams deltas to onEvent using the supplied credential key", async () => {
     const { provider, seen } = streamStub({ deltas: ["hel", "lo"] });
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       streamingRegistry: new StreamingProviderRegistry([provider]),
     });
     const events: ChatStreamEvent[] = [];
@@ -231,7 +232,7 @@ describe("LlmHarness.chatStream — live BYOK streaming", () => {
 
   it("returns no-streaming (and emits an error event) for a provider with no streaming adapter", async () => {
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       streamingRegistry: new StreamingProviderRegistry([]),
     });
     const events: ChatStreamEvent[] = [];
@@ -247,7 +248,7 @@ describe("LlmHarness.chatStream — live BYOK streaming", () => {
   it("blocks an SSRF baseUrl before the provider stream is reached", async () => {
     const { provider, seen } = streamStub();
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       streamingRegistry: new StreamingProviderRegistry([provider]),
     });
     const events: ChatStreamEvent[] = [];
@@ -264,7 +265,7 @@ describe("LlmHarness.chatStream — live BYOK streaming", () => {
   it("surfaces a provider-side error as a failed outcome", async () => {
     const { provider } = streamStub({ emitError: true });
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       streamingRegistry: new StreamingProviderRegistry([provider]),
     });
     const out = await harness.chatStream(
@@ -296,7 +297,7 @@ describe("LlmHarness.chatStream — live BYOK streaming", () => {
       },
     });
     const harness = new LlmHarness({
-      swk,
+      swk: swkOps(swk),
       streamingRegistry: new StreamingProviderRegistry([anthropicStreaming]),
       streamingFetchImpl: fakeFetch,
     });
@@ -322,7 +323,7 @@ describe("LlmHarness.chatWithCredential — non-streaming BYOK (adapt path)", ()
         return { content: `text:${req.messages.at(-1)!.content}`, model: req.model };
       },
     };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     const resp = await harness.chatWithCredential(
       { provider: "p", apiKey: "adapt-key" },
       { model: "m", messages: [{ role: "user", content: "rewrite" }] },
@@ -333,7 +334,7 @@ describe("LlmHarness.chatWithCredential — non-streaming BYOK (adapt path)", ()
 
   it("throws on an SSRF baseUrl", async () => {
     const stub: LLMProvider = { name: "p", async chat() { return { content: "", model: "" }; } };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     await expect(
       harness.chatWithCredential(
         { provider: "p", apiKey: "k", baseUrl: "http://169.254.169.254/" },
@@ -346,7 +347,7 @@ describe("LlmHarness.chatWithCredential — non-streaming BYOK (adapt path)", ()
 describe("daemon HTTP /llm/chat", () => {
   function makeCtx(harness?: LlmHarness): DaemonContext {
     const apps = new Map<string, AppMembership>();
-    apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", phoneIrk.publicKey, swk));
+    apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", phoneIrk.publicKey, swkOps(swk)));
     const sessions = new Map<string, Uint8Array>([["phone-token", phoneIrk.publicKey]]);
     const injectors = new Map<string, IdentityInjector>();
     return {
@@ -366,7 +367,7 @@ describe("daemon HTTP /llm/chat", () => {
   });
 
   it("rejects unauthenticated callers", async () => {
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([]) });
     const app = buildDaemonHttp(makeCtx(harness));
     const r = await app.inject({
       method: "POST",
@@ -385,7 +386,7 @@ describe("daemon HTTP /llm/chat", () => {
         return { content: "pong", model: req.model };
       },
     };
-    const harness = new LlmHarness({ swk, registry: new ProviderRegistry([stub]) });
+    const harness = new LlmHarness({ swk: swkOps(swk), registry: new ProviderRegistry([stub]) });
     const app = buildDaemonHttp(makeCtx(harness));
 
     const sealed = buildSealedRequest({
@@ -422,7 +423,7 @@ describe("daemon HTTP /llm/chat", () => {
   });
 
   it("rejects malformed bodies", async () => {
-    const harness = new LlmHarness({ swk });
+    const harness = new LlmHarness({ swk: swkOps(swk) });
     const app = buildDaemonHttp(makeCtx(harness));
     const r = await app.inject({
       method: "POST",
@@ -433,7 +434,7 @@ describe("daemon HTTP /llm/chat", () => {
   });
 
   it("rejects non-hex sealed payloads", async () => {
-    const harness = new LlmHarness({ swk });
+    const harness = new LlmHarness({ swk: swkOps(swk) });
     const app = buildDaemonHttp(makeCtx(harness));
     const r = await app.inject({
       method: "POST",

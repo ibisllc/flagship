@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { swkOps } from "./helpers/keyCustody.js";
 import {
   deriveIRK,
   deriveSWK,
@@ -185,7 +186,7 @@ describe("InviteStore — single-use signed-capability flow", () => {
 
 describe("AppMembership — combined invite redemption + membership", () => {
   it("happy path: redeem creates a membership and yields a per-app stable id", () => {
-    const app = new AppMembership(APP, OWNER, ownerIrk.publicKey, swk);
+    const app = new AppMembership(APP, OWNER, ownerIrk.publicKey, swkOps(swk));
     const { token, inviteSig, acceptance, acceptanceSig } = makeInvite("parent");
     const r = app.redeemInvite(token, inviteSig, acceptance, acceptanceSig);
     expect(r.ok).toBe(true);
@@ -197,15 +198,15 @@ describe("AppMembership — combined invite redemption + membership", () => {
   });
 
   it("two different apps yield DIFFERENT stable ids for the same person (privacy)", () => {
-    const appA = new AppMembership("habit-tracker", OWNER, ownerIrk.publicKey, swk);
-    const appB = new AppMembership("photos", OWNER, ownerIrk.publicKey, swk);
+    const appA = new AppMembership("habit-tracker", OWNER, ownerIrk.publicKey, swkOps(swk));
+    const appB = new AppMembership("photos", OWNER, ownerIrk.publicKey, swkOps(swk));
     expect(appA.stableIdFor(sarahIrk.publicKey)).not.toEqual(
       appB.stableIdFor(sarahIrk.publicKey),
     );
   });
 
   it("removal mutation works after a redeem-based add", () => {
-    const app = new AppMembership(APP, OWNER, ownerIrk.publicKey, swk);
+    const app = new AppMembership(APP, OWNER, ownerIrk.publicKey, swkOps(swk));
     const { token, inviteSig, acceptance, acceptanceSig } = makeInvite("parent");
     app.redeemInvite(token, inviteSig, acceptance, acceptanceSig);
 

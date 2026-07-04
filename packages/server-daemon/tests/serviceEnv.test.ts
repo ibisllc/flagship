@@ -14,6 +14,8 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { swkOps, boxSigner } from "./helpers/keyCustody.js";
+import type { SwkOps } from "../src/keyCustodian.js";
 import {
   ed,
   signInstallService,
@@ -47,10 +49,10 @@ function makeKey(): Keypair {
   crypto.getRandomValues(priv);
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
-  return b;
+  return swkOps(b);
 }
 function fakeRunner(): { runner: AppRunner; specs: AppSpec[] } {
   const specs: AppSpec[] = [];
@@ -453,7 +455,7 @@ describe("export/share artifact — declared names only, never a value", () => {
 
     const deploy = buildDeploySession({
       servicePlatform: platform,
-      hostIrk,
+      signer: boxSigner(hostIrk),
       hostUsername: HOST,
       workingDir: workDir,
       cmd: { run: async () => {}, capture: async () => ({ stdout: "", stderr: "" }) },

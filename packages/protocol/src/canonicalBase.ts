@@ -13,7 +13,23 @@
  * domain modules' use but are deliberately NOT re-exported by `auth.ts`, so
  * the package's public API is unchanged.
  */
-import type { Bytes } from "./types.js";
+import type { Bytes, Keypair } from "./types.js";
+import { ed } from "./edSync.js";
+
+/**
+ * A message signer: either a raw Ed25519 `Keypair` (the historical form) or a
+ * closure that signs canonical bytes. The closure form lets a caller that does
+ * NOT hold the private key — e.g. a daemon whose seed lives behind a
+ * KeyCustodian — sign without ever surfacing the seed. `resolveMsgSigner`
+ * normalizes either to `(msg) => sig`, so signature bytes stay identical.
+ */
+export type MsgSigner = Keypair | ((msg: Bytes) => Bytes);
+
+export function resolveMsgSigner(signer: MsgSigner): (msg: Bytes) => Bytes {
+  return typeof signer === "function"
+    ? signer
+    : (msg: Bytes) => ed.sign(msg, signer.privateKey);
+}
 
 /** Lower-case hex of a byte array. */
 export function hex(b: Bytes): string {

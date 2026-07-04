@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha256";
-import { encodeShards, encryptChunk, type Bytes } from "@flagship/protocol";
+import { encodeShards, type Bytes } from "@flagship/protocol";
+import type { SwkOps } from "./keyCustodian.js";
 import type { PeerProvider, ShardPusher } from "./peerBackup/repairDaemon.js";
 import type { ShardRegistry } from "./peerBackup/registry.js";
 import type { ShardBytesStore } from "./peerBackup/shardStore.js";
@@ -13,7 +14,7 @@ import {
 } from "./peerBackup/manifest.js";
 
 export interface BackupConfig {
-  swk: Bytes;
+  swk: SwkOps;
   k: number;
   n: number;
 }
@@ -151,7 +152,7 @@ export class BackupLoop {
         continue;
       }
 
-      const enc = encryptChunk(f.content, this.cfg.swk);
+      const enc = this.cfg.swk.encryptChunkWithSwk(f.content);
       const encChunkId = sha256(enc.ciphertext);
       const shards = encodeShards(enc.ciphertext, this.cfg.k, this.cfg.n);
       report.totalShards += shards.shards.length;
@@ -285,7 +286,7 @@ export class BackupLoop {
   private dryRun(files: ReadonlyArray<FileToBack>, now: number): BackupReport {
     const report: BackupReport = { ...ZERO_REPORT };
     for (const f of files) {
-      const enc = encryptChunk(f.content, this.cfg.swk);
+      const enc = this.cfg.swk.encryptChunkWithSwk(f.content);
       const shards = encodeShards(enc.ciphertext, this.cfg.k, this.cfg.n);
       report.totalShards += shards.shards.length;
       for (const s of shards.shards) report.totalShardBytes += s.length;

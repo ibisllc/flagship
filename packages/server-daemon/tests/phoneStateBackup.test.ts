@@ -1,3 +1,4 @@
+import { swkOps } from "./helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import {
   deriveIRK,
@@ -21,7 +22,7 @@ function bytesToHex(b: Uint8Array): string {
 
 function makeCtx(extra: { store?: InMemoryPhoneStateStore } = {}) {
   const apps = new Map<string, AppMembership>();
-  apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", irk.publicKey, swk));
+  apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", irk.publicKey, swkOps(swk)));
   const sessions = new Map<string, Uint8Array>([["phone-token", irk.publicKey]]);
   const ctx: DaemonContext = {
     serverId: "srv-1",

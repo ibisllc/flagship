@@ -17,6 +17,8 @@
  *     tokens become 401, old tabIds become 404.
  */
 
+import { swkOps } from "../helpers/keyCustody.js";
+import type { SwkOps } from "../../src/keyCustodian.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ed,
@@ -49,10 +51,10 @@ function makeKey(): Keypair {
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
 
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const swk = new Uint8Array(32);
   crypto.getRandomValues(swk);
-  return swk;
+  return swkOps(swk);
 }
 
 function bytesToHex(b: Uint8Array): string {

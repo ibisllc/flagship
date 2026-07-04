@@ -1,3 +1,4 @@
+import { swkOps } from "../helpers/keyCustody.js";
 import { describe, expect, it } from "vitest";
 import { ed, deriveIRK, deriveSWK } from "@flagship/protocol";
 import { AppMembership } from "../../src/membership.js";
@@ -79,7 +80,7 @@ function fakeUrlController(initial: string[] = []): UrlControllerLike & { claime
 function makeMembership(): AppMembership {
   const umk = { seed: new Uint8Array(32).fill(7) };
   const irk = deriveIRK(umk);
-  const swk = deriveSWK(umk, "srv-1");
+  const swk = swkOps(deriveSWK(umk, "srv-1"));
   return new AppMembership("habits", USERNAME, irk.publicKey, swk);
 }
 

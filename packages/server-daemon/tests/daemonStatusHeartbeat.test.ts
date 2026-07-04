@@ -65,7 +65,7 @@ describe("daemon-status heartbeat", () => {
 
     await postDaemonStatus({
       serverDomain: "abc5.harry1.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com/",
       cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
       certValidUntil: 1_800_000_000_000,
@@ -102,7 +102,7 @@ describe("daemon-status heartbeat", () => {
 
     const hb = startDaemonStatusHeartbeat({
       serverDomain: "home1.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       intervalMs: 60_000,
       now: () => 1_700_000_000_000,
@@ -128,7 +128,7 @@ describe("daemon-status heartbeat", () => {
     await expect(
       postDaemonStatus({
         serverDomain: "home1.harry.flagship.services",
-        identity: id,
+        sign: id,
         controlPlaneBaseUrl: "https://flagshipserver.com",
         cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
         certValidUntil: 1_800_000_000_000,
@@ -170,7 +170,7 @@ DI8uD7t+By9uA9EEqQM=
 
     await postDaemonStatus({
       serverDomain: "frank.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       cert: { certPem: REAL_CERT_PEM, privateKeyPem: "x" },
       certValidUntil: 1_800_000_000_000,
@@ -224,7 +224,7 @@ describe("daemon-status heartbeat — loop resilience", () => {
 
     const hb = startDaemonStatusHeartbeat({
       serverDomain: "hali.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       intervalMs: 5 * 60_000,
       requestTimeoutMs: 0,
@@ -258,7 +258,7 @@ describe("daemon-status heartbeat — loop resilience", () => {
 
     const hb = startDaemonStatusHeartbeat({
       serverDomain: "hali.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       intervalMs: 5 * 60_000,
       requestTimeoutMs: 0,
@@ -295,7 +295,7 @@ describe("daemon-status heartbeat — loop resilience", () => {
     // beating while a tunnel would be mid-reconnect.
     const hb = startDaemonStatusHeartbeat({
       serverDomain: "hali.harry.flagship.services",
-      identity: id,
+      sign: id,
       controlPlaneBaseUrl: "https://flagshipserver.com",
       intervalMs: 5 * 60_000,
       requestTimeoutMs: 0,

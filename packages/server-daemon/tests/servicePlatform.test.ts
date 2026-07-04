@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { swkOps } from "./helpers/keyCustody.js";
+import type { SwkOps } from "../src/keyCustodian.js";
 import {
   ed,
   signInstallService,
@@ -29,10 +31,10 @@ function makeKey(): Keypair {
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
 
-function fakeSwk(): Uint8Array {
+function fakeSwk(): SwkOps {
   const swk = new Uint8Array(32);
   crypto.getRandomValues(swk);
-  return swk;
+  return swkOps(swk);
 }
 
 function bytesToHex(b: Uint8Array): string {
