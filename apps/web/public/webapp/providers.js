@@ -103,7 +103,12 @@ async function unwrapList(umkSeed, blob) {
 
 /* ---------- entry validation ---------- */
 
-const VALID_PROVIDERS = new Set(["anthropic", "openai", "google", "openrouter", "ollama"]);
+const VALID_PROVIDERS = new Set(["anthropic", "openai", "google", "openrouter", "ollama", "flagship"]);
+
+// Optional per-entry provenance. "promo" marks a Flagship-minted free-credits
+// key (scoped .com token → our blessed inference endpoint); the daemon pins a
+// promo credential's baseUrl to the RunPod host. Absent ⇒ a BYOK key.
+const VALID_SOURCES = new Set(["byok", "promo"]);
 
 function isValidEntry(e) {
   if (!e || typeof e !== "object") return false;
@@ -115,6 +120,7 @@ function isValidEntry(e) {
   if (e.defaultModel !== undefined && (typeof e.defaultModel !== "string" || e.defaultModel.length > 128)) {
     return false;
   }
+  if (e.source !== undefined && (typeof e.source !== "string" || !VALID_SOURCES.has(e.source))) return false;
   return true;
 }
 
@@ -157,6 +163,7 @@ export async function addProvider(umkSeed, partial) {
     apiKey: partial.apiKey,
     baseUrl: partial.baseUrl || undefined,
     defaultModel: partial.defaultModel || undefined,
+    source: partial.source || undefined,
   };
   if (!isValidEntry(entry)) throw new Error("invalid provider entry");
   list.entries.push(entry);
