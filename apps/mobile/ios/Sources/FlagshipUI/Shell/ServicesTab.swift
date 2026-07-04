@@ -680,20 +680,52 @@ struct MarketplaceDetailContainer: View {
         }
         // Same assurance the webapp confirm states: the signed envelope is
         // verified against the IRK before the daemon starts the container.
+        // A scan-grade F BLOCKS the normal Install: the only way through is the
+        // distinct destructive "Install anyway" override (never the plain tap).
         .confirmationDialog(
-            "Install \(creator)/\(slug)?",
+            confirmTitle,
             isPresented: $confirmingInstall,
             titleVisibility: .visible
         ) {
-            Button("Install") {
-                if let l = listing, let vm, let serverFqdn = app.currentPod?.fqdn {
-                    Task { await vm.install(creator: l.creator, slug: l.slug, serverId: serverFqdn) }
-                }
+            if listing?.scanGateBucket.blocksInstall == true {
+                Button("Install anyway", role: .destructive) { startInstall() }
+                    .accessibilityIdentifier("marketplace-install-anyway")
+            } else {
+                Button("Install") { startInstall() }
+                    .accessibilityIdentifier("marketplace-install-confirm")
             }
-            .accessibilityIdentifier("marketplace-install-confirm")
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The signed app envelope is verified against your IRK before the daemon starts the container.")
+            Text(confirmMessage)
+        }
+    }
+
+    /// Confirm-dialog title — a security warning for an F verdict, otherwise the
+    /// neutral install prompt.
+    private var confirmTitle: String {
+        if listing?.scanGateBucket.blocksInstall == true {
+            return "⚠️ Security warning — \(creator)/\(slug)"
+        }
+        return "Install \(creator)/\(slug)?"
+    }
+
+    /// Confirm-dialog body — escalates for a failed scan, cautions for an
+    /// ungraded listing, else the standard IRK-verification assurance.
+    private var confirmMessage: String {
+        switch listing?.scanGateBucket {
+        case .some(let b) where b.blocksInstall:
+            return "This app FAILED the marketplace security scan (grade F). Installing it could put your box at risk. Only continue if you fully trust this creator."
+        case .some(let b) where b.installCaution:
+            return "This app hasn't been security-scanned yet. The signed envelope is still verified against your IRK, but its code hasn't been graded — install with caution."
+        default:
+            return "The signed app envelope is verified against your IRK before the daemon starts the container."
+        }
+    }
+
+    /// Sign + POST the install (shared by the normal and override buttons).
+    private func startInstall() {
+        if let l = listing, let vm, let serverFqdn = app.currentPod?.fqdn {
+            Task { await vm.install(creator: l.creator, slug: l.slug, serverId: serverFqdn) }
         }
     }
 
@@ -701,6 +733,7 @@ struct MarketplaceDetailContainer: View {
     private func installControls(listing l: MarketplaceListing, c: FSColors) -> some View {
         switch vm?.installState ?? .idle {
         case .idle:
+            scanGateNotice(for: l, c: c)
             FSPrimaryButton(
                 l.alreadyInstalled ? "Already installed" : "Deploy",
                 enabled: !l.alreadyInstalled,
@@ -763,6 +796,48 @@ struct MarketplaceDetailContainer: View {
             ErrorCard(message: "Install failed: \(message)")
                 .accessibilityIdentifier("marketplace-deploy-error")
             FSGhostButton("Try again", block: true) { vm?.resetInstall() }
+        }
+    }
+
+    /// Inline pre-install security banner mirroring the paymentRequired card:
+    /// a red danger card for an F verdict (the install is gated behind the
+    /// "Install anyway" override), an amber caution for an ungraded listing,
+    /// and nothing for a clean A/B/C/D grade.
+    @ViewBuilder
+    private func scanGateNotice(for l: MarketplaceListing, c: FSColors) -> some View {
+        let bucket = l.scanGateBucket
+        if bucket.blocksInstall {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "exclamationmark.octagon.fill")
+                            .foregroundColor(c.danger)
+                        Text("Failed the security scan")
+                            .font(FS.font.h4())
+                            .foregroundColor(c.text)
+                    }
+                    Text("This app was graded F. Deploy is blocked unless you explicitly choose \u{201C}Install anyway.\u{201D}")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-scan-blocked")
+        } else if bucket.installCaution {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(c.warning)
+                        Text("Not yet security-scanned")
+                            .font(FS.font.h4())
+                            .foregroundColor(c.text)
+                    }
+                    Text("This app hasn't been graded by the marketplace scanner. Install with caution.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+            .accessibilityIdentifier("marketplace-scan-caution")
         }
     }
 

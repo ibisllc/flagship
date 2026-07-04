@@ -162,6 +162,17 @@ enum class ScanGradeBucket {
             "A", "B", "C", "D", "F" -> "scan ${grade!!.uppercase()}"
             else -> "ungraded"
         }
+
+        /** Conservative install-confirm gate: a failing grade (F → ERR) BLOCKS
+         *  the normal Install tap; the client must demand an explicit,
+         *  visually-distinct "Install anyway" override before posting to the
+         *  box. A/B/C/D and ungraded do NOT block. */
+        fun blocksInstall(grade: String?): Boolean = from(grade) == ERR
+
+        /** True when the listing has no usable grade yet (null / empty /
+         *  unrecognised → UNGRADED) — the confirm cautions "not yet
+         *  security-scanned" but still allows the install. */
+        fun isUngraded(grade: String?): Boolean = from(grade) == UNGRADED
     }
 }
 

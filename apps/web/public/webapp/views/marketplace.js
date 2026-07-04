@@ -99,13 +99,75 @@ export async function renderMarketplace() {
   }
 }
 
+/**
+ * Task #29 — install-confirm security gate. Branches on the listing's
+ * `scan_grade` (A..F or null; also tolerates the camelCase `scanGrade`)
+ * and returns the parameters for the confirm modal. Conservative policy:
+ *
+ *   - F        → BLOCKED. Distinct security warning + a red (danger)
+ *                "Install anyway" action that is NOT the normal install
+ *                tap. Only that explicit action proceeds.
+ *   - null     → allowed, but the confirm clearly cautions that the app
+ *                has not been security-scanned yet.
+ *   - A/B/C/D  → normal confirm, no extra warning (D is allowed under
+ *                current policy).
+ *
+ * Pure so it can be unit-tested without a DOM.
+ */
+export function installConfirmParams(listing) {
+  const l = listing ?? {};
+  const creator = l.creator;
+  const slug = l.slug;
+  const raw = l.scan_grade ?? l.scanGrade ?? null;
+  const grade = typeof raw === "string" ? raw.toUpperCase() : null;
+  const verifyNote =
+    "The signed app envelope is verified against your IRK before the daemon starts the container.";
+  if (grade === "F") {
+    return {
+      grade,
+      blocked: true,
+      danger: true,
+      title: `⚠ Security warning — ${creator}/${slug}`,
+      message:
+        "Flagship's scanner gave this app a failing grade (F) — it found critical " +
+        "security issues, so installing it is strongly discouraged. " +
+        verifyNote,
+      okLabel: "Install anyway",
+    };
+  }
+  if (!grade) {
+    return {
+      grade: null,
+      blocked: false,
+      danger: false,
+      title: `Install ${creator}/${slug}?`,
+      message: `This app has not been security-scanned yet. ${verifyNote}`,
+      okLabel: "Install",
+    };
+  }
+  return {
+    grade,
+    blocked: false,
+    danger: false,
+    title: `Install ${creator}/${slug}?`,
+    message: verifyNote,
+    okLabel: "Install",
+  };
+}
+
 async function runInstall(listing, btn) {
   const { creator, slug } = listing;
   const { inlineConfirm } = await import("../lib/modal.js");
+  // Client-side consent gate: the real install POSTs to the user's pod
+  // daemon (not .com), so a blocked grade is enforced here by refusing to
+  // call installFromMarketplace unless the user takes the distinct
+  // (danger-styled "Install anyway") action.
+  const gate = installConfirmParams(listing);
   const ok = await inlineConfirm({
-    title: `Install ${creator}/${slug}?`,
-    message: "The signed app envelope is verified against your IRK before the daemon starts the container.",
-    okLabel: "Install",
+    title: gate.title,
+    message: gate.message,
+    okLabel: gate.okLabel,
+    danger: gate.danger,
   });
   if (!ok) return;
   btn.disabled = true;

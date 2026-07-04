@@ -65,6 +65,60 @@ final class MarketplaceListingUXTests: XCTestCase {
         XCTAssertEqual(ScanGradeBucket.pillLabel("?"), "ungraded")
     }
 
+    // MARK: - Install-consent gate (F blocks; nil cautions; A–D normal)
+
+    private func listing(grade: String?) -> MarketplaceListing {
+        MarketplaceListing(
+            creator: "a", slug: "b", title: "T", summary: "S",
+            screenshots: [], installCount: 0, requiresLlmKey: false,
+            llmKeyEnvVar: nil, scanGrade: grade, alreadyInstalled: false
+        )
+    }
+
+    func test_scanGate_onlyFBlocksInstall() {
+        // F is the sole grade conservative enough to block the normal install.
+        XCTAssertTrue(ScanGradeBucket.from("F").blocksInstall)
+        XCTAssertTrue(ScanGradeBucket.from("f").blocksInstall)   // case-insensitive
+        for ok in ["A", "B", "C", "D", nil, "", "Z"] {
+            XCTAssertFalse(ScanGradeBucket.from(ok).blocksInstall,
+                           "grade \(ok ?? "nil") must NOT block install")
+        }
+    }
+
+    func test_scanGate_onlyUngradedCautions() {
+        // nil / unknown → caution; every real grade (incl. F) is not a caution.
+        XCTAssertTrue(ScanGradeBucket.from(nil).installCaution)
+        XCTAssertTrue(ScanGradeBucket.from("").installCaution)
+        XCTAssertTrue(ScanGradeBucket.from("Z").installCaution)
+        for graded in ["A", "B", "C", "D", "F"] {
+            XCTAssertFalse(ScanGradeBucket.from(graded).installCaution,
+                           "grade \(graded) is graded, not a caution")
+        }
+    }
+
+    func test_scanGate_blockAndCautionAreMutuallyExclusive() {
+        for g in ["A", "B", "C", "D", "F", nil, "", "?"] {
+            let bucket = ScanGradeBucket.from(g)
+            XCTAssertFalse(bucket.blocksInstall && bucket.installCaution,
+                           "grade \(g ?? "nil") can't both block and caution")
+        }
+    }
+
+    func test_listing_scanGateBucketReflectsGrade() {
+        XCTAssertTrue(listing(grade: "F").scanGateBucket.blocksInstall)
+        XCTAssertFalse(listing(grade: "F").scanGateBucket.installCaution)
+        XCTAssertTrue(listing(grade: nil).scanGateBucket.installCaution)
+        XCTAssertFalse(listing(grade: nil).scanGateBucket.blocksInstall)
+        // A clean grade is neither blocked nor cautioned → the normal confirm.
+        let a = listing(grade: "A").scanGateBucket
+        XCTAssertFalse(a.blocksInstall)
+        XCTAssertFalse(a.installCaution)
+        // D maps to the warn bucket but STILL installs normally (only F blocks).
+        let d = listing(grade: "D").scanGateBucket
+        XCTAssertFalse(d.blocksInstall)
+        XCTAssertFalse(d.installCaution)
+    }
+
     // MARK: - Wire shape: new fields decode + tolerate absence
 
     func test_listingDecodesScanGradeAndLlmKeyEnvVar() throws {

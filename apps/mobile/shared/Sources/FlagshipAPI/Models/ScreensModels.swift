@@ -186,6 +186,23 @@ public enum ScanGradeBucket: Equatable, Sendable {
         default:                      return "ungraded"
         }
     }
+
+    /// Client-side install consent gate. An `F` verdict (`.err`) is the only
+    /// grade conservative enough to BLOCK the normal install: the confirm must
+    /// require a distinct "Install anyway" override before anything reaches the
+    /// box. A/B/C/D install normally. Pure so the gate can be unit-tested
+    /// without a running app and stays identical across surfaces.
+    public var blocksInstall: Bool { self == .err }
+
+    /// An ungraded listing (`nil`/unknown scan_grade) installs, but the confirm
+    /// must caution the owner it hasn't been security-scanned yet.
+    public var installCaution: Bool { self == .ungraded }
+}
+
+extension MarketplaceListing {
+    /// The install-consent bucket for THIS listing's scan grade — the single
+    /// source the confirm surface reads to decide block / caution / normal.
+    public var scanGateBucket: ScanGradeBucket { ScanGradeBucket.from(scanGrade) }
 }
 
 /// Marketplace install LLM-key UX helpers, shared so the prefilled-name flow
