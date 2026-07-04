@@ -20,7 +20,7 @@ import {
   type InstallServiceRequest,
   type Keypair,
 } from "@flagship/protocol";
-import type { CommandRunner } from "../serviceRunner.js";
+import { runDockerBuild, type CommandRunner } from "../serviceRunner.js";
 import type { ServicePlatform } from "../servicePlatform.js";
 import type { ForgejoAppAdmin } from "../forgejoServiceAdmin.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
@@ -128,7 +128,7 @@ export function buildArtifactDeployer(deps: DeployArtifactDeps) {
     const image = `flagship-vibe-${serviceId}:${revision}`.toLowerCase();
     await note(buildId, mode, "build-phase", "docker build");
     try {
-      await deps.cmd.run("docker", ["build", "-t", image, appDir]);
+      await runDockerBuild(deps.cmd, image, appDir);
     } catch (e) {
       await note(buildId, mode, "error", `docker build failed`);
       return { ok: false, reason: `docker build failed: ${(e as Error).message}` };

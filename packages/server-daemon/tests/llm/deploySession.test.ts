@@ -45,7 +45,9 @@ function recordingCmd(): { cmd: CommandRunner; calls: string[] } {
   const calls: string[] = [];
   const cmd: CommandRunner = {
     run: async (c, args) => { calls.push(`${c} ${args.join(" ")}`); },
-    capture: async () => ({ stdout: "", stderr: "" }),
+    // docker build goes through capture when available (runDockerBuild), so
+    // record those calls too.
+    capture: async (c, args) => { calls.push(`${c} ${args.join(" ")}`); return { stdout: "", stderr: "" }; },
   };
   return { cmd, calls };
 }
@@ -260,7 +262,10 @@ describe("buildDeploySession", () => {
           if (c === "docker" && args[0] === "build") events.push("dockerBuild");
           return cmd.run(c, args);
         },
-        capture: cmd.capture,
+        capture: async (c, args) => {
+          if (c === "docker" && args[0] === "build") events.push("dockerBuild");
+          return cmd.capture!(c, args);
+        },
       };
 
       const platform = new ServicePlatform({
@@ -500,7 +505,18 @@ describe("buildDeploySession", () => {
         run: async (c, args) => {
           if (c === "docker" && args[0] === "build") throw new Error("Dockerfile syntax error");
         },
-        capture: async () => ({ stdout: "", stderr: "" }),
+        // Mirrors realCommandRunner.capture: the rejection message carries the
+        // builder's stderr tail (the remote 502 reason must be diagnosable —
+        // the gating live-e2e regression was an opaque "exited with code 1").
+        capture: async (c, args) => {
+          if (c === "docker" && args[0] === "build") {
+            throw Object.assign(
+              new Error("docker exited with code 1: COPY failed: stat index.html: file does not exist"),
+              { stdout: "", stderr: "COPY failed: stat index.html: file does not exist\n" },
+            );
+          }
+          return { stdout: "", stderr: "" };
+        },
       };
       const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
@@ -528,6 +544,9 @@ describe("buildDeploySession", () => {
       expect(r.ok).toBe(false);
       if (r.ok) return;
       expect(r.reason).toMatch(/docker build failed/);
+      // The builder's actual error must reach the caller (phone / e2e driver),
+      // not just "exited with code 1".
+      expect(r.reason).toMatch(/COPY failed: stat index\.html/);
     } finally {
       await wd.cleanup();
     }

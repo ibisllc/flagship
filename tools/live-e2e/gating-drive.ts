@@ -3,9 +3,10 @@
  * gating flow against a REAL gym box + the REAL gym control plane.
  *
  * Unlike the mocked Tier-1, this provisions (or reuses) an actual full-platform
- * Hetzner box, vibe-deploys a real served service, then exercises the gating
- * mechanism end-to-end with the SAME signed envelopes the apps send (it derives
- * the demo owner IRK from GYM_DEMO_IRK_KEK + uses @flagship/protocol to sign):
+ * Hetzner box, installs a real served service (deterministic — see §3), then
+ * exercises the gating mechanism end-to-end with the SAME signed envelopes the
+ * apps send (it derives the demo owner IRK from GYM_DEMO_IRK_KEK + uses
+ * @flagship/protocol to sign):
  *
  *   open→restricted (owner set-mode) → the WEBSITE now serves the knock page
  *   → mint invite on .com (owner-signed) → friend redeems (AID-signed) → box
@@ -39,6 +40,8 @@ import {
   signKnockAuthorization,
   signRemoveServiceAllow,
   signPhoneOrder,
+  signInstallService,
+  type InstallServiceRequest,
   type CreateServiceInvite,
   type RedeemServiceInvite,
   type RevokeServiceInvite,
@@ -56,8 +59,6 @@ const CONTROL = process.env.LIVE_E2E_CONTROL || "gym.flagshipserver.com";
 const SERVICES = process.env.GYM_LIVE_SERVICES_APEX || process.env.LIVE_E2E_SERVICES || "gym.flagship.services";
 const ADMIN = process.env.GYM_ADMIN_SECRET || process.env.FLAGSHIP_ADMIN_SECRET || "";
 const KEK = process.env.GYM_DEMO_IRK_KEK || "";
-const AI_KEY = process.env.GYM_AI_API_KEY || "";
-const AI_MODEL = process.env.GYM_AI_MODEL || "gpt-4o-mini";
 const REUSE_USER = process.env.LIVE_E2E_REUSE_USER || "";
 
 const results: Array<{ name: string; ok: boolean; detail: string }> = [];
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
   log(`\nLIVE gating e2e`);
   log(`  control = ${CONTROL}`);
   log(`  box     = ${fqdn} (${REUSE_USER ? "REUSE" : "PROVISION cpx31"})`);
-  log(`  ai      = ${AI_KEY ? `yes (${AI_MODEL})` : "NO KEY — vibe-deploy will be skipped"}\n`);
+  log("");
 
   // Identities — owner = the demo box owner IRK (== the .com-registered IRK for
   // `user`); author/friend are stable AIDs from fixed UMKs (the friend is ANY
@@ -182,44 +183,47 @@ async function main(): Promise<void> {
     return `token accepted (${r.status})`;
   });
 
-  // ── 3. vibe-deploy a real served service ──────────────────────────────────
-  log("[install a service to gate (vibe-deploy)]");
-  let serviceRef = "";
-  let serviceUrl = "";
-  let label = "";
-  const sessionHdr = { "content-type": "application/json", "x-flagship-session": token };
-  if (paired && AI_KEY) {
-    let sid = "";
-    await step("vibe-code start → model runs (BYOK)", async () => {
-      const r = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
-        method: "POST", headers: sessionHdr,
-        body: JSON.stringify({ prompt: "Build a minimal static website that serves the text 'hello gate'. Produce an index.html AND a Dockerfile that SERVES it over HTTP — use `FROM nginx:alpine`, COPY index.html into /usr/share/nginx/html/, and the container listens on port 80. The flagship.app.json runtime.port MUST be 80. The site must return HTTP 200 with 'hello gate' in the body at '/'.", model: AI_MODEL, credential: { provider: "openai", apiKey: AI_KEY } }),
+  // ── 3. install the service to gate (deterministic, owner-IRK signed) ─────
+  // The gating chain needs A served service — NOT an AI-authored one. The
+  // vibe-deploy previously used here gambled on model output and lost twice
+  // (a manifest missing `data:{}`, then a Dockerfile `COPY index.html` vs an
+  // emitted `src/index.html`); the vibe path has its own proofs (run.ts's
+  // model-run check + vibe-drive.ts's full deploy). Here we install the same
+  // fixed whoami manifest run.ts's install test uses, so the gating steps
+  // always get their subject. `public_routes:["/"]` gives the OPEN baseline
+  // an anonymous 200; the access-mode enforcement fronts the per-label proxy
+  // (index.ts buildAccessEnforcementHandler), so `restricted` still knocks.
+  log("[install the service to gate (deterministic whoami)]");
+  const slug = "gate";
+  const serviceRef = `${user}--${slug}`;
+  const serviceUrl = `https://${slug}.${fqdn}`;
+  let haveService = false;
+  if (paired) {
+    const installed = await step("install the gate service (owner-IRK signed, fixed image)", async () => {
+      const manifestJson = JSON.stringify({
+        schema_version: 1,
+        name: slug,
+        version: "0.1.0",
+        description: "gating-e2e gate service",
+        runtime: { image: "traefik/whoami", port: 80 },
+        data: {}, // image-only — no stores, so no data stack needed
+        network: { subdomain: slug },
+        access: { enabled: true, public_routes: ["/"] },
+        migration: { verification: "standard" },
       });
-      assert(r.status === 200, `start ${r.status}: ${r.text.slice(0, 120)}`);
-      sid = r.json?.sessionId;
-      assert(sid && r.json?.needsCredential !== true, `no session: ${JSON.stringify(r.json).slice(0, 80)}`);
-      // poll until the model has emitted a manifest/file (deployable)
-      for (let i = 0; i < 30; i++) {
-        await sleep(4000);
-        const s = await http(`https://${fqdn}/api/screens/vibe-code/${encodeURIComponent(sid)}`, { headers: { "x-flagship-session": token } });
-        const txt = JSON.stringify(s.json ?? {});
-        if (/manifest|"done"|complete|index\.html|"file/i.test(txt)) return `session ${sid.slice(0, 8)} emitted`;
-      }
-      throw new Error("model produced no deployable output in 120s");
+      const req: InstallServiceRequest = { serverId: fqdn, creator: user, slug, manifestJson, addOwnerToMembership: true, issuedAt: Date.now() };
+      const sig = bytesToHex(signInstallService(req, ownerIrk));
+      const r = await http(
+        `https://${fqdn}/api/services`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }) },
+        90_000,
+      );
+      assert(r.status === 200, `install ${r.status}: ${r.text.slice(0, 180)}`);
+      return `installed ${serviceRef}`;
     });
-    if (sid) {
-      await step("deploy the built service → installed + served", async () => {
-        const r = await http(`https://${fqdn}/api/llm/sessions/${encodeURIComponent(sid)}/deploy`, { method: "POST", headers: sessionHdr, body: "{}" }, 180_000);
-        assert(r.status === 200, `deploy ${r.status}: ${r.text.slice(0, 160)}`);
-        assert(r.json?.ok === true && r.json?.serviceId && r.json?.url, `no serviceId/url: ${JSON.stringify(r.json).slice(0, 120)}`);
-        serviceRef = r.json.serviceId;
-        serviceUrl = r.json.url.replace(/\/$/, "");
-        const m = /^https:\/\/([^.]+)\./.exec(serviceUrl);
-        label = m ? m[1]! : "";
-        return `serviceId=${serviceRef} url=${serviceUrl}`;
-      });
-      await step("the deployed service serves 200 (open baseline)", async () => {
-        // containers take a moment to become healthy after install
+    if (installed) {
+      haveService = await step("the installed service serves 200 (open baseline)", async () => {
+        // the image may need a moment to pull + start
         for (let i = 0; i < 20; i++) {
           const r = await http(`${serviceUrl}/`, { headers: { accept: "text/html" } }, 12000).catch(() => ({ status: 0, text: "" }) as any);
           if (r.status === 200) return `200 (${r.text.slice(0, 30).replace(/\s+/g, " ")})`;
@@ -229,11 +233,8 @@ async function main(): Promise<void> {
       });
     }
   } else {
-    await step("vibe-deploy", () => { throw new Error(paired ? "no GYM_AI_API_KEY" : "no paired session"); });
+    await step("install the gate service", () => { throw new Error("no paired session"); });
   }
-
-  // The gating chain needs an installed, served service.
-  const haveService = !!serviceRef && !!serviceUrl && !!label;
   if (!haveService) {
     log("\n[gating chain] SKIPPED — no installed service to gate (see vibe-deploy failures above)");
   } else {
@@ -316,7 +317,7 @@ async function main(): Promise<void> {
       assert(sessionCookie, "no session cookie delivered to the holder");
       // the cookie reaches the restricted site → real content (not the knock page)
       const access = await svcGet(`Flagship-App-Session=${sessionCookie}`);
-      assert(access.status === 200 && /hello gate/i.test(access.text) && !/Access is restricted/i.test(access.text), `access not granted: ${access.status} ${access.text.slice(0, 60)}`);
+      assert(access.status === 200 && /Hostname|RemoteAddr|GET \//i.test(access.text) && !/Access is restricted/i.test(access.text), `access not granted: ${access.status} ${access.text.slice(0, 60)}`);
       return `authorized → cookie → site served the content`;
     });
     await step("holder-race: a poll WITHOUT the holder cookie never gets the session cookie", async () => {

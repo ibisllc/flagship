@@ -3,6 +3,7 @@ import {
   AppRunner,
   DEFAULT_CONTAINER_LIMITS,
   realCommandRunner,
+  runDockerBuild,
   type CommandRunner,
 } from "../src/serviceRunner.js";
 
@@ -26,6 +27,54 @@ describe("realCommandRunner spawn-failure (regression: docker-missing daemon cra
       capture: () => Promise.reject(new Error("spawn docker ENOENT")),
     };
     await expect(new AppRunner(rejecting).ensureNetwork()).resolves.toBeUndefined();
+  });
+});
+
+describe("realCommandRunner.capture failure detail", () => {
+  // Regression (gating live-e2e): a failed `docker build` surfaced to the
+  // remote caller as an opaque "docker exited with code 1" — the stderr
+  // ("COPY failed: stat index.html: …") never left the box. The rejection
+  // must carry the process output tail.
+  it("carries the stderr tail in the rejection message", async () => {
+    await expect(
+      realCommandRunner.capture!(process.execPath, [
+        "-e",
+        "console.error('COPY failed: stat index.html: file does not exist'); process.exit(1)",
+      ]),
+    ).rejects.toThrow(/COPY failed: stat index\.html: file does not exist/);
+  });
+  it("attaches stdout/stderr to the rejection for callers that echo them", async () => {
+    const err = await realCommandRunner
+      .capture!(process.execPath, ["-e", "console.log('out'); console.error('err'); process.exit(2)"])
+      .then(() => null, (e: Error & { stdout?: string; stderr?: string }) => e);
+    expect(err).not.toBeNull();
+    expect(err!.stdout).toContain("out");
+    expect(err!.stderr).toContain("err");
+  });
+});
+
+describe("runDockerBuild", () => {
+  it("prefers capture so a failure surfaces the builder's stderr", async () => {
+    const cmd: CommandRunner = {
+      run: async () => {
+        throw new Error("run must not be used when capture exists");
+      },
+      capture: async (c, args) => {
+        expect(c).toBe("docker");
+        expect(args).toEqual(["build", "-t", "img:1", "/ctx"]);
+        throw Object.assign(new Error("docker exited with code 1: COPY failed"), {
+          stdout: "",
+          stderr: "COPY failed\n",
+        });
+      },
+    };
+    await expect(runDockerBuild(cmd, "img:1", "/ctx")).rejects.toThrow(/COPY failed/);
+  });
+  it("falls back to run when the runner has no capture", async () => {
+    const calls: string[][] = [];
+    const cmd: CommandRunner = { run: async (c, args) => { calls.push([c, ...args]); } };
+    await runDockerBuild(cmd, "img:1", "/ctx");
+    expect(calls).toEqual([["docker", "build", "-t", "img:1", "/ctx"]]);
   });
 });
 

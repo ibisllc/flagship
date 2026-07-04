@@ -127,12 +127,44 @@ export const realCommandRunner: CommandRunner = {
       p.on("error", reject);
       p.stdout?.on("data", (d) => (stdout += d.toString()));
       p.stderr?.on("data", (d) => (stderr += d.toString()));
-      p.on("exit", (code) =>
-        code === 0 ? resolve({ stdout, stderr }) : reject(new Error(`${cmd} exited with code ${code}`)),
-      );
+      p.on("exit", (code) => {
+        if (code === 0) return resolve({ stdout, stderr });
+        // Carry the tail of the process output in the message — a bare
+        // "exited with code 1" is undiagnosable from a remote client (the
+        // gating live-e2e's vibe-deploy 502 was exactly this).
+        const tail = (stderr || stdout).trim().split("\n").slice(-8).join("\n").slice(-800);
+        reject(
+          Object.assign(
+            new Error(`${cmd} exited with code ${code}${tail ? `: ${tail}` : ""}`),
+            { stdout, stderr },
+          ),
+        );
+      });
     });
   },
 };
+
+/**
+ * Run `docker build` preferring capture over inherit so a FAILURE carries the
+ * builder's stderr back to the caller (the deploy HTTP surface returns the
+ * reason to the phone/driver — with stdio:"inherit" the error was an opaque
+ * "docker exited with code 1"). The captured output is echoed to the daemon's
+ * own stdio so the full build log still lands in the journal.
+ */
+export async function runDockerBuild(cmd: CommandRunner, image: string, contextDir: string): Promise<void> {
+  const args = ["build", "-t", image, contextDir];
+  if (!cmd.capture) return cmd.run("docker", args);
+  try {
+    const { stdout, stderr } = await cmd.capture("docker", args);
+    if (stdout) process.stdout.write(stdout);
+    if (stderr) process.stderr.write(stderr);
+  } catch (e) {
+    const err = e as Error & { stdout?: string; stderr?: string };
+    if (err.stdout) process.stdout.write(err.stdout);
+    if (err.stderr) process.stderr.write(err.stderr);
+    throw err;
+  }
+}
 
 export class AppRunner {
   private readonly limits: ContainerLimits;
