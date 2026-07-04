@@ -9,11 +9,14 @@ import {
   verifyServerTransferOffer,
   signServerTransferClaim,
   verifyServerTransferClaim,
+  signRehomeAuthorization,
+  verifyRehomeAuthorization,
   type AccountSelfDelete,
   type Keypair,
   type ServersSelfDelete,
   type ServerTransferOffer,
   type ServerTransferClaim,
+  type RehomeAuthorization,
 } from "../src/index.js";
 
 function hex(b: Uint8Array): string {
@@ -235,6 +238,66 @@ describe("server-transfer-claim v2 vector (transfer-a-box §4 + Slice D §9.8)",
     ).toBe(false);
     expect(
       verifyServerTransferClaim({ ...claim, acquirerAdminRootPubHex: "" }, sig, irk.publicKey),
+    ).toBe(false);
+  });
+});
+
+describe("server-rehome-auth vector (transfer-a-box §4 — v1-sec GAP 3)", () => {
+  it("canonical bytes match the pinned cross-platform string", () => {
+    const irk = makeKey(7); // giver owner IRK
+    const acquirerIrk = makeKey(9);
+    const order: RehomeAuthorization = {
+      oldServerDomain: "home.alice.flagship.services",
+      newServerDomain: "home.bob.flagship.services",
+      acquirerIrkPub: acquirerIrk.publicKey,
+      issuedAt: 1800,
+    };
+    const sig = signRehomeAuthorization(order, irk);
+    const expected = new TextEncoder().encode(
+      `flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|${hex(acquirerIrk.publicKey)}|1800`,
+    );
+    expect(ed.verify(sig, expected, irk.publicKey)).toBe(true);
+    expect(verifyRehomeAuthorization(order, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("lowercases the domains; binds to the giver IRK (not the acquirer key)", () => {
+    const giver = makeKey(10);
+    const acquirer = makeKey(11);
+    const order: RehomeAuthorization = {
+      oldServerDomain: "HOME.ALICE.flagship.services",
+      newServerDomain: "HOME.BOB.flagship.services",
+      acquirerIrkPub: acquirer.publicKey,
+      issuedAt: 5,
+    };
+    const sig = signRehomeAuthorization(order, giver);
+    const expected = new TextEncoder().encode(
+      `flagship/server-rehome-auth/v1|home.alice.flagship.services|home.bob.flagship.services|${hex(acquirer.publicKey)}|5`,
+    );
+    expect(ed.verify(sig, expected, giver.publicKey)).toBe(true);
+    // A box that pins the acquirer key by mistake must NOT accept it.
+    expect(verifyRehomeAuthorization(order, sig, acquirer.publicKey)).toBe(false);
+  });
+
+  it("a swapped new domain or acquirer key breaks the signature", () => {
+    const giver = makeKey(12);
+    const acquirer = makeKey(13);
+    const order: RehomeAuthorization = {
+      oldServerDomain: "home.alice.flagship.services",
+      newServerDomain: "home.bob.flagship.services",
+      acquirerIrkPub: acquirer.publicKey,
+      issuedAt: 9,
+    };
+    const sig = signRehomeAuthorization(order, giver);
+    expect(verifyRehomeAuthorization(order, sig, giver.publicKey)).toBe(true);
+    expect(
+      verifyRehomeAuthorization(
+        { ...order, newServerDomain: "home.carol.flagship.services" },
+        sig,
+        giver.publicKey,
+      ),
+    ).toBe(false);
+    expect(
+      verifyRehomeAuthorization({ ...order, acquirerIrkPub: makeKey(99).publicKey }, sig, giver.publicKey),
     ).toBe(false);
   });
 });

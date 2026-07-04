@@ -42,10 +42,12 @@
 import {
   verifyAdminRootTransfer,
   verifyDeviceEndpointClaim,
+  verifyRehomeAuthorization,
   verifyServerTransferOffer,
   verifyServerTransferClaim,
   type AdminRootTransfer,
   type DeviceEndpointClaim,
+  type RehomeAuthorization,
   type ServerTransferOffer,
   type ServerTransferClaim,
 } from "@flagship/protocol";
@@ -290,6 +292,8 @@ export async function handlePostTransferOffer(
     adminHandoffNewRootHex: null,
     adminHandoffIssuedAt: null,
     adminHandoffSigHex: null,
+    rehomeAuthIssuedAt: null,
+    rehomeAuthSigHex: null,
   });
 
   if (deps.auditEvents) {
@@ -625,17 +629,22 @@ export async function handleGetTransferRehome(
     ...(row.acquirerAdminRootPubHex !== null
       ? { acquirerAdminRootPub: row.acquirerAdminRootPubHex }
       : {}),
-    // TODO(v1-sec GAP 3, control-plane follow-up): relay the LEGACY
-    // giver-owner-IRK re-home authorization here as
-    //   rehomeAuth: { issuedAt, signatureHex }
+    // v1-sec GAP 3 — relay the LEGACY giver-owner-IRK re-home authorization
     // (a `flagship/server-rehome-auth/v1` signature over
     //  {oldServerDomain, newServerDomain, acquirerIrkPub, issuedAt}). A box with
-    // NO pinned admin root now REFUSES to re-home without it (fail-closed —
-    // never on `.com`'s unsigned word). This needs: a giver-phone deposit
-    // endpoint (mirroring the disk-key/admin-handoff deposits below) that stores
-    // the giver-IRK signature on the offer row, and echoing it in this response.
-    // Until wired, legacy (non-admin-tier) transfers stall at re-home — the
-    // intended safe default for the hardening branch.
+    // NO pinned admin root REFUSES to re-home without it (fail-closed — never on
+    // `.com`'s unsigned word); it reconstructs the canonical from the fields
+    // above and verifies the sig against its pinned owner IRK. `.com` relays the
+    // deposited proof but cannot forge it. Absent (admin-tier transfer / legacy
+    // giver hasn't deposited yet) ⇒ omitted, and the box keeps polling.
+    ...(row.rehomeAuthSigHex !== null && row.rehomeAuthIssuedAt !== null
+      ? {
+          rehomeAuth: {
+            issuedAt: row.rehomeAuthIssuedAt,
+            signatureHex: row.rehomeAuthSigHex,
+          },
+        }
+      : {}),
     //
     // The GIVER-admin-root-signed handoff proof, once deposited. A box with a
     // pinned admin root REFUSES to re-home until this verifies against its
@@ -839,6 +848,87 @@ export async function handlePostTransferAdminHandoff(
     oldRootHex: h.oldAdminRootPub.toLowerCase(),
     newRootHex: h.newAdminRootPub.toLowerCase(),
     issuedAt: h.issuedAt,
+    sigHex: b.signatureHex.toLowerCase(),
+  });
+  if (!stored) return notFound("no claimed transfer for this server");
+  return ok({ ok: true });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 8. POST /api/server/:domain/transfer/rehome-auth  (giver's phone)
+//
+// v1-sec GAP 3 — the LEGACY (no-admin-root) sibling of the admin-handoff
+// deposit above. The giver deposits a `flagship/server-rehome-auth/v1` envelope
+// signed by the GIVER's owner IRK, committing (this box's OLD canonical → the
+// acquirer's NEW canonical, the acquirer's IRK pub, issuedAt). A box with NO
+// pinned admin master root re-homes ONLY on this proof, verified LOCALLY against
+// its pinned owner IRK (its config still holds the giver's until it re-homes) —
+// never on `.com`'s unauthenticated word (the hijack this closes).
+//
+// Like the admin-handoff, this endpoint carries NO extra auth gate: the
+// giver-owner-IRK signature IS the authorization — only the giver's phone holds
+// that IRK, and `.com` cannot forge it. `.com`'s verify below (against the giver
+// account's REGISTERED owner IRK) is a sanity/garbage filter so junk never
+// occupies the relay slot; the box re-verifies against its PINNED owner IRK
+// regardless. The signed fields are ALL reconstructed from the CLAIMED row so a
+// rogue `.com` can't have the box verify a proof over swapped values (the box
+// rebuilds the same canonical from the rehome read + its own OLD canonical).
+//
+// The body is minimal — `{ issuedAt, signatureHex }` — since old/new/acquirerIrk
+// live on the row. Accepted ONLY on a CLAIMED row. Idempotent: a re-deposit
+// replaces (the giver's phone may retry).
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handlePostTransferRehomeAuth(
+  deps: ServerTransferDeps,
+  host: string,
+  body: unknown,
+): Promise<HandlerResponseWithHeaders> {
+  const now = deps.now ?? (() => Date.now());
+  const b = body as { issuedAt?: unknown; signatureHex?: unknown };
+  if (typeof b?.issuedAt !== "number" || typeof b?.signatureHex !== "string") {
+    return malformed("malformed rehome auth");
+  }
+  if (!HEX128.test(b.signatureHex.toLowerCase())) {
+    return malformed("signatureHex must be 64 bytes hex");
+  }
+
+  const row = await deps.serverTransfers.getOffer(host, now());
+  if (!row || row.claimedAt === null || !row.acquirerUsername || !row.acquirerIrkPubHex) {
+    return notFound("no claimed transfer for this server");
+  }
+
+  // Reconstruct the acquirer's NEW canonical exactly as the box + the rehome
+  // read derive it (`<server>.<acquirer>.<apex>`); a box that can't be split
+  // here can't be re-homed under the namespace scheme.
+  const apex = deps.apex ?? "flagship.services";
+  const parts = splitPodCanonical(host, apex);
+  if (!parts) return malformed("server domain is not a valid pod canonical");
+  const newServerDomain = `${parts.server}.${row.acquirerUsername}.${apex}`;
+
+  // Verify the giver-owner-IRK signature against the giver account's REGISTERED
+  // owner IRK — the garbage filter (the box re-verifies against its own pin).
+  const giver = await deps.usernames.get(row.giverUsername);
+  if (!giver) return notFound("unknown giver account");
+
+  const authorization: RehomeAuthorization = {
+    oldServerDomain: host,
+    newServerDomain,
+    acquirerIrkPub: hexToBytes(row.acquirerIrkPubHex),
+    issuedAt: b.issuedAt,
+  };
+  let sigBytes: Uint8Array;
+  try {
+    sigBytes = hexToBytes(b.signatureHex);
+  } catch {
+    return malformed("invalid hex");
+  }
+  if (!verifyRehomeAuthorization(authorization, sigBytes, hexToBytes(giver.irkPubHex))) {
+    return forbidden("invalid rehome-auth signature");
+  }
+
+  const stored = await deps.serverTransfers.putRehomeAuth(host, {
+    issuedAt: b.issuedAt,
     sigHex: b.signatureHex.toLowerCase(),
   });
   if (!stored) return notFound("no claimed transfer for this server");
