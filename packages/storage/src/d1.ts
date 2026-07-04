@@ -2218,7 +2218,7 @@ function rowToServerMigration(r: ServerMigrationRow): ServerMigrationRecord {
 }
 
 /**
- * D1 ServerMigrationStorage (migration 0069) — one session row per migrating
+ * D1 ServerMigrationStorage (migration 0081) — one session row per migrating
  * FQDN (docs/server-migration.md). The `phase` column is the authoritative
  * cursor; each mark* stamps its timestamp column + the phase, mirroring the
  * server_evictions handshake style. The handlers own the transition legality.
@@ -4800,7 +4800,7 @@ export class D1NamespaceStorage implements NamespaceStorage {
 }
 
 /**
- * D1 PeerBackupManifestStorage (migration 0068) — one row per server,
+ * D1 PeerBackupManifestStorage (migration 0080) — one row per server,
  * latest-wins by the box-signed `generation`. The upsert's conflict
  * clause carries `WHERE excluded.generation > generation` so a replayed
  * older deposit is a 0-change no-op (`meta.changes` drives the stale

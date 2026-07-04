@@ -1487,7 +1487,7 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // serverMigrations — the server-migration orchestration lane (0069).
+  // serverMigrations — the server-migration orchestration lane (0081).
   // One row per migrating FQDN (upsert); listForUser orders by
   // initiatedAt asc; attach + the mark* stamps advance phase + timestamp.
   // ────────────────────────────────────────────────────────────────────
@@ -1869,7 +1869,7 @@ describe("D1 ↔ InMemory parity", () => {
   // migration applied), with exactly the documented tolerated no-op.
   // ────────────────────────────────────────────────────────────────────
   // ────────────────────────────────────────────────────────────────────
-  // Peer-backup manifests (0068) — latest-wins upsert by generation
+  // Peer-backup manifests (0080) — latest-wins upsert by generation
   // ────────────────────────────────────────────────────────────────────
   describe("peerBackupManifests", () => {
     const rec = (over: Partial<import("../src/types.js").PeerBackupManifestRecord> = {}) => ({

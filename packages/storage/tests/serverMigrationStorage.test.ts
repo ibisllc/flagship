@@ -1,6 +1,6 @@
 /**
  * Storage adapter contract — ServerMigrationStorage (the server-migration
- * orchestration lane, docs/server-migration.md; migration 0069).
+ * orchestration lane, docs/server-migration.md; migration 0081).
  *
  * One session row per migrating FQDN. Focused on the InMemory adapter's
  * observable behaviour: put→get→list, the attach stamp, and each phase mark.
