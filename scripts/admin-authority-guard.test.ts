@@ -130,6 +130,7 @@ const ALLOWLIST_FILES = [
   "packages/control-plane/src/serviceInvites.ts",
   "packages/control-plane/src/secretMailbox.ts",
   "packages/control-plane/src/deviceCapabilityGrants.ts",
+  "packages/control-plane/src/routing.ts",
 ];
 
 describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .com set", () => {
@@ -155,7 +156,9 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
       "serviceInvites.ts|handleCreateServiceInvite",
       "serviceInvites.ts|handleRevokeServiceInvite",
       "secretMailbox.ts|handlePostSetLeaderDeposit",
+      "secretMailbox.ts|handlePostUpdateDeposit",
       "deviceCapabilityGrants.ts|handleMintDeviceGrant",
+      "routing.ts|handleRegisterRck",
     ];
     for (const e of expected) expect(script).toContain(e);
   });
