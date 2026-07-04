@@ -6,7 +6,9 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.AdminRootTransferWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
+import com.flagshipserver.app.api.TransferAdminHandoffBody
 import com.flagshipserver.app.api.TransferClaimBody
 import com.flagshipserver.app.api.TransferClaimWire
 import com.flagshipserver.app.api.TransferDiskKeyBody
@@ -175,14 +177,19 @@ object ServerTransferFlow {
         // .irkPubHex` — identity, independent of the signature). The SENSITIVE
         // claim ORDER signs with the acquirer's admin master root (`orderKey`)
         // when supplied (else the IRK); `.com` gates the signature against the
-        // acquirer's admin root. Canonical bytes (incl. the IRK field) unchanged.
+        // acquirer's admin root.
         orderKey: Ed25519Sign? = null,
+        // §9.8 — the acquirer's admin root pub rides INSIDE the v2 signed
+        // canonical ("" when the account has none) so the box re-pins the
+        // acquirer's anchor at re-home off a value the acquirer signed.
+        acquirerAdminRootPubHex: String = "",
     ): TransferClaimBody {
         if (offer.expiresAt <= issuedAt) throw TransferException("expired")
         val lowered = acquirerUsername.lowercase()
         val sig = (orderKey ?: acquirerIrk).sign(
             ServerTransferClaimOrder.canonicalBytes(
-                offer.serverDomain, offer.transferNonce, lowered, acquirerIrkPubHex, issuedAt
+                offer.serverDomain, offer.transferNonce, lowered, acquirerIrkPubHex,
+                acquirerAdminRootPubHex, issuedAt,
             )
         )
         return TransferClaimBody(
@@ -191,9 +198,51 @@ object ServerTransferFlow {
                 transferNonce = offer.transferNonce,
                 acquirerUsername = lowered,
                 acquirerIrkPub = acquirerIrkPubHex.lowercase(),
+                acquirerAdminRootPub = acquirerAdminRootPubHex.lowercase(),
                 issuedAt = issuedAt,
             ),
             claimSignature = HexUtil.encode(sig),
+        )
+    }
+
+    // ── GIVER: admin-root hand-off (§9.8) ─────────────────────────────────────
+
+    /** Build + sign the admin-root hand-off the box verifies against its PINNED
+     *  giver anchor before re-pinning the acquirer's root at re-home.
+     *  `serverDomain` is the box's OLD canonical; `newAdminRootPubHex` "" ⇒
+     *  unpin (the acquirer account has no admin root). Signed by the GIVER's
+     *  admin master root. */
+    fun buildAdminHandoff(
+        serverDomain: String,
+        giverUsername: String,
+        acquirerUsername: String,
+        oldAdminRootPubHex: String,
+        newAdminRootPubHex: String,
+        transferNonce: String,
+        issuedAt: Long,
+        giverAdminRoot: Ed25519Sign,
+    ): TransferAdminHandoffBody {
+        val handoff = AdminRootTransfer(
+            serverDomain = serverDomain.lowercase(),
+            giverUsername = giverUsername.lowercase(),
+            acquirerUsername = acquirerUsername.lowercase(),
+            oldAdminRootPub = oldAdminRootPubHex.lowercase(),
+            newAdminRootPub = newAdminRootPubHex.lowercase(),
+            transferNonce = transferNonce.lowercase(),
+            issuedAt = issuedAt,
+        )
+        val sig = AdminRootTransferClaim.sign(handoff, giverAdminRoot)
+        return TransferAdminHandoffBody(
+            handoff = AdminRootTransferWire(
+                serverDomain = handoff.serverDomain,
+                giverUsername = handoff.giverUsername,
+                acquirerUsername = handoff.acquirerUsername,
+                oldAdminRootPub = handoff.oldAdminRootPub,
+                newAdminRootPub = handoff.newAdminRootPub,
+                transferNonce = handoff.transferNonce,
+                issuedAt = handoff.issuedAt,
+            ),
+            signatureHex = HexUtil.encode(sig),
         )
     }
 

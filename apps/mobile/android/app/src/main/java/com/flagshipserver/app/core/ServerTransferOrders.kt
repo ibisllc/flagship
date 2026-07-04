@@ -12,10 +12,15 @@
 // Canonical bytes (byte-identical to TS + the Swift mirror):
 //
 //   flagship/server-transfer-offer/v1|<serverDomain>|<transferNonce>|<issuedAt>|<expiresAt>
-//   flagship/server-transfer-claim/v1|<serverDomain>|<transferNonce>|<acquirerUsername>|<acquirerIrkPubHex>|<issuedAt>
+//   flagship/server-transfer-claim/v2|<serverDomain>|<transferNonce>|<acquirerUsername>|<acquirerIrkPubHex>|<acquirerAdminRootPubHex>|<issuedAt>
 //
-// serverDomain, transferNonce, and acquirerUsername are lowercased into the
-// canonical bytes (matching the TS `.toLowerCase()`).
+// serverDomain, transferNonce, acquirerUsername, and the pub hexes are
+// lowercased into the canonical bytes (matching the TS `.toLowerCase()`).
+//
+// Claim v2 (device-admin-tier spec §9.8): the acquirer's ADMIN MASTER ROOT pub
+// rides INSIDE the signed canonical (empty string when the acquirer account has
+// none) so the box can re-pin the acquirer's authority anchor at re-home — a
+// value `.com` merely relayed outside the signature could be swapped.
 
 package com.flagshipserver.app.core
 
@@ -33,13 +38,14 @@ object ServerTransferOfferOrder {
 }
 
 object ServerTransferClaimOrder {
-    const val CANONICAL_TAG = "flagship/server-transfer-claim/v1"
+    const val CANONICAL_TAG = "flagship/server-transfer-claim/v2"
 
     fun canonicalBytes(
         serverDomain: String,
         transferNonce: String,
         acquirerUsername: String,
         acquirerIrkPubHex: String,
+        acquirerAdminRootPubHex: String,
         issuedAt: Long,
     ): ByteArray =
         listOf(
@@ -48,6 +54,7 @@ object ServerTransferClaimOrder {
             transferNonce.lowercase(),
             acquirerUsername.lowercase(),
             acquirerIrkPubHex.lowercase(),
+            acquirerAdminRootPubHex.lowercase(),
             issuedAt.toString(),
         ).joinToString("|").toByteArray(Charsets.UTF_8)
 }

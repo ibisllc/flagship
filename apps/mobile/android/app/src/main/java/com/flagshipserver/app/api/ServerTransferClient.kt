@@ -8,6 +8,7 @@
 //   POST /api/server/:domain/transfer/claim-poll         giver, IRK mailbox-auth → acquirer IRK
 //   POST /api/server/:domain/transfer/disk-key           giver, IRK mailbox-auth + sealed disk key
 //   POST /api/server/:domain/transfer/disk-key-claim      acquirer, IRK mailbox-auth → sealed disk key
+//   POST /api/server/:domain/transfer/admin-handoff       giver, admin-root-signed hand-off proof (§9.8)
 //
 // The wire types are PURE (no crypto): the VM builds the IRK-signed offer/claim
 // + the mailbox-auth via core and hands the finished bytes here. Field names
@@ -35,6 +36,11 @@ interface ServerTransferClient {
 
     /** ACQUIRER: pick up the giver's re-sealed disk key. null until deposited (404). */
     suspend fun claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope): TransferDiskKey?
+
+    /** GIVER: deposit the admin-root hand-off proof (signed by the GIVER's admin
+     *  master root; the box verifies vs its pinned anchor). Domain in the path is
+     *  the box's OLD canonical. */
+    suspend fun postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody)
 }
 
 // ── Wire types ──────────────────────────────────────────────────────────────
@@ -64,6 +70,9 @@ data class TransferClaimWire(
     val transferNonce: String,
     val acquirerUsername: String,
     val acquirerIrkPub: String,
+    /** The acquirer's admin master-root pub hex, "" when the account has none.
+     *  Inside the claim's v2 signed canonical (§9.8). */
+    val acquirerAdminRootPub: String,
     val issuedAt: Long,
 )
 
@@ -86,6 +95,7 @@ data class TransferClaimPoll(
     val newServerDomain: String? = null,
     val acquirerUsername: String? = null,
     val acquirerIrkPub: String? = null,
+    val acquirerAdminRootPub: String? = null,
 )
 
 @Serializable
@@ -97,6 +107,25 @@ data class TransferDiskKeyBody(
 
 @Serializable
 data class TransferDiskKey(val sealedDiskKey: String = "")
+
+/** Wire twin of core `AdminRootTransfer` — field names match the Worker handler
+ *  JSON exactly. */
+@Serializable
+data class AdminRootTransferWire(
+    val serverDomain: String,
+    val giverUsername: String,
+    val acquirerUsername: String,
+    val oldAdminRootPub: String,
+    val newAdminRootPub: String,
+    val transferNonce: String,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class TransferAdminHandoffBody(
+    val handoff: AdminRootTransferWire,
+    val signatureHex: String,
+)
 
 // ── Live ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +171,13 @@ class LiveServerTransferClient(
     override suspend fun claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope): TransferDiskKey? =
         postOptional(serverDomain, "transfer/disk-key-claim", auth, TransferDiskKey.serializer())
 
+    override suspend fun postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) {
+        transport.postJson(
+            urlFor(serverDomain, "transfer/admin-handoff"), body,
+            serializer = TransferAdminHandoffBody.serializer(), accept = setOf(200),
+        )
+    }
+
     /** POST the IRK mailbox-auth in the body; 404 ⇒ null (not-yet-claimed /
      *  not-yet-deposited), 200 ⇒ decode. */
     private suspend fun <R> postOptional(
@@ -171,9 +207,11 @@ class MockServerTransferClient : ServerTransferClient {
     val offers = mutableListOf<Pair<String, TransferOfferBody>>()
     val claims = mutableListOf<Pair<String, TransferClaimBody>>()
     val diskKeyDeposits = mutableListOf<Pair<String, TransferDiskKeyBody>>()
+    val adminHandoffDeposits = mutableListOf<Pair<String, TransferAdminHandoffBody>>()
     var scriptedPoll: TransferClaimPoll? = null
     var scriptedDiskKey: TransferDiskKey? = null
     var claimResult: TransferClaimResult? = null
+    var adminHandoffError: Throwable? = null
 
     override suspend fun postOffer(serverDomain: String, body: TransferOfferBody): TransferOfferResult {
         offers.add(serverDomain to body)
@@ -197,4 +235,9 @@ class MockServerTransferClient : ServerTransferClient {
     }
 
     override suspend fun claimDiskKey(serverDomain: String, auth: MailboxAuthEnvelope): TransferDiskKey? = scriptedDiskKey
+
+    override suspend fun postAdminHandoff(serverDomain: String, body: TransferAdminHandoffBody) {
+        adminHandoffError?.let { throw it }
+        adminHandoffDeposits.add(serverDomain to body)
+    }
 }

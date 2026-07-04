@@ -64,9 +64,12 @@ class ServerTransferFlowTest {
         )
         val body = ServerTransferFlow.buildClaim(qr, "Bob", signer, pubHex, 1800)
         assertEquals("bob", body.claim.acquirerUsername)
+        // No admin root supplied ⇒ the v2 slot is "" both on the wire and in
+        // the signed canonical.
+        assertEquals("", body.claim.acquirerAdminRootPub)
         Ed25519Verify(acq.publicKey).verify(
             HexUtil.decode(body.claimSignature)!!,
-            ServerTransferClaimOrder.canonicalBytes(host, qr.transferNonce, "bob", body.claim.acquirerIrkPub, 1800),
+            ServerTransferClaimOrder.canonicalBytes(host, qr.transferNonce, "bob", body.claim.acquirerIrkPub, "", 1800),
         )
     }
 

@@ -37,6 +37,9 @@ class TransferAcquirerViewModel(
      *  root. */
     private val orderSigner: suspend (reason: String) -> Ed25519Sign? =
         { r -> if (Keystore.hasAdminRoot()) Keystore.adminRootKey(r) else null },
+    /** §9.8 — this account's admin root pub, carried INSIDE the v2 claim
+     *  canonical so the box re-pins it at re-home. Null ⇒ "" (unpin). */
+    private val adminRootPubHex: suspend () -> String? = { Keystore.adminRootPubHex() },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     private val _phase = MutableStateFlow<TransferAcquirerPhase>(TransferAcquirerPhase.Idle)
@@ -109,7 +112,10 @@ class TransferAcquirerViewModel(
             return
         }
         try {
-            val body = ServerTransferFlow.buildClaim(parsed, username, key, pub, now(), orderKey)
+            val body = ServerTransferFlow.buildClaim(
+                parsed, username, key, pub, now(), orderKey,
+                acquirerAdminRootPubHex = adminRootPubHex() ?: "",
+            )
             _phase.value = TransferAcquirerPhase.Posting
             val result = client.postClaim(parsed.serverDomain, body)
             _phase.value = TransferAcquirerPhase.Claimed(result.newServerDomain)
