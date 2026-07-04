@@ -1,9 +1,18 @@
 # Flagship for Desktop — host a server in the app (encrypted, phone-gated VM appliance)
 
 > **Status: DESIGN LOCKED, build is POST-LAUNCH.** This records the decision + plan
-> from the 2026-07-01 design discussion. No code yet. It is an upgrade to the
+> from the 2026-07-01 design discussion. It is an upgrade to the
 > **desktop app** (today's burner, `apps/burner-mac`) only — the phone/webapp
 > clients and the daemon core are reused unchanged.
+>
+> **Mac reference slice: foundation built on `feat/desktop-vm`.** Pure, fully
+> unit-tested VM core (`FlagshipBurnerCore/VM/`: config/resource-caps/lifecycle/
+> inventory/tier-badge), a thin `VZHost.swift` (VZEFIBootLoader +
+> VZGenericMachinePlatform), the virtualization entitlement, the Burn-to-USB /
+> Host-here wizard chooser, the hosted-servers sidebar, and the debug-grant-gated
+> serial console. NOT yet done: a manual end-to-end VM boot on real hardware
+> (install → sealed → phone unlock → green padlock), Linux/Windows backends, and
+> auto-start-on-host-boot.
 
 ## Vision
 
