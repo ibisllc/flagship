@@ -71,6 +71,7 @@ import {
   handleGetTransferRehome,
   handlePostTransferDiskKey,
   handleGetTransferDiskKey,
+  handlePostTransferAdminHandoff,
   handleDepositAcmeAccountKey,
   handleReleaseAcmeAccountKey,
   handleRevokeAcmeAccountKeyDelivery,
@@ -563,6 +564,9 @@ const ROUTE_RE = {
   // mailbox-auth — the auth rides the body, mirroring claim-poll).
   TRANSFER_DISK_KEY: /^\/api\/server\/([^/]+)\/transfer\/disk-key$/,
   TRANSFER_DISK_KEY_CLAIM: /^\/api\/server\/([^/]+)\/transfer\/disk-key-claim$/,
+  // Slice D §9.8 — the giver deposits the admin-root handoff proof (the
+  // giver-admin-root SIGNATURE is the auth; the box re-verifies vs its pin).
+  TRANSFER_ADMIN_HANDOFF: /^\/api\/server\/([^/]+)\/transfer\/admin-handoff$/,
   // #28 Option B — seal-to-box ACME account-key delivery. ONE path
   // (singular `acme-account-key`) discriminated by method:
   //   POST   deposit (IRK-signed grant, sealed to the box STK)
@@ -1689,6 +1693,25 @@ export async function tryControlPlane(
         isClaim
           ? await handleGetTransferDiskKey(xferDeps, domain, await readJson(request))
           : await handlePostTransferDiskKey(xferDeps, domain, await readJson(request)),
+      );
+    }
+    // Slice D §9.8 — the giver deposits the admin-root handoff proof. No
+    // mailbox-auth: the giver-admin-root signature IS the authorization (the
+    // handler verifies it against the giver account's registered admin root as
+    // a garbage filter; the box re-verifies against its PINNED root).
+    if (method === "POST" && (m = path.match(ROUTE_RE.TRANSFER_ADMIN_HANDOFF))) {
+      return finishPlain(
+        await handlePostTransferAdminHandoff(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            routing: storage.routing,
+            serverTransfers: storage.serverTransfers,
+            apex: env.SERVICES_APEX,
+          },
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
       );
     }
     // Transfer-a-box broker — the cross-account ownership handoff. The claim

@@ -1105,6 +1105,22 @@ export interface ServerTransferRecord {
   claimIssuedAt: number | null;
   /** The acquirer's claim signature, hex, or null. */
   claimSignatureHex: string | null;
+  /** Slice D §9.8 — the acquirer's ADMIN MASTER ROOT pubkey from the claim
+   *  (claim canonical v2, signature-covered). "" when the acquirer account has
+   *  no admin root; null until claimed (and on pre-0068 legacy claims). The
+   *  giver's phone reads this back to build the admin-root handoff proof. */
+  acquirerAdminRootPubHex: string | null;
+  /** Slice D §9.8 — the GIVER-admin-root-signed `flagship/admin-root-transfer/v1`
+   *  proof (old giver root → new acquirer root, bound to this box + nonce).
+   *  Deposited by the giver's phone post-claim; the box re-verifies it against
+   *  its PINNED root before re-pinning — `.com` relays but cannot forge. The
+   *  giver/acquirer usernames + nonce live on the row itself; only the proof's
+   *  root pair + issuedAt + signature need columns. Null until deposited. */
+  adminHandoffOldRootHex: string | null;
+  /** "" = the acquirer has no admin root (the box UNPINS); null until deposited. */
+  adminHandoffNewRootHex: string | null;
+  adminHandoffIssuedAt: number | null;
+  adminHandoffSigHex: string | null;
   /** Layer B — the box's LUKS disk key, RE-SEALED to the ACQUIRER IRK by the
    *  giver's phone after the claim (the giver holds the giver IRK to unseal the
    *  current blob; the box never does). Hex of a `sealForEd25519Recipient` blob;
@@ -1141,10 +1157,23 @@ export interface ServerTransferStorage {
     transferNonce: string,
     acquirerUsername: string,
     acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
     claimIssuedAt: number,
     claimSignatureHex: string,
     now: number,
   ): Promise<{ ok: true; record: ServerTransferRecord } | { ok: false; reason: string }>;
+  /** Slice D §9.8 — the giver's phone deposits the giver-admin-root-signed
+   *  handoff proof on the CLAIMED transfer row. Idempotent — a re-deposit
+   *  replaces. No-op (false) if there is no claimed row for the box. */
+  putAdminHandoff(
+    serverDomain: string,
+    handoff: {
+      oldRootHex: string;
+      newRootHex: string;
+      issuedAt: number;
+      sigHex: string;
+    },
+  ): Promise<boolean>;
   /** Layer B — the giver's phone deposits the disk key re-sealed to the
    *  acquirer IRK on the CLAIMED transfer row. No-op (false) if there is no
    *  claimed row for the box. */

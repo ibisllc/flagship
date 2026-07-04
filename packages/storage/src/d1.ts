@@ -1814,6 +1814,11 @@ interface ServerTransferRow {
   claim_signature_hex: string | null;
   disk_key_handoff_hex: string | null;
   disk_key_handoff_at: number | null;
+  acquirer_admin_root_pub_hex: string | null;
+  admin_handoff_old_root_hex: string | null;
+  admin_handoff_new_root_hex: string | null;
+  admin_handoff_issued_at: number | null;
+  admin_handoff_sig_hex: string | null;
 }
 
 function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
@@ -1832,6 +1837,11 @@ function rowToServerTransfer(r: ServerTransferRow): ServerTransferRecord {
     claimSignatureHex: r.claim_signature_hex,
     diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
     diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
+    acquirerAdminRootPubHex: r.acquirer_admin_root_pub_hex ?? null,
+    adminHandoffOldRootHex: r.admin_handoff_old_root_hex ?? null,
+    adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
+    adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
+    adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
   };
 }
 
@@ -1847,8 +1857,10 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
            (server_domain, giver_username, transfer_nonce, giver_irk_pub_hex,
             issued_at, expires_at, offer_signature_hex,
             claimed_at, acquirer_username, acquirer_irk_pub_hex,
-            claim_issued_at, claim_signature_hex)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+            claim_issued_at, claim_signature_hex, acquirer_admin_root_pub_hex,
+            admin_handoff_old_root_hex, admin_handoff_new_root_hex,
+            admin_handoff_issued_at, admin_handoff_sig_hex)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
       )
       .bind(
         rec.serverDomain,
@@ -1863,6 +1875,11 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         rec.acquirerIrkPubHex === null ? null : rec.acquirerIrkPubHex.toLowerCase(),
         rec.claimIssuedAt,
         rec.claimSignatureHex === null ? null : rec.claimSignatureHex.toLowerCase(),
+        rec.acquirerAdminRootPubHex === null ? null : rec.acquirerAdminRootPubHex.toLowerCase(),
+        rec.adminHandoffOldRootHex === null ? null : rec.adminHandoffOldRootHex.toLowerCase(),
+        rec.adminHandoffNewRootHex === null ? null : rec.adminHandoffNewRootHex.toLowerCase(),
+        rec.adminHandoffIssuedAt,
+        rec.adminHandoffSigHex === null ? null : rec.adminHandoffSigHex.toLowerCase(),
       )
       .run();
   }
@@ -1890,6 +1907,7 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
     transferNonce: string,
     acquirerUsername: string,
     acquirerIrkPubHex: string,
+    acquirerAdminRootPubHex: string,
     claimIssuedAt: number,
     claimSignatureHex: string,
     now: number,
@@ -1910,8 +1928,9 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
       .prepare(
         `UPDATE server_transfers
            SET claimed_at = ?1, acquirer_username = ?2, acquirer_irk_pub_hex = ?3,
-               claim_issued_at = ?4, claim_signature_hex = ?5
-         WHERE server_domain = ?6 AND claimed_at IS NULL`,
+               claim_issued_at = ?4, claim_signature_hex = ?5,
+               acquirer_admin_root_pub_hex = ?6
+         WHERE server_domain = ?7 AND claimed_at IS NULL`,
       )
       .bind(
         now,
@@ -1919,6 +1938,7 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         acquirerIrkPubHex.toLowerCase(),
         claimIssuedAt,
         claimSignatureHex.toLowerCase(),
+        acquirerAdminRootPubHex.toLowerCase(),
         serverDomain,
       )
       .run();
@@ -1941,8 +1961,13 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
         acquirerIrkPubHex: acquirerIrkPubHex.toLowerCase(),
         claimIssuedAt,
         claimSignatureHex: claimSignatureHex.toLowerCase(),
+        acquirerAdminRootPubHex: acquirerAdminRootPubHex.toLowerCase(),
         diskKeyHandoffHex: r.disk_key_handoff_hex ?? null,
         diskKeyHandoffAt: r.disk_key_handoff_at ?? null,
+        adminHandoffOldRootHex: r.admin_handoff_old_root_hex ?? null,
+        adminHandoffNewRootHex: r.admin_handoff_new_root_hex ?? null,
+        adminHandoffIssuedAt: r.admin_handoff_issued_at ?? null,
+        adminHandoffSigHex: r.admin_handoff_sig_hex ?? null,
       },
     };
   }
@@ -1961,6 +1986,31 @@ export class D1ServerTransferStorage implements ServerTransferStorage {
          WHERE server_domain = ?3 AND claimed_at IS NOT NULL`,
       )
       .bind(diskKeyHandoffHex.toLowerCase(), now, serverDomain)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined || meta.changes > 0;
+  }
+
+  async putAdminHandoff(
+    serverDomain: string,
+    handoff: { oldRootHex: string; newRootHex: string; issuedAt: number; sigHex: string },
+  ): Promise<boolean> {
+    // Only a CLAIMED row accepts the admin-root handoff (the giver signs the
+    // proof for the acquirer root learned from the claim). Idempotent replace.
+    const w = await this.db
+      .prepare(
+        `UPDATE server_transfers
+           SET admin_handoff_old_root_hex = ?1, admin_handoff_new_root_hex = ?2,
+               admin_handoff_issued_at = ?3, admin_handoff_sig_hex = ?4
+         WHERE server_domain = ?5 AND claimed_at IS NOT NULL`,
+      )
+      .bind(
+        handoff.oldRootHex.toLowerCase(),
+        handoff.newRootHex.toLowerCase(),
+        handoff.issuedAt,
+        handoff.sigHex.toLowerCase(),
+        serverDomain,
+      )
       .run();
     const meta = (w as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined || meta.changes > 0;
