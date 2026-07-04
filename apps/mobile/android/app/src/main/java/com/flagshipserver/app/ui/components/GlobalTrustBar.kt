@@ -79,21 +79,26 @@ fun GlobalTrustBar() {
 
     val verdict by trust.verdict.collectAsState()
     val failuresState by trust.failures.collectAsState()
+    val relayFailuresState by trust.relayFailures.collectAsState()
     val overridden by trust.overriddenCertHashes.collectAsState()
     val isUnlocked by app.isUnlocked.collectAsState()
 
-    // Locked ⇒ show nothing (mirror the operations bar). Only show while the
-    // verdict is positively UNTRUSTED.
+    // Two failure SOURCES share the one red sliver. Locked ⇒ show nothing
+    // (mirror the operations bar). The control-CA class shows only while the
+    // verdict is positively UNTRUSTED (the `.com` global halt); the per-cert
+    // RELAY failures aggregated across the user's pods show whenever unlocked
+    // (a warning + override — NOT a halt).
     val failures = if (isUnlocked && verdict == com.flagshipserver.app.core.TrustVerdict.UNTRUSTED) {
         failuresState
     } else {
         emptyList()
     }
+    val relayFailures = if (isUnlocked) relayFailuresState else emptyList()
 
     var overriding by remember { mutableStateOf<TrustFailure?>(null) }
 
     AnimatedVisibility(
-        visible = failures.isNotEmpty(),
+        visible = failures.isNotEmpty() || relayFailures.isNotEmpty(),
         enter = fadeIn() + expandVertically(spring(dampingRatio = 0.9f, stiffness = 420f)),
         exit = fadeOut() + shrinkVertically(spring(dampingRatio = 0.9f, stiffness = 420f)),
     ) {
@@ -101,8 +106,20 @@ fun GlobalTrustBar() {
             failures.forEach { f ->
                 TrustSliverLine(
                     failure = f,
+                    serverCount = 0,
                     overridden = f.certHash in overridden,
                     onTap = { overriding = f },
+                )
+            }
+            // One line per DISTINCT faulty relay authority, spanning all
+            // affected servers; the "continuing" marker is wire-driven (a
+            // covering exception the box relayed) OR a local override.
+            relayFailures.forEach { rf ->
+                TrustSliverLine(
+                    failure = rf.trustFailure,
+                    serverCount = rf.serverCount,
+                    overridden = rf.overridden || rf.certHash in overridden,
+                    onTap = { overriding = rf.trustFailure },
                 )
             }
         }
@@ -179,7 +196,14 @@ fun GlobalTrustBar() {
 }
 
 @Composable
-private fun TrustSliverLine(failure: TrustFailure, overridden: Boolean, onTap: () -> Unit) {
+private fun TrustSliverLine(
+    failure: TrustFailure,
+    /** >1 for a relay-cert failure spanning multiple servers; 0 for the
+     *  single-authority control-CA class (no count shown). */
+    serverCount: Int,
+    overridden: Boolean,
+    onTap: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -206,6 +230,21 @@ private fun TrustSliverLine(failure: TrustFailure, overridden: Boolean, onTap: (
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        if (serverCount > 1) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(FS.radius.pill))
+                    .background(Color.White.copy(alpha = 0.18f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "$serverCount servers",
+                    color = Color.White,
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                )
+            }
+            Box(Modifier.padding(start = FS.space.s2))
+        }
         if (overridden) {
             Box(
                 modifier = Modifier
