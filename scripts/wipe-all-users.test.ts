@@ -118,6 +118,38 @@ describe("wipe-all-users.sh — guards", () => {
     expect(deleteCalls().length).toBeGreaterThan(30);
   });
 
+  it("HARD-GUARD: a non-prod env pointing at the PROD D1 refuses before anything", () => {
+    // The gym/CI path must be structurally incapable of wiping flagship-state:
+    // WIPE_ENV=gym with the default (prod) WIPE_D1 exits 1 before the preview.
+    const r = run(["--yes"], { WIPE_ENV: "gym", WIPE_CONFIRM: "gym" });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("PROD database");
+    expect(deleteCalls()).toHaveLength(0);
+    // Same refusal even for an explicit WIPE_D1=flagship-state.
+    const r2 = run(["--yes"], { WIPE_ENV: "gym", WIPE_CONFIRM: "gym", WIPE_D1: "flagship-state" });
+    expect(r2.code).toBe(1);
+    expect(deleteCalls()).toHaveLength(0);
+  });
+
+  it("WIPE_WRANGLER_CONFIG threads --config into every wrangler call", () => {
+    const r = run(["--yes"], {
+      WIPE_ENV: "gym",
+      WIPE_CONFIRM: "gym",
+      WIPE_D1: "flagship-state-gym",
+      WIPE_WRANGLER_CONFIG: "wrangler.gym.toml",
+    });
+    expect(r.code).toBe(0);
+    const log = readFileSync(callLog, "utf8");
+    expect(log).toContain("--config wrangler.gym.toml");
+    // And the prod path (no override) stays config-free — behavior unchanged.
+  });
+
+  it("prod default carries NO --config flag (behavior unchanged)", () => {
+    run(["--yes"], { WIPE_CONFIRM: "prod", WIPE_ENV: "prod", WIPE_WRANGLER_CONFIG: "" });
+    const log = readFileSync(callLog, "utf8");
+    expect(log).not.toContain("--config");
+  });
+
   it("an unknown argument is rejected (no delete)", () => {
     const r = run(["--nuke-everything"]);
     expect(r.code).toBe(2);

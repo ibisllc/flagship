@@ -38,6 +38,9 @@
 #   WIPE_ENV      target env name (default "prod"); WIPE_CONFIRM must match it.
 #   WIPE_CONFIRM  must equal WIPE_ENV to authorize a real delete.
 #   WIPE_D1       wrangler D1 binding/name (default "flagship-state").
+#   WIPE_WRANGLER_CONFIG  optional wrangler --config path (e.g.
+#                 wrangler.gym.toml, relative to apps/com). Unset = prod
+#                 behavior unchanged (apps/com/wrangler.toml).
 # (needs a shell already authenticated to Cloudflare / wrangler.)
 set -uo pipefail
 
@@ -47,6 +50,18 @@ com_dir="$here/../apps/com"
 
 target_env="${WIPE_ENV:-prod}"
 d1="${WIPE_D1:-flagship-state}"
+wr_config="${WIPE_WRANGLER_CONFIG:-}"
+
+# HARD GUARD: a non-prod env may NEVER point at the prod D1. This makes the
+# gym/CI path structurally incapable of wiping flagship-state even when the
+# caller forgets WIPE_D1 (the default) or fat-fingers it — WIPE_CONFIRM alone
+# can't save that case because the operator DID intend a wipe, just not prod's.
+if [ "$target_env" != "prod" ] && [ "$d1" = "flagship-state" ]; then
+  echo "REFUSING TO WIPE: WIPE_ENV='$target_env' but WIPE_D1 is the PROD database (flagship-state)." >&2
+  echo "A non-prod wipe must name its own D1, e.g.:" >&2
+  echo "  WIPE_ENV=gym WIPE_CONFIRM=gym WIPE_D1=flagship-state-gym bash scripts/wipe-all-users.sh --yes" >&2
+  exit 1
+fi
 
 # --yes (or --force) is the only way past the dry-run preview.
 proceed=0
@@ -76,7 +91,7 @@ cd "$com_dir"
 # loop will actually skip. Best-effort: it never aborts the preview.
 count_table() {
   local t="$1" out n
-  out="$(npx wrangler d1 execute "$d1" --remote \
+  out="$(npx wrangler d1 execute "$d1" ${wr_config:+--config "$wr_config"} --remote \
           --command "SELECT count(*) AS n FROM $t;" --json </dev/null 2>/dev/null)" || {
     echo "-"; return 0;
   }
@@ -128,7 +143,7 @@ echo "AUDIT $stamp · WIPE START · env=$target_env d1=$d1 operator=$operator ap
 
 wiped=0; skipped=0
 for t in $tables; do
-  if npx wrangler d1 execute "$d1" --remote \
+  if npx wrangler d1 execute "$d1" ${wr_config:+--config "$wr_config"} --remote \
        --command "DELETE FROM $t;" </dev/null >/dev/null 2>&1; then
     echo "  wiped  $t"; wiped=$((wiped + 1))
   else
