@@ -83,6 +83,7 @@ import {
 } from "./views/companion-requests.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
+import { initDeveloperView, enterDeveloper } from "./views/developer.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
@@ -140,6 +141,7 @@ const SUB_VIEW_TABS = {
   "view-invite-manage": "apps",
   "view-service-access": "apps",
   "view-marketplace": "apps",
+  "view-developer": "apps",
   "view-vibe-code": "apps",
   "view-vibecode-chat": "apps",
   "view-build-source": "apps",
@@ -366,6 +368,7 @@ function wireServicesTabEntries() {
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("services-list-open-marketplace", enterMarketplace);
   wire("services-list-open-vibe-code", enterBuildSource);
+  wire("services-list-open-developer", enterDeveloper);
 }
 
 /** #91 — true iff we're paired to a box (so the AI-chat poll has somewhere to
@@ -529,6 +532,7 @@ async function boot() {
   initJoinView();
   initTierStatusView();
   initMarketplaceView();
+  initDeveloperView();
   initVibeCodeView();
   initBuildSourceView();
   initBuildKeyView();
