@@ -103,6 +103,50 @@ final class AdminRootTests: XCTestCase {
             try AdminRootEscrow.unwrapFromEscrow(base64: wrapped, prfSecret: Data(repeating: 0x02, count: 32)))
     }
 
+    // MARK: - Cross-platform escrow KAT (Issue 2 anti-drift guard)
+
+    /// A FIXED (prfSecret, seeds, nonce) → pinned ciphertext, SHARED verbatim
+    /// with the webapp (apps/web/tests/fixtures/recoveryWrapGolden.json +
+    /// recoveryWrapKat.test.ts) and Android (RecoveryWrapTest). This is the
+    /// guard that would have caught the webapp raw-PRF / concat divergence:
+    /// only random-nonce round-trips existed, so no platform pinned the wire
+    /// bytes. Each of the three escrow secrets (UMK, ACME account key, admin
+    /// root) rides its own domain salt.
+    func test_escrowWrap_crossPlatformGoldenKAT() throws {
+        let prf = hexData("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+        let umk = hexData("202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
+        let acme = hexData("404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f")
+        let admin = hexData("606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f")
+        let nonce = hexData("a0a1a2a3a4a5a6a7a8a9aaab")
+        let umkBlob = "oKGio6SlpqeoqaqrhgoulhbK4Hw5GnZ/Eg3p2tE8znE4LEH4VNFNiZqUWTG1AJh5e1ANGjervCj+CdE/"
+        let acmeBlob = "oKGio6SlpqeoqaqrYhwcBqIf+sPx7eZDHRsCyYYye+B4JJtN4LoVBzGOndkEPhG4pToPWRTfw7TS+I3I"
+        let adminBlob = "oKGio6SlpqeoqaqrrTVhM+39nuBWm85By/ZoC+0FhIEMWdL4J2aBSr+wcO3RBVAkuZ8NANC3dtXp0j84"
+
+        // (a) DECRYPT parity — the SHIPPED unwrap opens the pinned webapp blobs.
+        //     This also anchors the production salts: a wrong salt fails here.
+        let recoveredUmk = try Recovery.unwrap(wrappedUmkBase64: umkBlob, prfSecret: prf)
+            .withUnsafeBytes { Data($0) }
+        XCTAssertEqual(recoveredUmk, umk, "web-enrolled UMK blob must unwrap on iOS")
+        XCTAssertEqual(try AcmeAccountKey.unwrapFromEscrow(base64: acmeBlob, prfSecret: prf), acme)
+        XCTAssertEqual(try AdminRootEscrow.unwrapFromEscrow(base64: adminBlob, prfSecret: prf), admin)
+
+        // (b) ENCRYPT parity — HKDF-SHA256 + AES-256-GCM with the fixed nonce
+        //     reproduces the pinned ciphertext byte-for-byte.
+        XCTAssertEqual(try sealWithFixedNonce(umk, prf, "flagship/recovery-wrap/v1", nonce), umkBlob)
+        XCTAssertEqual(try sealWithFixedNonce(acme, prf, "flagship/recovery-acme-wrap/v1", nonce), acmeBlob)
+        XCTAssertEqual(try sealWithFixedNonce(admin, prf, "flagship/recovery-admin-root-wrap/v1", nonce), adminBlob)
+    }
+
+    private func hexData(_ s: String) -> Data { HexUtil.decode(s)! }
+
+    private func sealWithFixedNonce(_ plaintext: Data, _ prf: Data, _ salt: String, _ nonce: Data) throws -> String {
+        let key = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: prf),
+            salt: Data(salt.utf8), info: Data(), outputByteCount: 32)
+        let sealed = try AES.GCM.seal(plaintext, using: key, nonce: try AES.GCM.Nonce(data: nonce))
+        return sealed.combined!.base64EncodedString()
+    }
+
     // MARK: - The gate: admin root when present, owner IRK when absent
 
     func test_sensitiveOrderSigningKey_usesAdminRoot_whenPresent() async throws {
