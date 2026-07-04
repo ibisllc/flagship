@@ -131,7 +131,18 @@ class LiveScreensClient(
         resp.close()
         if (status !in 200..299) throw ScreensError.Http(status, String(bytes, Charsets.UTF_8))
         return try {
-            json.decodeFromString(MarketplaceListingDetail.serializer(), String(bytes, Charsets.UTF_8))
+            // .com wraps the listing under `listing` with snake_case keys; map
+            // it into the flat detail the VM consumes.
+            val env = json.decodeFromString(ComListingEnvelope.serializer(), String(bytes, Charsets.UTF_8))
+            val l = env.listing
+            MarketplaceListingDetail(
+                creator = l.creator,
+                slug = l.slug,
+                title = l.name,
+                summary = l.tagline,
+                manifestJson = l.manifestJson,
+                manifestHash = l.manifestHash,
+            )
         } catch (t: Throwable) {
             throw ScreensError.Decoding(t.message ?: "decode failed")
         }

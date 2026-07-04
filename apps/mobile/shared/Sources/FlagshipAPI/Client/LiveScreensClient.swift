@@ -93,7 +93,18 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             throw ScreensClientError.http(status: http.statusCode, message: text)
         }
         do {
-            return try JSONDecoder().decode(MarketplaceListingDetail.self, from: data)
+            // .com wraps the listing under `listing` with snake_case keys; map
+            // it into the flat detail the VM consumes.
+            let env = try JSONDecoder().decode(ComListingEnvelope.self, from: data)
+            let l = env.listing
+            return MarketplaceListingDetail(
+                creator: l.creator,
+                slug: l.slug,
+                title: l.name ?? "",
+                summary: l.tagline ?? "",
+                manifestJson: l.manifest_json ?? "",
+                manifestHash: l.manifest_hash ?? ""
+            )
         } catch {
             throw ScreensClientError.decoding(String(describing: error))
         }

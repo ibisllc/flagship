@@ -162,6 +162,10 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("flagship/uninstall-service/v1");
     expect(r.body).toContain("/api/marketplace/");
     expect(r.body).toContain("/api/services");
+    // Blocker-1: installs the manifest carried on the listing (not a pod
+    // fetch) and rejects one whose hash doesn't match the committed hash.
+    expect(r.body).toContain("manifest_json");
+    expect(r.body).toContain("manifest hash mismatch");
   });
 
   it("service-worker exposes the offline-replay queue (P2.13)", async () => {

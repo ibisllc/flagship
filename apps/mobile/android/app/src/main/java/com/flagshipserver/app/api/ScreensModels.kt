@@ -14,6 +14,14 @@ import kotlinx.serialization.json.JsonObject
 
 // ---------- Shared shapes ----------------------------------------------
 
+/** sha256 hex of a UTF-8 string. Used to verify a carried marketplace manifest
+ *  hashes to the listing's committed `manifest_hash` before install (mirror of
+ *  the webapp `sha256Hex` + iOS `manifestSha256Hex`). */
+fun manifestSha256Hex(s: String): String =
+    com.flagshipserver.app.core.HexUtil.encode(
+        java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8)),
+    )
+
 @Serializable
 data class AppSummary(
     val serviceId: String,
@@ -174,6 +182,29 @@ data class MarketplaceListingDetail(
     val title: String,
     val summary: String,
     val manifestJson: String,
+    /** The listing's committed `manifest_hash` (sha256 hex of manifestJson).
+     *  The VM re-checks it before install so a swapped manifest is rejected.
+     *  Empty on legacy listings that predate the carried manifest. */
+    val manifestHash: String = "",
+)
+
+/**
+ * Wire shape of the `.com` single-listing GET
+ * (`GET https://flagshipserver.com/api/marketplace/<creator>/<slug>`): the
+ * listing object is wrapped under `listing` and uses snake_case keys. Mapped
+ * into [MarketplaceListingDetail] by the Live client. Unknown fields tolerated.
+ */
+@Serializable
+internal data class ComListingEnvelope(val listing: ComListingObject)
+
+@Serializable
+internal data class ComListingObject(
+    val creator: String,
+    val slug: String,
+    val name: String = "",
+    val tagline: String = "",
+    @SerialName("manifest_json") val manifestJson: String = "",
+    @SerialName("manifest_hash") val manifestHash: String = "",
 )
 
 /**

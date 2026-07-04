@@ -155,6 +155,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// exercise the error path.
     public var installShouldFail: Bool = false
     public var installFailureMessage: String = "simulated daemon error"
+    /// HTTP status the simulated install failure throws. Default 400; set to
+    /// 402 to exercise the paid-app gate.
+    public var installFailureStatus: Int = 400
+
+    /// When true, `marketplaceFetchListing` returns a listing whose
+    /// `manifestHash` does NOT match its `manifestJson`, so the VM's
+    /// install-time hash check can be exercised. Mirrors Android
+    /// `tamperListingManifest`.
+    public var tamperListingManifest: Bool = false
 
     // MARK: - P1.4 marketplace-browse
 
@@ -212,7 +221,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             slug: slug,
             title: slug.capitalized,
             summary: "Marketplace stub for \(creator)/\(slug)",
-            manifestJson: manifestJson
+            manifestJson: manifestJson,
+            manifestHash: tamperListingManifest
+                ? String(repeating: "00", count: 32)
+                : manifestSha256Hex(manifestJson)
         )
     }
 
@@ -223,7 +235,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         installCalls.append(envelope)
         if installShouldFail {
-            throw ScreensClientError.http(status: 400, message: installFailureMessage)
+            throw ScreensClientError.http(status: installFailureStatus, message: installFailureMessage)
         }
         return InstallServiceResponse(
             ok: true,
