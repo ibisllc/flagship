@@ -174,6 +174,17 @@ fun TrustedDevicesScreen(nav: NavController) {
             modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
         )
         Spacer(Modifier.height(FS.space.s2))
+        // Spec S1/F — the "Add a control device" (browser / tablet) entry
+        // merged in from its old standalone Settings row, so every device-add
+        // path lives in one place. Distinct from "Add device" above (that pairs
+        // another phone that holds account keys); this pairs a browser/tablet.
+        com.flagshipserver.app.ui.components.FSGhostButton(
+            label = "Add a browser or tablet",
+            onClick = { nav.navigate("add-control-device") },
+            block = true,
+            modifier = Modifier.semantics { contentDescription = "trusted-devices-add-control" },
+        )
+        Spacer(Modifier.height(FS.space.s2))
         when (state) {
             is TrustedDevicesViewModel.State.Idle,
             is TrustedDevicesViewModel.State.Loading -> LoadingRow()
