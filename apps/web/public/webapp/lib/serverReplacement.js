@@ -117,8 +117,10 @@ function canonicalMailboxAuthBytes({
 /**
  * Build the owner IRK mailbox-auth credential (signed DeviceEndpointClaim) the
  * deposit lanes expect. Returns the wire object `{ auth, authSignature }`.
+ * Exported for the sibling deposit lanes (server-migration) that ride the same
+ * envelope.
  */
-async function buildMailboxAuth(args, deps) {
+export async function buildMailboxAuth(args, deps) {
   const { username, umk, signWithIrk, irkPubHex } = args;
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const now = (deps.now || Date.now)();

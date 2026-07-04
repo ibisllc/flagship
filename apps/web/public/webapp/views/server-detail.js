@@ -55,6 +55,19 @@ import {
   DISK_DISPOSITIONS,
   DEFAULT_DISPOSITION,
 } from "../lib/serverReplacement.js";
+import {
+  startMigration,
+  fetchMigration,
+  confirmMigrationReady,
+  freezeMigration,
+  abortMigration,
+  setMigrationHold,
+  clearMigrationHold,
+  migrationSteps,
+  migrationWaitCopy,
+  MIGRATION_DISPOSITIONS,
+  DEFAULT_MIGRATION_DISPOSITION,
+} from "../lib/serverMigration.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -285,6 +298,18 @@ export async function renderServerDetail() {
         </p>
       </div>
 
+      <h2 class="mt-4">Migrate</h2>
+      <div class="card" id="migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">
+          Move <strong>${escapeHtml(body.serverFqdn)}</strong> to new hardware —
+          same name, same data, new box. The new box restores from backup while
+          this one keeps serving; the name only moves once the restore is
+          confirmed, and the old box is never wiped before the new one has taken
+          over.
+        </p>
+        <button id="migrate-start-btn" class="full-width mt-2">Migrate to new hardware</button>
+      </div>
+
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
         <p class="note">
@@ -304,6 +329,7 @@ export async function renderServerDetail() {
     wireTransfer(body);
     wireReplace(body);
     wireUpdate(body);
+    wireMigrate(body);
     wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -1305,6 +1331,289 @@ async function openUpdateDialog(body) {
         goBtn.textContent = orig;
         refresh();
       }
+    });
+  });
+}
+
+// ---- Migrate to new hardware (docs/server-migration.md) ----------------
+
+function wireMigrate(body) {
+  $("migrate-start-btn")?.addEventListener("click", () => {
+    openMigrateDialog(body).catch((e) => {
+      if (e?.code !== "cancelled") {
+        console.error("server migration failed", e);
+        toast(humanError(e), "err");
+      }
+    });
+  });
+}
+
+const MIGRATION_DISPOSITION_LABELS = {
+  keep: "Keep the old disk (manual fallback copy)",
+  "wipe-after-handoff": "Wipe the old box after the new one takes over (recommended)",
+};
+
+// One dialog, two modes: no session yet → the admin-signed INITIATE ceremony;
+// live session → the 8-step progress timeline with the phase-appropriate
+// action (hand off / abort). Abort is offered at every pre-take-over step
+// with honest copy — the old server stays active with all its data.
+async function openMigrateDialog(body) {
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const serverFqdn = body.serverFqdn;
+  const username = session.username || body.username;
+  const signerArgs = () => ({
+    serverDomain: serverFqdn,
+    username,
+    umk: session.umk,
+    irkPubHex: bytesToHex(session.irk.publicKey),
+    // Slice D: the migration order/control sign with the admin root (when
+    // present); the co-signed mailbox-auth stays the IRK (tag-routed).
+    signWithIrk: sensitiveSigner(),
+  });
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Migrate to new hardware");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Migrate ${escapeHtml(serverFqdn)}</h3>
+    <p class="modal-message" data-mig-loading>Checking for a migration in progress…</p>
+    <div class="hidden" data-mig-init>
+      <p class="note" data-mig-backup></p>
+      <label class="caption mt-2">What happens to the old box's disk?</label>
+      <select class="full-width" data-mig-disposition>
+        ${MIGRATION_DISPOSITIONS.map(
+          (d) => `<option value="${escapeHtml(d)}"${d === DEFAULT_MIGRATION_DISPOSITION ? " selected" : ""}>${escapeHtml(MIGRATION_DISPOSITION_LABELS[d])}</option>`,
+        ).join("")}
+      </select>
+      <p class="note small err-text hidden" data-mig-gate></p>
+      <p class="note small mt-2">The old box is wiped only <em>after</em> the new
+      one has restored the data and taken over the name. If anything fails, the
+      old box keeps serving with all its data.</p>
+    </div>
+    <div class="hidden" data-mig-progress>
+      <ul class="mt-2" data-mig-steps style="list-style:none;padding-left:0"></ul>
+      <p class="note" data-mig-wait></p>
+    </div>
+    <p class="modal-error err-text hidden" data-mig-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-mig-cancel>Close</button>
+      <button class="danger hidden" data-mig-action></button>
+    </div>
+    <div class="mt-2 hidden" data-mig-abort-row>
+      <button class="secondary full-width" data-mig-abort>Abort migration — old server stays active with all data</button>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const loadingEl = dlg.querySelector("[data-mig-loading]");
+  const initEl = dlg.querySelector("[data-mig-init]");
+  const backupEl = dlg.querySelector("[data-mig-backup]");
+  const dispoEl = dlg.querySelector("[data-mig-disposition]");
+  const gateEl = dlg.querySelector("[data-mig-gate]");
+  const progressEl = dlg.querySelector("[data-mig-progress]");
+  const stepsEl = dlg.querySelector("[data-mig-steps]");
+  const waitEl = dlg.querySelector("[data-mig-wait]");
+  const errEl = dlg.querySelector("[data-mig-error]");
+  const actionBtn = dlg.querySelector("[data-mig-action]");
+  const cancelBtn = dlg.querySelector("[data-mig-cancel]");
+  const abortRow = dlg.querySelector("[data-mig-abort-row]");
+  const abortBtn = dlg.querySelector("[data-mig-abort]");
+
+  let ctx = { retiredStkPubHex: null, backupEnrolled: false };
+  let pollTimer = null;
+  const cleanup = () => {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = null;
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+
+  const showError = (e) => {
+    errEl.textContent = humanError(e);
+    errEl.classList.remove("hidden");
+  };
+
+  // -- progress mode --------------------------------------------------------
+  const renderProgress = (s) => {
+    loadingEl.classList.add("hidden");
+    initEl.classList.add("hidden");
+    progressEl.classList.remove("hidden");
+    stepsEl.innerHTML = migrationSteps(s, Date.now())
+      .map((st) => {
+        const mark = st.state === "done" ? "✓" : st.state === "active" ? "…" : "·";
+        const cls = st.state === "done" ? "" : st.state === "active" ? "" : "dim";
+        return `<li class="${cls}" style="padding:2px 0">${mark} ${escapeHtml(st.label)}</li>`;
+      })
+      .join("");
+    waitEl.textContent = migrationWaitCopy(s, Date.now());
+
+    // Phase-appropriate primary action. Confirm-ready + freeze are ONE guided
+    // tap ("hand off"): the confirm is the health checkpoint the user is
+    // looking at right now, and splitting them into two ceremonies adds a
+    // signature prompt without adding safety (the machine still enforces
+    // pre-seeded → ready → freezing server-side).
+    actionBtn.classList.add("hidden");
+    abortRow.classList.add("hidden");
+    if (s.abortedAt == null && s.takenOverAt == null) {
+      abortRow.classList.remove("hidden");
+    }
+    if (s.phase === "pre-seeded") {
+      actionBtn.textContent = "Hand off to the new box now";
+      actionBtn.classList.remove("hidden");
+      actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ true);
+    } else if (s.phase === "ready") {
+      actionBtn.textContent = "Freeze old server and hand off";
+      actionBtn.classList.remove("hidden");
+      actionBtn.onclick = () => runHandOff(s, /*confirmFirst*/ false);
+    }
+    if (s.done || s.abortedAt != null) {
+      clearMigrationHold(serverFqdn);
+      cancelBtn.textContent = "Done";
+    }
+  };
+
+  const poll = async () => {
+    try {
+      const s = await fetchMigration(serverFqdn);
+      if (!dlg.open) return;
+      if (s) renderProgress(s);
+    } catch {
+      /* transient — keep the last render */
+    }
+    if (dlg.open) pollTimer = setTimeout(poll, 5000);
+  };
+
+  const runHandOff = async (s, confirmFirst) => {
+    errEl.classList.add("hidden");
+    actionBtn.disabled = true;
+    const orig = actionBtn.textContent;
+    actionBtn.textContent = "Signing…";
+    try {
+      if (confirmFirst) await confirmMigrationReady(signerArgs());
+      // Freeze = the graceful-decommission deposit, session-validated. If this
+      // half fails after confirm-ready landed, the next poll renders the
+      // `ready` phase and the button retries the freeze alone.
+      await freezeMigration({ ...signerArgs(), session: s });
+      toast("Handing off — the old server is freezing", "ok");
+      await poll();
+    } catch (e) {
+      showError(e);
+    } finally {
+      actionBtn.disabled = false;
+      actionBtn.textContent = orig;
+    }
+  };
+
+  abortBtn.addEventListener("click", async () => {
+    errEl.classList.add("hidden");
+    abortBtn.disabled = true;
+    const orig = abortBtn.textContent;
+    abortBtn.textContent = "Aborting…";
+    try {
+      await abortMigration(signerArgs());
+      clearMigrationHold(serverFqdn);
+      toast("Migration aborted — your old server stays active", "ok");
+      await poll();
+    } catch (e) {
+      showError(e);
+    } finally {
+      abortBtn.disabled = false;
+      abortBtn.textContent = orig;
+    }
+  });
+
+  // -- initiate mode --------------------------------------------------------
+  const renderInitiate = () => {
+    loadingEl.classList.add("hidden");
+    initEl.classList.remove("hidden");
+    backupEl.textContent = ctx.backupEnrolled
+      ? "Peer-backup is enrolled — the new box restores from it while this one keeps serving."
+      : "No backup is enrolled for this server. The migration moves data THROUGH backup — enable backup first, or choose to keep the old disk.";
+    actionBtn.textContent = "Start migration";
+    actionBtn.classList.remove("hidden");
+
+    const refreshGate = () => {
+      // The restore rides peer-backup, so a no-backup box can only migrate
+      // with `keep` (the old disk remains the fallback copy). Same fail-closed
+      // posture as the replace pre-flight gate.
+      const wipes = dispoEl.value === "wipe-after-handoff";
+      const blocked = wipes && !ctx.backupEnrolled;
+      if (blocked) {
+        gateEl.textContent =
+          "This server has no backup — enable backup first, or keep the old disk as the fallback.";
+        gateEl.classList.remove("hidden");
+      } else {
+        gateEl.classList.add("hidden");
+      }
+      actionBtn.disabled = blocked || !ctx.retiredStkPubHex;
+    };
+    dispoEl.addEventListener("change", refreshGate);
+    refreshGate();
+
+    actionBtn.onclick = async () => {
+      errEl.classList.add("hidden");
+      actionBtn.disabled = true;
+      const orig = actionBtn.textContent;
+      actionBtn.textContent = "Signing…";
+      try {
+        await startMigration({
+          ...signerArgs(),
+          oldStkPubHex: ctx.retiredStkPubHex,
+          disposition: dispoEl.value,
+        });
+        // The SWK hold makes the NEXT added pod's SWK deposit migration-aware
+        // (lib/serverMigration.js migrationSwkServerId).
+        setMigrationHold(serverFqdn);
+        toast("Migration started — now add the new box", "ok");
+        waitEl.textContent =
+          "Next: burn/apply a recipe for the NEW box via Add a server (any name — it becomes " +
+          serverFqdn +
+          " at take-over). It attaches here automatically once online.";
+        await poll();
+      } catch (e) {
+        showError(e);
+        actionBtn.disabled = false;
+        actionBtn.textContent = orig;
+      }
+    };
+  };
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => {
+      cleanup();
+      resolve({ ok: true });
+    };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+
+    void (async () => {
+      // An in-flight session wins — render its timeline. Otherwise initiate.
+      const existing = await fetchMigration(serverFqdn).catch(() => null);
+      if (existing && existing.abortedAt == null) {
+        renderProgress(existing);
+        pollTimer = setTimeout(poll, 5000);
+        return;
+      }
+      ctx = await resolveReplacementContext({ serverDomain: serverFqdn, username });
+      if (!ctx.retiredStkPubHex) {
+        loadingEl.classList.add("hidden");
+        showError(
+          new Error(
+            "Couldn't read this box's current key from the directory — is it online? It must be reachable to migrate.",
+          ),
+        );
+        return;
+      }
+      renderInitiate();
+    })().catch((e) => {
+      loadingEl.classList.add("hidden");
+      showError(e);
+      reject(e);
     });
   });
 }
