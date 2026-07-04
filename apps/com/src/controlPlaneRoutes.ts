@@ -288,6 +288,29 @@ export interface ControlPlaneEnv {
   FLAGSHIP_ISO_MANIFEST?: string;
 
   /**
+   * The blessed in-house inference endpoint that backs the free-credits
+   * ("flagship") provider posture, as a JSON string of the
+   * `InferenceEndpoint` shape: {"baseUrl","model"}. `baseUrl` is the
+   * OpenAI-compatible RunPod/vLLM URL; `model` the served model id.
+   * Unset / unparseable / non-https ⇒ treated as unconfigured, and a
+   * `flagship` promo issue is refused (503) rather than minting a dead
+   * key. Rotating the RunPod endpoint is purely a matter of changing this
+   * value server-side — it never appears in a recipe or client build.
+   * Set via `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT`.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+
+  /**
+   * HMAC-SHA256 secret used to sign the scoped inference tokens the promo
+   * minter hands out for `provider:"flagship"`, and which the metering
+   * shim in front of the RunPod endpoint verifies (and reports usage back
+   * under, to POST /api/llm-promo/usage). Unset ⇒ a `flagship` issue is
+   * refused (503). NOT in git — `wrangler secret put
+   * FLAGSHIP_INFERENCE_TOKEN_SECRET`.
+   */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
+
+  /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
    * (apps/boot → POST /api/internal/notify-owner). The boot worker holds
    * no push secrets; it calls this endpoint server-to-server so the
