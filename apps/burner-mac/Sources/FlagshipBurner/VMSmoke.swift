@@ -100,6 +100,7 @@ enum VMSmoke {
             try linuxBoot(kernel: URL(fileURLWithPath: kernel),
                           initrd: kv["linux-initrd"].map { URL(fileURLWithPath: $0) },
                           iso: kv["base-iso"].map { URL(fileURLWithPath: $0) },
+                          targetDisk: kv["target-disk"].map { URL(fileURLWithPath: $0) },
                           cmdline: kv["cmdline"] ?? "console=hvc0",
                           timeout: TimeInterval(kv["timeout"] ?? "120") ?? 120)
             RunLoop.main.run()
@@ -206,21 +207,35 @@ enum VMSmoke {
     static var linuxConsole: FileHandle?
     static var linuxVM: VZVirtualMachine?
     static var linuxDelegate: LinuxDelegate?
-    static func linuxBoot(kernel: URL, initrd: URL?, iso: URL?, cmdline: String, timeout: TimeInterval) throws {
-        log("linux-boot · kernel=\(kernel.lastPathComponent) initrd=\(initrd?.lastPathComponent ?? "none") iso=\(iso?.lastPathComponent ?? "none") cmdline=\"\(cmdline)\"")
+    static func linuxBoot(kernel: URL, initrd: URL?, iso: URL?, targetDisk: URL?, cmdline: String, timeout: TimeInterval) throws {
+        log("linux-boot · kernel=\(kernel.lastPathComponent) initrd=\(initrd?.lastPathComponent ?? "none") iso=\(iso?.lastPathComponent ?? "none") target=\(targetDisk?.lastPathComponent ?? "none") cmdline=\"\(cmdline)\"")
         let vz = VZVirtualMachineConfiguration()
-        vz.cpuCount = 2
-        vz.memorySize = 4 * 1024 * 1024 * 1024
+        vz.cpuCount = 4
+        vz.memorySize = 6 * 1024 * 1024 * 1024
         vz.platform = VZGenericPlatformConfiguration()
         let boot = VZLinuxBootLoader(kernelURL: kernel)
         boot.commandLine = cmdline
         if let initrd { boot.initialRamdiskURL = initrd }
         vz.bootLoader = boot
 
+        var storage: [VZStorageDeviceConfiguration] = []
+        // Target disk FIRST so the guest sees it as vda (the preseed's
+        // partman/early_command wipes `list-devices disk | head -n1`).
+        if let targetDisk {
+            if !FileManager.default.fileExists(atPath: targetDisk.path) {
+                FileManager.default.createFile(atPath: targetDisk.path, contents: nil)
+                let h = try FileHandle(forWritingTo: targetDisk)
+                try h.truncate(atOffset: 24 * 1024 * 1024 * 1024)
+                try h.close()
+            }
+            let d = try VZDiskImageStorageDeviceAttachment(url: targetDisk, readOnly: false)
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: d))
+        }
         if let iso {
             let a = try VZDiskImageStorageDeviceAttachment(url: iso, readOnly: true)
-            vz.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: a)]
+            storage.append(VZVirtioBlockDeviceConfiguration(attachment: a))
         }
+        vz.storageDevices = storage
         let net = VZVirtioNetworkDeviceConfiguration()
         net.attachment = VZNATNetworkDeviceAttachment()
         vz.networkDevices = [net]
