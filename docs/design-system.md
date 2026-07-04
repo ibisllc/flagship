@@ -46,8 +46,8 @@ ships in light by default for daytime credibility.
 | `--border` | `#E6E4DD` | Hairlines. 1px only, never 2px. |
 | `--text` | `#14140F` | Primary copy. Near-black, warm. |
 | `--text-muted` | `#6B6A63` | Secondary copy, captions, metadata. |
-| `--primary` | `#3B5BFF` | The Flagship blue. CTAs, links, focus rings. |
-| `--primary-hover` | `#2C46E0` | Hover / pressed state of `--primary`. |
+| `--primary` / `--accent` | `#14B8A6` | The Flagship teal. CTAs, links, focus rings. |
+| `--primary-hover` | `#0E9488` | Hover / pressed state of `--primary`. |
 | `--success` | `#1F8A4C` | "Server online", "cert renewed", green padlock moments. |
 | `--warning` | `#B8651A` | Amber. "Cert renews in 3 days". |
 | `--danger` | `#C83A3A` | Destructive only. Confirmations, revoke, wipe. |
@@ -62,8 +62,8 @@ ships in light by default for daytime credibility.
 | `--border` | `#2A2D33` | Hairlines. |
 | `--text` | `#F2F1EC` | Primary copy — same warm off-white as light `--bg`. |
 | `--text-muted` | `#9A9A93` | Secondary copy. |
-| `--primary` | `#7E96FF` | Lifted blue for legibility on dark. |
-| `--primary-hover` | `#A8B8FF` | Hover / pressed. |
+| `--primary` / `--accent` | `#2DD4BF` | Lifted teal for legibility on dark. |
+| `--primary-hover` | `#5EEAD4` | Hover / pressed. |
 | `--success` | `#4FBE7A` | |
 | `--warning` | `#E5A050` | |
 | `--danger` | `#E86464` | |
@@ -89,6 +89,12 @@ system fallbacks on every target platform.
   rounded zero) for a hint of personality.
 - **Mono:** **JetBrains Mono** for code, addresses, build codes, fingerprints.
   Weights 400 and 500.
+
+> Per-surface note (v1): the mobile apps (iOS/Android) ship the stack above.
+> The **webapp** deliberately ships its own platform-idiomatic stack (Geist /
+> Instrument Serif); per the v1 UX decision (`docs/v1-ux-spec.md` §S4) fonts stay
+> platform-native while the *semantic* tokens — teal accent, 4pt spacing grid,
+> `{6,10,16}` radii, and color roles — are unified across all three surfaces.
 
 System fallbacks:
 
