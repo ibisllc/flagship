@@ -40,10 +40,21 @@ public class QemuCommandLineTests
         var args = QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0);
         var s = Joined(args);
         Assert.Contains("-machine q35", s);
-        Assert.Contains("-accel whpx", s);
+        // The stable WHPX APIC configuration.
+        Assert.Contains("-accel whpx,kernel-irqchip=off", s);
         Assert.Contains("-smp 4", s);
         Assert.Contains("-m 6144M", s);
         Assert.Contains("-display none", s);
+    }
+
+    [Fact]
+    public void WhpxMasksVmxAndSgxSoOvmfBoots()
+    {
+        // `-cpu max` under WHPX exposes VMX+SGX; OVMF then writes
+        // IA32_FEATURE_CONTROL (MSR 0x3A), unimplemented by WHPX → #GP in
+        // PlatformPei, firmware never boots. Found live on this box.
+        var s = Joined(QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0));
+        Assert.Contains("-cpu max,vmx=off,sgx=off,sgxlc=off", s);
     }
 
     [Fact]

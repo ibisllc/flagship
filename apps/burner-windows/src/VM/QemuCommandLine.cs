@@ -45,12 +45,20 @@ public static class QemuCommandLine
             throw new ArgumentException("Unsupported network mode for this VM.");
 
         var name = config.Name;
+        // WHPX quirks, found empirically on real hardware (Win11 Home, QEMU 11):
+        //   - `-cpu max` exposes VMX and SGX; OVMF then writes
+        //     IA32_FEATURE_CONTROL (MSR 0x3A), which WHPX doesn't emulate →
+        //     #GP in PlatformPei and the firmware never boots. Mask BOTH
+        //     (vmx=off alone still leaves OVMF locking the SGX bits).
+        //   - kernel-irqchip=off is the stable WHPX APIC configuration.
+        var accelArg = accel == "whpx" ? "whpx,kernel-irqchip=off" : accel;
+        var cpuArg = accel == "whpx" ? "max,vmx=off,sgx=off,sgxlc=off" : "max";
         var args = new List<string>
         {
             "-name", name,
             "-machine", "q35",
-            "-accel", accel,
-            "-cpu", "max",
+            "-accel", accelArg,
+            "-cpu", cpuArg,
             "-smp", config.CpuCount.ToString(CultureInfo.InvariantCulture),
             "-m", (config.MemoryBytes / (1024 * 1024)).ToString(CultureInfo.InvariantCulture) + "M",
 
