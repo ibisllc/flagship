@@ -842,20 +842,13 @@ public struct SettingsScreen: View {
     }
 
     private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
+        Date.flagshipFormatted(epochMs: ms)
     }
 
     /// M4 — absolute locale timestamp for the pending-re-pair banner's
     /// unlock time (mirrors the webapp's `formatCompletesAt`).
     private func absolute(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        Date.flagshipFormatted(epochMs: ms, includeTime: true)
     }
 }
 

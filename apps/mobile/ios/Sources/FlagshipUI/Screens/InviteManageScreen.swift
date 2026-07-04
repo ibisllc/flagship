@@ -223,11 +223,7 @@ public struct InviteManageScreen: View {
     }
 
     private func fmtDate(_ ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = DateFormatter()
-        fmt.dateStyle = .short
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        Date.flagshipFormatted(epochMs: ms, includeTime: true)
     }
 
     /// Pass-through for the share URL the issue screen builds.
