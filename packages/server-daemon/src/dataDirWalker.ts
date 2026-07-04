@@ -36,12 +36,22 @@ const execFileP = promisify(execFile);
 export interface WalkDataDirOptions {
   /** Skip files larger than this many bytes (default 64 MiB). */
   maxFileBytes?: number;
+  /**
+   * Files whose relPath matches are subject to `raisedCapBytes` instead of the
+   * default cap — for the consistent logical dumps under `_dumps/` that
+   * legitimately exceed 64 MiB (a full pg_dumpall, a forgejo repos tar). Without
+   * this the cap would silently truncate them out of the backup.
+   */
+  raiseCapFor?: (relPath: string) => boolean;
+  /** Cap applied to `raiseCapFor` matches. Default 4 GiB. */
+  raisedCapBytes?: number;
   /** Extra per-relative-path exclusion (return true to skip). */
   exclude?: (relPath: string) => boolean;
   onLog?: (msg: string) => void;
 }
 
 const DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
+const DEFAULT_RAISED_CAP_BYTES = 4 * 1024 * 1024 * 1024;
 
 /** Key-material / droppings that must never ride a backup even if misplaced. */
 const EXCLUDED_SUFFIXES = [".key", ".pem", ".hex", ".restore-tmp", ".tmp"];
@@ -58,6 +68,7 @@ export async function walkDataDir(
   opts: WalkDataDirOptions = {},
 ): Promise<FileToBack[]> {
   const maxBytes = opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+  const raisedCap = opts.raisedCapBytes ?? DEFAULT_RAISED_CAP_BYTES;
   const log = opts.onLog ?? (() => {});
   const out: FileToBack[] = [];
 
@@ -94,8 +105,9 @@ export async function walkDataDir(
         continue;
       }
       if (!st.isFile()) continue; // sockets/fifos/devices
-      if (st.size > maxBytes) {
-        log(`[backup-walk] skipping oversize ${rel} (${st.size} bytes > ${maxBytes})`);
+      const cap = opts.raiseCapFor?.(rel) ? raisedCap : maxBytes;
+      if (st.size > cap) {
+        log(`[backup-walk] skipping oversize ${rel} (${st.size} bytes > ${cap})`);
         continue;
       }
       try {
@@ -119,22 +131,45 @@ export async function walkDataDir(
  * the writers) so the final full flush walks a WRITE-FROZEN tree. The chosen
  * v1 mechanism is stop-services-then-full-flush — no delta shipping, no
  * fs-level snapshot; the box is being retired immediately after, so services
- * never restart on it. Best-effort (a missing systemctl — dev runs — is not
- * an error); the runner is injectable for tests.
+ * never restart on it.
+ *
+ * ⚠️ The old implementation ran ONLY `systemctl stop flagship-data-services`,
+ * but that unit is Type=oneshot + RemainAfterExit + (was) no ExecStop → the
+ * `docker compose` containers it started KEPT RUNNING, so the "frozen" flush
+ * still walked live, torn data. We now stop the containers DIRECTLY via
+ * `docker compose … stop` (mirroring `realWipeContent`'s explicit compose
+ * teardown) — reliable regardless of the unit's ExecStop. The `systemctl stop`
+ * is kept first (harmless; also correct now that late-command adds ExecStop).
+ *
+ * With the volume-aware logical dumps taken BEFORE this runs, postgres/redis
+ * are already captured consistently and don't NEED the freeze; it mainly gives
+ * minio a stable window and provides a clean final point for any non-store
+ * files under data/. Best-effort throughout (a missing systemctl / already-
+ * stopped stack — dev runs — is not an error); the runner is injectable.
  */
 export async function quiesceDataServices(
   onLog?: (msg: string) => void,
   runner?: (cmd: string, args: string[]) => Promise<void>,
+  opts?: { composePath?: string; envFile?: string },
 ): Promise<void> {
   const run =
     runner ??
     (async (cmd: string, args: string[]) => {
       await execFileP(cmd, args, { timeout: 120_000 });
     });
+  const composePath = opts?.composePath ?? "/opt/flagship/installer/data-services/docker-compose.yml";
+  const envFile = opts?.envFile ?? "/var/flagship/data-services.env";
   try {
     await run("systemctl", ["stop", "flagship-data-services"]);
-    onLog?.("[freeze] data services stopped (write-frozen)");
   } catch (e) {
     onLog?.(`[freeze] systemctl stop failed (continuing): ${(e as Error).message}`);
+  }
+  try {
+    // The actual stop: the compose stack the unit launched. `stop` (not `down`)
+    // leaves the containers + volumes intact — this is a freeze, not a wipe.
+    await run("docker", ["compose", "-f", composePath, "--env-file", envFile, "stop"]);
+    onLog?.("[freeze] data services stopped (write-frozen)");
+  } catch (e) {
+    onLog?.(`[freeze] docker compose stop failed (continuing): ${(e as Error).message}`);
   }
 }
