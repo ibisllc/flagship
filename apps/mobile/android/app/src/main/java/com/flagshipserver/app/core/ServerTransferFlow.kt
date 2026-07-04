@@ -14,6 +14,7 @@ import com.flagshipserver.app.api.TransferClaimWire
 import com.flagshipserver.app.api.TransferDiskKeyBody
 import com.flagshipserver.app.api.TransferOfferBody
 import com.flagshipserver.app.api.TransferOfferWire
+import com.flagshipserver.app.api.TransferRehomeAuthBody
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.serialization.Serializable
@@ -244,6 +245,31 @@ object ServerTransferFlow {
             ),
             signatureHex = HexUtil.encode(sig),
         )
+    }
+
+    // ── GIVER: legacy re-home authorization (v1-sec GAP 3) ────────────────────
+
+    /** Build + sign the `flagship/server-rehome-auth/v1` re-home authorization
+     *  with the GIVER's owner IRK (the box's pinned owner IRK until it re-homes).
+     *  A box with NO pinned admin master root verifies this against its pin
+     *  before writing the re-home marker — never on `.com`'s unsigned word. The
+     *  deposit body carries only `issuedAt` + the signature; `.com` reconstructs
+     *  the signed (old/new domain, acquirer IRK) fields from the claimed row.
+     *  `oldServerDomain` is the box's OLD canonical; `newServerDomain` +
+     *  `acquirerIrkPubHex` come from the giver's claim poll. */
+    fun buildRehomeAuth(
+        oldServerDomain: String,
+        newServerDomain: String,
+        acquirerIrkPubHex: String,
+        giverIrk: Ed25519Sign,
+        issuedAt: Long,
+    ): TransferRehomeAuthBody {
+        val sig = giverIrk.sign(
+            RehomeAuthorizationOrder.canonicalBytes(
+                oldServerDomain, newServerDomain, acquirerIrkPubHex, issuedAt,
+            )
+        )
+        return TransferRehomeAuthBody(issuedAt = issuedAt, signatureHex = HexUtil.encode(sig))
     }
 
     // ── GIVER: disk-key re-seal ───────────────────────────────────────────────
