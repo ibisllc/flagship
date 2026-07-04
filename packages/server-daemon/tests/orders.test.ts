@@ -410,3 +410,102 @@ describe("orders-from-user handler", () => {
     expect(calls[1]?.password).toBeUndefined();
   });
 });
+
+describe("orders-from-user — Slice D admin gate (spec §2 row 10)", () => {
+  const USERNAME = "alice";
+
+  it("legacy: no adminRootPub ⇒ a pskPub-signed destructive order works as today", async () => {
+    const psk = makeKey();
+    const calls: string[] = [];
+    const ex: OrderExecutor = { shutDown: () => void calls.push("shut-down") };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = { type: "shut-down", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual(["shut-down"]);
+  });
+
+  it("gated: admin root pinned + PSK signer not admin-authorized ⇒ 403, executor untouched", async () => {
+    const psk = makeKey();
+    const adminRoot = makeKey();
+    const calls: string[] = [];
+    const ex: OrderExecutor = {
+      shutDown: () => void calls.push("shut-down"),
+      revokeSelf: () => void calls.push("revoke-self"),
+      deliverBak: () => void calls.push("deliver-bak"),
+      rotateServerIdentity: () => void calls.push("rotate-server-identity"),
+    };
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      adminRootPub: adminRoot.publicKey,
+      username: USERNAME,
+      executor: ex,
+    });
+    const destructive: PhoneOrder[] = [
+      { type: "shut-down", serverId: SERVER_FQDN, issuedAt: Date.now() },
+      { type: "revoke-self", serverId: SERVER_FQDN, reason: "stolen", issuedAt: Date.now() },
+      {
+        type: "rotate-server-identity",
+        serverId: SERVER_FQDN,
+        newIdentityPubKey: makeKey().publicKey,
+        issuedAt: Date.now(),
+      },
+      {
+        type: "deliver-bak",
+        serverId: SERVER_FQDN,
+        bakPubKey: makeKey().publicKey,
+        issuedAt: Date.now(),
+      },
+    ];
+    for (const order of destructive) {
+      const r = await h(makeReq(envelope(order, psk)));
+      expect(r.status).toBe(403);
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("gated: an admin-root-signed destructive order is authorized", async () => {
+    const psk = makeKey();
+    const adminRoot = makeKey();
+    const calls: string[] = [];
+    const ex: OrderExecutor = { shutDown: () => void calls.push("shut-down") };
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      adminRootPub: adminRoot.publicKey,
+      username: USERNAME,
+      executor: ex,
+    });
+    const order: PhoneOrder = { type: "shut-down", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const r = await h(makeReq(envelope(order, adminRoot)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual(["shut-down"]);
+  });
+
+  it("gated: pair-for-use orders keep verifying against the legacy key (spec rows 14-15)", async () => {
+    const psk = makeKey();
+    const adminRoot = makeKey();
+    const calls: string[] = [];
+    const ex: OrderExecutor = {
+      addPairedSession: ({ label }) => void calls.push(`pair:${label}`),
+    };
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      adminRootPub: adminRoot.publicKey,
+      username: USERNAME,
+      executor: ex,
+    });
+    const order: PhoneOrder = {
+      type: "add-paired-session",
+      serverId: SERVER_FQDN,
+      token: "tok-1",
+      label: "webapp",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual(["pair:webapp"]);
+  });
+});

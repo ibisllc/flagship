@@ -598,6 +598,17 @@ export interface WebauthnRecoveryRecord {
    * without a minted account key leave it unset.
    */
   wrappedAcmeAccountKeyB64?: string;
+  /**
+   * Slice D (D-3, docs/device-admin-tier-spec.md §5.3): the ADMIN MASTER ROOT,
+   * escrowed as opaque ciphertext (base64) wrapped to the SAME recovery
+   * credential as the UMK. The admin root is admin-held (NOT UMK-derived), so
+   * losing every admin device would otherwise make admin authority
+   * unrecoverable — escrowing it here lets credential recovery unwrap the old
+   * root, mint a new one, and sign the rotation proof boxes re-pin on. `.com`
+   * only ever sees ciphertext. Optional + backward-compatible: legacy rows /
+   * accounts without an admin root leave it unset.
+   */
+  wrappedAdminRootB64?: string;
   irkPubHex: string;
   /**
    * Task #74 — passphrase-derived fetch-token gate (hex SHA-256).

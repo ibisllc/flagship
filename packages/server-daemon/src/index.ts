@@ -639,6 +639,10 @@ async function main(): Promise<void> {
   const orders = ordersVerifyPub
     ? {
         pskPub: ordersVerifyPub,
+        // Slice D (§2 row 10) — the pinned admin master root gates the
+        // destructive order types on this endpoint (absent ⇒ legacy).
+        ...(cfg?.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        ...(cfg ? { username: cfg.userId } : {}),
         executor: defaultExecutor({
           backupLoop,
           identity: identityKeypair,
