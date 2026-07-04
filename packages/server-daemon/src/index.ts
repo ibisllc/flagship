@@ -2295,6 +2295,10 @@ async function wireRuntimeSurfaces(deps: {
         }
       : null,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+    // Task #28 — box-originated marketplace publish. The box signs the listing
+    // with its daemon identity key (the owner IRK is phone-held); .com accepts
+    // it because this box is a registered server of the account.
+    marketplacePublish: { signingKey: identityKeypair, creatorUsername: username },
     lineageResolver,
     // P9 — peer-backup management surface. BackupLoop is the
     // authoritative participation toggle. The shard registry is not
