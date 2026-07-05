@@ -36,6 +36,7 @@
     <Compile Include="src\DiskWrite.cs" />
     <Compile Include="src\IsoManifestClient.cs" />
     <Compile Include="src\IsoBaseCache.cs" />
+    <Compile Include="src\PairSession.cs" />
     <Compile Include="src\VM\HostResources.cs" />
     <Compile Include="src\VM\VMResourcePlan.cs" />
     <Compile Include="src\VM\ServerTier.cs" />

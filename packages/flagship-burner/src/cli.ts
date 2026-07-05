@@ -314,11 +314,18 @@ function extractFlagValue(argv: string[], flag: string): string | undefined {
 async function cmdPair(rest: string[]): Promise<void> {
   const host = extractFlagValue(rest, "--host");
   const out = extractFlagValue(rest, "--out");
+  // GUI hosts (the desktop apps) drive this as a subprocess and render a native
+  // cover. `--emit-events` prints one machine-readable `FLAGSHIP_PAIR <json>`
+  // line per milestone on stdout (alongside the human logs, which they ignore).
+  const emitEvents = rest.includes("--emit-events");
   await runPair({
     ...(host ? { host } : {}),
     ...(out ? { out } : {}),
     insecure: rest.includes("--insecure"),
     debug: rest.includes("--debug"),
+    ...(emitEvents
+      ? { emitEvents: (ev) => process.stdout.write(`FLAGSHIP_PAIR ${JSON.stringify(ev)}\n`) }
+      : {}),
   });
 }
 
@@ -355,6 +362,7 @@ usage:
   flagship-burn pair                                       pair with your phone (shows a QR + code),
                                                            receive + verify the recipe over the live relay
                                                            [--out <recipe.json>] [--host <control-host>] [--debug]
+                                                           [--emit-events: machine-readable milestones for GUI hosts]
                                                            (--debug = Advanced: request an owner-signed debug-access
                                                             grant; you approve it on your phone with Face ID, and the
                                                             box enables a debug console user only after verifying it)

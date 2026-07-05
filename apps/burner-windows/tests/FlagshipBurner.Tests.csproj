@@ -36,6 +36,8 @@
     <!-- Manifest client + manifest-driven base-ISO cache are WPF-free. -->
     <Compile Include="..\src\IsoManifestClient.cs"/>
     <Compile Include="..\src\IsoBaseCache.cs"/>
+    <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
+    <Compile Include="..\src\PairSession.cs"/>
     <!-- The pure VM core (mirrors apps/burner-mac FlagshipBurnerCore/VM) is
          WPF-free by design; pinned against the shared golden vectors. -->
     <Compile Include="..\src\VM\HostResources.cs"/>
@@ -74,6 +76,7 @@
     <Compile Include="QemuLocatorTests.cs"/>
     <Compile Include="WhpxProbeTests.cs"/>
     <Compile Include="VMManagerTests.cs"/>
+    <Compile Include="PairEventParserTests.cs"/>
   </ItemGroup>
 
   <ItemGroup>

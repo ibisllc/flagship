@@ -66,6 +66,150 @@ public sealed class Wizard : INotifyPropertyChanged
         if (Vm.Toolchain is { } tc) _ = ProbeWhpxAsync(tc);
     }
 
+    // ---- Phone pairing (the QR cover — how a recipe arrives without a file) ----
+
+    private PairSession? _pair;
+    private bool _isPairing;
+    private string? _pairQr;
+    private string? _pairCode;
+    private string? _pairSas;
+    private string? _pairStatus;
+    private bool _pairDebug;
+
+    /// <summary>True while the pairing relay session is live (cover is showing
+    /// the QR + waiting for / talking to the phone).</summary>
+    public bool IsPairing
+    {
+        get => _isPairing;
+        private set { if (_isPairing != value) { _isPairing = value; FireBag(); } }
+    }
+
+    /// <summary>The scannable unicode-block QR (rendered in a monospace block).</summary>
+    public string? PairQr
+    {
+        get => _pairQr;
+        private set { if (_pairQr != value) { _pairQr = value; FireBag(); } }
+    }
+
+    /// <summary>The 8-char human code to type if the QR can't be scanned.</summary>
+    public string? PairCode
+    {
+        get => _pairCode;
+        private set { if (_pairCode != value) { _pairCode = value; FireBag(); } }
+    }
+
+    /// <summary>The 6-digit SAS to compare against the phone once it connects.</summary>
+    public string? PairSas
+    {
+        get => _pairSas;
+        private set { if (_pairSas != value) { _pairSas = value; FireBag(); } }
+    }
+
+    public string? PairStatus
+    {
+        get => _pairStatus;
+        private set { if (_pairStatus != value) { _pairStatus = value; FireBag(); } }
+    }
+
+    /// <summary>Advanced: request an owner-signed debug-access grant during pairing.</summary>
+    public bool PairDebug
+    {
+        get => _pairDebug;
+        set { if (_pairDebug != value) { _pairDebug = value; FireBag(); } }
+    }
+
+    public bool HasPairSas => !string.IsNullOrEmpty(_pairSas);
+
+    /// <summary>
+    /// Start pairing: spawn `flagship-burn pair --emit-events`, surface the QR /
+    /// code / SAS / status, and on delivery load the received recipe (identical
+    /// to a dropped-in recipe file) → the destination chooser.
+    /// </summary>
+    public void StartPairing()
+    {
+        if (IsPairing) return;
+        SelectedServerName = null;
+        Destination = null;
+        RecipeError = null;
+        Verified = null;
+        _parsedRecipe = null;
+        IsFinished = false;
+        PairQr = null;
+        PairCode = null;
+        PairSas = null;
+        PairStatus = "Starting…";
+        IsPairing = true;
+
+        var session = new PairSession(_pairDebug);
+        _pair = session;
+        session.OnEvent += ev => OnUi(() => HandlePairEvent(ev));
+        session.OnLog += line => OnUi(() => AppendLog(line.Stream, line.Text));
+        _ = Task.Run(async () =>
+        {
+            try { await session.RunAsync(); }
+            catch (Exception e) { OnUi(() => { AppendLog(LogStream.Stderr, $"pair failed: {e.Message}"); EndPairing("Pairing couldn't start — is Node installed?"); }); }
+        });
+    }
+
+    public void CancelPairing()
+    {
+        _pair?.Cancel();
+        EndPairing(null);
+    }
+
+    private void EndPairing(string? status)
+    {
+        _pair = null;
+        IsPairing = false;
+        if (status != null) PairStatus = status;
+        PairQr = null;
+        PairSas = null;
+        FireBag();
+    }
+
+    private void HandlePairEvent(PairEvent ev)
+    {
+        switch (ev.Event)
+        {
+            case "ready":
+                PairQr = ev.QrTerminal;
+                PairCode = ev.HumanCode;
+                PairStatus = "Scan the QR with the Flagship app, or type the code.";
+                break;
+            case "phone-connected":
+                PairSas = ev.Sas;
+                PairStatus = "Phone connected — check the security code matches, then approve on your phone.";
+                break;
+            case "paired":
+                PairStatus = "Paired — receiving your recipe…";
+                break;
+            case "delivered":
+                PairStatus = $"Recipe received for {ev.ServerDomain}.";
+                break;
+            case "debug-result":
+                AppendLog(LogStream.Stdout, ev.DebugGranted
+                    ? "debug access granted (owner-signed)"
+                    : "debug access not granted — production image");
+                break;
+            case "done":
+                IsPairing = false;
+                _pair = null;
+                PairSas = null;
+                PairStatus = null;
+                if (ev.RecipePath is string p && File.Exists(p))
+                {
+                    // Identical to a dropped-in recipe file: verify locally +
+                    // go to the destination chooser.
+                    AcceptRecipeFile(p);
+                }
+                FireBag();
+                break;
+            case "error":
+                EndPairing(ev.Message ?? "Pairing failed.");
+                break;
+        }
+    }
+
     // ---- Hosted VMs (the "Host here" destination) ----
 
     /// <summary>Runtime orchestrator for hosted VMs (sidebar + detail).</summary>
@@ -101,12 +245,15 @@ public sealed class Wizard : INotifyPropertyChanged
     public HostedServer? SelectedServer
         => _selectedServerName is null ? null : Vm.Server(_selectedServerName);
 
-    // Main-area pane switching (exactly one is visible).
+    // Main-area pane switching (exactly one is visible). Priority: a selected
+    // server's detail, else the live pairing cover, else the recipe→destination
+    // flow.
     public bool ShowServerDetail => SelectedServer != null;
+    public bool ShowPairingCover => !ShowServerDetail && IsPairing;
     public bool ShowDestinationChooser
-        => !ShowServerDetail && Verified != null && _destination == null && !IsRunning && !IsFinished;
-    public bool ShowHostHerePane => !ShowServerDetail && _destination == ServerDestination.HostHere;
-    public bool ShowWizardPanes => !ShowServerDetail && !ShowDestinationChooser && !ShowHostHerePane;
+        => !ShowServerDetail && !IsPairing && Verified != null && _destination == null && !IsRunning && !IsFinished;
+    public bool ShowHostHerePane => !ShowServerDetail && !IsPairing && _destination == ServerDestination.HostHere;
+    public bool ShowWizardPanes => !ShowServerDetail && !IsPairing && !ShowDestinationChooser && !ShowHostHerePane;
     /// <summary>The back-to-chooser link inside the USB pane.</summary>
     public bool ShowDestinationBackLink
         => ShowWizardPanes && Verified != null && _destination == ServerDestination.BurnToUSB && !IsRunning;
@@ -148,6 +295,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// <summary>The "＋ Add a server" sidebar entry: back to a fresh wizard.</summary>
     public void ResetToNewServer()
     {
+        if (IsPairing) CancelPairing();
         SelectedServerName = null;
         Destination = null;
         RecipePath = null;
@@ -852,6 +1000,8 @@ public sealed class Wizard : INotifyPropertyChanged
         nameof(Destination), nameof(SelectedServerName), nameof(SelectedServer),
         nameof(ShowServerDetail), nameof(ShowDestinationChooser),
         nameof(ShowHostHerePane), nameof(ShowWizardPanes), nameof(ShowDestinationBackLink),
+        nameof(IsPairing), nameof(ShowPairingCover), nameof(PairQr), nameof(PairCode),
+        nameof(PairSas), nameof(PairStatus), nameof(PairDebug), nameof(HasPairSas),
         nameof(HasHostedServers), nameof(HostHereDisabledReason), nameof(HostHereEnabled),
         nameof(HostHereSpecSummary), nameof(HardwareBadgeLabel), nameof(HostedVmBadgeLabel),
     };
@@ -903,6 +1053,19 @@ public static class CliArgs
         }
         if (yes) a.Add("--yes");
         if (keepRecipe) a.Add("--keep-recipe");
+        return a.ToArray();
+    }
+
+    /// <summary>
+    /// `pair --out &lt;recipe.json&gt; --emit-events [--debug]` — the phone-pairing
+    /// relay session (shared TS implementation), with machine-readable
+    /// milestones the WPF cover renders. Mirrors the CLI's `cmdPair`.
+    /// </summary>
+    public static string[] Pair(string entryPath, string outPath, bool debug)
+    {
+        var a = new System.Collections.Generic.List<string>
+            { entryPath, "pair", "--out", outPath, "--emit-events" };
+        if (debug) a.Add("--debug");
         return a.ToArray();
     }
 }

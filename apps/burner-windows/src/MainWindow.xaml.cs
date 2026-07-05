@@ -124,6 +124,14 @@ public partial class MainWindow : Window
         _wizard.ClearLog();
     }
 
+    // ---- Phone pairing ----
+
+    private void StartPairing_Click(object sender, RoutedEventArgs e)
+        => _wizard.StartPairing();
+
+    private void CancelPairing_Click(object sender, RoutedEventArgs e)
+        => _wizard.CancelPairing();
+
     // ---- Destination chooser + Host here ----
 
     private void ChooseUsb_Click(object sender, RoutedEventArgs e)

@@ -39,4 +39,12 @@ public static class CliArgs
         if (keepRecipe) a.Add("--keep-recipe");
         return a.ToArray();
     }
+
+    public static string[] Pair(string entryPath, string outPath, bool debug)
+    {
+        var a = new System.Collections.Generic.List<string>
+            { entryPath, "pair", "--out", outPath, "--emit-events" };
+        if (debug) a.Add("--debug");
+        return a.ToArray();
+    }
 }
