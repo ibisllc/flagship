@@ -743,6 +743,7 @@
                              SelectedValuePath="Name"
                              SelectedValue="{Binding SelectedServerName, Mode=TwoWay}"
                              SelectionChanged="ServerList_SelectionChanged"
+                             MouseDoubleClick="ServerList_MouseDoubleClick"
                              Background="Transparent"
                              BorderThickness="0"
                              Margin="8,0,8,0"
@@ -750,23 +751,69 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}"
-                                               Style="{StaticResource RowTitle}"
-                                               FontSize="13"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding BadgeLabel}"
-                                               Style="{StaticResource Caption}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                        <Ellipse Width="7" Height="7"
-                                                 VerticalAlignment="Center"
-                                                 Fill="{Binding StateKind,
-                                                     Converter={StaticResource StateKindToBrush}}"/>
-                                        <TextBlock Text="{Binding StateLabel}"
-                                                   Style="{StaticResource Caption}"
-                                                   Margin="5,0,0,0"/>
+                                <!-- Transparent background so the whole row is
+                                     hit-testable for double-click (a shortcut to
+                                     SSH-into a running debug VM). The ⋯ button
+                                     and right-click both open the same actions
+                                     menu — SSH/console appear only for a
+                                     debug-enabled VM (ConsoleEnabled). -->
+                                <Grid Background="Transparent">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.ContextMenu>
+                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext,
+                                                         RelativeSource={RelativeSource Self}}">
+                                            <MenuItem Header="Open in SSH"
+                                                      Click="ServerRow_OpenSsh_Click"
+                                                      Visibility="{Binding ConsoleEnabled,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
+                                            <MenuItem Header="Open console"
+                                                      Click="ServerRow_OpenConsole_Click"
+                                                      Visibility="{Binding ConsoleEnabled,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
+                                            <Separator Visibility="{Binding ConsoleEnabled,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
+                                            <MenuItem Header="Start"
+                                                      Click="ServerRow_Start_Click"
+                                                      Visibility="{Binding CanStart,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
+                                            <MenuItem Header="Stop"
+                                                      Click="ServerRow_Stop_Click"
+                                                      Visibility="{Binding CanStop,
+                                                          Converter={StaticResource BoolToVisibility}}"/>
+                                            <Separator/>
+                                            <MenuItem Header="Delete…"
+                                                      Click="ServerRow_Delete_Click"/>
+                                        </ContextMenu>
+                                    </Grid.ContextMenu>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   Style="{StaticResource RowTitle}"
+                                                   FontSize="13"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding BadgeLabel}"
+                                                   Style="{StaticResource Caption}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                            <Ellipse Width="7" Height="7"
+                                                     VerticalAlignment="Center"
+                                                     Fill="{Binding StateKind,
+                                                         Converter={StaticResource StateKindToBrush}}"/>
+                                            <TextBlock Text="{Binding StateLabel}"
+                                                       Style="{StaticResource Caption}"
+                                                       Margin="5,0,0,0"/>
+                                        </StackPanel>
                                     </StackPanel>
-                                </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource LinkButton}"
+                                            Content="⋯"
+                                            FontSize="16"
+                                            Padding="6,0,2,0"
+                                            VerticalAlignment="Top"
+                                            ToolTip="Actions"
+                                            Click="ServerRowMenu_Click"/>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

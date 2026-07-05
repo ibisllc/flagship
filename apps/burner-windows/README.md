@@ -17,8 +17,12 @@ whole flow:
   QEMU+WHPX backend, a hosted-servers sidebar, and per-server start/stop.
 - **SSH / console into a debug VM** — a VM created from a debug-grant recipe
   exposes a serial console and an "Open in SSH" affordance (a loopback
-  hostfwd to the guest's `:22`). A production VM gets neither — the guardrail
-  is the phone-signed grant, enforced in `QemuCommandLine`.
+  hostfwd to the guest's `:22`). Reachable straight from the **sidebar**:
+  right-click or the ⋯ menu on a hosted server → *Open in SSH* / *Open
+  console*, or double-click the row to SSH in. This only ever wires up SSH to
+  a VM this app is **hosting locally** (`127.0.0.1:<fwd>`) — it never relays
+  SSH to a box deployed elsewhere. A production VM gets neither console nor SSH
+  — the guardrail is the phone-signed grant, enforced in `QemuCommandLine`.
 
 See `docs/desktop-vm-appliance.md` for the design and `e2e/README.md` for the
 end-to-end VM-boot harness + what's proven vs. open.

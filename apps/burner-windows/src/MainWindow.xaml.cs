@@ -178,6 +178,9 @@ public partial class MainWindow : Window
     }
 
     private async void DeleteServer_Click(object sender, RoutedEventArgs e)
+        => await DeleteSelectedAsync();
+
+    private async Task DeleteSelectedAsync()
     {
         if (_wizard.SelectedServerName is not string name) return;
         var fqdn = _wizard.SelectedServer?.Fqdn ?? name;
@@ -192,6 +195,112 @@ public partial class MainWindow : Window
         CloseConsole();
         await _wizard.Vm.DeleteServerAsync(name);
         _wizard.SelectedServerName = null;
+    }
+
+    // ---- Sidebar row actions (⋯ button / right-click / double-click) ----
+    //
+    // The owner's model: select a hosted VM in the sidebar and act on it right
+    // there — no round-trip through the detail pane. Every action first selects
+    // the row's server (so the detail pane follows along), then reuses the same
+    // logic the detail-pane buttons call. SSH/console are debug-VM-only, gated
+    // in XAML on ConsoleEnabled AND at the hypervisor layer (a production VM
+    // never gets a forwarded port). This is ALWAYS a local, app-hosted VM — the
+    // app never relays SSH to a box running elsewhere.
+
+    private static HostedServer? RowServer(object sender)
+        => (sender as FrameworkElement)?.DataContext as HostedServer;
+
+    /// <summary>Left-click on the ⋯ button opens the row's actions menu (WPF
+    /// already opens it on right-click).</summary>
+    private void ServerRowMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.DataContext is HostedServer s)
+        {
+            _wizard.SelectedServerName = s.Name;
+            // The menu lives on the row Grid (the button's templated parent
+            // chain); find and open it, anchored to the button.
+            var menu = FindRowContextMenu(b);
+            if (menu != null)
+            {
+                menu.PlacementTarget = b;
+                menu.IsOpen = true;
+            }
+        }
+        e.Handled = true;
+    }
+
+    private static ContextMenu? FindRowContextMenu(DependencyObject start)
+    {
+        var node = start;
+        while (node != null)
+        {
+            if (node is FrameworkElement fe && fe.ContextMenu != null) return fe.ContextMenu;
+            node = System.Windows.Media.VisualTreeHelper.GetParent(node);
+        }
+        return null;
+    }
+
+    private void ServerList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        // The first click of the double already selected the row. Ignore a
+        // double-click that landed on the ⋯ button (it has its own action).
+        if (e.OriginalSource is DependencyObject src && FindAncestorButton(src) != null) return;
+        if (_wizard.SelectedServer is not HostedServer s) return;
+        // Double-click is the shortcut to the primary debug action — SSH into a
+        // running debug VM. A non-debug VM just stays selected (no SSH surface).
+        if (s.ConsoleEnabled) OpenSshFor(s.Name);
+    }
+
+    private static Button? FindAncestorButton(DependencyObject start)
+    {
+        var node = start;
+        while (node != null)
+        {
+            if (node is Button b) return b;
+            node = System.Windows.Media.VisualTreeHelper.GetParent(node);
+        }
+        return null;
+    }
+
+    private void ServerRow_OpenSsh_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        OpenSshFor(s.Name);
+    }
+
+    private void ServerRow_OpenConsole_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        // The console UI is in the detail pane; selecting shows it, then open it
+        // once the selection change (which closes any prior console) has run.
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (ConsoleToggle != null) ConsoleToggle.IsChecked = true;
+        });
+    }
+
+    private async void ServerRow_Start_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        await _wizard.Vm.PowerOnAsync(s.Name);
+    }
+
+    private async void ServerRow_Stop_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        CloseConsole();
+        await _wizard.Vm.PowerOffAsync(s.Name);
+    }
+
+    private async void ServerRow_Delete_Click(object sender, RoutedEventArgs e)
+    {
+        if (RowServer(sender) is not HostedServer s) return;
+        _wizard.SelectedServerName = s.Name;
+        await DeleteSelectedAsync();
     }
 
     // ---- Debug serial console (only reachable for debug-grant recipes:
@@ -231,7 +340,18 @@ public partial class MainWindow : Window
 
     private void OpenSsh_Click(object sender, RoutedEventArgs e)
     {
-        if (_wizard.SelectedServerName is not string name) return;
+        if (_wizard.SelectedServerName is string name) OpenSshFor(name);
+    }
+
+    /// <summary>
+    /// Open the built-in OpenSSH client at a hosted debug VM's forwarded
+    /// loopback port. The forward exists only for a running debug VM (a
+    /// production VM never gets one — guarded in QemuCommandLine), and it always
+    /// targets a VM this app is hosting on THIS machine: 127.0.0.1:&lt;port&gt;.
+    /// The guest's own debug gate still governs whether the login is accepted.
+    /// </summary>
+    private void OpenSshFor(string name)
+    {
         var host = _wizard.Vm.Host(name);
         if (host is null || host.SshPort == 0)
         {
@@ -242,9 +362,6 @@ public partial class MainWindow : Window
         }
         try
         {
-            // Open a new console window running the OpenSSH client at the guest's
-            // forwarded loopback port. The guest's own debug gate still governs
-            // whether the login is accepted (debug/flagship on a granted box).
             Process.Start(new ProcessStartInfo
             {
                 FileName = "cmd.exe",
