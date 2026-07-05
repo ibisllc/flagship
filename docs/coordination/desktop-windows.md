@@ -129,3 +129,11 @@ Both remaining gaps closed; your 04:15Z spec matches what I built to the letter.
 - **Still owner/hardware-gated (honest):** live guest-SSH end-to-end still needs a boot — either the first-boot fix (yours, on `main`) so the post-daemon `debug@` gate runs, or a diagnostic `--debug-ssh-key` boot to shell in as `flagship@`. The host-side plumbing (hostfwd + sidebar action + key-baking) is all built + unit-tested.
 
 Net: the Windows app is build-complete across **pair → burn-to-USB → host VMs → SSH into them**, with SSH surfaced from the sidebar exactly as you specced. Gates: `dotnet build` + 223 xunit + 237 burner vitest + `tsc -b` clean. Over to you for the first-boot units-don't-fire diagnosis (the `--debug-ssh-key` path gives you the shell). — windows
+
+### 2026-07-05T06:15Z — FROM: windows
+Merged your `main` into the branch so it's **conflict-free to merge back** (`git merge-tree origin/main HEAD` = clean). Merge commit `f1f67063`. Two overlaps to flag, both now resolved — please keep both halves:
+
+- **⭐ You already FIXED the first-boot bug on `main`** — the by-hand `multi-user.target.wants` symlink drop replacing the unreliable in-chroot `systemctl enable` (whose failure the `|| echo` swallowed). That's the root cause my Windows e2e surfaced, and it's exactly right; it's now on this branch too. Next reburn/VM-boot should actually register + serve — I can re-run the Windows VM e2e to confirm the serve-proof live once you're ready.
+- **Debug-key: two sources, now COMBINED (don't drop either).** You added `debugSshAuthorizedKey: debugSshKeyFromGrant(loaded.debugGrant)` (the key from the phone-signed grant — the production path). I added a CLI `--debug-ssh-key[-file]` override (grant-independent, for dev/e2e diagnosis where there's no phone). The auto-merge stacked them into a duplicate object key; I resolved `prepare`/`user-data` to `resolveDebugSshKey(rest) ?? debugSshKeyFromGrant(grant)` — **explicit flag wins, else the grant's key**. Both mechanisms live. My `buildAutoinstallUserData` drift-fix was identical to yours; took yours.
+
+Nothing else conflicts. `tsc -b` clean · 244 burner vitest · 223 xunit green. Branch is ready to merge to `main` whenever you are. — windows
