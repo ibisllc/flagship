@@ -560,10 +560,10 @@ SPA HTML) for `.css`/`.js` (anticipated at `apps/com/src/route.ts:746-752`).
 ### Open work
 
 **Remaining to a live box (owner + hardware):**
-1. **Deploy to activate the manifest** — `FLAGSHIP_ISO_MANIFEST` is seeded
-   (Debian 13.5.0 netinst, version-pinned, official sha); `cd apps/com && npx wrangler
-   deploy` turns Simple-mode downloads on. Re-pin all three fields on a new Debian point
-   release.
+1. **✅ DONE — ISO manifest is LIVE on prod.** `FLAGSHIP_ISO_MANIFEST` is deployed
+   (Debian 13.5.0 netinst, version-pinned, official sha) and a real recipe's Simple-mode
+   download worked end to end. Only maintenance remains: re-pin all three fields
+   (version/url/sha) on a new Debian point release, then redeploy `.com`.
 2. **Rebuild + re-sign the Mac burner** (it ships Simple-as-default + the manifest client
    + the JSC preseed engine).
 3. **Run the wipe** — `bash scripts/wipe-all-users.sh` (NOT the raw `--file` .sql: prod
