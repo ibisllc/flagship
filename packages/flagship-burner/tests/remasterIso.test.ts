@@ -21,8 +21,22 @@ import {
   classifyIsoText,
   detectIsoFamily,
   resolveXorriso,
+  toXorrisoDiskPath,
   DEBIAN_PRESEED_CMDLINE,
 } from "../src/remasterIso.js";
+
+describe("toXorrisoDiskPath (Cygwin/MSYS Windows builds)", () => {
+  it("converts win32 drive paths to the /c/ form xorriso parses as absolute", () => {
+    // A bare `C:\a\b` is parsed by Cygwin xorriso as RELATIVE (workdir-prefixed).
+    expect(toXorrisoDiskPath("C:\\Users\\x\\out.iso", "win32")).toBe("/c/Users/x/out.iso");
+    expect(toXorrisoDiskPath("D:/tmp/seed", "win32")).toBe("/d/tmp/seed");
+    expect(toXorrisoDiskPath("relative\\dir\\f.cfg", "win32")).toBe("relative/dir/f.cfg");
+  });
+  it("passes POSIX paths through untouched", () => {
+    expect(toXorrisoDiskPath("/tmp/x/out.iso", "darwin")).toBe("/tmp/x/out.iso");
+    expect(toXorrisoDiskPath("/tmp/x/out.iso", "linux")).toBe("/tmp/x/out.iso");
+  });
+});
 
 const GRUB = `set timeout=30
 menuentry "Try or Install Ubuntu Server" {
@@ -72,6 +86,10 @@ function sh(cmd: string, argv: string[]): Promise<number> {
   });
 }
 
+// The round-trip helpers spawn xorriso THEMSELVES (outside the production
+// code), so their disk paths need the same Cygwin-form conversion on Windows.
+const dp = (p: string) => toXorrisoDiskPath(p);
+
 async function xorrisoPresent(): Promise<boolean> {
   const x = await resolveXorriso();
   try {
@@ -103,7 +121,7 @@ describe("remasterIsoWithAutoinstall (real xorriso round-trip)", () => {
       await chmod(grubSrc, 0o444);
       const srcIso = join(work, "src.iso");
       const x = await resolveXorriso();
-      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", srcIso, "-V", "SYNTH", src]);
+      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", dp(srcIso), "-V", "SYNTH", dp(src)]);
       expect(mk).toBe(0);
 
       const outIso = join(work, "out.iso");
@@ -119,13 +137,13 @@ describe("remasterIsoWithAutoinstall (real xorriso round-trip)", () => {
         "-osirrox",
         "on",
         "-indev",
-        outIso,
+        dp(outIso),
         "-extract",
         "/boot/grub/grub.cfg",
-        join(check, "grub.cfg"),
+        dp(join(check, "grub.cfg")),
         "-extract",
         "/nocloud/user-data",
-        join(check, "user-data"),
+        dp(join(check, "user-data")),
       ]);
       const patched = await readFile(join(check, "grub.cfg"), "utf-8");
       expect(patched).toContain("autoinstall ds=nocloud\\;s=/cdrom/nocloud/");
@@ -250,7 +268,7 @@ describe("remasterIsoWithPreseed + detection (real xorriso round-trip)", () => {
       const srcIso = join(work, "src.iso");
       const x = await resolveXorriso();
       // Volume id contains "Debian" so detection picks the d-i path.
-      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", srcIso, "-V", "Debian 13.5.0 amd64 1", src]);
+      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", dp(srcIso), "-V", "Debian 13.5.0 amd64 1", dp(src)]);
       expect(mk).toBe(0);
 
       // Detection should classify this as debian.
@@ -271,16 +289,16 @@ describe("remasterIsoWithPreseed + detection (real xorriso round-trip)", () => {
         "-osirrox",
         "on",
         "-indev",
-        outIso,
+        dp(outIso),
         "-extract",
         "/preseed.cfg",
-        join(check, "preseed.cfg"),
+        dp(join(check, "preseed.cfg")),
         "-extract",
         "/boot/grub/grub.cfg",
-        join(check, "grub.cfg"),
+        dp(join(check, "grub.cfg")),
         "-extract",
         "/isolinux/txt.cfg",
-        join(check, "txt.cfg"),
+        dp(join(check, "txt.cfg")),
       ]);
       const preseed = await readFile(join(check, "preseed.cfg"), "utf-8");
       expect(preseed).toContain("d-i debian-installer/locale");

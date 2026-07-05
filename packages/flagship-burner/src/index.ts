@@ -8,6 +8,7 @@ export {
   loadBlobFromFile,
   loadBlobFromStdin,
   loadBlobFromString,
+  debugSshKeyFromGrant,
   BurnerLoadError,
   type LoadedBlob,
 } from "./loadBlob.js";
