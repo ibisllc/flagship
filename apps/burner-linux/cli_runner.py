@@ -146,6 +146,16 @@ def args_write(
     return a
 
 
+def args_pair(entry_path: str, out_path: str, debug: bool) -> list[str]:
+    """`pair --out <recipe.json> --emit-events [--debug]` — the phone-pairing
+    relay session (shared TS implementation), with machine-readable milestones
+    the GTK cover renders. Mirrors CliArgs.Pair (Windows) / the CLI's cmdPair."""
+    a = [entry_path, "pair", "--out", out_path, "--emit-events"]
+    if debug:
+        a.append("--debug")
+    return a
+
+
 # ---- runner ----
 
 
