@@ -307,6 +307,32 @@ d-i preseed/late_command string ${lateCommand}
  * consented to a destructive install. Every sub-command is guarded (`|| true`)
  * so it can never abort the install; dmsetup/dd/blockdev all exist in the d-i env.
  */
+/**
+ * Resolve the install TARGET disk to the LARGEST NON-REMOVABLE block device,
+ * run inside partman/early_command BEFORE the wipe/partition. The naive
+ * `list-devices disk | head -n1` picked the first-ENUMERATED device, which on
+ * any box with a USB installer stick + an internal disk is the WRONG one: the
+ * USB device commonly sorts first (e.g. the Mac VZHost attaches the virtio main
+ * disk as vda and the USB ISO as sda — sda sorts before vda), so partman tried
+ * to partition the ~755 MB installer stick and aborted ("failed to partition:
+ * too small"). Bare-metal with a USB stick + an internal disk hits the identical
+ * trap. Selecting the largest FIXED disk is robust for both: the installer
+ * medium is tiny relative to a real disk, and removable media is excluded
+ * outright. `/sys/block/<name>/removable` is 1 for removable media; `/size` is
+ * in 512-byte sectors. Falls back to the old first-enumerated pick only if the
+ * scan finds nothing (degenerate single-disk case). The Ubuntu/curtin path
+ * already selects `match: {size: largest}`, so this brings d-i to parity.
+ */
+const resolveTargetDisk =
+  `DISK=""; _best=0; ` +
+  `for _d in $(list-devices disk); do ` +
+  `_n=\${_d##*/}; ` +
+  `[ "$(cat /sys/block/$_n/removable 2>/dev/null || echo 0)" = 1 ] && continue; ` +
+  `_s=$(cat /sys/block/$_n/size 2>/dev/null || echo 0); ` +
+  `[ "$_s" -gt "$_best" ] && { _best=$_s; DISK=$_d; }; ` +
+  `done; ` +
+  `[ -n "$DISK" ] || DISK=$(list-devices disk | head -n1)`;
+
 const wipeTargetDisk =
   `dmsetup remove_all 2>/dev/null || true; ` +
   `dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true; ` +
@@ -323,7 +349,7 @@ const wipeTargetDisk =
 function partmanEarlyCommand(partitionBeacon: string, installingDrop: string): string {
   return (
     `d-i partman/early_command string \\\n` +
-    `  DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"; \\\n` +
+    `  ${resolveTargetDisk}; debconf-set partman-auto/disk "$DISK"; \\\n` +
     `  ${partitionBeacon}; \\\n` +
     `  ${wipeTargetDisk}; \\\n` +
     `  ${installingDrop}`

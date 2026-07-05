@@ -27,6 +27,7 @@ import {
   runWriteImageCommand,
   remasterIsoWithInstaller,
   detectIsoFamily,
+  debugSshKeyFromGrant,
   type IsoFamily,
 } from "./index.js";
 
@@ -135,12 +136,16 @@ async function cmdUserData(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
+    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
+    // carried in the owner-Face-ID-signed debug grant (the production path).
+    debugSshAuthorizedKey:
+      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: extractFlagValue(rest, "--wifi-password"),
-    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
   };
   // Emit a Debian d-i preseed.cfg with --debian (or --family debian); default
   // stays the Ubuntu autoinstall user-data (this command is for inspection;
@@ -192,12 +197,16 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
+    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
+    // carried in the owner-Face-ID-signed debug grant (the production path).
+    debugSshAuthorizedKey:
+      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: extractFlagValue(rest, "--wifi-password"),
-    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
   };
   // Detect Ubuntu vs Debian from the ISO and bake the matching unattended
   // mechanism (NoCloud autoinstall vs d-i preseed). --family overrides.

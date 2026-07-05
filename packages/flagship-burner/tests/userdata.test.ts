@@ -90,6 +90,38 @@ function extractBootstrap(yaml: string): string {
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
+describe("debug SSH key threading — a debug grant with a real key bakes the SSH stub", () => {
+  const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI owner@laptop";
+
+  it("Ubuntu path bakes the debug SSH stub when debugSshAuthorizedKey is set", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const b = extractBootstrap(yaml);
+    // buildBootstrapScriptDebug — remote access only, NO provisioning/LUKS re-key.
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+    expect(b).toContain("openssh-server");
+    expect(b).not.toContain("[flagship-bootstrap] starting"); // not the provisioning bootstrap
+  });
+
+  it("Debian path bakes the same debug SSH stub", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const cfg = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const m = cfg.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+    const b = Buffer.from(m![1]!, "base64").toString("utf8");
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+  });
+
+  it("no debugSshAuthorizedKey ⇒ the normal provisioning bootstrap (byte-identical)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const withUndef = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: undefined });
+    const without = buildAutoinstallUserData({ blob, blobSignatureHex });
+    expect(withUndef).toBe(without);
+    expect(extractBootstrap(without)).toContain("[flagship-bootstrap] starting");
+  });
+});
+
 describe("buildAutoinstallUserData", () => {
   it("embeds an auth-code with every field canonicalAuthCode needs", () => {
     const { blob, blobSignatureHex } = signedBlob();
@@ -201,6 +233,27 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     // install chroot). No `systemctl start` of either unit anywhere.
     expect(b).not.toMatch(/systemctl start flagship-daemon\.service/);
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
+  });
+
+  it("enables the units DETERMINISTICALLY (chroot-proof manual .wants symlinks)", () => {
+    // ROOT CAUSE of the live "installed but dead at the login prompt" box:
+    // `systemctl enable` in the installer in-target chroot (no running
+    // systemd/D-Bus) can silently create NO [Install] symlink, and the `|| echo`
+    // swallows the failure ⇒ first-boot-register + daemon never fire on first
+    // boot (zero phone-home beacons). The cloud-init path never hits this (it
+    // enables under a live systemd + starts inline). We can't `systemctl start`
+    // in the chroot, so we drop the multi-user.target.wants symlinks BY HAND —
+    // the same pattern the Wi-Fi setup already trusts — which needs no running
+    // systemd and can't be a no-op.
+    const b = bootstrap();
+    expect(b).toContain("mkdir -p /etc/systemd/system/multi-user.target.wants");
+    expect(b).toContain(
+      "for _u in flagship-daemon flagship-first-boot-register flagship-data-services; do",
+    );
+    expect(b).toContain('ln -sf "/etc/systemd/system/${_u}.service"');
+    expect(b).toContain(
+      '"/etc/systemd/system/multi-user.target.wants/${_u}.service"',
+    );
   });
 
   it("installs docker so the daemon can run app containers + the data layer", () => {
@@ -1109,7 +1162,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "1540d942963bc0878f879089eed177e8ac16f5e31736ef4bf1c47be621f64737",
+      "c598afd8fcc1ed17f40976116bfaff7911af13ed67cda3d585ec4eb919be8fec",
     );
   });
 
@@ -1132,7 +1185,7 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "555dd7b10c5bfbc43ae40dbb5ed6f1e3874b9ebc739c00587e9593809411a62d",
+      "32e34919c43aea1ea7a1da524d5d18002c7e6d5c0597498783ef3315e2d4506b",
     );
   });
 
