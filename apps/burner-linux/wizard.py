@@ -47,6 +47,13 @@ from cli_runner import (
     locate,
     parse_verify_json,
 )
+from pair_session import PairEvent, PairSession
+from vm import recipe_info, resource_plan, ssh_launch
+from vm.config import VMConfig
+from vm.host_resources import HostResources
+from vm.inventory import VMStoreError
+from vm.manager import VMManager
+from vm.server_tier import ServerDestination, ServerTier
 
 
 # Two flows, same remaster+write engine (the Node CLI's `write` subcommand):
@@ -212,6 +219,20 @@ class WizardState:
     download_url: Optional[str] = None
     # Cached/fetched base ISO path used by the Simple-mode CLI write.
     base_iso_path: Optional[Path] = None
+    # Where the verified recipe should live: None until the user picks on the
+    # destination chooser (usb => the wizard steps; host-here => a managed VM).
+    destination: Optional[ServerDestination] = None
+    # Sidebar selection: the hosted server whose detail fills the main area.
+    # None shows the wizard/chooser.
+    selected_server_name: Optional[str] = None
+    # Phone pairing (the QR cover — how a recipe arrives without a file).
+    is_pairing: bool = False
+    pair_qr: Optional[str] = None
+    pair_code: Optional[str] = None
+    pair_sas: Optional[str] = None
+    pair_status: Optional[str] = None
+    # Advanced: request an owner-signed debug-access grant during pairing.
+    pair_debug: bool = False
 
     @property
     def requires_user_iso(self) -> bool:
@@ -295,6 +316,11 @@ class WizardModel:
         # without network: defaults to the real manifest-driven cache.
         ensure_base_fn: Optional[Callable[..., Path]] = None,
         burner_version: str = BURNER_VERSION,
+        # Injectable seams for the host-here / pairing paths (tests pass fakes;
+        # production uses the live defaults).
+        vm_manager: Optional[VMManager] = None,
+        pair_session_factory: Optional[Callable[[bool], PairSession]] = None,
+        ssh_launch_fn: Optional[Callable[[int], object]] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -304,6 +330,14 @@ class WizardModel:
         self._lock = threading.Lock()
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
         self._burner_version = burner_version
+        self.vm = vm_manager if vm_manager is not None else VMManager.create_default()
+        self.vm.on_change = self._notify
+        self.vm.log = lambda m: self._append_log("stdout", m)
+        self._pair_session_factory = pair_session_factory or (
+            lambda debug: PairSession(debug, locate_fn=self._locate_fn)
+        )
+        self._ssh_launch = ssh_launch_fn or ssh_launch.launch
+        self._pair: Optional[PairSession] = None
 
     def set_mode(self, mode: str) -> None:
         if mode not in (MODE_SIMPLE, MODE_ADVANCED):
@@ -509,6 +543,369 @@ class WizardModel:
         self.state.is_finished = True
         self._notify()
 
+    # ---- pane switching (mirrors Wizard.cs: exactly one main pane visible;
+    #      priority: server detail, then the pairing cover, then the
+    #      recipe -> destination flow) ----
+
+    @property
+    def selected_server(self):
+        name = self.state.selected_server_name
+        return self.vm.server(name) if name else None
+
+    @property
+    def show_server_detail(self) -> bool:
+        return self.selected_server is not None
+
+    @property
+    def show_pairing_cover(self) -> bool:
+        return not self.show_server_detail and self.state.is_pairing
+
+    @property
+    def show_destination_chooser(self) -> bool:
+        return (
+            not self.show_server_detail
+            and not self.state.is_pairing
+            and self.state.verified is not None
+            and self.state.destination is None
+            and not self.state.is_running
+            and not self.state.is_finished
+        )
+
+    @property
+    def show_host_here_pane(self) -> bool:
+        return (
+            not self.show_server_detail
+            and not self.state.is_pairing
+            and self.state.destination == ServerDestination.HOST_HERE
+        )
+
+    @property
+    def show_wizard_panes(self) -> bool:
+        return (
+            not self.show_server_detail
+            and not self.state.is_pairing
+            and not self.show_destination_chooser
+            and not self.show_host_here_pane
+        )
+
+    @property
+    def show_destination_back_link(self) -> bool:
+        return (
+            self.show_wizard_panes
+            and self.state.verified is not None
+            and self.state.destination == ServerDestination.BURN_TO_USB
+            and not self.state.is_running
+        )
+
+    @property
+    def has_hosted_servers(self) -> bool:
+        return len(self.vm.servers) > 0
+
+    def set_destination(self, destination: Optional[ServerDestination]) -> None:
+        self.state.destination = destination
+        self._notify()
+
+    def select_server(self, name: Optional[str]) -> None:
+        self.state.selected_server_name = name
+        self._notify()
+
+    def reset_to_new_server(self) -> None:
+        """The "+ Add a server" sidebar entry: back to a fresh wizard."""
+        if self.state.is_pairing:
+            self.cancel_pairing()
+        self.state.selected_server_name = None
+        self.state.destination = None
+        self.state.recipe_path = None
+        self.state.pasted_recipe_staging = None
+        self.state.verified = None
+        self.state.recipe_error = None
+        self.state.is_finished = False
+        self._notify()
+
+    # ---- Host on this PC ----
+
+    @property
+    def host_here_disabled_reason(self) -> Optional[str]:
+        """Why "Host on this PC" is unavailable — None means it's usable.
+        Honest, actionable reasons only (toolchain / capacity). A missing KVM
+        does NOT block: the VM degrades to TCG with accel_warning."""
+        if self.vm.toolchain_error is not None:
+            return self.vm.toolchain_error
+        cap = self.vm.max_vm_count
+        if cap == 0:
+            floor = resource_plan.MINIMUM_VM_MEMORY_BYTES // resource_plan.GIB
+            return (
+                "This PC doesn't have enough free memory to host a server "
+                f"(each server needs ~{floor} GiB)."
+            )
+        if len(self.vm.servers) >= cap:
+            return (
+                f"This PC is at its hosting limit ({cap}). Remove one first, "
+                "or burn to USB."
+            )
+        return None
+
+    @property
+    def host_here_enabled(self) -> bool:
+        return self.host_here_disabled_reason is None
+
+    @property
+    def host_here_accel_warning(self) -> Optional[str]:
+        return self.vm.accel_warning
+
+    @property
+    def hardware_badge_label(self) -> str:
+        return ServerTier.HARDWARE.badge_label
+
+    @property
+    def hosted_vm_badge_label(self) -> str:
+        return ServerTier.HOSTED_VM.badge_label
+
+    @property
+    def host_here_spec_summary(self) -> str:
+        host = HostResources.current()
+        return (
+            "Will run as a managed VM on this PC — "
+            f"{resource_plan.vm_cpu_count(host)} vCPU, "
+            f"{resource_plan.vm_memory_bytes(host) // resource_plan.GIB} GiB RAM, "
+            f"{resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES // resource_plan.GIB} GiB disk."
+        )
+
+    def run_host_here(self) -> None:
+        threading.Thread(target=self._run_host_here_sync, daemon=True).start()
+
+    def _run_host_here_sync(self) -> None:
+        """"Host here": the SAME recipe -> the SAME remastered installer ISO
+        (via the Node CLI's prepare, which also bakes the debug grant's SSH key
+        exactly like a USB burn), but applied to a managed VM on this PC. The
+        guest boot chain (unattended install -> LUKS -> phone-home unlock ->
+        register) runs unmodified inside the VM; this app never holds a key."""
+        if self.state.is_running or self.state.recipe_path is None or self.state.verified is None:
+            return
+        reason = self.host_here_disabled_reason
+        if reason is not None:
+            self._append_log("stderr", reason)
+            return
+        recipe = self.state.recipe_path
+        try:
+            raw = Path(recipe).read_bytes()
+            fields = recipe_info.read_recipe_fields(raw)
+        except (OSError, ValueError) as e:
+            self._append_log("stderr", f"Cannot read the recipe: {e}")
+            return
+        config = VMConfig.plan(fields, raw, HostResources.current())
+
+        # Same Simple-mode base ISO fetch as the USB path; Advanced mode may
+        # bring its own stock ISO.
+        if self.state.mode == MODE_ADVANCED and self.state.iso_path is not None:
+            base = self.state.iso_path
+        else:
+            self.state.phase = "download"
+            self.state.progress = None
+            self.state.download_url = None
+            self._notify()
+
+            def _on_progress(fraction: float, url: str) -> None:
+                self.state.progress = fraction
+                self.state.download_url = url
+                self._notify()
+
+            def _on_download_start(descriptor) -> None:
+                self.state.download_url = descriptor.url
+                self._append_log(
+                    "stdout",
+                    f"+ fetching base image {descriptor.version} ({descriptor.url})",
+                )
+
+            try:
+                base = Path(
+                    self._ensure_base(
+                        self._burner_version,
+                        progress=_on_progress,
+                        on_download_start=_on_download_start,
+                        log=lambda m: self._append_log("stdout", m),
+                    )
+                )
+            except iso_base_cache.CacheError as e:
+                self._append_log("stderr", str(e))
+                self.state.phase = None
+                self.state.progress = None
+                self.state.download_url = None
+                self._notify()
+                return
+
+        # Create the bundle, then remaster the installer INTO it — identical
+        # remaster to the USB path (same engine, same recipe).
+        self.state.phase = "remaster"
+        self.state.progress = None
+        self.state.download_url = None
+        self._notify()
+        try:
+            self.vm.create_server(config)
+        except VMStoreError as e:
+            self._append_log("stderr", str(e))
+            self.state.phase = None
+            self._notify()
+            return
+        out_iso = self.vm.installer_iso_path(config.name)
+        remastered = [False]
+
+        def build(entry: str) -> list[str]:
+            return args_prepare(entry, str(recipe), str(base), out_iso, keep_recipe=True)
+
+        def on_ok(_stdout: str) -> None:
+            remastered[0] = True
+
+        self._run_cli(build, on_success=on_ok)
+        if not remastered[0]:
+            self.vm.delete_server(config.name)
+            return
+
+        # Shred the single-use recipe, exactly like a successful USB burn.
+        try:
+            os.unlink(recipe)
+        except OSError:
+            pass
+        self.state.selected_server_name = config.name
+        self.state.destination = None
+        self.state.recipe_path = None
+        self.state.pasted_recipe_staging = None
+        self.state.verified = None
+        self._notify()
+        self.vm.begin_install(config.name)
+
+    # ---- hosted-server actions (sidebar rows + detail pane) ----
+
+    def start_server(self, name: str) -> None:
+        threading.Thread(target=lambda: self.vm.power_on(name), daemon=True).start()
+
+    def stop_server(self, name: str) -> None:
+        threading.Thread(target=lambda: self.vm.power_off(name), daemon=True).start()
+
+    def retry_install(self, name: str) -> None:
+        threading.Thread(target=lambda: self.vm.begin_install(name), daemon=True).start()
+
+    def delete_server(self, name: str) -> None:
+        """Confirmation is the VIEW's job (dialog); this executes."""
+        self.vm.delete_server(name)
+        if self.state.selected_server_name == name:
+            self.state.selected_server_name = None
+        self._notify()
+
+    def open_ssh(self, name: str) -> None:
+        """Open the user's terminal at the hosted debug VM's forwarded loopback
+        port. The forward exists only for a RUNNING debug VM (a production VM
+        never gets one — guarded in qemu_command_line); the guest's own debug
+        gate still governs whether the login is accepted. Always local:
+        127.0.0.1:<port>, never a relay."""
+        host = self.vm.host(name)
+        if host is None or host.ssh_port == 0:
+            self._append_log(
+                "stderr",
+                "SSH is available once the server is running (a debug-enabled "
+                "VM forwards a local port to the guest).",
+            )
+            return
+        try:
+            argv = self._ssh_launch(host.ssh_port)
+            if isinstance(argv, list):
+                self._append_log("stdout", "+ " + " ".join(argv))
+        except ssh_launch.SshLaunchError as e:
+            self._append_log("stderr", str(e))
+
+    # ---- phone pairing ----
+
+    def start_pairing(self) -> None:
+        """Spawn `flagship-burn pair --emit-events`, surface the QR / code /
+        SAS / status, and on delivery load the received recipe (identical to a
+        dropped-in recipe file) -> the destination chooser."""
+        if self.state.is_pairing:
+            return
+        s = self.state
+        s.selected_server_name = None
+        s.destination = None
+        s.recipe_error = None
+        s.verified = None
+        s.is_finished = False
+        s.pair_qr = None
+        s.pair_code = None
+        s.pair_sas = None
+        s.pair_status = "Starting…"
+        s.is_pairing = True
+        self._notify()
+
+        session = self._pair_session_factory(s.pair_debug)
+        self._pair = session
+
+        def run() -> None:
+            try:
+                session.run(
+                    on_event=self._handle_pair_event,
+                    on_log=lambda ll: self._append_log(ll.stream, ll.text),
+                )
+            except (CLILocateError, FileNotFoundError, OSError) as e:
+                self._append_log("stderr", f"pair failed: {e}")
+                self._end_pairing("Pairing couldn't start — is Node installed?")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def cancel_pairing(self) -> None:
+        pair = self._pair
+        if pair is not None:
+            pair.cancel()
+        self._end_pairing(None)
+
+    def set_pair_debug(self, value: bool) -> None:
+        self.state.pair_debug = bool(value)
+        self._notify()
+
+    def _end_pairing(self, status: Optional[str]) -> None:
+        self._pair = None
+        self.state.is_pairing = False
+        if status is not None:
+            self.state.pair_status = status
+        self.state.pair_qr = None
+        self.state.pair_sas = None
+        self._notify()
+
+    def _handle_pair_event(self, ev: PairEvent) -> None:
+        s = self.state
+        if ev.event == "ready":
+            s.pair_qr = ev.qr_terminal
+            s.pair_code = ev.human_code
+            s.pair_status = "Scan the QR with the Flagship app, or type the code."
+        elif ev.event == "phone-connected":
+            s.pair_sas = ev.sas
+            s.pair_status = (
+                "Phone connected — check the security code matches, then "
+                "approve on your phone."
+            )
+        elif ev.event == "paired":
+            s.pair_status = "Paired — receiving your recipe…"
+        elif ev.event == "delivered":
+            s.pair_status = f"Recipe received for {ev.server_domain}."
+        elif ev.event == "debug-result":
+            self._append_log(
+                "stdout",
+                "debug access granted (owner-signed)"
+                if ev.granted
+                else "debug access not granted — production image",
+            )
+        elif ev.event == "done":
+            s.is_pairing = False
+            self._pair = None
+            s.pair_sas = None
+            s.pair_status = None
+            if ev.recipe_path and os.path.exists(ev.recipe_path):
+                # Identical to a dropped-in recipe file: verify + go to the
+                # destination chooser.
+                self.accept_recipe_file(Path(ev.recipe_path))
+                return  # accept_recipe_file notified
+        elif ev.event == "error":
+            self._end_pairing(ev.message or "Pairing failed.")
+            return
+        self._notify()
+
     def _run_cli(
         self,
         build_args: Callable[[str], list[str]],
@@ -574,7 +971,7 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     window = Adw.ApplicationWindow(application=application)
     window.set_title("Flagship Burner")
-    window.set_default_size(720, 820)
+    window.set_default_size(960, 820)
 
     toolbar = Adw.ToolbarView()
     header = Adw.HeaderBar()
@@ -595,15 +992,27 @@ def build_window(application, model: Optional[WizardModel] = None):
     mode_box.append(mode_switch)
     header.pack_end(mode_box)
 
-    # Main vertical layout: scrolled wizard cards + log pane.
+    # Main vertical layout: (main panes | hosted-servers sidebar) + log pane.
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
     toolbar.set_content(root)
     window.set_content(toolbar)
 
+    content_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    content_row.set_vexpand(True)
+    root.append(content_row)
+
+    # Exactly one main pane is visible at a time (pane switching mirrors the
+    # Windows app): wizard steps / destination chooser / host-here / pairing
+    # cover / hosted-server detail.
+    main_stack = Gtk.Stack()
+    main_stack.set_hexpand(True)
+    main_stack.set_vexpand(True)
+    content_row.append(main_stack)
+
     scroller = Gtk.ScrolledWindow()
     scroller.set_vexpand(True)
     scroller.set_hscrollbar_policy(Gtk.PolicyType.NEVER)
-    root.append(scroller)
+    main_stack.add_named(scroller, "wizard")
 
     content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
     content_box.set_margin_top(20)
@@ -655,6 +1064,25 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     use_pasted.connect("clicked", _on_use_pasted)
     step1["body"].append(use_pasted)
+
+    pair_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    pair_btn = Gtk.Button(label="Pair with your phone")
+    pair_btn.set_tooltip_text(
+        "Scan a QR with the Flagship app to receive a recipe — no file needed."
+    )
+    pair_btn.connect("clicked", lambda _b: wizard_model.start_pairing())
+    pair_row.append(pair_btn)
+    pair_debug_check = Gtk.CheckButton(label="Request debug access (Advanced)")
+    pair_debug_check.set_tooltip_text(
+        "Asks your phone to sign a debug-access grant. The box verifies it "
+        "against your owner key; without it the image is production (no "
+        "console, no SSH)."
+    )
+    pair_debug_check.connect(
+        "toggled", lambda cb: wizard_model.set_pair_debug(cb.get_active())
+    )
+    pair_row.append(pair_debug_check)
+    step1["body"].append(pair_row)
 
     recipe_status = Gtk.Label(xalign=0.0)
     recipe_status.set_wrap(True)
@@ -785,6 +1213,381 @@ def build_window(application, model: Optional[WizardModel] = None):
     step5["body"].append(done_label)
     step5["card"].set_visible(False)
 
+    # ---- Destination chooser (a verified recipe picks USB vs host-here) ----
+    chooser_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+    for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
+        getattr(chooser_box, setter)(24)
+    chooser_domain = Gtk.Label(xalign=0.0)
+    chooser_domain.add_css_class("title-3")
+    chooser_box.append(chooser_domain)
+    chooser_sub = Gtk.Label(
+        label="Recipe verified — choose where this server should live.", xalign=0.0
+    )
+    chooser_sub.add_css_class("dim-label")
+    chooser_box.append(chooser_sub)
+
+    usb_card = Gtk.Button()
+    usb_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    usb_title = Gtk.Label(label="Burn to USB", xalign=0.0)
+    usb_title.add_css_class("heading")
+    usb_inner.append(usb_title)
+    usb_badge = Gtk.Label(label=wizard_model.hardware_badge_label, xalign=0.0)
+    usb_badge.add_css_class("dim-label")
+    usb_inner.append(usb_badge)
+    usb_hint = Gtk.Label(
+        label="Build a dedicated hardware appliance — the gold standard. "
+        "Boot any spare box from the USB stick.",
+        xalign=0.0,
+    )
+    usb_hint.set_wrap(True)
+    usb_hint.add_css_class("dim-label")
+    usb_inner.append(usb_hint)
+    usb_card.set_child(usb_inner)
+    usb_card.connect(
+        "clicked", lambda _b: wizard_model.set_destination(ServerDestination.BURN_TO_USB)
+    )
+    chooser_box.append(usb_card)
+
+    host_card = Gtk.Button()
+    host_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    host_title = Gtk.Label(label="Host on this PC", xalign=0.0)
+    host_title.add_css_class("heading")
+    host_inner.append(host_title)
+    host_badge = Gtk.Label(label=wizard_model.hosted_vm_badge_label, xalign=0.0)
+    host_badge.add_css_class("dim-label")
+    host_inner.append(host_badge)
+    host_hint = Gtk.Label(
+        label="Run the same encrypted, phone-gated appliance as a managed VM "
+        "inside this app. Same recipe, same unlock — your phone still holds "
+        "the keys.",
+        xalign=0.0,
+    )
+    host_hint.set_wrap(True)
+    host_hint.add_css_class("dim-label")
+    host_inner.append(host_hint)
+    host_reason = Gtk.Label(xalign=0.0)
+    host_reason.set_wrap(True)
+    host_reason.add_css_class("warning")
+    host_reason.set_visible(False)
+    host_inner.append(host_reason)
+    host_card.set_child(host_inner)
+    host_card.connect(
+        "clicked", lambda _b: wizard_model.set_destination(ServerDestination.HOST_HERE)
+    )
+    chooser_box.append(host_card)
+    main_stack.add_named(chooser_box, "chooser")
+
+    # ---- Host here (create the VM) ----
+    hosthere_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
+        getattr(hosthere_box, setter)(24)
+    hh_back = Gtk.Button(label="‹ Choose destination")
+    hh_back.set_halign(Gtk.Align.START)
+    hh_back.add_css_class("flat")
+    hh_back.connect("clicked", lambda _b: wizard_model.set_destination(None))
+    hosthere_box.append(hh_back)
+    hh_domain = Gtk.Label(xalign=0.0)
+    hh_domain.add_css_class("title-3")
+    hosthere_box.append(hh_domain)
+    hh_spec = Gtk.Label(xalign=0.0)
+    hh_spec.set_wrap(True)
+    hh_spec.add_css_class("dim-label")
+    hosthere_box.append(hh_spec)
+    hh_note = Gtk.Label(
+        label="The VM installs unattended from the same image a USB burn uses, "
+        "then boots encrypted and waits for your phone to unlock it. This app "
+        "never sees the disk key.",
+        xalign=0.0,
+    )
+    hh_note.set_wrap(True)
+    hh_note.add_css_class("dim-label")
+    hosthere_box.append(hh_note)
+    hh_accel_warning = Gtk.Label(xalign=0.0)
+    hh_accel_warning.set_wrap(True)
+    hh_accel_warning.add_css_class("warning")
+    hh_accel_warning.set_visible(False)
+    hosthere_box.append(hh_accel_warning)
+    hh_create = Gtk.Button(label="Create server on this PC")
+    hh_create.add_css_class("suggested-action")
+    hh_create.add_css_class("pill")
+    hh_create.set_halign(Gtk.Align.CENTER)
+    hh_create.connect("clicked", lambda _b: wizard_model.run_host_here())
+    hosthere_box.append(hh_create)
+    hh_caption = Gtk.Label(label="Encrypted disk · unlocked by your phone")
+    hh_caption.add_css_class("dim-label")
+    hosthere_box.append(hh_caption)
+    hh_progress = Gtk.ProgressBar()
+    hh_progress.set_show_text(True)
+    hh_progress.set_visible(False)
+    hosthere_box.append(hh_progress)
+    hh_url = Gtk.Label(xalign=0.0)
+    hh_url.set_wrap(True)
+    hh_url.add_css_class("dim-label")
+    hh_url.add_css_class("monospace")
+    hh_url.set_visible(False)
+    hosthere_box.append(hh_url)
+    main_stack.add_named(hosthere_box, "hosthere")
+
+    # ---- Pairing cover ----
+    pairing_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+    pairing_box.set_valign(Gtk.Align.CENTER)
+    pairing_box.set_halign(Gtk.Align.CENTER)
+    pairing_title = Gtk.Label(label="Pair with your phone")
+    pairing_title.add_css_class("title-2")
+    pairing_box.append(pairing_title)
+    pairing_status = Gtk.Label()
+    pairing_status.set_wrap(True)
+    pairing_status.add_css_class("dim-label")
+    pairing_box.append(pairing_status)
+    pairing_qr = Gtk.Label()
+    pairing_qr.add_css_class("monospace")
+    pairing_qr.set_selectable(False)
+    pairing_box.append(pairing_qr)
+    pairing_code = Gtk.Label()
+    pairing_code.add_css_class("monospace")
+    pairing_code.set_selectable(True)
+    pairing_box.append(pairing_code)
+    pairing_sas_caption = Gtk.Label(
+        label="Security code — confirm it matches your phone"
+    )
+    pairing_sas_caption.add_css_class("dim-label")
+    pairing_sas_caption.set_visible(False)
+    pairing_box.append(pairing_sas_caption)
+    pairing_sas = Gtk.Label()
+    pairing_sas.add_css_class("title-1")
+    pairing_sas.set_visible(False)
+    pairing_box.append(pairing_sas)
+    pairing_cancel = Gtk.Button(label="Cancel")
+    pairing_cancel.set_halign(Gtk.Align.CENTER)
+    pairing_cancel.connect("clicked", lambda _b: wizard_model.cancel_pairing())
+    pairing_box.append(pairing_cancel)
+    main_stack.add_named(pairing_box, "pairing")
+
+    # ---- Hosted-server detail ----
+    detail_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
+        getattr(detail_box, setter)(24)
+    detail_title = Gtk.Label(xalign=0.0)
+    detail_title.add_css_class("title-2")
+    detail_box.append(detail_title)
+    detail_fqdn = Gtk.Label(xalign=0.0)
+    detail_fqdn.add_css_class("monospace")
+    detail_fqdn.add_css_class("dim-label")
+    detail_fqdn.set_selectable(True)
+    detail_box.append(detail_fqdn)
+    detail_badge = Gtk.Label(xalign=0.0)
+    detail_badge.add_css_class("dim-label")
+    detail_box.append(detail_badge)
+    status_card = Gtk.Frame()
+    status_card.add_css_class("card")
+    status_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
+        getattr(status_inner, setter)(14)
+    detail_state = Gtk.Label(xalign=0.0)
+    detail_state.add_css_class("heading")
+    status_inner.append(detail_state)
+    detail_subtitle = Gtk.Label(xalign=0.0)
+    detail_subtitle.set_wrap(True)
+    detail_subtitle.add_css_class("dim-label")
+    status_inner.append(detail_subtitle)
+    status_card.set_child(status_inner)
+    detail_box.append(status_card)
+    detail_spec = Gtk.Label(xalign=0.0)
+    detail_spec.add_css_class("dim-label")
+    detail_box.append(detail_spec)
+    detail_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    detail_start = Gtk.Button(label="Start")
+    detail_start.add_css_class("suggested-action")
+    detail_actions.append(detail_start)
+    detail_stop = Gtk.Button(label="Stop")
+    detail_actions.append(detail_stop)
+    detail_retry = Gtk.Button(label="Retry install")
+    detail_retry.add_css_class("suggested-action")
+    detail_actions.append(detail_retry)
+    # SSH exists IFF the recipe carried the owner-signed debug grant. A
+    # production VM shows no debug affordance at all (the phone-signed grant is
+    # the gate; there is no host-side override).
+    detail_ssh = Gtk.Button(label="Open in SSH")
+    detail_actions.append(detail_ssh)
+    detail_box.append(detail_actions)
+    detail_delete = Gtk.Button(label="Delete this server")
+    detail_delete.add_css_class("destructive-action")
+    detail_delete.add_css_class("flat")
+    detail_delete.set_halign(Gtk.Align.END)
+    detail_delete.set_margin_top(24)
+    detail_box.append(detail_delete)
+    main_stack.add_named(detail_box, "detail")
+
+    def _selected_name() -> Optional[str]:
+        return wizard_model.state.selected_server_name
+
+    def _confirm_delete(name: str) -> None:
+        server = wizard_model.vm.server(name)
+        fqdn = server.fqdn if server else name
+        dialog = Adw.MessageDialog(
+            transient_for=window,
+            heading="Delete this server?",
+            body=f"Delete {fqdn}?\n\nThe VM and its encrypted disk image are "
+            "removed from this PC. The server's identity and any backups live "
+            "with your phone/account, not here.",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+
+        def _on_response(_d, response):
+            if response == "delete":
+                wizard_model.delete_server(name)
+
+        dialog.connect("response", _on_response)
+        dialog.present()
+
+    detail_start.connect(
+        "clicked", lambda _b: wizard_model.start_server(_selected_name()) if _selected_name() else None
+    )
+    detail_stop.connect(
+        "clicked", lambda _b: wizard_model.stop_server(_selected_name()) if _selected_name() else None
+    )
+    detail_retry.connect(
+        "clicked", lambda _b: wizard_model.retry_install(_selected_name()) if _selected_name() else None
+    )
+    detail_ssh.connect(
+        "clicked", lambda _b: wizard_model.open_ssh(_selected_name()) if _selected_name() else None
+    )
+    detail_delete.connect(
+        "clicked", lambda _b: _confirm_delete(_selected_name()) if _selected_name() else None
+    )
+
+    # ---- Sidebar: servers hosted in this app ----
+    content_row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+    sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    sidebar.set_size_request(250, -1)
+    content_row.append(sidebar)
+    sidebar_title = Gtk.Label(label="Servers on this PC", xalign=0.0)
+    sidebar_title.add_css_class("heading")
+    for setter in ("set_margin_top", "set_margin_start", "set_margin_end"):
+        getattr(sidebar_title, setter)(12)
+    sidebar.append(sidebar_title)
+    server_list = Gtk.ListBox()
+    server_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+    server_list.set_vexpand(True)
+    server_list.add_css_class("navigation-sidebar")
+
+    def _on_server_row_selected(_lb, row):
+        if row is None:
+            return
+        name = getattr(row, "server_name", None)
+        if name and name != wizard_model.state.selected_server_name:
+            wizard_model.select_server(name)
+
+    server_list.connect("row-selected", _on_server_row_selected)
+    sidebar.append(server_list)
+    no_servers = Gtk.Label(
+        label='None yet. Verify a recipe and choose "Host on this PC".',
+        xalign=0.0,
+    )
+    no_servers.set_wrap(True)
+    no_servers.add_css_class("dim-label")
+    for setter in ("set_margin_start", "set_margin_end"):
+        getattr(no_servers, setter)(12)
+    sidebar.append(no_servers)
+    sidebar.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+    add_server_btn = Gtk.Button(label="＋ Add a server")
+    add_server_btn.add_css_class("flat")
+    add_server_btn.set_halign(Gtk.Align.START)
+    for setter in ("set_margin_start", "set_margin_end", "set_margin_bottom"):
+        getattr(add_server_btn, setter)(8)
+    add_server_btn.connect("clicked", lambda _b: wizard_model.reset_to_new_server())
+    sidebar.append(add_server_btn)
+
+    def _rebuild_server_list() -> None:
+        while True:
+            row = server_list.get_first_child()
+            if row is None:
+                break
+            server_list.remove(row)
+        selected = wizard_model.state.selected_server_name
+        for server in wizard_model.vm.servers:
+            row = Gtk.ListBoxRow()
+            row.server_name = server.name  # type: ignore[attr-defined]
+            grid = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            for setter in ("set_margin_top", "set_margin_bottom", "set_margin_start", "set_margin_end"):
+                getattr(grid, setter)(6)
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            col.set_hexpand(True)
+            name_label = Gtk.Label(label=server.display_name, xalign=0.0)
+            name_label.add_css_class("heading")
+            name_label.set_ellipsize(3)  # Pango.EllipsizeMode.END
+            col.append(name_label)
+            badge_label = Gtk.Label(label=server.badge_label, xalign=0.0)
+            badge_label.add_css_class("dim-label")
+            col.append(badge_label)
+            state_label = Gtk.Label(label=f"● {server.state_label}", xalign=0.0)
+            state_label.add_css_class("dim-label")
+            col.append(state_label)
+            grid.append(col)
+
+            # Row actions: the ⋯ button, right-click, and double-click all
+            # reach the same dispatch; SSH appears only for a debug-enabled VM.
+            menu_btn = Gtk.MenuButton(label="⋯")
+            menu_btn.add_css_class("flat")
+            menu_btn.set_valign(Gtk.Align.START)
+            popover = Gtk.Popover()
+            actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+
+            def _action(label: str, name: str, fn, destructive: bool = False):
+                b = Gtk.Button(label=label)
+                b.add_css_class("flat")
+                if destructive:
+                    b.add_css_class("destructive-action")
+
+                def _on(_btn, n=name, f=fn):
+                    popover.popdown()
+                    wizard_model.select_server(n)
+                    f(n)
+
+                b.connect("clicked", _on)
+                actions.append(b)
+
+            if server.console_enabled:
+                _action("Open in SSH", server.name, wizard_model.open_ssh)
+            if server.can_start:
+                _action("Start", server.name, wizard_model.start_server)
+            if server.can_stop:
+                _action("Stop", server.name, wizard_model.stop_server)
+            if server.can_retry_install:
+                _action("Retry install", server.name, wizard_model.retry_install)
+            _action("Delete…", server.name, _confirm_delete, destructive=True)
+            popover.set_child(actions)
+            menu_btn.set_popover(popover)
+            grid.append(menu_btn)
+
+            right_click = Gtk.GestureClick()
+            right_click.set_button(3)
+            right_click.connect(
+                "pressed", lambda _g, _n, _x, _y, mb=menu_btn: mb.popup()
+            )
+            grid.add_controller(right_click)
+            double_click = Gtk.GestureClick()
+            double_click.set_button(1)
+
+            def _on_double(_g, n_press, _x, _y, s=server):
+                # Double-click is the shortcut to the primary debug action —
+                # SSH into a running debug VM. A non-debug VM just stays
+                # selected (no SSH surface).
+                if n_press == 2 and s.console_enabled:
+                    wizard_model.select_server(s.name)
+                    wizard_model.open_ssh(s.name)
+
+            double_click.connect("pressed", _on_double)
+            grid.add_controller(double_click)
+
+            row.set_child(grid)
+            server_list.append(row)
+            if selected == server.name:
+                server_list.select_row(row)
+
     # ---- Log pane ----
     log_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
     log_outer.set_margin_start(24)
@@ -824,6 +1627,70 @@ def build_window(application, model: Optional[WizardModel] = None):
     # ---- Sync state -> view ----
     def _render() -> None:
         s = wizard_model.state
+        # main pane (priority mirrors Wizard.cs)
+        if wizard_model.show_server_detail:
+            main_stack.set_visible_child_name("detail")
+        elif wizard_model.show_pairing_cover:
+            main_stack.set_visible_child_name("pairing")
+        elif wizard_model.show_destination_chooser:
+            main_stack.set_visible_child_name("chooser")
+        elif wizard_model.show_host_here_pane:
+            main_stack.set_visible_child_name("hosthere")
+        else:
+            main_stack.set_visible_child_name("wizard")
+        # destination chooser
+        chooser_domain.set_text(s.verified.server_domain if s.verified else "")
+        reason = wizard_model.host_here_disabled_reason
+        host_card.set_sensitive(reason is None)
+        host_reason.set_text(reason or "")
+        host_reason.set_visible(reason is not None)
+        # host-here pane
+        hh_domain.set_text(s.verified.server_domain if s.verified else "")
+        hh_spec.set_text(wizard_model.host_here_spec_summary)
+        accel_warning = wizard_model.host_here_accel_warning
+        hh_accel_warning.set_text(accel_warning or "")
+        hh_accel_warning.set_visible(accel_warning is not None)
+        hh_create.set_visible(not s.is_running)
+        hh_caption.set_visible(not s.is_running)
+        if s.is_running and s.phase in ("download", "remaster"):
+            hh_progress.set_visible(True)
+            if s.progress is None:
+                hh_progress.pulse()
+            else:
+                hh_progress.set_fraction(max(0.0, min(1.0, s.progress)))
+            hh_progress.set_text(s.phase_label or "")
+        else:
+            hh_progress.set_visible(False)
+        if s.phase == "download" and s.download_url:
+            hh_url.set_text(s.download_url)
+            hh_url.set_visible(True)
+        else:
+            hh_url.set_visible(False)
+        # pairing cover
+        pairing_status.set_text(s.pair_status or "")
+        pairing_qr.set_text(s.pair_qr or "")
+        pairing_qr.set_visible(bool(s.pair_qr))
+        pairing_code.set_text(f"Code: {s.pair_code}" if s.pair_code else "")
+        pairing_code.set_visible(bool(s.pair_code))
+        pairing_sas_caption.set_visible(bool(s.pair_sas))
+        pairing_sas.set_text(s.pair_sas or "")
+        pairing_sas.set_visible(bool(s.pair_sas))
+        # server detail
+        server = wizard_model.selected_server
+        if server is not None:
+            detail_title.set_text(server.display_name)
+            detail_fqdn.set_text(server.fqdn)
+            detail_badge.set_text(server.badge_label)
+            detail_state.set_text(server.state_label)
+            detail_subtitle.set_text(server.status_subtitle)
+            detail_spec.set_text(server.spec_summary)
+            detail_start.set_visible(server.can_start)
+            detail_stop.set_visible(server.can_stop)
+            detail_retry.set_visible(server.can_retry_install)
+            detail_ssh.set_visible(server.console_enabled)
+        # sidebar
+        _rebuild_server_list()
+        no_servers.set_visible(not wizard_model.has_hosted_servers)
         # recipe status
         if s.recipe_error:
             recipe_status.set_text(s.recipe_error)
@@ -870,6 +1737,10 @@ def build_window(application, model: Optional[WizardModel] = None):
             and not s.is_running
         )
         verify_btn.set_sensitive(s.recipe_path is not None and not s.is_running)
+        pair_btn.set_sensitive(not s.is_running and not s.is_pairing)
+        pair_debug_check.set_sensitive(not s.is_pairing)
+        if pair_debug_check.get_active() != s.pair_debug:
+            pair_debug_check.set_active(s.pair_debug)
         cancel_btn.set_sensitive(s.is_running)
         if s.is_running:
             log_spinner.start()
