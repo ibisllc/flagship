@@ -75,7 +75,35 @@ export interface PairOptions {
   keypair?: { secretKey: Bytes; publicKey: Bytes };
   /** Suppress the QR / human-facing prints (tests). */
   quiet?: boolean;
+  /**
+   * Structured milestone callback for GUI hosts (the Windows/Mac desktop apps
+   * drive `flagship-burn pair` as a subprocess and render a native cover). When
+   * set, each pairing milestone is reported as a typed event; the human-facing
+   * `log()` prints are unaffected (a caller can also pass `quiet` to suppress
+   * them). Additive — a caller that doesn't set this sees byte-identical
+   * behavior to before.
+   */
+  emitEvents?: (ev: PairEvent) => void;
 }
+
+/** Machine-readable pairing milestones (see PairOptions.emitEvents). */
+export type PairEvent =
+  /** Cover is up: show the QR + code and wait for the phone. `qrTerminal` is
+   *  the scannable unicode-block QR; `payload` is the raw QR string (for a
+   *  host that renders its own image). */
+  | { event: "ready"; sessionId: string; humanCode: string; payload: string; qrTerminal: string; debugRequested: boolean }
+  /** The phone connected; compare `sas` against the phone before approving. */
+  | { event: "phone-connected"; sas: string }
+  /** SAS confirmed on the phone; the recipe is arriving. */
+  | { event: "paired" }
+  /** The recipe was received + verified. */
+  | { event: "delivered"; serverDomain: string }
+  /** Debug-access consent resolved (only when `--debug`). */
+  | { event: "debug-result"; granted: boolean }
+  /** Terminal success: the recipe is written to `recipePath`. */
+  | { event: "done"; recipePath: string; serverDomain: string; debugGranted: boolean }
+  /** Terminal failure. */
+  | { event: "error"; message: string };
 
 const DEFAULT_DEBUG_WARNING =
   "Turning on debug lets someone log into this server's console. Only approve this for a box you're actively debugging.";
@@ -109,25 +137,35 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
   const makeTransport = opts.transport ?? realTransport;
   const log = (s: string) => { if (!opts.quiet) process.stdout.write(s + "\n"); };
 
+  const emit = (ev: PairEvent) => { try { opts.emitEvents?.(ev); } catch { /* never let a host callback break pairing */ } };
+
   const kp = opts.keypair ?? newBurnerKeypair();
   const code = opts.codeBytes ?? newCodeBytes();
   const sid = sessionId(code);
   const human = humanCode(code);
   const payload = qrPayload(human, kp.publicKey);
 
-  if (!opts.quiet) {
-    const qr = await QRCode.toString(payload, { type: "terminal", small: true });
-    log("");
-    log(qr);
-    log(`  Pair from your phone — open Flagship, choose "Pair with the burner app".`);
-    log(`  Scan the QR above, or enter this code:   ${formatHumanCode(human)}`);
-    log(`  (Don't have it? Get the Flagship app at https://${host})`);
-    if (wantDebug) {
-      log(`  Advanced: debug access requested — you'll approve it on your phone after the recipe arrives.`);
+  // Render the QR + announce readiness AFTER the transport handlers are
+  // registered synchronously below (QRCode.toString is async; awaiting it here
+  // would yield control before the socket callbacks are wired, which the test
+  // harness — and a fast real relay — would race). Fire-and-forget so setup
+  // stays synchronous.
+  const announceReady = async () => {
+    const qrTerminal = await QRCode.toString(payload, { type: "terminal", small: true });
+    emit({ event: "ready", sessionId: sid, humanCode: human, payload, qrTerminal, debugRequested: wantDebug });
+    if (!opts.quiet) {
+      log("");
+      log(qrTerminal);
+      log(`  Pair from your phone — open Flagship, choose "Pair with the burner app".`);
+      log(`  Scan the QR above, or enter this code:   ${formatHumanCode(human)}`);
+      log(`  (Don't have it? Get the Flagship app at https://${host})`);
+      if (wantDebug) {
+        log(`  Advanced: debug access requested — you'll approve it on your phone after the recipe arrives.`);
+      }
+      log("");
+      log("  Waiting for your phone…");
     }
-    log("");
-    log("  Waiting for your phone…");
-  }
+  };
 
   const url = `${scheme}://${host}/burner-pipe/${sid}?role=burner`;
   const transport = makeTransport(url);
@@ -149,7 +187,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
     sendUp({ kind: "burner-hello", burnerPk: base64UrlEncode(kp.publicKey) });
   };
 
-  return await new Promise<PairResult>((resolve, reject) => {
+  const resultPromise = new Promise<PairResult>((resolve, reject) => {
     const cleanup = () => {
       if (pingTimer) clearInterval(pingTimer);
       if (consentTimer) clearTimeout(consentTimer);
@@ -159,6 +197,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
       if (finalized) return;
       finalized = true;
       cleanup();
+      emit({ event: "error", message: msg });
       reject(new Error(msg));
     };
 
@@ -181,6 +220,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
           toWrite = JSON.stringify(obj);
         }
         await writeFile(outPath, toWrite, { mode: 0o600 });
+        emit({ event: "done", recipePath: outPath, serverDomain: recipeDomain, debugGranted: !!debugCarrier });
         log("");
         log(`  ✅ Recipe received + verified for:   ${recipeDomain}`);
         if (wantDebug) {
@@ -227,6 +267,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
       }
       if (!carrierObj || !carrierStr) {
         log("  Debug access was declined on the phone — burning a production image.");
+        emit({ event: "debug-result", granted: false });
         void finalize();
         return;
       }
@@ -246,6 +287,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
         log("  ⚠ Debug grant did not verify locally — embedding it anyway; the box is the authority.");
         debugCarrier = carrierStr;
       }
+      emit({ event: "debug-result", granted: !!debugCarrier });
       void finalize();
     };
 
@@ -305,12 +347,14 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
           if (!phonePk) return;
           const mat = deriveSessionMaterial(kp.secretKey, phonePk);
           aeadKey = mat.aeadKey;
+          emit({ event: "phone-connected", sas: formatSas(mat.sasCode) });
           log("");
           log(`  📱 Phone connected. Security code:   ${formatSas(mat.sasCode)}`);
           log(`  Confirm this matches the code on your phone, then approve there.`);
           return;
         }
         case "confirm-pairing":
+          emit({ event: "paired" });
           log("  ✓ Paired. Receiving the recipe…");
           return;
         case "deliver": {
@@ -326,6 +370,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
             recipeText = text;
             recipeDomain = loaded.blob.serverDomain;
             ownerIrkPub = loaded.blob.authCode.userPubKey;
+            emit({ event: "delivered", serverDomain: recipeDomain });
             if (wantDebug) {
               requestDebugConsent(); // keep the session open for the consent round-trip
             } else {
@@ -346,6 +391,11 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
       }
     };
   });
+
+  // Handlers are now registered synchronously; the async QR render + `ready`
+  // announcement can't race the socket callbacks.
+  void announceReady();
+  return await resultPromise;
 }
 
 function base16(hex: string): Uint8Array | null {
