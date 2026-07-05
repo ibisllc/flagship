@@ -84,6 +84,12 @@ final class WizardModel: ObservableObject {
     /// detail instead of the wizard stage.
     @Published var selectedHostedServer: String? = nil
 
+    /// One-shot request from a sidebar row action ("Open console" / double-click
+    /// on a debug VM) to auto-open the detail pane's serial console for the named
+    /// server. The detail view consumes it and clears it. Mirrors the Windows
+    /// ServerRow_OpenConsole path (select the row, then flip the console toggle).
+    @Published var consoleAutoOpenFor: String? = nil
+
     /// Hosted-VM orchestrator (inventory + lifecycles + VZ hosts).
     let vmManager = VMManager()
     private var cancellables = Set<AnyCancellable>()
