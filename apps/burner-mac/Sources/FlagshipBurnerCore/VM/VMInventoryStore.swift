@@ -133,14 +133,20 @@ public final class VMInventoryStore {
     }
 
     /// Bundle names are server FQDNs — plain hostnames. Reject anything that
-    /// could escape the root or collide with the filesystem.
-    static func validate(name: String) throws {
+    /// could escape the root or collide with the filesystem. Mirrors
+    /// `apps/burner-windows` `VMInventoryStore.IsValidName`; both are pinned by
+    /// the shared golden vectors (apps/desktop-shared/golden/vm-core-vectors.json)
+    /// so the two cores cannot drift. The trailing-dot rejection is the one
+    /// deliberate tightening the vectors call out (no real FQDN ends in a dot).
+    public static func isValidName(_ name: String) -> Bool {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
-        guard !name.isEmpty, name != ".", name != "..",
-              !name.hasPrefix("."),
-              name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
-            throw VMStoreError.invalidName(name)
-        }
+        return !name.isEmpty && name != "." && name != ".."
+            && !name.hasPrefix(".") && !name.hasSuffix(".")
+            && name.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    static func validate(name: String) throws {
+        guard isValidName(name) else { throw VMStoreError.invalidName(name) }
     }
 
     static func encoder() -> JSONEncoder {

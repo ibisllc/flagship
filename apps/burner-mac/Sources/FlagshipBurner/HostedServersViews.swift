@@ -8,6 +8,9 @@ struct HostedServersSidebar: View {
     @ObservedObject var model: WizardModel
     @ObservedObject var vmManager: VMManager
 
+    /// Set by a row's Delete action; drives the shared confirmation dialog.
+    @State private var confirmDeleteServer: VMManager.HostedServer?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Servers on this Mac")
@@ -22,6 +25,23 @@ struct HostedServersSidebar: View {
                     }
                 }
                 .padding(.horizontal, FB.Spacing.s2)
+            }
+            .confirmationDialog(
+                confirmDeleteServer.map { "Delete \($0.record.config.serverDomain)?" } ?? "",
+                isPresented: Binding(
+                    get: { confirmDeleteServer != nil },
+                    set: { if !$0 { confirmDeleteServer = nil } }),
+                presenting: confirmDeleteServer) { server in
+                Button("Delete VM and its disk", role: .destructive) {
+                    Task {
+                        await vmManager.deleteServer(named: server.id)
+                        if model.selectedHostedServer == server.id {
+                            model.selectedHostedServer = nil
+                        }
+                    }
+                }
+            } message: { _ in
+                Text("The VM and its encrypted disk image are removed from this Mac. The server's identity and any backups live with your phone/account, not here.")
             }
             Spacer(minLength: 0)
             Divider()
@@ -39,11 +59,24 @@ struct HostedServersSidebar: View {
         .background(FB.Colors.surface)
     }
 
+    /// One sidebar VM row. Mirrors the Windows sidebar's row actions (⋯ button /
+    /// right-click / double-click → Start / Stop / Delete / Open console): the
+    /// owner acts on a hosted VM right in the list, no round-trip through the
+    /// detail pane. Console is debug-VM-only (gated on `serialConsoleEnabled`,
+    /// hard-enforced at the hypervisor in VZHost — a production VM has no console
+    /// device at all).
+    ///
+    /// NOTE — no "Open SSH" on Mac. The Windows/Linux QEMU path forwards a
+    /// loopback host port (hostfwd) so it can spawn a terminal at
+    /// `ssh -p <port> debug@127.0.0.1`. macOS Virtualization.framework uses
+    /// `VZNATNetworkDeviceAttachment` (NAT with no host port-forward and no
+    /// host-reachable guest IP), so there is nothing to SSH to. Mac is
+    /// console-first: "Open console" attaches to the guest's virtio serial port
+    /// (VZHost wires it when the recipe carried the debug grant). Faking an SSH
+    /// affordance would be worse than omitting it.
     private func serverRow(_ server: VMManager.HostedServer) -> some View {
         let isSelected = model.selectedHostedServer == server.id
-        return Button {
-            model.selectedHostedServer = server.id
-        } label: {
+        return HStack(alignment: .top, spacing: FB.Spacing.s1) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(server.record.config.serverName + "." + server.record.config.username)
                     .font(FB.Font.rowTitle())
@@ -60,19 +93,83 @@ struct HostedServersSidebar: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(FB.Spacing.s2)
-            .background(
-                RoundedRectangle(cornerRadius: FB.Radius.sm)
-                    .fill(isSelected ? FB.Colors.primary.opacity(0.10) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: FB.Radius.sm)
-                    .strokeBorder(isSelected ? FB.Colors.primary : FB.Colors.border, lineWidth: 1)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: FB.Radius.sm))
+            rowMenu(server)
         }
-        .buttonStyle(.plain)
+        .padding(FB.Spacing.s2)
+        .background(
+            RoundedRectangle(cornerRadius: FB.Radius.sm)
+                .fill(isSelected ? FB.Colors.primary.opacity(0.10) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FB.Radius.sm)
+                .strokeBorder(isSelected ? FB.Colors.primary : FB.Colors.border, lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: FB.Radius.sm))
+        // Double-click is the shortcut to the primary debug action — open the
+        // console on a debug VM (parity with Windows double-click → Open SSH,
+        // the equivalent primary debug affordance on that platform). Single
+        // click selects. Higher count first so it wins the gesture.
+        .onTapGesture(count: 2) { handleDoubleClick(server) }
+        .onTapGesture { model.selectedHostedServer = server.id }
+        .contextMenu { rowActions(server) }
         .pointerCursor()
+    }
+
+    /// The ⋯ actions menu on the trailing edge of a row.
+    private func rowMenu(_ server: VMManager.HostedServer) -> some View {
+        Menu {
+            rowActions(server)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .pointerCursor()
+    }
+
+    /// The shared action set — used by BOTH the right-click context menu and the
+    /// ⋯ button. Each action first selects the row (so the detail pane follows),
+    /// then reuses the same VMManager calls the detail-pane buttons make.
+    @ViewBuilder
+    private func rowActions(_ server: VMManager.HostedServer) -> some View {
+        let name = server.id
+        switch server.record.state {
+        case .installed, .stopped:
+            Button("Start") { select(name); Task { await vmManager.powerOn(named: name) } }
+        case .running, .awaitingPhoneUnlock:
+            Button("Stop") { select(name); Task { await vmManager.powerOff(named: name) } }
+        case .failed(let f) where f.phase == .install:
+            if FileManager.default.fileExists(atPath: vmManager.installerISOPath(for: name).path) {
+                Button("Retry install") { select(name); Task { await vmManager.beginInstall(named: name) } }
+            }
+        case .failed:
+            Button("Start") { select(name); Task { await vmManager.powerOn(named: name) } }
+        case .created, .installing:
+            EmptyView()
+        }
+        if server.record.config.serialConsoleEnabled {
+            Button("Open console") { openConsole(server) }
+        }
+        Divider()
+        Button("Delete…", role: .destructive) { select(name); confirmDeleteServer = server }
+    }
+
+    private func select(_ name: String) { model.selectedHostedServer = name }
+
+    /// Select the server and request the detail pane open its serial console.
+    private func openConsole(_ server: VMManager.HostedServer) {
+        select(server.id)
+        model.consoleAutoOpenFor = server.id
+    }
+
+    private func handleDoubleClick(_ server: VMManager.HostedServer) {
+        select(server.id)
+        if server.record.config.serialConsoleEnabled { openConsole(server) }
     }
 
     private func stateDot(_ state: VMState) -> some View {
@@ -117,11 +214,27 @@ struct VMDetailView: View {
                 dangerRow(server)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // A sidebar "Open console" / double-click request auto-opens the
+            // serial console here (parity with the Windows ServerRow_OpenConsole
+            // path). Consume + clear the one-shot request. Only meaningful for a
+            // debug VM — the console section isn't even built otherwise.
+            .onChange(of: model.consoleAutoOpenFor) { _, requested in
+                consumeConsoleRequest(requested, server: server)
+            }
+            .onAppear { consumeConsoleRequest(model.consoleAutoOpenFor, server: server) }
         } else {
             Text("This server was removed.")
                 .font(FB.Font.caption())
                 .foregroundStyle(FB.Colors.textMuted)
         }
+    }
+
+    /// Open the serial console if the request names THIS server and the recipe
+    /// carried a debug grant. Clears the one-shot request either way.
+    private func consumeConsoleRequest(_ requested: String?, server: VMManager.HostedServer) {
+        guard requested == name else { return }
+        if server.record.config.serialConsoleEnabled { showConsole = true }
+        model.consoleAutoOpenFor = nil
     }
 
     private func header(_ server: VMManager.HostedServer) -> some View {
