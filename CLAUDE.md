@@ -126,7 +126,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > **This section is the single source of truth.** Update it as work lands —
 > don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
 > trackers are frozen in `docs/archive/`. Keep entries terse: what changed +
-> what remains, not test counts or commit hashes. Last updated **2026-07-03**.
+> what remains, not test counts or commit hashes. Last updated **2026-07-05**.
 
 ### Pending owner validation (the standing caveat — applies to nearly every entry below)
 
@@ -148,6 +148,26 @@ harness can't do:
   ISO + a physical OTG drive (`apps/mobile/android/OTG-BURNER-NOTES.md` §5).
 
 ### Recent work (condensed log, newest first)
+
+**2026-07-05 — Linux desktop parity MERGED: the desktop trio is complete.**
+`apps/burner-linux` (the last thin platform) gains the full VM-appliance host
+layer at Windows/Mac parity: a pure Python VM core pinned to the shared golden
+vectors (`apps/desktop-shared/golden/vm-core-vectors.json` — Python/C#/Swift
+cores provably identical), a QEMU/KVM backend (`-accel kvm -cpu host`, AHCI
+main disk ⇒ metal-identical `/dev/sda`, USB-attached installer ISO, OVMF, QMP;
+the WHPX-only VMX/SGX masking deliberately NOT ported; TCG degrade with an
+honest warning), the "Servers on this PC" sidebar + Host-on-this-PC chooser +
+detail pane, phone pairing over the shared `pair --emit-events` CLI, and a
+debug-grant-gated **Open in SSH** (`ssh -p <hostfwd-port> debug@127.0.0.1`,
+loopback hostfwd — the affordance Mac's VZ NAT can't offer; production VMs get
+no console AND no forwarded port). All GTK code stays behind `build_window`,
+so the whole layer unit-tests headless. Owner validation on a real Linux box:
+GTK render, live KVM boot→sealed→phone-unlock→padlock, real Open-in-SSH, live
+pairing, TCG degrade (list in `apps/burner-linux/README.md`). Earlier the same
+day (see agent-memory handoff): v1-hardening + gym-integration + desktop
+Mac/Windows waves merged; installer disk-selection trap + first-boot-units
+bugs fixed on `main`; migrations 0080/0081 applied to prod. **Migration 0082
+is pending-apply before the next `.com` deploy.**
 
 **2026-07-03 — Slice D re-escrow seam CLOSED (device-admin tier is now build-complete).**
 The last build item of the admin tier: after an admin-root rotation the NEW root is
