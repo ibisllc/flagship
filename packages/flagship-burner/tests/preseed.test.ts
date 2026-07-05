@@ -244,7 +244,24 @@ describe("buildDebianPreseed — storage (LVM-on-LUKS; ESP + bios_grub + /boot)"
       const c = cfg({ encryptRoot });
       // The wipe runs from partman/early_command after DISK is resolved.
       expect(c, `encryptRoot=${encryptRoot}`).toContain("d-i partman/early_command string");
-      expect(c).toContain('DISK=$(list-devices disk | head -n1); debconf-set partman-auto/disk "$DISK"');
+      // DISK is resolved to the LARGEST NON-REMOVABLE block device — never the
+      // first-enumerated / removable installer stick (the ~755MB "too small"
+      // partition trap on any box with a USB installer + an internal disk, incl.
+      // the Mac VZHost's sda(USB)/vda(main) ordering). The scanning loop is the
+      // PRIMARY selector; first-enumerated survives ONLY as the degenerate
+      // fallback, gated behind `[ -n "$DISK" ] ||`.
+      expect(c).toContain("for _d in $(list-devices disk); do");
+      expect(c).toContain('[ "$(cat /sys/block/$_n/removable 2>/dev/null || echo 0)" = 1 ] && continue');
+      expect(c).toContain("_s=$(cat /sys/block/$_n/size 2>/dev/null || echo 0)");
+      expect(c).toContain('[ "$_s" -gt "$_best" ] && { _best=$_s; DISK=$_d; }');
+      // The scanning loop must precede debconf-set; head -n1 appears ONLY as the
+      // guarded fallback (never as the primary, unguarded selector).
+      expect(c.indexOf("for _d in $(list-devices disk)")).toBeLessThan(
+        c.indexOf('debconf-set partman-auto/disk "$DISK"'),
+      );
+      expect(c).toContain('[ -n "$DISK" ] || DISK=$(list-devices disk | head -n1)');
+      expect(c).not.toMatch(/string \\\n\s*DISK=\$\(list-devices disk \| head -n1\)/);
+      expect(c).toContain('debconf-set partman-auto/disk "$DISK"');
       // dmsetup clears stale mappings; dd zeroes the front GPT; rereadpt re-reads.
       expect(c).toContain("dmsetup remove_all 2>/dev/null || true");
       expect(c).toContain('dd if=/dev/zero of="$DISK" bs=1M count=16 2>/dev/null || true');
