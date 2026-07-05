@@ -27,6 +27,7 @@ import {
   runWriteImageCommand,
   remasterIsoWithInstaller,
   detectIsoFamily,
+  debugSshKeyFromGrant,
   type IsoFamily,
 } from "./index.js";
 
@@ -135,6 +136,9 @@ async function cmdUserData(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    // A debug grant carrying a real SSH key (owner Face-ID-signed) bakes it at
+    // install time so a debug-friendly box is SSH-diagnosable pre-daemon.
+    debugSshAuthorizedKey: debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
@@ -191,6 +195,9 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    // A debug grant carrying a real SSH key (owner Face-ID-signed) bakes it at
+    // install time so a debug-friendly VM is SSH-diagnosable pre-daemon.
+    debugSshAuthorizedKey: debugSshKeyFromGrant(loaded.debugGrant),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),

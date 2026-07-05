@@ -90,6 +90,38 @@ function extractBootstrap(yaml: string): string {
   return Buffer.from(m[1]!, "base64").toString("utf8");
 }
 
+describe("debug SSH key threading — a debug grant with a real key bakes the SSH stub", () => {
+  const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI owner@laptop";
+
+  it("Ubuntu path bakes the debug SSH stub when debugSshAuthorizedKey is set", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const yaml = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const b = extractBootstrap(yaml);
+    // buildBootstrapScriptDebug — remote access only, NO provisioning/LUKS re-key.
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+    expect(b).toContain("openssh-server");
+    expect(b).not.toContain("[flagship-bootstrap] starting"); // not the provisioning bootstrap
+  });
+
+  it("Debian path bakes the same debug SSH stub", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const cfg = buildDebianPreseed({ blob, blobSignatureHex, debugSshAuthorizedKey: KEY });
+    const m = cfg.match(/echo '([A-Za-z0-9+/=]+)' \| base64 -d > \/target\/usr\/local\/sbin\/flagship-bootstrap\.sh/);
+    const b = Buffer.from(m![1]!, "base64").toString("utf8");
+    expect(b).toContain("Flagship DEBUG bootstrap");
+    expect(b).toContain(KEY);
+  });
+
+  it("no debugSshAuthorizedKey ⇒ the normal provisioning bootstrap (byte-identical)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const withUndef = buildAutoinstallUserData({ blob, blobSignatureHex, debugSshAuthorizedKey: undefined });
+    const without = buildAutoinstallUserData({ blob, blobSignatureHex });
+    expect(withUndef).toBe(without);
+    expect(extractBootstrap(without)).toContain("[flagship-bootstrap] starting");
+  });
+});
+
 describe("buildAutoinstallUserData", () => {
   it("embeds an auth-code with every field canonicalAuthCode needs", () => {
     const { blob, blobSignatureHex } = signedBlob();

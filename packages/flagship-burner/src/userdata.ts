@@ -232,6 +232,10 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    // Thread the debug SSH key so the Ubuntu path honors a debug grant too (the
+    // Debian preseed already passes it). Absent ⇒ undefined ⇒ the normal
+    // provisioning bootstrap, byte-identical to before.
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
