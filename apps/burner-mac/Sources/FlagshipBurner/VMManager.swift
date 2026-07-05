@@ -181,13 +181,17 @@ final class VMManager: ObservableObject {
 
     /// The guest stopped on its own. What it MEANS depends on the phase the
     /// pure lifecycle is in: during install, a clean self-stop is the
-    /// unattended installer completing (the preseed powers the guest off);
-    /// afterwards it's a shutdown (clean) or a crash (error).
+    /// unattended installer completing; afterwards it's a shutdown (clean) or
+    /// a crash (error).
     ///
-    /// TODO(desktop-vm): if a base image's finish-install REBOOTS instead of
-    /// powering off, this reads the reboot as install-success and the next
-    /// boot comes from disk anyway — verify against the real preseed during
-    /// the manual smoke boot.
+    /// The install→success read is guarded by ELAPSED TIME (see
+    /// `VMLifecycle.verdictForCleanInstallStop`): the shipping preseed powers
+    /// the guest off at the end of a multi-minute install, and a finish-install
+    /// that instead REBOOTS also surfaces here as a clean stop — both are
+    /// "installed" once a plausible amount of time has passed. But a guest that
+    /// never booted (e.g. a wrong-architecture base image, which VZ stops ~0.3s
+    /// after start with no error) must NOT be read as a successful install; it
+    /// is a fast-clean-stop failure.
     private func guestStopped(name: String, error: Error?) async {
         hosts[name] = nil
         switch currentState(name) {
@@ -195,11 +199,22 @@ final class VMManager: ObservableObject {
             if let error {
                 await apply(.installFailed((error as? LocalizedError)?.errorDescription ?? "\(error)"), to: name)
             } else {
-                log("VM \(name): install finished — booting from disk")
-                await apply(.installSucceeded, to: name)
-                // First boot from disk follows immediately; an encrypted guest
-                // then sits sealed in awaiting-phone-unlock.
-                await apply(.powerOn, to: name)
+                let startedAt = lifecycles[name]?.stateChangedAt ?? .distantPast
+                switch VMLifecycle.verdictForCleanInstallStop(installStartedAt: startedAt, now: Date()) {
+                case .installed:
+                    log("VM \(name): install finished — booting from disk")
+                    await apply(.installSucceeded, to: name)
+                    // First boot from disk follows immediately; an encrypted
+                    // guest then sits sealed in awaiting-phone-unlock.
+                    await apply(.powerOn, to: name)
+                case .failedTooFast(let elapsed):
+                    log("VM \(name): stopped after \(Int(elapsed))s, before the install could run")
+                    await apply(.installFailed(
+                        "The virtual machine stopped after \(Int(elapsed))s, before the install could run. "
+                        + "The base image may be the wrong architecture for this Mac "
+                        + "(Apple silicon can only run an arm64 image) or otherwise not bootable."),
+                        to: name)
+                }
             }
         case .awaitingPhoneUnlock, .running:
             if let error {

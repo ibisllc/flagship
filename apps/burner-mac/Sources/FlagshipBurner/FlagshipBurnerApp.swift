@@ -1,7 +1,25 @@
 import SwiftUI
 import AppKit
 
+/// Entry point. Normally launches the SwiftUI app, but a hidden
+/// `--vm-smoke` flag runs the headless Phase-0 VM boot harness (VMSmoke)
+/// instead — it needs to run from THIS signed, virtualization-entitled
+/// binary because a `swift run` binary can't start a VZVirtualMachine.
 @main
+enum AppMain {
+    static func main() {
+        let args = CommandLine.arguments
+        #if canImport(Virtualization)
+        if let idx = args.firstIndex(of: "--vm-smoke") {
+            MainActor.assumeIsolated {
+                VMSmoke.run(Array(args[(idx + 1)...]))
+            }
+        }
+        #endif
+        FlagshipBurnerApp.main()
+    }
+}
+
 struct FlagshipBurnerApp: App {
     var body: some Scene {
         WindowGroup("Flagship Assembler", id: "main") {
