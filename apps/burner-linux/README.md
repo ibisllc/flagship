@@ -2,7 +2,9 @@
 
 GTK4 + libadwaita wrapper around the `@flagship/burner` Node CLI
 (`packages/flagship-burner/`). UX matches `apps/burner-mac/` 1:1: one
-window, five-step wizard.
+window, five-step wizard — plus the desktop VM appliance: the same recipe can
+be **hosted on this PC** as a managed QEMU/KVM VM instead of burned to USB
+(parity with `apps/burner-windows` and `apps/burner-mac`).
 
 ## Two modes
 
@@ -45,6 +47,75 @@ written to the log pane.
    pane.
 5. **Done** — shows the resulting server-domain + when the recipe
    expires.
+
+## Host on this PC (VM appliance)
+
+After a recipe verifies, a **destination chooser** appears: *Burn to USB* —
+"Appliance (hardware)", the gold standard — or *Host on this PC* — "Appliance
+(hosted VM)". Hosting runs the SAME remastered installer ISO (the Node CLI's
+`prepare`) inside a managed QEMU/KVM VM: unattended install → LUKS → phone-home
+unlock → register, unmodified. This app never holds a key; while the guest sits
+sealed it just polls `https://<fqdn>/` — any HTTP response proves the unlock
+completed (TLS terminates on the box).
+
+Hosted servers live in the **"Servers on this PC" sidebar**. Per-row actions via
+the ⋯ button / right-click / double-click: Start, Stop, Retry install, Open in
+SSH (debug VMs only), Delete. Selecting a row opens its detail pane.
+
+- **Recipes can also arrive by phone pairing** — "Pair with your phone" drives
+  the shared `flagship-burn pair --emit-events` CLI and renders the QR / code /
+  SAS natively; the delivered recipe behaves exactly like a dropped-in file.
+- **Debug is consent-as-crypto.** SSH + the serial console exist IFF the recipe
+  carries the phone-signed `debugGrant` sibling (mint with the pairing debug
+  toggle, or `flagship-burn pair --debug`). The grant's `sshAuthorizedKey` is
+  baked by the shared CLI at remaster time (`debugSshKeyFromGrant`), so a
+  debug-friendly recipe yields an SSH-able first boot; a production VM gets NO
+  console device and NO forwarded port — there is no host-side override.
+- **"Open in SSH"** opens your terminal (`$TERMINAL`, else
+  x-terminal-emulator / gnome-terminal / konsole / xterm) at
+  `ssh -p <hostfwd-port> debug@127.0.0.1` — a local loopback forward into a VM
+  hosted by THIS app, never a relay.
+- **Metal-identical guest**: AHCI main disk (the guest sees `/dev/sda`),
+  installer ISO attached as USB mass storage (`sdb`, same order as a real
+  stick), OVMF UEFI with a per-VM vars copy, user-mode NAT (outbound only —
+  inbound arrives over the tunnel), `-display none`.
+- **KVM** is probed at launch (`/dev/kvm` exists + writable, vmx/svm flag). If
+  unavailable the app says exactly why (kvm group / firmware / module) and
+  degrades to TCG with an honest "much slower" warning — hosting still works.
+- Bundles live under `$XDG_DATA_HOME/flagship-burner/VMs/<fqdn>/`
+  (`config.json`, sparse `disk.qcow2`, per-VM `efi-vars.fd`, `installer.iso`
+  during install only, `console.log` transcript for debug VMs).
+- Resource plan (pinned by the shared golden vectors): 2–4 vCPUs, 4–6 GiB RAM
+  per VM, 4 GiB host reserve, 64 GiB sparse disk, capacity capped by host RAM.
+
+Extra requirements for hosting (on top of the burner's):
+
+- `qemu-system-x86` + `qemu-utils` (e.g. `sudo apt install qemu-system-x86
+  qemu-utils`)
+- OVMF firmware (`sudo apt install ovmf` / `sudo dnf install edk2-ovmf`)
+- KVM access: `sudo usermod -aG kvm $USER`, then log out and back in
+- Overrides: `FLAGSHIP_QEMU_SYSTEM`, `FLAGSHIP_QEMU_IMG`, `FLAGSHIP_OVMF_CODE`,
+  `FLAGSHIP_OVMF_VARS`
+
+The pure VM core (lifecycle state machine, resource plan, install verdict,
+bundle-name rules) is pinned to the cross-language contract in
+`apps/desktop-shared/golden/vm-core-vectors.json` — the same vectors the
+Windows (C#) and Mac (Swift) cores must pass.
+
+### Owner validation on a real Linux box (this build machine is macOS)
+
+The pure layer is fully unit-tested; the following need a live Linux desktop:
+
+1. GTK render: sidebar + chooser + host-here + pairing cover + detail pane
+   (this repo's GTK code cannot run on macOS).
+2. A real KVM boot: create-server → unattended install → duration-gated verdict
+   → first boot → sealed `awaitingPhoneUnlock` → phone approval → Running with
+   a green padlock at the FQDN.
+3. A real `Open in SSH` into a debug-grant VM (terminal opens,
+   `debug@127.0.0.1` login accepted by the guest's grant gate).
+4. A live phone pairing (QR scan → SAS match → recipe delivered → chooser).
+5. The TCG degrade path on a machine without KVM (warning shown, VM still
+   boots, slowly).
 
 ## Requirements
 
@@ -93,9 +164,22 @@ Tests cover:
   parse (download vs keep), mocked HTTP.
 - `iso_base_cache` — manifest-driven keep vs download vs sha-mismatch
   against a temp cache dir.
+- **`vm/` core vs the shared golden vectors** (`test_vm_core_vectors`) —
+  lifecycle transitions/invalids, the duration-gated install verdict, the
+  resource plan, and bundle-name validation, all pinned to
+  `apps/desktop-shared/golden/vm-core-vectors.json`.
+- `vm/` units — QEMU argv builder, KVM probe classifier, QMP protocol over a
+  fake duplex, toolchain/OVMF locator, inventory round-trip, the VMManager
+  orchestrator (fake host), and `ssh_launch`.
+- `pair_session` — the `FLAGSHIP_PAIR <json>` event parser (mirrors the
+  Windows `PairEventParserTests`, plus the `debug-result.granted` field).
+- `test_wizard_hosting` — pane switching, host-here pipeline (create →
+  prepare → shred → install; rollback on failure), sidebar actions, SSH
+  dispatch, pairing lifecycle.
 
 The view layer is intentionally not unit tested — drive it manually
-with `flagship-burner.py`.
+with `flagship-burner.py` (GTK objects are only constructed inside
+`build_window`, so everything above runs headless without `gi`).
 
 Static analysis:
 
@@ -151,6 +235,14 @@ iso_base_cache.py     manifest-driven Debian base-ISO cache (inspect / fetch /
 disk_write.py         sector-aligned raw write (lib + pkexec CLI entry)
 cli_runner.py         spawn Node, stream output, locate CLI, parse JSON
 disk_enumerator.py    lsblk JSON parser + safety classifier (mirrors devices.ts)
+pair_session.py       FLAGSHIP_PAIR NDJSON event parser + pair-session driver
+                      (wraps `flagship-burn pair --emit-events`)
+vm/                   the VM appliance host layer (mirrors burner-windows src/VM/):
+                      config, lifecycle (golden-vector-pinned state machine),
+                      resource_plan, inventory (bundle store), recipe_info,
+                      kvm_probe, qemu_locator, qemu_command_line (pure argv),
+                      qemu_host + qmp_client (process + control socket),
+                      manager (orchestrator), ssh_launch (Open in SSH)
 polkit/               PolicyKit action XML — two actions: Node-CLI write
                       + write-image (pkexec python3 disk_write.py)
 flatpak/              Flatpak manifest (stub — raw write is sandbox-incompatible)
