@@ -81,23 +81,35 @@ Crucially, this is **not** the VM host's job and **not** Windows-specific:
   padlock"** under *pending owner validation* (needs a physical reburn). The
   idle box is consistent with the enabled units not firing on first boot.
 
-We could not diagnose from inside: a production/debug-grant box has **no console
-login** (root disabled, no `debug` password until the daemon's `debugAccessGate`
-runs, and it never got that far), the installed GRUB/kernel is **video-only** (no
-serial getty — `init=/bin/bash` over serial isn't reachable), and this recipe's
-`debugGrant.sshAuthorizedKey` was `""` so no key was installed. So a first-boot
-provisioning failure currently **locks you out** of the box.
+A production/debug-**grant** box has **no console login** (root disabled, no
+`debug` password until the daemon's `debugAccessGate` runs, and it never got
+that far) and the installed GRUB/kernel is **video-only** (no serial getty —
+`init=/bin/bash` over serial isn't reachable). To break in for diagnosis, bake a
+dev SSH key at install time (below) — the CLI now threads it.
 
 ## Recommended next step (to finish the serve proof)
 
 Make the box **inspectable** so the first-boot chain can be watched/driven:
 
-1. Add an e2e helper that generates the preseed with
-   `UserDataOptions.debugSshAuthorizedKey` set to a throwaway keypair
-   (`buildDebianPreseed` supports it directly; the CLI's `prepare` does **not**
-   thread it). Note the **debug** bootstrap is deliberately *non-provisioning*
-   (it makes the box reachable for MANUAL clone/build/register), so this proves
-   the serve loop **interactively**, not automatically.
+1. **Bake a diagnostic dev SSH key** (now wired end-to-end). The CLI's
+   `prepare`/`user-data` accept `--debug-ssh-key-file <pub>` (or
+   `--debug-ssh-key "<key>"`), threaded into `buildDebianPreseed`
+   /`buildAutoinstallUserData` → the `flagship` user's `authorized_keys`:
+
+   ```pwsh
+   ssh-keygen -t ed25519 -N '""' -f out\diag
+   npx tsx packages/flagship-burner/src/cli.ts prepare out\recipe.json `
+       "$env:LOCALAPPDATA\flagship-burner\flagship-base-debian-13.5.0.iso" `
+       out\installer.iso --keep-recipe --debug-ssh-key-file out\diag.pub
+   # boot (step 3 above), then, once the guest is up on its NAT'd loopback fwd:
+   ssh -i out\diag -p <sshPort> flagship@127.0.0.1   # sshPort = QemuHost.SshPort
+   ```
+
+   This bootstrap is deliberately **non-provisioning** — it ONLY makes the box
+   reachable (sshd + key, no LUKS re-key, no clone/build/register), so you drive
+   + observe the serve loop **manually** and bake the fix back into the
+   production bootstrap. It is the mechanism for chasing the first-boot bug, not
+   a normal image.
 2. OR give the VM host a **rescue-shell affordance** — it owns the disk + GRUB,
    so a host-driven "boot to a root shell" (append `init=/bin/bash`, or an
    overlay initrd) would let the app read `/var/log/flagship-bootstrap.log` and

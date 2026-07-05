@@ -232,6 +232,10 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    // Parity with buildDebianPreseed: honor the dev SSH key so the debug
+    // remote-access image is identical on both installers. Absent (the normal
+    // case) ⇒ undefined ⇒ the production bootstrap, byte-identical to before.
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,

@@ -14,7 +14,7 @@
  * flagshipserver.com — the phone's signature is the trust root and
  * .com's involvement in the burn step is a non-feature.
  */
-import { writeFile, unlink } from "node:fs/promises";
+import { writeFile, unlink, readFile } from "node:fs/promises";
 import {
   loadBlobFromFile,
   loadBlobFromStdin,
@@ -140,6 +140,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: extractFlagValue(rest, "--wifi-password"),
+    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
   };
   // Emit a Debian d-i preseed.cfg with --debian (or --family debian); default
   // stays the Ubuntu autoinstall user-data (this command is for inspection;
@@ -196,6 +197,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
     wifiPassword: extractFlagValue(rest, "--wifi-password"),
+    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
   };
   // Detect Ubuntu vs Debian from the ISO and bake the matching unattended
   // mechanism (NoCloud autoinstall vs d-i preseed). --family overrides.
@@ -296,6 +298,26 @@ async function cmdWriteImage(rest: string[]): Promise<void> {
   console.log(`wrote ${result.bytesWritten} bytes to ${result.devicePath}`);
 }
 
+/**
+ * DEBUG-ONLY: resolve the dev SSH public key that turns the image into a
+ * remote-access-only diagnostic box (sshd + this key on the `flagship` user,
+ * NO provisioning, NO LUKS re-key — see userdata.ts buildBootstrapScriptDebug).
+ * `--debug-ssh-key-file <path>` reads the key from a file (the usual case — a
+ * public key has spaces); `--debug-ssh-key "<key>"` takes it inline. Absent ⇒
+ * undefined ⇒ the normal production bootstrap (byte-identical to before). This
+ * is a bring-up/diagnosis mechanism, never a user-facing GUI feature.
+ */
+async function resolveDebugSshKey(rest: string[]): Promise<string | undefined> {
+  const file = extractFlagValue(rest, "--debug-ssh-key-file");
+  if (file) {
+    const key = (await readFile(file, "utf8")).trim();
+    if (!key) throw new Error(`--debug-ssh-key-file ${file} is empty`);
+    return key;
+  }
+  const inline = extractFlagValue(rest, "--debug-ssh-key");
+  return inline && inline.trim() ? inline.trim() : undefined;
+}
+
 /** Extract `--flag value` or `--flag=value` from argv. */
 function extractFlagValue(argv: string[], flag: string): string | undefined {
   for (let i = 0; i < argv.length; i++) {
@@ -371,6 +393,12 @@ usage:
 Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
   --wifi-ssid <name> --wifi-password <pass>   bake netplan Wi-Fi into the image
   (a burn-time local input; NEVER part of the signed recipe)
+
+Debug remote-access image (bring-up / diagnosis only) — pass to user-data/prepare:
+  --debug-ssh-key-file <path> | --debug-ssh-key "<pubkey>"
+  Bakes sshd + this key on the 'flagship' user and does NOTHING ELSE — no
+  provisioning, no LUKS re-key — so a first-boot that never registers is still
+  reachable to diagnose (ssh flagship@<box>). NOT a production/user feature.
 
 The recipe is the signed JSON the website produces after you scan the
 QR code with your phone. Bring it here — the Burner verifies the
