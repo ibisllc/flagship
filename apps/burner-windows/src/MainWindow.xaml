@@ -650,6 +650,7 @@
                         <StackPanel Margin="0,16,0,0"
                                     Visibility="{Binding ConsoleEnabled,
                                         Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
                             <ToggleButton x:Name="ConsoleToggle"
                                           Background="Transparent" BorderThickness="0"
                                           Cursor="Hand" Padding="0"
@@ -670,9 +671,17 @@
                                            Foreground="{StaticResource FB.PrimaryDeep}"
                                            FontSize="12.5"/>
                             </ToggleButton>
+                            <Button x:Name="SshButton"
+                                    Style="{StaticResource LinkButton}"
+                                    Margin="16,0,0,0"
+                                    Foreground="{StaticResource FB.PrimaryDeep}"
+                                    FontSize="12.5"
+                                    Content="Open in SSH"
+                                    Click="OpenSsh_Click"/>
+                            </StackPanel>
                             <TextBlock x:Name="ConsoleHint"
                                        Style="{StaticResource Caption}"
-                                       Text="Console available while the server is running."
+                                       Text="Console + SSH available while the server is running."
                                        Visibility="Collapsed"/>
                             <Border x:Name="ConsolePanel"
                                     Visibility="Collapsed"

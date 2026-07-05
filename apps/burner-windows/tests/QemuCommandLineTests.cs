@@ -149,4 +149,31 @@ public class QemuCommandLineTests
         Assert.Contains("-accel tcg", s);
         Assert.DoesNotContain("whpx", s);
     }
+
+    // ---- SSH host-forward (debug VMs only) ----
+
+    [Fact]
+    public void DebugVmGetsSshHostForward()
+    {
+        var s = Joined(QemuCommandLine.Build(Config(console: true), Layout, Code,
+            attachInstallerISO: false, 4444, 5555, sshHostPort: 2222));
+        Assert.Contains("-netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22", s);
+    }
+
+    [Fact]
+    public void NoSshForwardWhenPortIsZero()
+    {
+        var s = Joined(QemuCommandLine.Build(Config(console: true), Layout, Code, false, 4444, 5555, sshHostPort: 0));
+        Assert.Contains("-netdev user,id=net0 ", s + " ");
+        Assert.DoesNotContain("hostfwd", s);
+    }
+
+    [Fact]
+    public void RefusesSshForwardForAProductionVm()
+    {
+        // The SSH forward is gated on the same debug grant as the console — a
+        // production VM must never expose :22.
+        Assert.Throws<ArgumentException>(() =>
+            QemuCommandLine.Build(Config(console: false), Layout, Code, false, 4444, 0, sshHostPort: 2222));
+    }
 }

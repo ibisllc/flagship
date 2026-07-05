@@ -39,10 +39,16 @@ public static class QemuCommandLine
                                  bool attachInstallerISO,
                                  int qmpPort,
                                  int serialPort,
+                                 int sshHostPort = 0,
                                  string accel = "whpx")
     {
         if (config.NetworkMode != VMNetworkMode.Nat)
             throw new ArgumentException("Unsupported network mode for this VM.");
+        // The SSH host-forward is gated on the SAME debug grant as the serial
+        // console: a production VM gets neither. Never forward :22 for a box
+        // the owner didn't authorize for debug.
+        if (sshHostPort > 0 && !config.SerialConsoleEnabled)
+            throw new ArgumentException("Refusing to forward SSH for a production (non-debug) VM.");
 
         var name = config.Name;
         // WHPX quirks, found empirically on real hardware (Win11 Home, QEMU 11):
@@ -97,10 +103,16 @@ public static class QemuCommandLine
         }
 
         // User-mode NAT: outbound-only is all the appliance needs (it dials
-        // out to .com/.services; user traffic arrives over the tunnel).
+        // out to .com/.services; user traffic arrives over the tunnel). For a
+        // debug VM we additionally forward a loopback host port to the guest's
+        // :22 so "Open in SSH" can reach it without hunting a LAN IP — the
+        // metal debug affordance, host-driven.
+        var netdev = sshHostPort > 0
+            ? $"user,id=net0,hostfwd=tcp:127.0.0.1:{sshHostPort}-:22"
+            : "user,id=net0";
         args.AddRange(new[]
         {
-            "-netdev", "user,id=net0",
+            "-netdev", netdev,
             "-device", "virtio-net-pci,netdev=net0",
             "-device", "virtio-rng-pci",
         });

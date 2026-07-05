@@ -34,6 +34,10 @@ public sealed class QemuHost
     /// <summary>Serial-console port of the running VM (0 when stopped or
     /// production — the console device only exists under a debug grant).</summary>
     public int SerialPort { get; private set; }
+    /// <summary>Loopback host port forwarded to the guest's :22 (0 when stopped
+    /// or production — only a debug-grant VM gets an SSH forward). "Open in
+    /// SSH" targets 127.0.0.1:this.</summary>
+    public int SshPort { get; private set; }
     public bool IsRunning => _process is { HasExited: false };
 
     /// <summary>
@@ -89,8 +93,11 @@ public sealed class QemuHost
 
         QmpPort = FreeLoopbackPort();
         SerialPort = config.SerialConsoleEnabled ? FreeLoopbackPort() : 0;
+        // SSH forward only for a debug VM, and never during the install phase
+        // (the guest isn't a running system yet).
+        SshPort = (config.SerialConsoleEnabled && !attachInstallerISO) ? FreeLoopbackPort() : 0;
         var args = QemuCommandLine.Build(config, layout, _toolchain.UefiCodePath,
-                                         attachInstallerISO, QmpPort, SerialPort, accel);
+                                         attachInstallerISO, QmpPort, SerialPort, SshPort, accel);
 
         var psi = new ProcessStartInfo
         {
@@ -115,6 +122,7 @@ public sealed class QemuHost
             _process = null;
             QmpPort = 0;
             SerialPort = 0;
+            SshPort = 0;
             OnGuestStopped?.Invoke(code, tail);
         };
         _process = p;

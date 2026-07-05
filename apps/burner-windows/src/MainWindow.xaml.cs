@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -227,6 +228,36 @@ public partial class MainWindow : Window
     }
 
     private void ConsoleToggle_Unchecked(object sender, RoutedEventArgs e) => CloseConsole();
+
+    private void OpenSsh_Click(object sender, RoutedEventArgs e)
+    {
+        if (_wizard.SelectedServerName is not string name) return;
+        var host = _wizard.Vm.Host(name);
+        if (host is null || host.SshPort == 0)
+        {
+            MessageBox.Show(this,
+                "SSH is available once the server is running (a debug-enabled VM forwards a local port to the guest).",
+                "Open in SSH", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        try
+        {
+            // Open a new console window running the OpenSSH client at the guest's
+            // forwarded loopback port. The guest's own debug gate still governs
+            // whether the login is accepted (debug/flagship on a granted box).
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = SshLaunch.CmdKArguments(host.SshPort),
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Couldn't launch SSH: {ex.Message}",
+                "Open in SSH", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private void ConsoleInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {

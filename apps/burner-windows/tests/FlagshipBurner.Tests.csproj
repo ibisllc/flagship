@@ -52,6 +52,7 @@
     <Compile Include="..\src\VM\WhpxProbe.cs"/>
     <Compile Include="..\src\VM\QmpClient.cs"/>
     <Compile Include="..\src\VM\QemuHost.cs"/>
+    <Compile Include="..\src\VM\SshLaunch.cs"/>
     <Compile Include="..\src\VM\VMManager.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
@@ -77,6 +78,7 @@
     <Compile Include="WhpxProbeTests.cs"/>
     <Compile Include="VMManagerTests.cs"/>
     <Compile Include="PairEventParserTests.cs"/>
+    <Compile Include="SshLaunchTests.cs"/>
   </ItemGroup>
 
   <ItemGroup>
