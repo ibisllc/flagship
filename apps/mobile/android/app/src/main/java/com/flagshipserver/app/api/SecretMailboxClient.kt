@@ -435,6 +435,32 @@ data class SignedDaemonStatus(
     val signatureHex: String = "",
 )
 
+/** PER-BOX relay-trust verdict tuple, relayed VERBATIM by `/pods`. Field names
+ *  match the daemon's wire JSON (what the STK signature commits to via the
+ *  canonical bytes in core.BoxTrustStatusReport). `relayVerdict` stays a raw
+ *  String on the wire; the aggregator maps it to the enum. Every field is
+ *  defaulted so a garbled relay still DECODES (then fails VERIFICATION). */
+@Serializable
+data class BoxTrustStatusReportWire(
+    val serverDomain: String = "",
+    val relayVerdict: String = "",
+    val lockedDown: Boolean = false,
+    val failingCertHash: String? = null,
+    val coveringExceptionCertHash: String? = null,
+    val nonce: String = "",
+    val issuedAt: Long = 0,
+)
+
+/** `trustStatus` on a `/pods` pod: the verbatim box-trust-status report + the
+ *  box's STK signature over its canonical bytes. `.com` can relay or drop this
+ *  but cannot forge it — the phone re-verifies under the pod's identityPubKey
+ *  (the registered STK). Consumed by core.RelayTrustAggregator. */
+@Serializable
+data class SignedBoxTrustStatus(
+    val report: BoxTrustStatusReportWire? = null,
+    val signatureHex: String = "",
+)
+
 /** One un-answered box→owner approval request, from the cheap UNAUTHENTICATED
  *  `/pods` digest that drives the Box Request Inbox (docs/box-request-inbox.md).
  *  Detection tier only: `type` is the secret-request purpose; the full signed
@@ -476,6 +502,13 @@ data class PodDirectoryEntry(
      *  null when the daemon never reported (or `.com` dropped it). Consumed by
      *  core.CertPinRegistry; defaulted for mixed-deploy tolerance. */
     val signedStatus: SignedDaemonStatus? = null,
+    /** PER-BOX relay-trust verdict — the box's separately STK-signed
+     *  box-trust-status envelope, relayed VERBATIM. The phone re-verifies it
+     *  under `identityPubKey` and aggregates the untrusted ones BY
+     *  `failingCertHash` across all pods (core.RelayTrustAggregator). null when
+     *  the box reports no trust status (old daemon). Defaulted for
+     *  mixed-deploy tolerance. Mirror of iOS PodDirectoryEntry.trustStatus. */
+    val trustStatus: SignedBoxTrustStatus? = null,
     /** The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
      *  — the list of approvals this box is currently asking its owner for
      *  (`unlock-key`, `entitlement`, …future types). The unified client inbox is

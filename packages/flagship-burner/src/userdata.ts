@@ -232,6 +232,10 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
     bootHost,
     wifiSSID: opts.wifiSSID,
     wifiPassword: opts.wifiPassword,
+    // Thread the debug SSH key so the Ubuntu path honors a debug grant too (the
+    // Debian preseed already passes it). Absent ⇒ undefined ⇒ the normal
+    // provisioning bootstrap, byte-identical to before.
+    debugSshAuthorizedKey: opts.debugSshAuthorizedKey,
   });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
@@ -899,6 +903,25 @@ systemctl enable docker.service containerd.service 2>/dev/null || \\
     echo "[flagship-bootstrap] WARNING: could not enable docker (daemon will retry network setup on boot)"
 systemctl enable flagship-daemon.service flagship-first-boot-register.service flagship-data-services.service || \\
     echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
+# ── FIRST-BOOT AUTOSTART: enable the units DETERMINISTICALLY. ────────────────
+# ROOT CAUSE of the "installed but DEAD at the login prompt" box (live-proven on
+# the Windows VM e2e): this bootstrap runs in the installer's in-target CHROOT,
+# where \`systemctl enable\` is unreliable — with no running systemd/D-Bus it can
+# return without creating the [Install] WantedBy symlinks, and the \`|| echo\`
+# above SWALLOWS that failure, so first-boot-register + the daemon never fire,
+# no phone-home beacon is sent, and .com never publishes DNS. The WORKING
+# cloud-init path (demoUsersAdminCloudInit.ts) never hits this: it runs at REAL
+# boot under a live systemd AND starts register + daemon INLINE, so its enable
+# always takes. We can't \`systemctl start\` in the chroot, so instead we make the
+# enable itself chroot-proof: drop the multi-user.target.wants symlinks BY HAND
+# (exactly what \`systemctl enable\` does, and precisely the pattern the Wi-Fi
+# setup already relies on). This needs no running systemd and can't be a no-op,
+# so the units are GUARANTEED enabled for the first real boot.
+mkdir -p /etc/systemd/system/multi-user.target.wants
+for _u in flagship-daemon flagship-first-boot-register flagship-data-services; do
+    ln -sf "/etc/systemd/system/\${_u}.service" \\
+        "/etc/systemd/system/multi-user.target.wants/\${_u}.service"
+done
 echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
 ${wifiSafetyNet}
 # Reached the end cleanly — disarm the error trap so the EXIT handler doesn't

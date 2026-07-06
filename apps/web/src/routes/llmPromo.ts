@@ -6,6 +6,11 @@ import {
   type LlmPromoIssueComplete,
   type LlmPromoIssueStart,
 } from "@flagship/protocol";
+import {
+  mintScopedInferenceToken,
+  parseBlessedInferenceEndpoint,
+  type InferenceEndpoint,
+} from "@flagship/control-plane";
 import { hexToBytes } from "../lib/hex.js";
 
 /**
@@ -195,6 +200,81 @@ function defaultGenerateTicket(): string {
   const buf = new Uint8Array(16);
   crypto.getRandomValues(buf);
   return "tk-" + bytesToHex(buf);
+}
+
+/**
+ * The production {@link PromoIssuer}: mints a scoped, short-lived `.com`
+ * token against the blessed in-house inference endpoint. "Tell the GPU
+ * server about this user" is implicit — the metering shim in front of
+ * RunPod validates the token + enforces caps + reports usage, so there is
+ * no admin round-trip to make here: the token IS the grant.
+ *
+ * Reads the SAME blessed config (`FLAGSHIP_INFERENCE_ENDPOINT`) + signing
+ * secret (`FLAGSHIP_INFERENCE_TOKEN_SECRET`) as the Worker's single-shot
+ * `/api/llm-promo/issue`, and signs with the SAME `mintScopedInferenceToken`
+ * helper — one wire format for both issue paths + the shim.
+ */
+export interface FlagshipInferenceIssuerOptions {
+  endpoint: InferenceEndpoint;
+  tokenSecret: string;
+  /** Token lifetime (default 1h). */
+  ttlMs?: number;
+  /** Per-token caps the shim enforces (defaults match the promo CTA). */
+  lifetimeTokens?: number;
+  dailyTokens?: number;
+  now?: () => number;
+}
+
+export class FlagshipInferenceIssuer implements PromoIssuer {
+  constructor(private readonly opts: FlagshipInferenceIssuerOptions) {}
+
+  async mintKey(args: { irkPub: Uint8Array; userId: string }): Promise<PromoIssuedKey> {
+    const now = (this.opts.now ?? (() => Date.now()))();
+    const ttl = this.opts.ttlMs ?? 60 * 60_000;
+    const lifetimeTokens = this.opts.lifetimeTokens ?? 500_000;
+    const dailyTokens = this.opts.dailyTokens ?? 100_000;
+    const keyId = `fp-${bytesToHex(randomBytes(8))}`;
+    const apiKey = await mintScopedInferenceToken(
+      {
+        username: args.userId,
+        keyId,
+        iat: now,
+        exp: now + ttl,
+        dailyInputTokenCap: dailyTokens,
+        dailyOutputTokenCap: dailyTokens,
+      },
+      this.opts.tokenSecret,
+    );
+    return {
+      keyId,
+      apiKey,
+      baseUrl: this.opts.endpoint.baseUrl,
+      model: this.opts.endpoint.model,
+      lifetimeTokens,
+      dailyTokens,
+    };
+  }
+}
+
+/**
+ * Build the production issuer from env, or null when the in-house
+ * inference config is absent — the caller then simply does not register
+ * the promo routes (they 404). Never throws.
+ */
+export function buildFlagshipInferenceIssuer(env: {
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
+}): FlagshipInferenceIssuer | null {
+  const endpoint = parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT);
+  const tokenSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
+  if (!endpoint || !tokenSecret) return null;
+  return new FlagshipInferenceIssuer({ endpoint, tokenSecret });
+}
+
+function randomBytes(n: number): Uint8Array {
+  const b = new Uint8Array(n);
+  crypto.getRandomValues(b);
+  return b;
 }
 
 export function registerLlmPromo(app: FastifyInstance, opts: LlmPromoOptions): void {

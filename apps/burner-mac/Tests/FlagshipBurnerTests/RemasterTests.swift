@@ -69,6 +69,27 @@ final class RemasterTests: XCTestCase {
         XCTAssertEqual(Remaster.editGrubCfgForPreseed(out), out)
     }
 
+    func testEditGrubCfgForPreseedArm64InstallDir() {
+        // The Apple-silicon VM path boots an arm64 Debian netinst whose
+        // installer dir is `/install.a64/`, not `/install.amd/`. The cmdline
+        // injection must still fire (it was amd64-only before Phase-0).
+        let grub = """
+        set timeout=10
+        menuentry 'Install' {
+        \tlinux\t/install.a64/vmlinuz  --- quiet
+        \tinitrd\t/install.a64/initrd.gz
+        }
+        menuentry 'Graphical install' {
+        \tlinux\t/install.a64/vmlinuz  --- quiet
+        \tinitrd\t/install.a64/gtk/initrd.gz
+        }
+        """
+        let out = Remaster.editGrubCfgForPreseed(grub)
+        XCTAssertTrue(out.contains("/install.a64/vmlinuz \(Remaster.debianPreseedCmdline)"))
+        XCTAssertTrue(out.contains("preseed/file=/cdrom/preseed.cfg"))
+        XCTAssertEqual(Remaster.editGrubCfgForPreseed(out), out) // idempotent
+    }
+
     func testEditIsolinuxCfgForPreseed() {
         let txt = """
         prompt 1

@@ -59,10 +59,17 @@ public struct PendingServerReconciler {
     /// the handler (it no-ops unless a deposit is owed). Default no-op.
     public typealias RegisteredHandler = @MainActor (_ fqdn: String, _ identityPubKeyHex: String) async -> Void
 
+    /// Fired ONCE per reconcile with the raw `/pods` entries, BEFORE any
+    /// per-pod mapping — the seam the per-cert relay-trust aggregation hangs off
+    /// (it needs each box's STK-signed `trustStatus` + `identityPubKey`, which
+    /// the mapped `PodInfo` doesn't carry). Default no-op.
+    public typealias DirectoryHandler = @MainActor (_ pods: [PodDirectoryEntry]) -> Void
+
     private let app: AppState
     private let store: PendingServerStore
     private let fetchPods: PodsFetcher
     private let onRegistered: RegisteredHandler
+    private let onDirectory: DirectoryHandler
     private let now: () -> Int64
 
     public init(
@@ -70,13 +77,15 @@ public struct PendingServerReconciler {
         store: PendingServerStore = PendingServerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         fetchPods: @escaping PodsFetcher,
-        onRegistered: @escaping RegisteredHandler = { _, _ in }
+        onRegistered: @escaping RegisteredHandler = { _, _ in },
+        onDirectory: @escaping DirectoryHandler = { _ in }
     ) {
         self.app = app
         self.store = store
         self.now = now
         self.fetchPods = fetchPods
         self.onRegistered = onRegistered
+        self.onDirectory = onDirectory
     }
 
     /// Run the full reconcile from the single merged `/pods` fetch. Best-effort:
@@ -90,6 +99,11 @@ public struct PendingServerReconciler {
         // ONE unauthenticated fetch — registered servers AND active orders.
         // A nil (couldn't reach the directory) leaves all state untouched.
         guard let directory = await fetchPods(username) else { return }
+
+        // Per-cert relay-trust aggregation (maintainer-trust Layer 3): hand the
+        // raw entries to the aggregation seam BEFORE mapping, since it verifies
+        // each box's STK-signed `trustStatus` under `identityPubKey`.
+        onDirectory(directory.pods)
 
         // HONEST LIVENESS (Fix A) — surface every registered server with its
         // server-authoritative `liveness` (`live`/`unreachable`/`never`), NOT a

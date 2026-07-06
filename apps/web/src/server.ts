@@ -41,6 +41,7 @@ import {
   registerLlmPromo,
   InMemoryPromoLedger,
   ConsoleSmsSender,
+  buildFlagshipInferenceIssuer,
   type PromoLedger,
   type PromoIssuer,
   type SmsSender,
@@ -305,20 +306,24 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
 
-  if (
-    isCom &&
-    opts.resolveUserIrk &&
-    opts.promoIssuer &&
-    opts.promoIdentityPepper
-  ) {
+  // The promo issuer is either injected (tests) or built from the blessed
+  // inference env (production) — the free-credits flow is one
+  // `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT` +
+  // `FLAGSHIP_INFERENCE_TOKEN_SECRET` away from live. The identity pepper
+  // likewise defaults from env. `resolveUserIrk` is still caller-supplied
+  // (it resolves username → IRK for signature checks); absent ⇒ the promo
+  // routes stay unregistered (they 404) rather than accept unsigned issue.
+  const promoIssuer = opts.promoIssuer ?? buildFlagshipInferenceIssuer(process.env);
+  const promoPepper = opts.promoIdentityPepper ?? pepperFromEnv(process.env.FLAGSHIP_PROMO_IDENTITY_PEPPER);
+  if (isCom && opts.resolveUserIrk && promoIssuer && promoPepper) {
     const ledger = opts.promoLedger ?? new InMemoryPromoLedger();
     const sms = opts.promoSms ?? new ConsoleSmsSender();
     registerLlmPromo(app, {
       resolveUserIrk: opts.resolveUserIrk,
       ledger,
-      issuer: opts.promoIssuer,
+      issuer: promoIssuer,
       sms,
-      identityPepper: opts.promoIdentityPepper,
+      identityPepper: promoPepper,
     });
     app.decorate("promoLedger", ledger);
   }
@@ -334,6 +339,18 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   });
 
   return app;
+}
+
+/**
+ * Parse the promo identity pepper from env: a 64-char hex string (32
+ * bytes). Absent / malformed ⇒ null (promo routes stay unregistered
+ * rather than salting identities with a weak/degenerate pepper).
+ */
+function pepperFromEnv(raw: string | undefined): Uint8Array | null {
+  if (!raw || !/^[0-9a-fA-F]{64}$/.test(raw)) return null;
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = parseInt(raw.slice(i * 2, i * 2 + 2), 16);
+  return out;
 }
 
 declare module "fastify" {

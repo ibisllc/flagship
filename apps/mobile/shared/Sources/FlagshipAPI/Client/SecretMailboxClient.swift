@@ -465,6 +465,14 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// garbled relay yields nil (⇒ no pin) instead of failing the whole
     /// pods-list decode.
     public let signedStatus: SignedDaemonStatus?
+    /// PER-BOX relay-trust verdict — the box's separately STK-signed
+    /// `flagship/box-trust-status/v1` envelope, relayed VERBATIM. The phone
+    /// re-verifies it under `identityPubKey` (the STK) and aggregates the
+    /// untrusted ones BY `failingCertHash` across all pods into the red trust
+    /// sliver (`FlagshipCore.RelayTrustAggregator`). nil when the box reports no
+    /// trust status (old daemon / never evaluated). Decoded LENIENTLY so a
+    /// garbled relay yields nil rather than failing the whole pods-list decode.
+    public let trustStatus: SignedBoxTrustStatus?
     /// The typed Box Request Inbox digest for this pod (docs/box-request-inbox.md)
     /// — the list of approvals this box is currently asking its owner for
     /// (`unlock-key`, `entitlement`, …future types). The unified client inbox is
@@ -495,6 +503,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         registeredAt: Int64? = nil,
         hasCert: Bool = false,
         signedStatus: SignedDaemonStatus? = nil,
+        trustStatus: SignedBoxTrustStatus? = nil,
         pendingRequests: [PendingRequestSummaryWire] = [],
         liveness: String? = nil,
         lastSeenMsAgo: Int64? = nil,
@@ -504,6 +513,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.revokedAt = revokedAt; self.lastReported = lastReported
         self.registeredAt = registeredAt; self.hasCert = hasCert
         self.signedStatus = signedStatus
+        self.trustStatus = trustStatus
         self.pendingRequests = pendingRequests
         self.liveness = liveness
         self.lastSeenMsAgo = lastSeenMsAgo
@@ -526,6 +536,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         let cert = (try? c.decodeIfPresent(CurrentCert.self, forKey: .currentCert)) ?? nil
         self.hasCert = cert != nil
         self.signedStatus = (try? c.decodeIfPresent(SignedDaemonStatus.self, forKey: .signedStatus)) ?? nil
+        self.trustStatus = (try? c.decodeIfPresent(SignedBoxTrustStatus.self, forKey: .trustStatus)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -540,6 +551,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         try c.encodeIfPresent(registeredAt, forKey: .registeredAt)
         if hasCert { try c.encode(CurrentCert(sha256: nil), forKey: .currentCert) }
         try c.encodeIfPresent(signedStatus, forKey: .signedStatus)
+        try c.encodeIfPresent(trustStatus, forKey: .trustStatus)
         try c.encodeIfPresent(liveness, forKey: .liveness)
         try c.encodeIfPresent(lastSeenMsAgo, forKey: .lastSeenMsAgo)
         if !leadsServices.isEmpty { try c.encode(leadsServices, forKey: .leadsServices) }
@@ -552,7 +564,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices
+        case serverDomain, identityPubKey, revokedAt, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices
     }
 }
 

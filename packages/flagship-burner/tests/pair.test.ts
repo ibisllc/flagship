@@ -276,6 +276,71 @@ describe("runPair transport glue", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("emitEvents reports each milestone in order for a GUI host", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pair-"));
+    const out = join(dir, "recipe.json");
+    const burnerKp = newBurnerKeypair();
+    const phoneKp = newBurnerKeypair();
+    const phoneAead = deriveSessionMaterial(phoneKp.secretKey, burnerKp.publicKey).aeadKey;
+    const { json: recipeJson } = buildSignedRecipe();
+    const harness = fakeTransport();
+    const events: Array<Record<string, unknown>> = [];
+
+    const p = runPair({
+      out,
+      quiet: true,
+      keypair: burnerKp,
+      transport: () => harness.transport,
+      emitEvents: (ev) => events.push(ev as unknown as Record<string, unknown>),
+    });
+
+    // `ready` fires synchronously (before any phone traffic) so the cover can render.
+    await tick();
+    const ready = events.find((e) => e.event === "ready");
+    expect(ready).toBeTruthy();
+    expect(typeof ready?.humanCode).toBe("string");
+    expect(typeof ready?.qrTerminal).toBe("string");
+    expect((ready?.qrTerminal as string).length).toBeGreaterThan(0);
+    expect(ready?.debugRequested).toBe(false);
+
+    harness.open();
+    harness.inject({ kind: "peer-joined" });
+    await tick();
+    harness.inject({ kind: "peer", frame: { kind: "phone-hello", phonePk: base64UrlEncode(phoneKp.publicKey) } });
+    harness.inject({ kind: "peer", frame: { kind: "confirm-pairing" } });
+    await tick();
+    const sealed = sealDelivered(new TextEncoder().encode(recipeJson), phoneAead);
+    harness.inject({ kind: "peer", frame: { kind: "deliver", ciphertext: sealed.ciphertextB64u, nonce: sealed.nonceB64u } });
+    await p;
+
+    const order = events.map((e) => e.event);
+    expect(order).toEqual(["ready", "phone-connected", "paired", "delivered", "done"]);
+    const connected = events.find((e) => e.event === "phone-connected");
+    expect(typeof connected?.sas).toBe("string");
+    const done = events.find((e) => e.event === "done");
+    expect(done?.serverDomain).toBe("home.harry.flagship.services");
+    expect(done?.debugGranted).toBe(false);
+    expect(done?.recipePath).toBe(out);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("emitEvents reports an error on session expiry", async () => {
+    const burnerKp = newBurnerKeypair();
+    const harness = fakeTransport();
+    const events: Array<Record<string, unknown>> = [];
+    const p = runPair({
+      out: join(tmpdir(), "never.json"),
+      quiet: true,
+      keypair: burnerKp,
+      transport: () => harness.transport,
+      emitEvents: (ev) => events.push(ev as unknown as Record<string, unknown>),
+    });
+    harness.open();
+    harness.inject({ kind: "expired" });
+    await expect(p).rejects.toThrow(/timed out/);
+    expect(events.some((e) => e.event === "error")).toBe(true);
+  });
+
   it("rejects when the relay session expires before any recipe", async () => {
     const burnerKp = newBurnerKeypair();
     const harness = fakeTransport();

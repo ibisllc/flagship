@@ -49,8 +49,22 @@ export interface BaseUrlGuardOptions {
    * on this list it bypasses the private-range block (but still must satisfy
    * the scheme rule). Lets an operator permit one specific internal host
    * without opening the whole private range.
+   *
+   * NOTE: this is a PERMIT list (bypass private ranges), NOT a restriction —
+   * a host not on it that is otherwise public still passes. To PIN traffic
+   * to exactly one host (rejecting every other host, incl. a redirect to
+   * another public host), use `exclusiveHost`.
    */
   hostAllowlist?: string[];
+  /**
+   * Hard pin: when set, the URL's host MUST equal this (case-insensitive)
+   * or it is rejected — every other host, public or private, is denied.
+   * Because `guardedFetch` re-runs the guard on each redirect hop, this
+   * also blocks a `302 → attacker.example.com`. Used for promo (free-
+   * credits) credentials so a leaked scoped token can only ever be
+   * presented to the blessed inference host.
+   */
+  exclusiveHost?: string;
 }
 
 export class UnsafeBaseUrlError extends Error {
@@ -86,6 +100,15 @@ export function assertSafeProviderBaseUrl(
   }
 
   const host = url.hostname.toLowerCase();
+
+  // Hard pin: reject any host other than the exclusive one, BEFORE any
+  // allowlist/scheme reasoning. Enforced on every redirect hop by
+  // guardedFetch, so a promo credential's scoped token can't be steered
+  // to another host.
+  if (opts.exclusiveHost !== undefined && host !== opts.exclusiveHost.toLowerCase()) {
+    throw new UnsafeBaseUrlError(raw, "host not pinned");
+  }
+
   const allowlist = (opts.hostAllowlist ?? []).map((h) => h.toLowerCase());
   const allowlisted = allowlist.includes(host);
 

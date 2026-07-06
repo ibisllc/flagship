@@ -47,6 +47,11 @@ class PendingServerReconciler(
      *  has a directory identity to seal it to. Best-effort + idempotent in the
      *  handler (it no-ops unless a deposit is owed). Default no-op. */
     private val onRegistered: suspend (fqdn: String, identityPubKeyHex: String) -> Unit = { _, _ -> },
+    /** Fired ONCE per reconcile with the raw `/pods` entries, BEFORE any
+     *  per-pod mapping — the seam the per-cert relay-trust aggregation hangs off
+     *  (it needs each box's STK-signed `trustStatus` + `identityPubKey`, which
+     *  the mapped PodInfo doesn't carry). Default no-op. Mirror of iOS. */
+    private val onDirectory: (pods: List<com.flagshipserver.app.api.PodDirectoryEntry>) -> Unit = { },
 ) {
     /** Run the full reconcile from the single merged `/pods` fetch.
      *  Best-effort: a network failure (or no signed-in user) leaves the
@@ -68,6 +73,11 @@ class PendingServerReconciler(
     suspend fun reconcile(directory: PodsDirectoryResponse) {
         val username = app.currentUser.value
         if (username.isNullOrEmpty()) return
+
+        // Per-cert relay-trust aggregation (maintainer-trust Layer 3): hand the
+        // raw entries to the aggregation seam BEFORE mapping, since it verifies
+        // each box's STK-signed `trustStatus` under `identityPubKey`.
+        onDirectory(directory.pods)
 
         // Surface every registered server as ONLINE — REGARDLESS of any
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod

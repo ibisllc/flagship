@@ -66,10 +66,14 @@ const XORRISO_CANDIDATES = [
   "/opt/homebrew/bin/xorriso",
   "/usr/local/bin/xorriso",
   "/usr/bin/xorriso",
+  // Windows: the MSYS2 pacman package (the practical way to get xorriso there).
+  "C:\\msys64\\usr\\bin\\xorriso.exe",
 ];
 
 export async function resolveXorriso(override?: string): Promise<string> {
+  const env = process.env.FLAGSHIP_XORRISO;
   if (override) return override;
+  if (env) return env;
   for (const c of XORRISO_CANDIDATES) {
     try {
       await stat(c);
@@ -80,6 +84,18 @@ export async function resolveXorriso(override?: string): Promise<string> {
   }
   // Fall back to bare name — spawn will surface ENOENT with a clear hint.
   return "xorriso";
+}
+
+/**
+ * Disk-side path form for xorriso argv. The Cygwin/MSYS Windows builds parse
+ * a leading drive letter as a RELATIVE path (prepending the workdir), so
+ * `C:\a\b` must become `/c/a/b`. POSIX hosts pass through untouched. Pure.
+ */
+export function toXorrisoDiskPath(p: string, platform: string = process.platform): string {
+  if (platform !== "win32") return p;
+  const m = /^([A-Za-z]):[\\/](.*)$/.exec(p);
+  if (!m) return p.replace(/\\/g, "/");
+  return `/${m[1]!.toLowerCase()}/${m[2]!.replace(/\\/g, "/")}`;
 }
 
 /**
@@ -254,10 +270,10 @@ export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<vo
       "-osirrox",
       "on",
       "-indev",
-      args.srcIsoPath,
+      toXorrisoDiskPath(args.srcIsoPath),
       "-extract",
       "/boot/grub/grub.cfg",
-      grubOut,
+      toXorrisoDiskPath(grubOut),
     ]);
     // osirrox preserves the file's ISO mode, and grub.cfg ships read-only
     // (0444) on the Ubuntu image — so make our copy writable before we
@@ -277,17 +293,17 @@ export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<vo
     await rm(args.outIsoPath, { force: true }).catch(() => {});
     await sh(xorriso, [
       "-indev",
-      args.srcIsoPath,
+      toXorrisoDiskPath(args.srcIsoPath),
       "-outdev",
-      args.outIsoPath,
+      toXorrisoDiskPath(args.outIsoPath),
       "-boot_image",
       "any",
       "replay",
       "-map",
-      seed,
+      toXorrisoDiskPath(seed),
       "/nocloud",
       "-map",
-      grubOut,
+      toXorrisoDiskPath(grubOut),
       "/boot/grub/grub.cfg",
     ]);
   } finally {
@@ -332,7 +348,7 @@ export async function detectIsoFamily(
   //    "Ubuntu-Server 22.04.5 LTS amd64").
   let volid = "";
   try {
-    volid = await shCapture(xorriso, ["-indev", srcIsoPath, "-toc"]);
+    volid = await shCapture(xorriso, ["-indev", toXorrisoDiskPath(srcIsoPath), "-toc"]);
   } catch {
     // fall through to the directory probe
   }
@@ -344,7 +360,7 @@ export async function detectIsoFamily(
   try {
     const listing = await shCapture(xorriso, [
       "-indev",
-      srcIsoPath,
+      toXorrisoDiskPath(srcIsoPath),
       "-find",
       "/",
       "-maxdepth",
@@ -408,7 +424,7 @@ export async function remasterIsoWithPreseed(args: RemasterPreseedArgs): Promise
       if (!ok) continue;
       await chmod(local, 0o644).catch(() => {});
       await writeFile(local, t.edit(await readFile(local, "utf-8")), "utf-8");
-      mapArgs.push("-map", local, t.iso);
+      mapArgs.push("-map", toXorrisoDiskPath(local), t.iso);
       patchedAny = true;
     }
     if (!patchedAny) {
@@ -422,14 +438,14 @@ export async function remasterIsoWithPreseed(args: RemasterPreseedArgs): Promise
     await rm(args.outIsoPath, { force: true }).catch(() => {});
     await sh(xorriso, [
       "-indev",
-      args.srcIsoPath,
+      toXorrisoDiskPath(args.srcIsoPath),
       "-outdev",
-      args.outIsoPath,
+      toXorrisoDiskPath(args.outIsoPath),
       "-boot_image",
       "any",
       "replay",
       "-map",
-      preseedOut,
+      toXorrisoDiskPath(preseedOut),
       "/preseed.cfg",
       ...mapArgs,
     ]);
@@ -500,7 +516,11 @@ async function extractOptional(
   outPath: string,
 ): Promise<boolean> {
   try {
-    await sh(xorriso, ["-osirrox", "on", "-indev", srcIso, "-extract", isoPath, outPath]);
+    await sh(xorriso, [
+      "-osirrox", "on",
+      "-indev", toXorrisoDiskPath(srcIso),
+      "-extract", isoPath, toXorrisoDiskPath(outPath),
+    ]);
     // -extract can "succeed" without creating the file for a missing path on
     // some xorriso builds; confirm the local file actually exists + is nonempty.
     const st = await stat(outPath);

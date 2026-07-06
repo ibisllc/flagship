@@ -27,6 +27,7 @@ import {
   type LlmPromoIssueRequest,
   type LlmProvider,
 } from "@flagship/protocol";
+import type { InferenceEndpoint } from "./inferenceEndpoint.js";
 import type {
   DemoLlmLedgerStorage,
   LlmPromoStorage,
@@ -54,6 +55,14 @@ export interface LlmPromoDeps {
     dailyOutputTokenCap: number;
     expiresAt: number;
   }) => Promise<{ key: string; providerKeyId: string }>;
+  /**
+   * The blessed in-house inference endpoint. REQUIRED for a
+   * `provider:"flagship"` issue — absent ⇒ that issue is refused (503)
+   * rather than minting a key the box can't route. Upstream providers
+   * (anthropic/openai/google) never consult it. Surfaced in the issue
+   * response as `baseUrl`+`model` so the client saves them with the key.
+   */
+  inferenceEndpoint?: InferenceEndpoint | null;
   freshnessMs?: number;
   now?: () => number;
   /** Override caps per tier. */
@@ -111,7 +120,10 @@ export async function handleLlmPromoIssue(
     typeof r.username !== "string" ||
     typeof r.serverFqdn !== "string" ||
     typeof r.provider !== "string" ||
-    (r.provider !== "anthropic" && r.provider !== "openai" && r.provider !== "google") ||
+    (r.provider !== "anthropic" &&
+      r.provider !== "openai" &&
+      r.provider !== "google" &&
+      r.provider !== "flagship") ||
     typeof r.desiredDailyInputTokenCap !== "number" ||
     typeof r.desiredDailyOutputTokenCap !== "number" ||
     typeof r.issuedAt !== "number" ||
@@ -214,7 +226,16 @@ export async function handleLlmPromoIssue(
     }
   }
 
-  // Mint the upstream provider key.
+  // In-house inference: a `flagship` issue is only valid when the blessed
+  // endpoint is configured — otherwise refuse rather than hand the box a
+  // key with nowhere to route. Upstream providers ignore this.
+  if (r.provider === "flagship" && !deps.inferenceEndpoint) {
+    return { status: 503, body: { error: "in-house inference not configured" } };
+  }
+
+  // Mint the provider key. For `flagship` the minter returns a scoped
+  // `.com` token; for upstream providers it returns the provider's own
+  // scoped key.
   const minted = await deps.mintProviderKey({
     provider: r.provider,
     username: r.username,
@@ -240,7 +261,76 @@ export async function handleLlmPromoIssue(
     dailyInputTokenCap: dailyInput,
     dailyOutputTokenCap: dailyOutput,
     tier,
+    // For `flagship`, hand the client the blessed endpoint so it saves
+    // baseUrl+model with the key and the box talks to it directly. The
+    // credential is marked promo-sourced so the daemon pins its SSRF
+    // guard to this host.
+    ...(r.provider === "flagship" && deps.inferenceEndpoint
+      ? {
+          baseUrl: deps.inferenceEndpoint.baseUrl,
+          model: deps.inferenceEndpoint.model,
+          source: "promo" as const,
+        }
+      : {}),
   });
+}
+
+export interface LlmPromoUsageDeps {
+  llmPromo: LlmPromoStorage;
+  /**
+   * Authenticate a usage report: verify the scoped inference token the
+   * metering shim re-presents (the SAME token it validated to serve the
+   * request) and return the account it was minted for. Only our shim can
+   * present a valid token, so this both authenticates the report and
+   * identifies the user — no separate shared secret needed. The Worker
+   * wires this to `verifyScopedInferenceToken(env secret)`.
+   */
+  verifyToken: (token: string) => Promise<{ ok: true; username: string } | { ok: false }>;
+  now?: () => number;
+}
+
+interface UsageBody {
+  token?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+/**
+ * POST /api/llm-promo/usage — the in-house inference metering webhook
+ * (metering model (b)). The shim in front of RunPod reports TRUE token
+ * usage per request; we record it against the token's account so
+ * /api/llm-promo/status reflects real consumption. Because we own the
+ * endpoint, this closes the integrity gap of the pessimistic issue-time
+ * estimate used for providers we don't proxy.
+ */
+export async function handleLlmPromoUsage(
+  deps: LlmPromoUsageDeps,
+  body: UsageBody | undefined,
+): Promise<HandlerResponse> {
+  if (
+    !body ||
+    typeof body.token !== "string" ||
+    typeof body.inputTokens !== "number" ||
+    typeof body.outputTokens !== "number" ||
+    !Number.isFinite(body.inputTokens) ||
+    !Number.isFinite(body.outputTokens) ||
+    body.inputTokens < 0 ||
+    body.outputTokens < 0
+  ) {
+    return malformed("malformed usage report");
+  }
+  const v = await deps.verifyToken(body.token);
+  if (!v.ok) return forbidden("invalid inference token");
+  const now = (deps.now ?? (() => Date.now()))();
+  const day = Math.floor(now / 86_400_000);
+  await deps.llmPromo.recordMeteredUsage(
+    v.username,
+    day,
+    Math.floor(body.inputTokens),
+    Math.floor(body.outputTokens),
+    now,
+  );
+  return ok({ ok: true });
 }
 
 export async function handleLlmPromoStatus(

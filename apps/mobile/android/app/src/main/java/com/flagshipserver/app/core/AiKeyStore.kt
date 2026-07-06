@@ -48,7 +48,7 @@ data class AiCredential(
 
 object AiKeyStore {
 
-    val SUPPORTED_PROVIDERS = listOf("anthropic", "openai", "google", "openrouter", "ollama")
+    val SUPPORTED_PROVIDERS = listOf("anthropic", "openai", "google", "openrouter", "ollama", "flagship")
 
     private const val FILE_NAME = "flagship-ai-keys"
     private const val RECORD_KEY = "entries"

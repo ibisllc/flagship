@@ -36,6 +36,23 @@ function runContract(name: string, make: () => Promise<BuildCredentialStore>) {
       expect(got).toEqual({ provider: "anthropic", apiKey: SECRET, baseUrl: "https://api.example" });
     });
 
+    it("roundtrips a promo-sourced credential (source pins the daemon SSRF guard)", async () => {
+      const s = await make();
+      await s.put(ID, {
+        provider: "flagship",
+        apiKey: "scoped-token",
+        baseUrl: "https://coder.runpod.example.com",
+        source: "promo",
+      });
+      const got = await s.get(ID);
+      expect(got).toEqual({
+        provider: "flagship",
+        apiKey: "scoped-token",
+        baseUrl: "https://coder.runpod.example.com",
+        source: "promo",
+      });
+    });
+
     it("has() + providerName() report the non-secret surface only", async () => {
       const s = await make();
       expect(s.has(ID)).toBe(false);

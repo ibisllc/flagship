@@ -354,6 +354,17 @@ class MainActivity : FragmentActivity() {
                                         .depositIfNeeded(fqdn, identityPubKeyHex)
                                 }
                             },
+                            // Per-cert relay-trust aggregation (maintainer-trust
+                            // Layer 3): verify each box's STK-signed box-trust-status
+                            // and aggregate the untrusted ones BY failing relay
+                            // cert-hash into the red sliver — one line + one override
+                            // per DISTINCT authority. A warning + override source; it
+                            // never gates `.com` I/O.
+                            onDirectory = { pods ->
+                                trustCenter.setRelayFailures(
+                                    com.flagshipserver.app.core.RelayTrustAggregator.aggregate(pods),
+                                )
+                            },
                         )
                     },
                 )

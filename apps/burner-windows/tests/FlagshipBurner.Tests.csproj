@@ -36,6 +36,24 @@
     <!-- Manifest client + manifest-driven base-ISO cache are WPF-free. -->
     <Compile Include="..\src\IsoManifestClient.cs"/>
     <Compile Include="..\src\IsoBaseCache.cs"/>
+    <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
+    <Compile Include="..\src\PairSession.cs"/>
+    <!-- The pure VM core (mirrors apps/burner-mac FlagshipBurnerCore/VM) is
+         WPF-free by design; pinned against the shared golden vectors. -->
+    <Compile Include="..\src\VM\HostResources.cs"/>
+    <Compile Include="..\src\VM\VMResourcePlan.cs"/>
+    <Compile Include="..\src\VM\ServerTier.cs"/>
+    <Compile Include="..\src\VM\RecipeSiblings.cs"/>
+    <Compile Include="..\src\VM\VMConfig.cs"/>
+    <Compile Include="..\src\VM\VMLifecycle.cs"/>
+    <Compile Include="..\src\VM\VMInventoryStore.cs"/>
+    <Compile Include="..\src\VM\QemuLocator.cs"/>
+    <Compile Include="..\src\VM\QemuCommandLine.cs"/>
+    <Compile Include="..\src\VM\WhpxProbe.cs"/>
+    <Compile Include="..\src\VM\QmpClient.cs"/>
+    <Compile Include="..\src\VM\QemuHost.cs"/>
+    <Compile Include="..\src\VM\SshLaunch.cs"/>
+    <Compile Include="..\src\VM\VMManager.cs"/>
     <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
          it into a tiny shim for the test target to keep WPF out. -->
     <Compile Include="CliArgsShim.cs"/>
@@ -49,6 +67,26 @@
     <Compile Include="DiskWriteTests.cs"/>
     <Compile Include="IsoManifestClientTests.cs"/>
     <Compile Include="IsoBaseCacheTests.cs"/>
+    <Compile Include="VMLifecycleTests.cs"/>
+    <Compile Include="VMResourcePlanTests.cs"/>
+    <Compile Include="VMConfigTests.cs"/>
+    <Compile Include="VMInventoryStoreTests.cs"/>
+    <Compile Include="RecipeSiblingsTests.cs"/>
+    <Compile Include="VMCoreVectorTests.cs"/>
+    <Compile Include="QemuCommandLineTests.cs"/>
+    <Compile Include="QemuLocatorTests.cs"/>
+    <Compile Include="WhpxProbeTests.cs"/>
+    <Compile Include="VMManagerTests.cs"/>
+    <Compile Include="PairEventParserTests.cs"/>
+    <Compile Include="SshLaunchTests.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shared VM-core contract (apps/desktop-shared/golden) — the Mac
+         suite must consume the SAME file so the two cores cannot drift. -->
+    <Content Include="..\..\desktop-shared\golden\vm-core-vectors.json"
+             Link="Resources\vm-core-vectors.json"
+             CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 
   <ItemGroup>

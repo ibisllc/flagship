@@ -172,9 +172,9 @@ describe("ollama provider", () => {
 });
 
 describe("ProviderRegistry", () => {
-  it("ships the five built-in providers", () => {
+  it("ships the built-in providers (incl. the in-house `flagship` posture)", () => {
     expect(defaultRegistry.list().sort()).toEqual(
-      ["anthropic", "google", "ollama", "openai", "openrouter"].sort()
+      ["anthropic", "flagship", "google", "ollama", "openai", "openrouter"].sort()
     );
   });
 

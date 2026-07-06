@@ -141,6 +141,27 @@ describe("assertSafeProviderBaseUrl", () => {
       ).toBe("cloud metadata IP");
     });
   });
+
+  describe("exclusiveHost pin (promo credentials)", () => {
+    const pin = { hostAllowlist: ["coder.runpod.example.com"], exclusiveHost: "coder.runpod.example.com" };
+    it("permits exactly the pinned host", () => {
+      expect(() =>
+        assertSafeProviderBaseUrl("https://coder.runpod.example.com/v1/chat/completions", pin),
+      ).not.toThrow();
+    });
+    it("the pin is case-insensitive", () => {
+      expect(() =>
+        assertSafeProviderBaseUrl("https://Coder.RunPod.Example.com", pin),
+      ).not.toThrow();
+    });
+    it("rejects ANY other host — even a public one (redirect-to-attacker defense)", () => {
+      expect(rejects("https://attacker.example.com", pin)).toBe("host not pinned");
+      expect(rejects("https://api.openai.com", pin)).toBe("host not pinned");
+    });
+    it("still rejects http even for the pinned host (no allowHttp)", () => {
+      expect(rejects("http://coder.runpod.example.com", pin)).toContain("scheme");
+    });
+  });
 });
 
 describe("assertSafeResolvedUrl — DNS-record bypass", () => {

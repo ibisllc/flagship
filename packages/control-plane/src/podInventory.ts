@@ -24,6 +24,8 @@
 
 import {
   verifyDaemonStatusReport,
+  verifyBoxTrustStatusReport,
+  type BoxTrustStatusReport,
   type DaemonStatusReport,
 } from "@flagship/protocol";
 import { sha256 } from "@noble/hashes/sha256";
@@ -175,6 +177,15 @@ export interface OnlinePodEntry {
   lastSeenMsAgo: number | null;
   currentCert: { sha256: string | null; validUntil: number | null; issuer: string | null } | null;
   signedStatus: { report: unknown; signatureHex: string } | null;
+  /**
+   * PER-BOX relay-trust verdict — the box's separately-signed
+   * `flagship/box-trust-status/v1` envelope, relayed verbatim so a client
+   * re-verifies it under the locally-derived STK. Null when the box reports no
+   * trust status (old daemon / never evaluated). Clients aggregate warnings by
+   * `report.failingCertHash` ACROSS all a user's pods: one sliver line + one
+   * biometric override per DISTINCT faulty authority, not one per box.
+   */
+  trustStatus: { report: unknown; signatureHex: string } | null;
   appsServed: string[];
   /**
    * The service slugs this box currently LEADS (Phase 6 Part 3) — sourced from the
@@ -305,6 +316,13 @@ export async function buildPodInventory(
       // `leadsServices` the daemon stashed inside the report JSON. Parsed alongside
       // signedStatus; absent/corrupt → empty (additive, never fails the list).
       let leadsServices: string[] = [];
+      // PER-BOX relay-trust verdict — the separately-signed box-trust-status
+      // sibling the daemon stashed inside the report JSON. Relayed verbatim as
+      // `trustStatus` ({ report, signatureHex }) so a client re-verifies the
+      // box's own verdict under the locally-derived STK; a client then
+      // aggregates warnings by `failingCertHash` ACROSS all a user's pods (one
+      // sliver line + one override per DISTINCT faulty authority, not per box).
+      let trustStatus: { report: unknown; signatureHex: string } | null = null;
       if (status?.reportJson && status.signatureHex) {
         try {
           const parsedReport = JSON.parse(status.reportJson) as unknown;
@@ -316,8 +334,25 @@ export async function buildPodInventory(
           if (Array.isArray(ls)) {
             leadsServices = ls.filter((x): x is string => typeof x === "string");
           }
+          const rawTs = (
+            parsedReport as {
+              trustStatus?: { report?: unknown; signatureHex?: unknown };
+            }
+          )?.trustStatus;
+          if (
+            rawTs &&
+            typeof rawTs === "object" &&
+            rawTs.report &&
+            typeof rawTs.signatureHex === "string"
+          ) {
+            trustStatus = {
+              report: rawTs.report,
+              signatureHex: rawTs.signatureHex,
+            };
+          }
         } catch {
           signedStatus = null;
+          trustStatus = null;
         }
       }
       const { liveness, lastSeenMsAgo } = computeLiveness(realLastReported, now);
@@ -341,6 +376,7 @@ export async function buildPodInventory(
             }
           : null,
         signedStatus,
+        trustStatus,
         appsServed,
         leadsServices,
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
@@ -432,6 +468,15 @@ interface DaemonStatusBody {
    * Tolerant of absence: an old daemon omits it ⇒ no leads relayed.
    */
   leadsServices?: string[];
+  /**
+   * SIBLING signed envelope — the box's PER-BOX relay-trust verdict
+   * (`flagship/box-trust-status/v1`). Signed independently of the daemon-status
+   * report with the SAME STK. `.com` verifies + stashes it verbatim inside the
+   * relayed reportJson and surfaces it on /pods as `trustStatus` so a client
+   * re-verifies the box's own "this server appears unauthorized" verdict under
+   * the locally-derived STK. Tolerant of absence: an old daemon omits it.
+   */
+  trustStatus?: { report: BoxTrustStatusReport; signatureHex: string };
 }
 
 /**
@@ -509,13 +554,40 @@ export async function handlePostDaemonStatus(
     return forbidden("invalid signature");
   }
 
-  // Store the verbatim signed report PLUS the unsigned `leadsServices` sibling. The
-  // `report` object's canonical-bytes (what clients re-verify) IGNORE extra keys, so
-  // appending `leadsServices` to the relayed JSON is signature-safe and needs no
-  // migration (it rides the existing reportJson column). Only attach when present so
-  // the verbatim tuple is unchanged for boxes that don't report leads.
-  const reportForStore =
-    leadsServices.length > 0 ? { ...report, leadsServices } : report;
+  // SIBLING box-trust-status envelope — verify its OWN signature against the
+  // same registered STK (defense-in-depth so a corrupt/forged block never gets
+  // stored) and stash it verbatim for relay. Its serverDomain must match this
+  // box. A bad/mismatched block is simply dropped: the heartbeat still lands
+  // (never reject the whole report over the advisory trust sibling). The client
+  // re-verifies again against the locally-derived STK — `.com` is not trusted.
+  let trustStatusForStore:
+    | { report: BoxTrustStatusReport; signatureHex: string }
+    | null = null;
+  const ts = body?.trustStatus;
+  if (
+    ts &&
+    typeof ts === "object" &&
+    ts.report &&
+    typeof ts.report === "object" &&
+    typeof ts.signatureHex === "string" &&
+    HEX128.test(ts.signatureHex) &&
+    ts.report.serverDomain === report.serverDomain &&
+    verifyBoxTrustStatusReport(ts.report, hexToBytes(ts.signatureHex), stkPub)
+  ) {
+    trustStatusForStore = { report: ts.report, signatureHex: ts.signatureHex };
+  }
+
+  // Store the verbatim signed report PLUS the unsigned `leadsServices` sibling and
+  // the signed `trustStatus` sibling. The `report` object's canonical-bytes (what
+  // clients re-verify) IGNORE extra keys, so appending siblings to the relayed JSON
+  // is signature-safe and needs no migration (they ride the existing reportJson
+  // column). Only attach each when present so the verbatim tuple is unchanged for
+  // boxes that don't report them.
+  const reportForStore = {
+    ...report,
+    ...(leadsServices.length > 0 ? { leadsServices } : {}),
+    ...(trustStatusForStore ? { trustStatus: trustStatusForStore } : {}),
+  };
   await deps.daemonStatus.put({
     serverDomain: r.serverDomain.toLowerCase(),
     certSha256: report.certSha256,

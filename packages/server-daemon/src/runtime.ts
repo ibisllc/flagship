@@ -37,6 +37,7 @@ import { RelayTrustVerifier } from "./relayTrustVerifier.js";
 import {
   RelayLockdownController,
   relayTrustEnforceFromEnv,
+  type RelaySosEvent,
 } from "./relayLockdown.js";
 import type { ServiceBlessing } from "@flagship/protocol";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
@@ -175,6 +176,25 @@ export interface DaemonRuntimeOptions {
    * drive reconnect synthetically.
    */
   tunnelSupervisor?: import("./tunnel/tunnelClient.js").SupervisorOptions;
+  /**
+   * Resolve the owner-signed relay TrustExceptions that may cover a failing
+   * relay cert-hash, verified against the IRK-anchored device set (never a
+   * `.com`-asserted roster). Built by the daemon entry from the box's config
+   * (owner IRK + username); see `makeRelayTrustExceptionResolver`. Wired into
+   * the RelayLockdownController so ONE phone-signed override, fanned out via
+   * `.com`, satisfies this box too. Absent ⇒ no exceptions resolvable (under
+   * ENFORCE a failing verdict then locks down; OBSERVE just propagates it).
+   */
+  resolveRelayTrustExceptions?: (certHash: string) => Promise<{
+    exceptions: import("@flagship/protocol").TrustException[];
+    allowedDevicePubs: string[];
+  }>;
+  /**
+   * Emit an owner SOS when the box enters relay-lockdown (ENFORCE only). The
+   * daemon entry supplies the real STK-signed `flagship/push-relay/v1`
+   * trust-alert fan-out; absent ⇒ the controller's log-only default.
+   */
+  onRelaySos?: (e: RelaySosEvent) => void;
   /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
@@ -894,11 +914,16 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   });
   const relayLockdown = new RelayLockdownController({
     enforce: relayTrustEnforceFromEnv(),
-    // TODO(exception-sync): resolveTrustExceptions reads the owner-signed
-    // relay exceptions from `.com`'s directory + the IRK-anchored device
-    // roster. Left unwired here (no roster accessor on the box yet, same
-    // gap noted in control-plane/serviceBlessing.ts); under ENFORCE a
-    // failing verdict locks down with no exception. OBSERVE is unaffected.
+    // Owner-override resolution: reads the owner-signed relay exceptions from
+    // `.com`'s directory + verifies them against the box's IRK-anchored roster
+    // (built by the daemon entry from cfg — owner IRK + username). ONE
+    // phone-signed exception, fanned out via `.com`, thereby satisfies this box
+    // too. Absent in cert-only/test profiles ⇒ no exceptions resolvable.
+    ...(opts.resolveRelayTrustExceptions
+      ? { resolveTrustExceptions: opts.resolveRelayTrustExceptions }
+      : {}),
+    // Real STK-signed push-relay SOS when supplied; else the log-only default.
+    ...(opts.onRelaySos ? { sos: opts.onRelaySos } : {}),
   });
   const onHelloAckTrust = (e: {
     serviceBlessing: unknown;

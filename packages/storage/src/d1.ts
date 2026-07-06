@@ -3091,6 +3091,26 @@ export class D1LlmPromoStorage implements LlmPromoStorage {
     ).bind(u, i, o, now).run();
     return (await this.getLifetime(u))!;
   }
+  async recordMeteredUsage(u: string, d: number, i: number, o: number, now: number): Promise<void> {
+    // Add TRUE token usage to daily + lifetime WITHOUT bumping call counts.
+    await this.db.batch([
+      this.db.prepare(
+        `INSERT INTO llm_promo_usage (username, day, daily_count, daily_input_tokens, daily_output_tokens)
+         VALUES (?,?,0,?,?)
+         ON CONFLICT(username, day) DO UPDATE SET
+           daily_input_tokens = daily_input_tokens + excluded.daily_input_tokens,
+           daily_output_tokens = daily_output_tokens + excluded.daily_output_tokens`,
+      ).bind(u, d, i, o),
+      this.db.prepare(
+        `INSERT INTO llm_promo_lifetime (username, lifetime_count, lifetime_input_tokens, lifetime_output_tokens, updated_at)
+         VALUES (?,0,?,?,?)
+         ON CONFLICT(username) DO UPDATE SET
+           lifetime_input_tokens = lifetime_input_tokens + excluded.lifetime_input_tokens,
+           lifetime_output_tokens = lifetime_output_tokens + excluded.lifetime_output_tokens,
+           updated_at = excluded.updated_at`,
+      ).bind(u, i, o, now),
+    ]);
+  }
 }
 
 export class D1TierStorage implements TierStorage {

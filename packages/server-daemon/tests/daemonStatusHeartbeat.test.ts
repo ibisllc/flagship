@@ -92,6 +92,76 @@ describe("daemon-status heartbeat", () => {
     expect(ok).toBe(true);
   });
 
+  it("rides a SEPARATELY-SIGNED box-trust-status sibling when a snapshot is present", async () => {
+    const id = makeKeypair(7);
+    let captured: any = null;
+    const fetchImpl = (async (_url: any, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await postDaemonStatus({
+      serverDomain: "abc5.harry1.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com/",
+      cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: ["abc5.harry1.flagship.services"],
+      trustStatus: {
+        relayVerdict: "untrusted",
+        lockedDown: false,
+        failingCertHash: "ab".repeat(32),
+        coveringExceptionCertHash: null,
+      },
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+
+    expect(captured.trustStatus).toBeTruthy();
+    const bts = captured.trustStatus;
+    expect(bts.report.serverDomain).toBe("abc5.harry1.flagship.services");
+    expect(bts.report.relayVerdict).toBe("untrusted");
+    expect(bts.report.failingCertHash).toBe("ab".repeat(32));
+    // Its signature verifies under the box STK over the box-trust-status
+    // canonical bytes — a DISTINCT signature from the daemon-status one.
+    const btsCanonical = new TextEncoder().encode(
+      [
+        "flagship/box-trust-status/v1",
+        bts.report.serverDomain,
+        bts.report.relayVerdict,
+        bts.report.lockedDown ? "1" : "0",
+        bts.report.failingCertHash ?? "",
+        bts.report.coveringExceptionCertHash ?? "",
+        bts.report.nonce,
+        String(bts.report.issuedAt),
+      ].join("|"),
+    );
+    expect(
+      ed.verify(hexToBytes(bts.signatureHex), btsCanonical, id.publicKey),
+    ).toBe(true);
+    expect(bts.signatureHex).not.toBe(captured.signature);
+  });
+
+  it("omits trustStatus when no snapshot is supplied (additive)", async () => {
+    const id = makeKeypair(7);
+    let captured: any = null;
+    const fetchImpl = (async (_url: any, init: any) => {
+      captured = JSON.parse(init.body);
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    await postDaemonStatus({
+      serverDomain: "abc5.harry1.flagship.services",
+      sign: id,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: [],
+      now: () => 1_700_000_000_000,
+      fetchImpl,
+    });
+    expect(captured.trustStatus).toBeUndefined();
+  });
+
   it("update() fires one report immediately with the served names", async () => {
     const id = makeKeypair(9);
     const calls: any[] = [];

@@ -179,6 +179,10 @@ import {
   handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
+  handleLlmPromoUsage,
+  parseBlessedInferenceEndpoint,
+  mintScopedInferenceToken,
+  verifyScopedInferenceToken,
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleFetchWrappedUmkWithToken,
@@ -315,6 +319,29 @@ export interface ControlPlaneEnv {
    * entry once values are public).
    */
   FLAGSHIP_ISO_MANIFEST?: string;
+
+  /**
+   * The blessed in-house inference endpoint that backs the free-credits
+   * ("flagship") provider posture, as a JSON string of the
+   * `InferenceEndpoint` shape: {"baseUrl","model"}. `baseUrl` is the
+   * OpenAI-compatible RunPod/vLLM URL; `model` the served model id.
+   * Unset / unparseable / non-https ⇒ treated as unconfigured, and a
+   * `flagship` promo issue is refused (503) rather than minting a dead
+   * key. Rotating the RunPod endpoint is purely a matter of changing this
+   * value server-side — it never appears in a recipe or client build.
+   * Set via `wrangler secret put FLAGSHIP_INFERENCE_ENDPOINT`.
+   */
+  FLAGSHIP_INFERENCE_ENDPOINT?: string;
+
+  /**
+   * HMAC-SHA256 secret used to sign the scoped inference tokens the promo
+   * minter hands out for `provider:"flagship"`, and which the metering
+   * shim in front of the RunPod endpoint verifies (and reports usage back
+   * under, to POST /api/llm-promo/usage). Unset ⇒ a `flagship` issue is
+   * refused (503). NOT in git — `wrangler secret put
+   * FLAGSHIP_INFERENCE_TOKEN_SECRET`.
+   */
+  FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -732,6 +759,7 @@ const ROUTE_RE = {
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
+  LLM_PROMO_USAGE: /^\/api\/llm-promo\/usage$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
   REVOCATIONS_LIST: /^\/api\/revocations$/,
@@ -1307,7 +1335,20 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.TRUST_EXCEPTIONS))) {
     return finish(
       await handleStoreTrustException(
-        { storage: storage.trustExceptions },
+        {
+          storage: storage.trustExceptions,
+          // IRK-anchored roster: the account IRK (registered at claim, the
+          // `registeredIrkPubHex` from the wrapped-UMK path) is the single
+          // anchor — every one of the user's devices signs a TrustException
+          // with the shared account IRK, so the roster is exactly that key.
+          // Wiring it here rejects a granter outside the roster AT STORE TIME,
+          // closing the directory's spam-surface fail-open (previously `.com`
+          // stored any self-consistent envelope). The consuming box re-checks.
+          resolveDeviceRoster: async (u) => {
+            const rec = await storage.usernames.get(u);
+            return rec?.irkPubHex ? [rec.irkPubHex] : null;
+          },
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
@@ -3274,6 +3315,8 @@ export async function tryControlPlane(
 
   // ── LLM promo ──────────────────────────────────────────────
   if (method === "POST" && ROUTE_RE.LLM_PROMO_ISSUE.test(path)) {
+    const inferenceEndpoint = parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT);
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
     return finish(
       await handleLlmPromoIssue(
         {
@@ -3282,12 +3325,38 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           // #85 — enforce the demo rolling-token ceiling in production.
           demoLlmLedger: storage.demoLlmLedger,
-          // Stub minter: returns a deterministic fake key. Real Worker
-          // wiring calls the upstream provider's scoped-key API.
-          mintProviderKey: async (args) => ({
-            key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
-            providerKeyId: `pkid-${args.expiresAt}`,
-          }),
+          // Both the endpoint AND the signing secret must be present for
+          // a `flagship` issue; missing either ⇒ the handler's 503.
+          inferenceEndpoint: inferenceSecret ? inferenceEndpoint : null,
+          // For `provider:"flagship"` mint a scoped, short-lived (1h)
+          // `.com`-signed token the metering shim verifies — NOT a real
+          // upstream key. Refuse if the signing secret is unset (belt to
+          // the handler's endpoint-configured check). Upstream providers
+          // (anthropic/openai/google) keep the deterministic stub until
+          // their real scoped-key APIs are wired.
+          mintProviderKey: async (args) => {
+            if (args.provider === "flagship") {
+              if (!inferenceSecret) throw new Error("inference token secret not configured");
+              const keyId = `fp-${crypto.randomUUID()}`;
+              const key = await mintScopedInferenceToken(
+                {
+                  username: args.username,
+                  keyId,
+                  iat: Date.now(),
+                  exp: args.expiresAt,
+                  dailyInputTokenCap: args.dailyInputTokenCap,
+                  dailyOutputTokenCap: args.dailyOutputTokenCap,
+                  serverFqdn: args.serverFqdn,
+                },
+                inferenceSecret,
+              );
+              return { key, providerKeyId: keyId };
+            }
+            return {
+              key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
+              providerKeyId: `pkid-${args.expiresAt}`,
+            };
+          },
         },
         await readJson(request),
       ),
@@ -3303,6 +3372,27 @@ export async function tryControlPlane(
           mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Metering webhook — the in-house inference shim reports TRUE token
+  // usage (model (b)). Authenticated by the scoped token the shim
+  // re-presents; refused if the signing secret is unset.
+  if (method === "POST" && ROUTE_RE.LLM_PROMO_USAGE.test(path)) {
+    const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
+    if (!inferenceSecret) {
+      return finishPlain({ status: 503, body: { error: "in-house inference not configured" } });
+    }
+    return finish(
+      await handleLlmPromoUsage(
+        {
+          llmPromo: storage.llmPromo,
+          verifyToken: async (token) => {
+            const v = await verifyScopedInferenceToken(token, inferenceSecret);
+            return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
+          },
+        },
+        await readJson(request),
       ),
     );
   }

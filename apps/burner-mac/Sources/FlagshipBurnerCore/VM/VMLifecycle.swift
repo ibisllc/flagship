@@ -148,3 +148,41 @@ public struct VMLifecycle: Sendable {
         }
     }
 }
+
+// MARK: - Install-stop interpretation (the reboot/poweroff/never-booted seam)
+
+extension VMLifecycle {
+    /// The minimum wall-clock time from entering `.installing` for a CLEAN
+    /// (no-error) guest self-stop to plausibly mean "the unattended install
+    /// finished". A real Debian-preseed install takes many minutes; a clean
+    /// stop faster than this means the guest did NOT install:
+    ///
+    ///   - it failed to boot at all — e.g. an amd64 base image on an
+    ///     Apple-silicon host, which VZ cannot run: the VM stops ~0.3s after
+    ///     start with `error=nil` (observed during Phase-0 hardware bring-up);
+    ///   - or the installer rebooted very early (a mid-install failure).
+    ///
+    /// The seam must NOT read such a fast clean stop as success, or a VM that
+    /// never ran an install is reported "Installed" and then boots an empty
+    /// disk. Only a clean stop after a plausible duration is a real install
+    /// completion — and that is true whether the finished installer POWERED OFF
+    /// or REBOOTED (VZ surfaces both as a delegate `guestDidStop`, so the
+    /// distinction is duration, not the stop kind).
+    public static let minPlausibleInstallDuration: TimeInterval = 90
+
+    public enum InstallStopVerdict: Equatable, Sendable {
+        case installed
+        case failedTooFast(elapsed: TimeInterval)
+    }
+
+    /// Interpret a clean guest self-stop observed while `.installing`.
+    /// `installStartedAt` is when `.installing` was entered (this lifecycle's
+    /// `stateChangedAt`); `now` from the caller's clock.
+    public static func verdictForCleanInstallStop(installStartedAt: Date,
+                                                  now: Date) -> InstallStopVerdict {
+        let elapsed = now.timeIntervalSince(installStartedAt)
+        return elapsed >= minPlausibleInstallDuration
+            ? .installed
+            : .failedTooFast(elapsed: elapsed)
+    }
+}

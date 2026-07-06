@@ -3,17 +3,20 @@ import { openai, openaiStreaming } from "./providers/openai.js";
 import { google, googleStreaming } from "./providers/google.js";
 import { openrouter } from "./providers/openrouter.js";
 import { ollama } from "./providers/ollama.js";
+import { flagship, flagshipStreaming } from "./providers/flagship.js";
 import type { LLMProvider, StreamingLLMProvider } from "./types.js";
 
-const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama];
+const builtins: LLMProvider[] = [anthropic, openai, google, openrouter, ollama, flagship];
 
 // Only providers with a real SSE streaming adapter. openrouter (an
 // OpenAI-compatible proxy) + ollama are intentionally excluded for now —
-// they fall back to the non-streaming `chat()` path.
+// they fall back to the non-streaming `chat()` path. `flagship` is
+// OpenAI-compatible, so it streams.
 const streamingBuiltins: StreamingLLMProvider[] = [
   anthropicStreaming,
   openaiStreaming,
   googleStreaming,
+  flagshipStreaming,
 ];
 
 export class ProviderRegistry {
