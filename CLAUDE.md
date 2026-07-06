@@ -149,7 +149,39 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
-**2026-07-06 — multi-arch hosting (Apple-silicon + arm64 Linux) + debug-SSH is a v1 FEATURE.**
+**2026-07-06 (evening, Chromebook instance) — Linux burner validated LIVE on
+ChromeOS; multi-arch Linux remainder DONE; Android/iOS large-screen polish.**
+On `feat/chromebook-fit` (branch off main; iOS half needs a Mac build before
+merge). Validated on a real Crostini Chromebook (Debian 12 container, /dev/kvm
+exposed): 228→278 pytest, a live KVM OVMF boot through QemuHost/QMP
+(`query-kvm enabled=true`), the FIRST-EVER GTK render, the app on the
+Chromebook's own Android layer (ADB→ARC), and a REAL end-to-end host-here run:
+a headless twin of the dev phone-simulator minted a live recipe on prod
+(`penguin.eager-birch.flagship.services`, de=none), and the wizard pipeline
+took it manifest-download (Debian 13.5.0) → preseed-engine remaster → KVM
+unattended install → duration-gated verdict → first boot → **Running** (~47
+min wall) → clean QMP power-off. Remaining on that item: the LUKS/sealed
+phone-approval half + entitlement grant (needs a real phone). The run
+surfaced + fixed four ship-blockers no unit test could see: (a)
+`Adw.ToolbarView` needs adw ≥1.4 — Debian 12/Ubuntu 22.04/Crostini ship 1.2 →
+fallback layout; (b) a GTK3-only `set_hscrollbar_policy` call — the window had
+never built on ANY GTK4; (c) AppImage+Flatpak packaging omitted
+`pair_session.py` + the whole `vm/` package → packaged startup ImportError;
+(d) the CLI locator preferred `src/cli.ts`, which plain node can't run → every
+checkout burner failed its first CLI call (dist/cli.js now wins). Chromebook
+fit: Crostini-aware empty-disk-picker hint (share USB via ChromeOS Settings);
+`garcon-terminal-handler` support for Open-in-SSH (command verbatim, no `-e`,
+symlink-resolved); elevation falls back to passwordless `sudo -n` where pkexec
+can't work (stock Crostini). Multi-arch handoff (9bb1d60d) CLOSED: `-machine
+virt` + explicit AHCI on arm64 (amd64 argv unchanged), VMManager host-arch
+detect + cross-arch create/start refusal, wizard arch pass-through, tests. New
+CI: `burner-linux.yml` runs pytest + a `render_smoke.py` window-build under
+xvfb on ubuntu-latest AND debian:12 (both adw generations). Apps: Android
+edge-to-edge insets (targetSdk-35 bug — slivers drew under the status bar) +
+readingMaxWidth caps on detail/flow/welcome screens (validated fullscreen on
+ARC with screenshots); iOS twin `.fsReadingColumn()` applied to the 5 matching
+screens — **UNCOMPILED, Mac must build + run GymIPadTests + eyeball an iPad
+sim before merge**.
 (a) **Arch-aware ISO manifest**: `POST /api/iso-manifest` takes optional
 `arch` (absent = amd64, deployed burners byte-compatible); the Worker serves a
 second blessed manifest `FLAGSHIP_ISO_MANIFEST_ARM64` (official Debian 13.5.0
