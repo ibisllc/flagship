@@ -384,3 +384,44 @@ def _make_disk(device_path: str) -> DeviceInfo:
 def _model_with_fake_locate(node: str, entry: str) -> WizardModel:
     locate_fn = lambda: Resolved(node_path=node, entry_path=entry)
     return WizardModel(locate_fn=locate_fn)
+
+
+def test_usb_burn_advisory_fires_on_chromeos_with_a_selected_disk():
+    import container_env
+
+    model = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        is_chromeos=lambda: True,
+    )
+    assert model.usb_burn_advisory is None  # no disk selected yet
+    model.state.disks = [_make_disk("/dev/sda")]
+    model.select_disk("/dev/sda")
+    assert model.usb_burn_advisory == container_env.USB_BURN_ADVISORY
+
+
+def test_usb_burn_advisory_silent_off_chromeos():
+    model = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        is_chromeos=lambda: False,
+    )
+    model.state.disks = [_make_disk("/dev/sda")]
+    model.select_disk("/dev/sda")
+    assert model.usb_burn_advisory is None
+
+
+def test_run_bake_logs_the_advisory_before_writing_on_chromeos():
+    import container_env
+
+    model = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        is_chromeos=lambda: True,
+    )
+    model.state.disks = [_make_disk("/dev/sda")]
+    model.select_disk("/dev/sda")
+    # Stop the bake thread from doing real work — we only assert the log.
+    model._run_simple_bake_sync = lambda: None
+    model.run_bake()
+    assert any(
+        ll.stream == "stderr" and ll.text == container_env.USB_BURN_ADVISORY
+        for ll in model.state.log_lines
+    )
