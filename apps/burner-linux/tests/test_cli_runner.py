@@ -199,3 +199,31 @@ def test_command_vector_ignores_the_prefix_without_pkexec():
         elevation_prefix=["sudo", "-n"],
     )
     assert r.command_vector == ["/usr/bin/node", "/cli.js", "verify"]
+
+
+def test_find_entry_prefers_the_built_dist_over_the_ts_source(tmp_path):
+    from cli_runner import find_entry
+
+    pkg = tmp_path / "packages" / "flagship-burner"
+    (pkg / "src").mkdir(parents=True)
+    (pkg / "dist").mkdir(parents=True)
+    (pkg / "src" / "cli.ts").write_text("ts")
+    (pkg / "dist" / "cli.js").write_text("js")
+    exe_dir = tmp_path / "apps" / "burner-linux"
+    exe_dir.mkdir(parents=True)
+    # Plain `node` cannot execute the .ts (ERR_UNKNOWN_FILE_EXTENSION) — the
+    # built dist must win whenever it exists.
+    got = find_entry(executable_dir=exe_dir, environ={})
+    assert got.endswith("dist/cli.js")
+
+
+def test_find_entry_falls_back_to_the_ts_source_without_a_build(tmp_path):
+    from cli_runner import find_entry
+
+    pkg = tmp_path / "packages" / "flagship-burner"
+    (pkg / "src").mkdir(parents=True)
+    (pkg / "src" / "cli.ts").write_text("ts")
+    exe_dir = tmp_path / "apps" / "burner-linux"
+    exe_dir.mkdir(parents=True)
+    got = find_entry(executable_dir=exe_dir, environ={})
+    assert got.endswith("src/cli.ts")

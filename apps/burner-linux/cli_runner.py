@@ -60,10 +60,12 @@ def find_entry(
 ) -> str:
     """Find the flagship-burn CLI entry. Searches:
       1. $FLAGSHIP_BURN_ENTRY
-      2. ../../packages/flagship-burner/src/cli.ts from this file
-      3. ../../packages/flagship-burner/dist/cli.js (release-packaged)
-      4. /usr/share/flagship-burner/cli.ts (system-installed AppImage extract)
-      5. /usr/share/flagship-burner/cli.js
+      2. ../../packages/flagship-burner/dist/cli.js from this file (the tsc
+         build — plain `node` runs it; node 20 can NOT execute the .ts)
+      3. ../../packages/flagship-burner/src/cli.ts (last-resort: only works
+         under a TS-capable runtime)
+      4. /usr/share/flagship-burner/cli.js (system-installed AppImage extract)
+      5. /usr/share/flagship-burner/cli.ts
     """
     env = environ if environ is not None else os.environ
     override = env.get("FLAGSHIP_BURN_ENTRY")
@@ -71,14 +73,16 @@ def find_entry(
         return override
     base = executable_dir if executable_dir is not None else Path(__file__).resolve().parent
     # apps/burner-linux/ → walk up to flagship/, then over to
-    # packages/flagship-burner/src/cli.ts
+    # packages/flagship-burner/. dist BEFORE src: the runner is plain `node`,
+    # which throws ERR_UNKNOWN_FILE_EXTENSION on the .ts — a checkout that ran
+    # `npx tsc -b` must Just Work.
     candidates = [
-        base.parent.parent / "packages" / "flagship-burner" / "src" / "cli.ts",
         base.parent.parent / "packages" / "flagship-burner" / "dist" / "cli.js",
-        Path("/usr/share/flagship-burner/cli.ts"),
+        base.parent.parent / "packages" / "flagship-burner" / "src" / "cli.ts",
         Path("/usr/share/flagship-burner/cli.js"),
-        Path("/usr/share/flagship-burner/src/cli.ts"),
+        Path("/usr/share/flagship-burner/cli.ts"),
         Path("/usr/share/flagship-burner/dist/cli.js"),
+        Path("/usr/share/flagship-burner/src/cli.ts"),
     ]
     for c in candidates:
         if fileexists(str(c)):

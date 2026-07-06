@@ -176,10 +176,12 @@ python3 apps/burner-linux/flagship-burner.py
 ```
 
 The GUI resolves the Node CLI entry from
-`packages/flagship-burner/src/cli.ts` relative to its own directory, so
-it Just Works in a checkout. Override with `FLAGSHIP_BURN_ENTRY=...` if
-you need a different path (useful when running from inside an AppImage
-extract).
+`packages/flagship-burner/dist/cli.js` relative to its own directory —
+run `npx tsc -b packages/flagship-burner` once so the build exists
+(plain `node` can't execute the `.ts` source; the src entry is only a
+last-resort for TS-capable runtimes). Override with
+`FLAGSHIP_BURN_ENTRY=...` if you need a different path (useful when
+running from inside an AppImage extract).
 
 ## Test
 
