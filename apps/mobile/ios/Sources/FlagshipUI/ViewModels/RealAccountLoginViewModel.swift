@@ -11,7 +11,7 @@ import FlagshipCore
 /// runs `/api/account/resolve` (200 always) and lands on `.realAccount`
 /// for `kind == single | multi`. This view model takes that resolution
 /// and drives the credentialed-takeover branches that Phase 1 stubbed
-/// out to the old `RecoverFromWelcomeContainer`.
+/// out to the old passkey container (removed with the login redesign).
 ///
 /// Mock-only (per the Phase 3 scope): the WebAuthn-PRF unwrap runs
 /// against `MockWebAuthnProvider`; live `ASAuthorization` wrappers are a
