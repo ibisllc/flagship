@@ -314,6 +314,7 @@ class WizardModel:
         run_lsblk: Optional[Callable[[], str]] = None,
         locate_fn: Optional[Callable[[], Resolved]] = None,
         probe_elevation: Callable[[], Optional[elevation.Elevation]] = elevation.probe,
+        is_chromeos: Callable[[], bool] = container_env.is_chromeos_container,
         mode: str = MODE_SIMPLE,
         # Injectable seam so the Simple-mode base fetch is unit-testable
         # without network: defaults to the real manifest-driven cache.
@@ -330,6 +331,7 @@ class WizardModel:
         self._run_lsblk = run_lsblk
         self._locate_fn = locate_fn or locate
         self._probe_elevation = probe_elevation
+        self._is_chromeos = is_chromeos
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
@@ -438,11 +440,27 @@ class WizardModel:
             self.state.verified = VerifyInfo.from_dict(parsed)
             self._notify()
 
+    @property
+    def usb_burn_advisory(self) -> Optional[str]:
+        """Non-None when a USB burn is likely to fail on this machine: inside
+        ChromeOS's Linux container, raw writes to a shared removable drive are
+        capped by ChromeOS, so a burn stalls near 0%. Surfaced in the GUI +
+        logged before the write so the user isn't left with a raw ENOSPC.
+        Advisory only — never hard-blocks (a future ChromeOS could lift it)."""
+        if self.state.selected_disk is None:
+            return None
+        if not self._is_chromeos():
+            return None
+        return container_env.USB_BURN_ADVISORY
+
     def run_bake(self) -> None:
         """Flash the USB. Both modes remaster + write via the Node CLI's
         `write` subcommand (needs root → pkexec). Simple mode first ensures the
         server-manifest Debian base ISO is cached, then feeds it to the SAME
         CLI path Advanced uses with a user-supplied ISO."""
+        advisory = self.usb_burn_advisory
+        if advisory is not None:
+            self._append_log("stderr", advisory)
         if self.state.mode == MODE_SIMPLE:
             threading.Thread(target=self._run_simple_bake_sync, daemon=True).start()
         else:
@@ -1255,6 +1273,12 @@ def build_window(application, model: Optional[WizardModel] = None):
     readiness.set_wrap(True)
     step4["body"].append(readiness)
 
+    usb_advisory = Gtk.Label(xalign=0.0)
+    usb_advisory.set_wrap(True)
+    usb_advisory.add_css_class("warning")
+    usb_advisory.set_visible(False)
+    step4["body"].append(usb_advisory)
+
     bake_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     bake_btn = Gtk.Button(label="Flash to USB")
     bake_btn.add_css_class("suggested-action")
@@ -1822,6 +1846,9 @@ def build_window(application, model: Optional[WizardModel] = None):
         no_disks.set_visible(len(s.disks) == 0)
         # readiness
         readiness.set_text(s.readiness_summary)
+        advisory = wizard_model.usb_burn_advisory
+        usb_advisory.set_text(advisory or "")
+        usb_advisory.set_visible(advisory is not None)
         bake_btn.set_sensitive(s.can_flash and not s.is_running)
         prep_btn.set_sensitive(
             s.recipe_path is not None and s.iso_path is not None

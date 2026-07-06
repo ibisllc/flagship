@@ -181,7 +181,14 @@ edge-to-edge insets (targetSdk-35 bug — slivers drew under the status bar) +
 readingMaxWidth caps on detail/flow/welcome screens (validated fullscreen on
 ARC with screenshots); iOS twin `.fsReadingColumn()` applied to the 5 matching
 screens — **UNCOMPILED, Mac must build + run GymIPadTests + eyeball an iPad
-sim before merge**.
+sim before merge**. USB burn test on real hardware: the whole burner path is
+correct (enumeration → safety verdict → recipe verify via dist/cli.js →
+`sudo -n` elevation → remaster → write syscalls) but ChromeOS **caps raw
+block writes to a shared USB from the container** (~488 KB then silent
+ENOSPC) — a genuine Crostini limitation, not a burner bug. So **on a
+Chromebook the burn path is Host-on-this-PC (works), not USB**; the burner
+now shows an upfront advisory when a USB is selected on ChromeOS instead of a
+mid-burn ENOSPC.
 (a) **Arch-aware ISO manifest**: `POST /api/iso-manifest` takes optional
 `arch` (absent = amd64, deployed burners byte-compatible); the Worker serves a
 second blessed manifest `FLAGSHIP_ISO_MANIFEST_ARM64` (official Debian 13.5.0
