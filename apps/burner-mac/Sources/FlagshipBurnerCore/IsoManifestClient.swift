@@ -10,9 +10,21 @@ import Foundation
 /// LOCKED WIRE CONTRACT:
 ///   POST https://flagshipserver.com/api/iso-manifest
 ///   Request:  { "platform":"mac", "burnerVersion":"<s>",
-///               "current": { "version":"<s>", "sha256":"<hex64>" } | null }
+///               "current": { "version":"<s>", "sha256":"<hex64>" } | null,
+///               "arch": "amd64" | "arm64" (OPTIONAL; absent = "amd64") }
 ///   Response: { "download": { "url","sha256","version","sizeBytes","attestation" } }
 ///        or:  { "download": null }
+///   `download: null` means "keep what you've got" — UNLESS the requested arch
+///   has no blessed manifest at all, in which case it means "nothing to offer";
+///   the caller distinguishes the two by whether it has a cached base.
+
+/// Base-ISO architecture. Burning always targets amd64 (real boxes are x86);
+/// arm64 exists solely for the host-a-VM path, where Virtualization.framework
+/// boots native-arch guests only.
+public enum IsoArch: String, Codable, CaseIterable, Sendable {
+    case amd64
+    case arm64
+}
 
 /// What the burner currently holds in its cache, reported verbatim to the server.
 public struct IsoManifestCurrent: Codable, Equatable, Sendable {
@@ -30,11 +42,37 @@ public struct IsoManifestRequest: Codable, Equatable, Sendable {
     public let platform: String
     public let burnerVersion: String
     public let current: IsoManifestCurrent?
+    public let arch: IsoArch
 
-    public init(platform: String = "mac", burnerVersion: String, current: IsoManifestCurrent?) {
+    public init(platform: String = "mac", burnerVersion: String,
+                current: IsoManifestCurrent?, arch: IsoArch = .amd64) {
         self.platform = platform
         self.burnerVersion = burnerVersion
         self.current = current
+        self.arch = arch
+    }
+
+    // Hand-rolled Codable: amd64 is encoded as an ABSENT `arch` key so the
+    // burn-path request stays byte-identical to the pre-arch wire format
+    // (absent = amd64 server-side, the back-compat default).
+    private enum CodingKeys: String, CodingKey {
+        case platform, burnerVersion, current, arch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        platform = try c.decode(String.self, forKey: .platform)
+        burnerVersion = try c.decode(String.self, forKey: .burnerVersion)
+        current = try c.decodeIfPresent(IsoManifestCurrent.self, forKey: .current)
+        arch = try c.decodeIfPresent(IsoArch.self, forKey: .arch) ?? .amd64
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(platform, forKey: .platform)
+        try c.encode(burnerVersion, forKey: .burnerVersion)
+        try c.encodeIfPresent(current, forKey: .current)
+        if arch != .amd64 { try c.encode(arch, forKey: .arch) }
     }
 }
 

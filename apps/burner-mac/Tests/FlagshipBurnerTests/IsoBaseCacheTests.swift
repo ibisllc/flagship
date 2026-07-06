@@ -2,6 +2,13 @@ import XCTest
 import CryptoKit
 @testable import FlagshipBurnerCore
 
+/// Box for values mutated from the cache's @Sendable progress closure (which
+/// runs synchronously inside `ensure()`, so there is no actual race).
+private final class Captured<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
+
 final class IsoBaseCacheTests: XCTestCase {
 
     private var tmpDir: URL!
@@ -23,17 +30,19 @@ final class IsoBaseCacheTests: XCTestCase {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func writeCachedBase(version: String, body: Data) -> URL {
-        let url = tmpDir.appendingPathComponent("flagship-base-\(version).iso")
+    private func writeCachedBase(version: String, arch: IsoArch = .amd64, body: Data) -> URL {
+        let prefix = arch == .amd64 ? "flagship-base-" : "flagship-base-\(arch.rawValue)-"
+        let url = tmpDir.appendingPathComponent("\(prefix)\(version).iso")
         try? body.write(to: url)
         return url
     }
 
-    private func makeCache() -> IsoBaseCache {
+    private func makeCache(arch: IsoArch = .amd64) -> IsoBaseCache {
         let session = StubURLProtocol.makeSession()
         let client = IsoManifestClient(endpoint: IsoManifestClient.endpoint, session: session)
         return IsoBaseCache(client: client,
                             burnerVersion: "test",
+                            arch: arch,
                             downloadSession: session,
                             cacheDirOverride: tmpDir,
                             log: { _ in })
@@ -57,13 +66,13 @@ final class IsoBaseCacheTests: XCTestCase {
         let cached = writeCachedBase(version: "debian-12.4", body: body)
         StubURLProtocol.responder = { _ in (200, self.manifestJSON(download: nil)) }
 
-        var readyFromCache = false
+        let readyFromCache = Captured(false)
         let cache = makeCache()
         let result = try await cache.ensure(progress: { phase in
-            if case .ready(_, _, let fromCache) = phase { readyFromCache = fromCache }
+            if case .ready(_, _, let fromCache) = phase { readyFromCache.value = fromCache }
         })
         XCTAssertEqual(result.standardizedFileURL, cached.standardizedFileURL)
-        XCTAssertTrue(readyFromCache)
+        XCTAssertTrue(readyFromCache.value)
         XCTAssertEqual(try Data(contentsOf: result), body)
     }
 
@@ -93,18 +102,18 @@ final class IsoBaseCacheTests: XCTestCase {
             return (200, self.manifestJSON(download: (isoURL, goodSha, "debian-12.5", isoBody.count)))
         }
 
-        var sawURL: String? = nil
-        var readyFromCache: Bool? = nil
+        let sawURL = Captured<String?>(nil)
+        let readyFromCache = Captured<Bool?>(nil)
         let cache = makeCache()
         let result = try await cache.ensure(progress: { phase in
             switch phase {
-            case .downloading(let url, _, _): sawURL = url
-            case .ready(_, _, let fc): readyFromCache = fc
+            case .downloading(let url, _, _): sawURL.value = url
+            case .ready(_, _, let fc): readyFromCache.value = fc
             default: break
             }
         })
-        XCTAssertEqual(sawURL, isoURL, "the URL must be surfaced for the UI")
-        XCTAssertEqual(readyFromCache, false)
+        XCTAssertEqual(sawURL.value, isoURL, "the URL must be surfaced for the UI")
+        XCTAssertEqual(readyFromCache.value, false)
         XCTAssertEqual(result.lastPathComponent, "flagship-base-debian-12.5.iso")
         XCTAssertEqual(try Data(contentsOf: result), isoBody)
     }
@@ -164,6 +173,84 @@ final class IsoBaseCacheTests: XCTestCase {
         let decoded = try JSONDecoder().decode(IsoManifestRequest.self, from: reqBody)
         XCTAssertEqual(decoded.current?.version, "debian-12.4")
         XCTAssertEqual(decoded.current?.sha256, expectedSha)
+    }
+
+    // MARK: - per-arch
+
+    /// The host path's arm64 cache asks the server for arch=arm64; the burn
+    /// path's default request carries no arch key at all (byte-compat).
+    func testArm64RequestCarriesArch() async throws {
+        _ = writeCachedBase(version: "debian-13.5.0", arch: .arm64, body: Data("arm base".utf8))
+        StubURLProtocol.responder = { _ in (200, self.manifestJSON(download: nil)) }
+        _ = try await makeCache(arch: .arm64).ensure()
+        let reqBody = try XCTUnwrap(StubURLProtocol.lastBody)
+        let decoded = try JSONDecoder().decode(IsoManifestRequest.self, from: reqBody)
+        XCTAssertEqual(decoded.arch, .arm64)
+        XCTAssertEqual(decoded.current?.version, "debian-13.5.0",
+                       "the arm64 inspect must report the arm64 entry's version")
+    }
+
+    /// arm64 + download:null + NOTHING cached is "hosting unavailable for this
+    /// architecture", never "up to date": the error points at Advanced mode
+    /// with an arm64 ISO.
+    func testArm64NullWithNoCacheSaysHostingUnavailable() async {
+        StubURLProtocol.responder = { _ in (200, self.manifestJSON(download: nil)) }
+        do {
+            _ = try await makeCache(arch: .arm64).ensure()
+            XCTFail("expected noBaseAvailable")
+        } catch let e as IsoBaseCache.CacheError {
+            guard case .noBaseAvailable(.arm64) = e else { return XCTFail("wrong: \(e)") }
+            let msg = e.errorDescription ?? ""
+            XCTAssertTrue(msg.contains("Advanced mode"), "must point at the escape hatch, got: \(msg)")
+            XCTAssertTrue(msg.contains("arm64"), "must name the missing arch, got: \(msg)")
+        } catch { XCTFail("wrong type: \(error)") }
+    }
+
+    /// An amd64 burn base and an arm64 host base coexist: the arm64 download
+    /// must not evict the amd64 entry, and vice versa.
+    func testPerArchCacheCoexistence() async throws {
+        let amdBody = Data("amd64 burn base".utf8)
+        let amdURL = writeCachedBase(version: "debian-13.5.0", body: amdBody)
+
+        let armBody = Data(repeating: 0xA6, count: 4096)
+        let armISO = "https://flagshipserver.com/iso/debian-arm64.iso"
+        StubURLProtocol.responder = { req in
+            if req.url?.absoluteString == armISO { return (200, armBody) }
+            return (200, self.manifestJSON(download: (armISO, self.sha256(armBody), "debian-13.5.0", armBody.count)))
+        }
+        let armURL = try await makeCache(arch: .arm64).ensure()
+        XCTAssertEqual(armURL.lastPathComponent, "flagship-base-arm64-debian-13.5.0.iso")
+        XCTAssertEqual(try Data(contentsOf: amdURL), amdBody,
+                       "the arm64 download must not prune the amd64 burn base")
+
+        // Now the reverse: a fresh amd64 download prunes the OLD amd64 base
+        // but leaves the arm64 host base alone.
+        let newAmdBody = Data(repeating: 0x64, count: 2048)
+        let newAmdISO = "https://flagshipserver.com/iso/debian-13.6-amd64.iso"
+        StubURLProtocol.responder = { req in
+            if req.url?.absoluteString == newAmdISO { return (200, newAmdBody) }
+            return (200, self.manifestJSON(download: (newAmdISO, self.sha256(newAmdBody), "debian-13.6.0", newAmdBody.count)))
+        }
+        _ = try await makeCache().ensure()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: amdURL.path), "old amd64 base pruned")
+        XCTAssertEqual(try Data(contentsOf: armURL), armBody,
+                       "the amd64 download must not prune the arm64 host base")
+    }
+
+    /// The amd64 inspect must not mistake an arm64 entry for its own cache —
+    /// its filename shares the legacy amd64 prefix.
+    func testAmd64InspectIgnoresArm64Entry() async throws {
+        _ = writeCachedBase(version: "debian-13.5.0", arch: .arm64, body: Data("arm only".utf8))
+        StubURLProtocol.responder = { _ in (200, self.manifestJSON(download: nil)) }
+        do {
+            _ = try await makeCache().ensure()
+            XCTFail("expected noBaseAvailable — the arm64 entry is not an amd64 cache")
+        } catch let e as IsoBaseCache.CacheError {
+            guard case .noBaseAvailable(.amd64) = e else { return XCTFail("wrong: \(e)") }
+        } catch { XCTFail("wrong type: \(error)") }
+        let reqBody = try XCTUnwrap(StubURLProtocol.lastBody)
+        let decoded = try JSONDecoder().decode(IsoManifestRequest.self, from: reqBody)
+        XCTAssertNil(decoded.current, "the arm64 entry must not be reported as the amd64 current")
     }
 
     /// Empty cache → `current` is nil.

@@ -12,6 +12,12 @@ import CryptoKit
 /// The Debian netinst base lands at
 ///   ~/Library/Caches/flagship-burner/flagship-base-<version>.iso
 /// and is then remastered with a preseed via the shared Advanced path.
+///
+/// The cache is keyed PER-ARCH: amd64 (the burn default) keeps the legacy
+/// un-tagged filename so existing caches stay valid, while other arches are
+/// namespaced `flagship-base-<arch>-<version>.iso` — an amd64 burn base and
+/// an arm64 host base coexist, and each arch's inspect/prune only ever sees
+/// its own entry.
 public struct IsoBaseCache {
 
     public enum CacheError: LocalizedError {
@@ -19,7 +25,7 @@ public struct IsoBaseCache {
         case httpStatus(Int)
         case checksumMismatch(expected: String, got: String)
         case noCacheDir
-        case noBaseAvailable
+        case noBaseAvailable(IsoArch)
 
         public var errorDescription: String? {
             switch self {
@@ -31,8 +37,13 @@ public struct IsoBaseCache {
                 return "Base image failed its integrity check (expected \(e.prefix(12))…, got \(g.prefix(12))…). It was discarded — try again."
             case .noCacheDir:
                 return "Couldn't open the cache directory."
-            case .noBaseAvailable:
-                return "No base image is available yet — the server has nothing to download and nothing is cached."
+            case .noBaseAvailable(let arch):
+                switch arch {
+                case .amd64:
+                    return "No base image is available yet — the server has nothing to download and nothing is cached."
+                case .arm64:
+                    return "The server doesn't offer an arm64 base image yet, so Simple mode can't host a server on this Apple-silicon Mac for now. Use Advanced mode with an arm64 Debian netinst ISO instead."
+                }
             }
         }
     }
@@ -50,6 +61,9 @@ public struct IsoBaseCache {
 
     private let client: IsoManifestClient
     private let burnerVersion: String
+    /// Which arch's base this cache instance manages. Burning stays amd64;
+    /// the host-a-VM path passes the HOST arch (arm64 on Apple silicon).
+    private let arch: IsoArch
     private let log: @Sendable (String) -> Void
     /// Session used for the ISO byte stream. Defaults to `.shared`; tests inject
     /// a stub. The manifest POST uses the client's own session.
@@ -59,11 +73,13 @@ public struct IsoBaseCache {
 
     public init(client: IsoManifestClient = IsoManifestClient(),
                 burnerVersion: String = IsoBaseCache.defaultBurnerVersion(),
+                arch: IsoArch = .amd64,
                 downloadSession: URLSession = .shared,
                 cacheDirOverride: URL? = nil,
                 log: @escaping @Sendable (String) -> Void = { _ in }) {
         self.client = client
         self.burnerVersion = burnerVersion
+        self.arch = arch
         self.downloadSession = downloadSession
         self.cacheDirOverride = cacheDirOverride
         self.log = log
@@ -93,18 +109,38 @@ public struct IsoBaseCache {
         return dir
     }
 
-    static func cachedURL(version: String, dir: URL) -> URL {
-        dir.appendingPathComponent("flagship-base-\(version).iso")
+    static func cachedURL(version: String, arch: IsoArch, dir: URL) -> URL {
+        dir.appendingPathComponent("\(basePrefix(arch))\(version).iso")
     }
 
-    /// The single base ISO currently on disk, if any. We persist the version in
-    /// a sidecar so we can report it; the filename also encodes it.
-    static func existingCachedISO(in dir: URL) -> (url: URL, version: String)? {
+    /// amd64 keeps the legacy un-tagged prefix so caches downloaded before the
+    /// arch split stay valid; other arches get their own namespace so a host
+    /// base and the burn base coexist without evicting each other.
+    static func basePrefix(_ arch: IsoArch) -> String {
+        arch == .amd64 ? "flagship-base-" : "flagship-base-\(arch.rawValue)-"
+    }
+
+    /// nil unless `name` is a cached base for exactly this arch. The legacy
+    /// amd64 prefix is a prefix of every arch-tagged name, so the amd64 match
+    /// must REJECT names whose "version" is actually another arch's tag.
+    static func version(ofCachedName name: String, arch: IsoArch) -> String? {
+        let prefix = basePrefix(arch)
+        guard name.hasPrefix(prefix), name.hasSuffix(".iso") else { return nil }
+        let version = String(name.dropFirst(prefix.count).dropLast(".iso".count))
+        if arch == .amd64,
+           IsoArch.allCases.contains(where: { $0 != .amd64 && version.hasPrefix("\($0.rawValue)-") }) {
+            return nil
+        }
+        return version
+    }
+
+    /// The single base ISO of this arch currently on disk, if any. The
+    /// filename encodes the version (and, for non-amd64, the arch).
+    static func existingCachedISO(in dir: URL, arch: IsoArch) -> (url: URL, version: String)? {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else { return nil }
         for name in entries.sorted() {
-            guard name.hasPrefix("flagship-base-"), name.hasSuffix(".iso") else { continue }
-            let version = String(name.dropFirst("flagship-base-".count).dropLast(".iso".count))
+            guard let version = version(ofCachedName: name, arch: arch) else { continue }
             let url = dir.appendingPathComponent(name)
             if fm.fileExists(atPath: url.path) {
                 return (url, version)
@@ -118,7 +154,7 @@ public struct IsoBaseCache {
     /// Inspect the cache, ask the server, obey, return the local base-ISO URL.
     public func ensure(progress: @escaping @Sendable (Phase) -> Void = { _ in }) async throws -> URL {
         let dir = try resolvedCacheDir()
-        let existing = Self.existingCachedISO(in: dir)
+        let existing = Self.existingCachedISO(in: dir, arch: arch)
 
         // (a) Inspect the cached ISO + compute its sha256, LOG path+sha.
         var current: IsoManifestCurrent? = nil
@@ -128,19 +164,22 @@ public struct IsoBaseCache {
             progress(.inspected(path: existing.url.path, sha256: sha))
             current = IsoManifestCurrent(version: existing.version, sha256: sha)
         } else {
-            log("base-iso cache: empty (no cached base ISO)")
+            log("base-iso cache: empty (no cached \(arch.rawValue) base ISO)")
             progress(.inspected(path: nil, sha256: nil))
         }
 
         // (b) POST the manifest with `current`.
         let request = IsoManifestRequest(platform: "mac",
                                          burnerVersion: burnerVersion,
-                                         current: current)
+                                         current: current,
+                                         arch: arch)
         let response = try await client.fetch(request)
 
-        // (c) If ordered → download + verify; else keep the cache.
+        // (c) If ordered → download + verify; else keep the cache. null with
+        // NOTHING cached means the server has no manifest for this arch at
+        // all — surfaced as unavailable, never as "up to date".
         guard let order = response.download else {
-            guard let existing else { throw CacheError.noBaseAvailable }
+            guard let existing else { throw CacheError.noBaseAvailable(arch) }
             log("base-iso: server ordered no change — keeping cached \(existing.url.path)")
             let sha = try current?.sha256 ?? Self.sha256OfFile(at: existing.url)
             progress(.ready(path: existing.url.path, sha256: sha, fromCache: true))
@@ -158,7 +197,7 @@ public struct IsoBaseCache {
         guard let url = URL(string: order.url) else {
             throw CacheError.offline("server returned a malformed download URL")
         }
-        let dest = Self.cachedURL(version: order.version, dir: dir)
+        let dest = Self.cachedURL(version: order.version, arch: arch, dir: dir)
 
         progress(.downloading(url: order.url, version: order.version, progress: 0))
 
@@ -216,9 +255,10 @@ public struct IsoBaseCache {
         // Atomic move into place.
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: tmp, to: dest)
-        // A fresh order supersedes any older cached base — drop stale versions so
-        // the next inspect reports the new one.
-        Self.pruneOtherBases(keeping: dest, in: dir)
+        // A fresh order supersedes any older cached base OF THIS ARCH — drop
+        // stale versions so the next inspect reports the new one. Other
+        // arches' bases are untouched (the burn base survives a host fetch).
+        Self.pruneOtherBases(keeping: dest, arch: arch, in: dir)
 
         log("downloaded \(dest.path) sha256=\(got) from \(order.url)")
         progress(.ready(path: dest.path, sha256: got, fromCache: false))
@@ -227,11 +267,11 @@ public struct IsoBaseCache {
 
     // MARK: - Helpers
 
-    static func pruneOtherBases(keeping keep: URL, in dir: URL) {
+    static func pruneOtherBases(keeping keep: URL, arch: IsoArch, in dir: URL) {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
         for name in entries {
-            guard name.hasPrefix("flagship-base-"), name.hasSuffix(".iso") else { continue }
+            guard version(ofCachedName: name, arch: arch) != nil else { continue }
             let url = dir.appendingPathComponent(name)
             if url.standardizedFileURL != keep.standardizedFileURL {
                 try? fm.removeItem(at: url)

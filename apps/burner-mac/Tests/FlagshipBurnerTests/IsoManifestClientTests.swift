@@ -103,6 +103,32 @@ final class IsoManifestClientTests: XCTestCase {
         XCTAssertEqual(decoded.current, current)
     }
 
+    /// The default (burn-path) request encodes NO `arch` key — byte-identical
+    /// to the pre-arch wire format — and an absent key decodes as amd64.
+    func testRequestBodyOmitsArchForAmd64() async throws {
+        StubURLProtocol.responder = { _ in (200, Data(#"{"download":null}"#.utf8)) }
+        let client = IsoManifestClient(endpoint: IsoManifestClient.endpoint,
+                                       session: StubURLProtocol.makeSession())
+        _ = try await client.fetch(IsoManifestRequest(burnerVersion: "1.0", current: nil))
+        let body = try XCTUnwrap(StubURLProtocol.lastBody)
+        let keys = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any]).keys
+        XCTAssertFalse(keys.contains("arch"), "amd64 must stay the absent back-compat default")
+        let decoded = try JSONDecoder().decode(IsoManifestRequest.self, from: body)
+        XCTAssertEqual(decoded.arch, .amd64)
+    }
+
+    /// An arm64 (host-path) request carries `"arch":"arm64"` on the wire.
+    func testRequestBodyCarriesArm64() async throws {
+        StubURLProtocol.responder = { _ in (200, Data(#"{"download":null}"#.utf8)) }
+        let client = IsoManifestClient(endpoint: IsoManifestClient.endpoint,
+                                       session: StubURLProtocol.makeSession())
+        _ = try await client.fetch(IsoManifestRequest(burnerVersion: "1.0", current: nil, arch: .arm64))
+        let body = try XCTUnwrap(StubURLProtocol.lastBody)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(obj["arch"] as? String, "arm64")
+        XCTAssertEqual(obj["platform"] as? String, "mac")
+    }
+
     /// A non-2xx surfaces as `.httpStatus`.
     func testHTTPErrorSurfaces() async {
         StubURLProtocol.responder = { _ in (503, Data()) }
