@@ -20,6 +20,14 @@
 -- OUT (dropped in 0033). The runner now requires WIPE_CONFIRM=<env> + --yes and
 -- prints a row-count preview (scripts/wipe-all-users.sh) — see CLAUDE.md GA
 -- close-out TODO item 1.
+-- Re-audited 2026-07-05 through 0082: added username_offer (0062) +
+-- username_suggest_throttle (0061), server_transfers (0059), server_evictions
+-- (0063), admin_root_rotations (0066), peer_backup_manifests (0080),
+-- server_migrations (0081). username_suggestion_queue (0061) is PRESERVED —
+-- it's a .com-generated pre-validated name pool (infrastructure, expensive to
+-- refill via DoH), not user data. schema_version is PRESERVED (the migration
+-- ledger the predeploy drift gate reads). 0082 only adds columns to
+-- server_transfers (already listed).
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -37,6 +45,8 @@ DELETE FROM name_claims;
 DELETE FROM service_aliases;
 DELETE FROM user_service_aliases;
 DELETE FROM voici_links;
+DELETE FROM username_offer;
+DELETE FROM username_suggest_throttle;
 
 -- Servers + routing + registration
 DELETE FROM servers;
@@ -51,6 +61,10 @@ DELETE FROM custom_domain_orders;
 DELETE FROM nfc_rendezvous;
 DELETE FROM service_invites;
 DELETE FROM service_invite_bindings;
+DELETE FROM server_transfers;
+DELETE FROM server_evictions;
+DELETE FROM server_migrations;
+DELETE FROM peer_backup_manifests;
 
 -- Cert authority + mint
 DELETE FROM acme_account_key_grants;
@@ -72,6 +86,7 @@ DELETE FROM webauthn_recovery_records;
 DELETE FROM recovery_shards;
 DELETE FROM pending_re_pairs;
 DELETE FROM trust_exceptions;
+DELETE FROM admin_root_rotations;
 
 -- Devices + delegation + push
 DELETE FROM device_capability_grants;
