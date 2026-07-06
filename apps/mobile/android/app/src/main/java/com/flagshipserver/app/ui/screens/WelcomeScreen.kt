@@ -27,6 +27,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 
 /**
  * D.2.1 — WelcomeScreen.
@@ -37,11 +38,18 @@ import com.flagshipserver.app.ui.theme.FS
 @Composable
 fun WelcomeScreen(nav: NavController) {
     Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      Column(
         modifier = Modifier
-            .fillMaxSize()
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .fillMaxHeight()
             .padding(horizontal = FS.space.s6),
         verticalArrangement = Arrangement.SpaceBetween,
-    ) {
+      ) {
         Spacer(Modifier.height(FS.space.s16))
 
         // Illustration
@@ -104,6 +112,7 @@ fun WelcomeScreen(nav: NavController) {
             )
             Spacer(Modifier.height(FS.space.s4))
         }
+      }
     }
 }
 
