@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import List
 
+from . import host_arch
 from .config import VMConfig, VMNetworkMode
 from .inventory import VMBundleLayout
 
@@ -69,9 +70,13 @@ def build(
         accel_arg = accel
         cpu_arg = "max"
 
+    # q35 is x86-only; an arm64 guest boots the generic `virt` machine.
+    is_arm64 = config.arch == host_arch.ARCH_ARM64
+    machine_arg = "virt" if is_arm64 else "q35"
+
     args: List[str] = [
         "-name", name,
-        "-machine", "q35",
+        "-machine", machine_arg,
         "-accel", accel_arg,
         "-cpu", cpu_arg,
         "-smp", str(config.cpu_count),
@@ -83,15 +88,23 @@ def build(
         "-drive", f"if=pflash,format=raw,readonly=on,file={uefi_code_path}",
         "-drive", f"if=pflash,format=raw,file={layout.efi_variable_store_path(name)}",
 
-        # Main disk on the q35 built-in AHCI so the guest sees /dev/sda —
-        # METAL-IDENTICAL naming. The preseed's partman/early_command targets
+        # Main disk on AHCI so the guest sees /dev/sda — METAL-IDENTICAL
+        # naming. The preseed's partman/early_command targets
         # `list-devices disk | head -n1`; with a virtio main disk (vda) the USB
         # installer stick becomes sda and d-i tries to install onto the stick.
         # SATA main + USB installer reproduces the metal order (sda = system
         # disk, sdb = installer).
         "-drive", f"id=flagship-main,if=none,format=qcow2,file={layout.disk_image_path(name)}",
-        "-device", "ide-hd,drive=flagship-main",
     ]
+    if is_arm64:
+        # virt has no built-in SATA (q35 does) — an explicit AHCI keeps the
+        # guest's device order identical to metal and to the amd64 twin.
+        args += [
+            "-device", "ahci,id=ahci",
+            "-device", "ide-hd,drive=flagship-main,bus=ahci.0",
+        ]
+    else:
+        args += ["-device", "ide-hd,drive=flagship-main"]
 
     if attach_installer_iso:
         # USB mass storage matches how the ISO boots on real hardware (the

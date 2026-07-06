@@ -11,10 +11,18 @@ import json
 
 import pytest
 
+from pathlib import Path
+
+from cli_runner import Resolved
 from iso_base_cache import ManifestFetchError, cached_path_for, ensure, inspect_cache
 from iso_manifest_client import ManifestResult, fetch_manifest
-from vm import host_arch
-from vm.qemu_locator import QemuLocatorError, locate
+from vm import host_arch, qemu_command_line, resource_plan
+from vm.config import VMConfig, VMNetworkMode
+from vm.inventory import VMBundleLayout, VMInventoryStore
+from vm.lifecycle import VMStateKind
+from vm.manager import VMManager
+from vm.qemu_locator import QemuLocatorError, QemuToolchain, locate
+from wizard import VerifyInfo, WizardModel
 
 
 # ---- host arch mapping ----
@@ -200,3 +208,151 @@ def test_locator_amd64_default_unchanged():
     tc = locate(env={}, which=which, exists=exists)
     assert tc.system_binary.endswith("qemu-system-x86_64")
     assert tc.uefi_code_path == paths[0]
+
+
+# ---- arm64 argv: -machine virt + explicit AHCI (handoff item 1) ----
+
+
+def _vm_config(arch: str) -> VMConfig:
+    return VMConfig(
+        name="home.harry.flagship.services",
+        server_domain="home.harry.flagship.services",
+        username="harry",
+        server_name="home",
+        cpu_count=2,
+        memory_bytes=4 * resource_plan.GIB,
+        main_disk_size_bytes=resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES,
+        network_mode=VMNetworkMode.NAT,
+        serial_console_enabled=False,
+        boot_unlock_mode="auto",
+        disk_encrypted=True,
+        arch=arch,
+    )
+
+
+_LAYOUT = VMBundleLayout("/data/VMs")
+
+
+def _argv(arch: str):
+    return qemu_command_line.build(
+        _vm_config(arch), _LAYOUT, "/fw/code.fd", False, 4444, 4445, 0, "kvm"
+    )
+
+
+def _pairs(args):
+    return list(zip(args, args[1:]))
+
+
+def test_arm64_argv_boots_the_virt_machine():
+    assert ("-machine", "virt") in _pairs(_argv("arm64"))
+
+
+def test_arm64_argv_adds_explicit_ahci_for_metal_identical_sda():
+    # virt has no built-in SATA (q35 does): without an explicit AHCI the main
+    # disk can't be an ide-hd and the guest loses its metal-identical /dev/sda.
+    p = _pairs(_argv("arm64"))
+    assert ("-device", "ahci,id=ahci") in p
+    assert ("-device", "ide-hd,drive=flagship-main,bus=ahci.0") in p
+
+
+def test_amd64_argv_is_unchanged_by_the_arch_work():
+    p = _pairs(_argv("amd64"))
+    assert ("-machine", "q35") in p
+    assert ("-device", "ide-hd,drive=flagship-main") in p
+    assert not any(a == "ahci,id=ahci" for a in _argv("amd64"))
+
+
+# ---- cross-arch refusal (handoff item 2) ----
+
+
+class _FakeHost:
+    def __init__(self) -> None:
+        self.on_guest_stopped = None
+        self.started: list = []
+        self.qmp_port = 1
+        self.serial_port = 0
+        self.ssh_port = 0
+
+    def start(self, cfg, layout, attach) -> None:
+        self.started.append((cfg.name, attach))
+
+    def force_stop(self) -> None:
+        pass
+
+
+_TOOLCHAIN = QemuToolchain("/usr/bin/qemu-system-x86_64", "/usr/bin/qemu-img", "/c.fd", "/v.fd")
+
+
+def _manager(tmp_path, host_arch_tag):
+    return VMManager(
+        VMInventoryStore(VMBundleLayout(str(tmp_path / "VMs"))),
+        _TOOLCHAIN,
+        host_factory=_FakeHost,
+        unlock_probe=lambda url: False,
+        unlock_interval=0.01,
+        host_arch_tag=host_arch_tag,
+    )
+
+
+def test_create_server_refuses_a_cross_arch_config(tmp_path):
+    vm = _manager(tmp_path, host_arch_tag="amd64")
+    with pytest.raises(ValueError) as e:
+        vm.create_server(_vm_config("arm64"))
+    assert "arm64" in str(e.value) and "amd64" in str(e.value)
+    assert vm.servers == []
+
+
+def test_starting_a_foreign_arch_bundle_is_refused_with_an_honest_log(tmp_path):
+    # The bundle store travels with the home dir — a backup restored onto a
+    # different-arch machine must refuse to start, not crawl under TCG.
+    vm = _manager(tmp_path, host_arch_tag="arm64")
+    vm.create_server(_vm_config("arm64"))
+    logs: list[str] = []
+    vm.log = logs.append
+    vm.host_arch_tag = "amd64"
+    host = vm._hosts.get("home.harry.flagship.services")
+    vm.begin_install("home.harry.flagship.services")
+    (s,) = vm.servers
+    assert s.record.state.kind == VMStateKind.CREATED
+    assert host is None or host.started == []
+    assert any("can't run here" in m for m in logs)
+
+
+# ---- wizard arch pass-through (handoff item 3) ----
+
+
+def test_host_here_passes_the_host_arch_into_plan_and_base_fetch(tmp_path, monkeypatch):
+    vm = _manager(tmp_path, host_arch_tag="arm64")
+    base = tmp_path / "base-arm64.iso"
+    base.write_bytes(b"iso")
+    captured: dict = {}
+
+    def fake_ensure(burner_version, **kw):
+        captured["arch"] = kw.get("arch")
+        return base
+
+    m = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        vm_manager=vm,
+        ensure_base_fn=fake_ensure,
+    )
+    recipe = tmp_path / "r.json"
+    recipe.write_text(json.dumps({
+        "version": 2,
+        "serverDomain": "home.harry.flagship.services",
+        "username": "harry",
+        "serverName": "home",
+    }))
+    m.state.recipe_path = recipe
+    m.state.verified = VerifyInfo(ok=True, server_domain="home.harry.flagship.services")
+
+    def fake_run_cli(build_args, on_success, use_pkexec=False):
+        Path(vm.installer_iso_path("home.harry.flagship.services")).write_bytes(b"remastered")
+        on_success("")
+
+    monkeypatch.setattr(m, "_run_cli_core", fake_run_cli)
+    m._run_host_here_sync()
+
+    assert captured["arch"] == "arm64"
+    (s,) = vm.servers
+    assert s.record.config.arch == "arm64"

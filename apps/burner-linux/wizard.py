@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import os
 import shlex
-import shutil
 import subprocess
 import tempfile
 import threading
@@ -32,6 +31,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import container_env
+import elevation
 import iso_base_cache
 from disk_enumerator import (
     DeviceInfo,
@@ -50,7 +50,7 @@ from cli_runner import (
     parse_verify_json,
 )
 from pair_session import PairEvent, PairSession
-from vm import recipe_info, resource_plan, ssh_launch
+from vm import host_arch, recipe_info, resource_plan, ssh_launch
 from vm.config import VMConfig
 from vm.host_resources import HostResources
 from vm.inventory import VMStoreError
@@ -313,7 +313,7 @@ class WizardModel:
         on_change: Optional[Callable[[], None]] = None,
         run_lsblk: Optional[Callable[[], str]] = None,
         locate_fn: Optional[Callable[[], Resolved]] = None,
-        which: Callable[[str], Optional[str]] = shutil.which,
+        probe_elevation: Callable[[], Optional[elevation.Elevation]] = elevation.probe,
         mode: str = MODE_SIMPLE,
         # Injectable seam so the Simple-mode base fetch is unit-testable
         # without network: defaults to the real manifest-driven cache.
@@ -329,7 +329,7 @@ class WizardModel:
         self.on_change = on_change or (lambda: None)
         self._run_lsblk = run_lsblk
         self._locate_fn = locate_fn or locate
-        self._which = which
+        self._probe_elevation = probe_elevation
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
@@ -729,7 +729,11 @@ class WizardModel:
         except (OSError, ValueError) as e:
             self._append_log("stderr", f"Cannot read the recipe: {e}")
             return
-        config = VMConfig.plan(fields, raw, HostResources.current())
+        # host_here_disabled_reason above already refused a None host arch
+        # (create_default sets toolchain_error), so the fallback never fires
+        # in practice — it only keeps the type honest.
+        guest_arch = self.vm.host_arch_tag or host_arch.ARCH_AMD64
+        config = VMConfig.plan(fields, raw, HostResources.current(), arch=guest_arch)
 
         # Own is_running across the whole download→remaster pipeline (mirrors
         # Wizard.cs RunHostHereAsync) so progress + Cancel work from the first
@@ -773,6 +777,7 @@ class WizardModel:
                             on_download_start=_on_download_start,
                             log=lambda m: self._append_log("stdout", m),
                             cancel_event=cancel,
+                            arch=guest_arch,
                         )
                     )
                 except iso_base_cache.CacheError as e:
@@ -787,7 +792,7 @@ class WizardModel:
             self._notify()
             try:
                 self.vm.create_server(config)
-            except VMStoreError as e:
+            except (VMStoreError, ValueError) as e:
                 self._append_log("stderr", str(e))
                 return
             out_iso = self.vm.installer_iso_path(config.name)
@@ -987,18 +992,17 @@ class WizardModel:
         """CLI body WITHOUT the is_running toggle/guard — for callers (Simple
         bake, host-here) that already own the running state across a
         multi-phase pipeline. Mirrors Wizard.cs RunCliCoreAsync."""
-        # A missing pkexec otherwise surfaces as a bare ENOENT at spawn
-        # time — after the remaster already ran. Fail up front with the
-        # install hint instead (polkit ships pkexec on every major
-        # distro; ChromeOS's stock container image omits it).
-        if use_pkexec and not self._which("pkexec"):
-            self._append_log(
-                "stderr",
-                "pkexec not found — the raw USB write needs PolicyKit "
-                "elevation. Install it (Debian/Ubuntu: sudo apt install "
-                "pkexec; Fedora: sudo dnf install polkit) and retry.",
-            )
-            return
+        # Unelevatable otherwise surfaces as a bare ENOENT at spawn time —
+        # after the remaster already ran. Probe up front: pkexec normally,
+        # passwordless sudo where pkexec can't work (ChromeOS's container).
+        elev = None
+        if use_pkexec:
+            elev = self._probe_elevation()
+            if elev is None:
+                self._append_log("stderr", elevation.MISSING_MESSAGE)
+                return
+            if elev.prefix != ["pkexec"]:
+                self._append_log("stdout", f"+ elevating via {elev.label}")
         try:
             resolved = self._locate_fn()
         except CLILocateError as e:
@@ -1009,6 +1013,7 @@ class WizardModel:
             node_path=resolved.node_path,
             arguments=args,
             use_pkexec=use_pkexec,
+            elevation_prefix=elev.prefix if elev is not None else None,
         )
         self._current_runner = runner
         self._append_log("stdout", f"+ {runner.command_string}")

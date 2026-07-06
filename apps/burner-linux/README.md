@@ -137,23 +137,33 @@ The pure layer is fully unit-tested; the following need a live Linux desktop:
   user-supplied ISO.
 - **`lsblk`** — ships on every Linux distro.
 - **`pkexec`** (PolicyKit) — ships on every modern desktop distro (NOT in
-  ChromeOS's stock container — see below).
+  ChromeOS's stock container — there the burner falls back to passwordless
+  `sudo -n`, which Crostini grants the primary user; see below).
 
 ### ChromeOS (Crostini)
 
 The burner runs inside ChromeOS's Linux container, and **Host on this PC gets
-real KVM acceleration** (modern ChromeOS exposes `/dev/kvm` to the container).
+real KVM acceleration** where ChromeOS exposes `/dev/kvm` to the container
+(true on this validated board; it varies by board/ChromeOS version — where
+it's absent the VM degrades to TCG with the honest much-slower warning). An
+arm64 Chromebook hosts a native arm64 guest (`qemu-system-arm
+qemu-efi-aarch64` instead of `qemu-system-x86 ovmf`); burning always writes
+the amd64 image.
 
 ```sh
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
-                 qemu-system-x86 qemu-utils ovmf pkexec
+                 qemu-system-x86 qemu-utils ovmf
 ```
 
-Two container quirks the app now handles:
+Three container quirks the app now handles:
 
 - **USB burning**: a USB stick is invisible to the container until you share
   it (ChromeOS Settings → Linux → Manage USB devices). The empty disk picker
   says so on ChromeOS instead of "plug one in".
+- **Elevation**: the stock container has no pkexec (and no polkit agent to
+  prompt), so the raw write elevates via non-interactive passwordless
+  `sudo -n` — which Crostini grants the primary user by design. pkexec still
+  wins wherever it exists.
 - **Open in SSH** opens the ChromeOS Terminal app (`x-terminal-emulator`
   resolves to `garcon-terminal-handler`, which takes the command verbatim —
   no `-e`).

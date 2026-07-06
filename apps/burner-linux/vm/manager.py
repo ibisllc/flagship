@@ -12,13 +12,14 @@ run inline.
 """
 from __future__ import annotations
 
+import platform
 import threading
 import time
 import urllib.error
 import urllib.request
 from typing import Callable, Dict, List, Optional
 
-from . import kvm_probe, resource_plan
+from . import host_arch, kvm_probe, resource_plan
 from .config import VMConfig
 from .host_resources import HostResources
 from .inventory import VMBundleLayout, VMInventoryStore, VMRecord, VMStoreError
@@ -158,9 +159,14 @@ class VMManager:
         unlock_probe: Callable[[str], bool] = _default_unlock_probe,
         unlock_interval: float = 15.0,
         on_change: Optional[Callable[[], None]] = None,
+        host_arch_tag: Optional[str] = host_arch.ARCH_AMD64,
     ) -> None:
         self.store = store
         self.toolchain = toolchain
+        # The arch this machine can host (None = unsupported CPU). A config
+        # whose arch differs is refused — cross-arch TCG would be dishonestly
+        # slow, and the bundle was simply built on a different machine.
+        self.host_arch_tag = host_arch_tag
         # Non-None when the QEMU toolchain could not be located; the host-here
         # path is disabled with this reason.
         self.toolchain_error = toolchain_error
@@ -188,10 +194,17 @@ class VMManager:
     def create_default(on_change: Optional[Callable[[], None]] = None) -> "VMManager":
         toolchain: Optional[QemuToolchain] = None
         error: Optional[str] = None
-        try:
-            toolchain = locate()
-        except QemuLocatorError as e:
-            error = str(e)
+        host = host_arch.current()
+        if host is None:
+            error = (
+                "Hosting isn't supported on this CPU architecture "
+                f"({platform.machine()})."
+            )
+        else:
+            try:
+                toolchain = locate(arch=host)
+            except QemuLocatorError as e:
+                error = str(e)
         # KVM missing degrades to TCG with an honest warning (unlike Windows,
         # where no WHPX blocks hosting) — TCG genuinely works, just slowly.
         verdict = kvm_probe.probe()
@@ -209,6 +222,7 @@ class VMManager:
             accel=accel,
             accel_warning=warning,
             on_change=on_change,
+            host_arch_tag=host,
         )
 
     # ---- capacity (pure cap math passthrough) ----
@@ -270,10 +284,24 @@ class VMManager:
 
     # ---- creation / deletion ----
 
+    def arch_refusal(self, config: VMConfig) -> Optional[str]:
+        """Why this config can't run on this machine (None = it can). KVM
+        boots native-arch guests only; cross-arch TCG would be dishonestly
+        slow — a bundle built for another arch belongs on that machine."""
+        if self.host_arch_tag is not None and config.arch != self.host_arch_tag:
+            return (
+                f"'{config.name}' was built for {config.arch}, but this "
+                f"machine hosts {self.host_arch_tag} — it can't run here."
+            )
+        return None
+
     def create_server(self, config: VMConfig) -> None:
         """Create the persistent bundle for a planned VM. The caller (wizard)
         then remasters the installer ISO into installer_iso_path(name) and
         calls begin_install."""
+        refusal = self.arch_refusal(config)
+        if refusal is not None:
+            raise ValueError(refusal)
         record = VMRecord(
             config=config,
             state=VMState.created(),
@@ -325,6 +353,11 @@ class VMManager:
         server = self.server(name)
         if server is None:
             return
+        if event.kind in (VMEventKind.START_INSTALL, VMEventKind.POWER_ON):
+            refusal = self.arch_refusal(server.record.config)
+            if refusal is not None:
+                self.log(f"VM {name}: {refusal}")
+                return
         lc = self._lifecycles.get(name)
         if lc is None:
             lc = VMLifecycle(
