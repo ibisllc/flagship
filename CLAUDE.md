@@ -149,6 +149,35 @@ harness can't do:
 
 ### Recent work (condensed log, newest first)
 
+**2026-07-06 — multi-arch hosting (Apple-silicon + arm64 Linux) + debug-SSH is a v1 FEATURE.**
+(a) **Arch-aware ISO manifest**: `POST /api/iso-manifest` takes optional
+`arch` (absent = amd64, deployed burners byte-compatible); the Worker serves a
+second blessed manifest `FLAGSHIP_ISO_MANIFEST_ARM64` (official Debian 13.5.0
+arm64 netinst) for the desktop apps' HOST-a-VM path on arm64 hardware — VZ and
+KVM boot native-arch guests only; burning stays amd64. Guest payload is now
+arch-neutral (unseal-helper builds native — no GOARCH pin; initramfs NSS
+staging globs the multiarch triplet; `grub-efi-arm64` preseed twin). Engine
+bundle + golden vectors regenerated AND synced to the vendored Mac/Android
+copies; bootstrap sha pins re-pinned. Re-pin BOTH arches together on a Debian
+point release. (b) **Mac app hosts in Simple mode on Apple silicon**: per-arch
+base cache (amd64 keeps legacy names), Rosetta-safe host-arch detection
+(sysctl hw.optional.arm64), honest "use Advanced + an arm64 netinst" when the
+server hasn't blessed arm64; hosting now honors an Advanced BYO ISO (was a
+dead end). (c) **Debug-SSH ships in v1** (owner decision): Advanced-hidden,
+biometric-gated at mint, consent-as-crypto — Bucket C item 2 resolved-as-
+feature; the release-guard EXEMPTS `debugAccessGate.ts`, fails on debug creds
+anywhere else, and asserts the gate still calls `verifyDebugAccessGrant`.
+(d) **Linux multi-arch is HALF done — HANDED OFF to the Linux-box instance**:
+landed = host_arch map, manifest-client arch field, per-arch base cache,
+per-arch QEMU locator (AAVMF), VMConfig/inventory arch persistence (253
+pytest green). Remaining (ordered list in commit 9bb1d60d): `-machine virt`
++ explicit AHCI argv on arm64, VMManager host-arch detection + cross-arch
+refusal, wizard arch pass-through, Crostini/Chromebook README, tests. Also
+same evening: prod wiped (58 tables, list re-audited through 0082), 0082
+applied+stamped, `.com` deployed, Mac burner re-signed+reinstalled, iOS
+jetsam fix (vibe-code log cap) + dead RecoverFromWelcomeContainer deleted,
+marketplace/retail re-synced+pushed.
+
 **2026-07-05 — Linux desktop parity MERGED: the desktop trio is complete.**
 `apps/burner-linux` (the last thin platform) gains the full VM-appliance host
 layer at Windows/Mac parity: a pure Python VM core pinned to the shared golden
