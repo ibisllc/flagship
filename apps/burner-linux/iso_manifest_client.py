@@ -84,15 +84,25 @@ class DownloadDescriptor:
     @classmethod
     def from_wire(cls, d: dict) -> "DownloadDescriptor":
         try:
-            return cls(
+            parsed = cls(
                 url=str(d["url"]),
-                sha256=str(d["sha256"]),
+                sha256=str(d["sha256"]).lower(),
                 version=str(d["version"]),
                 size_bytes=int(d["sizeBytes"]),
                 attestation=str(d["attestation"]),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise ManifestParseError(f"download missing/invalid field: {e}") from e
+        # Match the Windows/Mac clients: refuse a non-https byte source and a
+        # sha that can't possibly verify (the download would fail anyway, but
+        # fail HERE with a message that blames the manifest, not the network).
+        if not parsed.url.startswith("https://"):
+            raise ManifestParseError("download URL is not https")
+        if len(parsed.sha256) != 64 or any(
+            c not in "0123456789abcdef" for c in parsed.sha256
+        ):
+            raise ManifestParseError("sha256 is not a 64-char hex digest")
+        return parsed
 
 
 @dataclass(frozen=True)

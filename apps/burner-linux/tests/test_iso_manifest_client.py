@@ -101,6 +101,48 @@ def test_response_download_parses_descriptor():
     assert res.download.size_bytes == 700 * 1024 * 1024
 
 
+def test_response_download_http_url_is_parse_error():
+    body = {
+        "download": {
+            "url": "http://flagshipserver.com/base/debian.iso",  # not https
+            "sha256": "cd" * 32,
+            "version": "debian-12.5",
+            "sizeBytes": 1,
+            "attestation": "https://x/att",
+        }
+    }
+    with pytest.raises(ManifestParseError, match="https"):
+        fetch_manifest("1.0.0", None, opener=_opener_for(body))
+
+
+def test_response_download_bad_sha_is_parse_error():
+    body = {
+        "download": {
+            "url": "https://flagshipserver.com/base/debian.iso",
+            "sha256": "not-a-sha",
+            "version": "debian-12.5",
+            "sizeBytes": 1,
+            "attestation": "https://x/att",
+        }
+    }
+    with pytest.raises(ManifestParseError, match="hex"):
+        fetch_manifest("1.0.0", None, opener=_opener_for(body))
+
+
+def test_response_download_sha_is_lowercased():
+    body = {
+        "download": {
+            "url": "https://flagshipserver.com/base/debian.iso",
+            "sha256": "CD" * 32,
+            "version": "debian-12.5",
+            "sizeBytes": 1,
+            "attestation": "https://x/att",
+        }
+    }
+    res = fetch_manifest("1.0.0", None, opener=_opener_for(body))
+    assert res.download.sha256 == "cd" * 32
+
+
 def test_response_missing_download_key_is_parse_error():
     with pytest.raises(ManifestParseError):
         fetch_manifest("1.0.0", None, opener=_opener_for({"nope": 1}))
