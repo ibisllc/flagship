@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -56,6 +57,7 @@ import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.ui.theme.FSLayout
 
 /**
  * Self-contained on-device burner. Hook this up to the create-server delivery
@@ -103,9 +105,16 @@ fun BurnerOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+            .verticalScroll(scroll),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      // Reading column — clamp + center on expanded panes; a no-op on phones.
+      Column(
+        modifier = Modifier
+            .widthIn(max = FSLayout.readingMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = FS.space.s6),
+      ) {
         Spacer(Modifier.height(FS.space.s8))
         FSGhostButton(label = "← Back", onClick = onDone)
         Spacer(Modifier.height(FS.space.s3))
@@ -170,6 +179,7 @@ fun BurnerOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
         }
 
         Spacer(Modifier.height(FS.space.s10))
+      }
     }
 }
 

@@ -10,8 +10,13 @@ package com.flagshipserver.app.ui.shell
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Home
@@ -40,10 +45,9 @@ import com.flagshipserver.app.ui.shell.tabs.HomeTab
 import com.flagshipserver.app.ui.shell.tabs.SettingsTab
 import com.flagshipserver.app.ui.theme.FS
 
-/** Local enum so we don't pull androidx.window.core in just for this.
- *  Compose foundation will expose this in a stable release; for now
- *  MainActivity passes COMPACT and the expanded layout is reachable
- *  via tests + manual ExpandedShell composition. */
+/** Local enum so screens don't depend on the material3 window-size-class
+ *  artifact directly; MainActivity maps its real calculateWindowSizeClass
+ *  result into this via mapWidth. */
 enum class WindowWidthSizeClass { COMPACT, MEDIUM, EXPANDED }
 
 /** Root entry point invoked from MainActivity once the user is paired.
@@ -140,7 +144,13 @@ private fun ExpandedShell(
                 )
             }
         }
-        Box(Modifier.fillMaxSize()) { TabContent(selected, PaddingValues(0.dp)) }
+        // Unlike CompactShell (whose Scaffold reserves the NavigationBar's
+        // inset-padded height), nothing here accounts for the gesture bar.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom)),
+        ) { TabContent(selected, PaddingValues(0.dp)) }
     }
 }
 
