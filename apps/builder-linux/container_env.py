@@ -31,6 +31,18 @@ NO_DISKS_CROSTINI = (
     "skip the USB entirely and use Host on this PC."
 )
 
+# ChromeOS shares a USB into the Linux container but MANAGES the removable
+# device itself: raw block writes from the container truncate after a few
+# hundred KB (empirically ~488 KB) with no error, so a burn stalls at ~0%.
+# Surface this BEFORE the write instead of a cryptic mid-burn ENOSPC.
+USB_BURN_ADVISORY = (
+    "Heads-up: burning a USB from inside ChromeOS's Linux container usually "
+    "fails — ChromeOS manages the removable drive and caps raw writes from "
+    "the container, so the burn stalls near 0%. Use Host on this PC to run "
+    "the server as a local VM (recommended on a Chromebook), or run this "
+    "burner on a native Linux machine to write the stick."
+)
+
 
 def is_chromeos_container(exists: Callable[[str], bool] = os.path.exists) -> bool:
     return any(exists(m) for m in _CROSTINI_MARKERS)

@@ -157,9 +157,17 @@ sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
 
 Three container quirks the app now handles:
 
-- **USB burning**: a USB stick is invisible to the container until you share
-  it (ChromeOS Settings → Linux → Manage USB devices). The empty disk picker
-  says so on ChromeOS instead of "plug one in".
+- **USB burning does NOT work from the container** (validated 2026-07-06 on a
+  real Chromebook): even after sharing the stick (ChromeOS Settings → Linux →
+  Manage USB devices) so it appears as `/dev/sda`, ChromeOS manages the
+  removable drive and **caps raw block writes from the container** — a burn
+  stalls at ~0% (empirically ~488 KB, then a silent short write → `ENOSPC`).
+  Everything up to the write is correct (enumeration, safety verdict,
+  `sudo -n` elevation, remaster); only ChromeOS's device layer blocks the
+  bytes. The app now shows an upfront advisory when a USB is selected on
+  ChromeOS and recommends **Host on this PC** (which works great with KVM) —
+  or run this burner on a native Linux machine to write a stick. The empty
+  disk picker (before sharing) likewise explains the sharing step.
 - **Elevation**: the stock container has no pkexec (and no polkit agent to
   prompt), so the raw write elevates via non-interactive passwordless
   `sudo -n` — which Crostini grants the primary user by design. pkexec still
