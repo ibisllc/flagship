@@ -219,45 +219,100 @@ def test_simple_bake_ensures_base_then_runs_cli_with_that_iso(tmp_path):
 
     captured: dict = {}
 
-    def fake_ensure(burner_version, progress=None, on_download_start=None, log=None):
+    def fake_ensure(burner_version, progress=None, on_download_start=None, log=None, **kw):
         captured["burner_version"] = burner_version
+        captured["is_running_during_download"] = _running_holder[0].state.is_running
         if log:
             log(f"cached base {base} sha256=deadbeef")
         return base
 
     locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
     model = WizardModel(locate_fn=locate_fn, ensure_base_fn=fake_ensure)
+    _running_holder = [model]
     model.state.recipe_path = tmp_path / "r.json"
     model.state.selected_disk = _make_disk("/dev/sdb")
 
     cli_calls: list = []
-    model._cli_write = lambda recipe, iso, disk: cli_calls.append((recipe, iso, disk))
+    model._run_cli_core = (
+        lambda build_args, on_success, use_pkexec=False: cli_calls.append(
+            (build_args("/cli.ts"), use_pkexec)
+        )
+    )
 
     model._run_simple_bake_sync()
 
     assert captured["burner_version"]  # forwarded the burner version
+    # The model owns is_running for the WHOLE pipeline, download included —
+    # the Wizard.cs parity fix (progress/Cancel live from the first byte).
+    assert captured["is_running_during_download"] is True
     assert model.state.base_iso_path == base
     assert len(cli_calls) == 1
-    _recipe, iso_arg, _disk = cli_calls[0]
-    assert iso_arg == base
+    args, use_pkexec = cli_calls[0]
+    assert args[:2] == ["/cli.ts", "write"]
+    assert str(base) in args
+    assert use_pkexec is True
+    assert model.state.is_running is False  # released at the end
+
+
+def test_simple_bake_refuses_reentry_while_running(tmp_path):
+    locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
+    model = WizardModel(
+        locate_fn=locate_fn,
+        ensure_base_fn=lambda *a, **k: pytest.fail("must not fetch while running"),
+    )
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.selected_disk = _make_disk("/dev/sdb")
+    model.state.is_running = True
+    model._run_simple_bake_sync()  # no-op, no fetch, no CLI
 
 
 def test_simple_bake_surfaces_cache_error(tmp_path):
     import iso_base_cache
 
-    def boom(burner_version, progress=None, on_download_start=None, log=None):
+    def boom(burner_version, progress=None, on_download_start=None, log=None, **kw):
         raise iso_base_cache.OfflineError("no net")
 
     locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
     model = WizardModel(locate_fn=locate_fn, ensure_base_fn=boom)
     model.state.recipe_path = tmp_path / "r.json"
     model.state.selected_disk = _make_disk("/dev/sdb")
-    model._cli_write = lambda *a: pytest.fail("CLI must not run when base fetch fails")
+    model._run_cli_core = lambda *a, **k: pytest.fail(
+        "CLI must not run when base fetch fails"
+    )
 
     model._run_simple_bake_sync()
 
     assert any(ll.stream == "stderr" for ll in model.state.log_lines)
     assert model.state.phase is None
+    assert model.state.is_running is False
+
+
+def test_cancel_trips_the_download_cancel_event(tmp_path):
+    import iso_base_cache
+
+    seen: dict = {}
+
+    def fake_ensure(burner_version, cancel_event=None, **kw):
+        # The wizard hands its cancel event to the cache; cancel() trips it
+        # mid-download, and the cache raises CancelledError.
+        seen["event"] = cancel_event
+        _model_holder[0].cancel()
+        assert cancel_event.is_set()
+        raise iso_base_cache.CancelledError()
+
+    locate_fn = lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts")
+    model = WizardModel(locate_fn=locate_fn, ensure_base_fn=fake_ensure)
+    _model_holder = [model]
+    model.state.recipe_path = tmp_path / "r.json"
+    model.state.selected_disk = _make_disk("/dev/sdb")
+    model._run_cli_core = lambda *a, **k: pytest.fail("CLI must not run after cancel")
+
+    model._run_simple_bake_sync()
+
+    assert seen["event"] is not None
+    assert any("cancelled" in ll.text for ll in model.state.log_lines)
+    assert model.state.is_running is False
+    assert model._cancel_download is None  # cleared for the next run
 
 
 # ---- helpers ----

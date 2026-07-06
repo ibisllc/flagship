@@ -90,6 +90,13 @@ class NoCacheDirError(CacheError):
         super().__init__("Couldn't open the cache directory.")
 
 
+class CancelledError(CacheError):
+    """The user hit Cancel mid-download (wizard.cancel() trips the event)."""
+
+    def __init__(self) -> None:
+        super().__init__("Base-image download cancelled.")
+
+
 class ManifestFetchError(CacheError):
     """Wraps an iso_manifest_client.ManifestError so callers only catch
     CacheError."""
@@ -174,13 +181,15 @@ def _download(
     progress: ProgressCb,
     log: LogCb,
     opener=None,
+    cancel_event=None,
 ) -> Path:
     """Stream the descriptor's URL to disk, verifying sha256 as we go.
 
     The download URL is passed to `progress` on every tick so the UI can show
     it under the progress bar. On a sha mismatch the partial file is deleted
-    and ChecksumMismatchError is raised.
-    """
+    and ChecksumMismatchError is raised. A set `cancel_event`
+    (threading.Event) aborts between chunks: the partial file is deleted and
+    CancelledError raised."""
     do_open = opener or (lambda req: urlopen(req))  # noqa: S310 - URL from server manifest
 
     dest_dir = _ensure_cache_dir()
@@ -211,6 +220,8 @@ def _download(
         try:
             with open(tmp, "wb") as handle:
                 while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise CancelledError()
                     block = resp.read(1 << 20)
                     if not block:
                         break
@@ -219,6 +230,12 @@ def _download(
                     received += len(block)
                     if expected_len > 0:
                         progress(min(1.0, received / expected_len), descriptor.url)
+        except CancelledError:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
         except (URLError, OSError) as e:
             try:
                 tmp.unlink()
@@ -249,6 +266,7 @@ def ensure(
     *,
     manifest_fn: Optional[Callable[..., object]] = None,
     opener=None,
+    cancel_event=None,
 ) -> Path:
     """Return a verified base ISO path, obeying the server manifest.
 
@@ -295,4 +313,6 @@ def ensure(
         return cached.path
 
     on_download_start(descriptor)
-    return _download(descriptor, progress=progress, log=log, opener=opener)
+    return _download(
+        descriptor, progress=progress, log=log, opener=opener, cancel_event=cancel_event
+    )

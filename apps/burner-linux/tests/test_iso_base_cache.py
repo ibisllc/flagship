@@ -167,6 +167,32 @@ def test_ensure_sha_mismatch_deletes_and_raises():
     assert not dest.with_suffix(dest.suffix + ".partial").exists()
 
 
+def test_ensure_cancel_event_aborts_and_removes_partial():
+    import threading
+
+    data = b"bytes that never finish"
+    descriptor = DownloadDescriptor(
+        url="https://flagshipserver.com/base/debian.iso",
+        sha256=hashlib.sha256(data).hexdigest(),
+        version="debian-12.5",
+        size_bytes=len(data),
+        attestation="https://x/att",
+    )
+    cancel = threading.Event()
+    cancel.set()  # tripped before the first chunk — the tightest race
+
+    with pytest.raises(iso_base_cache.CancelledError):
+        ensure(
+            "1.0.0",
+            manifest_fn=lambda v, c: ManifestResult(download=descriptor),
+            opener=lambda req: _FakeResponse(data),
+            cancel_event=cancel,
+        )
+    dest = iso_base_cache.cached_path_for("debian-12.5")
+    assert not dest.exists()
+    assert not dest.with_suffix(dest.suffix + ".partial").exists()
+
+
 def test_ensure_reports_current_on_download_path():
     _write_base("debian-12", b"old base")
     captured: dict = {}

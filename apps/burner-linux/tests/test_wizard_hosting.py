@@ -198,7 +198,7 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
         Path(vm.installer_iso_path("home.harry.flagship.services")).write_bytes(b"remastered")
         on_success("")
 
-    monkeypatch.setattr(m, "_run_cli", fake_run_cli)
+    monkeypatch.setattr(m, "_run_cli_core", fake_run_cli)
     m._run_host_here_sync()
 
     # prepare (not write): recipe + base -> the bundle's installer.iso, recipe
@@ -229,7 +229,7 @@ def test_run_host_here_rolls_back_the_bundle_when_remaster_fails(tmp_path, monke
     m.state.recipe_path = recipe
     verified(m)
 
-    monkeypatch.setattr(m, "_run_cli", lambda build_args, on_success, use_pkexec=False: None)
+    monkeypatch.setattr(m, "_run_cli_core", lambda build_args, on_success, use_pkexec=False: None)
     m._run_host_here_sync()
     assert vm.servers == []  # no half-created bundle
     assert recipe.exists()  # NOT shredded on failure
@@ -262,12 +262,39 @@ def test_run_host_here_debug_recipe_yields_a_debug_vm(tmp_path, monkeypatch):
     verified(m)
     monkeypatch.setattr(
         m,
-        "_run_cli",
+        "_run_cli_core",
         lambda build_args, on_success, use_pkexec=False: on_success(""),
     )
     m._run_host_here_sync()
     (s,) = vm.servers
     assert s.console_enabled is True
+
+
+def test_run_host_here_owns_is_running_for_the_whole_pipeline(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+    base = tmp_path / "base.iso"
+    base.write_bytes(b"iso")
+    seen: dict = {}
+
+    def fake_ensure(_version, cancel_event=None, **_k):
+        seen["is_running_during_download"] = m.state.is_running
+        seen["cancel_event"] = cancel_event
+        return base
+
+    m = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        vm_manager=vm,
+        ensure_base_fn=fake_ensure,
+    )
+    m.state.recipe_path = _write_recipe(tmp_path)
+    verified(m)
+    monkeypatch.setattr(
+        m, "_run_cli_core", lambda build_args, on_success, use_pkexec=False: on_success("")
+    )
+    m._run_host_here_sync()
+    assert seen["is_running_during_download"] is True
+    assert seen["cancel_event"] is not None
+    assert m.state.is_running is False
 
 
 # ---- sidebar actions ----

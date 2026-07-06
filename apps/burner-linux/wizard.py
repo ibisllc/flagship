@@ -338,6 +338,9 @@ class WizardModel:
         )
         self._ssh_launch = ssh_launch_fn or ssh_launch.launch
         self._pair: Optional[PairSession] = None
+        # Set while a Simple-mode base download can be cancelled (the analog of
+        # Wizard.cs's CancellationTokenSource); cancel() trips it.
+        self._cancel_download: Optional[threading.Event] = None
 
     def set_mode(self, mode: str) -> None:
         if mode not in (MODE_SIMPLE, MODE_ADVANCED):
@@ -409,6 +412,9 @@ class WizardModel:
         self._notify()
 
     def cancel(self) -> None:
+        cancel = self._cancel_download
+        if cancel is not None:
+            cancel.set()
         if self._current_runner is not None:
             self._current_runner.terminate()
 
@@ -452,11 +458,20 @@ class WizardModel:
 
     def _run_simple_bake_sync(self) -> None:
         """Ensure the server-manifest base ISO, then run the same CLI
-        remaster+write path Advanced uses."""
+        remaster+write path Advanced uses. Owns is_running across the WHOLE
+        download→remaster→write pipeline (mirrors Wizard.cs RunSimpleBakeAsync)
+        so the UI shows progress + Cancel from the first byte and a second
+        bake can't start mid-download."""
         recipe = self.state.recipe_path
         disk = self.state.selected_disk
         if recipe is None or disk is None:
             return
+        with self._lock:
+            if self.state.is_running:
+                return
+            self.state.is_running = True
+        cancel = threading.Event()
+        self._cancel_download = cancel
 
         # 1. Fetch/verify the base ISO per the server manifest. The download
         #    URL is surfaced via state.download_url (shown under the bar).
@@ -479,29 +494,46 @@ class WizardModel:
             self._notify()
 
         try:
-            base = self._ensure_base(
-                self._burner_version,
-                progress=_on_progress,
-                on_download_start=_on_download_start,
-                log=lambda m: self._append_log("stdout", m),
-            )
-        except iso_base_cache.CacheError as e:
-            self._append_log("stderr", str(e))
+            try:
+                base = self._ensure_base(
+                    self._burner_version,
+                    progress=_on_progress,
+                    on_download_start=_on_download_start,
+                    log=lambda m: self._append_log("stdout", m),
+                    cancel_event=cancel,
+                )
+            except iso_base_cache.CacheError as e:
+                self._append_log("stderr", str(e))
+                return
+
+            self.state.base_iso_path = Path(base)
+            self.state.iso_path = Path(base)
+            self.state.download_url = None
+
+            # 2. Same Node-CLI remaster+write path Advanced uses.
+            self.state.phase = "remaster"
+            self.state.progress = None
+            self._notify()
+
+            def build(entry: str) -> list[str]:
+                return args_write(
+                    entry,
+                    str(recipe),
+                    str(base),
+                    device=disk.device_path,
+                    yes=True,
+                    keep_recipe=False,
+                )
+
+            self._run_cli_core(build, on_success=self._on_bake_ok, use_pkexec=True)
+        finally:
+            self._cancel_download = None
             self.state.phase = None
             self.state.progress = None
             self.state.download_url = None
+            with self._lock:
+                self.state.is_running = False
             self._notify()
-            return
-
-        self.state.base_iso_path = Path(base)
-        self.state.iso_path = Path(base)
-        self.state.download_url = None
-
-        # 2. Same Node-CLI remaster+write path Advanced uses.
-        self.state.phase = "remaster"
-        self.state.progress = None
-        self._notify()
-        self._cli_write(recipe, Path(base), disk)
 
     def _cli_write(self, recipe: Path, iso: Path, disk: DeviceInfo) -> None:
         def build(entry: str) -> list[str]:
@@ -680,7 +712,7 @@ class WizardModel:
         exactly like a USB burn), but applied to a managed VM on this PC. The
         guest boot chain (unattended install -> LUKS -> phone-home unlock ->
         register) runs unmodified inside the VM; this app never holds a key."""
-        if self.state.is_running or self.state.recipe_path is None or self.state.verified is None:
+        if self.state.recipe_path is None or self.state.verified is None:
             return
         reason = self.host_here_disabled_reason
         if reason is not None:
@@ -695,84 +727,99 @@ class WizardModel:
             return
         config = VMConfig.plan(fields, raw, HostResources.current())
 
-        # Same Simple-mode base ISO fetch as the USB path; Advanced mode may
-        # bring its own stock ISO.
-        if self.state.mode == MODE_ADVANCED and self.state.iso_path is not None:
-            base = self.state.iso_path
-        else:
-            self.state.phase = "download"
-            self.state.progress = None
-            self.state.download_url = None
-            self._notify()
-
-            def _on_progress(fraction: float, url: str) -> None:
-                self.state.progress = fraction
-                self.state.download_url = url
-                self._notify()
-
-            def _on_download_start(descriptor) -> None:
-                self.state.download_url = descriptor.url
-                self._append_log(
-                    "stdout",
-                    f"+ fetching base image {descriptor.version} ({descriptor.url})",
-                )
-
-            try:
-                base = Path(
-                    self._ensure_base(
-                        self._burner_version,
-                        progress=_on_progress,
-                        on_download_start=_on_download_start,
-                        log=lambda m: self._append_log("stdout", m),
-                    )
-                )
-            except iso_base_cache.CacheError as e:
-                self._append_log("stderr", str(e))
-                self.state.phase = None
+        # Own is_running across the whole download→remaster pipeline (mirrors
+        # Wizard.cs RunHostHereAsync) so progress + Cancel work from the first
+        # byte and nothing else can start mid-flight.
+        with self._lock:
+            if self.state.is_running:
+                return
+            self.state.is_running = True
+        cancel = threading.Event()
+        self._cancel_download = cancel
+        self._notify()
+        try:
+            # Same Simple-mode base ISO fetch as the USB path (HOST arch — the
+            # guest must match this machine); Advanced mode may bring its own
+            # stock ISO.
+            if self.state.mode == MODE_ADVANCED and self.state.iso_path is not None:
+                base = self.state.iso_path
+            else:
+                self.state.phase = "download"
                 self.state.progress = None
                 self.state.download_url = None
                 self._notify()
+
+                def _on_progress(fraction: float, url: str) -> None:
+                    self.state.progress = fraction
+                    self.state.download_url = url
+                    self._notify()
+
+                def _on_download_start(descriptor) -> None:
+                    self.state.download_url = descriptor.url
+                    self._append_log(
+                        "stdout",
+                        f"+ fetching base image {descriptor.version} ({descriptor.url})",
+                    )
+
+                try:
+                    base = Path(
+                        self._ensure_base(
+                            self._burner_version,
+                            progress=_on_progress,
+                            on_download_start=_on_download_start,
+                            log=lambda m: self._append_log("stdout", m),
+                            cancel_event=cancel,
+                        )
+                    )
+                except iso_base_cache.CacheError as e:
+                    self._append_log("stderr", str(e))
+                    return
+
+            # Create the bundle, then remaster the installer INTO it — identical
+            # remaster to the USB path (same engine, same recipe).
+            self.state.phase = "remaster"
+            self.state.progress = None
+            self.state.download_url = None
+            self._notify()
+            try:
+                self.vm.create_server(config)
+            except VMStoreError as e:
+                self._append_log("stderr", str(e))
+                return
+            out_iso = self.vm.installer_iso_path(config.name)
+            remastered = [False]
+
+            def build(entry: str) -> list[str]:
+                return args_prepare(entry, str(recipe), str(base), out_iso, keep_recipe=True)
+
+            def on_ok(_stdout: str) -> None:
+                remastered[0] = True
+
+            self._run_cli_core(build, on_success=on_ok)
+            if not remastered[0]:
+                self.vm.delete_server(config.name)
                 return
 
-        # Create the bundle, then remaster the installer INTO it — identical
-        # remaster to the USB path (same engine, same recipe).
-        self.state.phase = "remaster"
-        self.state.progress = None
-        self.state.download_url = None
-        self._notify()
-        try:
-            self.vm.create_server(config)
-        except VMStoreError as e:
-            self._append_log("stderr", str(e))
-            self.state.phase = None
+            # Shred the single-use recipe, exactly like a successful USB burn.
+            try:
+                os.unlink(recipe)
+            except OSError:
+                pass
+            self.state.selected_server_name = config.name
+            self.state.destination = None
+            self.state.recipe_path = None
+            self.state.pasted_recipe_staging = None
+            self.state.verified = None
             self._notify()
-            return
-        out_iso = self.vm.installer_iso_path(config.name)
-        remastered = [False]
-
-        def build(entry: str) -> list[str]:
-            return args_prepare(entry, str(recipe), str(base), out_iso, keep_recipe=True)
-
-        def on_ok(_stdout: str) -> None:
-            remastered[0] = True
-
-        self._run_cli(build, on_success=on_ok)
-        if not remastered[0]:
-            self.vm.delete_server(config.name)
-            return
-
-        # Shred the single-use recipe, exactly like a successful USB burn.
-        try:
-            os.unlink(recipe)
-        except OSError:
-            pass
-        self.state.selected_server_name = config.name
-        self.state.destination = None
-        self.state.recipe_path = None
-        self.state.pasted_recipe_staging = None
-        self.state.verified = None
-        self._notify()
-        self.vm.begin_install(config.name)
+            self.vm.begin_install(config.name)
+        finally:
+            self._cancel_download = None
+            self.state.phase = None
+            self.state.progress = None
+            self.state.download_url = None
+            with self._lock:
+                self.state.is_running = False
+            self._notify()
 
     # ---- hosted-server actions (sidebar rows + detail pane) ----
 
@@ -918,19 +965,38 @@ class WizardModel:
             self.state.is_running = True
         self._notify()
         try:
-            try:
-                resolved = self._locate_fn()
-            except CLILocateError as e:
-                self._append_log("stderr", f"CLI locate failed: {e}")
-                return
-            args = build_args(resolved.entry_path)
-            runner = CLIRunner(
-                node_path=resolved.node_path,
-                arguments=args,
-                use_pkexec=use_pkexec,
-            )
-            self._current_runner = runner
-            self._append_log("stdout", f"+ {runner.command_string}")
+            self._run_cli_core(build_args, on_success, use_pkexec)
+        finally:
+            self.state.phase = None
+            self.state.progress = None
+            self.state.download_url = None
+            with self._lock:
+                self.state.is_running = False
+            self._notify()
+
+    def _run_cli_core(
+        self,
+        build_args: Callable[[str], list[str]],
+        on_success: Callable[[str], None],
+        use_pkexec: bool = False,
+    ) -> None:
+        """CLI body WITHOUT the is_running toggle/guard — for callers (Simple
+        bake, host-here) that already own the running state across a
+        multi-phase pipeline. Mirrors Wizard.cs RunCliCoreAsync."""
+        try:
+            resolved = self._locate_fn()
+        except CLILocateError as e:
+            self._append_log("stderr", f"CLI locate failed: {e}")
+            return
+        args = build_args(resolved.entry_path)
+        runner = CLIRunner(
+            node_path=resolved.node_path,
+            arguments=args,
+            use_pkexec=use_pkexec,
+        )
+        self._current_runner = runner
+        self._append_log("stdout", f"+ {runner.command_string}")
+        try:
             try:
                 runner.start(on_line=lambda ll: self._append_log(ll.stream, ll.text))
             except (FileNotFoundError, OSError) as e:
@@ -944,12 +1010,6 @@ class WizardModel:
                 self._append_log("stderr", f"CLI exited {code}")
         finally:
             self._current_runner = None
-            self.state.phase = None
-            self.state.progress = None
-            self.state.download_url = None
-            with self._lock:
-                self.state.is_running = False
-            self._notify()
 
     def _append_log(self, stream: str, text: str) -> None:
         self.state.log_lines.append(LogLine(stream=stream, text=text))
