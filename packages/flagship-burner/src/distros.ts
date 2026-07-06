@@ -59,6 +59,24 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
     recommended: true,
   },
   {
+    // arm64 twin of the Debian default. NOT for burning (real boxes are x86) —
+    // it exists so the desktop apps' HOST-a-VM path can run a native-arch
+    // guest on arm64 hardware: Apple-silicon Macs (Virtualization.framework
+    // boots native-arch only) and arm64 Linux/Chromebook KVM hosts.
+    id: "debian-13-netinst-arm64",
+    displayName: "Debian 13 (trixie) netinst (arm64)",
+    upstreamUrl:
+      "https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-13.5.0-arm64-netinst.iso",
+    sha256: "3f8211e759d19370d50e1d853859b66ecba62700d712214a8a65ed26c6d08ecc",
+    sizeBytes: 735_358_976,
+    family: "debian",
+    cloudInitDatasource: "debian-cloud",
+    // arm64 netinst is UEFI-only — no isolinux/BIOS half. The remaster
+    // tolerates that (it patches whichever boot configs exist).
+    boot: "uefi",
+    recommended: false,
+  },
+  {
     id: "ubuntu-22.04-server-amd64",
     displayName: "Ubuntu Server 22.04.5 LTS (amd64)",
     upstreamUrl:

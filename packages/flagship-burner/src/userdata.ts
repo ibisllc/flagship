@@ -1621,8 +1621,10 @@ echo "${mode}" > /boot/flagship-boot-unlock-mode
 #     Ubuntu archive can build the CGO-free static helper (one dep, pinned).
 echo "[flagship-bootstrap] building flagship-unseal from source"
 apt-get install -y --no-install-recommends golang-go
+# No GOARCH: build for the arch we're running on — amd64 on real boxes,
+# arm64 inside a VM hosted on Apple-silicon / arm64 KVM hardware.
 ( cd /opt/flagship/installer/unseal-helper && \\
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \\
+  CGO_ENABLED=0 GOOS=linux \\
     go build -trimpath -buildvcs=false -ldflags '-s -w' -o /boot/flagship-unseal . )
 chmod 755 /boot/flagship-unseal
 echo "[flagship-bootstrap] /boot/flagship-unseal baked ($(ls -l /boot/flagship-unseal))"
@@ -1656,7 +1658,7 @@ copy_exec /sbin/ip /sbin/ip 2>/dev/null || copy_exec /bin/ip /sbin/ip
 # absent; the guards make that a no-op.
 mkdir -p "\${DESTDIR}/etc"
 echo "hosts: files dns" > "\${DESTDIR}/etc/nsswitch.conf"
-for _nss in /lib/x86_64-linux-gnu/libnss_dns.so.2 /lib/x86_64-linux-gnu/libnss_files.so.2 /lib/x86_64-linux-gnu/libresolv.so.2; do
+for _nss in /lib/*-linux-gnu*/libnss_dns.so.2 /lib/*-linux-gnu*/libnss_files.so.2 /lib/*-linux-gnu*/libresolv.so.2; do
   [ -e "$_nss" ] && copy_exec "$_nss" || true
 done
 # CA bundle for the HTTPS unlock curls — copy_exec stages the curl binary but

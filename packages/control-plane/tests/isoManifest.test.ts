@@ -67,6 +67,70 @@ describe("iso manifest handler", () => {
     expect(r.body).toEqual({ download: null });
   });
 
+  describe("arch selection", () => {
+    const BLESSED_ARM64: IsoManifest = {
+      version: "debian-13.5.0-arm64",
+      url: "https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/debian-13.5.0-arm64-netinst.iso",
+      sha256: "d".repeat(64),
+      sizeBytes: 735358976,
+      attestation:
+        "https://cdimage.debian.org/debian-cd/13.5.0/arm64/iso-cd/SHA256SUMS",
+    };
+
+    it("absent arch → the amd64 manifest (back-compat with deployed burners)", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
+        { platform: "mac", burnerVersion: "1.2.3", current: null },
+      );
+      expect(r.body).toEqual({ download: BLESSED });
+    });
+
+    it('arch:"amd64" → the amd64 manifest', () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
+        { platform: "linux", burnerVersion: "1.2.3", current: null, arch: "amd64" },
+      );
+      expect(r.body).toEqual({ download: BLESSED });
+    });
+
+    it('arch:"arm64" → the arm64 manifest', () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
+        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "arm64" },
+      );
+      expect(r.body).toEqual({ download: BLESSED_ARM64 });
+    });
+
+    it('arch:"arm64" with a matching current sha → { download: null }', () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
+        {
+          platform: "mac",
+          burnerVersion: "1.2.3",
+          current: { version: "debian-13.5.0-arm64", sha256: "D".repeat(64) },
+          arch: "arm64",
+        },
+      );
+      expect(r.body).toEqual({ download: null });
+    });
+
+    it('arch:"arm64" unconfigured → { download: null } even though amd64 is blessed', () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED },
+        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "arm64" },
+      );
+      expect(r.body).toEqual({ download: null });
+    });
+
+    it("bad arch → 400", () => {
+      const r = handleIsoManifest(
+        { blessedManifest: BLESSED, blessedManifestArm64: BLESSED_ARM64 },
+        { platform: "mac", burnerVersion: "1.2.3", current: null, arch: "riscv64" },
+      );
+      expect(r.status).toBe(400);
+    });
+  });
+
   describe("bad input → 400", () => {
     it("missing body", () => {
       expect(handleIsoManifest({ blessedManifest: BLESSED }, undefined).status).toBe(400);

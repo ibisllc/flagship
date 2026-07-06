@@ -292,6 +292,17 @@ export interface ControlPlaneEnv {
   FLAGSHIP_ISO_MANIFEST?: string;
 
   /**
+   * The blessed arm64 Debian base-ISO manifest, same JSON shape as
+   * `FLAGSHIP_ISO_MANIFEST`. Served only to `arch: "arm64"` manifest
+   * requests — the desktop apps' HOST-a-VM path on arm64 hardware
+   * (Apple-silicon Macs, arm64 Linux/Chromebook KVM hosts), which can
+   * only boot a native-arch guest. Burning stays amd64. Unset ⇒ arm64
+   * requests get `{ download: null }` and the apps direct the user to
+   * Advanced mode.
+   */
+  FLAGSHIP_ISO_MANIFEST_ARM64?: string;
+
+  /**
    * The blessed in-house inference endpoint that backs the free-credits
    * ("flagship") provider posture, as a JSON string of the
    * `InferenceEndpoint` shape: {"baseUrl","model"}. `baseUrl` is the
@@ -2834,7 +2845,12 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.ISO_MANIFEST.test(path)) {
     return finish(
       handleIsoManifest(
-        { blessedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_MANIFEST) },
+        {
+          blessedManifest: parseBlessedIsoManifest(env.FLAGSHIP_ISO_MANIFEST),
+          blessedManifestArm64: parseBlessedIsoManifest(
+            env.FLAGSHIP_ISO_MANIFEST_ARM64,
+          ),
+        },
         await readJson(request),
       ),
     );

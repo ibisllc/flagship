@@ -583,7 +583,10 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("-o /boot/flagship-unseal");
     expect(b).toContain("chmod 755 /boot/flagship-unseal");
     // CGO-free static linux/amd64, matching the helper Makefile.
-    expect(b).toContain("CGO_ENABLED=0 GOOS=linux GOARCH=amd64");
+    // No GOARCH: the helper builds for whatever arch the box runs — amd64 on
+    // real hardware, arm64 inside a VM hosted on Apple-silicon / arm64 KVM.
+    expect(b).toContain("CGO_ENABLED=0 GOOS=linux \\");
+    expect(b).not.toContain("GOARCH=amd64");
   });
 
   it("re-keys LUKS to a random key + seals it for the phone + uploads to .com", () => {
@@ -1162,7 +1165,9 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       bootHost: DEFAULT_BOOT_HOST,
     });
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "c598afd8fcc1ed17f40976116bfaff7911af13ed67cda3d585ec4eb919be8fec",
+      // Re-pinned 2026-07-05: arch-neutral bootstrap (no GOARCH on the unseal
+      // build; NSS triplet globbed) for arm64 VM-hosted guests.
+      "f05ef19a228f35a61c8360c90358e66555c2d3d8be9833e633981f6ca32e20b4",
     );
   });
 
@@ -1185,7 +1190,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
     expect(s).toContain('[ -n "$CRYPT_NAME" ] || CRYPT_NAME=flagship_root');
     expect(s).toContain('cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" "$CRYPT_NAME"');
     expect(createHash("sha256").update(s).digest("hex")).toBe(
-      "32e34919c43aea1ea7a1da524d5d18002c7e6d5c0597498783ef3315e2d4506b",
+      // Re-pinned 2026-07-05: arch-neutral bootstrap (see the wired pin above).
+      "d5dc5a75d10f9086c4d9e3c02209216ca010dc6ee7a682fdf6acdd883908279d",
     );
   });
 

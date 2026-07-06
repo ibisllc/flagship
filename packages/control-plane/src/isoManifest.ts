@@ -24,15 +24,27 @@ export interface IsoManifestDeps {
    * field on the wire.
    */
   blessedManifest: IsoManifest | null;
+  /**
+   * The blessed arm64 manifest, or null when none is configured. Served
+   * only when the request asks for `arch: "arm64"` — the desktop apps'
+   * HOST-a-VM path on an arm64 machine (Apple-silicon Macs under
+   * Virtualization.framework boot native-arch guests only; arm64
+   * Linux/Chromebook KVM hosts likewise want a native guest). BURNING
+   * always stays amd64 — real boxes are x86 — so an absent `arch`
+   * keeps the original manifest and old burners are byte-compatible.
+   */
+  blessedManifestArm64?: IsoManifest | null;
 }
 
 const ALLOWED_PLATFORMS = new Set(["mac", "linux", "windows"]);
+const ALLOWED_ARCHES = new Set(["amd64", "arm64"]);
 const SHA256_RE = /^[0-9a-f]{64}$/i;
 
 interface IsoManifestRequestBody {
   platform?: unknown;
   burnerVersion?: unknown;
   current?: unknown;
+  arch?: unknown;
 }
 
 /**
@@ -51,13 +63,19 @@ export function handleIsoManifest(
 ): HandlerResponseWithHeaders {
   if (!body || typeof body !== "object") return malformed("malformed body");
 
-  const { platform, burnerVersion, current } = body;
+  const { platform, burnerVersion, current, arch } = body;
 
   if (typeof platform !== "string" || !ALLOWED_PLATFORMS.has(platform)) {
     return malformed("platform must be one of mac, linux, windows");
   }
   if (typeof burnerVersion !== "string" || burnerVersion.length === 0) {
     return malformed("burnerVersion must be a non-empty string");
+  }
+  if (
+    arch !== undefined &&
+    (typeof arch !== "string" || !ALLOWED_ARCHES.has(arch))
+  ) {
+    return malformed("arch must be one of amd64, arm64");
   }
 
   let currentSha: string | null = null;
@@ -73,7 +91,8 @@ export function handleIsoManifest(
     currentSha = c.sha256.toLowerCase();
   }
 
-  const blessed = deps.blessedManifest;
+  const blessed =
+    arch === "arm64" ? (deps.blessedManifestArm64 ?? null) : deps.blessedManifest;
   if (!blessed) return ok({ download: null });
 
   if (currentSha !== null && currentSha === blessed.sha256.toLowerCase()) {

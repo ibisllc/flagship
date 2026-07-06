@@ -275,6 +275,10 @@ d-i grub-installer/bootdev string default
 # https://wiki.debian.org/UEFI
 d-i grub-installer/force-efi-extra-removable boolean true
 grub-efi-amd64 grub2/force_efi_extra_removable boolean true
+# arm64 twin (VM-hosted guests on Apple-silicon / arm64 KVM hosts). Preseeding
+# a question owned by a package the arch never installs is a no-op, so this is
+# inert on amd64 and load-bearing on arm64 (there /EFI/BOOT/BOOTAA64.EFI).
+grub-efi-arm64 grub2/force_efi_extra_removable boolean true
 # Belt + suspenders for the firmware that also rejects the os-prober/efibootmgr
 # NVRAM write outright: tell grub-installer not to touch NVRAM at all.
 d-i grub-installer/update-nvram boolean false
