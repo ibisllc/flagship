@@ -79,6 +79,7 @@ public struct CreateServerStubScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .sheet(isPresented: $showPair) {

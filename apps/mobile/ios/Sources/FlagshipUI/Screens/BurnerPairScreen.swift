@@ -56,6 +56,7 @@ public struct BurnerPairScreen: View {
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         // Keep the display awake while the screen is foreground so the OS

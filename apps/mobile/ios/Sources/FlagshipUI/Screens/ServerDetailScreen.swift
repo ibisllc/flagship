@@ -211,6 +211,7 @@ public struct ServerDetailScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Server")
