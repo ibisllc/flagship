@@ -96,6 +96,7 @@ def _config_to_dict(c: VMConfig) -> dict:
         "serialConsoleEnabled": c.serial_console_enabled,
         "bootUnlockMode": c.boot_unlock_mode,
         "diskEncrypted": c.disk_encrypted,
+        "arch": c.arch,
     }
 
 
@@ -112,6 +113,8 @@ def _config_from_dict(d: dict) -> VMConfig:
         serial_console_enabled=bool(d["serialConsoleEnabled"]),
         boot_unlock_mode=d["bootUnlockMode"],
         disk_encrypted=bool(d["diskEncrypted"]),
+        # Legacy bundles predate multi-arch hosting and are all amd64.
+        arch=d.get("arch", "amd64"),
     )
 
 

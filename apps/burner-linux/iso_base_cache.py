@@ -44,10 +44,15 @@ from iso_manifest_client import (
     fetch_manifest,
 )
 
-# Filename pattern for cached base ISOs: flagship-base-<version>.iso.
-# Mirrors BaseIsoCache's cachedURL filename on the Mac side.
+# Filename pattern for cached base ISOs: flagship-base-<version>.iso for the
+# amd64 burn base (the legacy name, so existing caches stay valid) and
+# flagship-base-arm64-<version>.iso for the arm64 hosting base. Mirrors the
+# Mac IsoBaseCache's per-arch naming — the two bases must COEXIST (a burn and
+# an arm64 host on the same machine), so inspect/download are arch-scoped and
+# never see each other's entries.
 _FILENAME_PREFIX = "flagship-base-"
 _FILENAME_SUFFIX = ".iso"
+_ARM64_TAG = "arm64-"
 
 # progress(fraction, url) — fraction is 0…1 during the download; url is the
 # byte source so the UI can surface it under the progress bar.
@@ -119,9 +124,14 @@ def _ensure_cache_dir() -> Path:
     return d
 
 
-def cached_path_for(version: str) -> Path:
-    """Absolute path a base ISO of `version` lives at."""
-    return cache_dir() / f"{_FILENAME_PREFIX}{version}{_FILENAME_SUFFIX}"
+def _arch_prefix(arch: str) -> str:
+    """amd64 keeps the legacy bare prefix; other arches are tag-namespaced."""
+    return _FILENAME_PREFIX if arch == "amd64" else f"{_FILENAME_PREFIX}{_ARM64_TAG}"
+
+
+def cached_path_for(version: str, arch: str = "amd64") -> Path:
+    """Absolute path a base ISO of `version` for `arch` lives at."""
+    return cache_dir() / f"{_arch_prefix(arch)}{version}{_FILENAME_SUFFIX}"
 
 
 @dataclass(frozen=True)
@@ -132,11 +142,18 @@ class CachedBase:
     sha256: str
 
 
-def _version_from_filename(path: Path) -> Optional[str]:
+def _version_from_filename(path: Path, arch: str = "amd64") -> Optional[str]:
+    """Parse the version out of an arch-matching cache filename; None when the
+    name belongs to another arch. The legacy amd64 prefix is a prefix of every
+    arm64 name, so the amd64 branch must explicitly reject the arm64 tag."""
     name = path.name
-    if name.startswith(_FILENAME_PREFIX) and name.endswith(_FILENAME_SUFFIX):
-        return name[len(_FILENAME_PREFIX):-len(_FILENAME_SUFFIX)] or None
-    return None
+    prefix = _arch_prefix(arch)
+    if not (name.startswith(prefix) and name.endswith(_FILENAME_SUFFIX)):
+        return None
+    version = name[len(prefix):-len(_FILENAME_SUFFIX)]
+    if arch == "amd64" and version.startswith(_ARM64_TAG):
+        return None
+    return version or None
 
 
 def _sha256_of(path: Path) -> str:
@@ -150,12 +167,14 @@ def _sha256_of(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def inspect_cache(log: Optional[LogCb] = None) -> Optional[CachedBase]:
-    """Find the cached base ISO (if any), compute its sha256, and LOG its
-    local path + sha256. Returns None when nothing is cached.
+def inspect_cache(log: Optional[LogCb] = None, arch: str = "amd64") -> Optional[CachedBase]:
+    """Find the cached base ISO for `arch` (if any), compute its sha256, and
+    LOG its local path + sha256. Returns None when nothing is cached.
 
     If multiple cached bases exist (e.g. after a version bump that hasn't been
-    pruned), the most recently modified one is treated as current.
+    pruned), the most recently modified one is treated as current. Entries of
+    the OTHER arch are invisible — the amd64 burn base and the arm64 hosting
+    base coexist without evicting or shadowing each other.
     """
     log = log or (lambda _m: None)
     d = cache_dir()
@@ -167,7 +186,7 @@ def inspect_cache(log: Optional[LogCb] = None) -> Optional[CachedBase]:
         reverse=True,
     )
     for candidate in matches:
-        version = _version_from_filename(candidate)
+        version = _version_from_filename(candidate, arch=arch)
         if version is None or not candidate.is_file():
             continue
         sha = _sha256_of(candidate)
@@ -182,6 +201,7 @@ def _download(
     log: LogCb,
     opener=None,
     cancel_event=None,
+    arch: str = "amd64",
 ) -> Path:
     """Stream the descriptor's URL to disk, verifying sha256 as we go.
 
@@ -193,7 +213,7 @@ def _download(
     do_open = opener or (lambda req: urlopen(req))  # noqa: S310 - URL from server manifest
 
     dest_dir = _ensure_cache_dir()
-    dest = dest_dir / f"{_FILENAME_PREFIX}{descriptor.version}{_FILENAME_SUFFIX}"
+    dest = dest_dir / f"{_arch_prefix(arch)}{descriptor.version}{_FILENAME_SUFFIX}"
 
     req = Request(descriptor.url, headers={"User-Agent": "flagship-burner-linux"})
     try:
@@ -267,8 +287,9 @@ def ensure(
     manifest_fn: Optional[Callable[..., object]] = None,
     opener=None,
     cancel_event=None,
+    arch: str = "amd64",
 ) -> Path:
-    """Return a verified base ISO path, obeying the server manifest.
+    """Return a verified base ISO path for `arch`, obeying the server manifest.
 
     Flow: inspect cache (LOG path+sha) → POST manifest with `current` →
     download-on-order (stream-verify sha, LOG path+sha) OR keep cache.
@@ -278,14 +299,16 @@ def ensure(
     injectable seams for tests.
 
     Raises CacheError subclasses (incl. ManifestFetchError) with clear
-    messages on manifest / network / HTTP / checksum failure.
+    messages on manifest / network / HTTP / checksum failure. For an arch the
+    server hasn't blessed yet, "no download + nothing cached" is reported as
+    "hosting unavailable on this architecture" — never "up to date".
     """
     progress = progress or (lambda _f, _u: None)
     on_download_start = on_download_start or (lambda _d: None)
     log = log or (lambda _m: None)
     fetch = manifest_fn or fetch_manifest
 
-    cached = inspect_cache(log=log)
+    cached = inspect_cache(log=log, arch=arch)
     current = (
         CurrentBase(version=cached.version, sha256=cached.sha256)
         if cached is not None
@@ -293,7 +316,7 @@ def ensure(
     )
 
     try:
-        result = fetch(burner_version, current)
+        result = fetch(burner_version, current, arch=arch)
     except ManifestError as e:
         # If we have a usable cache, a manifest hiccup must not block the burn.
         if cached is not None:
@@ -305,7 +328,13 @@ def ensure(
     if descriptor is None:
         if cached is None:
             # Server says "no download" but we have nothing cached — there is
-            # no base ISO to bake with. Surface a clear error.
+            # no base ISO to bake with. Surface a clear, arch-honest error.
+            if arch != "amd64":
+                raise ManifestFetchError(
+                    f"The server doesn't offer an {arch} base image yet, so "
+                    f"Simple mode can't host a server on this machine for now. "
+                    f"Use Advanced mode with an {arch} Debian netinst ISO instead."
+                )
             raise ManifestFetchError(
                 "Server returned no base image to download and none is cached."
             )
@@ -314,5 +343,6 @@ def ensure(
 
     on_download_start(descriptor)
     return _download(
-        descriptor, progress=progress, log=log, opener=opener, cancel_event=cancel_event
+        descriptor, progress=progress, log=log, opener=opener,
+        cancel_event=cancel_event, arch=arch,
     )

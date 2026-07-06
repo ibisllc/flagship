@@ -42,6 +42,10 @@ class VMConfig:
     boot_unlock_mode: str
     # From the SIGNED blob: whether the guest root is LUKS-encrypted.
     disk_encrypted: bool
+    # Guest architecture — always the HOST's arch (KVM can't cross-run; TCG
+    # could but would be dishonestly slow). "amd64" on x86 hosts, "arm64" on
+    # arm64 Chromebooks/SBCs. Legacy bundles (no persisted arch) are amd64.
+    arch: str = "amd64"
 
     @property
     def awaits_phone_unlock_at_boot(self) -> bool:
@@ -56,6 +60,7 @@ class VMConfig:
         recipe_json: bytes,
         host: HostResources,
         main_disk_size_bytes: int = resource_plan.DEFAULT_MAIN_DISK_SIZE_BYTES,
+        arch: str = "amd64",
     ) -> "VMConfig":
         """Build the spec for a verified recipe on this host. Deterministic: the
         same recipe bytes + host always produce the same config.
@@ -74,4 +79,5 @@ class VMConfig:
             serial_console_enabled=recipe_info.debug_grant(recipe_json) is not None,
             boot_unlock_mode=fields.effective_boot_unlock_mode,
             disk_encrypted=fields.encrypts_disk,
+            arch=arch,
         )

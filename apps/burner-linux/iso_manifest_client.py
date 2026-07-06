@@ -16,7 +16,15 @@ POST https://flagshipserver.com/api/iso-manifest
 Request JSON:
   { "platform": "linux",
     "burnerVersion": "<string>",
-    "current": { "version": "<string>", "sha256": "<hex64>" } | null }
+    "current": { "version": "<string>", "sha256": "<hex64>" } | null,
+    "arch": "amd64" | "arm64" }          # OPTIONAL; absent = "amd64"
+
+Burning always requests amd64 (real boxes are x86; the arch key stays ABSENT
+so the burn-path request is byte-identical to the pre-arch wire format). The
+host-on-this-PC path requests the HOST arch — an arm64 guest is the only kind
+an arm64 Chromebook/SBC can host. `download: null` for a requested arch means
+"keep what you've got" — UNLESS nothing is cached for that arch, in which case
+the CACHE layer surfaces "no base for this arch" (see iso_base_cache).
 
 Response JSON, exactly one of:
   { "download": { "url": "<https>", "sha256": "<hex64>",
@@ -117,6 +125,7 @@ def fetch_manifest(
     current: Optional[CurrentBase],
     url: str = MANIFEST_URL,
     *,
+    arch: Optional[str] = None,
     opener=None,
 ) -> ManifestResult:
     """POST the manifest request and parse the response.
@@ -134,6 +143,10 @@ def fetch_manifest(
         "burnerVersion": burner_version,
         "current": current.to_wire() if current is not None else None,
     }
+    # amd64 is encoded as an ABSENT key so the burn-path request stays
+    # byte-identical to the pre-arch wire format (matches the Mac client).
+    if arch is not None and arch != "amd64":
+        body["arch"] = arch
     payload = json.dumps(body).encode("utf-8")
     req = Request(
         url,

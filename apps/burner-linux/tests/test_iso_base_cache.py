@@ -87,7 +87,7 @@ def test_ensure_keep_when_manifest_returns_null():
     path, sha = _write_base("debian-12", b"keep-me")
     seen: dict = {}
 
-    def fake_manifest(burner_version, current):
+    def fake_manifest(burner_version, current, arch="amd64"):
         seen["current"] = current
         return ManifestResult(download=None)
 
@@ -102,7 +102,7 @@ def test_ensure_keep_when_manifest_returns_null():
 def test_ensure_keep_logs_decision():
     _write_base("debian-12", b"keep-me")
     logs: list[str] = []
-    ensure("1.0.0", log=logs.append, manifest_fn=lambda v, c: ManifestResult(download=None))
+    ensure("1.0.0", log=logs.append, manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=None))
     assert any("keep cached base" in line for line in logs)
 
 
@@ -130,7 +130,7 @@ def test_ensure_downloads_when_ordered_and_verifies():
         "1.0.0",
         progress=lambda frac, url: urls_seen.append(url),
         log=logs.append,
-        manifest_fn=lambda v, c: ManifestResult(download=descriptor),
+        manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=descriptor),
         opener=fake_open,
     )
     assert out.read_bytes() == data
@@ -158,7 +158,7 @@ def test_ensure_sha_mismatch_deletes_and_raises():
     with pytest.raises(ChecksumMismatchError):
         ensure(
             "1.0.0",
-            manifest_fn=lambda v, c: ManifestResult(download=descriptor),
+            manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=descriptor),
             opener=fake_open,
         )
     # No partial / final file left behind.
@@ -184,7 +184,7 @@ def test_ensure_cancel_event_aborts_and_removes_partial():
     with pytest.raises(iso_base_cache.CancelledError):
         ensure(
             "1.0.0",
-            manifest_fn=lambda v, c: ManifestResult(download=descriptor),
+            manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=descriptor),
             opener=lambda req: _FakeResponse(data),
             cancel_event=cancel,
         )
@@ -205,7 +205,7 @@ def test_ensure_reports_current_on_download_path():
         attestation="https://x/att",
     )
 
-    def fake_manifest(burner_version, current):
+    def fake_manifest(burner_version, current, arch="amd64"):
         captured["current"] = current
         return ManifestResult(download=descriptor)
 
@@ -228,7 +228,7 @@ def test_ensure_manifest_error_falls_back_to_cache():
 
     path, _sha = _write_base("debian-12", b"cached")
 
-    def boom(v, c):
+    def boom(v, c, arch="amd64"):
         raise ManifestOfflineError("no net")
 
     out = ensure("1.0.0", manifest_fn=boom)
@@ -238,7 +238,7 @@ def test_ensure_manifest_error_falls_back_to_cache():
 def test_ensure_manifest_error_no_cache_raises():
     from iso_manifest_client import ManifestOfflineError
 
-    def boom(v, c):
+    def boom(v, c, arch="amd64"):
         raise ManifestOfflineError("no net")
 
     with pytest.raises(ManifestFetchError):
@@ -247,4 +247,4 @@ def test_ensure_manifest_error_no_cache_raises():
 
 def test_ensure_null_download_no_cache_raises():
     with pytest.raises(ManifestFetchError):
-        ensure("1.0.0", manifest_fn=lambda v, c: ManifestResult(download=None))
+        ensure("1.0.0", manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=None))
