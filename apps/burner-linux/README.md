@@ -106,11 +106,17 @@ Windows (C#) and Mac (Swift) cores must pass.
 
 The pure layer is fully unit-tested; the following need a live Linux desktop:
 
-1. GTK render: sidebar + chooser + host-here + pairing cover + detail pane
-   (this repo's GTK code cannot run on macOS).
+1. ~~GTK render~~ — **validated 2026-07-06 on ChromeOS/Crostini (Debian 12,
+   GTK 4.8 + libadwaita 1.2)**: the window builds and runs. Two view-layer
+   crashes were found + fixed on first-ever render (`Adw.ToolbarView` needs
+   libadwaita ≥ 1.4 — now falls back to a plain box; a GTK3-only
+   `set_hscrollbar_policy` call). Deeper interaction passes still pending.
 2. A real KVM boot: create-server → unattended install → duration-gated verdict
    → first boot → sealed `awaitingPhoneUnlock` → phone approval → Running with
-   a green padlock at the FQDN.
+   a green padlock at the FQDN. **Partially validated on Crostini 2026-07-06**:
+   a KVM-accelerated OVMF boot through `QemuHost` + QMP (`query-kvm
+   enabled=true`, clean `quit`) works; the full install chain still needs a
+   real recipe.
 3. A real `Open in SSH` into a debug-grant VM (terminal opens,
    `debug@127.0.0.1` login accepted by the guest's grant gate).
 4. A live phone pairing (QR scan → SAS match → recipe delivered → chooser).
@@ -130,7 +136,27 @@ The pure layer is fully unit-tested; the following need a live Linux desktop:
 - **Node.js 20+** somewhere on `PATH` — the Node CLI remasters the
   user-supplied ISO.
 - **`lsblk`** — ships on every Linux distro.
-- **`pkexec`** (PolicyKit) — ships on every modern desktop distro.
+- **`pkexec`** (PolicyKit) — ships on every modern desktop distro (NOT in
+  ChromeOS's stock container — see below).
+
+### ChromeOS (Crostini)
+
+The burner runs inside ChromeOS's Linux container, and **Host on this PC gets
+real KVM acceleration** (modern ChromeOS exposes `/dev/kvm` to the container).
+
+```sh
+sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
+                 qemu-system-x86 qemu-utils ovmf pkexec
+```
+
+Two container quirks the app now handles:
+
+- **USB burning**: a USB stick is invisible to the container until you share
+  it (ChromeOS Settings → Linux → Manage USB devices). The empty disk picker
+  says so on ChromeOS instead of "plug one in".
+- **Open in SSH** opens the ChromeOS Terminal app (`x-terminal-emulator`
+  resolves to `garcon-terminal-handler`, which takes the command verbatim —
+  no `-e`).
 
 ## Run from a checkout
 

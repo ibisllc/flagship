@@ -11,7 +11,7 @@ from typing import Optional
 
 import pytest
 
-from cli_runner import Resolved
+from cli_runner import CLILocateError, Resolved
 from disk_enumerator import DeviceInfo
 from wizard import (
     MODE_ADVANCED,
@@ -313,6 +313,34 @@ def test_cancel_trips_the_download_cancel_event(tmp_path):
     assert any("cancelled" in ll.text for ll in model.state.log_lines)
     assert model.state.is_running is False
     assert model._cancel_download is None  # cleared for the next run
+
+
+def test_run_cli_with_pkexec_fails_up_front_when_pkexec_is_missing():
+    locate_fn = lambda: pytest.fail("locate must not run — pkexec check comes first")
+    model = WizardModel(locate_fn=locate_fn, which=lambda _n: None)
+    model._run_cli(
+        build_args=lambda entry: [entry],
+        on_success=lambda _out: pytest.fail("must not succeed"),
+        use_pkexec=True,
+    )
+    errs = [ll.text for ll in model.state.log_lines if ll.stream == "stderr"]
+    assert any("pkexec" in t for t in errs)
+    assert model.state.is_running is False
+
+
+def test_run_cli_without_pkexec_skips_the_pkexec_check():
+    locate_calls: list[int] = []
+
+    def locate_fn():
+        locate_calls.append(1)
+        raise CLILocateError("stop here")
+
+    model = WizardModel(locate_fn=locate_fn, which=lambda _n: None)
+    model._run_cli(
+        build_args=lambda entry: [entry],
+        on_success=lambda _out: pytest.fail("must not succeed"),
+    )
+    assert locate_calls == [1]
 
 
 # ---- helpers ----

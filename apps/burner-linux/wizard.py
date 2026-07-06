@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -30,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import container_env
 import iso_base_cache
 from disk_enumerator import (
     DeviceInfo,
@@ -311,6 +313,7 @@ class WizardModel:
         on_change: Optional[Callable[[], None]] = None,
         run_lsblk: Optional[Callable[[], str]] = None,
         locate_fn: Optional[Callable[[], Resolved]] = None,
+        which: Callable[[str], Optional[str]] = shutil.which,
         mode: str = MODE_SIMPLE,
         # Injectable seam so the Simple-mode base fetch is unit-testable
         # without network: defaults to the real manifest-driven cache.
@@ -326,6 +329,7 @@ class WizardModel:
         self.on_change = on_change or (lambda: None)
         self._run_lsblk = run_lsblk
         self._locate_fn = locate_fn or locate
+        self._which = which
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
@@ -983,6 +987,18 @@ class WizardModel:
         """CLI body WITHOUT the is_running toggle/guard — for callers (Simple
         bake, host-here) that already own the running state across a
         multi-phase pipeline. Mirrors Wizard.cs RunCliCoreAsync."""
+        # A missing pkexec otherwise surfaces as a bare ENOENT at spawn
+        # time — after the remaster already ran. Fail up front with the
+        # install hint instead (polkit ships pkexec on every major
+        # distro; ChromeOS's stock container image omits it).
+        if use_pkexec and not self._which("pkexec"):
+            self._append_log(
+                "stderr",
+                "pkexec not found — the raw USB write needs PolicyKit "
+                "elevation. Install it (Debian/Ubuntu: sudo apt install "
+                "pkexec; Fedora: sudo dnf install polkit) and retry.",
+            )
+            return
         try:
             resolved = self._locate_fn()
         except CLILocateError as e:
@@ -1033,9 +1049,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     window.set_title("Flagship Burner")
     window.set_default_size(960, 820)
 
-    toolbar = Adw.ToolbarView()
     header = Adw.HeaderBar()
-    toolbar.add_top_bar(header)
 
     # ---- mode toggle (Simple default / Advanced) ----
     mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1054,8 +1068,19 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     # Main vertical layout: (main panes | hosted-servers sidebar) + log pane.
     root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-    toolbar.set_content(root)
-    window.set_content(toolbar)
+    if hasattr(Adw, "ToolbarView"):
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(header)
+        toolbar.set_content(root)
+        window.set_content(toolbar)
+    else:
+        # libadwaita < 1.4 (Debian 12 / Ubuntu 22.04 / ChromeOS's stock
+        # container) has no ToolbarView; a plain box gives the same layout.
+        fallback = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        fallback.append(header)
+        root.set_vexpand(True)
+        fallback.append(root)
+        window.set_content(fallback)
 
     content_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
     content_row.set_vexpand(True)
@@ -1071,7 +1096,7 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     scroller = Gtk.ScrolledWindow()
     scroller.set_vexpand(True)
-    scroller.set_hscrollbar_policy(Gtk.PolicyType.NEVER)
+    scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     main_stack.add_named(scroller, "wizard")
 
     content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -1206,9 +1231,10 @@ def build_window(application, model: Optional[WizardModel] = None):
     step3["body"].append(disks_list)
 
     no_disks = Gtk.Label(
-        label="No removable disks detected. Plug one in and click Refresh.",
+        label=container_env.no_disks_hint(container_env.is_chromeos_container()),
         xalign=0.0,
     )
+    no_disks.set_wrap(True)
     no_disks.add_css_class("dim-label")
     step3["body"].append(no_disks)
 

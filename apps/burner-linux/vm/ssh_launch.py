@@ -17,11 +17,17 @@ from typing import Callable, List, Optional
 DEBUG_USER = "debug"
 
 # Tried in order when $TERMINAL isn't set. x-terminal-emulator is the Debian
-# alternatives symlink (whatever the user chose as their default).
+# alternatives symlink (whatever the user chose as their default); on ChromeOS
+# it resolves to garcon-terminal-handler, which opens the ChromeOS Terminal.
 TERMINAL_CANDIDATES = [
     "x-terminal-emulator",
     "gnome-terminal",
     "konsole",
+    "ptyxis",
+    "foot",
+    "alacritty",
+    "kitty",
+    "xfce4-terminal",
     "xterm",
 ]
 
@@ -68,14 +74,23 @@ def pick_terminal(
     return None
 
 
-def terminal_command(terminal_path: str, command: List[str]) -> List[str]:
+def terminal_command(
+    terminal_path: str,
+    command: List[str],
+    realpath: Callable[[str], str] = os.path.realpath,
+) -> List[str]:
     """The full argv that opens `command` in a new terminal window.
-    gnome-terminal removed `-e`; everything else speaks the classic
-    `-e cmd args…` convention (xterm, konsole, x-terminal-emulator, and
-    whatever $TERMINAL names)."""
-    base = os.path.basename(terminal_path)
+    gnome-terminal removed `-e`; ChromeOS's garcon-terminal-handler passes its
+    argv verbatim to the ChromeOS Terminal (no flag at all); everything else
+    speaks the classic `-e cmd args…` convention (xterm, konsole, and whatever
+    $TERMINAL names). The symlink chain is resolved because the convention
+    belongs to the real target — on Debian x-terminal-emulator is an
+    alternatives link to any of them."""
+    base = os.path.basename(realpath(terminal_path))
     if base == "gnome-terminal":
         return [terminal_path, "--", *command]
+    if base == "garcon-terminal-handler":
+        return [terminal_path, *command]
     return [terminal_path, "-e", *command]
 
 

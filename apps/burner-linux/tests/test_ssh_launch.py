@@ -51,7 +51,17 @@ def test_candidate_order_is_x_terminal_emulator_first():
         return None
 
     assert pick_terminal(which=which, environ={}) is None
-    assert seen == ["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"]
+    assert seen == [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "ptyxis",
+        "foot",
+        "alacritty",
+        "kitty",
+        "xfce4-terminal",
+        "xterm",
+    ]
 
 
 def test_gnome_terminal_uses_double_dash():
@@ -60,9 +70,34 @@ def test_gnome_terminal_uses_double_dash():
 
 
 def test_classic_terminals_use_dash_e():
-    for term in ("/usr/bin/x-terminal-emulator", "/usr/bin/konsole", "/usr/bin/xterm", "/usr/bin/kitty"):
+    # x-terminal-emulator is deliberately absent: it is a symlink whose
+    # convention comes from its target (see the realpath test below).
+    for term in ("/usr/bin/konsole", "/usr/bin/xterm", "/usr/bin/kitty"):
         cmd = terminal_command(term, ["ssh", "x"])
         assert cmd == [term, "-e", "ssh", "x"]
+
+
+def test_garcon_terminal_handler_gets_the_command_verbatim():
+    cmd = terminal_command("/usr/bin/garcon-terminal-handler", ["ssh", "x"])
+    assert cmd == ["/usr/bin/garcon-terminal-handler", "ssh", "x"]
+
+
+def test_symlinked_x_terminal_emulator_resolves_to_the_real_convention():
+    # ChromeOS: /usr/bin/x-terminal-emulator -> garcon-terminal-handler (no
+    # flag); GNOME Debian: -> gnome-terminal (--). The spawned argv keeps the
+    # symlink path; only the convention comes from the target.
+    cmd = terminal_command(
+        "/usr/bin/x-terminal-emulator",
+        ["ssh", "x"],
+        realpath=lambda _p: "/usr/bin/garcon-terminal-handler",
+    )
+    assert cmd == ["/usr/bin/x-terminal-emulator", "ssh", "x"]
+    cmd = terminal_command(
+        "/usr/bin/x-terminal-emulator",
+        ["ssh", "x"],
+        realpath=lambda _p: "/usr/bin/gnome-terminal",
+    )
+    assert cmd == ["/usr/bin/x-terminal-emulator", "--", "ssh", "x"]
 
 
 def test_launch_spawns_the_composed_argv():

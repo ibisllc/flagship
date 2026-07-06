@@ -55,6 +55,12 @@ install -Dm644 "${LINUX_DIR}/cli_runner.py"        "${APPDIR}/usr/share/flagship
 install -Dm644 "${LINUX_DIR}/iso_manifest_client.py" "${APPDIR}/usr/share/flagship-burner/iso_manifest_client.py"
 install -Dm644 "${LINUX_DIR}/iso_base_cache.py"    "${APPDIR}/usr/share/flagship-burner/iso_base_cache.py"
 install -Dm644 "${LINUX_DIR}/disk_enumerator.py"   "${APPDIR}/usr/share/flagship-burner/disk_enumerator.py"
+install -Dm644 "${LINUX_DIR}/container_env.py"     "${APPDIR}/usr/share/flagship-burner/container_env.py"
+# The phone-pairing session + the VM appliance host layer — wizard.py imports
+# both at module scope, so a bundle without them dies at startup.
+install -Dm644 "${LINUX_DIR}/pair_session.py"      "${APPDIR}/usr/share/flagship-burner/pair_session.py"
+mkdir -p "${APPDIR}/usr/share/flagship-burner/vm"
+install -m644 -t "${APPDIR}/usr/share/flagship-burner/vm" "${LINUX_DIR}"/vm/*.py
 # disk_write.py is the script pkexec elevates for the raw write — install it
 # 0755 so the polkit-launched python3 can read+exec it.
 install -Dm755 "${LINUX_DIR}/disk_write.py"        "${APPDIR}/usr/share/flagship-burner/disk_write.py"

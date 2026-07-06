@@ -38,6 +38,10 @@ modules:
       - install -Dm644 iso_manifest_client.py ${FLATPAK_DEST}/share/flagship-burner/iso_manifest_client.py
       - install -Dm644 iso_base_cache.py    ${FLATPAK_DEST}/share/flagship-burner/iso_base_cache.py
       - install -Dm644 disk_enumerator.py   ${FLATPAK_DEST}/share/flagship-burner/disk_enumerator.py
+      - install -Dm644 container_env.py     ${FLATPAK_DEST}/share/flagship-burner/container_env.py
+      - install -Dm644 pair_session.py      ${FLATPAK_DEST}/share/flagship-burner/pair_session.py
+      - mkdir -p ${FLATPAK_DEST}/share/flagship-burner/vm
+      - install -m644 -t ${FLATPAK_DEST}/share/flagship-burner/vm vm/*.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-burner/disk_write.py
       - install -Dm644 com.flagshipserver.Burner.desktop ${FLATPAK_DEST}/share/applications/com.flagshipserver.Burner.desktop
     sources:
