@@ -260,7 +260,7 @@ struct WizardView: View {
                     }
                     .controlSize(.large)
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.verified == nil)
+                    .disabled(model.verified == nil || (model.effectiveRequiresUserISO && model.iso == nil))
                     Text("Encrypted disk · unlocked by your phone")
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)

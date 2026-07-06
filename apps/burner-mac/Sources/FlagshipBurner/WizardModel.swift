@@ -422,8 +422,8 @@ final class WizardModel: ObservableObject {
     /// verify it if ordered (or reuse the cache), and return the local ISO. The
     /// download URL is surfaced under the progress bar via `baseDownloadURL`;
     /// the boot/after-download path+sha logging happens inside IsoBaseCache.
-    private func ensureBaseISO() async throws -> URL {
-        let cache = IsoBaseCache(log: { [weak self] line in
+    private func ensureBaseISO(arch: IsoArch = .amd64) async throws -> URL {
+        let cache = IsoBaseCache(arch: arch, log: { [weak self] line in
             Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(line)") }
         })
         return try await cache.ensure(progress: { [weak self] phase in
@@ -605,6 +605,7 @@ final class WizardModel: ObservableObject {
     /// unmodified inside the VM; this app never holds a key.
     func runHostHere() async {
         guard let recipe = recipe else { return }
+        if effectiveRequiresUserISO && iso == nil { return }
         guard !isRunning else { return }
         isRunning = true
         progress = nil
@@ -635,14 +636,23 @@ final class WizardModel: ObservableObject {
 
         let config = VMConfig.plan(recipe: parsed, recipeJSON: recipeData, host: host)
 
-        // Same Simple-mode base ISO fetch as the USB path.
-        phase = "download"
+        // Same base-ISO selection as the USB path EXCEPT the arch: the guest
+        // must match this Mac's silicon (Virtualization.framework boots
+        // native-arch guests only), whereas a burn always targets amd64
+        // boxes. Advanced BYO-ISO hosting uses the user's ISO unchanged —
+        // that's the escape hatch while the server has no arm64 manifest.
         let srcISO: URL
-        do {
-            srcISO = try await ensureBaseISO()
-        } catch {
-            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-            return
+        if fetchesBaseISO {
+            phase = "download"
+            do {
+                srcISO = try await ensureBaseISO(arch: HostArch.current())
+            } catch {
+                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                return
+            }
+        } else {
+            guard let iso = iso else { return }
+            srcISO = iso
         }
 
         // Create the bundle, then remaster the installer INTO it — identical
