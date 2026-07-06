@@ -169,3 +169,33 @@ trailer
     parsed = parse_verify_json(text)
     assert parsed is not None
     assert parsed["nested"]["b"]["c"] == 2
+
+
+def test_command_vector_wraps_in_pkexec_by_default():
+    from cli_runner import CLIRunner
+
+    r = CLIRunner(node_path="/usr/bin/node", arguments=["/cli.js", "write"], use_pkexec=True)
+    assert r.command_vector == ["pkexec", "/usr/bin/node", "/cli.js", "write"]
+
+
+def test_command_vector_honors_the_elevation_prefix():
+    from cli_runner import CLIRunner
+
+    r = CLIRunner(
+        node_path="/usr/bin/node",
+        arguments=["/cli.js", "write"],
+        use_pkexec=True,
+        elevation_prefix=["sudo", "-n"],
+    )
+    assert r.command_vector == ["sudo", "-n", "/usr/bin/node", "/cli.js", "write"]
+
+
+def test_command_vector_ignores_the_prefix_without_pkexec():
+    from cli_runner import CLIRunner
+
+    r = CLIRunner(
+        node_path="/usr/bin/node",
+        arguments=["/cli.js", "verify"],
+        elevation_prefix=["sudo", "-n"],
+    )
+    assert r.command_vector == ["/usr/bin/node", "/cli.js", "verify"]

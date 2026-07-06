@@ -212,11 +212,16 @@ class CLIRunner:
         arguments: list[str],
         cwd: Optional[str] = None,
         use_pkexec: bool = False,
+        elevation_prefix: Optional[list[str]] = None,
     ) -> None:
         self.node_path = node_path
         self.arguments = arguments
         self.cwd = cwd
         self.use_pkexec = use_pkexec
+        # How to elevate when use_pkexec is True. Default stays ["pkexec"];
+        # the wizard passes ["sudo", "-n"] where pkexec can't work (ChromeOS's
+        # container — see elevation.probe).
+        self.elevation_prefix = elevation_prefix
         self._proc: Optional[subprocess.Popen] = None
         self._threads: list[threading.Thread] = []
         self._stdout_lines: list[str] = []
@@ -228,7 +233,7 @@ class CLIRunner:
         base = [self.node_path, *self.arguments]
         if self.use_pkexec:
             # pkexec requires absolute paths; node_path already absolute.
-            return ["pkexec", *base]
+            return [*(self.elevation_prefix or ["pkexec"]), *base]
         return base
 
     @property
